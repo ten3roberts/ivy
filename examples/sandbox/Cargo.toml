@@ -8,3 +8,4 @@ edition = "2018"
 
 [dependencies]
 ivy-core = { path = "../../ivy-core", version = "0.1.0" }
+log = "0.4"
