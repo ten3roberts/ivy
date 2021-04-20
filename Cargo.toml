@@ -1,0 +1,7 @@
+[workspace]
+members = [
+  "ivy-core",
+  "examples/sandbox"
+]
+
+
