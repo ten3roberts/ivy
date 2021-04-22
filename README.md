@@ -8,13 +8,10 @@ Represents the main application managing events and window
 ### Application creation
   ```rust
 let app = Application::builder()
-<<<<<<< HEAD
 .name("Sandbox")
-.with_step(Step::Tied,)
-=======
+.with_layer(SandboxLayer::new)
   .name("Sandbox")
   .with_step(Step::Tied,)
->>>>>>> eede25c (Add default logger)
 
   app.run();
   ```
@@ -34,7 +31,7 @@ frame: usize,
   }
 
 impl SandboxLayer {
-  pub fn new(app: &Application) -> Self {
+  pub fn new(world: &mut World, events: &mut Events) -> Self {
     Self {
 frame: 0,
          accumulator: 0.0,
@@ -55,10 +52,6 @@ impl Layer for SandboxLayer {
       app.world.run_workload("Physics");
       self.accumulator -= dt;
     }
-<<<<<<< HEAD
-=======
-
->>>>>>> eede25c (Add default logger)
   }
 }
 ```
