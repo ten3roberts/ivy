@@ -1,8 +1,10 @@
 [workspace]
 members = [
   "ivy-core",
-  "ivy-vulkan",
+  "ivy-graphics",
   "ivy-stb",
+  "ivy-vulkan",
+
   "examples/sandbox",
   "examples/vulkan"
 ]

@@ -10,10 +10,12 @@ layout(location = 1) out vec2 fragTexCoord;
 
 layout(binding = 0) uniform GlobalData {
  vec4 color;
+ mat4 viewproj;
 } globalData;
 
 void main() {
-  gl_Position = vec4(inPosition, 1.0);
+  gl_Position = globalData.viewproj * vec4(inPosition, 1.0);
+
   fragColor = globalData.color;
   fragTexCoord = texCoord;
 }

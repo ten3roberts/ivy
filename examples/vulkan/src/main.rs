@@ -115,35 +115,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .collect::<Result<Vec<PerFrameData>, _>>()?;
 
-    // A simple triangle
-    let vertices = [
-        Vertex {
-            position: Vec3::new(-0.5, 0.5, 0.0),
-            normal: Vec3::unit_z(),
-            texcoord: Vec2::new(0.0, 0.0),
-        },
-        Vertex {
-            position: Vec3::new(0.5, 0.5, 0.0),
-            normal: Vec3::unit_z(),
-            texcoord: Vec2::new(0.0, 0.0),
-        },
-        Vertex {
-            position: Vec3::new(0.0, -0.5, 0.0),
-            normal: Vec3::unit_z(),
-            texcoord: Vec2::new(0.0, 0.0),
-        },
-    ];
+    let document = ivy_graphics::Document::load(context.clone(), "./res/models/cube.gltf")?;
 
-    let vertexbuffer = Buffer::new(
-        context.clone(),
-        BufferType::Vertex,
-        BufferAccess::Staged,
-        &vertices,
-    )?;
+    let mesh = document.mesh(0).clone();
+
+    let viewproj = ultraviolet::projection::perspective_vk(1.0, 1280.0 / 720.0, 0.1, 100.0)
+        * ultraviolet::Mat4::look_at(Vec3::new(5.0, 0.5, 5.0), Vec3::zero(), Vec3::unit_y());
 
     // An example uniform containing global uniform data
     let global_data = GlobalData {
         color: Vec4::new(0.3, 0.0, 8.0, 1.0),
+        viewproj,
     };
 
     // Create a pipeline from the shaders
@@ -235,8 +217,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         frame.commandbuffer.bind_pipeline(&pipeline);
 
         // Bind and draw the triangle without indexing
-        frame.commandbuffer.bind_vertexbuffers(0, &[&vertexbuffer]);
-        frame.commandbuffer.draw(3, 1, 0, 0);
+        frame
+            .commandbuffer
+            .bind_vertexbuffers(0, &[&mesh.vertex_buffer()]);
+        frame.commandbuffer.bind_indexbuffer(mesh.index_buffer(), 0);
+
+        frame
+            .commandbuffer
+            .draw_indexed(mesh.index_count(), 1, 0, 0, 0);
 
         // Done
         frame.commandbuffer.end_renderpass();
@@ -332,6 +320,7 @@ impl PerFrameData {
             BufferAccess::MappedPersistent,
             &[GlobalData {
                 color: Vec4::new(1.0, 0.0, 0.0, 1.0),
+                viewproj: Mat4::identity(),
             }],
         )?;
 
@@ -411,7 +400,9 @@ impl VertexDesc for Vertex {
     }
 }
 
+#[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct GlobalData {
     color: Vec4,
+    viewproj: Mat4,
 }

@@ -10,5 +10,6 @@ edition = "2018"
 glfw = { version = "0.41.0", features = [ "vulkan" ] }
 ivy-core = { path = "../../ivy-core", version = "0.1.0" }
 ivy-vulkan = { path = "../../ivy-vulkan", version = "0.1.0" }
+ivy-graphics = { path = "../../ivy-graphics", version = "0.1.0" }
 log = "0.4"
 ultraviolet = "0.8"
