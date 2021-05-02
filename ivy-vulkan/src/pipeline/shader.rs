@@ -27,7 +27,7 @@ impl ShaderModule {
         let reflect_module = spirv_reflect::create_shader_module(unsafe {
             std::slice::from_raw_parts(create_info.p_code as *const u8, create_info.code_size)
         })
-        .map_err(|msg| Error::SPVReflectError(msg))?;
+        .map_err(|msg| Error::SpirvReflection(msg))?;
 
         Ok(Self {
             module,
@@ -75,7 +75,7 @@ pub fn reflect<S: AsRef<spirv_reflect::ShaderModule>>(
         let stage_flags = vk::ShaderStageFlags::from_raw(module.get_shader_stage().bits());
         let bindings = module
             .enumerate_descriptor_bindings(None)
-            .map_err(|msg| Error::SPVReflectError(msg))?;
+            .map_err(|msg| Error::SpirvReflection(msg))?;
 
         for binding in bindings {
             sets[binding.set as usize].add(descriptors::DescriptorSetBinding {
@@ -89,7 +89,7 @@ pub fn reflect<S: AsRef<spirv_reflect::ShaderModule>>(
 
         let push_constants = module
             .enumerate_push_constant_blocks(None)
-            .map_err(|msg| Error::SPVReflectError(msg))?;
+            .map_err(|msg| Error::SpirvReflection(msg))?;
 
         for push_constant in push_constants {
             push_constant_ranges.push(vk::PushConstantRange {

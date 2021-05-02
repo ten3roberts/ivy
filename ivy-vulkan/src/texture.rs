@@ -68,7 +68,7 @@ impl Texture {
     /// Uses mipmapping.
     pub fn load<P: AsRef<Path>>(context: Rc<VulkanContext>, path: P) -> Result<Self, Error> {
         let image =
-            ivy_stb::Image::load(&path, 4).ok_or(Error::ImageError(path.as_ref().to_owned()))?;
+            ivy_stb::Image::load(&path, 4).ok_or(Error::ImageLoading(path.as_ref().to_owned()))?;
 
         let texture = Self::new(
             context,

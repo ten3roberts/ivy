@@ -37,7 +37,7 @@ pub fn create(
 
     let extensions: Vec<CString> = glfw
         .get_required_instance_extensions()
-        .ok_or(Error::VulkanUnsupported)?
+        .ok_or(Error::SurfaceSupport)?
         .into_iter()
         .chain(INSTANCE_EXTENSIONS.iter().map(|s| s.to_string()))
         .map(CString::new)
