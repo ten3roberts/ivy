@@ -9,6 +9,7 @@ description = "Provides high level graphics abstractions like Meshes, Materials,
 
 [dependencies]
 ash = "0.32"
+glfw = "0.41"
 gltf = "0.15"
 ivy-vulkan = { path = "../ivy-vulkan", version = "*" }
 thiserror = "1.0"

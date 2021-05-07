@@ -1,11 +1,13 @@
 use std::{rc::Rc, time::Duration};
-use ultraviolet::*;
 
 use glfw::*;
 use ivy_core::*;
+use ivy_graphics::window::{WindowExt, WindowInfo, WindowMode};
 use ivy_vulkan::commands::*;
 use ivy_vulkan::descriptors::*;
 use ivy_vulkan::*;
+use ultraviolet::{projection, Mat4, Vec2, Vec3, Vec4};
+
 use log::*;
 
 const FRAMES_IN_FLIGHT: usize = 2;
@@ -19,14 +21,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS)?;
 
-    glfw.window_hint(WindowHint::ClientApi(ClientApiHint::NoApi));
+    let (window, events) = ivy_graphics::window::create(
+        &mut glfw,
+        "ivy-vulkan",
+        WindowInfo {
+            extent: None,
+            resizable: false,
+            mode: WindowMode::Windowed,
+        },
+    )?;
 
-    let (mut window, events) = glfw
-        .create_window(1280, 720, "ivy-vulkan", WindowMode::Windowed)
-        .unwrap();
-
-    // Catch all events.
-    window.set_all_polling(true);
+    let extent = window.extent();
 
     // Initialize vulkan
     let context = Rc::new(VulkanContext::new(&glfw, &window)?);
@@ -119,7 +124,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mesh = document.mesh(0).clone();
 
-    let viewproj = ultraviolet::projection::perspective_vk(1.0, 1280.0 / 720.0, 0.1, 100.0)
+    let viewproj = ultraviolet::projection::perspective_vk(1.0, extent.aspect(), 0.1, 100.0)
         * ultraviolet::Mat4::look_at(Vec3::new(5.0, 0.5, 5.0), Vec3::zero(), Vec3::unit_y());
 
     // An example uniform containing global uniform data

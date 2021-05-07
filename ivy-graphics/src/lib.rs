@@ -4,6 +4,7 @@
 mod document;
 mod error;
 mod mesh;
+pub mod window;
 
 pub use document::*;
 pub use error::*;

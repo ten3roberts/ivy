@@ -16,6 +16,11 @@ impl Extent {
     pub fn new(width: u32, height: u32) -> Extent {
         Self { width, height }
     }
+
+    /// Returns the aspect ratio of the extent
+    pub fn aspect(&self) -> f32 {
+        self.width as f32 / self.height as f32
+    }
 }
 
 impl Display for Extent {

@@ -10,4 +10,7 @@ pub enum Error {
 
     #[error("Gltf sparse accessors are not supported")]
     SparseAccessor,
+
+    #[error("Failed to create window")]
+    WindowCreation,
 }
