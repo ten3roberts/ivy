@@ -1,32 +1,15 @@
+mod builder;
+
+pub use builder::*;
+
 use crate::layer::{Layer, LayerStack};
 
-pub struct ApplicationBuilder {
-    application: Application,
-}
-
-impl ApplicationBuilder {
-    pub fn new() -> Self {
-        Self {
-            application: Application::new(),
-        }
-    }
-
-    pub fn build(&mut self) -> Application {
-        std::mem::replace(&mut self.application, Application::new())
-    }
-
-    pub fn push_layer<T: 'static + Layer>(&mut self, layer: T) -> &mut Self {
-        self.application.push_layer(layer);
-        self
-    }
-}
-
-pub struct Application {
+pub struct App {
     name: String,
     layers: LayerStack,
 }
 
-impl Application {
+impl App {
     pub fn new() -> Self {
         Self {
             name: "Ivy".into(),
@@ -34,8 +17,8 @@ impl Application {
         }
     }
 
-    pub fn builder() -> ApplicationBuilder {
-        ApplicationBuilder::new()
+    pub fn builder() -> AppBuilder {
+        AppBuilder::new()
     }
 
     pub fn run(&mut self) {

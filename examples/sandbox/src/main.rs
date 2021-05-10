@@ -3,9 +3,7 @@ use std::{thread::sleep, time::Duration};
 use ivy_core::*;
 
 fn main() {
-    let mut app = Application::builder()
-        .push_layer(SandboxLayer::new())
-        .build();
+    let mut app = App::builder().push_layer(SandboxLayer::new()).build();
 
     app.run();
 }
@@ -28,6 +26,6 @@ impl Layer for SandboxLayer {
     }
 
     fn on_attach(&mut self) {
-        println!("Attaching sandbox layer");
+        println!("Attached sandbox layer");
     }
 }
