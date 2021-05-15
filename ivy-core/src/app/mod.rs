@@ -3,11 +3,15 @@ mod builder;
 pub use builder::*;
 use hecs::World;
 
-use crate::layer::{Layer, LayerStack};
+use crate::{
+    layer::{Layer, LayerStack},
+    Events,
+};
 
 pub struct App {
     name: String,
     world: World,
+    events: Events,
     layers: LayerStack,
 }
 
@@ -17,6 +21,7 @@ impl App {
             name: "Ivy".into(),
             layers: LayerStack::new(),
             world: World::new(),
+            events: Events::new(),
         }
     }
 
@@ -27,15 +32,16 @@ impl App {
     /// Enters the main application event loop and runs the layers.
     pub fn run(&mut self) {
         let world = &mut self.world;
+        let events = &mut self.events;
         // Run attach on layers in order
         self.layers
             .iter_mut()
-            .for_each(|layer| layer.on_attach(world));
+            .for_each(|layer| layer.on_attach(world, events));
 
         // Update layers
         loop {
             for layer in self.layers.iter_mut() {
-                layer.on_update(world);
+                layer.on_update(world, events);
             }
         }
     }

@@ -1,3 +1,4 @@
+use flume::{Receiver, Sender};
 use rand::prelude::*;
 use std::{thread::sleep, time::Duration};
 
@@ -31,27 +32,41 @@ struct Velocity {
     y: i32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum SandboxEvent {
+    DummyEvent(usize),
+}
+
 struct SandboxLayer {
     frame: usize,
     elapsed: Clock,
     frame_clock: Clock,
     last_status: Clock,
+
+    rx: Receiver<SandboxEvent>,
+    tx: Sender<SandboxEvent>,
 }
 
 impl SandboxLayer {
     fn new() -> Self {
+        let (tx, rx) = flume::unbounded();
         Self {
             frame: 0,
             frame_clock: Clock::new(),
             elapsed: Clock::new(),
             last_status: Clock::new(),
+            rx,
+            tx,
         }
     }
 }
 
 impl Layer for SandboxLayer {
-    fn on_update(&mut self, world: &mut World) {
+    fn on_update(&mut self, world: &mut World, events: &mut Events) {
         let dt = self.frame_clock.reset();
+
+        // Send dummy events
+        events.send(SandboxEvent::DummyEvent(self.frame));
 
         if self.last_status.elapsed() > 1.secs() {
             self.last_status.reset();
@@ -73,11 +88,16 @@ impl Layer for SandboxLayer {
 
         info!("Entities:\n{}", status);
 
+        // Receive events
+        for event in self.rx.try_iter() {
+            info!("Event: {:?}", event);
+        }
+
         self.frame += 1;
         sleep(Duration::from_millis(100));
     }
 
-    fn on_attach(&mut self, world: &mut World) {
+    fn on_attach(&mut self, world: &mut World, events: &mut Events) {
         info!("Attached sandbox layer");
 
         let mut rng = StdRng::seed_from_u64(0);
@@ -108,6 +128,8 @@ impl Layer for SandboxLayer {
             let name = (0..5).map(|_| rng.gen_range('a'..'z')).collect::<String>();
             (name,)
         }));
+
+        events.subscribe(self.tx.clone());
     }
 }
 
@@ -115,7 +137,7 @@ fn integrate(world: &mut World) {
     world
         .query_mut::<(&mut Position, &Velocity)>()
         .into_iter()
-        .for_each(|(id, (pos, vel))| {
+        .for_each(|(_id, (pos, vel))| {
             pos.x += vel.x;
             pos.y += vel.y
         });
