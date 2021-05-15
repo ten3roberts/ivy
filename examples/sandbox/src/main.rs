@@ -94,6 +94,11 @@ impl Layer for SandboxLayer {
         }
 
         self.frame += 1;
+
+        if self.elapsed.elapsed() > 2.0.secs() {
+            events.send(AppEvent::Exit)
+        }
+
         sleep(Duration::from_millis(100));
     }
 
