@@ -763,7 +763,9 @@ checksum = "36f5fd4a7d6d5d19808610583131c0aed271556527cad4cb71c436831a28e059"
 name = "vulkan"
 version = "0.1.0"
 dependencies = [
+ "flume",
  "glfw",
+ "hecs",
  "ivy-core",
  "ivy-graphics",
  "ivy-vulkan",
