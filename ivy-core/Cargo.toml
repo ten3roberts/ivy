@@ -8,6 +8,7 @@ edition = "2018"
 
 [dependencies]
 crossbeam-channel = { version = "0.5", optional = true }
+downcast-rs = "1.2"
 flume = "0.10"
 hecs = "0.5"
 log = { version = "0.4", features = ["std"] }

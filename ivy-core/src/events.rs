@@ -1,11 +1,9 @@
-use std::{
-    any::{Any, TypeId},
-    collections::HashMap,
-    sync::mpsc,
-};
+use std::{any::TypeId, collections::HashMap, sync::mpsc};
+
+use downcast_rs::{impl_downcast, Downcast};
 
 pub struct Events {
-    dispatchers: HashMap<TypeId, Box<dyn Any>>,
+    dispatchers: HashMap<TypeId, Box<dyn AnyEventDispatcher>>,
 }
 
 impl Events {
@@ -17,25 +15,28 @@ impl Events {
 
     /// Sends an event of type T to all subscribed listeners.
     /// If no dispatcher exists for event T, a new one will be created.
-    pub fn send<T: 'static + Clone>(&mut self, event: T) {
+    pub fn send<T: 'static + Clone + Send + Sync>(&mut self, event: T) {
         self.dispatchers
-            .entry(std::any::TypeId::of::<T>())
+            .entry(TypeId::of::<T>())
             .or_insert_with(new_event_dispatcher::<T>)
             .downcast_mut::<EventDispatcher<T>>()
             .map(|dispatcher| dispatcher.send(event));
     }
 
-    pub fn subscribe<S, T: 'static + Clone>(&mut self, sender: S)
+    pub fn subscribe<S, T: 'static + Clone + Send + Sync>(&mut self, sender: S)
     where
         S: 'static + EventSender<T> + Send + Sync,
     {
         self.dispatchers
-            .entry(std::any::TypeId::of::<T>())
+            .entry(TypeId::of::<T>())
             .or_insert_with(new_event_dispatcher::<T>)
             .downcast_mut::<EventDispatcher<T>>()
             .map(|dispatcher| dispatcher.subscribe(sender));
     }
 }
+
+trait AnyEventDispatcher: 'static + Send + Sync + Downcast {}
+impl_downcast!(AnyEventDispatcher);
 
 /// Handles event dispatching for a single type of event
 pub struct EventDispatcher<T> {
@@ -71,6 +72,8 @@ where
         self.subscribers.push(Subscriber::new(sender));
     }
 }
+
+impl<T: 'static + Send + Sync + Clone> AnyEventDispatcher for EventDispatcher<T> {}
 
 struct Subscriber<T> {
     sender: Box<dyn EventSender<T> + Send + Sync>,
@@ -124,7 +127,7 @@ impl<T> EventSender<T> for flume::Sender<T> {
     }
 }
 
-fn new_event_dispatcher<T: 'static + Clone>() -> Box<dyn Any> {
+fn new_event_dispatcher<T: 'static + Clone + Send + Sync>() -> Box<dyn AnyEventDispatcher> {
     let dispatcher: EventDispatcher<T> = EventDispatcher::new();
     Box::new(dispatcher)
 }
