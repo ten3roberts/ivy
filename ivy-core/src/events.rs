@@ -2,6 +2,34 @@ use std::{any::TypeId, collections::HashMap, sync::mpsc};
 
 use downcast_rs::{impl_downcast, Downcast};
 
+/// Manages event broadcasting for different types of events.
+/// Sending an event will send a clone of the event to all subscribed listeners.
+///
+/// The event listeners can be anything implementing `EventSender`. Implemented by `std::sync::mpsc::Sender`,
+/// `flume::Sender`, `crossbeam_channel::Sender`.
+///
+/// # Example
+/// ```
+/// use ivy_core::Events;
+/// use std::sync::mpsc;
+/// let mut events = Events::new();
+///
+/// let (tx1, rx1) = mpsc::channel::<&'static str>();
+/// events.subscribe(tx1);
+///
+/// let (tx2, rx2) = mpsc::channel::<&'static str>();
+/// events.subscribe(tx2);
+///
+/// events.send("Hello");
+///
+/// if let Ok(e) = rx1.try_recv() {
+///     println!("1 Received: {}", e);
+/// }
+///
+/// if let Ok(e) = rx2.try_recv() {
+///     println!("2 Received: {}", e);
+/// }
+/// ```
 pub struct Events {
     dispatchers: HashMap<TypeId, Box<dyn AnyEventDispatcher>>,
 }
@@ -13,9 +41,9 @@ impl Events {
         }
     }
 
-    /// Sends an event of type T to all subscribed listeners.
-    /// If no dispatcher exists for event T, a new one will be created.
-    pub fn send<T: 'static + Clone + Send + Sync>(&mut self, event: T) {
+    /// Sends an event of type `T` to all subscribed listeners.
+    /// If no dispatcher exists for event `T`, a new one will be created.
+    pub fn send<T: Event>(&mut self, event: T) {
         self.dispatchers
             .entry(TypeId::of::<T>())
             .or_insert_with(new_event_dispatcher::<T>)
@@ -23,9 +51,9 @@ impl Events {
             .map(|dispatcher| dispatcher.send(event));
     }
 
-    pub fn subscribe<S, T: 'static + Clone + Send + Sync>(&mut self, sender: S)
+    pub fn subscribe<S, T: Event>(&mut self, sender: S)
     where
-        S: 'static + EventSender<T> + Send + Sync,
+        S: 'static + EventSender<T> + Send,
     {
         self.dispatchers
             .entry(TypeId::of::<T>())
@@ -35,7 +63,11 @@ impl Events {
     }
 }
 
-trait AnyEventDispatcher: 'static + Send + Sync + Downcast {}
+// Blanket type for events.
+pub trait Event: 'static + Clone + Send {}
+impl<T: 'static + Clone + Send> Event for T {}
+
+trait AnyEventDispatcher: 'static + Send + Downcast {}
 impl_downcast!(AnyEventDispatcher);
 
 /// Handles event dispatching for a single type of event
@@ -67,22 +99,22 @@ where
     /// up when the receiving end is dropped.
     pub fn subscribe<S>(&mut self, sender: S)
     where
-        S: 'static + EventSender<T> + Send + Sync,
+        S: 'static + EventSender<T> + Send,
     {
         self.subscribers.push(Subscriber::new(sender));
     }
 }
 
-impl<T: 'static + Send + Sync + Clone> AnyEventDispatcher for EventDispatcher<T> {}
+impl<T: 'static + Send + Clone> AnyEventDispatcher for EventDispatcher<T> {}
 
 struct Subscriber<T> {
-    sender: Box<dyn EventSender<T> + Send + Sync>,
+    sender: Box<dyn EventSender<T> + Send>,
 }
 
 impl<T> Subscriber<T> {
     pub fn new<S>(sender: S) -> Self
     where
-        S: 'static + EventSender<T> + Send + Sync,
+        S: 'static + EventSender<T> + Send,
     {
         Self {
             sender: Box::new(sender),
@@ -127,7 +159,34 @@ impl<T> EventSender<T> for flume::Sender<T> {
     }
 }
 
-fn new_event_dispatcher<T: 'static + Clone + Send + Sync>() -> Box<dyn AnyEventDispatcher> {
+fn new_event_dispatcher<T: 'static + Clone + Send>() -> Box<dyn AnyEventDispatcher> {
     let dispatcher: EventDispatcher<T> = EventDispatcher::new();
     Box::new(dispatcher)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc;
+
+    #[test]
+    fn event_broadcast() {
+        let mut events = Events::new();
+
+        let (tx1, rx1) = mpsc::channel::<&'static str>();
+        events.subscribe(tx1);
+
+        let (tx2, rx2) = mpsc::channel::<&'static str>();
+        events.subscribe(tx2);
+
+        events.send("Hello");
+
+        if let Ok(e) = rx1.try_recv() {
+            assert_eq!(e, "Hello")
+        }
+
+        if let Ok(e) = rx2.try_recv() {
+            assert_eq!(e, "Hello")
+        }
+    }
 }
