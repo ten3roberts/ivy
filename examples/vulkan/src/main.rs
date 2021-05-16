@@ -1,7 +1,7 @@
 use std::{
     rc::Rc,
     sync::{mpsc, Arc},
-    thread::sleep,
+    time::Duration,
 };
 
 use glfw::{Glfw, Window, WindowEvent};
@@ -11,9 +11,7 @@ use ivy_graphics::{
     window::{WindowExt, WindowInfo, WindowMode},
     Mesh,
 };
-use ivy_vulkan::descriptors::*;
-use ivy_vulkan::*;
-use ivy_vulkan::{commands::*, vk::Semaphore};
+use ivy_vulkan::{commands::*, descriptors::*, vk::Semaphore, *};
 use ultraviolet::{Mat4, Vec2, Vec3, Vec4};
 
 use log::*;
@@ -45,6 +43,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut app = App::builder()
         .push_layer(window_layer)
         .push_layer(vulkan_layer)
+        .push_layer(PerformanceLayer::new(1.secs()))
         .build();
 
     app.run();
@@ -220,14 +219,7 @@ impl VulkanLayer {
 
 impl Layer for VulkanLayer {
     fn on_update(&mut self, _world: &mut World, _events: &mut Events) {
-        sleep(100.ms());
-
         let image_index = self.swapchain.next_image(self.present_semaphore).unwrap();
-
-        debug!(
-            "Image index: {},\t current_frame: {}",
-            image_index, self.current_frame
-        );
 
         let frame = &mut self.frames[self.current_frame];
         let framebuffer = &self.framebuffers[image_index as usize];
@@ -435,6 +427,68 @@ impl Layer for WindowLayer {
     }
 
     fn on_attach(&mut self, _world: &mut World, _events: &mut Events) {}
+}
+
+struct PerformanceLayer {
+    clock: Clock,
+    frame_clock: Clock,
+    last_status: Clock,
+    frequency: Duration,
+
+    min: Duration,
+    max: Duration,
+    acc: Duration,
+
+    framecount: usize,
+}
+
+impl PerformanceLayer {
+    fn new(frequency: Duration) -> Self {
+        Self {
+            clock: Clock::new(),
+            frame_clock: Clock::new(),
+            last_status: Clock::new(),
+            frequency,
+            min: std::u64::MAX.secs(),
+            max: 0.secs(),
+            acc: 0.secs(),
+            framecount: 0,
+        }
+    }
+}
+
+impl Layer for PerformanceLayer {
+    fn on_update(&mut self, _: &mut World, _: &mut Events) {
+        let dt = self.frame_clock.reset();
+
+        self.acc += dt;
+
+        self.min = dt.min(self.min);
+        self.max = dt.max(self.max);
+
+        self.framecount += 1;
+
+        if self.last_status.elapsed() > self.frequency {
+            let avg = self.acc / self.framecount as u32;
+
+            info!(
+                "Elapsed: {:?},\t Deltatime: {:?} {:?} {:?},\t Framerate: {}",
+                self.clock.elapsed(),
+                self.min,
+                avg,
+                self.max,
+                1.0 / avg.secs()
+            );
+
+            self.min = std::u64::MAX.secs();
+            self.max = 0.secs();
+            self.acc = 0.secs();
+            self.last_status.reset();
+            self.framecount = 0;
+        }
+    }
+
+    fn on_attach(&mut self, world: &mut World, events: &mut Events) {}
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
