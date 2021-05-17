@@ -77,6 +77,24 @@ impl CommandPool {
         Ok(commandbuffers)
     }
 
+    pub fn allocate_one(&self) -> Result<CommandBuffer, Error> {
+        let alloc_info = vk::CommandBufferAllocateInfo::builder()
+            .command_pool(self.commandpool)
+            .level(vk::CommandBufferLevel::PRIMARY)
+            .command_buffer_count(1);
+
+        // Allocate handles
+        let raw = unsafe { self.device.allocate_command_buffers(&alloc_info)? };
+
+        // Wrap handles
+        let commandbuffer = CommandBuffer {
+            device: self.device.clone(),
+            commandbuffer: raw[0],
+        };
+
+        Ok(commandbuffer)
+    }
+
     // Resets all command buffers allocated from pool
     // `release`: Release all memory allocated back to the system, if
     // commandbuffers are to be rerecorded, this will need to once again
