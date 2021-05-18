@@ -1,8 +1,10 @@
 use std::{
     sync::{mpsc, Arc},
+    thread::sleep,
     time::Duration,
 };
 
+use components::{AngularVelocity, Position, Rotation, Scale};
 use glfw::{Glfw, Window, WindowEvent};
 use hecs::World;
 use ivy_core::*;
@@ -11,11 +13,15 @@ use ivy_graphics::{
     Mesh,
 };
 use ivy_vulkan::{commands::*, descriptors::*, *};
-use ultraviolet::{Mat4, Vec2, Vec3, Vec4};
+use mesh_renderer::MeshRenderer;
+use ultraviolet::{Mat4, Rotor3, Vec2, Vec3, Vec4};
 
 use log::*;
 use window_renderer::WindowRenderer;
 
+mod components;
+mod mesh_renderer;
+mod systems;
 mod window_renderer;
 
 const FRAMES_IN_FLIGHT: usize = 2;
@@ -45,7 +51,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut app = App::builder()
         .push_layer(|_, _| WindowLayer::new(glfw, window.clone(), events))
-        .try_push_layer(|_, _| VulkanLayer::new(context.clone(), window.clone()))?
+        .try_push_layer(|world, _| VulkanLayer::new(context.clone(), world, window.clone()))?
         .push_layer(|_, _| PerformanceLayer::new(1.secs()))
         .build();
 
@@ -56,13 +62,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 #[allow(dead_code)]
 struct VulkanLayer {
-    context: Rc<VulkanContext>,
+    context: Arc<VulkanContext>,
 
     window_renderer: WindowRenderer,
+    mesh_renderer: MeshRenderer,
 
     descriptor_layout_cache: DescriptorLayoutCache,
     descriptor_allocator: DescriptorAllocator,
-    pipeline: Pipeline,
+    pipeline: Arc<Pipeline>,
 
     frames: Vec<FrameData>,
 
@@ -76,6 +83,7 @@ struct VulkanLayer {
 impl VulkanLayer {
     pub fn new(
         context: Arc<VulkanContext>,
+        world: &mut World,
         window: Arc<glfw::Window>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let mut descriptor_layout_cache = DescriptorLayoutCache::new(context.device().clone());
@@ -83,6 +91,11 @@ impl VulkanLayer {
         let mut descriptor_allocator = DescriptorAllocator::new(context.device().clone(), 2);
 
         let window_renderer = WindowRenderer::new(context.clone(), window.clone())?;
+        let mesh_renderer = MeshRenderer::new(
+            context.clone(),
+            &mut descriptor_layout_cache,
+            &mut descriptor_allocator,
+        )?;
 
         // Data that is tied and updated per swapchain image basis
         let frames = (0..FRAMES_IN_FLIGHT)
@@ -114,7 +127,7 @@ impl VulkanLayer {
         };
 
         // Create a pipeline from the shaders
-        let pipeline = Pipeline::new(
+        let pipeline = Arc::new(Pipeline::new(
             context.device().clone(),
             &mut descriptor_layout_cache,
             &window_renderer.renderpass(),
@@ -130,11 +143,51 @@ impl VulkanLayer {
                 cull_mode: vk::CullModeFlags::NONE,
                 front_face: vk::FrontFace::CLOCKWISE,
             },
-        )?;
+        )?);
+
+        world.spawn_batch((0..100).map(|i| (Vec3::new(i as f32, 0.0, 0.0),)));
+        world.spawn_batch(
+            [
+                (
+                    Position(Vec3::new(0.0, 0.0, 0.0)),
+                    mesh.clone(),
+                    pipeline.clone(),
+                ),
+                (
+                    Position(Vec3::new(4.0, 0.0, 0.0)),
+                    mesh.clone(),
+                    pipeline.clone(),
+                ),
+                (
+                    Position(Vec3::new(0.0, 0.0, -3.0)),
+                    mesh.clone(),
+                    pipeline.clone(),
+                ),
+            ]
+            .iter()
+            .cloned(),
+        );
+
+        world.spawn((
+            Position(Vec3::new(1.0, -2.0, -3.0)),
+            mesh.clone(),
+            Rotation::default(),
+            Scale(Vec3::one() * 0.5),
+            pipeline.clone(),
+        ));
+
+        world.spawn((
+            Position(Vec3::new(4.0, 0.0, -3.0)),
+            mesh.clone(),
+            Rotation::default(),
+            AngularVelocity(Vec3::new(0.0, 1.0, 0.2)),
+            pipeline.clone(),
+        ));
 
         Ok(Self {
             context,
             window_renderer,
+            mesh_renderer,
             descriptor_layout_cache,
             descriptor_allocator,
             pipeline,
@@ -148,7 +201,7 @@ impl VulkanLayer {
 }
 
 impl Layer for VulkanLayer {
-    fn on_update(&mut self, _world: &mut World, _events: &mut Events) {
+    fn on_update(&mut self, world: &mut World, _events: &mut Events) {
         let extent = self.window_renderer.swapchain().extent();
 
         let frame = &mut self.frames[self.current_frame];
@@ -156,17 +209,20 @@ impl Layer for VulkanLayer {
         fence::wait(self.context.device(), &[frame.fence], true).unwrap();
         fence::reset(self.context.device(), &[frame.fence]).unwrap();
 
+        systems::generate_model_matrices(world);
+        systems::integrate_angular_velocity(world, 0.02);
+        sleep(5.ms());
+
         frame.commandpool.reset(false).unwrap();
 
-        let commandbuffer = &frame.commandbuffer;
+        let cmd = &frame.commandbuffer;
 
         // Begin recording the commandbuffer, hinting that it will only be used once
-        commandbuffer
-            .begin(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT)
+        cmd.begin(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT)
             .unwrap();
 
         // Begin surface rendering renderpass
-        self.window_renderer.begin(commandbuffer).unwrap();
+        self.window_renderer.begin(cmd).unwrap();
 
         let viewproj = ultraviolet::projection::perspective_vk(1.0, extent.aspect(), 0.1, 100.0)
             * ultraviolet::Mat4::look_at(
@@ -184,25 +240,17 @@ impl Layer for VulkanLayer {
             .unwrap();
 
         // Bind the global uniform buffer
-        commandbuffer.bind_descriptor_sets(self.pipeline.layout(), 0, &[frame.set]);
 
-        // Bind the pipeline
-        commandbuffer.bind_pipeline(&self.pipeline);
-
-        // Bind and draw the triangle without indexing
-        commandbuffer.bind_vertexbuffers(0, &[&self.mesh.vertex_buffer()]);
-        commandbuffer.bind_indexbuffer(self.mesh.index_buffer(), 0);
-
-        commandbuffer.draw_indexed(self.mesh.index_count(), 1, 0, 0, 0);
+        self.mesh_renderer
+            .draw(world, cmd, self.current_frame, frame.set)
+            .unwrap();
 
         // Done
         frame.commandbuffer.end_renderpass();
-        commandbuffer.end().unwrap();
+        cmd.end().unwrap();
 
         // Submit and present
-        self.window_renderer
-            .submit(commandbuffer, frame.fence)
-            .unwrap();
+        self.window_renderer.submit(cmd, frame.fence).unwrap();
     }
 }
 
