@@ -42,13 +42,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let window = Arc::new(window);
 
-    let vulkan_layer = VulkanLayer::new(&glfw, window.clone())?;
-    let window_layer = WindowLayer::new(glfw, window, events);
+    let context = Rc::new(VulkanContext::new(&glfw, &window)?);
 
     let mut app = App::builder()
-        .push_layer(window_layer)
-        .push_layer(vulkan_layer)
-        .push_layer(PerformanceLayer::new(1.secs()))
+        .push_layer(|_, _| WindowLayer::new(glfw, window.clone(), events))
+        .try_push_layer(|_, _| VulkanLayer::new(context.clone(), window.clone()))?
+        .push_layer(|_, _| PerformanceLayer::new(1.secs()))
         .build();
 
     app.run();
@@ -77,11 +76,9 @@ struct VulkanLayer {
 
 impl VulkanLayer {
     pub fn new(
-        glfw: &Glfw,
+        context: Rc<VulkanContext>,
         window: Arc<glfw::Window>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        let context = Rc::new(VulkanContext::new(&glfw, &window)?);
-
         let mut descriptor_layout_cache = DescriptorLayoutCache::new(context.device().clone());
 
         let mut descriptor_allocator = DescriptorAllocator::new(context.device().clone(), 2);
@@ -208,8 +205,6 @@ impl Layer for VulkanLayer {
             .submit(commandbuffer, frame.fence)
             .unwrap();
     }
-
-    fn on_attach(&mut self, _world: &mut World, _events: &mut Events) {}
 }
 
 impl Drop for VulkanLayer {
@@ -317,8 +312,6 @@ impl Layer for WindowLayer {
             events.send(event);
         }
     }
-
-    fn on_attach(&mut self, _world: &mut World, _events: &mut Events) {}
 }
 
 struct PerformanceLayer {
@@ -380,8 +373,6 @@ impl Layer for PerformanceLayer {
             self.framecount = 0;
         }
     }
-
-    fn on_attach(&mut self, _world: &mut World, _events: &mut Events) {}
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

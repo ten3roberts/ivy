@@ -48,8 +48,6 @@ impl App {
     pub fn run(&mut self) {
         self.running = true;
 
-        self.init();
-
         // Update layers
         while self.running {
             let world = &mut self.world;
@@ -62,16 +60,6 @@ impl App {
             // Read all events sent by application
             self.handle_events();
         }
-    }
-
-    pub fn init(&mut self) {
-        let world = &mut self.world;
-        let events = &mut self.events;
-
-        // Run attach on layers in order
-        self.layers
-            .iter_mut()
-            .for_each(|layer| layer.on_attach(world, events));
     }
 
     pub fn handle_events(&mut self) {
@@ -87,8 +75,27 @@ impl App {
         &self.name
     }
 
-    /// Pushes a layer to the end of the layer stack.
-    pub fn push_layer<T: 'static + Layer>(&mut self, layer: T) {
+    /// Pushes a layer from the provided init closure to to the top of the layer stack. The provided
+    /// closure to construct the layer takes in the world and events.
+    pub fn push_layer<F, T>(&mut self, func: F)
+    where
+        F: FnOnce(&mut World, &mut Events) -> T,
+        T: 'static + Layer,
+    {
+        let layer = func(&mut self.world, &mut self.events);
         self.layers.push(layer);
+    }
+
+    /// Pushes a layer from the provided init closure to to the top of the layer stack. The provided
+    /// closure to construct the layer takes in the world and events, and may return an error which
+    /// is propagated to the callee.
+    pub fn try_push_layer<F, T, E>(&mut self, func: F) -> Result<(), E>
+    where
+        F: FnOnce(&mut World, &mut Events) -> Result<T, E>,
+        T: 'static + Layer,
+    {
+        let layer = func(&mut self.world, &mut self.events)?;
+        self.layers.push(layer);
+        Ok(())
     }
 }

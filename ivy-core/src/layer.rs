@@ -7,8 +7,6 @@ use crate::Events;
 pub trait Layer {
     /// Called for each iteration of the application event loop
     fn on_update(&mut self, world: &mut World, events: &mut Events);
-    /// Called when a layer is attached, I.e, on application startup
-    fn on_attach(&mut self, world: &mut World, events: &mut Events);
 }
 
 /// Abstracts the stack of layered execution logic
