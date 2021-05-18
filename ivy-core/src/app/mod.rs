@@ -14,9 +14,11 @@ use crate::{
 
 pub struct App {
     name: String,
+
+    layers: LayerStack,
+
     world: World,
     events: Events,
-    layers: LayerStack,
 
     rx: Receiver<AppEvent>,
 
