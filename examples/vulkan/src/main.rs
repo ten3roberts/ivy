@@ -1,5 +1,4 @@
 use std::{
-    rc::Rc,
     sync::{mpsc, Arc},
     time::Duration,
 };
@@ -42,7 +41,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let window = Arc::new(window);
 
-    let context = Rc::new(VulkanContext::new(&glfw, &window)?);
+    let context = Arc::new(VulkanContext::new(&glfw, &window)?);
 
     let mut app = App::builder()
         .push_layer(|_, _| WindowLayer::new(glfw, window.clone(), events))
@@ -76,7 +75,7 @@ struct VulkanLayer {
 
 impl VulkanLayer {
     pub fn new(
-        context: Rc<VulkanContext>,
+        context: Arc<VulkanContext>,
         window: Arc<glfw::Window>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let mut descriptor_layout_cache = DescriptorLayoutCache::new(context.device().clone());
@@ -217,7 +216,7 @@ impl Drop for VulkanLayer {
 
 /// Represents data needed to be duplicated for each swapchain image
 struct FrameData {
-    context: Rc<VulkanContext>,
+    context: Arc<VulkanContext>,
     fence: Fence,
     set: DescriptorSet,
     global_uniformbuffer: Buffer,
@@ -227,7 +226,7 @@ struct FrameData {
 
 impl FrameData {
     fn new(
-        context: Rc<VulkanContext>,
+        context: Arc<VulkanContext>,
         descriptor_allocator: &mut DescriptorAllocator,
         descriptor_layout_cache: &mut DescriptorLayoutCache,
     ) -> Result<Self, ivy_vulkan::Error> {

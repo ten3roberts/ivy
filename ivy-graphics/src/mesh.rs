@@ -2,7 +2,7 @@ use ash::vk;
 use gltf::{buffer, Semantic};
 use std::iter::repeat;
 use std::mem;
-use std::rc::Rc;
+use std::sync::Arc;
 use ultraviolet::{Vec2, Vec3};
 
 use crate::Error;
@@ -76,7 +76,7 @@ pub struct Mesh {
 impl Mesh {
     /// Creates a new mesh from provided vertices and indices.
     pub fn new(
-        context: Rc<VulkanContext>,
+        context: Arc<VulkanContext>,
         vertices: &[Vertex],
         indices: &[u32],
     ) -> Result<Self, Error> {
@@ -101,7 +101,7 @@ impl Mesh {
     /// Creates a mesh from an structure-of-arrays vertex data
     /// Each index refers to the direct index of positions, normals and texcoords
     pub fn from_soa(
-        context: Rc<VulkanContext>,
+        context: Arc<VulkanContext>,
         positions: &[Vec3],
         normals: &[Vec3],
         texcoords: &[Vec2],
@@ -118,7 +118,7 @@ impl Mesh {
 
     /// Loads a mesh from gltf asset. Loads positions, normals, and texture coordinates.
     pub fn from_gltf(
-        context: Rc<VulkanContext>,
+        context: Arc<VulkanContext>,
         mesh: gltf::Mesh,
         buffers: &[buffer::Data],
     ) -> Result<Self, Error> {

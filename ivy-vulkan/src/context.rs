@@ -5,14 +5,14 @@ use ash::extensions::khr::Surface;
 use ash::vk;
 
 use glfw::Glfw;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use super::device::QueueFamilies;
 
 pub struct VulkanContext {
     _entry: ash::Entry,
     instance: ash::Instance,
-    device: Rc<ash::Device>,
+    device: Arc<ash::Device>,
     physical_device: vk::PhysicalDevice,
     queue_families: QueueFamilies,
     debug_utils: Option<(DebugUtils, vk::DebugUtilsMessengerEXT)>,
@@ -106,7 +106,7 @@ impl VulkanContext {
     }
 
     // Returns the device
-    pub fn device(&self) -> &Rc<ash::Device> {
+    pub fn device(&self) -> &Arc<ash::Device> {
         &self.device
     }
 

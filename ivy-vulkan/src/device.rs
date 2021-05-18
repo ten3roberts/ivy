@@ -11,7 +11,7 @@ use ash::{Device, Instance};
 use std::{
     collections::HashSet,
     ffi::{CStr, CString},
-    rc::Rc,
+    sync::Arc,
 };
 
 pub struct QueueFamilies {
@@ -211,7 +211,7 @@ pub fn create(
     surface_loader: &Surface,
     surface: SurfaceKHR,
     layers: &[&str],
-) -> Result<(Rc<Device>, PhysicalDeviceInfo), Error> {
+) -> Result<(Arc<Device>, PhysicalDeviceInfo), Error> {
     let extensions = DEVICE_EXTENSIONS
         .iter()
         .map(|s| CString::new(*s))
@@ -265,7 +265,7 @@ pub fn create(
 
     let device =
         unsafe { instance.create_device(pdevice_info.physical_device, &create_info, None)? };
-    Ok((Rc::new(device), pdevice_info))
+    Ok((Arc::new(device), pdevice_info))
 }
 
 pub fn get_limits(

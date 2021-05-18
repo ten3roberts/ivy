@@ -1,6 +1,6 @@
 //! A buffer represents a piece of memory that can be accessed by the GPU and used to store and
 //! write data. Buffers
-use std::{mem, rc::Rc};
+use std::{mem, sync::Arc};
 
 use ash::vk;
 use vk::DeviceSize;
@@ -46,7 +46,7 @@ pub enum BufferAccess {
 /// vertex and uniform use
 /// buffer access
 pub struct Buffer {
-    context: Rc<VulkanContext>,
+    context: Arc<VulkanContext>,
     buffer: vk::Buffer,
     allocation: vk_mem::Allocation,
     allocation_info: vk_mem::AllocationInfo,
@@ -63,7 +63,7 @@ pub struct Buffer {
 impl Buffer {
     /// Creates a new buffer with size and uninitialized contents.
     pub fn new_uninit(
-        context: Rc<VulkanContext>,
+        context: Arc<VulkanContext>,
         ty: BufferType,
         access: BufferAccess,
         size: DeviceSize,
@@ -125,7 +125,7 @@ impl Buffer {
     /// Creates a new buffer and fills it with vertex data using staging
     /// buffer. Buffer will be the same size as provided data.
     pub fn new<T>(
-        context: Rc<VulkanContext>,
+        context: Arc<VulkanContext>,
         ty: BufferType,
         access: BufferAccess,
         data: &[T],

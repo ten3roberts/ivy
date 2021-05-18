@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::sync::Arc;
 
 use super::{Error, Sampler, Texture};
 use ash::version::DeviceV1_0;
@@ -20,13 +20,13 @@ pub const MAX_BINDINGS: usize = 8;
 pub use vk::DescriptorSetLayoutBinding as DescriptorSetBinding;
 
 pub struct DescriptorPool {
-    device: Rc<Device>,
+    device: Arc<Device>,
     descriptor_pool: vk::DescriptorPool,
 }
 
 impl DescriptorPool {
     pub fn new(
-        device: Rc<Device>,
+        device: Arc<Device>,
         max_sets: u32,
         uniformbuffer_count: u32,
         texture_count: u32,

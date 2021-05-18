@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::ClearValue;
 
@@ -21,7 +21,7 @@ use ash::{version::DeviceV1_0, vk::PipelineLayout};
 pub const MAX_VB_BINDING: usize = 4;
 
 pub struct CommandPool {
-    device: Rc<Device>,
+    device: Arc<Device>,
     commandpool: vk::CommandPool,
 }
 
@@ -29,7 +29,7 @@ pub struct CommandPool {
 /// `reset`: Commandbuffers can be individually reset from pool
 impl CommandPool {
     pub fn new(
-        device: Rc<Device>,
+        device: Arc<Device>,
         queue_family: u32,
         transient: bool,
         reset: bool,
@@ -155,7 +155,7 @@ impl Drop for CommandPool {
 }
 
 pub struct CommandBuffer {
-    device: Rc<Device>,
+    device: Arc<Device>,
     commandbuffer: vk::CommandBuffer,
 }
 
@@ -232,6 +232,16 @@ impl CommandBuffer {
         }
     }
 
+    pub fn bind_vertexbuffer<B: AsRef<vk::Buffer>>(&self, first_binding: u32, vertexbuffer: B) {
+        unsafe {
+            self.device.cmd_bind_vertex_buffers(
+                self.commandbuffer,
+                first_binding,
+                &[*vertexbuffer.as_ref()],
+                &[0; 1],
+            )
+        }
+    }
     pub fn bind_vertexbuffers<B: AsRef<vk::Buffer>>(
         &self,
         first_binding: u32,

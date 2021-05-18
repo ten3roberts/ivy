@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::sync::Arc;
 
 use super::{renderpass::MAX_ATTACHMENTS, Error, Extent, RenderPass};
 use arrayvec::ArrayVec;
@@ -11,14 +11,14 @@ use ash::Device;
 /// textures are kept alive. This is because a texture can be used in several framebuffers
 /// simultaneously.
 pub struct Framebuffer {
-    device: Rc<Device>,
+    device: Arc<Device>,
     framebuffer: vk::Framebuffer,
     extent: Extent,
 }
 
 impl Framebuffer {
     pub fn new<T: AsRef<vk::ImageView>>(
-        device: Rc<Device>,
+        device: Arc<Device>,
         renderpass: &RenderPass,
         attachments: &[T],
         extent: Extent,

@@ -1,4 +1,4 @@
-use std::{path::Path, rc::Rc};
+use std::{path::Path, sync::Arc};
 
 use ash::version::DeviceV1_0;
 use ash::vk;
@@ -50,7 +50,7 @@ pub enum TextureUsage {
 // height, format, mipmapping levels and samples. Manages the deallocation of image memory unless
 // created manually without provided allocation using `from_image`.
 pub struct Texture {
-    context: Rc<VulkanContext>,
+    context: Arc<VulkanContext>,
     image: vk::Image,
     image_view: vk::ImageView,
     format: vk::Format,
@@ -66,7 +66,7 @@ impl Texture {
     /// Loads a color texture from an image file.
     /// Uses the width and height of the loaded image, no resizing.
     /// Uses mipmapping.
-    pub fn load<P: AsRef<Path>>(context: Rc<VulkanContext>, path: P) -> Result<Self, Error> {
+    pub fn load<P: AsRef<Path>>(context: Arc<VulkanContext>, path: P) -> Result<Self, Error> {
         let image =
             ivy_stb::Image::load(&path, 4).ok_or(Error::ImageLoading(path.as_ref().to_owned()))?;
 
@@ -86,7 +86,7 @@ impl Texture {
 
     /// Creates a texture from provided raw pixels
     /// Note, raw pixels must match format, width, and height
-    pub fn new(context: Rc<VulkanContext>, info: TextureInfo) -> Result<Self, Error> {
+    pub fn new(context: Arc<VulkanContext>, info: TextureInfo) -> Result<Self, Error> {
         // Re-alias as mutable
         let mut info = info;
         let mut mip_levels = calculate_mip_levels(info.extent);
@@ -154,7 +154,7 @@ impl Texture {
     /// Creates a texture from an already existing VkImage
     /// If allocation is provided, the image will be destroyed along with self
     pub fn from_image(
-        context: Rc<VulkanContext>,
+        context: Arc<VulkanContext>,
         info: TextureInfo,
         image: vk::Image,
         allocation: Option<vk_mem::Allocation>,

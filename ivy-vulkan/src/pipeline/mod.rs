@@ -2,7 +2,7 @@ use super::{descriptors::DescriptorLayoutCache, Error};
 use super::{renderpass::*, Extent};
 use ash::version::DeviceV1_0;
 use ash::Device;
-use std::{ffi::CString, rc::Rc};
+use std::{ffi::CString, sync::Arc};
 use std::{fs::File, path::PathBuf};
 
 use ash::vk;
@@ -41,14 +41,14 @@ impl Default for PipelineInfo {
 }
 
 pub struct Pipeline {
-    device: Rc<Device>,
+    device: Arc<Device>,
     pipeline: vk::Pipeline,
     layout: vk::PipelineLayout,
 }
 
 impl Pipeline {
     pub fn new(
-        device: Rc<Device>,
+        device: Arc<Device>,
         layout_cache: &mut DescriptorLayoutCache,
         renderpass: &RenderPass,
         info: PipelineInfo,

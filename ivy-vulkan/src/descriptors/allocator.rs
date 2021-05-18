@@ -2,7 +2,7 @@ use ash::version::DeviceV1_0;
 use ash::vk;
 use ash::Device;
 use smallvec::SmallVec;
-use std::{collections::HashMap, iter::repeat, rc::Rc};
+use std::{collections::HashMap, iter::repeat, sync::Arc};
 
 use crate::Error;
 
@@ -41,7 +41,7 @@ impl Pool {
 
 /// Manages descriptor allocations by automatically managing pools for each layout
 pub struct DescriptorAllocator {
-    device: Rc<Device>,
+    device: Arc<Device>,
     sub_allocators: HashMap<DescriptorSetLayout, DescriptorLayoutAllocator>,
     set_count: u32,
 }
@@ -49,7 +49,7 @@ pub struct DescriptorAllocator {
 impl DescriptorAllocator {
     /// Creates a new descriptor allocator. `set_count` represents the preferred descriptor count
     /// per pool. It is possible to allocate more than `set_count` at a time.
-    pub fn new(device: Rc<Device>, set_count: u32) -> Self {
+    pub fn new(device: Arc<Device>, set_count: u32) -> Self {
         Self {
             device,
             sub_allocators: HashMap::new(),
@@ -113,7 +113,7 @@ impl DescriptorAllocator {
 
 /// Manages allocation for a single descriptor set layout
 struct DescriptorLayoutAllocator {
-    device: Rc<Device>,
+    device: Arc<Device>,
     layout: DescriptorSetLayout,
     set_count: u32,
     /// A list of pools with atleast 1 descriptor remaining.
@@ -127,7 +127,7 @@ impl DescriptorLayoutAllocator {
     /// Creates a new descriptor allocator. Stores several pools contains `set_count` available
     /// descriptors each. `sizes` describes the relative
     pub fn new(
-        device: Rc<Device>,
+        device: Arc<Device>,
         layout: DescriptorSetLayout,
         layout_info: &DescriptorLayoutInfo,
         set_count: u32,

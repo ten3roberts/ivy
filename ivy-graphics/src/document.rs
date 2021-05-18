@@ -1,4 +1,4 @@
-use std::{path::Path, rc::Rc, sync::Arc};
+use std::{path::Path, sync::Arc};
 
 use crate::Error;
 
@@ -24,7 +24,7 @@ pub struct Document {
 
 impl Document {
     /// Loads a gltf document/asset from path
-    pub fn load<P: AsRef<Path>>(context: Rc<VulkanContext>, path: P) -> Result<Self, Error> {
+    pub fn load<P: AsRef<Path>>(context: Arc<VulkanContext>, path: P) -> Result<Self, Error> {
         let (document, buffers, _images) = gltf::import(path)?;
 
         Self::from_gltf(context, document, &buffers)
@@ -32,7 +32,7 @@ impl Document {
 
     /// Loads a gltf import document's meshes and scene data.
     pub fn from_gltf(
-        context: Rc<VulkanContext>,
+        context: Arc<VulkanContext>,
         document: gltf::Document,
         buffers: &[gltf::buffer::Data],
     ) -> Result<Self, Error> {

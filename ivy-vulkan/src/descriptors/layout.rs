@@ -1,4 +1,4 @@
-use std::{collections::HashMap, rc::Rc};
+use std::{collections::HashMap, sync::Arc};
 
 use arrayvec::ArrayVec;
 use ash::version::DeviceV1_0;
@@ -83,12 +83,12 @@ impl PartialEq for DescriptorLayoutInfo {
 impl Eq for DescriptorLayoutInfo {}
 
 pub struct DescriptorLayoutCache {
-    device: Rc<Device>,
+    device: Arc<Device>,
     layouts: HashMap<DescriptorLayoutInfo, DescriptorSetLayout>,
 }
 
 impl DescriptorLayoutCache {
-    pub fn new(device: Rc<Device>) -> Self {
+    pub fn new(device: Arc<Device>) -> Self {
         Self {
             device,
             layouts: HashMap::new(),

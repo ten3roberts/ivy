@@ -3,7 +3,7 @@ use arrayvec::ArrayVec;
 use ash::version::DeviceV1_0;
 use ash::vk::SampleCountFlags;
 use ash::Device;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use ash::vk;
 
@@ -157,12 +157,12 @@ pub struct RenderPassInfo<'a, 'b, 'c, 'd> {
 }
 
 pub struct RenderPass {
-    device: Rc<Device>,
+    device: Arc<Device>,
     renderpass: vk::RenderPass,
 }
 
 impl RenderPass {
-    pub fn new(device: Rc<Device>, info: &RenderPassInfo) -> Result<Self, Error> {
+    pub fn new(device: Arc<Device>, info: &RenderPassInfo) -> Result<Self, Error> {
         // Convert attachment infos into vulkan equivalent
         let vk_attachments = info
             .attachments

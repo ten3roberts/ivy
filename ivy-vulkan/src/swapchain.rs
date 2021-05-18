@@ -3,7 +3,7 @@ pub use ash::extensions::khr::Swapchain as SwapchainLoader;
 use ash::vk::{self, SurfaceKHR};
 use ash::Device;
 use ash::Instance;
-use std::{cmp, rc::Rc};
+use std::{cmp, sync::Arc};
 
 use super::{Error, Extent, Texture, TextureInfo, VulkanContext};
 
@@ -100,7 +100,7 @@ pub fn create_loader(instance: &Instance, device: &Device) -> SwapchainLoader {
 /// Contains a queue of images and is the link between vulkan and presenting image data to the
 /// system window.
 pub struct Swapchain {
-    context: Rc<VulkanContext>,
+    context: Arc<VulkanContext>,
     swapchain: vk::SwapchainKHR,
     images: Vec<Texture>,
     extent: Extent,
@@ -108,7 +108,7 @@ pub struct Swapchain {
 }
 
 impl Swapchain {
-    pub fn new(context: Rc<VulkanContext>, window: &glfw::Window) -> Result<Self, Error> {
+    pub fn new(context: Arc<VulkanContext>, window: &glfw::Window) -> Result<Self, Error> {
         let support = query_support(
             context.surface_loader(),
             context.surface(),

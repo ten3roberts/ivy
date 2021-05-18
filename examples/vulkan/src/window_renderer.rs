@@ -1,4 +1,4 @@
-use std::{rc::Rc, sync::Arc};
+use std::sync::Arc;
 
 use glfw::Window;
 use ivy_vulkan::{
@@ -12,7 +12,7 @@ use ivy_vulkan::{
 
 /// Renderer rendering to a glfw window
 pub struct WindowRenderer {
-    context: Rc<VulkanContext>,
+    context: Arc<VulkanContext>,
     swapchain: Swapchain,
     _window: Arc<Window>,
 
@@ -28,7 +28,7 @@ pub struct WindowRenderer {
 }
 
 impl WindowRenderer {
-    pub fn new(context: Rc<VulkanContext>, window: Arc<Window>) -> Result<Self, Error> {
+    pub fn new(context: Arc<VulkanContext>, window: Arc<Window>) -> Result<Self, Error> {
         let swapchain = Swapchain::new(context.clone(), &window)?;
 
         let extent = swapchain.extent();
