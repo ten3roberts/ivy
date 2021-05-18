@@ -105,14 +105,9 @@ impl VulkanContext {
         })
     }
 
-    // Returns a borrow of device
-    pub fn device(&self) -> &ash::Device {
+    // Returns the device
+    pub fn device(&self) -> &Rc<ash::Device> {
         &self.device
-    }
-
-    /// Returns a new owned reference to device
-    pub fn device_ref(&self) -> Rc<ash::Device> {
-        Rc::clone(&self.device)
     }
 
     pub fn physical_device(&self) -> vk::PhysicalDevice {
