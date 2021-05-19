@@ -1,0 +1,13 @@
+[package]
+name = "ivy-input"
+version = "0.1.0"
+authors = ["Tim Roberts <ten3roberts@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+flume = "0.10"
+glfw = { version = "0.41.0", features = [ "vulkan" ] }
+ivy-core = { path = "../ivy-core", version = "0.1.0" }
+ultraviolet = "0.8"

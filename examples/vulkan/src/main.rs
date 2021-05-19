@@ -4,17 +4,19 @@ use std::{
     time::Duration,
 };
 
+use atomic_refcell::AtomicRefCell;
 use components::{AngularVelocity, Position, Rotation, Scale};
-use glfw::{Glfw, Window, WindowEvent};
+use glfw::{Action, Glfw, Key, Window, WindowEvent};
 use hecs::World;
 use ivy_core::*;
 use ivy_graphics::{
     window::{WindowExt, WindowInfo, WindowMode},
     Material, Mesh,
 };
+use ivy_input::{Input, InputAxis, InputDirection, InputVector};
 use ivy_vulkan::{commands::*, descriptors::*, *};
 use mesh_renderer::MeshRenderer;
-use ultraviolet::{Mat4, Rotor3, Vec2, Vec3, Vec4};
+use ultraviolet::{projection, Mat4, Vec2, Vec3, Vec4};
 
 use log::*;
 use window_renderer::WindowRenderer;
@@ -35,13 +37,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS)?;
 
-    let (window, events) = ivy_graphics::window::create(
+    let (window, window_events) = ivy_graphics::window::create(
         &mut glfw,
         "ivy-vulkan",
         WindowInfo {
-            extent: Some(Extent::new(800, 600)),
+            extent: None, //Some(Extent::new(800, 600)),
+
             resizable: false,
-            mode: WindowMode::Windowed,
+            mode: WindowMode::Fullscreen,
         },
     )?;
 
@@ -50,8 +53,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let context = Arc::new(VulkanContext::new(&glfw, &window)?);
 
     let mut app = App::builder()
-        .push_layer(|_, _| WindowLayer::new(glfw, window.clone(), events))
-        .try_push_layer(|world, _| VulkanLayer::new(context.clone(), world, window.clone()))?
+        .push_layer(|_, _| WindowLayer::new(glfw, window.clone(), window_events))
+        .try_push_layer(|world, events| {
+            VulkanLayer::new(context.clone(), world, window.clone(), events)
+        })?
         .push_layer(|_, _| PerformanceLayer::new(1.secs()))
         .build();
 
@@ -65,6 +70,7 @@ struct VulkanLayer {
     context: Arc<VulkanContext>,
 
     window_renderer: WindowRenderer,
+    window: Arc<Window>,
     mesh_renderer: MeshRenderer,
 
     descriptor_layout_cache: DescriptorLayoutCache,
@@ -78,13 +84,19 @@ struct VulkanLayer {
     current_frame: usize,
 
     clock: Clock,
+
+    camera_pos: Position,
+
+    input: Input,
+    input_vec: InputVector,
 }
 
 impl VulkanLayer {
     pub fn new(
         context: Arc<VulkanContext>,
         world: &mut World,
-        window: Arc<glfw::Window>,
+        window: Arc<Window>,
+        events: &mut Events,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let mut descriptor_layout_cache = DescriptorLayoutCache::new(context.device().clone());
 
@@ -230,14 +242,23 @@ impl VulkanLayer {
             Position(Vec3::new(0.0, 0.0, 3.0)),
             sphere_mesh.clone(),
             Rotation::default(),
-            AngularVelocity(Vec3::new(0.0, 1.0, 0.2)),
+            AngularVelocity(Vec3::new(0.0, 0.1, 1.0)),
             pipeline.clone(),
             material.clone(),
         ));
 
+        let input = Input::new(events);
+
+        let input_vec = InputVector::new(
+            InputAxis::keyboard(Key::D, Key::A),
+            InputAxis::scroll(InputDirection::Vertical, false),
+            InputAxis::keyboard(Key::S, Key::W),
+        );
+
         Ok(Self {
             context,
             window_renderer,
+            window,
             mesh_renderer,
             descriptor_layout_cache,
             descriptor_allocator,
@@ -247,6 +268,9 @@ impl VulkanLayer {
             global_data,
             current_frame: 0,
             clock: Clock::new(),
+            camera_pos: Position(Vec3::new(0.0, 0.0, 15.0)),
+            input,
+            input_vec,
         })
     }
 }
@@ -260,8 +284,14 @@ impl Layer for VulkanLayer {
         fence::wait(self.context.device(), &[frame.fence], true).unwrap();
         fence::reset(self.context.device(), &[frame.fence]).unwrap();
 
-        systems::generate_model_matrices(world);
         systems::integrate_angular_velocity(world, 0.02);
+
+        systems::generate_model_matrices(world);
+
+        self.input.on_update();
+
+        self.camera_pos += Position(self.input_vec.get(&self.input) * 0.05);
+
         sleep(5.ms());
 
         frame.commandpool.reset(false).unwrap();
@@ -275,12 +305,9 @@ impl Layer for VulkanLayer {
         // Begin surface rendering renderpass
         self.window_renderer.begin(cmd).unwrap();
 
-        let viewproj = ultraviolet::projection::perspective_vk(1.0, extent.aspect(), 0.1, 100.0)
-            * ultraviolet::Mat4::look_at(
-                Vec3::new(5.0, self.clock.elapsed().secs().sin() * 10.0, 5.0),
-                Vec3::zero(),
-                Vec3::unit_y(),
-            );
+        let viewproj = projection::perspective_vk(1.0, extent.aspect(), 0.1, 100.0)
+            // * Mat4::look_at(*self.camera_pos, Vec3::zero(), Vec3::unit_y());
+            * Mat4::from_translation(*self.camera_pos).inversed();
 
         self.global_data.viewproj = viewproj;
 
@@ -291,7 +318,6 @@ impl Layer for VulkanLayer {
             .unwrap();
 
         // Bind the global uniform buffer
-
         self.mesh_renderer
             .draw(world, cmd, self.current_frame, frame.set)
             .unwrap();

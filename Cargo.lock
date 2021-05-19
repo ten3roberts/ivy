@@ -33,6 +33,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "atomic_refcell"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "681b971236e0f76b20fcafca0236b8718c9186ee778d67cd78bd5f28fd85427f"
+
+[[package]]
 name = "autocfg"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -338,6 +344,16 @@ dependencies = [
  "gltf",
  "ivy-vulkan",
  "thiserror",
+ "ultraviolet",
+]
+
+[[package]]
+name = "ivy-input"
+version = "0.1.0"
+dependencies = [
+ "flume",
+ "glfw",
+ "ivy-core",
  "ultraviolet",
 ]
 
@@ -803,12 +819,14 @@ checksum = "36f5fd4a7d6d5d19808610583131c0aed271556527cad4cb71c436831a28e059"
 name = "vulkan"
 version = "0.1.0"
 dependencies = [
+ "atomic_refcell",
  "derive_more",
  "flume",
  "glfw",
  "hecs",
  "ivy-core",
  "ivy-graphics",
+ "ivy-input",
  "ivy-vulkan",
  "log",
  "ultraviolet",
