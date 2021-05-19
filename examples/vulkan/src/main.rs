@@ -10,7 +10,7 @@ use hecs::World;
 use ivy_core::*;
 use ivy_graphics::{
     window::{WindowExt, WindowInfo, WindowMode},
-    Mesh,
+    Material, Mesh,
 };
 use ivy_vulkan::{commands::*, descriptors::*, *};
 use mesh_renderer::MeshRenderer;
@@ -110,7 +110,53 @@ impl VulkanLayer {
 
         let document = ivy_graphics::Document::load(context.clone(), "./res/models/cube.gltf")?;
 
-        let mesh = document.mesh(0).clone();
+        let cube_mesh = document.mesh(0).clone();
+
+        let document = ivy_graphics::Document::load(context.clone(), "./res/models/sphere.gltf")?;
+        let sphere_mesh = document.mesh(0).clone();
+
+        let grid = Arc::new(Texture::load(context.clone(), "./res/textures/grid.png")?);
+        let uv_grid = Arc::new(Texture::load(context.clone(), "./res/textures/uv.png")?);
+
+        let sampler = Arc::new(Sampler::new(
+            context.clone(),
+            SamplerInfo {
+                address_mode: AddressMode::REPEAT,
+                mag_filter: FilterMode::LINEAR,
+                min_filter: FilterMode::LINEAR,
+                unnormalized_coordinates: false,
+                anisotropy: 16.0,
+                mip_levels: grid.mip_levels(),
+            },
+        )?);
+
+        let sampler2 = Arc::new(Sampler::new(
+            context.clone(),
+            SamplerInfo {
+                address_mode: AddressMode::REPEAT,
+                mag_filter: FilterMode::LINEAR,
+                min_filter: FilterMode::LINEAR,
+                unnormalized_coordinates: false,
+                anisotropy: 16.0,
+                mip_levels: uv_grid.mip_levels(),
+            },
+        )?);
+
+        let material = Arc::new(Material::new(
+            context.clone(),
+            &mut descriptor_layout_cache,
+            &mut descriptor_allocator,
+            grid,
+            sampler,
+        )?);
+
+        let material2 = Arc::new(Material::new(
+            context.clone(),
+            &mut descriptor_layout_cache,
+            &mut descriptor_allocator,
+            uv_grid,
+            sampler2,
+        )?);
 
         let viewproj =
             ultraviolet::projection::perspective_vk(1.0, window.extent().aspect(), 0.1, 100.0)
@@ -150,17 +196,20 @@ impl VulkanLayer {
             [
                 (
                     Position(Vec3::new(0.0, 0.0, 0.0)),
-                    mesh.clone(),
+                    cube_mesh.clone(),
+                    material.clone(),
                     pipeline.clone(),
                 ),
                 (
                     Position(Vec3::new(4.0, 0.0, 0.0)),
-                    mesh.clone(),
+                    cube_mesh.clone(),
+                    material.clone(),
                     pipeline.clone(),
                 ),
                 (
                     Position(Vec3::new(0.0, 0.0, -3.0)),
-                    mesh.clone(),
+                    cube_mesh.clone(),
+                    material2.clone(),
                     pipeline.clone(),
                 ),
             ]
@@ -169,19 +218,21 @@ impl VulkanLayer {
         );
 
         world.spawn((
-            Position(Vec3::new(1.0, -2.0, -3.0)),
-            mesh.clone(),
+            Position(Vec3::new(1.0, -2.0, 3.0)),
+            cube_mesh.clone(),
             Rotation::default(),
             Scale(Vec3::one() * 0.5),
             pipeline.clone(),
+            material2.clone(),
         ));
 
         world.spawn((
-            Position(Vec3::new(4.0, 0.0, -3.0)),
-            mesh.clone(),
+            Position(Vec3::new(0.0, 0.0, 3.0)),
+            sphere_mesh.clone(),
             Rotation::default(),
             AngularVelocity(Vec3::new(0.0, 1.0, 0.2)),
             pipeline.clone(),
+            material.clone(),
         ));
 
         Ok(Self {
@@ -192,7 +243,7 @@ impl VulkanLayer {
             descriptor_allocator,
             pipeline,
             frames,
-            mesh,
+            mesh: cube_mesh,
             global_data,
             current_frame: 0,
             clock: Clock::new(),
@@ -257,6 +308,7 @@ impl Layer for VulkanLayer {
 impl Drop for VulkanLayer {
     fn drop(&mut self) {
         let device = self.context.device();
+        log::info!("Dropping vulkan layer");
         // Wait for everything to be done before cleaning up
         device::wait_idle(device).unwrap();
     }

@@ -10,7 +10,7 @@ edition = "2018"
 derive_more = "0.99"
 flume = "0.10"
 glfw = { version = "0.41.0", features = [ "vulkan" ] }
-hecs = "0.5"
+hecs = { version = "0.5", features = [ "macros" ] }
 ivy-core = { path = "../../ivy-core", version = "0.1.0" }
 ivy-graphics = { path = "../../ivy-graphics", version = "0.1.0" }
 ivy-vulkan = { path = "../../ivy-vulkan", version = "0.1.0" }

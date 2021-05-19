@@ -1,7 +1,5 @@
-use std::{mem::size_of, sync::Arc};
-
-use hecs::World;
-use ivy_graphics::Mesh;
+use hecs::{Query, World};
+use ivy_graphics::{Material, Mesh};
 use ivy_vulkan::{
     commands::CommandBuffer,
     descriptors::{
@@ -10,9 +8,10 @@ use ivy_vulkan::{
     },
     vk, Buffer, BufferAccess, BufferType, Error, Pipeline, VulkanContext,
 };
+use std::{mem::size_of, sync::Arc};
 use ultraviolet::Mat4;
 
-use crate::{components::ModelMatrix, Position, FRAMES_IN_FLIGHT};
+use crate::{components::ModelMatrix, FRAMES_IN_FLIGHT};
 
 pub const MAX_OBJECTS: usize = 256;
 
@@ -47,27 +46,33 @@ impl MeshRenderer {
         current_frame: usize,
         global_set: DescriptorSet,
     ) -> Result<(), Error> {
-        let query = world.query_mut::<(&ModelMatrix, &Arc<Mesh>, &Arc<Pipeline>)>();
+        let query = world.query_mut::<RenderObject>();
 
         let frame = &mut self.frames[current_frame];
 
-        let sets = &[global_set, frame.set];
+        let frame_set = frame.set;
 
         frame
             .object_buffer
             .write_slice(MAX_OBJECTS as u64, 0, |data| {
                 let mut i = 0;
-                for (_, (mvp, mesh, pipeline)) in query {
-                    data[i] = ObjectData { mvp: **mvp };
+                for (_, renderable) in query {
+                    data[i] = ObjectData {
+                        mvp: **renderable.modelmatrix,
+                    };
 
-                    cmd.bind_pipeline(pipeline);
+                    cmd.bind_pipeline(renderable.pipeline);
 
-                    cmd.bind_descriptor_sets(pipeline.layout(), 0, sets);
+                    cmd.bind_descriptor_sets(
+                        renderable.pipeline.layout(),
+                        0,
+                        &[global_set, frame_set, renderable.material.set()],
+                    );
 
-                    cmd.bind_vertexbuffer(0, mesh.vertex_buffer());
-                    cmd.bind_indexbuffer(mesh.index_buffer(), 0);
+                    cmd.bind_vertexbuffer(0, renderable.mesh.vertex_buffer());
+                    cmd.bind_indexbuffer(renderable.mesh.index_buffer(), 0);
 
-                    cmd.draw_indexed(mesh.index_count(), 1, 0, 0, i as u32);
+                    cmd.draw_indexed(renderable.mesh.index_count(), 1, 0, 0, i as u32);
                     i += 1;
                 }
             })?;
@@ -119,4 +124,12 @@ impl FrameData {
 #[repr(C)]
 struct ObjectData {
     mvp: Mat4,
+}
+
+#[derive(Query)]
+struct RenderObject<'a> {
+    mesh: &'a Arc<Mesh>,
+    material: &'a Arc<Material>,
+    pipeline: &'a Arc<Pipeline>,
+    modelmatrix: &'a ModelMatrix,
 }

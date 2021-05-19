@@ -3,9 +3,11 @@
 
 mod document;
 mod error;
+mod material;
 mod mesh;
 pub mod window;
 
-pub use document::*;
-pub use error::*;
-pub use mesh::*;
+pub use document::Document;
+pub use error::Error;
+pub use material::Material;
+pub use mesh::{Mesh, Vertex};
