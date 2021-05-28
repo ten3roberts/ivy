@@ -1,4 +1,4 @@
-use flume::{Receiver, Sender};
+use flume::Receiver;
 use rand::prelude::*;
 use std::{thread::sleep, time::Duration};
 
@@ -15,7 +15,7 @@ fn main() {
     }
     .install();
 
-    let mut app = App::builder().push_layer(SandboxLayer::new()).build();
+    let mut app = App::builder().push_layer(SandboxLayer::new).build();
 
     app.run();
 }
@@ -44,19 +44,50 @@ struct SandboxLayer {
     last_status: Clock,
 
     rx: Receiver<SandboxEvent>,
-    tx: Sender<SandboxEvent>,
 }
 
 impl SandboxLayer {
-    fn new() -> Self {
+    fn new(world: &mut World, events: &mut Events) -> Self {
+        info!("Attached sandbox layer");
+
+        let mut rng = StdRng::seed_from_u64(0);
+        // Spawn some with velocities
+        world.spawn_batch((0..10).map(|_| {
+            (
+                Position {
+                    x: rng.gen_range(-5..5),
+                    y: rng.gen_range(-5..5),
+                },
+                Velocity {
+                    x: rng.gen_range(-3..3),
+                    y: rng.gen_range(-3..3),
+                },
+            )
+        }));
+
+        // And some without
+        world.spawn_batch((0..10).map(|_| {
+            (Position {
+                x: rng.gen_range(-5..5),
+                y: rng.gen_range(-5..5),
+            },)
+        }));
+
+        // And many unrelated
+        world.spawn_batch((0..1_000).map(|_| {
+            let name = (0..5).map(|_| rng.gen_range('a'..'z')).collect::<String>();
+            (name,)
+        }));
+
         let (tx, rx) = flume::unbounded();
+        events.subscribe(tx);
+
         Self {
             frame: 0,
             frame_clock: Clock::new(),
             elapsed: Clock::new(),
             last_status: Clock::new(),
             rx,
-            tx,
         }
     }
 }
@@ -100,41 +131,6 @@ impl Layer for SandboxLayer {
         }
 
         sleep(Duration::from_millis(100));
-    }
-
-    fn on_attach(&mut self, world: &mut World, events: &mut Events) {
-        info!("Attached sandbox layer");
-
-        let mut rng = StdRng::seed_from_u64(0);
-        // Spawn some with velocities
-        world.spawn_batch((0..10).map(|_| {
-            (
-                Position {
-                    x: rng.gen_range(-5..5),
-                    y: rng.gen_range(-5..5),
-                },
-                Velocity {
-                    x: rng.gen_range(-3..3),
-                    y: rng.gen_range(-3..3),
-                },
-            )
-        }));
-
-        // And some without
-        world.spawn_batch((0..10).map(|_| {
-            (Position {
-                x: rng.gen_range(-5..5),
-                y: rng.gen_range(-5..5),
-            },)
-        }));
-
-        // And many unrelated
-        world.spawn_batch((0..1_000).map(|_| {
-            let name = (0..5).map(|_| rng.gen_range('a'..'z')).collect::<String>();
-            (name,)
-        }));
-
-        events.subscribe(self.tx.clone());
     }
 }
 
