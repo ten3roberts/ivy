@@ -1,4 +1,4 @@
-use glfw::{Action, Key, MouseButton, Window};
+use glfw::{Key, MouseButton};
 
 use crate::Input;
 
