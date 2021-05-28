@@ -143,14 +143,14 @@ impl Buffer {
     /// `len`: Specifies the number of items of T to map into slice. (is ignored with persistent
     /// access).
     /// `offset`: Specifies the offset in items T into buffer to map.
-    pub fn write_slice<T, F>(
+    pub fn write_slice<T, F, R>(
         &mut self,
         len: DeviceSize,
         offset: DeviceSize,
         write_func: F,
     ) -> Result<(), Error>
     where
-        F: FnOnce(&mut [T]),
+        F: FnOnce(&mut [T]) -> R,
     {
         let size = len * mem::size_of::<T>() as u64;
         self.write(size, offset * mem::size_of::<T>() as u64, |ptr| {
@@ -163,14 +163,14 @@ impl Buffer {
     /// `size`: Specifies the number of bytes to map (is ignored with persistent
     /// access)
     /// `offset`: Specifies the offset in bytes into buffer to map
-    pub fn write<F>(
+    pub fn write<F, R>(
         &mut self,
         size: DeviceSize,
         offset: DeviceSize,
         write_func: F,
     ) -> Result<(), Error>
     where
-        F: FnOnce(*mut u8),
+        F: FnOnce(*mut u8) -> R,
     {
         if size > self.size {
             return Err(Error::BufferOverflow {
@@ -190,14 +190,14 @@ impl Buffer {
 
     // Updates memory by mapping and unmapping
     // Will map the whole buffer
-    fn write_mapped_persistent<F>(
+    fn write_mapped_persistent<F, R>(
         &self,
         size: DeviceSize,
         offset: DeviceSize,
         write_func: F,
     ) -> Result<(), Error>
     where
-        F: FnOnce(*mut u8),
+        F: FnOnce(*mut u8) -> R,
     {
         let allocator = self.context.allocator();
         let mapped = self.allocation_info.get_mapped_data();
@@ -213,9 +213,9 @@ impl Buffer {
 
     // Updates memory by mapping and unmapping
     // Will map the whole buffer
-    fn write_mapped<F>(&self, offset: DeviceSize, write_func: F) -> Result<(), Error>
+    fn write_mapped<F, R>(&self, offset: DeviceSize, write_func: F) -> Result<(), Error>
     where
-        F: FnOnce(*mut u8),
+        F: FnOnce(*mut u8) -> R,
     {
         let allocator = self.context.allocator();
         let mapped = allocator.map_memory(&self.allocation)?;
@@ -228,14 +228,14 @@ impl Buffer {
         Ok(())
     }
 
-    fn write_staged<F>(
+    fn write_staged<F, R>(
         &self,
         size: DeviceSize,
         offset: DeviceSize,
         write_func: F,
     ) -> Result<(), Error>
     where
-        F: FnOnce(*mut u8),
+        F: FnOnce(*mut u8) -> R,
     {
         let allocator = self.context.allocator();
         // Create a new or reuse staging buffer
@@ -262,13 +262,13 @@ impl Buffer {
         Ok(())
     }
 
-    fn write_staged_persistent<F>(
+    fn write_staged_persistent<F, R>(
         &mut self,
         offset: DeviceSize,
         write_func: F,
     ) -> Result<(), Error>
     where
-        F: FnOnce(*mut u8),
+        F: FnOnce(*mut u8) -> R,
     {
         let allocator = self.context.allocator();
 

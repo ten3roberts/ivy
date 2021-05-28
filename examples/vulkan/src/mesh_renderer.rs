@@ -11,6 +11,13 @@ use crate::{components::ModelMatrix, FRAMES_IN_FLIGHT};
 
 pub const MAX_OBJECTS: usize = 256;
 
+type RenderObject<'a, T> = (
+    &'a Handle<T>,
+    &'a Handle<Mesh>,
+    &'a Handle<Material>,
+    &'a ModelMatrix,
+);
+
 pub struct MeshRenderer {
     frames: Vec<FrameData>,
     context: Arc<VulkanContext>,
@@ -46,24 +53,24 @@ impl MeshRenderer {
         meshes: &mut ResourceCache<Mesh>,
         passes: &mut ResourceCache<T>,
     ) -> Result<(), Error> {
-        let query =
-            world.query_mut::<(&Handle<T>, &Handle<Material>, &Handle<Mesh>, &ModelMatrix)>();
+        let query = world.query_mut::<RenderObject<T>>();
 
         let frame = &mut self.frames[current_frame];
 
         let frame_set = frame.set;
 
-        frame
-            .object_buffer
-            .write_slice(MAX_OBJECTS as u64, 0, |data| {
+        frame.object_buffer.write_slice(
+            MAX_OBJECTS as u64,
+            0,
+            |data: &mut [ObjectData]| -> Result<(), Error> {
                 let mut i = 0;
-                for (_, (shaderpass, material, mesh, modelmatrix)) in query {
+                for (_, (shaderpass, mesh, material, modelmatrix)) in query {
                     data[i] = ObjectData { mvp: **modelmatrix };
 
                     // TODO remove unwrap
-                    let shaderpass = passes.get(*shaderpass).unwrap();
-                    let material = materials.get(*material).unwrap();
-                    let mesh = meshes.get(*mesh).unwrap();
+                    let shaderpass = passes.get(*shaderpass)?;
+                    let material = materials.get(*material)?;
+                    let mesh = meshes.get(*mesh)?;
 
                     cmd.bind_pipeline(shaderpass.pipeline());
 
@@ -79,7 +86,10 @@ impl MeshRenderer {
                     cmd.draw_indexed(mesh.index_count(), 1, 0, 0, i as u32);
                     i += 1;
                 }
-            })?;
+
+                Ok(())
+            },
+        )?;
 
         Ok(())
     }
