@@ -1,19 +1,18 @@
 use std::{
     sync::{mpsc, Arc},
-    thread::sleep,
     time::Duration,
 };
 
-use atomic_refcell::AtomicRefCell;
 use components::{AngularVelocity, Position, Rotation, Scale};
-use glfw::{Action, Glfw, Key, Window, WindowEvent};
+use flume::Receiver;
+use glfw::{Glfw, Key, Window, WindowEvent};
 use hecs::World;
 use ivy_core::*;
 use ivy_graphics::{
     window::{WindowExt, WindowInfo, WindowMode},
     Material, Mesh,
 };
-use ivy_input::{Input, InputAxis, InputDirection, InputVector};
+use ivy_input::{Input, InputAxis, InputVector};
 use ivy_vulkan::{commands::*, descriptors::*, *};
 use mesh_renderer::MeshRenderer;
 use ultraviolet::{projection, Mat4, Vec2, Vec3, Vec4};
@@ -41,10 +40,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &mut glfw,
         "ivy-vulkan",
         WindowInfo {
-            extent: None, //Some(Extent::new(800, 600)),
+            extent: Some(Extent::new(800, 600)),
 
             resizable: false,
-            mode: WindowMode::Fullscreen,
+            mode: WindowMode::Windowed,
         },
     )?;
 
@@ -54,6 +53,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut app = App::builder()
         .push_layer(|_, _| WindowLayer::new(glfw, window.clone(), window_events))
+        .push_layer(|w, e| LogicLayer::new(w, e))
         .try_push_layer(|world, events| {
             VulkanLayer::new(context.clone(), world, window.clone(), events)
         })?
@@ -63,6 +63,78 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     app.run();
 
     Ok(())
+}
+
+struct Camera;
+
+struct LogicLayer {
+    input: Input,
+    input_vec: InputVector,
+
+    camera_vel: f32,
+    frame_clock: Clock,
+
+    rx: Receiver<WindowEvent>,
+    acc: f32,
+    timestep: Duration,
+}
+
+impl LogicLayer {
+    pub fn new(world: &mut World, events: &mut Events) -> Self {
+        let input = Input::new(events);
+
+        let input_vec = InputVector::new(
+            InputAxis::keyboard(Key::D, Key::A),
+            InputAxis::None,
+            InputAxis::keyboard(Key::S, Key::W),
+        );
+
+        let frame_clock = Clock::new();
+
+        world.spawn((Camera, Position(Vec3::new(0.0, 0.0, 5.0))));
+        let (tx, rx) = flume::unbounded();
+        events.subscribe(tx);
+
+        Self {
+            input,
+            camera_vel: 5.0,
+            input_vec,
+            frame_clock,
+            rx,
+            timestep: 20.ms(),
+            acc: 0.0,
+        }
+    }
+}
+
+impl Layer for LogicLayer {
+    fn on_update(&mut self, world: &mut World, _: &mut Events) {
+        let frame_time = self.frame_clock.reset().secs();
+        self.acc += frame_time;
+
+        let dt = self.timestep.secs();
+
+        while self.acc > 0.0 {
+            self.input.on_update();
+
+            let (_e, camera_pos) = world
+                .query_mut::<&mut Position>()
+                .with::<Camera>()
+                .into_iter()
+                .next()
+                .unwrap();
+
+            let movement = self.input_vec.get(&self.input);
+
+            *camera_pos += Position(movement * dt * self.camera_vel);
+
+            systems::integrate_angular_velocity(world, dt);
+
+            systems::generate_model_matrices(world);
+
+            self.acc -= self.timestep.secs();
+        }
+    }
 }
 
 #[allow(dead_code)]
@@ -84,11 +156,6 @@ struct VulkanLayer {
     current_frame: usize,
 
     clock: Clock,
-
-    camera_pos: Position,
-
-    input: Input,
-    input_vec: InputVector,
 }
 
 impl VulkanLayer {
@@ -96,7 +163,7 @@ impl VulkanLayer {
         context: Arc<VulkanContext>,
         world: &mut World,
         window: Arc<Window>,
-        events: &mut Events,
+        _: &mut Events,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let mut descriptor_layout_cache = DescriptorLayoutCache::new(context.device().clone());
 
@@ -247,14 +314,6 @@ impl VulkanLayer {
             material.clone(),
         ));
 
-        let input = Input::new(events);
-
-        let input_vec = InputVector::new(
-            InputAxis::keyboard(Key::D, Key::A),
-            InputAxis::scroll(InputDirection::Vertical, false),
-            InputAxis::keyboard(Key::S, Key::W),
-        );
-
         Ok(Self {
             context,
             window_renderer,
@@ -268,9 +327,6 @@ impl VulkanLayer {
             global_data,
             current_frame: 0,
             clock: Clock::new(),
-            camera_pos: Position(Vec3::new(0.0, 0.0, 15.0)),
-            input,
-            input_vec,
         })
     }
 }
@@ -284,15 +340,12 @@ impl Layer for VulkanLayer {
         fence::wait(self.context.device(), &[frame.fence], true).unwrap();
         fence::reset(self.context.device(), &[frame.fence]).unwrap();
 
-        systems::integrate_angular_velocity(world, 0.02);
-
-        systems::generate_model_matrices(world);
-
-        self.input.on_update();
-
-        self.camera_pos += Position(self.input_vec.get(&self.input) * 0.05);
-
-        sleep(5.ms());
+        let (_e, camera_pos) = world
+            .query_mut::<&mut Position>()
+            .with::<Camera>()
+            .into_iter()
+            .next()
+            .unwrap();
 
         frame.commandpool.reset(false).unwrap();
 
@@ -307,7 +360,7 @@ impl Layer for VulkanLayer {
 
         let viewproj = projection::perspective_vk(1.0, extent.aspect(), 0.1, 100.0)
             // * Mat4::look_at(*self.camera_pos, Vec3::zero(), Vec3::unit_y());
-            * Mat4::from_translation(*self.camera_pos).inversed();
+            * Mat4::from_translation(**camera_pos).inversed();
 
         self.global_data.viewproj = viewproj;
 
