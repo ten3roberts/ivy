@@ -2,7 +2,8 @@ SHADERC=glslc
 
 SHADERS=\
 				default.vert.spv\
-				default.frag.spv
+				default.frag.spv\
+				uv.frag.spv
 
 all: shaders
 

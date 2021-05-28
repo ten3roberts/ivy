@@ -10,7 +10,7 @@ use hecs::World;
 use ivy_core::*;
 use ivy_graphics::{
     window::{WindowExt, WindowInfo, WindowMode},
-    Material, Mesh,
+    Material, Mesh, ShaderPass,
 };
 use ivy_input::{Input, InputAxis, InputVector};
 use ivy_vulkan::{commands::*, descriptors::*, *};
@@ -137,6 +137,26 @@ impl Layer for LogicLayer {
     }
 }
 
+struct DiffusePass {
+    pipeline: Pipeline,
+}
+
+impl DiffusePass {
+    fn new(pipeline: Pipeline) -> Self {
+        Self { pipeline }
+    }
+}
+
+impl ShaderPass for DiffusePass {
+    fn pipeline(&self) -> &Pipeline {
+        &self.pipeline
+    }
+
+    fn pipeline_layout(&self) -> vk::PipelineLayout {
+        self.pipeline.layout()
+    }
+}
+
 #[allow(dead_code)]
 struct VulkanLayer {
     context: Arc<VulkanContext>,
@@ -147,7 +167,6 @@ struct VulkanLayer {
 
     descriptor_layout_cache: DescriptorLayoutCache,
     descriptor_allocator: DescriptorAllocator,
-    pipeline: Arc<Pipeline>,
 
     frames: Vec<FrameData>,
 
@@ -252,7 +271,7 @@ impl VulkanLayer {
         };
 
         // Create a pipeline from the shaders
-        let pipeline = Arc::new(Pipeline::new(
+        let pipeline = Pipeline::new(
             context.device().clone(),
             &mut descriptor_layout_cache,
             &window_renderer.renderpass(),
@@ -268,7 +287,29 @@ impl VulkanLayer {
                 cull_mode: vk::CullModeFlags::NONE,
                 front_face: vk::FrontFace::CLOCKWISE,
             },
-        )?);
+        )?;
+
+        // Create a pipeline from the shaders
+        let uv_pipeline = Pipeline::new(
+            context.device().clone(),
+            &mut descriptor_layout_cache,
+            &window_renderer.renderpass(),
+            PipelineInfo {
+                vertexshader: "./res/shaders/default.vert.spv".into(),
+                fragmentshader: "./res/shaders/uv.frag.spv".into(),
+                vertex_binding: Vertex::binding_description(),
+                vertex_attributes: Vertex::attribute_descriptions(),
+                samples: SampleCountFlags::TYPE_1,
+                extent: window_renderer.swapchain().extent(),
+                subpass: 0,
+                polygon_mode: vk::PolygonMode::FILL,
+                cull_mode: vk::CullModeFlags::NONE,
+                front_face: vk::FrontFace::CLOCKWISE,
+            },
+        )?;
+
+        let default_shaderpass = Arc::new(DiffusePass::new(pipeline));
+        let uv_shaderpass = Arc::new(DiffusePass::new(uv_pipeline));
 
         world.spawn_batch((0..100).map(|i| (Vec3::new(i as f32, 0.0, 0.0),)));
         world.spawn_batch(
@@ -277,19 +318,19 @@ impl VulkanLayer {
                     Position(Vec3::new(0.0, 0.0, 0.0)),
                     cube_mesh.clone(),
                     material.clone(),
-                    pipeline.clone(),
+                    default_shaderpass.clone(),
                 ),
                 (
                     Position(Vec3::new(4.0, 0.0, 0.0)),
                     cube_mesh.clone(),
                     material.clone(),
-                    pipeline.clone(),
+                    default_shaderpass.clone(),
                 ),
                 (
                     Position(Vec3::new(0.0, 0.0, -3.0)),
                     cube_mesh.clone(),
                     material2.clone(),
-                    pipeline.clone(),
+                    default_shaderpass.clone(),
                 ),
             ]
             .iter()
@@ -301,7 +342,7 @@ impl VulkanLayer {
             cube_mesh.clone(),
             Rotation::default(),
             Scale(Vec3::one() * 0.5),
-            pipeline.clone(),
+            default_shaderpass.clone(),
             material2.clone(),
         ));
 
@@ -310,7 +351,7 @@ impl VulkanLayer {
             sphere_mesh.clone(),
             Rotation::default(),
             AngularVelocity(Vec3::new(0.0, 0.1, 1.0)),
-            pipeline.clone(),
+            uv_shaderpass.clone(),
             material.clone(),
         ));
 
@@ -321,7 +362,6 @@ impl VulkanLayer {
             mesh_renderer,
             descriptor_layout_cache,
             descriptor_allocator,
-            pipeline,
             frames,
             mesh: cube_mesh,
             global_data,
@@ -372,7 +412,7 @@ impl Layer for VulkanLayer {
 
         // Bind the global uniform buffer
         self.mesh_renderer
-            .draw(world, cmd, self.current_frame, frame.set)
+            .draw::<DiffusePass>(world, cmd, self.current_frame, frame.set)
             .unwrap();
 
         // Done
