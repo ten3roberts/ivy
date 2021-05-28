@@ -170,11 +170,13 @@ struct VulkanLayer {
 
     frames: Vec<FrameData>,
 
-    mesh: Arc<Mesh>,
     global_data: GlobalData,
     current_frame: usize,
 
     clock: Clock,
+    materials: ResourceCache<Material>,
+    diffuse_passes: ResourceCache<DiffusePass>,
+    meshes: ResourceCache<Mesh>,
 }
 
 impl VulkanLayer {
@@ -206,12 +208,20 @@ impl VulkanLayer {
             })
             .collect::<Result<Vec<FrameData>, _>>()?;
 
-        let document = ivy_graphics::Document::load(context.clone(), "./res/models/cube.gltf")?;
+        let mut meshes = ResourceCache::new();
 
-        let cube_mesh = document.mesh(0).clone();
+        let document =
+            ivy_graphics::Document::load(context.clone(), &mut meshes, "./res/models/cube.gltf")?;
 
-        let document = ivy_graphics::Document::load(context.clone(), "./res/models/sphere.gltf")?;
-        let sphere_mesh = document.mesh(0).clone();
+        let cube_mesh = document.mesh(0);
+
+        let document = ivy_graphics::Document::load(
+            context.clone(),
+            &mut meshes,
+            "./res/models/sphere.gltf",
+        )?;
+
+        let sphere_mesh = document.mesh(0);
 
         let grid = Arc::new(Texture::load(context.clone(), "./res/textures/grid.png")?);
         let uv_grid = Arc::new(Texture::load(context.clone(), "./res/textures/uv.png")?);
@@ -239,8 +249,9 @@ impl VulkanLayer {
                 mip_levels: uv_grid.mip_levels(),
             },
         )?);
+        let mut materials = ResourceCache::new();
 
-        let material = Arc::new(Material::new(
+        let material = materials.insert(Material::new(
             context.clone(),
             &mut descriptor_layout_cache,
             &mut descriptor_allocator,
@@ -248,7 +259,7 @@ impl VulkanLayer {
             sampler,
         )?);
 
-        let material2 = Arc::new(Material::new(
+        let material2 = materials.insert(Material::new(
             context.clone(),
             &mut descriptor_layout_cache,
             &mut descriptor_allocator,
@@ -308,29 +319,30 @@ impl VulkanLayer {
             },
         )?;
 
-        let default_shaderpass = Arc::new(DiffusePass::new(pipeline));
-        let uv_shaderpass = Arc::new(DiffusePass::new(uv_pipeline));
+        let mut diffuse_passes = ResourceCache::new();
+        let default_shaderpass = diffuse_passes.insert(DiffusePass::new(pipeline));
+        let uv_shaderpass = diffuse_passes.insert(DiffusePass::new(uv_pipeline));
 
         world.spawn_batch((0..100).map(|i| (Vec3::new(i as f32, 0.0, 0.0),)));
         world.spawn_batch(
             [
                 (
                     Position(Vec3::new(0.0, 0.0, 0.0)),
-                    cube_mesh.clone(),
-                    material.clone(),
-                    default_shaderpass.clone(),
+                    cube_mesh,
+                    material,
+                    default_shaderpass,
                 ),
                 (
                     Position(Vec3::new(4.0, 0.0, 0.0)),
-                    cube_mesh.clone(),
-                    material.clone(),
-                    default_shaderpass.clone(),
+                    cube_mesh,
+                    material,
+                    default_shaderpass,
                 ),
                 (
                     Position(Vec3::new(0.0, 0.0, -3.0)),
-                    cube_mesh.clone(),
-                    material2.clone(),
-                    default_shaderpass.clone(),
+                    cube_mesh,
+                    material2,
+                    default_shaderpass,
                 ),
             ]
             .iter()
@@ -339,11 +351,11 @@ impl VulkanLayer {
 
         world.spawn((
             Position(Vec3::new(1.0, -2.0, 3.0)),
-            cube_mesh.clone(),
+            cube_mesh,
             Rotation::default(),
             Scale(Vec3::one() * 0.5),
-            default_shaderpass.clone(),
-            material2.clone(),
+            default_shaderpass,
+            material2,
         ));
 
         world.spawn((
@@ -363,10 +375,13 @@ impl VulkanLayer {
             descriptor_layout_cache,
             descriptor_allocator,
             frames,
-            mesh: cube_mesh,
             global_data,
             current_frame: 0,
             clock: Clock::new(),
+
+            diffuse_passes,
+            materials,
+            meshes,
         })
     }
 }
@@ -412,7 +427,15 @@ impl Layer for VulkanLayer {
 
         // Bind the global uniform buffer
         self.mesh_renderer
-            .draw::<DiffusePass>(world, cmd, self.current_frame, frame.set)
+            .draw::<DiffusePass>(
+                world,
+                cmd,
+                self.current_frame,
+                frame.set,
+                &mut self.materials,
+                &mut self.meshes,
+                &mut self.diffuse_passes,
+            )
             .unwrap();
 
         // Done

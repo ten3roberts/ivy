@@ -10,5 +10,7 @@ edition = "2018"
 crossbeam-channel = { version = "0.5", optional = true }
 downcast-rs = "1.2"
 flume = "0.10"
+generational-arena = "0.2.8"
 hecs = "0.5"
 log = { version = "0.4", features = ["std"] }
+thiserror = "1.0"

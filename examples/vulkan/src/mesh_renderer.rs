@@ -1,8 +1,8 @@
 use hecs::World;
-use ivy_graphics::{Material, Mesh, ShaderPass};
+use ivy_core::{resources::Handle, ResourceCache};
+use ivy_graphics::{Error, Material, Mesh, ShaderPass};
 use ivy_vulkan::{
-    commands::CommandBuffer, descriptors::*, vk, Buffer, BufferAccess, BufferType, Error,
-    VulkanContext,
+    commands::CommandBuffer, descriptors::*, vk, Buffer, BufferAccess, BufferType, VulkanContext,
 };
 use std::{mem::size_of, sync::Arc};
 use ultraviolet::Mat4;
@@ -35,15 +35,19 @@ impl MeshRenderer {
         Ok(Self { context, frames })
     }
 
-    /// Will draw all entities with a Arc<Material>, Arc<Mesh>, Modelmatrix and Shaderpass `T`
+    /// Will draw all entities with a `Handle<Material>`, `Handle<Mesh>`, Modelmatrix and Shaderpass `Handle<T>`
     pub fn draw<T: 'static + ShaderPass + Sized + Sync + Send>(
         &mut self,
         world: &mut World,
         cmd: &CommandBuffer,
         current_frame: usize,
         global_set: DescriptorSet,
+        materials: &mut ResourceCache<Material>,
+        meshes: &mut ResourceCache<Mesh>,
+        passes: &mut ResourceCache<T>,
     ) -> Result<(), Error> {
-        let query = world.query_mut::<(&Arc<T>, &Arc<Material>, &Arc<Mesh>, &ModelMatrix)>();
+        let query =
+            world.query_mut::<(&Handle<T>, &Handle<Material>, &Handle<Mesh>, &ModelMatrix)>();
 
         let frame = &mut self.frames[current_frame];
 
@@ -55,6 +59,11 @@ impl MeshRenderer {
                 let mut i = 0;
                 for (_, (shaderpass, material, mesh, modelmatrix)) in query {
                     data[i] = ObjectData { mvp: **modelmatrix };
+
+                    // TODO remove unwrap
+                    let shaderpass = passes.get(*shaderpass).unwrap();
+                    let material = materials.get(*material).unwrap();
+                    let mesh = meshes.get(*mesh).unwrap();
 
                     cmd.bind_pipeline(shaderpass.pipeline());
 

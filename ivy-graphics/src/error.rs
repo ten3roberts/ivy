@@ -13,4 +13,7 @@ pub enum Error {
 
     #[error("Failed to create window")]
     WindowCreation,
+
+    #[error(transparent)]
+    ResourceError(#[from] ivy_core::resources::Error),
 }

@@ -3,6 +3,7 @@ use std::{path::Path, sync::Arc};
 use crate::Error;
 
 use super::Mesh;
+use ivy_core::{resources::Handle, ResourceCache};
 use ivy_vulkan::VulkanContext;
 use ultraviolet::*;
 
@@ -18,27 +19,35 @@ pub struct Node {
 }
 
 pub struct Document {
-    meshes: Vec<Arc<Mesh>>,
+    meshes: Vec<Handle<Mesh>>,
     nodes: Vec<Node>,
 }
 
 impl Document {
     /// Loads a gltf document/asset from path
-    pub fn load<P: AsRef<Path>>(context: Arc<VulkanContext>, path: P) -> Result<Self, Error> {
+    pub fn load<P: AsRef<Path>>(
+        context: Arc<VulkanContext>,
+        meshes: &mut ResourceCache<Mesh>,
+        path: P,
+    ) -> Result<Self, Error> {
         let (document, buffers, _images) = gltf::import(path)?;
 
-        Self::from_gltf(context, document, &buffers)
+        Self::from_gltf(context, meshes, document, &buffers)
     }
 
-    /// Loads a gltf import document's meshes and scene data.
+    /// Loads a gltf import document's meshes and scene data. Will insert the meshes into the
+    /// provided resource cache.
     pub fn from_gltf(
         context: Arc<VulkanContext>,
+        meshes: &mut ResourceCache<Mesh>,
         document: gltf::Document,
         buffers: &[gltf::buffer::Data],
     ) -> Result<Self, Error> {
         let meshes = document
             .meshes()
-            .map(|mesh| Mesh::from_gltf(context.clone(), mesh, buffers).map(Arc::new))
+            .map(|mesh| {
+                Mesh::from_gltf(context.clone(), mesh, buffers).map(|mesh| meshes.insert(mesh))
+            })
             .collect::<Result<Vec<_>, _>>()?;
 
         let nodes = document
@@ -58,9 +67,10 @@ impl Document {
         Ok(Self { nodes, meshes })
     }
 
-    /// Returns a handle to the mesh at index.
-    pub fn mesh(&self, index: usize) -> &Arc<Mesh> {
-        &self.meshes[index]
+    /// Returns a handle to the mesh at index. Mesh was inserted in the resource cache upon
+    /// creation.
+    pub fn mesh(&self, index: usize) -> Handle<Mesh> {
+        self.meshes[index]
     }
 
     /// Returns a reference to the node at index.
