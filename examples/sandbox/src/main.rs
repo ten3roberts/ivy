@@ -1,6 +1,6 @@
 use flume::Receiver;
 use rand::prelude::*;
-use std::{thread::sleep, time::Duration};
+use std::{error::Error, thread::sleep, time::Duration};
 
 use hecs::World;
 use ivy_core::*;
@@ -93,7 +93,7 @@ impl SandboxLayer {
 }
 
 impl Layer for SandboxLayer {
-    fn on_update(&mut self, world: &mut World, events: &mut Events) {
+    fn on_update(&mut self, world: &mut World, events: &mut Events) -> Result<(), Box<dyn Error>> {
         let dt = self.frame_clock.reset();
 
         // Send dummy events
@@ -131,6 +131,7 @@ impl Layer for SandboxLayer {
         }
 
         sleep(Duration::from_millis(100));
+        Ok(())
     }
 }
 

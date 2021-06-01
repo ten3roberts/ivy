@@ -6,6 +6,7 @@ pub use event::*;
 
 use flume::Receiver;
 use hecs::World;
+use std::error::Error;
 
 use crate::{
     layer::{Layer, LayerStack},
@@ -47,7 +48,7 @@ impl App {
     }
 
     /// Enters the main application event loop and runs the layers.
-    pub fn run(&mut self) {
+    pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
         self.running = true;
 
         // Update layers
@@ -56,12 +57,13 @@ impl App {
             let events = &mut self.events;
 
             for layer in self.layers.iter_mut() {
-                layer.on_update(world, events);
+                layer.on_update(world, events)?;
             }
 
             // Read all events sent by application
             self.handle_events();
         }
+        Ok(())
     }
 
     pub fn handle_events(&mut self) {

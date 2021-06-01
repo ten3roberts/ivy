@@ -1,12 +1,14 @@
 use hecs::World;
+use std::error::Error;
 
 use crate::Events;
 
 /// A layer represents an ordered abstraction of execution logic. Layers are ordered and run in
 /// order.
 pub trait Layer {
-    /// Called for each iteration of the application event loop
-    fn on_update(&mut self, world: &mut World, events: &mut Events);
+    /// Called for each iteration of the application event loop.
+    /// The layer can return an error
+    fn on_update(&mut self, world: &mut World, events: &mut Events) -> Result<(), Box<dyn Error>>;
 }
 
 /// Abstracts the stack of layered execution logic

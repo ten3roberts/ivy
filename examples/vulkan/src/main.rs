@@ -3,6 +3,8 @@ use std::{
     time::Duration,
 };
 
+use anyhow::Context;
+
 use batched_mesh_renderer::BatchedMeshRenderer;
 use components::{AngularVelocity, Position, Rotation, Scale};
 use flume::Receiver;
@@ -62,9 +64,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .push_layer(|_, _| PerformanceLayer::new(1.secs()))
         .build();
 
-    app.run();
-
-    Ok(())
+    app.run()
 }
 
 struct Camera;
@@ -110,7 +110,11 @@ impl LogicLayer {
 }
 
 impl Layer for LogicLayer {
-    fn on_update(&mut self, world: &mut World, _: &mut Events) {
+    fn on_update(
+        &mut self,
+        world: &mut World,
+        _: &mut Events,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let frame_time = self.frame_clock.reset().secs();
         self.acc += frame_time;
 
@@ -136,6 +140,8 @@ impl Layer for LogicLayer {
 
             self.acc -= self.timestep.secs();
         }
+
+        Ok(())
     }
 }
 
@@ -213,17 +219,25 @@ impl VulkanLayer {
         let mut meshes = ResourceCache::new();
 
         let document =
-            ivy_graphics::Document::load(context.clone(), &mut meshes, "./res/models/cube.gltf")?;
+            ivy_graphics::Document::load(context.clone(), &mut meshes, "./res/models/cube.gltf")
+                .context("Failed to load cube model")?;
 
         let cube_mesh = document.mesh(0);
 
         let document =
-            ivy_graphics::Document::load(context.clone(), &mut meshes, "./res/models/sphere.gltf")?;
+            ivy_graphics::Document::load(context.clone(), &mut meshes, "./res/models/sphere.gltf")
+                .context("Failed to load sphere model")?;
 
         let sphere_mesh = document.mesh(0);
 
-        let grid = Arc::new(Texture::load(context.clone(), "./res/textures/grid.png")?);
-        let uv_grid = Arc::new(Texture::load(context.clone(), "./res/textures/uv.png")?);
+        let grid = Arc::new(
+            Texture::load(context.clone(), "./res/textures/grid.png")
+                .context("Failed to load grid texture")?,
+        );
+        let uv_grid = Arc::new(
+            Texture::load(context.clone(), "./res/textures/uv.png")
+                .context("Failed to load uv texture")?,
+        );
 
         let sampler = Arc::new(Sampler::new(
             context.clone(),
@@ -407,13 +421,17 @@ impl VulkanLayer {
 }
 
 impl Layer for VulkanLayer {
-    fn on_update(&mut self, world: &mut World, _events: &mut Events) {
+    fn on_update(
+        &mut self,
+        world: &mut World,
+        _events: &mut Events,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let extent = self.window_renderer.swapchain().extent();
 
         let frame = &mut self.frames[self.current_frame];
 
-        fence::wait(self.context.device(), &[frame.fence], true).unwrap();
-        fence::reset(self.context.device(), &[frame.fence]).unwrap();
+        fence::wait(self.context.device(), &[frame.fence], true)?;
+        fence::reset(self.context.device(), &[frame.fence])?;
 
         let (_e, camera_pos) = world
             .query_mut::<&mut Position>()
@@ -422,16 +440,15 @@ impl Layer for VulkanLayer {
             .next()
             .unwrap();
 
-        frame.commandpool.reset(false).unwrap();
+        frame.commandpool.reset(false)?;
 
         let cmd = &frame.commandbuffer;
 
         // Begin recording the commandbuffer, hinting that it will only be used once
-        cmd.begin(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT)
-            .unwrap();
+        cmd.begin(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT)?;
 
         // Begin surface rendering renderpass
-        self.window_renderer.begin(cmd).unwrap();
+        self.window_renderer.begin(cmd)?;
 
         let viewproj = projection::perspective_vk(1.0, extent.aspect(), 0.1, 100.0)
             // * Mat4::look_at(*self.camera_pos, Vec3::zero(), Vec3::unit_y());
@@ -440,34 +457,28 @@ impl Layer for VulkanLayer {
         self.global_data.viewproj = viewproj;
 
         // Update global uniform buffer
-        frame
-            .global_uniformbuffer
-            .fill(0, &[self.global_data])
-            .unwrap();
+        frame.global_uniformbuffer.fill(0, &[self.global_data])?;
 
-        self.mesh_renderer
-            .update(world, self.current_frame)
-            .unwrap();
+        self.mesh_renderer.update(world, self.current_frame)?;
 
         // Bind the global uniform buffer
-        self.mesh_renderer
-            .draw::<DiffusePass>(
-                world,
-                cmd,
-                self.current_frame,
-                frame.set,
-                &mut self.materials,
-                &mut self.meshes,
-                &mut self.diffuse_passes,
-            )
-            .unwrap();
+        self.mesh_renderer.draw::<DiffusePass>(
+            world,
+            cmd,
+            self.current_frame,
+            frame.set,
+            &mut self.materials,
+            &mut self.meshes,
+            &mut self.diffuse_passes,
+        )?;
 
         // Done
         frame.commandbuffer.end_renderpass();
-        cmd.end().unwrap();
+        cmd.end()?;
 
         // Submit and present
-        self.window_renderer.submit(cmd, frame.fence).unwrap();
+        self.window_renderer.submit(cmd, frame.fence)?;
+        Ok(())
     }
 }
 
@@ -566,7 +577,11 @@ impl WindowLayer {
 }
 
 impl Layer for WindowLayer {
-    fn on_update(&mut self, _world: &mut World, events: &mut Events) {
+    fn on_update(
+        &mut self,
+        _world: &mut World,
+        events: &mut Events,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         self.glfw.poll_events();
 
         for (_, event) in glfw::flush_messages(&self.events) {
@@ -576,6 +591,8 @@ impl Layer for WindowLayer {
 
             events.send(event);
         }
+
+        Ok(())
     }
 }
 
@@ -608,7 +625,11 @@ impl PerformanceLayer {
 }
 
 impl Layer for PerformanceLayer {
-    fn on_update(&mut self, _: &mut World, _: &mut Events) {
+    fn on_update(
+        &mut self,
+        _: &mut World,
+        _: &mut Events,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let dt = self.frame_clock.reset();
 
         self.acc += dt;
@@ -637,6 +658,8 @@ impl Layer for PerformanceLayer {
             self.acc = 0.secs();
             self.framecount = 0;
         }
+
+        Ok(())
     }
 }
 
