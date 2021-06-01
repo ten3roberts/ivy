@@ -53,8 +53,11 @@ impl Pipeline {
         renderpass: &RenderPass,
         info: PipelineInfo,
     ) -> Result<Self, Error> {
-        let mut vertexshader = File::open(info.vertexshader)?;
-        let mut fragmentshader = File::open(info.fragmentshader)?;
+        let mut vertexshader = File::open(&info.vertexshader)
+            .map_err(|e| Error::Io(e, Some(info.vertexshader.clone())))?;
+
+        let mut fragmentshader = File::open(&info.fragmentshader)
+            .map_err(|e| Error::Io(e, Some(info.fragmentshader.clone())))?;
 
         let vertexshader = ShaderModule::new(&device, &mut vertexshader)?;
         let fragmentshader = ShaderModule::new(&device, &mut fragmentshader)?;

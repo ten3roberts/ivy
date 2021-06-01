@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -5,8 +6,8 @@ pub enum Error {
     #[error(transparent)]
     Vulkan(#[from] ivy_vulkan::Error),
 
-    #[error("Gltf import failed: {0}")]
-    GltfImport(#[from] gltf::Error),
+    #[error("Gltf import failed{}: {0}", .1.as_ref().map(|path| format!(" for {:?}", path)).unwrap_or_default())]
+    GltfImport(gltf::Error, Option<PathBuf>),
 
     #[error("Gltf sparse accessors are not supported")]
     SparseAccessor,

@@ -20,7 +20,7 @@ pub struct ShaderModule {
 
 impl ShaderModule {
     pub fn new<R: Read + Seek>(device: &Device, code: &mut R) -> Result<Self, Error> {
-        let code = ash::util::read_spv(code)?;
+        let code = ash::util::read_spv(code).map_err(|e| Error::Io(e, None))?;
 
         let create_info = vk::ShaderModuleCreateInfo::builder().code(&code);
         let module = unsafe { device.create_shader_module(&create_info, None)? };

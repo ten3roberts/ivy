@@ -21,8 +21,8 @@ pub enum Error {
     MissingLayers(Vec<CString>),
     #[error("No suitable physical device was found")]
     UnsuitableDevice,
-    #[error("IO error {0}")]
-    IO(#[from] std::io::Error),
+    #[error("Io error {} {0} ", .1.as_ref().map(|path| format!("accessing {:?}.", path)).unwrap_or_default())]
+    Io(std::io::Error, Option<PathBuf>),
 
     #[error(
         "Insufficient buffer size. Trying to write {size} bytes to buffer of {max_size} bytes"
