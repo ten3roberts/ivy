@@ -8,7 +8,7 @@ use crate::Events;
 pub trait Layer {
     /// Called for each iteration of the application event loop.
     /// The layer can return an error
-    fn on_update(&mut self, world: &mut World, events: &mut Events) -> Result<(), Box<dyn Error>>;
+    fn on_update(&mut self, world: &mut World, events: &mut Events) -> anyhow::Result<()>;
 }
 
 /// Abstracts the stack of layered execution logic

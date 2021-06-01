@@ -93,7 +93,7 @@ impl SandboxLayer {
 }
 
 impl Layer for SandboxLayer {
-    fn on_update(&mut self, world: &mut World, events: &mut Events) -> Result<(), Box<dyn Error>> {
+    fn on_update(&mut self, world: &mut World, events: &mut Events) -> anyhow::Result<()> {
         let dt = self.frame_clock.reset();
 
         // Send dummy events

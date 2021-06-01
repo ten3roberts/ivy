@@ -355,6 +355,7 @@ checksum = "dd25036021b0de88a0aff6b850051563c6516d0bf53f8638938edbb9de732736"
 name = "ivy-core"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "crossbeam-channel",
  "downcast-rs",
  "flume",
@@ -675,6 +676,7 @@ dependencies = [
 name = "sandbox"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "flume",
  "hecs",
  "ivy-core",

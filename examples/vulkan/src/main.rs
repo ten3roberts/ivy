@@ -31,7 +31,7 @@ mod window_renderer;
 
 const FRAMES_IN_FLIGHT: usize = 2;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> anyhow::Result<()> {
     Logger {
         show_location: true,
         max_level: LevelFilter::Debug,
@@ -64,7 +64,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .push_layer(|_, _| PerformanceLayer::new(1.secs()))
         .build();
 
-    app.run()
+    anyhow::Result::from(app.run()).context("Failed to run application")
 }
 
 struct Camera;
@@ -110,11 +110,7 @@ impl LogicLayer {
 }
 
 impl Layer for LogicLayer {
-    fn on_update(
-        &mut self,
-        world: &mut World,
-        _: &mut Events,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn on_update(&mut self, world: &mut World, _: &mut Events) -> anyhow::Result<()> {
         let frame_time = self.frame_clock.reset().secs();
         self.acc += frame_time;
 
@@ -193,7 +189,7 @@ impl VulkanLayer {
         world: &mut World,
         window: Arc<Window>,
         _: &mut Events,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    ) -> anyhow::Result<Self> {
         let mut descriptor_layout_cache = DescriptorLayoutCache::new(context.device().clone());
 
         let mut descriptor_allocator = DescriptorAllocator::new(context.device().clone(), 2);
@@ -421,11 +417,7 @@ impl VulkanLayer {
 }
 
 impl Layer for VulkanLayer {
-    fn on_update(
-        &mut self,
-        world: &mut World,
-        _events: &mut Events,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn on_update(&mut self, world: &mut World, _events: &mut Events) -> anyhow::Result<()> {
         let extent = self.window_renderer.swapchain().extent();
 
         let frame = &mut self.frames[self.current_frame];
@@ -577,11 +569,7 @@ impl WindowLayer {
 }
 
 impl Layer for WindowLayer {
-    fn on_update(
-        &mut self,
-        _world: &mut World,
-        events: &mut Events,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn on_update(&mut self, _world: &mut World, events: &mut Events) -> anyhow::Result<()> {
         self.glfw.poll_events();
 
         for (_, event) in glfw::flush_messages(&self.events) {
@@ -625,11 +613,7 @@ impl PerformanceLayer {
 }
 
 impl Layer for PerformanceLayer {
-    fn on_update(
-        &mut self,
-        _: &mut World,
-        _: &mut Events,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn on_update(&mut self, _: &mut World, _: &mut Events) -> anyhow::Result<()> {
         let dt = self.frame_clock.reset();
 
         self.acc += dt;

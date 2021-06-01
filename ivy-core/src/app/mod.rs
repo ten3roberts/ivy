@@ -48,7 +48,7 @@ impl App {
     }
 
     /// Enters the main application event loop and runs the layers.
-    pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
+    pub fn run(&mut self) -> anyhow::Result<()> {
         self.running = true;
 
         // Update layers
