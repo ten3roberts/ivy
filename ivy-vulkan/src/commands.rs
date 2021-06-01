@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use crate::ClearValue;
 
-use super::pipeline::Pipeline;
 use super::renderpass::RenderPass;
 use super::Error;
 use super::{
@@ -222,12 +221,12 @@ impl CommandBuffer {
     }
 
     // Binds a graphics pipeline
-    pub fn bind_pipeline(&self, pipeline: &Pipeline) {
+    pub fn bind_pipeline<T: Into<vk::Pipeline>>(&self, pipeline: T) {
         unsafe {
             self.device.cmd_bind_pipeline(
                 self.commandbuffer,
                 vk::PipelineBindPoint::GRAPHICS,
-                pipeline.pipeline(),
+                pipeline.into(),
             )
         }
     }

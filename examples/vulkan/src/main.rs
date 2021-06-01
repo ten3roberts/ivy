@@ -3,6 +3,7 @@ use std::{
     time::Duration,
 };
 
+use batched_mesh_renderer::BatchedMeshRenderer;
 use components::{AngularVelocity, Position, Rotation, Scale};
 use flume::Receiver;
 use glfw::{Glfw, Key, Window, WindowEvent};
@@ -14,12 +15,13 @@ use ivy_graphics::{
 };
 use ivy_input::{Input, InputAxis, InputVector};
 use ivy_vulkan::{commands::*, descriptors::*, *};
-use mesh_renderer::MeshRenderer;
-use ultraviolet::{projection, Mat4, Vec2, Vec3, Vec4};
+// use mesh_renderer::MeshRenderer;
+use ultraviolet::{projection, Mat4, Rotor3, Vec2, Vec3, Vec4};
 
 use log::*;
 use window_renderer::WindowRenderer;
 
+mod batched_mesh_renderer;
 mod components;
 mod mesh_renderer;
 mod systems;
@@ -163,7 +165,7 @@ struct VulkanLayer {
 
     window_renderer: WindowRenderer,
     window: Arc<Window>,
-    mesh_renderer: MeshRenderer,
+    mesh_renderer: BatchedMeshRenderer,
 
     descriptor_layout_cache: DescriptorLayoutCache,
     descriptor_allocator: DescriptorAllocator,
@@ -191,7 +193,7 @@ impl VulkanLayer {
         let mut descriptor_allocator = DescriptorAllocator::new(context.device().clone(), 2);
 
         let window_renderer = WindowRenderer::new(context.clone(), window.clone())?;
-        let mesh_renderer = MeshRenderer::new(
+        let mesh_renderer = BatchedMeshRenderer::new(
             context.clone(),
             &mut descriptor_layout_cache,
             &mut descriptor_allocator,
@@ -215,11 +217,8 @@ impl VulkanLayer {
 
         let cube_mesh = document.mesh(0);
 
-        let document = ivy_graphics::Document::load(
-            context.clone(),
-            &mut meshes,
-            "./res/models/sphere.gltf",
-        )?;
+        let document =
+            ivy_graphics::Document::load(context.clone(), &mut meshes, "./res/models/sphere.gltf")?;
 
         let sphere_mesh = document.mesh(0);
 
@@ -249,6 +248,7 @@ impl VulkanLayer {
                 mip_levels: uv_grid.mip_levels(),
             },
         )?);
+
         let mut materials = ResourceCache::new();
 
         let material = materials.insert(Material::new(
@@ -323,7 +323,6 @@ impl VulkanLayer {
         let default_shaderpass = diffuse_passes.insert(DiffusePass::new(pipeline));
         let uv_shaderpass = diffuse_passes.insert(DiffusePass::new(uv_pipeline));
 
-        world.spawn_batch((0..100).map(|i| (Vec3::new(i as f32, 0.0, 0.0),)));
         world.spawn_batch(
             [
                 (
@@ -347,6 +346,27 @@ impl VulkanLayer {
             ]
             .iter()
             .cloned(),
+        );
+        let cube_side = 15;
+        world.spawn_batch(
+            (0..cube_side)
+                .flat_map(move |x| (0..cube_side).map(move |y| (x, y)))
+                .flat_map(move |(x, y)| (0..cube_side).map(move |z| (x, y, z)))
+                .map(|(x, y, z)| {
+                    (
+                        sphere_mesh,
+                        Position(Vec3::new(
+                            x as f32 * 3.0 - 5.0,
+                            y as f32 * 3.0,
+                            -z as f32 * 3.0,
+                        )),
+                        material,
+                        default_shaderpass,
+                        // Scale(Vec3::new(0.1, 0.1, 0.1)),
+                        Rotation(Rotor3::identity()),
+                        AngularVelocity(Vec3::new(0.0, y as f32 * 0.5, x as f32)),
+                    )
+                }),
         );
 
         world.spawn((
@@ -423,6 +443,10 @@ impl Layer for VulkanLayer {
         frame
             .global_uniformbuffer
             .fill(0, &[self.global_data])
+            .unwrap();
+
+        self.mesh_renderer
+            .update(world, self.current_frame)
             .unwrap();
 
         // Bind the global uniform buffer

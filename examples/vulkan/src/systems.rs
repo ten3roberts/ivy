@@ -43,6 +43,15 @@ pub fn generate_model_matrices(world: &mut World) {
             *model =
                 ModelMatrix(Mat4::from_translation(**pos)) * rot.into_matrix().into_homogeneous();
         });
+
+    world
+        .query_mut::<(&mut ModelMatrix, &Position, &Scale)>()
+        .without::<Rotation>()
+        .into_iter()
+        .for_each(|(_, (model, pos, scale))| {
+            *model =
+                ModelMatrix(Mat4::from_translation(**pos)) * Mat4::from_nonuniform_scale(**scale)
+        });
 }
 
 pub fn integrate_angular_velocity(world: &mut World, dt: f32) {

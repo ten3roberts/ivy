@@ -18,6 +18,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "anymap"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "33954243bd79057c2de7338850b85983a44588021f8a5fee574a8888c6de4344"
+
+[[package]]
 name = "arrayvec"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -837,6 +843,7 @@ checksum = "36f5fd4a7d6d5d19808610583131c0aed271556527cad4cb71c436831a28e059"
 name = "vulkan"
 version = "0.1.0"
 dependencies = [
+ "anymap",
  "atomic_refcell",
  "derive_more",
  "flume",

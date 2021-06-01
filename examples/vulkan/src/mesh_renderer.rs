@@ -11,7 +11,8 @@ use crate::{components::ModelMatrix, FRAMES_IN_FLIGHT};
 
 pub const MAX_OBJECTS: usize = 256;
 
-type RenderObject<'a, T> = (
+/// Any entity with these components will be renderered.
+pub type RenderObject<'a, T> = (
     &'a Handle<T>,
     &'a Handle<Mesh>,
     &'a Handle<Material>,
@@ -67,7 +68,6 @@ impl MeshRenderer {
                 for (_, (shaderpass, mesh, material, modelmatrix)) in query {
                     data[i] = ObjectData { mvp: **modelmatrix };
 
-                    // TODO remove unwrap
                     let shaderpass = passes.get(*shaderpass)?;
                     let material = materials.get(*material)?;
                     let mesh = meshes.get(*mesh)?;
