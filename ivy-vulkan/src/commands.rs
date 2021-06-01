@@ -334,6 +334,42 @@ impl CommandBuffer {
         }
     }
 
+    pub fn draw_indexed_indirect<B: AsRef<vk::Buffer>>(
+        &self,
+        buffer: B,
+        offset: u64,
+        draw_count: u32,
+        stride: u32,
+    ) {
+        unsafe {
+            self.device.cmd_draw_indexed_indirect(
+                self.commandbuffer,
+                *buffer.as_ref(),
+                offset,
+                draw_count,
+                stride,
+            )
+        }
+    }
+
+    pub fn draw_indirect<B: AsRef<vk::Buffer>>(
+        &self,
+        buffer: B,
+        offset: u64,
+        draw_count: u32,
+        stride: u32,
+    ) {
+        unsafe {
+            self.device.cmd_draw_indirect(
+                self.commandbuffer,
+                *buffer.as_ref(),
+                offset,
+                draw_count,
+                stride,
+            )
+        }
+    }
+
     pub fn copy_buffer(&self, src: vk::Buffer, dst: vk::Buffer, regions: &[vk::BufferCopy]) {
         unsafe {
             self.device

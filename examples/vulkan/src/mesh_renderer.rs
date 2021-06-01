@@ -9,7 +9,7 @@ use ultraviolet::Mat4;
 
 use crate::{components::ModelMatrix, FRAMES_IN_FLIGHT};
 
-pub const MAX_OBJECTS: usize = 256;
+pub const MAX_OBJECTS: usize = 8096;
 
 /// Any entity with these components will be renderered.
 pub type RenderObject<'a, T> = (

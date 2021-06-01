@@ -254,6 +254,7 @@ pub fn create(
     // TODO May not be present on all devices
     let enabled_features = vk::PhysicalDeviceFeatures {
         sampler_anisotropy: pdevice_info.features.sampler_anisotropy,
+        multi_draw_indirect: vk::TRUE,
         ..Default::default()
     };
 

@@ -21,6 +21,9 @@ pub enum BufferType {
     Uniform,
     /// Storage buffer
     Storage,
+
+    /// Indirect draw command buffer
+    Indirect,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,6 +77,7 @@ impl Buffer {
             BufferType::Index16 | BufferType::Index32 => vk::BufferUsageFlags::INDEX_BUFFER,
             BufferType::Uniform => vk::BufferUsageFlags::UNIFORM_BUFFER,
             BufferType::Storage => vk::BufferUsageFlags::STORAGE_BUFFER,
+            BufferType::Indirect => vk::BufferUsageFlags::INDIRECT_BUFFER,
         } | match access {
             BufferAccess::Mapped | BufferAccess::MappedPersistent => {
                 vk::BufferUsageFlags::default()

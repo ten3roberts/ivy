@@ -5,11 +5,13 @@ use std::{
 
 use anyhow::Context;
 
-use batched_mesh_renderer::BatchedMeshRenderer;
 use components::{AngularVelocity, Position, Rotation, Scale};
-use flume::Receiver;
 use glfw::{Glfw, Key, Window, WindowEvent};
 use hecs::World;
+
+use batched_mesh_renderer::BatchedMeshRenderer;
+use flume::Receiver;
+use indirect_mesh_renderer::IndirectMeshRenderer;
 use ivy_core::*;
 use ivy_graphics::{
     window::{WindowExt, WindowInfo, WindowMode},
@@ -17,7 +19,7 @@ use ivy_graphics::{
 };
 use ivy_input::{Input, InputAxis, InputVector};
 use ivy_vulkan::{commands::*, descriptors::*, *};
-// use mesh_renderer::MeshRenderer;
+use mesh_renderer::MeshRenderer;
 use ultraviolet::{projection, Mat4, Rotor3, Vec2, Vec3, Vec4};
 
 use log::*;
@@ -25,6 +27,7 @@ use window_renderer::WindowRenderer;
 
 mod batched_mesh_renderer;
 mod components;
+mod indirect_mesh_renderer;
 mod mesh_renderer;
 mod systems;
 mod window_renderer;
@@ -156,6 +159,12 @@ impl ShaderPass for DiffusePass {
         self.pipeline.layout()
     }
 }
+#[derive(Copy, Clone, Debug)]
+enum CurrentRenderer {
+    Direct,
+    Batched,
+    Indirect,
+}
 
 #[allow(dead_code)]
 struct VulkanLayer {
@@ -163,7 +172,11 @@ struct VulkanLayer {
 
     window_renderer: WindowRenderer,
     window: Arc<Window>,
-    mesh_renderer: BatchedMeshRenderer,
+    mesh_renderer: MeshRenderer,
+    batched_renderer: BatchedMeshRenderer,
+    indirect_renderer: IndirectMeshRenderer,
+
+    current_renderer: CurrentRenderer,
 
     descriptor_layout_cache: DescriptorLayoutCache,
     descriptor_allocator: DescriptorAllocator,
@@ -177,6 +190,8 @@ struct VulkanLayer {
     materials: ResourceCache<Material>,
     diffuse_passes: ResourceCache<DiffusePass>,
     meshes: ResourceCache<Mesh>,
+
+    window_events: Receiver<WindowEvent>,
 }
 
 impl VulkanLayer {
@@ -184,14 +199,24 @@ impl VulkanLayer {
         context: Arc<VulkanContext>,
         world: &mut World,
         window: Arc<Window>,
-        _: &mut Events,
+        events: &mut Events,
     ) -> anyhow::Result<Self> {
         let mut descriptor_layout_cache = DescriptorLayoutCache::new(context.device().clone());
 
         let mut descriptor_allocator = DescriptorAllocator::new(context.device().clone(), 2);
 
         let window_renderer = WindowRenderer::new(context.clone(), window.clone())?;
-        let mesh_renderer = BatchedMeshRenderer::new(
+        let indirect_renderer = IndirectMeshRenderer::new(
+            context.clone(),
+            &mut descriptor_layout_cache,
+            &mut descriptor_allocator,
+        )?;
+        let mesh_renderer = MeshRenderer::new(
+            context.clone(),
+            &mut descriptor_layout_cache,
+            &mut descriptor_allocator,
+        )?;
+        let batched_renderer = BatchedMeshRenderer::new(
             context.clone(),
             &mut descriptor_layout_cache,
             &mut descriptor_allocator,
@@ -360,7 +385,7 @@ impl VulkanLayer {
                 .flat_map(move |(x, y)| (0..cube_side).map(move |z| (x, y, z)))
                 .map(|(x, y, z)| {
                     (
-                        sphere_mesh,
+                        cube_mesh,
                         Position(Vec3::new(
                             x as f32 * 3.0 - 5.0,
                             y as f32 * 3.0,
@@ -393,11 +418,18 @@ impl VulkanLayer {
             material.clone(),
         ));
 
+        let (tx, rx) = flume::unbounded();
+
+        events.subscribe(tx);
+
         Ok(Self {
             context,
             window_renderer,
             window,
             mesh_renderer,
+            batched_renderer,
+            indirect_renderer,
+            current_renderer: CurrentRenderer::Direct,
             descriptor_layout_cache,
             descriptor_allocator,
             frames,
@@ -408,7 +440,23 @@ impl VulkanLayer {
             diffuse_passes,
             materials,
             meshes,
+            window_events: rx,
         })
+    }
+
+    fn handle_events(&mut self) {
+        for event in self.window_events.try_iter() {
+            if let WindowEvent::Key(Key::Num1, _, glfw::Action::Press, _) = event {
+                self.current_renderer = CurrentRenderer::Direct;
+                info!("Current renderer: {:?}", self.current_renderer);
+            } else if let WindowEvent::Key(Key::Num2, _, glfw::Action::Press, _) = event {
+                self.current_renderer = CurrentRenderer::Batched;
+                info!("Current renderer: {:?}", self.current_renderer);
+            } else if let WindowEvent::Key(Key::Num3, _, glfw::Action::Press, _) = event {
+                self.current_renderer = CurrentRenderer::Indirect;
+                info!("Current renderer: {:?}", self.current_renderer);
+            }
+        }
     }
 }
 
@@ -419,6 +467,8 @@ impl Layer for VulkanLayer {
         _events: &mut Events,
         _frame_time: Duration,
     ) -> anyhow::Result<()> {
+        self.handle_events();
+
         let extent = self.window_renderer.swapchain().extent();
 
         let frame = &mut self.frames[self.current_frame];
@@ -452,18 +502,46 @@ impl Layer for VulkanLayer {
         // Update global uniform buffer
         frame.global_uniformbuffer.fill(0, &[self.global_data])?;
 
-        self.mesh_renderer.update(world, self.current_frame)?;
+        match self.current_renderer {
+            CurrentRenderer::Direct => self.mesh_renderer.draw::<DiffusePass>(
+                world,
+                cmd,
+                self.current_frame,
+                frame.set,
+                &mut self.materials,
+                &mut self.meshes,
+                &mut self.diffuse_passes,
+            )?,
+            CurrentRenderer::Batched =>
+            // Bind the global uniform buffer
+            {
+                self.batched_renderer.update(world, self.current_frame)?;
 
-        // Bind the global uniform buffer
-        self.mesh_renderer.draw::<DiffusePass>(
-            world,
-            cmd,
-            self.current_frame,
-            frame.set,
-            &mut self.materials,
-            &mut self.meshes,
-            &mut self.diffuse_passes,
-        )?;
+                self.batched_renderer.draw::<DiffusePass>(
+                    world,
+                    cmd,
+                    self.current_frame,
+                    frame.set,
+                    &mut self.materials,
+                    &mut self.meshes,
+                    &mut self.diffuse_passes,
+                )?
+            }
+            CurrentRenderer::Indirect => {
+                self.indirect_renderer.update(world, self.current_frame)?;
+
+                // Bind the global uniform buffer
+                self.indirect_renderer.draw::<DiffusePass>(
+                    world,
+                    cmd,
+                    self.current_frame,
+                    frame.set,
+                    &mut self.materials,
+                    &mut self.meshes,
+                    &mut self.diffuse_passes,
+                )?;
+            }
+        }
 
         // Done
         frame.commandbuffer.end_renderpass();
