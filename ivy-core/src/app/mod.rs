@@ -6,11 +6,10 @@ pub use event::*;
 
 use flume::Receiver;
 use hecs::World;
-use std::error::Error;
 
 use crate::{
     layer::{Layer, LayerStack},
-    Events,
+    Clock, Events,
 };
 
 pub struct App {
@@ -51,13 +50,16 @@ impl App {
     pub fn run(&mut self) -> anyhow::Result<()> {
         self.running = true;
 
+        let mut frame_clock = Clock::new();
+
         // Update layers
         while self.running {
+            let frame_time = frame_clock.reset();
             let world = &mut self.world;
             let events = &mut self.events;
 
             for layer in self.layers.iter_mut() {
-                layer.on_update(world, events)?;
+                layer.on_update(world, events, frame_time)?;
             }
 
             // Read all events sent by application

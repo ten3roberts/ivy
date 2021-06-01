@@ -74,9 +74,7 @@ struct LogicLayer {
     input_vec: InputVector,
 
     camera_vel: f32,
-    frame_clock: Clock,
 
-    rx: Receiver<WindowEvent>,
     acc: f32,
     timestep: Duration,
 }
@@ -91,18 +89,12 @@ impl LogicLayer {
             InputAxis::keyboard(Key::S, Key::W),
         );
 
-        let frame_clock = Clock::new();
-
         world.spawn((Camera, Position(Vec3::new(0.0, 0.0, 5.0))));
-        let (tx, rx) = flume::unbounded();
-        events.subscribe(tx);
 
         Self {
             input,
             camera_vel: 5.0,
             input_vec,
-            frame_clock,
-            rx,
             timestep: 20.ms(),
             acc: 0.0,
         }
@@ -110,9 +102,13 @@ impl LogicLayer {
 }
 
 impl Layer for LogicLayer {
-    fn on_update(&mut self, world: &mut World, _: &mut Events) -> anyhow::Result<()> {
-        let frame_time = self.frame_clock.reset().secs();
-        self.acc += frame_time;
+    fn on_update(
+        &mut self,
+        world: &mut World,
+        _: &mut Events,
+        frame_time: Duration,
+    ) -> anyhow::Result<()> {
+        self.acc += frame_time.secs();
 
         let dt = self.timestep.secs();
 
@@ -417,7 +413,12 @@ impl VulkanLayer {
 }
 
 impl Layer for VulkanLayer {
-    fn on_update(&mut self, world: &mut World, _events: &mut Events) -> anyhow::Result<()> {
+    fn on_update(
+        &mut self,
+        world: &mut World,
+        _events: &mut Events,
+        _frame_time: Duration,
+    ) -> anyhow::Result<()> {
         let extent = self.window_renderer.swapchain().extent();
 
         let frame = &mut self.frames[self.current_frame];
@@ -569,7 +570,12 @@ impl WindowLayer {
 }
 
 impl Layer for WindowLayer {
-    fn on_update(&mut self, _world: &mut World, events: &mut Events) -> anyhow::Result<()> {
+    fn on_update(
+        &mut self,
+        _world: &mut World,
+        events: &mut Events,
+        _frame_time: Duration,
+    ) -> anyhow::Result<()> {
         self.glfw.poll_events();
 
         for (_, event) in glfw::flush_messages(&self.events) {
@@ -585,8 +591,7 @@ impl Layer for WindowLayer {
 }
 
 struct PerformanceLayer {
-    clock: Clock,
-    frame_clock: Clock,
+    elapsed: Clock,
     last_status: Clock,
     frequency: Duration,
 
@@ -600,8 +605,7 @@ struct PerformanceLayer {
 impl PerformanceLayer {
     fn new(frequency: Duration) -> Self {
         Self {
-            clock: Clock::new(),
-            frame_clock: Clock::new(),
+            elapsed: Clock::new(),
             last_status: Clock::new(),
             frequency,
             min: std::u64::MAX.secs(),
@@ -613,13 +617,16 @@ impl PerformanceLayer {
 }
 
 impl Layer for PerformanceLayer {
-    fn on_update(&mut self, _: &mut World, _: &mut Events) -> anyhow::Result<()> {
-        let dt = self.frame_clock.reset();
+    fn on_update(
+        &mut self,
+        _: &mut World,
+        _: &mut Events,
+        frame_time: Duration,
+    ) -> anyhow::Result<()> {
+        self.acc += frame_time;
 
-        self.acc += dt;
-
-        self.min = dt.min(self.min);
-        self.max = dt.max(self.max);
+        self.min = frame_time.min(self.min);
+        self.max = frame_time.max(self.max);
 
         self.framecount += 1;
 
@@ -630,7 +637,7 @@ impl Layer for PerformanceLayer {
 
             info!(
                 "Elapsed: {:?},\t Deltatime: {:?} {:?} {:?},\t Framerate: {}",
-                self.clock.elapsed(),
+                self.elapsed.elapsed(),
                 self.min,
                 avg,
                 self.max,

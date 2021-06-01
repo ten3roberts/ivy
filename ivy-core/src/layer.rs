@@ -1,5 +1,5 @@
 use hecs::World;
-use std::error::Error;
+use std::time::Duration;
 
 use crate::Events;
 
@@ -7,8 +7,14 @@ use crate::Events;
 /// order.
 pub trait Layer {
     /// Called for each iteration of the application event loop.
-    /// The layer can return an error
-    fn on_update(&mut self, world: &mut World, events: &mut Events) -> anyhow::Result<()>;
+    /// The layer can return an error.
+    /// frame_time: The duration between this and the last application frame.
+    fn on_update(
+        &mut self,
+        world: &mut World,
+        events: &mut Events,
+        frame_time: Duration,
+    ) -> anyhow::Result<()>;
 }
 
 /// Abstracts the stack of layered execution logic

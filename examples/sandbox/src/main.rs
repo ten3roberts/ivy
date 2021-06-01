@@ -40,7 +40,6 @@ enum SandboxEvent {
 struct SandboxLayer {
     frame: usize,
     elapsed: Clock,
-    frame_clock: Clock,
     last_status: Clock,
 
     rx: Receiver<SandboxEvent>,
@@ -84,7 +83,6 @@ impl SandboxLayer {
 
         Self {
             frame: 0,
-            frame_clock: Clock::new(),
             elapsed: Clock::new(),
             last_status: Clock::new(),
             rx,
@@ -93,9 +91,12 @@ impl SandboxLayer {
 }
 
 impl Layer for SandboxLayer {
-    fn on_update(&mut self, world: &mut World, events: &mut Events) -> anyhow::Result<()> {
-        let dt = self.frame_clock.reset();
-
+    fn on_update(
+        &mut self,
+        world: &mut World,
+        events: &mut Events,
+        frame_time: Duration,
+    ) -> anyhow::Result<()> {
         // Send dummy events
         events.send(SandboxEvent::DummyEvent(self.frame));
 
@@ -105,7 +106,7 @@ impl Layer for SandboxLayer {
                 "Updating SandboxLayer. frame: {}, \telapsed: {:?}, \tdt: {:?}",
                 self.frame,
                 self.elapsed.elapsed(),
-                dt
+                frame_time
             );
         }
 
