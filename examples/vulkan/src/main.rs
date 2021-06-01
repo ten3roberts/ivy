@@ -85,7 +85,7 @@ impl LogicLayer {
 
         let input_vec = InputVector::new(
             InputAxis::keyboard(Key::D, Key::A),
-            InputAxis::None,
+            InputAxis::keyboard(Key::Space, Key::LeftControl),
             InputAxis::keyboard(Key::S, Key::W),
         );
 
