@@ -1,5 +1,5 @@
 use flume::Receiver;
-use glfw::{Action, Key, MouseButton, WindowEvent};
+use glfw::{Action, Key, MouseButton, Window, WindowEvent};
 use ivy_core::Events;
 use ultraviolet::Vec2;
 
@@ -23,20 +23,23 @@ pub struct Input {
 
 impl Input {
     /// Creates a new Input state handler
-    pub fn new(events: &mut Events) -> Self {
+    pub fn new(window: &Window, events: &mut Events) -> Self {
         let (tx, rx) = flume::unbounded();
         let keys = [false; MAX_KEYS];
         let mouse_buttons = [false; MAX_MOUSE_BUTTONS];
 
         events.subscribe(tx);
 
+        let (x, y) = window.get_cursor_pos();
+        let mouse_pos = Vec2::new(x as f32, y as f32);
+
         Self {
             release_unfocus: true,
             rx,
             keys,
             mouse_buttons,
-            mouse_pos: Vec2::zero(),
-            old_mouse_pos: Vec2::zero(),
+            mouse_pos,
+            old_mouse_pos: mouse_pos,
             scroll: Vec2::zero(),
         }
     }

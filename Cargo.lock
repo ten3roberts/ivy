@@ -408,6 +408,7 @@ dependencies = [
  "smallvec",
  "spirv-reflect",
  "thiserror",
+ "ultraviolet",
  "vk-mem",
 ]
 

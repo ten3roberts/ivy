@@ -1,3 +1,4 @@
+use atomic_refcell::AtomicRefCell;
 use std::sync::Arc;
 
 use glfw::Window;
@@ -14,7 +15,7 @@ use ivy_vulkan::{
 pub struct WindowRenderer {
     context: Arc<VulkanContext>,
     swapchain: Swapchain,
-    _window: Arc<Window>,
+    _window: Arc<AtomicRefCell<Window>>,
 
     framebuffers: Vec<Framebuffer>,
     _depth_attachment: Texture,
@@ -28,8 +29,11 @@ pub struct WindowRenderer {
 }
 
 impl WindowRenderer {
-    pub fn new(context: Arc<VulkanContext>, window: Arc<Window>) -> Result<Self, Error> {
-        let swapchain = Swapchain::new(context.clone(), &window)?;
+    pub fn new(
+        context: Arc<VulkanContext>,
+        window: Arc<AtomicRefCell<Window>>,
+    ) -> Result<Self, Error> {
+        let swapchain = Swapchain::new(context.clone(), &window.borrow())?;
 
         let extent = swapchain.extent();
 

@@ -1,16 +1,10 @@
-use std::{
-    sync::{mpsc, Arc},
-    time::Duration,
-};
-
 use anyhow::Context;
-
-use components::{AngularVelocity, Position, Rotation, Scale};
-use glfw::{Glfw, Key, Window, WindowEvent};
-use hecs::World;
-
+use atomic_refcell::AtomicRefCell;
 use batched_mesh_renderer::BatchedMeshRenderer;
+use components::{AngularVelocity, Position, Rotation, Scale};
 use flume::Receiver;
+use glfw::{Action, CursorMode, Glfw, Key, Window, WindowEvent};
+use hecs::World;
 use indirect_mesh_renderer::IndirectMeshRenderer;
 use ivy_core::{resources::Handle, *};
 use ivy_graphics::{
@@ -20,6 +14,10 @@ use ivy_graphics::{
 use ivy_input::{Input, InputAxis, InputVector};
 use ivy_vulkan::{commands::*, descriptors::*, *};
 use mesh_renderer::MeshRenderer;
+use std::{
+    sync::{mpsc, Arc},
+    time::Duration,
+};
 use ultraviolet::{projection, Mat4, Rotor3, Vec2, Vec3, Vec4};
 
 use log::*;
@@ -54,13 +52,13 @@ fn main() -> anyhow::Result<()> {
         },
     )?;
 
-    let window = Arc::new(window);
+    let window = Arc::new(AtomicRefCell::new(window));
 
-    let context = Arc::new(VulkanContext::new(&glfw, &window)?);
+    let context = Arc::new(VulkanContext::new(&glfw, &window.borrow())?);
 
     let mut app = App::builder()
         .push_layer(|_, _| WindowLayer::new(glfw, window.clone(), window_events))
-        .push_layer(|w, e| LogicLayer::new(w, e))
+        .push_layer(|w, e| LogicLayer::new(w, e, window.clone()))
         .try_push_layer(|world, events| {
             VulkanLayer::new(context.clone(), world, window.clone(), events)
         })?
@@ -73,18 +71,24 @@ fn main() -> anyhow::Result<()> {
 struct Camera;
 
 struct LogicLayer {
+    window: Arc<AtomicRefCell<Window>>,
     input: Input,
     input_vec: InputVector,
 
     camera_vel: f32,
+    camera_euler: Vec3,
+
+    cursor_mode: CursorMode,
 
     acc: f32,
     timestep: Duration,
+
+    window_events: Receiver<WindowEvent>,
 }
 
 impl LogicLayer {
-    pub fn new(world: &mut World, events: &mut Events) -> Self {
-        let input = Input::new(events);
+    pub fn new(world: &mut World, events: &mut Events, window: Arc<AtomicRefCell<Window>>) -> Self {
+        let input = Input::new(&window.borrow(), events);
 
         let input_vec = InputVector::new(
             InputAxis::keyboard(Key::D, Key::A),
@@ -92,14 +96,55 @@ impl LogicLayer {
             InputAxis::keyboard(Key::S, Key::W),
         );
 
-        world.spawn((Camera, Position(Vec3::new(0.0, 0.0, 5.0))));
+        world.spawn((
+            Camera,
+            Position(Vec3::new(0.0, 0.0, 5.0)),
+            Rotation(Rotor3::identity()),
+        ));
+
+        let (tx, rx) = flume::unbounded();
+        events.subscribe(tx);
 
         Self {
+            window,
             input,
             camera_vel: 5.0,
+            camera_euler: Vec3::zero(),
             input_vec,
             timestep: 20.ms(),
             acc: 0.0,
+            window_events: rx,
+            cursor_mode: CursorMode::Normal,
+        }
+    }
+
+    pub fn handle_events(&mut self) {
+        for event in self.window_events.try_iter() {
+            debug!("Event: {:?}", event);
+            match event {
+                WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
+                    if self.cursor_mode == CursorMode::Normal {
+                        self.cursor_mode = CursorMode::Disabled;
+                    } else {
+                        self.cursor_mode = CursorMode::Normal;
+                    }
+
+                    self.window.borrow_mut().set_cursor_mode(self.cursor_mode);
+                }
+                WindowEvent::Focus(false) => {
+                    self.cursor_mode = CursorMode::Normal;
+                    self.window.borrow_mut().set_cursor_mode(self.cursor_mode)
+                }
+                WindowEvent::Focus(true) => {
+                    self.cursor_mode = CursorMode::Disabled;
+                    self.window.borrow_mut().set_cursor_mode(self.cursor_mode)
+                }
+                WindowEvent::Scroll(_, scroll) => {
+                    self.camera_vel += scroll as f32;
+                    self.camera_vel = self.camera_vel.clamp(0.0, 10.0);
+                }
+                _ => {}
+            }
         }
     }
 }
@@ -111,15 +156,38 @@ impl Layer for LogicLayer {
         _: &mut Events,
         frame_time: Duration,
     ) -> anyhow::Result<()> {
+        self.handle_events();
+
+        self.input.on_update();
+
         self.acc += frame_time.secs();
 
         let dt = self.timestep.secs();
 
-        while self.acc > 0.0 {
-            self.input.on_update();
+        {
+            let (_e, camera_rot) = world
+                .query_mut::<&mut Rotation>()
+                .with::<Camera>()
+                .into_iter()
+                .next()
+                .unwrap();
 
-            let (_e, camera_pos) = world
-                .query_mut::<&mut Position>()
+            let mouse_movement =
+                self.input.rel_mouse_pos() / self.window.borrow().extent().as_vec();
+
+            self.camera_euler += mouse_movement.xyz();
+
+            *camera_rot = Rotor3::from_euler_angles(
+                self.camera_euler.z,
+                self.camera_euler.y,
+                -self.camera_euler.x,
+            )
+            .into();
+        }
+
+        while self.acc > 0.0 {
+            let (_e, (camera_pos, camera_rot)) = world
+                .query_mut::<(&mut Position, &Rotation)>()
                 .with::<Camera>()
                 .into_iter()
                 .next()
@@ -127,7 +195,7 @@ impl Layer for LogicLayer {
 
             let movement = self.input_vec.get(&self.input);
 
-            *camera_pos += Position(movement * dt * self.camera_vel);
+            *camera_pos += Position(camera_rot.into_matrix() * (movement * dt * self.camera_vel));
 
             systems::integrate_angular_velocity(world, dt);
 
@@ -171,7 +239,7 @@ struct VulkanLayer {
     context: Arc<VulkanContext>,
 
     window_renderer: WindowRenderer,
-    window: Arc<Window>,
+    window: Arc<AtomicRefCell<Window>>,
     mesh_renderer: MeshRenderer,
     batched_renderer: BatchedMeshRenderer,
     indirect_renderer: IndirectMeshRenderer,
@@ -203,7 +271,7 @@ impl VulkanLayer {
     pub fn new(
         context: Arc<VulkanContext>,
         world: &mut World,
-        window: Arc<Window>,
+        window: Arc<AtomicRefCell<Window>>,
         events: &mut Events,
     ) -> anyhow::Result<Self> {
         let mut descriptor_layout_cache = DescriptorLayoutCache::new(context.device().clone());
@@ -301,12 +369,12 @@ impl VulkanLayer {
         )?);
 
         let viewproj =
-            ultraviolet::projection::perspective_vk(1.0, window.extent().aspect(), 0.1, 100.0)
-                * ultraviolet::Mat4::look_at(
-                    Vec3::new(5.0, 0.5, 5.0),
-                    Vec3::zero(),
-                    Vec3::unit_y(),
-                );
+            ultraviolet::projection::perspective_vk(
+                1.0,
+                window.borrow().extent().aspect(),
+                0.1,
+                100.0,
+            ) * ultraviolet::Mat4::look_at(Vec3::new(5.0, 0.5, 5.0), Vec3::zero(), Vec3::unit_y());
 
         // An example uniform containing global uniform data
         let global_data = GlobalData {
@@ -482,8 +550,8 @@ impl Layer for VulkanLayer {
         fence::wait(self.context.device(), &[frame.fence], true)?;
         fence::reset(self.context.device(), &[frame.fence])?;
 
-        let (_e, camera_pos) = world
-            .query_mut::<&mut Position>()
+        let (_e, (camera_pos, camera_rot)) = world
+            .query_mut::<(&Position, &Rotation)>()
             .with::<Camera>()
             .into_iter()
             .next()
@@ -501,7 +569,7 @@ impl Layer for VulkanLayer {
 
         let viewproj = projection::perspective_vk(1.0, extent.aspect(), 0.1, 100.0)
             // * Mat4::look_at(*self.camera_pos, Vec3::zero(), Vec3::unit_y());
-            * Mat4::from_translation(**camera_pos).inversed();
+            * (Mat4::from_translation(**camera_pos) * camera_rot.into_matrix().into_homogeneous()).inversed();
 
         self.global_data.viewproj = viewproj;
 
@@ -638,14 +706,14 @@ impl Drop for FrameData {
 
 struct WindowLayer {
     glfw: Glfw,
-    _window: Arc<Window>,
+    _window: Arc<AtomicRefCell<Window>>,
     events: mpsc::Receiver<(f64, WindowEvent)>,
 }
 
 impl WindowLayer {
     pub fn new(
         glfw: Glfw,
-        window: Arc<Window>,
+        window: Arc<AtomicRefCell<Window>>,
         events: mpsc::Receiver<(f64, WindowEvent)>,
     ) -> Self {
         Self {
