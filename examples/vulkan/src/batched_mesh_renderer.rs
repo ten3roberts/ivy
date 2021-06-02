@@ -34,7 +34,6 @@ pub struct BatchedMeshRenderer {
     context: Arc<VulkanContext>,
     max_object_id: usize,
     free_indices: Vec<usize>,
-    entity_index_map: HashMap<Entity, usize>,
 }
 
 impl BatchedMeshRenderer {
@@ -61,7 +60,6 @@ impl BatchedMeshRenderer {
             passes,
             max_object_id: 0,
             free_indices: Vec::new(),
-            entity_index_map: HashMap::new(),
         })
     }
 

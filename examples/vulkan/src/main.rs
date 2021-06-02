@@ -12,7 +12,7 @@ use hecs::World;
 use batched_mesh_renderer::BatchedMeshRenderer;
 use flume::Receiver;
 use indirect_mesh_renderer::IndirectMeshRenderer;
-use ivy_core::*;
+use ivy_core::{resources::Handle, *};
 use ivy_graphics::{
     window::{WindowExt, WindowInfo, WindowMode},
     Material, Mesh, ShaderPass,
@@ -192,6 +192,11 @@ struct VulkanLayer {
     meshes: ResourceCache<Mesh>,
 
     window_events: Receiver<WindowEvent>,
+
+    cube_mesh: Handle<Mesh>,
+    material: Handle<Material>,
+
+    pass: Handle<DiffusePass>,
 }
 
 impl VulkanLayer {
@@ -210,6 +215,7 @@ impl VulkanLayer {
             context.clone(),
             &mut descriptor_layout_cache,
             &mut descriptor_allocator,
+            16,
         )?;
         let mesh_renderer = MeshRenderer::new(
             context.clone(),
@@ -378,7 +384,8 @@ impl VulkanLayer {
             .iter()
             .cloned(),
         );
-        let cube_side = 15;
+
+        let cube_side = 10;
         world.spawn_batch(
             (0..cube_side)
                 .flat_map(move |x| (0..cube_side).map(move |y| (x, y)))
@@ -429,7 +436,7 @@ impl VulkanLayer {
             mesh_renderer,
             batched_renderer,
             indirect_renderer,
-            current_renderer: CurrentRenderer::Direct,
+            current_renderer: CurrentRenderer::Indirect,
             descriptor_layout_cache,
             descriptor_allocator,
             frames,
@@ -441,6 +448,9 @@ impl VulkanLayer {
             materials,
             meshes,
             window_events: rx,
+            cube_mesh,
+            material,
+            pass: default_shaderpass,
         })
     }
 
@@ -528,6 +538,12 @@ impl Layer for VulkanLayer {
                 )?
             }
             CurrentRenderer::Indirect => {
+                self.indirect_renderer.register_entities::<DiffusePass>(
+                    world,
+                    &mut self.descriptor_layout_cache,
+                    &mut self.descriptor_allocator,
+                )?;
+
                 self.indirect_renderer.update(world, self.current_frame)?;
 
                 // Bind the global uniform buffer
