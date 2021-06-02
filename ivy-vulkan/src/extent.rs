@@ -2,6 +2,7 @@ use std::{
     fmt::Display,
     ops::{Add, Mul},
 };
+use ultraviolet::Vec2;
 
 use ash::vk;
 
@@ -20,6 +21,11 @@ impl Extent {
     /// Returns the aspect ratio of the extent
     pub fn aspect(&self) -> f32 {
         self.width as f32 / self.height as f32
+    }
+
+    // Convert the extent into a float vector
+    pub fn as_vec(&self) -> Vec2 {
+        (*self).into()
     }
 }
 
@@ -133,5 +139,25 @@ impl From<(usize, usize)> for Extent {
             width: v.0 as u32,
             height: v.1 as u32,
         }
+    }
+}
+
+// Float conversion
+
+impl Into<[f32; 2]> for Extent {
+    fn into(self) -> [f32; 2] {
+        [self.width as f32, self.height as f32]
+    }
+}
+
+impl Into<(f32, f32)> for Extent {
+    fn into(self) -> (f32, f32) {
+        (self.width as f32, self.height as f32)
+    }
+}
+
+impl Into<Vec2> for Extent {
+    fn into(self) -> Vec2 {
+        Vec2::new(self.width as f32, self.height as f32)
     }
 }
