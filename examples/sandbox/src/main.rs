@@ -1,13 +1,13 @@
 use flume::Receiver;
 use rand::prelude::*;
-use std::{error::Error, thread::sleep, time::Duration};
+use std::{thread::sleep, time::Duration};
 
 use hecs::World;
 use ivy_core::*;
 use log::*;
 use rand::{prelude::StdRng, SeedableRng};
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     // Setup logging
     Logger {
         show_location: false,
@@ -17,7 +17,7 @@ fn main() {
 
     let mut app = App::builder().push_layer(SandboxLayer::new).build();
 
-    app.run();
+    app.run()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

@@ -211,12 +211,8 @@ impl VulkanLayer {
         let mut descriptor_allocator = DescriptorAllocator::new(context.device().clone(), 2);
 
         let window_renderer = WindowRenderer::new(context.clone(), window.clone())?;
-        let indirect_renderer = IndirectMeshRenderer::new(
-            context.clone(),
-            &mut descriptor_layout_cache,
-            &mut descriptor_allocator,
-            16,
-        )?;
+        let indirect_renderer =
+            IndirectMeshRenderer::new(context.clone(), &mut descriptor_layout_cache, 16)?;
         let mesh_renderer = MeshRenderer::new(
             context.clone(),
             &mut descriptor_layout_cache,
@@ -538,11 +534,8 @@ impl Layer for VulkanLayer {
                 )?
             }
             CurrentRenderer::Indirect => {
-                self.indirect_renderer.register_entities::<DiffusePass>(
-                    world,
-                    &mut self.descriptor_layout_cache,
-                    &mut self.descriptor_allocator,
-                )?;
+                self.indirect_renderer
+                    .register_entities::<DiffusePass>(world, &mut self.descriptor_layout_cache)?;
 
                 self.indirect_renderer.update(world, self.current_frame)?;
 

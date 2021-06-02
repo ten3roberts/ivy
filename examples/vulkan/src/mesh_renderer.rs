@@ -21,7 +21,6 @@ pub type RenderObject<'a, T> = (
 
 pub struct MeshRenderer {
     frames: Vec<FrameData>,
-    context: Arc<VulkanContext>,
 }
 
 impl MeshRenderer {
@@ -40,7 +39,7 @@ impl MeshRenderer {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok(Self { context, frames })
+        Ok(Self { frames })
     }
 
     /// Will draw all entities with a `Handle<Material>`, `Handle<Mesh>`, Modelmatrix and Shaderpass `Handle<T>`
@@ -97,7 +96,6 @@ impl MeshRenderer {
 
 struct FrameData {
     set: DescriptorSet,
-    set_layout: DescriptorSetLayout,
     object_buffer: Buffer,
 }
 
@@ -127,11 +125,7 @@ impl FrameData {
             )?
             .layout(descriptor_layout_cache, &mut set_layout)?;
 
-        Ok(Self {
-            object_buffer,
-            set,
-            set_layout,
-        })
+        Ok(Self { object_buffer, set })
     }
 }
 

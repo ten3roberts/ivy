@@ -31,7 +31,6 @@ pub const MAX_OBJECTS: usize = 8096;
 pub struct BatchedMeshRenderer {
     frames: Vec<FrameData>,
     passes: HashMap<TypeId, PassData>,
-    context: Arc<VulkanContext>,
     max_object_id: usize,
     free_indices: Vec<usize>,
 }
@@ -55,7 +54,6 @@ impl BatchedMeshRenderer {
         let passes = HashMap::new();
 
         Ok(Self {
-            context,
             frames,
             passes,
             max_object_id: 0,
@@ -64,7 +62,7 @@ impl BatchedMeshRenderer {
     }
 
     /// Inserts a new entity and return the marker
-    pub fn insert_entity(&mut self, entity: Entity) -> (Entity, ObjectBufferMarker) {
+    fn insert_entity(&mut self, entity: Entity) -> (Entity, ObjectBufferMarker) {
         if let Some(id) = self.free_indices.pop() {
             (entity, ObjectBufferMarker::new(id))
         } else {
@@ -100,7 +98,7 @@ impl BatchedMeshRenderer {
         frame
             .object_buffer
             .write_slice(MAX_OBJECTS as u64, 0, |data| {
-                query.into_iter().for_each(|(e, (modelmatrix, marker))| {
+                query.into_iter().for_each(|(_, (modelmatrix, marker))| {
                     data[marker.id] = ObjectData { mvp: **modelmatrix }
                 });
             })?;
@@ -120,8 +118,6 @@ impl BatchedMeshRenderer {
         passes: &mut ResourceCache<T>,
     ) -> Result<(), Error> {
         self.register_entities::<T>(world);
-
-        let query = world.query_mut::<RenderObject<T>>();
 
         let frame = &mut self.frames[current_frame];
 
@@ -217,14 +213,13 @@ impl PassData {
         let (shaderpass, mesh, material, _modelmatrix, object_marker) = renderobject;
 
         let shaderpass = passes.get(*shaderpass)?;
-        let (batch_idx, batch) = self.get_batch(shaderpass, *mesh, *material);
+        let (_batch_idx, batch) = self.get_batch(shaderpass, *mesh, *material);
 
         batch.ids.push(object_marker.id);
 
         Ok((
             entity,
             BatchMarker {
-                batch: batch_idx,
                 _shaderpass: PhantomData,
             },
         ))
@@ -294,22 +289,11 @@ impl ObjectBufferMarker {
 
 /// Marks the entity as already being batched for this shaderpasss with the batch index and object buffer index.
 struct BatchMarker<T> {
-    batch: usize,
     _shaderpass: PhantomData<T>,
-}
-
-impl<T> BatchMarker<T> {
-    fn new(batch: usize, idx: usize) -> Self {
-        Self {
-            batch,
-            _shaderpass: PhantomData,
-        }
-    }
 }
 
 struct FrameData {
     set: DescriptorSet,
-    set_layout: DescriptorSetLayout,
     object_buffer: Buffer,
 }
 
@@ -339,11 +323,7 @@ impl FrameData {
             )?
             .layout(descriptor_layout_cache, &mut set_layout)?;
 
-        Ok(Self {
-            object_buffer,
-            set,
-            set_layout,
-        })
+        Ok(Self { object_buffer, set })
     }
 }
 
