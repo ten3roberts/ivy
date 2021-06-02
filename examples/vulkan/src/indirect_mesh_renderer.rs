@@ -5,7 +5,6 @@ use ivy_vulkan::{
     commands::CommandBuffer, descriptors::*, vk, Buffer, BufferAccess, BufferType, VulkanContext,
 };
 
-use log::debug;
 use std::{any::TypeId, collections::HashMap, marker::PhantomData, mem::size_of, sync::Arc};
 use ultraviolet::Mat4;
 
@@ -32,9 +31,10 @@ type ObjectId = u32;
 
 /// A mesh renderer using vkCmdDrawIndirectIndexed and efficient batching.
 pub struct IndirectMeshRenderer {
+    context: Arc<VulkanContext>,
+    descriptor_allocator: DescriptorAllocator,
     frames: Vec<FrameData>,
     passes: HashMap<TypeId, PassData>,
-    context: Arc<VulkanContext>,
     max_object_id: ObjectId,
     free_indices: Vec<ObjectId>,
     /// Maximum number of objects that fit inside objectbuffer
@@ -47,15 +47,17 @@ impl IndirectMeshRenderer {
     pub fn new(
         context: Arc<VulkanContext>,
         descriptor_layout_cache: &mut DescriptorLayoutCache,
-        descriptor_allocator: &mut DescriptorAllocator,
         capacity: ObjectId,
     ) -> Result<Self, Error> {
+        let mut descriptor_allocator =
+            DescriptorAllocator::new(context.device().clone(), FRAMES_IN_FLIGHT as u32);
+
         let frames = (0..FRAMES_IN_FLIGHT)
             .map(|_| {
                 FrameData::new(
                     context.clone(),
                     descriptor_layout_cache,
-                    descriptor_allocator,
+                    &mut descriptor_allocator,
                     capacity,
                 )
             })
@@ -65,6 +67,7 @@ impl IndirectMeshRenderer {
 
         Ok(Self {
             context,
+            descriptor_allocator,
             frames,
             passes,
             max_object_id: 0,
@@ -91,18 +94,18 @@ impl IndirectMeshRenderer {
         world: &mut World,
         capacity: ObjectId,
         descriptor_layout_cache: &mut DescriptorLayoutCache,
-        descriptor_allocator: &mut DescriptorAllocator,
     ) -> Result<(), Error> {
         self.free_indices.clear();
         self.max_object_id = 0;
 
         self.frames.clear();
+        self.descriptor_allocator.reset()?;
 
         for _ in 0..FRAMES_IN_FLIGHT {
             self.frames.push(FrameData::new(
                 self.context.clone(),
                 descriptor_layout_cache,
-                descriptor_allocator,
+                &mut self.descriptor_allocator,
                 capacity,
             )?);
         }
@@ -125,7 +128,6 @@ impl IndirectMeshRenderer {
         &mut self,
         world: &mut World,
         descriptor_layout_cache: &mut DescriptorLayoutCache,
-        descriptor_allocator: &mut DescriptorAllocator,
     ) -> Result<(), Error> {
         let query = world
             .query_mut::<RenderObjectUnregistered<T>>()
@@ -153,7 +155,6 @@ impl IndirectMeshRenderer {
                 world,
                 nearest_power_2(self.object_count as _) as _,
                 descriptor_layout_cache,
-                descriptor_allocator,
             )?;
         }
 
@@ -447,12 +448,6 @@ struct ObjectBufferMarker {
     id: ObjectId,
 }
 
-impl ObjectBufferMarker {
-    fn new(id: ObjectId) -> Self {
-        Self { id }
-    }
-}
-
 /// Marks the entity as already being batched for this shaderpasss with the batch index and object buffer index.
 struct BatchMarker<T> {
     _shaderpass: PhantomData<T>,
@@ -460,7 +455,6 @@ struct BatchMarker<T> {
 
 struct FrameData {
     set: DescriptorSet,
-    set_layout: DescriptorSetLayout,
     object_buffer: Buffer,
 }
 
@@ -491,11 +485,7 @@ impl FrameData {
             )?
             .layout(descriptor_layout_cache, &mut set_layout)?;
 
-        Ok(Self {
-            object_buffer,
-            set,
-            set_layout,
-        })
+        Ok(Self { object_buffer, set })
     }
 }
 
