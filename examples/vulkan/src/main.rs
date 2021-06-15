@@ -1,6 +1,5 @@
 use anyhow::Context;
 use atomic_refcell::AtomicRefCell;
-use batched_mesh_renderer::BatchedMeshRenderer;
 use components::{AngularVelocity, Position, Rotation, Scale};
 use flume::Receiver;
 use glfw::{Action, CursorMode, Glfw, Key, Window, WindowEvent};
@@ -12,10 +11,9 @@ use ivy_graphics::{
     Material, Mesh, ShaderPass,
 };
 use ivy_input::{Input, InputAxis, InputVector};
-use ivy_resources::{Handle, ResourceCache};
+use ivy_resources::{Handle, ResourceManager};
 use ivy_ui::{Image, ImageRenderer};
 use ivy_vulkan::{commands::*, descriptors::*, *};
-use mesh_renderer::MeshRenderer;
 use std::{
     sync::{mpsc, Arc},
     time::Duration,
@@ -25,10 +23,8 @@ use ultraviolet::{projection, Mat4, Rotor3, Vec2, Vec3, Vec4};
 use log::*;
 use window_renderer::WindowRenderer;
 
-mod batched_mesh_renderer;
 mod components;
 mod indirect_mesh_renderer;
-mod mesh_renderer;
 mod systems;
 mod window_renderer;
 
@@ -229,12 +225,6 @@ impl ShaderPass for DiffusePass {
         self.pipeline.layout()
     }
 }
-#[derive(Copy, Clone, Debug)]
-enum CurrentRenderer {
-    Direct,
-    Batched,
-    Indirect,
-}
 
 #[allow(dead_code)]
 struct VulkanLayer {
@@ -242,12 +232,8 @@ struct VulkanLayer {
 
     window_renderer: WindowRenderer,
     window: Arc<AtomicRefCell<Window>>,
-    mesh_renderer: MeshRenderer,
     image_renderer: ImageRenderer,
-    batched_renderer: BatchedMeshRenderer,
     indirect_renderer: IndirectMeshRenderer,
-
-    current_renderer: CurrentRenderer,
 
     descriptor_layout_cache: DescriptorLayoutCache,
     descriptor_allocator: DescriptorAllocator,
@@ -258,19 +244,9 @@ struct VulkanLayer {
     current_frame: usize,
 
     clock: Clock,
-    materials: ResourceCache<Material>,
-    textures: ResourceCache<Texture>,
-    samplers: ResourceCache<Sampler>,
-    diffuse_passes: ResourceCache<DiffusePass>,
-    meshes: ResourceCache<Mesh>,
-    images: ResourceCache<Image>,
+    resources: ResourceManager,
 
     window_events: Receiver<WindowEvent>,
-
-    cube_mesh: Handle<Mesh>,
-    material: Handle<Material>,
-
-    pass: Handle<DiffusePass>,
 }
 
 impl VulkanLayer {
@@ -285,18 +261,9 @@ impl VulkanLayer {
         let mut descriptor_allocator = DescriptorAllocator::new(context.device().clone(), 2);
 
         let window_renderer = WindowRenderer::new(context.clone(), window.clone())?;
+
         let indirect_renderer =
             IndirectMeshRenderer::new(context.clone(), &mut descriptor_layout_cache, 16)?;
-        let mesh_renderer = MeshRenderer::new(
-            context.clone(),
-            &mut descriptor_layout_cache,
-            &mut descriptor_allocator,
-        )?;
-        let batched_renderer = BatchedMeshRenderer::new(
-            context.clone(),
-            &mut descriptor_layout_cache,
-            &mut descriptor_allocator,
-        )?;
 
         let image_renderer = ImageRenderer::new(
             context.clone(),
@@ -316,79 +283,207 @@ impl VulkanLayer {
             })
             .collect::<Result<Vec<FrameData>, _>>()?;
 
-        let mut meshes = ResourceCache::new();
+        let mut resources = ResourceManager::new();
 
-        let document =
-            ivy_graphics::Document::load(context.clone(), &mut meshes, "./res/models/cube.gltf")
-                .context("Failed to load cube model")?;
+        resources.create_cache::<Material>();
+        resources.create_cache::<Mesh>();
+        resources.create_cache::<Texture>();
+        resources.create_cache::<Sampler>();
+        resources.create_cache::<DiffusePass>();
+        resources.create_cache::<Image>();
 
-        let cube_mesh = document.mesh(0);
+        {
+            let mut materials = resources.cache_mut()?;
+            let mut meshes = resources.cache_mut()?;
+            let mut textures = resources.cache_mut()?;
+            let mut samplers = resources.cache_mut()?;
+            let mut diffuse_passes = resources.cache_mut()?;
+            let mut images = resources.cache_mut()?;
 
-        let document =
-            ivy_graphics::Document::load(context.clone(), &mut meshes, "./res/models/sphere.gltf")
-                .context("Failed to load sphere model")?;
+            let document = ivy_graphics::Document::load(
+                context.clone(),
+                &mut meshes,
+                "./res/models/cube.gltf",
+            )
+            .context("Failed to load cube model")?;
 
-        let sphere_mesh = document.mesh(0);
+            let cube_mesh = document.mesh(0);
 
-        let mut textures = ResourceCache::new();
+            let document = ivy_graphics::Document::load(
+                context.clone(),
+                &mut meshes,
+                "./res/models/sphere.gltf",
+            )
+            .context("Failed to load sphere model")?;
 
-        let grid = textures.insert(
-            Texture::load(context.clone(), "./res/textures/grid.png")
-                .context("Failed to load grid texture")?,
-        );
+            let sphere_mesh = document.mesh(0);
 
-        let uv_grid = textures.insert(
-            Texture::load(context.clone(), "./res/textures/uv.png")
-                .context("Failed to load uv texture")?,
-        );
+            let grid = textures.insert(
+                Texture::load(context.clone(), "./res/textures/grid.png")
+                    .context("Failed to load grid texture")?,
+            );
 
-        let mut samplers = ResourceCache::new();
+            let uv_grid = textures.insert(
+                Texture::load(context.clone(), "./res/textures/uv.png")
+                    .context("Failed to load uv texture")?,
+            );
 
-        let sampler = samplers.insert(Sampler::new(
-            context.clone(),
-            SamplerInfo {
-                address_mode: AddressMode::REPEAT,
-                mag_filter: FilterMode::LINEAR,
-                min_filter: FilterMode::LINEAR,
-                unnormalized_coordinates: false,
-                anisotropy: 16.0,
-                mip_levels: 4,
-            },
-        )?);
+            let sampler = samplers.insert(Sampler::new(
+                context.clone(),
+                SamplerInfo {
+                    address_mode: AddressMode::REPEAT,
+                    mag_filter: FilterMode::LINEAR,
+                    min_filter: FilterMode::LINEAR,
+                    unnormalized_coordinates: false,
+                    anisotropy: 16.0,
+                    mip_levels: 4,
+                },
+            )?);
 
-        let mut materials = ResourceCache::new();
+            let material = materials.insert(Material::new(
+                &context,
+                &mut descriptor_layout_cache,
+                &mut descriptor_allocator,
+                &textures,
+                &samplers,
+                grid,
+                sampler,
+            )?);
 
-        let material = materials.insert(Material::new(
-            &context,
-            &mut descriptor_layout_cache,
-            &mut descriptor_allocator,
-            &textures,
-            &samplers,
-            grid,
-            sampler,
-        )?);
+            let material2 = materials.insert(Material::new(
+                &context,
+                &mut descriptor_layout_cache,
+                &mut descriptor_allocator,
+                &textures,
+                &samplers,
+                uv_grid,
+                sampler,
+            )?);
 
-        let material2 = materials.insert(Material::new(
-            &context,
-            &mut descriptor_layout_cache,
-            &mut descriptor_allocator,
-            &textures,
-            &samplers,
-            uv_grid,
-            sampler,
-        )?);
+            let image: Handle<Image> = images.insert(Image::new(
+                &context,
+                &mut descriptor_layout_cache,
+                &mut descriptor_allocator,
+                &textures,
+                &samplers,
+                uv_grid,
+                sampler,
+            )?);
 
-        let mut images = ResourceCache::new();
+            // Create a pipeline from the shaders
+            let pipeline = Pipeline::new(
+                context.device().clone(),
+                &mut descriptor_layout_cache,
+                &window_renderer.renderpass(),
+                PipelineInfo {
+                    vertexshader: "./res/shaders/default.vert.spv".into(),
+                    fragmentshader: "./res/shaders/default.frag.spv".into(),
+                    vertex_binding: Vertex::binding_description(),
+                    vertex_attributes: Vertex::attribute_descriptions(),
+                    samples: SampleCountFlags::TYPE_1,
+                    extent: window_renderer.swapchain().extent(),
+                    subpass: 0,
+                    polygon_mode: vk::PolygonMode::FILL,
+                    cull_mode: vk::CullModeFlags::NONE,
+                    front_face: vk::FrontFace::CLOCKWISE,
+                },
+            )?;
 
-        let image: Handle<Image> = images.insert(Image::new(
-            &context,
-            &mut descriptor_layout_cache,
-            &mut descriptor_allocator,
-            &mut textures,
-            &mut samplers,
-            uv_grid,
-            sampler,
-        )?);
+            // Create a pipeline from the shaders
+            let uv_pipeline = Pipeline::new(
+                context.device().clone(),
+                &mut descriptor_layout_cache,
+                &window_renderer.renderpass(),
+                PipelineInfo {
+                    vertexshader: "./res/shaders/default.vert.spv".into(),
+                    fragmentshader: "./res/shaders/uv.frag.spv".into(),
+                    vertex_binding: Vertex::binding_description(),
+                    vertex_attributes: Vertex::attribute_descriptions(),
+                    samples: SampleCountFlags::TYPE_1,
+                    extent: window_renderer.swapchain().extent(),
+                    subpass: 0,
+                    polygon_mode: vk::PolygonMode::FILL,
+                    cull_mode: vk::CullModeFlags::NONE,
+                    front_face: vk::FrontFace::CLOCKWISE,
+                },
+            )?;
+
+            let default_shaderpass = diffuse_passes.insert(DiffusePass::new(pipeline));
+            let uv_shaderpass = diffuse_passes.insert(DiffusePass::new(uv_pipeline));
+
+            world.spawn_batch(
+                [
+                    (
+                        Position(Vec3::new(0.0, 0.0, 0.0)),
+                        cube_mesh,
+                        material,
+                        default_shaderpass,
+                    ),
+                    (
+                        Position(Vec3::new(4.0, 0.0, 0.0)),
+                        cube_mesh,
+                        material,
+                        default_shaderpass,
+                    ),
+                    (
+                        Position(Vec3::new(0.0, 0.0, -3.0)),
+                        cube_mesh,
+                        material2,
+                        default_shaderpass,
+                    ),
+                ]
+                .iter()
+                .cloned(),
+            );
+
+            let cube_side = 10;
+            world.spawn_batch(
+                (0..cube_side)
+                    .flat_map(move |x| (0..cube_side).map(move |y| (x, y)))
+                    .flat_map(move |(x, y)| (0..cube_side).map(move |z| (x, y, z)))
+                    .map(|(x, y, z)| {
+                        (
+                            cube_mesh,
+                            Position(Vec3::new(
+                                x as f32 * 3.0 - 5.0,
+                                y as f32 * 3.0,
+                                -z as f32 * 3.0,
+                            )),
+                            material,
+                            default_shaderpass,
+                            // Scale(Vec3::new(0.1, 0.1, 0.1)),
+                            Rotation(Rotor3::identity()),
+                            AngularVelocity(Vec3::new(0.0, y as f32 * 0.5, x as f32)),
+                        )
+                    }),
+            );
+
+            world.spawn((
+                Position(Vec3::new(1.0, -2.0, 3.0)),
+                cube_mesh,
+                Rotation::default(),
+                Scale(Vec3::one() * 0.5),
+                default_shaderpass,
+                material2,
+            ));
+
+            world.spawn((
+                Position(Vec3::new(0.0, 0.0, 3.0)),
+                sphere_mesh,
+                Rotation::default(),
+                AngularVelocity(Vec3::new(0.0, 0.1, 1.0)),
+                uv_shaderpass,
+                material,
+            ));
+
+            world.spawn_batch((0..100).map(|v| {
+                (
+                    Mat4::from_translation(Vec3::new(v as f32 * 2.0, 0.0, 0.0)),
+                    image,
+                    default_shaderpass,
+                )
+            }));
+        }
 
         let viewproj =
             ultraviolet::projection::perspective_vk(
@@ -404,166 +499,24 @@ impl VulkanLayer {
             viewproj,
         };
 
-        // Create a pipeline from the shaders
-        let pipeline = Pipeline::new(
-            context.device().clone(),
-            &mut descriptor_layout_cache,
-            &window_renderer.renderpass(),
-            PipelineInfo {
-                vertexshader: "./res/shaders/default.vert.spv".into(),
-                fragmentshader: "./res/shaders/default.frag.spv".into(),
-                vertex_binding: Vertex::binding_description(),
-                vertex_attributes: Vertex::attribute_descriptions(),
-                samples: SampleCountFlags::TYPE_1,
-                extent: window_renderer.swapchain().extent(),
-                subpass: 0,
-                polygon_mode: vk::PolygonMode::FILL,
-                cull_mode: vk::CullModeFlags::NONE,
-                front_face: vk::FrontFace::CLOCKWISE,
-            },
-        )?;
-
-        // Create a pipeline from the shaders
-        let uv_pipeline = Pipeline::new(
-            context.device().clone(),
-            &mut descriptor_layout_cache,
-            &window_renderer.renderpass(),
-            PipelineInfo {
-                vertexshader: "./res/shaders/default.vert.spv".into(),
-                fragmentshader: "./res/shaders/uv.frag.spv".into(),
-                vertex_binding: Vertex::binding_description(),
-                vertex_attributes: Vertex::attribute_descriptions(),
-                samples: SampleCountFlags::TYPE_1,
-                extent: window_renderer.swapchain().extent(),
-                subpass: 0,
-                polygon_mode: vk::PolygonMode::FILL,
-                cull_mode: vk::CullModeFlags::NONE,
-                front_face: vk::FrontFace::CLOCKWISE,
-            },
-        )?;
-
-        let mut diffuse_passes = ResourceCache::new();
-        let default_shaderpass = diffuse_passes.insert(DiffusePass::new(pipeline));
-        let uv_shaderpass = diffuse_passes.insert(DiffusePass::new(uv_pipeline));
-
-        world.spawn_batch(
-            [
-                (
-                    Position(Vec3::new(0.0, 0.0, 0.0)),
-                    cube_mesh,
-                    material,
-                    default_shaderpass,
-                ),
-                (
-                    Position(Vec3::new(4.0, 0.0, 0.0)),
-                    cube_mesh,
-                    material,
-                    default_shaderpass,
-                ),
-                (
-                    Position(Vec3::new(0.0, 0.0, -3.0)),
-                    cube_mesh,
-                    material2,
-                    default_shaderpass,
-                ),
-            ]
-            .iter()
-            .cloned(),
-        );
-
-        let cube_side = 10;
-        world.spawn_batch(
-            (0..cube_side)
-                .flat_map(move |x| (0..cube_side).map(move |y| (x, y)))
-                .flat_map(move |(x, y)| (0..cube_side).map(move |z| (x, y, z)))
-                .map(|(x, y, z)| {
-                    (
-                        cube_mesh,
-                        Position(Vec3::new(
-                            x as f32 * 3.0 - 5.0,
-                            y as f32 * 3.0,
-                            -z as f32 * 3.0,
-                        )),
-                        material,
-                        default_shaderpass,
-                        // Scale(Vec3::new(0.1, 0.1, 0.1)),
-                        Rotation(Rotor3::identity()),
-                        AngularVelocity(Vec3::new(0.0, y as f32 * 0.5, x as f32)),
-                    )
-                }),
-        );
-
-        world.spawn((
-            Position(Vec3::new(1.0, -2.0, 3.0)),
-            cube_mesh,
-            Rotation::default(),
-            Scale(Vec3::one() * 0.5),
-            default_shaderpass,
-            material2,
-        ));
-
-        world.spawn((
-            Position(Vec3::new(0.0, 0.0, 3.0)),
-            sphere_mesh,
-            Rotation::default(),
-            AngularVelocity(Vec3::new(0.0, 0.1, 1.0)),
-            uv_shaderpass,
-            material,
-        ));
-
-        world.spawn_batch((0..100).map(|v| {
-            (
-                Mat4::from_translation(Vec3::new(v as f32 * 2.0, 0.0, 0.0)),
-                image,
-                default_shaderpass,
-            )
-        }));
-
-        let (tx, rx) = flume::unbounded();
-
+        let (tx, window_events) = flume::unbounded();
         events.subscribe(tx);
 
         Ok(Self {
             context,
             window_renderer,
             window,
-            mesh_renderer,
-            batched_renderer,
+            image_renderer,
             indirect_renderer,
-            current_renderer: CurrentRenderer::Indirect,
             descriptor_layout_cache,
             descriptor_allocator,
             frames,
             global_data,
             current_frame: 0,
             clock: Clock::new(),
-            materials,
-            textures,
-            samplers,
-            diffuse_passes,
-            meshes,
-            window_events: rx,
-            cube_mesh,
-            material,
-            pass: default_shaderpass,
-            image_renderer,
-            images,
+            resources,
+            window_events,
         })
-    }
-
-    fn handle_events(&mut self) {
-        for event in self.window_events.try_iter() {
-            if let WindowEvent::Key(Key::Num1, _, glfw::Action::Press, _) = event {
-                self.current_renderer = CurrentRenderer::Direct;
-                info!("Current renderer: {:?}", self.current_renderer);
-            } else if let WindowEvent::Key(Key::Num2, _, glfw::Action::Press, _) = event {
-                self.current_renderer = CurrentRenderer::Batched;
-                info!("Current renderer: {:?}", self.current_renderer);
-            } else if let WindowEvent::Key(Key::Num3, _, glfw::Action::Press, _) = event {
-                self.current_renderer = CurrentRenderer::Indirect;
-                info!("Current renderer: {:?}", self.current_renderer);
-            }
-        }
     }
 }
 
@@ -574,8 +527,6 @@ impl Layer for VulkanLayer {
         _events: &mut Events,
         _frame_time: Duration,
     ) -> anyhow::Result<()> {
-        self.handle_events();
-
         let extent = self.window_renderer.swapchain().extent();
 
         let frame = &mut self.frames[self.current_frame];
@@ -609,49 +560,19 @@ impl Layer for VulkanLayer {
         // Update global uniform buffer
         frame.global_uniformbuffer.fill(0, &[self.global_data])?;
 
-        match self.current_renderer {
-            CurrentRenderer::Direct => self.mesh_renderer.draw::<DiffusePass>(
-                world,
-                cmd,
-                self.current_frame,
-                frame.set,
-                &mut self.materials,
-                &mut self.meshes,
-                &mut self.diffuse_passes,
-            )?,
-            CurrentRenderer::Batched =>
-            // Bind the global uniform buffer
-            {
-                self.batched_renderer.update(world, self.current_frame)?;
+        self.indirect_renderer
+            .register_entities::<DiffusePass>(world, &mut self.descriptor_layout_cache)?;
 
-                self.batched_renderer.draw::<DiffusePass>(
-                    world,
-                    cmd,
-                    self.current_frame,
-                    frame.set,
-                    &mut self.materials,
-                    &mut self.meshes,
-                    &mut self.diffuse_passes,
-                )?
-            }
-            CurrentRenderer::Indirect => {
-                self.indirect_renderer
-                    .register_entities::<DiffusePass>(world, &mut self.descriptor_layout_cache)?;
+        self.indirect_renderer.update(world, self.current_frame)?;
 
-                self.indirect_renderer.update(world, self.current_frame)?;
-
-                // Bind the global uniform buffer
-                self.indirect_renderer.draw::<DiffusePass>(
-                    world,
-                    cmd,
-                    self.current_frame,
-                    frame.set,
-                    &self.materials,
-                    &self.meshes,
-                    &self.diffuse_passes,
-                )?;
-            }
-        }
+        // Bind the global uniform buffer
+        self.indirect_renderer.draw::<DiffusePass>(
+            world,
+            cmd,
+            self.current_frame,
+            frame.set,
+            &self.resources,
+        )?;
 
         // Draw ui
         self.image_renderer
@@ -659,13 +580,12 @@ impl Layer for VulkanLayer {
 
         self.image_renderer.update(world, self.current_frame)?;
 
-        self.image_renderer.draw(
+        self.image_renderer.draw::<DiffusePass>(
             world,
             cmd,
             self.current_frame,
             frame.set,
-            &self.images,
-            &self.diffuse_passes,
+            &self.resources,
         )?;
 
         // Done

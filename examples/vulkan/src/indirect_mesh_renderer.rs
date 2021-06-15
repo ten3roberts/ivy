@@ -1,11 +1,13 @@
 use hecs::{Entity, World};
 use ivy_graphics::{Error, Material, Mesh, ShaderPass};
-use ivy_resources::{Handle, ResourceCache};
+use ivy_resources::{Handle, ResourceCache, ResourceManager};
 use ivy_vulkan::{
     commands::CommandBuffer, descriptors::*, vk, Buffer, BufferAccess, BufferType, VulkanContext,
 };
 
-use std::{any::TypeId, collections::HashMap, marker::PhantomData, mem::size_of, sync::Arc};
+use std::{
+    any::TypeId, borrow::Borrow, collections::HashMap, marker::PhantomData, mem::size_of, sync::Arc,
+};
 use ultraviolet::Mat4;
 
 use crate::{components::ModelMatrix, FRAMES_IN_FLIGHT};
@@ -185,10 +187,7 @@ impl IndirectMeshRenderer {
         cmd: &CommandBuffer,
         current_frame: usize,
         global_set: DescriptorSet,
-
-        materials: &ResourceCache<Material>,
-        meshes: &ResourceCache<Mesh>,
-        passes: &ResourceCache<T>,
+        resources: &ResourceManager,
     ) -> Result<(), Error> {
         let frame = &mut self.frames[current_frame];
 
@@ -203,9 +202,20 @@ impl IndirectMeshRenderer {
             }
         };
 
-        pass.build_batches::<T>(world, passes)?;
+        let passes = resources.cache()?;
+        let materials = resources.cache()?;
+        let meshes = resources.cache()?;
 
-        pass.draw(cmd, current_frame, global_set, frame_set, meshes, materials)?;
+        pass.build_batches::<T>(world, &passes)?;
+
+        pass.draw(
+            cmd,
+            current_frame,
+            global_set,
+            frame_set,
+            &meshes,
+            &materials,
+        )?;
 
         Ok(())
     }
@@ -288,6 +298,8 @@ impl PassData {
         let mut index = 0;
         let indirect_buffer = &mut self.indirect_buffers[current_frame];
         let batches = &mut self.batches;
+
+        let meshes = meshes.borrow();
 
         indirect_buffer.write_slice(self.object_count as u64, 0, |data| -> Result<(), Error> {
             for batch in batches {
@@ -386,7 +398,7 @@ impl PassData {
 
         // Rebuild indirect buffers for this frame
         if self.dirty[current_frame] {
-            self.build_indirect(current_frame, meshes)?;
+            self.build_indirect(current_frame, &meshes)?;
         }
 
         for batch in &self.batches {

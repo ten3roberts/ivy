@@ -1,6 +1,6 @@
 use hecs::{Entity, World};
 use ivy_graphics::{Error, Mesh, ShaderPass};
-use ivy_resources::{Handle, ResourceCache};
+use ivy_resources::{Handle, ResourceCache, ResourceManager};
 use ivy_vulkan::{
     commands::CommandBuffer, descriptors::*, vk, Buffer, BufferAccess, BufferType, VulkanContext,
 };
@@ -186,9 +186,7 @@ impl ImageRenderer {
         cmd: &CommandBuffer,
         current_frame: usize,
         global_set: DescriptorSet,
-
-        images: &ResourceCache<Image>,
-        passes: &ResourceCache<T>,
+        resources: &ResourceManager,
     ) -> Result<(), Error> {
         let frame = &mut self.frames[current_frame];
 
@@ -205,7 +203,10 @@ impl ImageRenderer {
             }
         };
 
-        pass.build_batches::<T>(world, passes)?;
+        let passes = resources.cache()?;
+        let images = resources.cache()?;
+
+        pass.build_batches::<T>(world, &passes)?;
 
         pass.draw(
             cmd,
@@ -213,7 +214,7 @@ impl ImageRenderer {
             global_set,
             frame_set,
             &self.square,
-            images,
+            &images,
         )?;
 
         Ok(())

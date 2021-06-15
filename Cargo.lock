@@ -391,6 +391,8 @@ dependencies = [
 name = "ivy-resources"
 version = "0.1.0"
 dependencies = [
+ "anymap",
+ "atomic_refcell",
  "generational-arena",
  "thiserror",
 ]
@@ -872,7 +874,6 @@ name = "vulkan"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "anymap",
  "atomic_refcell",
  "derive_more",
  "flume",
