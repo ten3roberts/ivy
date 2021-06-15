@@ -256,6 +256,8 @@ struct VulkanLayer {
 
     clock: Clock,
     materials: ResourceCache<Material>,
+    textures: ResourceCache<Texture>,
+    samplers: ResourceCache<Sampler>,
     diffuse_passes: ResourceCache<DiffusePass>,
     meshes: ResourceCache<Mesh>,
 
@@ -317,11 +319,14 @@ impl VulkanLayer {
 
         let sphere_mesh = document.mesh(0);
 
-        let grid = Arc::new(
+        let mut textures = ResourceCache::new();
+
+        let grid = textures.insert(
             Texture::load(context.clone(), "./res/textures/grid.png")
                 .context("Failed to load grid texture")?,
         );
-        let uv_grid = Arc::new(
+
+        let uv_grid = textures.insert(
             Texture::load(context.clone(), "./res/textures/uv.png")
                 .context("Failed to load uv texture")?,
         );
@@ -338,7 +343,7 @@ impl VulkanLayer {
             },
         )?);
 
-        let sampler2 = Arc::new(Sampler::new(
+        let sampler = samplers.insert(Sampler::new(
             context.clone(),
             SamplerInfo {
                 address_mode: AddressMode::REPEAT,
@@ -346,26 +351,30 @@ impl VulkanLayer {
                 min_filter: FilterMode::LINEAR,
                 unnormalized_coordinates: false,
                 anisotropy: 16.0,
-                mip_levels: uv_grid.mip_levels(),
+                mip_levels: 4,
             },
         )?);
 
         let mut materials = ResourceCache::new();
 
         let material = materials.insert(Material::new(
-            context.clone(),
+            &context,
             &mut descriptor_layout_cache,
             &mut descriptor_allocator,
+            &textures,
+            &samplers,
             grid,
             sampler,
         )?);
 
         let material2 = materials.insert(Material::new(
-            context.clone(),
+            &context,
             &mut descriptor_layout_cache,
             &mut descriptor_allocator,
+            &textures,
+            &samplers,
             uv_grid,
-            sampler2,
+            sampler,
         )?);
 
         let viewproj =
@@ -510,6 +519,9 @@ impl VulkanLayer {
 
             diffuse_passes,
             materials,
+            textures,
+            samplers,
+            diffuse_passes,
             meshes,
             window_events: rx,
             cube_mesh,
@@ -668,7 +680,7 @@ impl FrameData {
         let mut set = DescriptorSet::null();
         DescriptorBuilder::new()
             .bind_uniform_buffer(0, vk::ShaderStageFlags::VERTEX, &global_uniformbuffer)
-            .build(
+            .build_one(
                 context.device(),
                 descriptor_layout_cache,
                 descriptor_allocator,

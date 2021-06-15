@@ -1,6 +1,5 @@
-use std::sync::Arc;
-
 use ash::vk::{DescriptorSet, ShaderStageFlags};
+use ivy_core::{resources::Handle, ResourceCache};
 use ivy_vulkan::{
     descriptors::{DescriptorAllocator, DescriptorBuilder, DescriptorLayoutCache},
     Sampler, Texture, VulkanContext,
@@ -12,28 +11,32 @@ use crate::Error;
 /// define the graphics pipeline nor shaders as that is per pass dependent.
 pub struct Material {
     set: DescriptorSet,
-    albedo: Arc<Texture>,
-    sampler: Arc<Sampler>,
+    albedo: Handle<Texture>,
+    sampler: Handle<Sampler>,
 }
 
 impl Material {
     /// Creates a new material with albedo using the provided sampler
     pub fn new(
-        context: Arc<VulkanContext>,
+        context: &VulkanContext,
         descriptor_layout_cache: &mut DescriptorLayoutCache,
         descriptor_allocator: &mut DescriptorAllocator,
-        albedo: Arc<Texture>,
-        sampler: Arc<Sampler>,
+        textures: &ResourceCache<Texture>,
+        samplers: &ResourceCache<Sampler>,
+        albedo: Handle<Texture>,
+        sampler: Handle<Sampler>,
     ) -> Result<Self, Error> {
-        let mut set = Default::default();
-
-        DescriptorBuilder::new()
-            .bind_combined_image_sampler(0, ShaderStageFlags::FRAGMENT, &albedo, &sampler)
-            .build(
+        let set = DescriptorBuilder::new()
+            .bind_combined_image_sampler(
+                0,
+                ShaderStageFlags::FRAGMENT,
+                textures.get(albedo)?,
+                samplers.get(sampler)?,
+            )
+            .build_one(
                 context.device(),
                 descriptor_layout_cache,
                 descriptor_allocator,
-                &mut set,
             )?;
 
         Ok(Self {
@@ -48,11 +51,11 @@ impl Material {
         self.set
     }
 
-    pub fn albedo(&self) -> &Arc<Texture> {
-        &self.albedo
+    pub fn albedo(&self) -> Handle<Texture> {
+        self.albedo
     }
 
-    pub fn sampler(&self) -> &Arc<Sampler> {
-        &self.sampler
+    pub fn sampler(&self) -> Handle<Sampler> {
+        self.sampler
     }
 }

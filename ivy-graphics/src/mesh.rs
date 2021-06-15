@@ -98,6 +98,28 @@ impl Mesh {
         })
     }
 
+    /// Creates a new square or rectangle mesh.
+    pub fn new_square(context: Arc<VulkanContext>, width: f32, height: f32) -> Result<Self, Error> {
+        let hw = width / 2.0;
+        let hh = height / 2.0;
+
+        // Simple quad
+        let vertices = [
+            Vertex::new(
+                Vec3::new(-hw, -hh, 0.0),
+                Vec3::unit_x(),
+                Vec2::new(1.0, 0.0),
+            ),
+            Vertex::new(Vec3::new(hw, -hh, 0.0), Vec3::unit_x(), Vec2::new(0.0, 0.0)),
+            Vertex::new(Vec3::new(hw, hh, 0.0), Vec3::unit_x(), Vec2::new(0.0, 1.0)),
+            Vertex::new(Vec3::new(-hw, hh, 0.0), Vec3::unit_x(), Vec2::new(1.0, 1.0)),
+        ];
+
+        let indices: [u32; 6] = [0, 1, 2, 2, 3, 0];
+
+        Self::new(context, &vertices, &indices)
+    }
+
     /// Creates a mesh from an structure-of-arrays vertex data
     /// Each index refers to the direct index of positions, normals and texcoords
     pub fn from_soa(
