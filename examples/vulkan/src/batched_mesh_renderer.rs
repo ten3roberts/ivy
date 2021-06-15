@@ -113,9 +113,9 @@ impl BatchedMeshRenderer {
         current_frame: usize,
         global_set: DescriptorSet,
 
-        materials: &mut ResourceCache<Material>,
-        meshes: &mut ResourceCache<Mesh>,
-        passes: &mut ResourceCache<T>,
+        materials: &ResourceCache<Material>,
+        meshes: &ResourceCache<Mesh>,
+        passes: &ResourceCache<T>,
     ) -> Result<(), Error> {
         self.register_entities::<T>(world);
 
@@ -176,8 +176,8 @@ impl PassData {
         cmd: &CommandBuffer,
         global_set: DescriptorSet,
         frame_set: DescriptorSet,
-        meshes: &mut ResourceCache<Mesh>,
-        materials: &mut ResourceCache<Material>,
+        meshes: &ResourceCache<Mesh>,
+        materials: &ResourceCache<Material>,
     ) -> Result<(), Error> {
         for batch in &self.batches {
             let material = materials.get(batch.material)?;
