@@ -35,3 +35,9 @@ impl AppBuilder {
         Ok(self)
     }
 }
+
+impl Default for AppBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}

@@ -78,9 +78,9 @@ impl AsRef<vk::Sampler> for Sampler {
     }
 }
 
-impl Into<vk::Sampler> for &Sampler {
-    fn into(self) -> vk::Sampler {
-        self.sampler
+impl From<&Sampler> for vk::Sampler {
+    fn from(val: &Sampler) -> Self {
+        val.sampler
     }
 }
 

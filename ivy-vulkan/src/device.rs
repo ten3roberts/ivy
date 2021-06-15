@@ -55,27 +55,27 @@ impl QueueFamilies {
     }
 
     pub fn graphics(&self) -> Option<u32> {
-        return self.graphics;
+        self.graphics
     }
 
     pub fn present(&self) -> Option<u32> {
-        return self.present;
+        self.present
     }
 
     pub fn transfer(&self) -> Option<u32> {
-        return self.transfer;
+        self.transfer
     }
 
     pub fn has_graphics(&self) -> bool {
-        return self.graphics.is_some();
+        self.graphics.is_some()
     }
 
     pub fn has_present(&self) -> bool {
-        return self.present.is_some();
+        self.present.is_some()
     }
 
     pub fn has_transfer(&self) -> bool {
-        return self.transfer.is_some();
+        self.transfer.is_some()
     }
 }
 

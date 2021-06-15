@@ -188,7 +188,7 @@ impl ImageRenderer {
         global_set: DescriptorSet,
 
         images: &ResourceCache<Image>,
-        passes: &mut ResourceCache<T>,
+        passes: &ResourceCache<T>,
     ) -> Result<(), Error> {
         let frame = &mut self.frames[current_frame];
 
@@ -283,7 +283,7 @@ impl PassData {
             .map(|(e, renderobject)| self.insert_entity::<T>(e, renderobject, passes))
             .collect::<Result<Vec<_>, _>>()?;
 
-        if unbatched.len() > 0 {
+        if !unbatched.is_empty() {
             unbatched.into_iter().for_each(|(e, marker)| {
                 world.insert_one(e, marker).unwrap();
             });
@@ -484,7 +484,7 @@ impl FrameData {
             )?
             .layout(descriptor_layout_cache, &mut set_layout)?;
 
-        Ok(Self { object_buffer, set })
+        Ok(Self { set, object_buffer })
     }
 }
 
@@ -503,7 +503,7 @@ fn create_indirect_buffer(
     capacity: ObjectId,
 ) -> Result<Buffer, ivy_vulkan::Error> {
     Buffer::new_uninit(
-        context.clone(),
+        context,
         BufferType::Indirect,
         BufferAccess::Mapped,
         capacity as u64 * size_of::<IndirectObject>() as u64,

@@ -69,7 +69,7 @@ impl Document {
             })
             .collect();
 
-        Ok(Self { nodes, meshes })
+        Ok(Self { meshes, nodes })
     }
 
     /// Returns a handle to the mesh at index. Mesh was inserted in the resource cache upon

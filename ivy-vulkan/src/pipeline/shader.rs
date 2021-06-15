@@ -30,8 +30,8 @@ impl ShaderModule {
         .map_err(|msg| Error::SpirvReflection(msg))?;
 
         Ok(Self {
-            module,
             reflect_module,
+            module,
         })
     }
 
@@ -52,9 +52,9 @@ impl AsRef<vk::ShaderModule> for ShaderModule {
     }
 }
 
-impl Into<vk::ShaderModule> for &ShaderModule {
-    fn into(self) -> vk::ShaderModule {
-        self.module
+impl From<&ShaderModule> for vk::ShaderModule {
+    fn from(val: &ShaderModule) -> Self {
+        val.module
     }
 }
 
@@ -102,7 +102,7 @@ pub fn reflect<S: AsRef<spirv_reflect::ShaderModule>>(
 
     let set_layouts = sets
         .iter_mut()
-        .take_while(|set| set.bindings().len() > 0)
+        .take_while(|set| !set.bindings().is_empty())
         .map(|set| layout_cache.get(set))
         .collect::<Result<ArrayVec<[_; MAX_SETS]>, _>>()?;
 

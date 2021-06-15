@@ -186,9 +186,9 @@ impl IndirectMeshRenderer {
         current_frame: usize,
         global_set: DescriptorSet,
 
-        materials: &mut ResourceCache<Material>,
-        meshes: &mut ResourceCache<Mesh>,
-        passes: &mut ResourceCache<T>,
+        materials: &ResourceCache<Material>,
+        meshes: &ResourceCache<Mesh>,
+        passes: &ResourceCache<T>,
     ) -> Result<(), Error> {
         let frame = &mut self.frames[current_frame];
 
@@ -270,7 +270,7 @@ impl PassData {
             .map(|(e, renderobject)| self.insert_entity::<T>(e, renderobject, passes))
             .collect::<Result<Vec<_>, _>>()?;
 
-        if unbatched.len() > 0 {
+        if !unbatched.is_empty() {
             unbatched.into_iter().for_each(|(e, marker)| {
                 world.insert_one(e, marker).unwrap();
             });
@@ -283,7 +283,7 @@ impl PassData {
     pub fn build_indirect(
         &mut self,
         current_frame: usize,
-        meshes: &mut ResourceCache<Mesh>,
+        meshes: &ResourceCache<Mesh>,
     ) -> Result<(), Error> {
         let mut index = 0;
         let indirect_buffer = &mut self.indirect_buffers[current_frame];
@@ -376,8 +376,8 @@ impl PassData {
         current_frame: usize,
         global_set: DescriptorSet,
         frame_set: DescriptorSet,
-        meshes: &mut ResourceCache<Mesh>,
-        materials: &mut ResourceCache<Material>,
+        meshes: &ResourceCache<Mesh>,
+        materials: &ResourceCache<Material>,
     ) -> Result<(), Error> {
         // Indirect buffer is not large enough
         if self.object_count > self.capacity {
@@ -485,7 +485,7 @@ impl FrameData {
             )?
             .layout(descriptor_layout_cache, &mut set_layout)?;
 
-        Ok(Self { object_buffer, set })
+        Ok(Self { set, object_buffer })
     }
 }
 
@@ -504,7 +504,7 @@ fn create_indirect_buffer(
     capacity: ObjectId,
 ) -> Result<Buffer, ivy_vulkan::Error> {
     Buffer::new_uninit(
-        context.clone(),
+        context,
         BufferType::Indirect,
         BufferAccess::Mapped,
         capacity as u64 * size_of::<IndirectObject>() as u64,

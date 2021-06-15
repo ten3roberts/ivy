@@ -67,8 +67,8 @@ impl Texture {
     /// Uses the width and height of the loaded image, no resizing.
     /// Uses mipmapping.
     pub fn load<P: AsRef<Path>>(context: Arc<VulkanContext>, path: P) -> Result<Self, Error> {
-        let image =
-            ivy_stb::Image::load(&path, 4).ok_or(Error::ImageLoading(path.as_ref().to_owned()))?;
+        let image = ivy_stb::Image::load(&path, 4)
+            .ok_or_else(|| Error::ImageLoading(path.as_ref().to_owned()))?;
 
         let texture = Self::new(
             context,
@@ -283,15 +283,15 @@ impl AsRef<vk::Image> for Texture {
     }
 }
 
-impl Into<vk::ImageView> for &Texture {
-    fn into(self) -> vk::ImageView {
-        self.image_view
+impl From<&Texture> for vk::ImageView {
+    fn from(val: &Texture) -> Self {
+        val.image_view
     }
 }
 
-impl Into<vk::Image> for &Texture {
-    fn into(self) -> vk::Image {
-        self.image
+impl From<&Texture> for vk::Image {
+    fn from(val: &Texture) -> Self {
+        val.image
     }
 }
 
@@ -459,14 +459,12 @@ fn transition_layout(
                 vk::PipelineStageFlags::TRANSFER,
             ),
 
-            (vk::ImageLayout::TRANSFER_DST_OPTIMAL, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL) => {
-                (
-                    vk::AccessFlags::TRANSFER_WRITE,
-                    vk::AccessFlags::SHADER_READ,
-                    vk::PipelineStageFlags::TRANSFER,
-                    vk::PipelineStageFlags::FRAGMENT_SHADER,
-                )
-            }
+            (vk::ImageLayout::TRANSFER_DST_OPTIMAL, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL) => (
+                vk::AccessFlags::TRANSFER_WRITE,
+                vk::AccessFlags::SHADER_READ,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::PipelineStageFlags::FRAGMENT_SHADER,
+            ),
             _ => return Err(Error::UnsupportedLayoutTransition(old_layout, new_layout)),
         };
 

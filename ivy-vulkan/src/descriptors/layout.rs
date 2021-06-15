@@ -69,14 +69,14 @@ impl PartialEq for DescriptorLayoutInfo {
         for (a, b) in self.bindings.iter().zip(&other.bindings) {
             if a.binding != b.binding
                 || a.descriptor_type != b.descriptor_type
-                || b.descriptor_count != b.descriptor_count
+                || a.descriptor_count != b.descriptor_count
                 || a.stage_flags != b.stage_flags
             {
                 return false;
             }
         }
 
-        return true;
+        true
     }
 }
 
@@ -101,7 +101,7 @@ impl DescriptorLayoutCache {
         info.ensure_sorted();
 
         if let Some(layout) = self.layouts.get(&info) {
-            return Ok(*layout);
+            Ok(*layout)
         } else {
             let info = info.clone();
             // Create layout

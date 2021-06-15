@@ -122,7 +122,7 @@ impl Buffer {
             allocation,
             allocation_info,
             ty,
-            access: access,
+            access,
             staging_buffer: None,
         })
     }
@@ -342,9 +342,9 @@ impl AsRef<vk::Buffer> for Buffer {
     }
 }
 
-impl Into<vk::Buffer> for &Buffer {
-    fn into(self) -> vk::Buffer {
-        self.buffer
+impl From<&Buffer> for vk::Buffer {
+    fn from(buffer: &Buffer) -> vk::Buffer {
+        buffer.buffer
     }
 }
 

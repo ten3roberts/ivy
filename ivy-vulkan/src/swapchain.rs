@@ -51,7 +51,7 @@ fn pick_format(formats: &[vk::SurfaceFormatKHR]) -> vk::SurfaceFormatKHR {
         }
     }
 
-    return formats[0];
+    formats[0]
 }
 
 /// Picks a present mode
@@ -68,7 +68,7 @@ fn pick_present_mode(
         }
     }
 
-    return vk::PresentModeKHR::FIFO;
+    vk::PresentModeKHR::FIFO
 }
 
 fn pick_extent(window: &glfw::Window, capabilities: &vk::SurfaceCapabilitiesKHR) -> Extent {
@@ -139,8 +139,7 @@ impl Swapchain {
 
         let surface_format = pick_format(&support.formats);
 
-        let present_mode =
-            pick_present_mode(&support.present_modes, vk::PresentModeKHR::IMMEDIATE);
+        let present_mode = pick_present_mode(&support.present_modes, vk::PresentModeKHR::IMMEDIATE);
 
         let extent = pick_extent(window, &support.capabilities);
 

@@ -126,7 +126,7 @@ impl BatchedMeshRenderer {
         let pass = self
             .passes
             .entry(TypeId::of::<T>())
-            .or_insert_with(|| PassData::new());
+            .or_insert_with(PassData::new);
 
         pass.build_batches::<T>(world, passes)?;
 
@@ -323,7 +323,7 @@ impl FrameData {
             )?
             .layout(descriptor_layout_cache, &mut set_layout)?;
 
-        Ok(Self { object_buffer, set })
+        Ok(Self { set, object_buffer })
     }
 }
 

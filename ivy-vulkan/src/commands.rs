@@ -491,8 +491,8 @@ impl AsRef<vk::CommandBuffer> for CommandBuffer {
     }
 }
 
-impl Into<vk::CommandBuffer> for &CommandBuffer {
-    fn into(self) -> vk::CommandBuffer {
-        self.commandbuffer
+impl From<&CommandBuffer> for vk::CommandBuffer {
+    fn from(val: &CommandBuffer) -> Self {
+        val.commandbuffer
     }
 }

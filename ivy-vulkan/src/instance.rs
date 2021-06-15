@@ -4,13 +4,13 @@ use ash::{vk, Entry};
 use glfw::Glfw;
 use std::ffi::{CStr, CString};
 
-pub const VALIDATION_LAYERS: &'static [&str] = &["VK_LAYER_KHRONOS_validation"];
+pub const VALIDATION_LAYERS: &[&str] = &["VK_LAYER_KHRONOS_validation"];
 #[cfg(debug_assertions)]
 pub const ENABLE_VALIDATION_LAYERS: bool = true;
 #[cfg(not(debug_assertions))]
 pub const ENABLE_VALIDATION_LAYERS: bool = false;
 
-pub const INSTANCE_EXTENSIONS: &'static [&str] = &["VK_EXT_debug_utils"];
+pub const INSTANCE_EXTENSIONS: &[&str] = &["VK_EXT_debug_utils"];
 
 // Returns the currently enabled instance layers
 pub fn get_layers() -> &'static [&'static str] {

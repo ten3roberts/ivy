@@ -44,22 +44,34 @@ impl Events {
     /// Sends an event of type `T` to all subscribed listeners.
     /// If no dispatcher exists for event `T`, a new one will be created.
     pub fn send<T: Event>(&mut self, event: T) {
-        self.dispatchers
+        if let Some(dispatcher) = self
+            .dispatchers
             .entry(TypeId::of::<T>())
             .or_insert_with(new_event_dispatcher::<T>)
             .downcast_mut::<EventDispatcher<T>>()
-            .map(|dispatcher| dispatcher.send(event));
+        {
+            dispatcher.send(event)
+        }
     }
 
     pub fn subscribe<S, T: Event>(&mut self, sender: S)
     where
         S: 'static + EventSender<T> + Send,
     {
-        self.dispatchers
+        if let Some(dispatcher) = self
+            .dispatchers
             .entry(TypeId::of::<T>())
             .or_insert_with(new_event_dispatcher::<T>)
             .downcast_mut::<EventDispatcher<T>>()
-            .map(|dispatcher| dispatcher.subscribe(sender));
+        {
+            dispatcher.subscribe(sender)
+        }
+    }
+}
+
+impl Default for Events {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -133,29 +145,20 @@ pub trait EventSender<T> {
 
 impl<T> EventSender<T> for mpsc::Sender<T> {
     fn send(&self, event: T) -> bool {
-        match self.send(event) {
-            Ok(_) => true,
-            Err(_) => false,
-        }
+        self.send(event).is_ok()
     }
 }
 
 #[cfg(feature = "crossbeam-channel")]
 impl<T> EventSender<T> for crossbeam_channel::Sender<T> {
     fn send(&self, event: T) -> bool {
-        match self.send(event) {
-            Ok(_) => true,
-            Err(_) => false,
-        }
+        self.send(event).is_ok()
     }
 }
 
 impl<T> EventSender<T> for flume::Sender<T> {
     fn send(&self, event: T) -> bool {
-        match self.send(event) {
-            Ok(_) => true,
-            Err(_) => false,
-        }
+        self.send(event).is_ok()
     }
 }
 

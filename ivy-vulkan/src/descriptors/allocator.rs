@@ -64,15 +64,12 @@ impl DescriptorAllocator {
         layout_info: &DescriptorLayoutInfo,
         set_count: u32,
     ) -> Result<Vec<vk::DescriptorSet>, Error> {
-        let sub_allocator =
-            self.sub_allocators
-                .entry(layout)
-                .or_insert(DescriptorLayoutAllocator::new(
-                    self.device.clone(),
-                    layout,
-                    layout_info,
-                    self.set_count,
-                ));
+        let device = &self.device;
+        let self_set_count = self.set_count;
+
+        let sub_allocator = self.sub_allocators.entry(layout).or_insert_with(|| {
+            DescriptorLayoutAllocator::new(device.clone(), layout, layout_info, self_set_count)
+        });
 
         sub_allocator.allocate(set_count)
     }
@@ -81,8 +78,7 @@ impl DescriptorAllocator {
     pub fn reset(&mut self) -> Result<(), Error> {
         self.sub_allocators
             .iter_mut()
-            .map(|(_, sub_allocator)| sub_allocator.reset())
-            .collect::<Result<(), _>>()?;
+            .try_for_each(|(_, sub_allocator)| sub_allocator.reset())?;
 
         Ok(())
     }

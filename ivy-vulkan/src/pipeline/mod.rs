@@ -210,9 +210,9 @@ impl AsRef<vk::Pipeline> for Pipeline {
     }
 }
 
-impl Into<vk::Pipeline> for &Pipeline {
-    fn into(self) -> vk::Pipeline {
-        self.pipeline
+impl From<&Pipeline> for vk::Pipeline {
+    fn from(val: &Pipeline) -> Self {
+        val.pipeline
     }
 }
 
@@ -222,9 +222,9 @@ impl AsRef<vk::PipelineLayout> for Pipeline {
     }
 }
 
-impl Into<vk::PipelineLayout> for &Pipeline {
-    fn into(self) -> vk::PipelineLayout {
-        self.layout
+impl From<&Pipeline> for vk::PipelineLayout {
+    fn from(val: &Pipeline) -> Self {
+        val.layout
     }
 }
 

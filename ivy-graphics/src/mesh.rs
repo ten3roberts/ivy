@@ -27,7 +27,7 @@ impl Vertex {
     }
 }
 
-const ATTRIBUTE_DESCRIPTIONS: &'static [vk::VertexInputAttributeDescription] = &[
+const ATTRIBUTE_DESCRIPTIONS: &[vk::VertexInputAttributeDescription] = &[
     // vec3 3*4 bytes
     vk::VertexInputAttributeDescription {
         binding: 0,

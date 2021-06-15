@@ -58,24 +58,24 @@ impl Add<u32> for Extent {
 
 // Conversions
 
-impl Into<vk::Extent2D> for Extent {
-    fn into(self) -> vk::Extent2D {
+impl From<Extent> for vk::Extent2D {
+    fn from(val: Extent) -> Self {
         vk::Extent2D {
-            width: self.width,
-            height: self.height,
+            width: val.width,
+            height: val.height,
         }
     }
 }
 
-impl Into<[u32; 2]> for Extent {
-    fn into(self) -> [u32; 2] {
-        [self.width, self.height]
+impl From<Extent> for [u32; 2] {
+    fn from(val: Extent) -> Self {
+        [val.width, val.height]
     }
 }
 
-impl Into<(u32, u32)> for Extent {
-    fn into(self) -> (u32, u32) {
-        (self.width, self.height)
+impl From<Extent> for (u32, u32) {
+    fn from(val: Extent) -> Self {
+        (val.width, val.height)
     }
 }
 
@@ -144,20 +144,20 @@ impl From<(usize, usize)> for Extent {
 
 // Float conversion
 
-impl Into<[f32; 2]> for Extent {
-    fn into(self) -> [f32; 2] {
-        [self.width as f32, self.height as f32]
+impl From<Extent> for [f32; 2] {
+    fn from(val: Extent) -> Self {
+        [val.width as f32, val.height as f32]
     }
 }
 
-impl Into<(f32, f32)> for Extent {
-    fn into(self) -> (f32, f32) {
-        (self.width as f32, self.height as f32)
+impl From<Extent> for (f32, f32) {
+    fn from(val: Extent) -> Self {
+        (val.width as f32, val.height as f32)
     }
 }
 
-impl Into<Vec2> for Extent {
-    fn into(self) -> Vec2 {
-        Vec2::new(self.width as f32, self.height as f32)
+impl From<Extent> for Vec2 {
+    fn from(extent: Extent) -> Vec2 {
+        Vec2::new(extent.width as f32, extent.height as f32)
     }
 }

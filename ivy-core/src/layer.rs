@@ -27,17 +27,23 @@ impl LayerStack {
         Self { layers: Vec::new() }
     }
 
-    pub fn iter<'a>(&'a self) -> std::slice::Iter<'a, Box<dyn Layer>> {
+    pub fn iter(&self) -> std::slice::Iter<Box<dyn Layer>> {
         self.layers.iter()
     }
 
-    pub fn iter_mut<'a>(&'a mut self) -> std::slice::IterMut<'a, Box<dyn Layer>> {
+    pub fn iter_mut(&mut self) -> std::slice::IterMut<Box<dyn Layer>> {
         self.layers.iter_mut()
     }
 
     pub fn push<T: 'static + Layer>(&mut self, layer: T) {
         let layer = Box::new(layer);
         self.layers.push(layer);
+    }
+}
+
+impl Default for LayerStack {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

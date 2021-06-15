@@ -27,7 +27,7 @@ pub fn create(
         .pfn_user_callback(Some(debug_callback));
 
     let messenger = unsafe { debug_utils.create_debug_utils_messenger(&create_info, None)? };
-    return Ok((debug_utils, messenger));
+    Ok((debug_utils, messenger))
 }
 
 pub fn destroy(debug_utils: &DebugUtils, messenger: DebugUtilsMessengerEXT) {

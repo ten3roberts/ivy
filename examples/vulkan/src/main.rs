@@ -66,7 +66,7 @@ fn main() -> anyhow::Result<()> {
         .push_layer(|_, _| PerformanceLayer::new(1.secs()))
         .build();
 
-    anyhow::Result::from(app.run()).context("Failed to run application")
+    app.run().context("Failed to run application")
 }
 
 struct Camera;
@@ -389,7 +389,6 @@ impl VulkanLayer {
             sampler,
         )?);
 
-
         let viewproj =
             ultraviolet::projection::perspective_vk(
                 1.0,
@@ -504,11 +503,11 @@ impl VulkanLayer {
 
         world.spawn((
             Position(Vec3::new(0.0, 0.0, 3.0)),
-            sphere_mesh.clone(),
+            sphere_mesh,
             Rotation::default(),
             AngularVelocity(Vec3::new(0.0, 0.1, 1.0)),
-            uv_shaderpass.clone(),
-            material.clone(),
+            uv_shaderpass,
+            material,
         ));
 
         world.spawn((
@@ -644,9 +643,9 @@ impl Layer for VulkanLayer {
                     cmd,
                     self.current_frame,
                     frame.set,
-                    &mut self.materials,
-                    &mut self.meshes,
-                    &mut self.diffuse_passes,
+                    &self.materials,
+                    &self.meshes,
+                    &self.diffuse_passes,
                 )?;
             }
         }
@@ -662,8 +661,8 @@ impl Layer for VulkanLayer {
             cmd,
             self.current_frame,
             frame.set,
-            &mut self.images,
-            &mut self.diffuse_passes,
+            &self.images,
+            &self.diffuse_passes,
         )?;
 
         // Done
@@ -870,7 +869,7 @@ impl Vertex {
     }
 }
 
-const ATTRIBUTE_DESCRIPTIONS: &'static [vk::VertexInputAttributeDescription] = &[
+const ATTRIBUTE_DESCRIPTIONS: &[vk::VertexInputAttributeDescription] = &[
     // vec3 3*4 bytes
     vk::VertexInputAttributeDescription {
         binding: 0,

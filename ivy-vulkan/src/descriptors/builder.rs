@@ -175,11 +175,16 @@ impl DescriptorBuilder {
         allocator: &mut DescriptorAllocator,
         set: &mut vk::DescriptorSet,
     ) -> Result<&mut Self, Error> {
-    *set = self.build_one(device, cache, allocator)?;
-    Ok(self)
+        *set = self.build_one(device, cache, allocator)?;
+        Ok(self)
     }
 
-    pub fn build_one(&mut self, device: &Device, cache: &mut DescriptorLayoutCache, allocator: &mut DescriptorAllocator) -> Result<vk::DescriptorSet, Error> {
+    pub fn build_one(
+        &mut self,
+        device: &Device,
+        cache: &mut DescriptorLayoutCache,
+        allocator: &mut DescriptorAllocator,
+    ) -> Result<vk::DescriptorSet, Error> {
         let mut layout = Default::default();
 
         self.layout(cache, &mut layout)?;
@@ -189,9 +194,7 @@ impl DescriptorBuilder {
         // Allocate the descriptor sets
         let set = allocator.allocate(layout, &layout_info, 1)?[0];
 
-        self.writes
-            .iter_mut()
-            .for_each(|write| write.dst_set = set);
+        self.writes.iter_mut().for_each(|write| write.dst_set = set);
 
         unsafe { device.update_descriptor_sets(&self.writes, &[]) };
 

@@ -17,7 +17,7 @@ impl Clock {
 
     // Returns the elapsed time
     pub fn elapsed(&self) -> Duration {
-        return Instant::now() - self.start;
+        Instant::now() - self.start
     }
 
     // Resets the clock and returns the elapsed time
@@ -25,7 +25,13 @@ impl Clock {
         let elapsed = self.elapsed();
 
         self.start = Instant::now();
-        return elapsed;
+        elapsed
+    }
+}
+
+impl Default for Clock {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

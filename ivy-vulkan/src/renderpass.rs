@@ -23,9 +23,9 @@ pub enum ClearValue {
     DepthStencil(f32, u32),
 }
 
-impl Into<vk::ClearValue> for ClearValue {
-    fn into(self) -> vk::ClearValue {
-        match self {
+impl From<ClearValue> for vk::ClearValue {
+    fn from(val: ClearValue) -> Self {
+        match val {
             ClearValue::Color(r, g, b, a) => vk::ClearValue {
                 color: vk::ClearColorValue {
                     float32: [r, g, b, a],
@@ -38,9 +38,9 @@ impl Into<vk::ClearValue> for ClearValue {
     }
 }
 
-impl Into<vk::ClearValue> for &ClearValue {
-    fn into(self) -> vk::ClearValue {
-        (*self).into()
+impl From<&ClearValue> for vk::ClearValue {
+    fn from(val: &ClearValue) -> Self {
+        (*val).into()
     }
 }
 
@@ -100,18 +100,18 @@ impl AttachmentInfo {
     }
 }
 
-impl Into<vk::AttachmentDescription> for &AttachmentInfo {
-    fn into(self) -> vk::AttachmentDescription {
+impl From<&AttachmentInfo> for vk::AttachmentDescription {
+    fn from(val: &AttachmentInfo) -> Self {
         vk::AttachmentDescription {
             flags: vk::AttachmentDescriptionFlags::default(),
-            format: self.format,
-            samples: self.samples,
-            load_op: self.load,
-            store_op: self.store,
+            format: val.format,
+            samples: val.samples,
+            load_op: val.load,
+            store_op: val.store,
             stencil_load_op: LoadOp::DONT_CARE,
             stencil_store_op: StoreOp::DONT_CARE,
-            initial_layout: self.initial_layout,
-            final_layout: self.final_layout,
+            initial_layout: val.initial_layout,
+            final_layout: val.final_layout,
         }
     }
 }
@@ -124,21 +124,21 @@ pub struct SubpassInfo<'a, 'b> {
     pub depth_attachment: Option<AttachmentReference>,
 }
 
-impl<'a, 'b> Into<vk::SubpassDescription> for &SubpassInfo<'a, 'b> {
-    fn into(self) -> vk::SubpassDescription {
+impl<'a, 'b> From<&SubpassInfo<'a, 'b>> for vk::SubpassDescription {
+    fn from(val: &SubpassInfo<'a, 'b>) -> Self {
         vk::SubpassDescription {
             flags: vk::SubpassDescriptionFlags::default(),
             pipeline_bind_point: vk::PipelineBindPoint::GRAPHICS,
             input_attachment_count: 0,
             p_input_attachments: std::ptr::null(),
-            color_attachment_count: self.color_attachments.len() as u32,
-            p_color_attachments: self.color_attachments.as_ptr(),
-            p_resolve_attachments: if self.resolve_attachments.len() > 0 {
-                self.resolve_attachments.as_ptr()
+            color_attachment_count: val.color_attachments.len() as u32,
+            p_color_attachments: val.color_attachments.as_ptr(),
+            p_resolve_attachments: if !val.resolve_attachments.is_empty() {
+                val.resolve_attachments.as_ptr()
             } else {
                 std::ptr::null()
             },
-            p_depth_stencil_attachment: match &self.depth_attachment {
+            p_depth_stencil_attachment: match &val.depth_attachment {
                 Some(attachment) => attachment,
                 None => std::ptr::null(),
             },

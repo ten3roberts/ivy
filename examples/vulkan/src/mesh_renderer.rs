@@ -63,8 +63,9 @@ impl MeshRenderer {
             MAX_OBJECTS as u64,
             0,
             |data: &mut [ObjectData]| -> Result<(), Error> {
-                let mut i = 0;
-                for (_, (shaderpass, mesh, material, modelmatrix)) in query {
+                for (i, (_, (shaderpass, mesh, material, modelmatrix))) in
+                    query.into_iter().enumerate()
+                {
                     data[i] = ObjectData { mvp: **modelmatrix };
 
                     let shaderpass = passes.get(*shaderpass)?;
@@ -83,7 +84,6 @@ impl MeshRenderer {
                     cmd.bind_indexbuffer(mesh.index_buffer(), 0);
 
                     cmd.draw_indexed(mesh.index_count(), 1, 0, 0, i as u32);
-                    i += 1;
                 }
 
                 Ok(())
@@ -125,7 +125,7 @@ impl FrameData {
             )?
             .layout(descriptor_layout_cache, &mut set_layout)?;
 
-        Ok(Self { object_buffer, set })
+        Ok(Self { set, object_buffer })
     }
 }
 
