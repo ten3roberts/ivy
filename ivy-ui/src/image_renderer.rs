@@ -1,6 +1,6 @@
 use hecs::{Entity, World};
-use ivy_core::{resources::Handle, ResourceCache};
 use ivy_graphics::{Error, Mesh, ShaderPass};
+use ivy_resources::{Handle, ResourceCache};
 use ivy_vulkan::{
     commands::CommandBuffer, descriptors::*, vk, Buffer, BufferAccess, BufferType, VulkanContext,
 };

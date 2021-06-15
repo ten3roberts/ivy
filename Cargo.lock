@@ -359,7 +359,6 @@ dependencies = [
  "crossbeam-channel",
  "downcast-rs",
  "flume",
- "generational-arena",
  "hecs",
  "log",
  "thiserror",
@@ -372,7 +371,7 @@ dependencies = [
  "ash",
  "glfw",
  "gltf",
- "ivy-core",
+ "ivy-resources",
  "ivy-vulkan",
  "thiserror",
  "ultraviolet",
@@ -389,6 +388,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ivy-resources"
+version = "0.1.0"
+dependencies = [
+ "generational-arena",
+ "thiserror",
+]
+
+[[package]]
 name = "ivy-stb"
 version = "0.1.0"
 dependencies = [
@@ -402,8 +409,8 @@ version = "0.1.0"
 dependencies = [
  "derive_more",
  "hecs",
- "ivy-core",
  "ivy-graphics",
+ "ivy-resources",
  "ivy-vulkan",
  "ultraviolet",
 ]
@@ -874,6 +881,7 @@ dependencies = [
  "ivy-core",
  "ivy-graphics",
  "ivy-input",
+ "ivy-resources",
  "ivy-ui",
  "ivy-vulkan",
  "log",

@@ -1,5 +1,5 @@
-use ivy_core::{resources::Handle, ResourceCache};
 use ivy_graphics::Error;
+use ivy_resources::{Handle, ResourceCache};
 use ivy_vulkan::{
     descriptors::{DescriptorAllocator, DescriptorBuilder, DescriptorLayoutCache, DescriptorSet},
     vk::ShaderStageFlags,
@@ -19,8 +19,8 @@ impl Image {
         context: &VulkanContext,
         descriptor_layout_cache: &mut DescriptorLayoutCache,
         descriptor_allocator: &mut DescriptorAllocator,
-        textures: &mut ResourceCache<Texture>,
-        samplers: &mut ResourceCache<Sampler>,
+        textures: &ResourceCache<Texture>,
+        samplers: &ResourceCache<Sampler>,
         texture: Handle<Texture>,
         sampler: Handle<Sampler>,
     ) -> Result<Self, Error> {

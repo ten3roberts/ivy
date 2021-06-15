@@ -10,7 +10,7 @@ description = "GUI library for Ivy"
 [dependencies]
 derive_more = "0.99"
 hecs = "0.5"
-ivy-core = { path = "../ivy-core", version = "*" }
+ivy-resources = { path = "../ivy-resources", version = "*" }
 ivy-graphics = { path = "../ivy-graphics", version = "*" }
 ivy-vulkan = { path = "../ivy-vulkan", version = "*" }
 ultraviolet = "0.8"

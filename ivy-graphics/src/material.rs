@@ -1,5 +1,5 @@
 use ash::vk::{DescriptorSet, ShaderStageFlags};
-use ivy_core::{resources::Handle, ResourceCache};
+use ivy_resources::{Handle, ResourceCache};
 use ivy_vulkan::{
     descriptors::{DescriptorAllocator, DescriptorBuilder, DescriptorLayoutCache},
     Sampler, Texture, VulkanContext,

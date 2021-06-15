@@ -1,5 +1,5 @@
 [package]
-name = "ivy-core"
+name = "ivy-resources"
 version = "0.1.0"
 authors = ["Tim Roberts <ten3roberts@gmail.com>"]
 edition = "2018"
@@ -7,10 +7,5 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.40"
-crossbeam-channel = { version = "0.5", optional = true }
-downcast-rs = "1.2"
-flume = "0.10"
-hecs = "0.5"
-log = { version = "0.4", features = ["std"] }
+generational-arena = "0.2"
 thiserror = "1.0"

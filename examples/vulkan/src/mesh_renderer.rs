@@ -1,6 +1,6 @@
 use hecs::World;
-use ivy_core::{resources::Handle, ResourceCache};
 use ivy_graphics::{Error, Material, Mesh, ShaderPass};
+use ivy_resources::{Handle, ResourceCache};
 use ivy_vulkan::{
     commands::CommandBuffer, descriptors::*, vk, Buffer, BufferAccess, BufferType, VulkanContext,
 };
@@ -49,9 +49,9 @@ impl MeshRenderer {
         cmd: &CommandBuffer,
         current_frame: usize,
         global_set: DescriptorSet,
-        materials: &mut ResourceCache<Material>,
-        meshes: &mut ResourceCache<Mesh>,
-        passes: &mut ResourceCache<T>,
+        materials: &ResourceCache<Material>,
+        meshes: &ResourceCache<Mesh>,
+        passes: &ResourceCache<T>,
     ) -> Result<(), Error> {
         let query = world.query_mut::<RenderObject<T>>();
 

@@ -16,5 +16,5 @@ pub enum Error {
     WindowCreation,
 
     #[error(transparent)]
-    ResourceError(#[from] ivy_core::resources::Error),
+    ResourceError(#[from] ivy_resources::Error),
 }

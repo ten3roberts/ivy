@@ -6,12 +6,13 @@ use flume::Receiver;
 use glfw::{Action, CursorMode, Glfw, Key, Window, WindowEvent};
 use hecs::World;
 use indirect_mesh_renderer::IndirectMeshRenderer;
-use ivy_core::{resources::Handle, *};
+use ivy_core::{App, AppEvent, Clock, Events, FromDuration, IntoDuration, Layer, Logger};
 use ivy_graphics::{
     window::{WindowExt, WindowInfo, WindowMode},
     Material, Mesh, ShaderPass,
 };
 use ivy_input::{Input, InputAxis, InputVector};
+use ivy_resources::{Handle, ResourceCache};
 use ivy_ui::{Image, ImageRenderer};
 use ivy_vulkan::{commands::*, descriptors::*, *};
 use mesh_renderer::MeshRenderer;
@@ -510,11 +511,13 @@ impl VulkanLayer {
             material,
         ));
 
-        world.spawn((
-            Mat4::from_translation(Vec3::one()),
-            image,
-            default_shaderpass,
-        ));
+        world.spawn_batch((0..100).map(|v| {
+            (
+                Mat4::from_translation(Vec3::new(v as f32 * 2.0, 0.0, 0.0)),
+                image,
+                default_shaderpass,
+            )
+        }));
 
         let (tx, rx) = flume::unbounded();
 

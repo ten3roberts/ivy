@@ -12,6 +12,6 @@ ash = "0.32"
 glfw = "0.41"
 gltf = "0.15"
 ivy-vulkan = { path = "../ivy-vulkan", version = "*" }
-ivy-core = { path = "../ivy-core", version = "*" }
+ivy-resources = { path = "../ivy-resources", version = "*" }
 thiserror = "1.0"
 ultraviolet = "0.8"

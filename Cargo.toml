@@ -3,6 +3,7 @@ members = [
   "ivy-core",
   "ivy-graphics",
   "ivy-input",
+  "ivy-resources",
   "ivy-stb",
   "ivy-ui",
   "ivy-vulkan",
