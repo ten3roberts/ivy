@@ -1,0 +1,16 @@
+[package]
+name = "ivy-ui"
+version = "0.1.0"
+authors = ["Tim Roberts <ten3roberts@gmail.com>"]
+edition = "2018"
+description = "GUI library for Ivy"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+derive_more = "0.99"
+hecs = "0.5"
+ivy-core = { path = "../ivy-core", version = "*" }
+ivy-graphics = { path = "../ivy-graphics", version = "*" }
+ivy-vulkan = { path = "../ivy-vulkan", version = "*" }
+ultraviolet = "0.8"

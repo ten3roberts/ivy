@@ -1,7 +1,4 @@
-use derive_more::{
-    Add, AddAssign, AsRef, Deref, DerefMut, Div, DivAssign, From, Into, Mul, MulAssign, Sub,
-    SubAssign,
-};
+use derive_more::*;
 use ultraviolet::{Mat4, Rotor3, Vec3};
 
 #[derive(

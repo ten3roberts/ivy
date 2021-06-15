@@ -397,6 +397,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ivy-ui"
+version = "0.1.0"
+dependencies = [
+ "derive_more",
+ "hecs",
+ "ivy-core",
+ "ivy-graphics",
+ "ivy-vulkan",
+ "ultraviolet",
+]
+
+[[package]]
 name = "ivy-vulkan"
 version = "0.1.0"
 dependencies = [
@@ -862,6 +874,7 @@ dependencies = [
  "ivy-core",
  "ivy-graphics",
  "ivy-input",
+ "ivy-ui",
  "ivy-vulkan",
  "log",
  "ultraviolet",

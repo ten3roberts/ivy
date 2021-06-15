@@ -12,6 +12,7 @@ use ivy_graphics::{
     Material, Mesh, ShaderPass,
 };
 use ivy_input::{Input, InputAxis, InputVector};
+use ivy_ui::{Image, ImageRenderer};
 use ivy_vulkan::{commands::*, descriptors::*, *};
 use mesh_renderer::MeshRenderer;
 use std::{
@@ -241,6 +242,7 @@ struct VulkanLayer {
     window_renderer: WindowRenderer,
     window: Arc<AtomicRefCell<Window>>,
     mesh_renderer: MeshRenderer,
+    image_renderer: ImageRenderer,
     batched_renderer: BatchedMeshRenderer,
     indirect_renderer: IndirectMeshRenderer,
 
@@ -260,6 +262,7 @@ struct VulkanLayer {
     samplers: ResourceCache<Sampler>,
     diffuse_passes: ResourceCache<DiffusePass>,
     meshes: ResourceCache<Mesh>,
+    images: ResourceCache<Image>,
 
     window_events: Receiver<WindowEvent>,
 
@@ -292,6 +295,13 @@ impl VulkanLayer {
             context.clone(),
             &mut descriptor_layout_cache,
             &mut descriptor_allocator,
+        )?;
+
+        let image_renderer = ImageRenderer::new(
+            context.clone(),
+            &mut descriptor_layout_cache,
+            16,
+            FRAMES_IN_FLIGHT,
         )?;
 
         // Data that is tied and updated per swapchain image basis
@@ -331,17 +341,7 @@ impl VulkanLayer {
                 .context("Failed to load uv texture")?,
         );
 
-        let sampler = Arc::new(Sampler::new(
-            context.clone(),
-            SamplerInfo {
-                address_mode: AddressMode::REPEAT,
-                mag_filter: FilterMode::LINEAR,
-                min_filter: FilterMode::LINEAR,
-                unnormalized_coordinates: false,
-                anisotropy: 16.0,
-                mip_levels: grid.mip_levels(),
-            },
-        )?);
+        let mut samplers = ResourceCache::new();
 
         let sampler = samplers.insert(Sampler::new(
             context.clone(),
@@ -376,6 +376,19 @@ impl VulkanLayer {
             uv_grid,
             sampler,
         )?);
+
+        let mut images = ResourceCache::new();
+
+        let image: Handle<Image> = images.insert(Image::new(
+            &context,
+            &mut descriptor_layout_cache,
+            &mut descriptor_allocator,
+            &mut textures,
+            &mut samplers,
+            uv_grid,
+            sampler,
+        )?);
+
 
         let viewproj =
             ultraviolet::projection::perspective_vk(
@@ -498,6 +511,12 @@ impl VulkanLayer {
             material.clone(),
         ));
 
+        world.spawn((
+            Mat4::from_translation(Vec3::one()),
+            image,
+            default_shaderpass,
+        ));
+
         let (tx, rx) = flume::unbounded();
 
         events.subscribe(tx);
@@ -516,8 +535,6 @@ impl VulkanLayer {
             global_data,
             current_frame: 0,
             clock: Clock::new(),
-
-            diffuse_passes,
             materials,
             textures,
             samplers,
@@ -527,6 +544,8 @@ impl VulkanLayer {
             cube_mesh,
             material,
             pass: default_shaderpass,
+            image_renderer,
+            images,
         })
     }
 
@@ -632,6 +651,21 @@ impl Layer for VulkanLayer {
             }
         }
 
+        // Draw ui
+        self.image_renderer
+            .register_entities::<DiffusePass>(world, &mut self.descriptor_layout_cache)?;
+
+        self.image_renderer.update(world, self.current_frame)?;
+
+        self.image_renderer.draw(
+            world,
+            cmd,
+            self.current_frame,
+            frame.set,
+            &mut self.images,
+            &mut self.diffuse_passes,
+        )?;
+
         // Done
         frame.commandbuffer.end_renderpass();
         cmd.end()?;
@@ -677,14 +711,12 @@ impl FrameData {
             }],
         )?;
 
-        let mut set = DescriptorSet::null();
-        DescriptorBuilder::new()
+        let set = DescriptorBuilder::new()
             .bind_uniform_buffer(0, vk::ShaderStageFlags::VERTEX, &global_uniformbuffer)
             .build_one(
                 context.device(),
                 descriptor_layout_cache,
                 descriptor_allocator,
-                &mut set,
             )?;
 
         let commandpool = CommandPool::new(

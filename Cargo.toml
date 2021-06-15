@@ -4,10 +4,9 @@ members = [
   "ivy-graphics",
   "ivy-input",
   "ivy-stb",
+  "ivy-ui",
   "ivy-vulkan",
 
   "examples/sandbox",
   "examples/vulkan"
 ]
-
-
