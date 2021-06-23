@@ -1,7 +1,10 @@
 use hecs::World;
 use ultraviolet::{Mat4, Rotor3};
 
-use crate::components::{AngularVelocity, ModelMatrix, Position, Rotation, Scale};
+use crate::{
+    camera::Camera,
+    components::{AngularVelocity, ModelMatrix, Position, Rotation, Scale},
+};
 
 pub fn generate_model_matrices(world: &mut World) {
     let without = world
@@ -62,4 +65,22 @@ pub fn integrate_angular_velocity(world: &mut World, dt: f32) {
             let (x, y, z) = (ang.x, ang.y, ang.z);
             *rot = Rotation(**rot * Rotor3::from_euler_angles(x * dt, y * dt, z * dt));
         });
+}
+
+/// Updates the view matrix from camera position and optional rotation
+pub fn update_view_matrices(world: &World) {
+    world
+        .query::<(&mut Camera, &Position, Option<&Rotation>)>()
+        .into_iter()
+        .for_each(|(_, (camera, position, rotation))| {
+            let view = match rotation {
+                Some(rotation) => (Mat4::from_translation(**position)
+                    * rotation.into_matrix().into_homogeneous())
+                .inversed(),
+
+                None => Mat4::from_translation(**position).inversed(),
+            };
+
+            camera.view = view;
+        })
 }

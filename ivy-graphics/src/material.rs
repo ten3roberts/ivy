@@ -1,4 +1,4 @@
-use ash::vk::{DescriptorSet, ShaderStageFlags};
+use ash::vk::{DescriptorSet, DescriptorSetLayout, ShaderStageFlags};
 use ivy_resources::{Handle, ResourceCache};
 use ivy_vulkan::{
     descriptors::{DescriptorAllocator, DescriptorBuilder, DescriptorLayoutCache},
@@ -10,6 +10,7 @@ use crate::Error;
 /// A material contains shader properties such as albedo and other parameters. A material does not
 /// define the graphics pipeline nor shaders as that is per pass dependent.
 pub struct Material {
+    layout: DescriptorSetLayout,
     set: DescriptorSet,
     albedo: Handle<Texture>,
     sampler: Handle<Sampler>,
@@ -26,7 +27,7 @@ impl Material {
         albedo: Handle<Texture>,
         sampler: Handle<Sampler>,
     ) -> Result<Self, Error> {
-        let set = DescriptorBuilder::new()
+        let (set, layout) = DescriptorBuilder::new()
             .bind_combined_image_sampler(
                 0,
                 ShaderStageFlags::FRAGMENT,
@@ -40,10 +41,16 @@ impl Material {
             )?;
 
         Ok(Self {
+            layout,
             set,
             albedo,
             sampler,
         })
+    }
+
+    /// Get a reference to the material's descriptor set.
+    pub fn layout(&self) -> DescriptorSetLayout {
+        self.layout
     }
 
     /// Get a reference to the material's descriptor set.

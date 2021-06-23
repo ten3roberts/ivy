@@ -1,5 +1,6 @@
 use anyhow::Context;
 use atomic_refcell::AtomicRefCell;
+use camera::{Camera, CameraData};
 use components::{AngularVelocity, Position, Rotation, Scale};
 use flume::Receiver;
 use glfw::{Action, CursorMode, Glfw, Key, Window, WindowEvent};
@@ -18,11 +19,12 @@ use std::{
     sync::{mpsc, Arc},
     time::Duration,
 };
-use ultraviolet::{projection, Mat4, Rotor3, Vec2, Vec3, Vec4};
+use ultraviolet::{Mat4, Rotor3, Vec2, Vec3, Vec4};
 
 use log::*;
 use window_renderer::WindowRenderer;
 
+mod camera;
 mod components;
 mod indirect_mesh_renderer;
 mod systems;
@@ -36,6 +38,8 @@ fn main() -> anyhow::Result<()> {
         max_level: LevelFilter::Debug,
     }
     .install();
+
+    dbg!(Mat4::default());
 
     let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS)?;
 
@@ -66,8 +70,6 @@ fn main() -> anyhow::Result<()> {
     app.run().context("Failed to run application")
 }
 
-struct Camera;
-
 struct LogicLayer {
     window: Arc<AtomicRefCell<Window>>,
     input: Input,
@@ -94,8 +96,12 @@ impl LogicLayer {
             InputAxis::keyboard(Key::S, Key::W),
         );
 
+        let extent = window.borrow().extent();
+
+        let camera = Camera::perspective(1.0, extent.aspect(), 0.1, 100.0);
+
         world.spawn((
-            Camera,
+            camera,
             Position(Vec3::new(0.0, 0.0, 5.0)),
             Rotation(Rotor3::identity()),
         ));
@@ -195,6 +201,7 @@ impl Layer for LogicLayer {
 
             *camera_pos += Position(camera_rot.into_matrix() * (movement * dt * self.camera_vel));
 
+            systems::update_view_matrices(world);
             systems::integrate_angular_velocity(world, dt);
 
             systems::generate_model_matrices(world);
@@ -241,6 +248,7 @@ struct VulkanLayer {
     frames: Vec<FrameData>,
 
     global_data: GlobalData,
+    camera_data: CameraData,
     current_frame: usize,
 
     clock: Clock,
@@ -485,19 +493,12 @@ impl VulkanLayer {
             }));
         }
 
-        let viewproj =
-            ultraviolet::projection::perspective_vk(
-                1.0,
-                window.borrow().extent().aspect(),
-                0.1,
-                100.0,
-            ) * ultraviolet::Mat4::look_at(Vec3::new(5.0, 0.5, 5.0), Vec3::zero(), Vec3::unit_y());
-
         // An example uniform containing global uniform data
         let global_data = GlobalData {
             color: Vec4::new(0.3, 0.0, 8.0, 1.0),
-            viewproj,
         };
+
+        let camera_data = Default::default();
 
         let (tx, window_events) = flume::unbounded();
         events.subscribe(tx);
@@ -512,6 +513,7 @@ impl VulkanLayer {
             descriptor_allocator,
             frames,
             global_data,
+            camera_data,
             current_frame: 0,
             clock: Clock::new(),
             resources,
@@ -527,16 +529,13 @@ impl Layer for VulkanLayer {
         _events: &mut Events,
         _frame_time: Duration,
     ) -> anyhow::Result<()> {
-        let extent = self.window_renderer.swapchain().extent();
-
         let frame = &mut self.frames[self.current_frame];
 
         fence::wait(self.context.device(), &[frame.fence], true)?;
         fence::reset(self.context.device(), &[frame.fence])?;
 
-        let (_e, (camera_pos, camera_rot)) = world
-            .query_mut::<(&Position, &Rotation)>()
-            .with::<Camera>()
+        let (_e, (camera, camera_pos, camera_rot)) = world
+            .query_mut::<(&Camera, &Position, &Rotation)>()
             .into_iter()
             .next()
             .unwrap();
@@ -551,14 +550,19 @@ impl Layer for VulkanLayer {
         // Begin surface rendering renderpass
         self.window_renderer.begin(cmd)?;
 
-        let viewproj = projection::perspective_vk(1.0, extent.aspect(), 0.1, 100.0)
+        self.camera_data.viewproj = camera.viewproj();
+        dbg!(&self.camera_data.viewproj);
+
+        let viewproj = camera.projection
+        //projection::perspective_vk(1.0, extent.aspect(), 0.1, 100.0)
             // * Mat4::look_at(*self.camera_pos, Vec3::zero(), Vec3::unit_y());
             * (Mat4::from_translation(**camera_pos) * camera_rot.into_matrix().into_homogeneous()).inversed();
 
-        self.global_data.viewproj = viewproj;
+        self.camera_data.viewproj = viewproj;
 
         // Update global uniform buffer
         frame.global_uniformbuffer.fill(0, &[self.global_data])?;
+        frame.camera_uniformbuffer.fill(0, &[self.camera_data])?;
 
         self.indirect_renderer
             .register_entities::<DiffusePass>(world, &mut self.descriptor_layout_cache)?;
@@ -613,6 +617,7 @@ struct FrameData {
     fence: Fence,
     set: DescriptorSet,
     global_uniformbuffer: Buffer,
+    camera_uniformbuffer: Buffer,
     commandpool: CommandPool,
     commandbuffer: CommandBuffer,
 }
@@ -629,17 +634,25 @@ impl FrameData {
             BufferAccess::MappedPersistent,
             &[GlobalData {
                 color: Vec4::new(1.0, 0.0, 0.0, 1.0),
-                viewproj: Mat4::identity(),
             }],
+        )?;
+
+        let camera_uniformbuffer = Buffer::new(
+            context.clone(),
+            BufferType::Uniform,
+            BufferAccess::MappedPersistent,
+            &[CameraData::default()],
         )?;
 
         let set = DescriptorBuilder::new()
             .bind_uniform_buffer(0, vk::ShaderStageFlags::VERTEX, &global_uniformbuffer)
+            .bind_uniform_buffer(1, vk::ShaderStageFlags::VERTEX, &camera_uniformbuffer)
             .build_one(
                 context.device(),
                 descriptor_layout_cache,
                 descriptor_allocator,
-            )?;
+            )?
+            .0;
 
         let commandpool = CommandPool::new(
             context.device().clone(),
@@ -656,6 +669,7 @@ impl FrameData {
             fence,
             set,
             global_uniformbuffer,
+            camera_uniformbuffer,
             commandpool,
             commandbuffer,
         })
@@ -831,8 +845,7 @@ impl VertexDesc for Vertex {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 struct GlobalData {
     color: Vec4,
-    viewproj: Mat4,
 }

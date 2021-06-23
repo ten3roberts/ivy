@@ -175,7 +175,7 @@ impl DescriptorBuilder {
         allocator: &mut DescriptorAllocator,
         set: &mut vk::DescriptorSet,
     ) -> Result<&mut Self, Error> {
-        *set = self.build_one(device, cache, allocator)?;
+        *set = self.build_one(device, cache, allocator)?.0;
         Ok(self)
     }
 
@@ -184,7 +184,7 @@ impl DescriptorBuilder {
         device: &Device,
         cache: &mut DescriptorLayoutCache,
         allocator: &mut DescriptorAllocator,
-    ) -> Result<vk::DescriptorSet, Error> {
+    ) -> Result<(vk::DescriptorSet, vk::DescriptorSetLayout), Error> {
         let mut layout = Default::default();
 
         self.layout(cache, &mut layout)?;
@@ -198,7 +198,7 @@ impl DescriptorBuilder {
 
         unsafe { device.update_descriptor_sets(&self.writes, &[]) };
 
-        Ok(set)
+        Ok((set, layout))
     }
 
     /// Returns the descriptor set layout by writing to `layout`. Uses the provided cache to fetch
