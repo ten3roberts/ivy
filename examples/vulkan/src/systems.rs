@@ -81,6 +81,6 @@ pub fn update_view_matrices(world: &World) {
                 None => Mat4::from_translation(**position).inversed(),
             };
 
-            camera.view = view;
+            camera.set_view(view);
         })
 }

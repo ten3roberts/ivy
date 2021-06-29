@@ -1,3 +1,5 @@
+use crate::descriptors::DescriptorLayoutInfo;
+
 use super::{descriptors::DescriptorLayoutCache, Error};
 use super::{renderpass::*, Extent};
 use ash::version::DeviceV1_0;
@@ -10,7 +12,7 @@ use ash::vk;
 mod shader;
 use shader::*;
 
-pub struct PipelineInfo {
+pub struct PipelineInfo<'a> {
     pub vertexshader: PathBuf,
     pub fragmentshader: PathBuf,
     pub vertex_binding: vk::VertexInputBindingDescription,
@@ -21,9 +23,11 @@ pub struct PipelineInfo {
     pub polygon_mode: vk::PolygonMode,
     pub cull_mode: vk::CullModeFlags,
     pub front_face: vk::FrontFace,
+    /// The bindings specified
+    pub set_layouts: &'a [DescriptorLayoutInfo],
 }
 
-impl Default for PipelineInfo {
+impl<'a> Default for PipelineInfo<'a> {
     fn default() -> Self {
         Self {
             vertexshader: "".into(),
@@ -36,6 +40,7 @@ impl Default for PipelineInfo {
             polygon_mode: vk::PolygonMode::FILL,
             cull_mode: vk::CullModeFlags::BACK,
             front_face: vk::FrontFace::COUNTER_CLOCKWISE,
+            set_layouts: &[],
         }
     }
 }
@@ -62,7 +67,12 @@ impl Pipeline {
         let vertexshader = ShaderModule::new(&device, &mut vertexshader)?;
         let fragmentshader = ShaderModule::new(&device, &mut fragmentshader)?;
 
-        let layout = shader::reflect(&device, &[&vertexshader, &fragmentshader], layout_cache)?;
+        let layout = shader::reflect(
+            &device,
+            &[&vertexshader, &fragmentshader],
+            layout_cache,
+            info.set_layouts,
+        )?;
 
         let entrypoint = CString::new("main").unwrap();
 

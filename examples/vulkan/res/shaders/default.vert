@@ -16,7 +16,6 @@ layout(binding = 1) uniform CameraData {
   mat4 viewproj;
 } cameraData;
 
-
 struct ObjectData {
   mat4 mvp;
 };
@@ -24,7 +23,6 @@ struct ObjectData {
 layout(std140,set = 1, binding = 0) readonly buffer ObjectBuffer{ 
   ObjectData objects[];
 } objectBuffer;
-
 
 void main() {
   ObjectData objectData = objectBuffer.objects[gl_BaseInstance];

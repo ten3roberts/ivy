@@ -1,6 +1,7 @@
 use anyhow::Context;
 use atomic_refcell::AtomicRefCell;
-use camera::{Camera, CameraData};
+use camera::Camera;
+use camera_manager::{CameraIndex, CameraManager};
 use components::{AngularVelocity, Position, Rotation, Scale};
 use flume::Receiver;
 use glfw::{Action, CursorMode, Glfw, Key, Window, WindowEvent};
@@ -13,8 +14,8 @@ use ivy_graphics::{
 };
 use ivy_input::{Input, InputAxis, InputVector};
 use ivy_resources::{Handle, ResourceManager};
-use ivy_ui::{Image, ImageRenderer};
-use ivy_vulkan::{commands::*, descriptors::*, *};
+use ivy_ui::{Canvas, Image, ImageRenderer, Size2D};
+use ivy_vulkan::{commands::*, descriptors::*, vk::DescriptorType, *};
 use std::{
     sync::{mpsc, Arc},
     time::Duration,
@@ -25,6 +26,8 @@ use log::*;
 use window_renderer::WindowRenderer;
 
 mod camera;
+
+mod camera_manager;
 mod components;
 mod indirect_mesh_renderer;
 mod systems;
@@ -38,8 +41,6 @@ fn main() -> anyhow::Result<()> {
         max_level: LevelFilter::Debug,
     }
     .install();
-
-    dbg!(Mat4::default());
 
     let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS)?;
 
@@ -98,13 +99,19 @@ impl LogicLayer {
 
         let extent = window.borrow().extent();
 
-        let camera = Camera::perspective(1.0, extent.aspect(), 0.1, 100.0);
-
         world.spawn((
-            camera,
+            Camera::perspective(1.0, extent.aspect(), 0.1, 100.0),
             Position(Vec3::new(0.0, 0.0, 5.0)),
             Rotation(Rotor3::identity()),
         ));
+
+        world.spawn((
+            Camera::perspective(1.0, extent.aspect(), 0.1, 100.0),
+            Position(Vec3::new(0.0, 0.0, 50.0)),
+            Rotation(Rotor3::identity()),
+        ));
+
+        world.spawn((Canvas, Size2D(Vec2::new(0.0, 1.0))));
 
         let (tx, rx) = flume::unbounded();
         events.subscribe(tx);
@@ -241,6 +248,7 @@ struct VulkanLayer {
     window: Arc<AtomicRefCell<Window>>,
     image_renderer: ImageRenderer,
     indirect_renderer: IndirectMeshRenderer,
+    camera_manager: CameraManager,
 
     descriptor_layout_cache: DescriptorLayoutCache,
     descriptor_allocator: DescriptorAllocator,
@@ -248,7 +256,6 @@ struct VulkanLayer {
     frames: Vec<FrameData>,
 
     global_data: GlobalData,
-    camera_data: CameraData,
     current_frame: usize,
 
     clock: Clock,
@@ -280,13 +287,16 @@ impl VulkanLayer {
             FRAMES_IN_FLIGHT,
         )?;
 
+        let camera_manager = CameraManager::new(context.clone(), 2, FRAMES_IN_FLIGHT)?;
+
         // Data that is tied and updated per swapchain image basis
         let frames = (0..FRAMES_IN_FLIGHT)
-            .map(|_| {
+            .map(|i| {
                 FrameData::new(
                     context.clone(),
                     &mut descriptor_allocator,
                     &mut descriptor_layout_cache,
+                    camera_manager.buffer(i),
                 )
             })
             .collect::<Result<Vec<FrameData>, _>>()?;
@@ -378,6 +388,39 @@ impl VulkanLayer {
                 sampler,
             )?);
 
+            let set_layouts = [
+                DescriptorLayoutInfo::new(&[
+                    DescriptorSetBinding {
+                        binding: 0,
+                        descriptor_type: DescriptorType::UNIFORM_BUFFER,
+                        descriptor_count: 1,
+                        stage_flags: vk::ShaderStageFlags::VERTEX,
+                        ..Default::default()
+                    },
+                    DescriptorSetBinding {
+                        binding: 1,
+                        descriptor_type: DescriptorType::UNIFORM_BUFFER_DYNAMIC,
+                        descriptor_count: 1,
+                        stage_flags: vk::ShaderStageFlags::VERTEX,
+                        ..Default::default()
+                    },
+                ]),
+                DescriptorLayoutInfo::new(&[DescriptorSetBinding {
+                    binding: 0,
+                    descriptor_type: DescriptorType::STORAGE_BUFFER,
+                    descriptor_count: 1,
+                    stage_flags: vk::ShaderStageFlags::VERTEX,
+                    ..Default::default()
+                }]),
+                DescriptorLayoutInfo::new(&[DescriptorSetBinding {
+                    binding: 0,
+                    descriptor_type: DescriptorType::COMBINED_IMAGE_SAMPLER,
+                    descriptor_count: 1,
+                    stage_flags: vk::ShaderStageFlags::FRAGMENT,
+                    ..Default::default()
+                }]),
+            ];
+
             // Create a pipeline from the shaders
             let pipeline = Pipeline::new(
                 context.device().clone(),
@@ -394,6 +437,8 @@ impl VulkanLayer {
                     polygon_mode: vk::PolygonMode::FILL,
                     cull_mode: vk::CullModeFlags::NONE,
                     front_face: vk::FrontFace::CLOCKWISE,
+                    set_layouts: &set_layouts,
+                    ..Default::default()
                 },
             )?;
 
@@ -413,6 +458,8 @@ impl VulkanLayer {
                     polygon_mode: vk::PolygonMode::FILL,
                     cull_mode: vk::CullModeFlags::NONE,
                     front_face: vk::FrontFace::CLOCKWISE,
+                    set_layouts: &set_layouts,
+                    ..Default::default()
                 },
             )?;
 
@@ -498,8 +545,6 @@ impl VulkanLayer {
             color: Vec4::new(0.3, 0.0, 8.0, 1.0),
         };
 
-        let camera_data = Default::default();
-
         let (tx, window_events) = flume::unbounded();
         events.subscribe(tx);
 
@@ -509,11 +554,11 @@ impl VulkanLayer {
             window,
             image_renderer,
             indirect_renderer,
+            camera_manager,
             descriptor_layout_cache,
             descriptor_allocator,
             frames,
             global_data,
-            camera_data,
             current_frame: 0,
             clock: Clock::new(),
             resources,
@@ -529,19 +574,20 @@ impl Layer for VulkanLayer {
         _events: &mut Events,
         _frame_time: Duration,
     ) -> anyhow::Result<()> {
-        let frame = &mut self.frames[self.current_frame];
+        self.camera_manager.register_cameras(world);
+        let current_frame = self.current_frame;
+
+        let frame = &mut self.frames[current_frame];
 
         fence::wait(self.context.device(), &[frame.fence], true)?;
         fence::reset(self.context.device(), &[frame.fence])?;
 
-        let (_e, (camera, camera_pos, camera_rot)) = world
-            .query_mut::<(&Camera, &Position, &Rotation)>()
-            .into_iter()
-            .next()
-            .unwrap();
+        frame.global_uniformbuffer.fill(0, &[self.global_data])?;
+        self.camera_manager
+            .update_camera_data(world, current_frame)?;
 
+        // Record commandbuffer
         frame.commandpool.reset(false)?;
-
         let cmd = &frame.commandbuffer;
 
         // Begin recording the commandbuffer, hinting that it will only be used once
@@ -550,47 +596,47 @@ impl Layer for VulkanLayer {
         // Begin surface rendering renderpass
         self.window_renderer.begin(cmd)?;
 
-        self.camera_data.viewproj = camera.viewproj();
-        dbg!(&self.camera_data.viewproj);
-
-        let viewproj = camera.projection
-        //projection::perspective_vk(1.0, extent.aspect(), 0.1, 100.0)
-            // * Mat4::look_at(*self.camera_pos, Vec3::zero(), Vec3::unit_y());
-            * (Mat4::from_translation(**camera_pos) * camera_rot.into_matrix().into_homogeneous()).inversed();
-
-        self.camera_data.viewproj = viewproj;
-
-        // Update global uniform buffer
-        frame.global_uniformbuffer.fill(0, &[self.global_data])?;
-        frame.camera_uniformbuffer.fill(0, &[self.camera_data])?;
-
         self.indirect_renderer
             .register_entities::<DiffusePass>(world, &mut self.descriptor_layout_cache)?;
 
-        self.indirect_renderer.update(world, self.current_frame)?;
+        self.indirect_renderer.update(world, current_frame)?;
+
+        let cameras = world
+            .query::<&CameraIndex>()
+            .iter()
+            .map(|(e, camera_index)| (e, *camera_index))
+            .collect::<Vec<_>>();
 
         // Bind the global uniform buffer
-        self.indirect_renderer.draw::<DiffusePass>(
-            world,
-            cmd,
-            self.current_frame,
-            frame.set,
-            &self.resources,
-        )?;
+        for (_, camera_index) in cameras.into_iter() {
+            let camera_offset = *camera_index * self.camera_manager.dynamic_offset();
+
+            // let pipeline_layout = self.resources.get(self.k)
+            // cmd.push_constants(pipeline_layout, ShaderStageFlags::VERTEX, 0, &camera_offset);
+
+            self.indirect_renderer.draw::<DiffusePass>(
+                world,
+                cmd,
+                current_frame,
+                frame.set,
+                &[camera_offset],
+                &self.resources,
+            )?
+        }
 
         // Draw ui
-        self.image_renderer
-            .register_entities::<DiffusePass>(world, &mut self.descriptor_layout_cache)?;
+        // self.image_renderer
+        //     .register_entities::<DiffusePass>(world, &mut self.descriptor_layout_cache)?;
 
-        self.image_renderer.update(world, self.current_frame)?;
+        // self.image_renderer.update(world, current_frame)?;
 
-        self.image_renderer.draw::<DiffusePass>(
-            world,
-            cmd,
-            self.current_frame,
-            frame.set,
-            &self.resources,
-        )?;
+        // self.image_renderer.draw::<DiffusePass>(
+        //     world,
+        //     cmd,
+        //     current_frame,
+        //     frame.set,
+        //     &self.resources,
+        // )?;
 
         // Done
         frame.commandbuffer.end_renderpass();
@@ -617,7 +663,6 @@ struct FrameData {
     fence: Fence,
     set: DescriptorSet,
     global_uniformbuffer: Buffer,
-    camera_uniformbuffer: Buffer,
     commandpool: CommandPool,
     commandbuffer: CommandBuffer,
 }
@@ -627,6 +672,7 @@ impl FrameData {
         context: Arc<VulkanContext>,
         descriptor_allocator: &mut DescriptorAllocator,
         descriptor_layout_cache: &mut DescriptorLayoutCache,
+        camera_buffer: &Buffer,
     ) -> Result<Self, ivy_vulkan::Error> {
         let global_uniformbuffer = Buffer::new(
             context.clone(),
@@ -637,16 +683,9 @@ impl FrameData {
             }],
         )?;
 
-        let camera_uniformbuffer = Buffer::new(
-            context.clone(),
-            BufferType::Uniform,
-            BufferAccess::MappedPersistent,
-            &[CameraData::default()],
-        )?;
-
         let set = DescriptorBuilder::new()
             .bind_uniform_buffer(0, vk::ShaderStageFlags::VERTEX, &global_uniformbuffer)
-            .bind_uniform_buffer(1, vk::ShaderStageFlags::VERTEX, &camera_uniformbuffer)
+            .bind_dynamic_uniform_buffer(1, vk::ShaderStageFlags::VERTEX, &camera_buffer)
             .build_one(
                 context.device(),
                 descriptor_layout_cache,
@@ -669,7 +708,6 @@ impl FrameData {
             fence,
             set,
             global_uniformbuffer,
-            camera_uniformbuffer,
             commandpool,
             commandbuffer,
         })

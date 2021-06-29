@@ -187,6 +187,7 @@ impl IndirectMeshRenderer {
         cmd: &CommandBuffer,
         current_frame: usize,
         global_set: DescriptorSet,
+        dynamic_offsets: &[u32],
         resources: &ResourceManager,
     ) -> Result<(), Error> {
         let frame = &mut self.frames[current_frame];
@@ -213,6 +214,7 @@ impl IndirectMeshRenderer {
             current_frame,
             global_set,
             frame_set,
+            dynamic_offsets,
             &meshes,
             &materials,
         )?;
@@ -388,6 +390,7 @@ impl PassData {
         current_frame: usize,
         global_set: DescriptorSet,
         frame_set: DescriptorSet,
+        dynamic_offsets: &[u32],
         meshes: &ResourceCache<Mesh>,
         materials: &ResourceCache<Material>,
     ) -> Result<(), Error> {
@@ -408,6 +411,7 @@ impl PassData {
                 batch.pipeline_layout,
                 0,
                 &[global_set, frame_set, material.set()],
+                dynamic_offsets,
             );
 
             cmd.bind_pipeline(batch.pipeline);

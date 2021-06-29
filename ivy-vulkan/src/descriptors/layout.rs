@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{cmp::Ord, collections::HashMap, sync::Arc};
 
 use arrayvec::ArrayVec;
 use ash::version::DeviceV1_0;
@@ -17,15 +17,19 @@ pub use vk::DescriptorSetLayout;
 pub struct DescriptorLayoutInfo {
     // The bindings for the layout
     bindings: ArrayVec<[DescriptorSetBinding; MAX_BINDINGS]>,
-    sorted: bool,
 }
 
 impl DescriptorLayoutInfo {
     pub fn new(bindings: &[DescriptorSetBinding]) -> Self {
-        Self {
-            bindings: bindings.iter().copied().collect(),
-            sorted: false,
+        let mut layout = Self {
+            bindings: ArrayVec::new(),
+        };
+
+        for binding in bindings {
+            layout.insert(*binding);
         }
+
+        layout
     }
 
     /// Return a reference to the descriptor layout info's bindings.
@@ -33,17 +37,67 @@ impl DescriptorLayoutInfo {
         &self.bindings
     }
 
-    pub fn add(&mut self, binding: DescriptorSetBinding) {
-        self.bindings.push(binding);
+    /// Insert a new binding.
+    /// If binding index already exists, it will be replaced..
+    pub fn insert(&mut self, binding: DescriptorSetBinding) {
+        let mut len = self.bindings.len();
+        let mut mid = (len / 2).min(1);
+
+        loop {
+            if len < 1 {
+                if mid == self.bindings.len() || self.bindings[mid].binding > binding.binding {
+                    self.bindings.insert(mid, binding);
+                } else {
+                    self.bindings.insert(mid + 1, binding);
+                }
+                break;
+            }
+
+            match self.bindings[mid].binding.cmp(&binding.binding) {
+                std::cmp::Ordering::Less => {
+                    len /= 2;
+                    mid += (len as f32 / 2.0).ceil() as usize;
+                }
+                std::cmp::Ordering::Equal => {
+                    self.bindings[mid] = binding;
+                    break;
+                }
+                std::cmp::Ordering::Greater => {
+                    len /= 2;
+                    mid -= (len as f32 / 2.0).ceil() as usize;
+                }
+            }
+        }
     }
 
-    /// Ensures the bindings are sorted
-    fn ensure_sorted(&mut self) {
-        if self.sorted {
-            return;
+    pub fn extend<I: Iterator<Item = DescriptorSetBinding>>(&mut self, bindings: I) {
+        self.bindings.extend(bindings);
+    }
+
+    /// Returns the layout binding at binding index.
+    /// Uses a binary search.
+    pub fn get(&mut self, binding: u32) -> Option<DescriptorSetBinding> {
+        let mut len = self.bindings.len();
+        let mut mid = (len / 2).max(1);
+
+        loop {
+            dbg!(mid, len);
+            if mid >= self.bindings.len() || len == 0 {
+                return None;
+            }
+
+            match self.bindings[mid].binding.cmp(&binding) {
+                std::cmp::Ordering::Less => {
+                    len /= 2;
+                    mid += (len as f32 / 2.0).ceil() as usize;
+                }
+                std::cmp::Ordering::Equal => return Some(self.bindings[mid]),
+                std::cmp::Ordering::Greater => {
+                    len /= 2;
+                    mid -= (len as f32 / 2.0).ceil() as usize;
+                }
+            }
         }
-        self.bindings.sort_by_key(|binding| binding.binding);
-        self.sorted = true;
     }
 }
 
@@ -51,7 +105,6 @@ impl Default for DescriptorLayoutInfo {
     fn default() -> Self {
         Self {
             bindings: ArrayVec::new(),
-            sorted: false,
         }
     }
 }
@@ -97,9 +150,7 @@ impl DescriptorLayoutCache {
 
     /// Gets the descriptor set layout matching info. If layout does not already exist it is
     /// created. Takes info as mutable since it needs to be sorted.
-    pub fn get(&mut self, info: &mut DescriptorLayoutInfo) -> Result<DescriptorSetLayout, Error> {
-        info.ensure_sorted();
-
+    pub fn get(&mut self, info: &DescriptorLayoutInfo) -> Result<DescriptorSetLayout, Error> {
         if let Some(layout) = self.layouts.get(&info) {
             Ok(*layout)
         } else {
@@ -138,4 +189,104 @@ pub fn create(device: &Device, info: &DescriptorLayoutInfo) -> Result<Descriptor
 
 pub fn destroy(device: &Device, layout: DescriptorSetLayout) {
     unsafe { device.destroy_descriptor_set_layout(layout, None) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    /// Test the order is sorted after insertion
+    fn layout_info_add() {
+        let mut layout = DescriptorLayoutInfo::new(&[]);
+
+        let mut bindings = [DescriptorSetBinding::default(); 6];
+
+        bindings[0] = DescriptorSetBinding {
+            binding: 0,
+            descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+            descriptor_count: 1,
+            ..Default::default()
+        };
+
+        layout.insert(bindings[0]);
+
+        dbg!(&layout);
+
+        bindings[2] = DescriptorSetBinding {
+            binding: 2,
+            descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+            descriptor_count: 1,
+            ..Default::default()
+        };
+
+        layout.insert(bindings[2]);
+
+        dbg!(&layout);
+
+        bindings[1] = DescriptorSetBinding {
+            binding: 1,
+            descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+            descriptor_count: 1,
+            ..Default::default()
+        };
+
+        layout.insert(bindings[1]);
+
+        dbg!(&layout);
+
+        bindings[3] = DescriptorSetBinding {
+            binding: 3,
+            descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+            descriptor_count: 1,
+            ..Default::default()
+        };
+
+        layout.insert(bindings[3]);
+
+        dbg!(&layout);
+
+        bindings[5] = DescriptorSetBinding {
+            binding: 5,
+            descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+            descriptor_count: 1,
+            ..Default::default()
+        };
+
+        layout.insert(bindings[5]);
+
+        dbg!(&layout);
+
+        bindings[4] = DescriptorSetBinding {
+            binding: 4,
+            descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+            descriptor_count: 1,
+            ..Default::default()
+        };
+
+        layout.insert(bindings[4]);
+
+        layout.insert(DescriptorSetBinding {
+            binding: 4,
+            descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+            descriptor_count: 1,
+            ..Default::default()
+        });
+
+        dbg!(&layout);
+
+        assert!(layout
+            .bindings()
+            .iter()
+            .map(|val| val.binding)
+            .eq([0, 1, 2, 3, 4, 5].iter().cloned()));
+
+        for binding in &bindings {
+            assert_eq!(
+                Some(binding.binding),
+                layout.get(binding.binding).map(|val| val.binding)
+            )
+        }
+
+        assert_eq!(None, layout.get(9).map(|_| ()));
+    }
 }

@@ -63,6 +63,7 @@ pub fn reflect<S: AsRef<spirv_reflect::ShaderModule>>(
     device: &Device,
     modules: &[S],
     layout_cache: &mut DescriptorLayoutCache,
+    override_sets: &[DescriptorLayoutInfo],
 ) -> Result<vk::PipelineLayout, Error> {
     let mut sets: [DescriptorLayoutInfo; MAX_SETS] = Default::default();
 
@@ -78,7 +79,7 @@ pub fn reflect<S: AsRef<spirv_reflect::ShaderModule>>(
             .map_err(|msg| Error::SpirvReflection(msg))?;
 
         for binding in bindings {
-            sets[binding.set as usize].add(descriptors::DescriptorSetBinding {
+            sets[binding.set as usize].insert(descriptors::DescriptorSetBinding {
                 binding: binding.binding,
                 descriptor_type: map_descriptortype(binding.descriptor_type),
                 descriptor_count: binding.count,
@@ -99,6 +100,15 @@ pub fn reflect<S: AsRef<spirv_reflect::ShaderModule>>(
             })
         }
     }
+
+    // Override sets
+    for (set, layout) in override_sets.iter().enumerate() {
+        for binding in layout.bindings() {
+            sets[set].insert(*binding);
+        }
+    }
+
+    dbg!(&sets);
 
     let set_layouts = sets
         .iter_mut()

@@ -1,3 +1,4 @@
+use std::mem::size_of;
 use std::sync::Arc;
 
 use crate::ClearValue;
@@ -11,6 +12,7 @@ use super::{
 use super::{framebuffer::Framebuffer, Extent};
 use arrayvec::ArrayVec;
 use ash::vk;
+use ash::vk::ShaderStageFlags;
 use ash::Device;
 use ash::{version::DeviceV1_0, vk::PipelineLayout};
 
@@ -281,6 +283,7 @@ impl CommandBuffer {
         pipeline_layout: PipelineLayout,
         first_set: u32,
         descriptor_sets: &[vk::DescriptorSet],
+        offsets: &[u32],
     ) {
         unsafe {
             self.device.cmd_bind_descriptor_sets(
@@ -289,7 +292,25 @@ impl CommandBuffer {
                 pipeline_layout,
                 first_set,
                 descriptor_sets,
-                &[],
+                offsets,
+            )
+        }
+    }
+
+    pub fn push_constants<T>(
+        &self,
+        pipeline_layout: PipelineLayout,
+        stage: ShaderStageFlags,
+        offset: u32,
+        data: &T,
+    ) {
+        unsafe {
+            self.device.cmd_push_constants(
+                self.commandbuffer,
+                pipeline_layout,
+                stage,
+                offset,
+                std::slice::from_raw_parts(data as *const T as *const u8, size_of::<T>()),
             )
         }
     }

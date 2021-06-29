@@ -17,4 +17,10 @@ pub enum Error {
 
     #[error(transparent)]
     ResourceError(#[from] ivy_resources::Error),
+
+    #[error(transparent)]
+    ComponentError(#[from] hecs::ComponentError),
+
+    #[error(transparent)]
+    NoSuchEntity(#[from] hecs::NoSuchEntity),
 }

@@ -94,6 +94,78 @@ impl DescriptorBuilder {
         self
     }
 
+    /// Binds part of a buffer.
+    pub fn bind_uniform_sub_buffer(
+        &mut self,
+        binding: u32,
+        stage: ShaderStageFlags,
+        offset: u64,
+        range: u64,
+        uniform_buffer: &Buffer,
+    ) -> &mut Self {
+        assert_eq!(uniform_buffer.ty(), BufferType::Uniform);
+        self.buffer_infos[binding as usize] = vk::DescriptorBufferInfo {
+            buffer: *uniform_buffer.as_ref(),
+            offset,
+            range,
+        };
+
+        let write = WriteDescriptorSet {
+            dst_binding: binding,
+            dst_array_element: 0,
+            descriptor_count: 1,
+            descriptor_type: DescriptorType::UNIFORM_BUFFER,
+            p_buffer_info: &self.buffer_infos[binding as usize],
+            ..Default::default()
+        };
+
+        let binding = DescriptorSetBinding {
+            binding,
+            descriptor_type: DescriptorType::UNIFORM_BUFFER,
+            descriptor_count: 1,
+            stage_flags: stage,
+            p_immutable_samplers: std::ptr::null(),
+        };
+
+        self.add(binding, write);
+
+        self
+    }
+
+    pub fn bind_dynamic_uniform_buffer(
+        &mut self,
+        binding: u32,
+        stage: ShaderStageFlags,
+        uniform_buffer: &Buffer,
+    ) -> &mut Self {
+        assert_eq!(uniform_buffer.ty(), BufferType::UniformDynamic);
+        self.buffer_infos[binding as usize] = vk::DescriptorBufferInfo {
+            buffer: *uniform_buffer.as_ref(),
+            offset: 0,
+            range: vk::WHOLE_SIZE,
+        };
+
+        let write = WriteDescriptorSet {
+            dst_binding: binding,
+            dst_array_element: 0,
+            descriptor_count: 1,
+            descriptor_type: DescriptorType::UNIFORM_BUFFER_DYNAMIC,
+            p_buffer_info: &self.buffer_infos[binding as usize],
+            ..Default::default()
+        };
+
+        let binding = DescriptorSetBinding {
+            binding,
+            descriptor_type: DescriptorType::UNIFORM_BUFFER_DYNAMIC,
+            descriptor_count: 1,
+            stage_flags: stage,
+            p_immutable_samplers: std::ptr::null(),
+        };
+
+        self.add(binding, write);
+
+        self
+    }
     pub fn bind_storage_buffer(
         &mut self,
         binding: u32,
@@ -219,8 +291,8 @@ impl DescriptorBuilder {
     }
 
     fn recache_layout(&mut self, cache: &mut DescriptorLayoutCache) -> Result<(), Error> {
-        let mut info = DescriptorLayoutInfo::new(&self.bindings);
-        let cached_layout = cache.get(&mut info)?;
+        let info = DescriptorLayoutInfo::new(&self.bindings);
+        let cached_layout = cache.get(&info)?;
         self.cached_layout = Some((cached_layout, info));
         Ok(())
     }

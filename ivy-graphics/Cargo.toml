@@ -11,7 +11,8 @@ description = "Provides high level graphics abstractions like Meshes, Materials,
 ash = "0.32"
 glfw = "0.41"
 gltf = "0.15"
-ivy-vulkan = { path = "../ivy-vulkan", version = "*" }
+hecs = "0.5"
 ivy-resources = { path = "../ivy-resources", version = "*" }
+ivy-vulkan = { path = "../ivy-vulkan", version = "*" }
 thiserror = "1.0"
 ultraviolet = "0.8"

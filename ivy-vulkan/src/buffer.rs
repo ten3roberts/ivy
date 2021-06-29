@@ -19,6 +19,10 @@ pub enum BufferType {
     Index32,
     /// Uniform buffer
     Uniform,
+
+    /// Dynamically offsetted uniform buffer
+    UniformDynamic,
+
     /// Storage buffer
     Storage,
 
@@ -75,7 +79,9 @@ impl Buffer {
         let vk_usage = match ty {
             BufferType::Vertex => vk::BufferUsageFlags::VERTEX_BUFFER,
             BufferType::Index16 | BufferType::Index32 => vk::BufferUsageFlags::INDEX_BUFFER,
-            BufferType::Uniform => vk::BufferUsageFlags::UNIFORM_BUFFER,
+            BufferType::Uniform | BufferType::UniformDynamic => {
+                vk::BufferUsageFlags::UNIFORM_BUFFER
+            }
             BufferType::Storage => vk::BufferUsageFlags::STORAGE_BUFFER,
             BufferType::Indirect => vk::BufferUsageFlags::INDIRECT_BUFFER,
         } | match access {
