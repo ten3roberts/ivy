@@ -1,5 +1,4 @@
 use hecs::{Entity, World};
-use ivy_graphics::{Error, Material, Mesh, ShaderPass};
 use ivy_resources::{Handle, ResourceCache, ResourceManager};
 use ivy_vulkan::{
     commands::CommandBuffer, descriptors::*, vk, Buffer, BufferAccess, BufferType, VulkanContext,
@@ -10,7 +9,7 @@ use std::{
 };
 use ultraviolet::Mat4;
 
-use crate::{components::ModelMatrix, FRAMES_IN_FLIGHT};
+use crate::{components::ModelMatrix, Error, Material, Mesh, ShaderPass};
 
 /// Any entity with these components will be renderered.
 type RenderObject<'a, T> = (
@@ -50,11 +49,12 @@ impl IndirectMeshRenderer {
         context: Arc<VulkanContext>,
         descriptor_layout_cache: &mut DescriptorLayoutCache,
         capacity: ObjectId,
+        frames_in_flight: usize,
     ) -> Result<Self, Error> {
         let mut descriptor_allocator =
-            DescriptorAllocator::new(context.device().clone(), FRAMES_IN_FLIGHT as u32);
+            DescriptorAllocator::new(context.device().clone(), frames_in_flight as u32);
 
-        let frames = (0..FRAMES_IN_FLIGHT)
+        let frames = (0..frames_in_flight)
             .map(|_| {
                 FrameData::new(
                     context.clone(),
@@ -100,10 +100,12 @@ impl IndirectMeshRenderer {
         self.free_indices.clear();
         self.max_object_id = 0;
 
+        let len = self.frames.len();
+
         self.frames.clear();
         self.descriptor_allocator.reset()?;
 
-        for _ in 0..FRAMES_IN_FLIGHT {
+        for _ in 0..len {
             self.frames.push(FrameData::new(
                 self.context.clone(),
                 descriptor_layout_cache,
@@ -197,8 +199,10 @@ impl IndirectMeshRenderer {
         let pass = match self.passes.get_mut(&TypeId::of::<T>()) {
             Some(pass) => pass,
             None => {
-                self.passes
-                    .insert(TypeId::of::<T>(), PassData::new(self.context.clone(), 8)?);
+                self.passes.insert(
+                    TypeId::of::<T>(),
+                    PassData::new(self.context.clone(), 8, self.frames.len())?,
+                );
                 self.passes.get_mut(&TypeId::of::<T>()).unwrap()
             }
         };
@@ -229,14 +233,18 @@ struct PassData {
     batch_map: HashMap<BatchKey, usize>,
     indirect_buffers: Vec<Buffer>,
     object_count: ObjectId,
-    /// Dirty indirect buffers
-    dirty: [bool; FRAMES_IN_FLIGHT],
+    /// Dirty indirect buffers, one for
+    dirty: Vec<bool>,
     capacity: ObjectId,
 }
 
 impl PassData {
-    pub fn new(context: Arc<VulkanContext>, capacity: ObjectId) -> Result<Self, Error> {
-        let indirect_buffers = (0..FRAMES_IN_FLIGHT)
+    pub fn new(
+        context: Arc<VulkanContext>,
+        capacity: ObjectId,
+        frames_in_flight: usize,
+    ) -> Result<Self, Error> {
+        let indirect_buffers = (0..frames_in_flight)
             .map(|_| create_indirect_buffer(context.clone(), capacity))
             .collect::<Result<Vec<_>, _>>()?;
 
@@ -246,7 +254,7 @@ impl PassData {
             batch_map: HashMap::new(),
             indirect_buffers,
             object_count: 0,
-            dirty: [false; FRAMES_IN_FLIGHT],
+            dirty: vec![false; frames_in_flight],
             capacity,
         })
     }
@@ -260,7 +268,7 @@ impl PassData {
             *buffer = create_indirect_buffer(self.context.clone(), capacity)?;
         }
 
-        self.dirty = [true; FRAMES_IN_FLIGHT];
+        self.dirty.fill(true);
 
         self.capacity = capacity;
 
@@ -347,7 +355,7 @@ impl PassData {
         let (_, batch) = self.get_batch(shaderpass, *mesh, *material);
 
         batch.ids.push(object_marker.id);
-        self.dirty = [true; FRAMES_IN_FLIGHT];
+        self.dirty.fill(true);
         self.object_count += 1;
 
         Ok((

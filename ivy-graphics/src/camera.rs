@@ -1,3 +1,6 @@
+use derive_more::{AsRef, Deref, From, Into};
+use ivy_resources::Handle;
+use ivy_vulkan::Texture;
 use ultraviolet::Mat4;
 
 /// A camera holds a view and projection matrix.
@@ -86,5 +89,25 @@ impl Default for CameraData {
         Self {
             viewproj: Mat4::identity(),
         }
+    }
+}
+
+#[derive(AsRef, Deref, Into, From)]
+/// The color attachment of a camera.
+pub struct ColorAttachment(pub Handle<Texture>);
+
+impl ColorAttachment {
+    pub fn new(texture: Handle<Texture>) -> ColorAttachment {
+        Self(texture)
+    }
+}
+
+#[derive(AsRef, Deref, Into, From)]
+/// The depth attachment of a camera.
+pub struct DepthAttachment(pub Handle<Texture>);
+
+impl DepthAttachment {
+    pub fn new(texture: Handle<Texture>) -> DepthAttachment {
+        Self(texture)
     }
 }

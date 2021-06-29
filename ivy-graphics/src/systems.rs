@@ -2,8 +2,8 @@ use hecs::World;
 use ultraviolet::{Mat4, Rotor3};
 
 use crate::{
-    camera::Camera,
     components::{AngularVelocity, ModelMatrix, Position, Rotation, Scale},
+    Camera,
 };
 
 pub fn generate_model_matrices(world: &mut World) {

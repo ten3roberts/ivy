@@ -1,16 +1,14 @@
 use anyhow::Context;
 use atomic_refcell::AtomicRefCell;
-use camera::Camera;
-use camera_manager::{CameraIndex, CameraManager};
-use components::{AngularVelocity, Position, Rotation, Scale};
 use flume::Receiver;
 use glfw::{Action, CursorMode, Glfw, Key, Window, WindowEvent};
 use hecs::World;
-use indirect_mesh_renderer::IndirectMeshRenderer;
 use ivy_core::{App, AppEvent, Clock, Events, FromDuration, IntoDuration, Layer, Logger};
 use ivy_graphics::{
+    components::{AngularVelocity, Position, Rotation, Scale},
+    systems,
     window::{WindowExt, WindowInfo, WindowMode},
-    Material, Mesh, ShaderPass,
+    Camera, CameraIndex, CameraManager, IndirectMeshRenderer, Material, Mesh, ShaderPass,
 };
 use ivy_input::{Input, InputAxis, InputVector};
 use ivy_resources::{Handle, ResourceManager};
@@ -25,12 +23,6 @@ use ultraviolet::{Mat4, Rotor3, Vec2, Vec3, Vec4};
 use log::*;
 use window_renderer::WindowRenderer;
 
-mod camera;
-
-mod camera_manager;
-mod components;
-mod indirect_mesh_renderer;
-mod systems;
 mod window_renderer;
 
 const FRAMES_IN_FLIGHT: usize = 2;
@@ -106,7 +98,7 @@ impl LogicLayer {
         ));
 
         world.spawn((
-            Camera::perspective(1.0, extent.aspect(), 0.1, 100.0),
+            Camera::orthographic(100.0 * extent.aspect(), 100.0, 0.1, 100.0),
             Position(Vec3::new(0.0, 0.0, 50.0)),
             Rotation(Rotor3::identity()),
         ));
@@ -277,8 +269,12 @@ impl VulkanLayer {
 
         let window_renderer = WindowRenderer::new(context.clone(), window.clone())?;
 
-        let indirect_renderer =
-            IndirectMeshRenderer::new(context.clone(), &mut descriptor_layout_cache, 16)?;
+        let indirect_renderer = IndirectMeshRenderer::new(
+            context.clone(),
+            &mut descriptor_layout_cache,
+            16,
+            FRAMES_IN_FLIGHT,
+        )?;
 
         let image_renderer = ImageRenderer::new(
             context.clone(),
@@ -574,8 +570,9 @@ impl Layer for VulkanLayer {
         _events: &mut Events,
         _frame_time: Duration,
     ) -> anyhow::Result<()> {
-        self.camera_manager.register_cameras(world);
         let current_frame = self.current_frame;
+
+        self.camera_manager.register_cameras(world);
 
         let frame = &mut self.frames[current_frame];
 
@@ -644,6 +641,9 @@ impl Layer for VulkanLayer {
 
         // Submit and present
         self.window_renderer.submit(cmd, frame.fence)?;
+
+        self.current_frame = (self.current_frame + 1) % FRAMES_IN_FLIGHT;
+
         Ok(())
     }
 }

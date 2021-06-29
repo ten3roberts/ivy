@@ -1,8 +1,8 @@
 use derive_more::{Deref, From, Into};
 use std::{mem::size_of, sync::Arc};
 
+use crate::Error;
 use hecs::{Entity, World};
-use ivy_graphics::Error;
 use ivy_vulkan::{Buffer, BufferAccess, BufferType, VulkanContext};
 
 use crate::camera::{Camera, CameraData};
@@ -14,14 +14,14 @@ pub struct CameraManager {
     max_camera_index: u32,
     // The offset for each camera satisfying alignment requirements.
     dynamic_offset: u32,
-    max_cameras: u32,
+    max_capacity: u32,
 }
 
 impl CameraManager {
     /// Creates a new camera manager.
     pub fn new(
         context: Arc<VulkanContext>,
-        max_cameras: u32,
+        max_capacity: u32,
         frames_in_flight: usize,
     ) -> Result<Self, Error> {
         let dynamic_offset = (size_of::<CameraData>() as u32)
@@ -35,23 +35,23 @@ impl CameraManager {
                     context.clone(),
                     BufferType::UniformDynamic,
                     BufferAccess::Mapped,
-                    max_cameras as u64 * dynamic_offset as u64,
+                    max_capacity as u64 * dynamic_offset as u64,
                 )
             })
             .collect::<Result<Vec<_>, _>>()?;
 
         // let descriptor_allocator = DescriptorAllocator::new(
         //     context.device().clone(),
-        //     max_cameras * frames_in_flight as u32,
+        //     max_capacity * frames_in_flight as u32,
         // );
 
-        // let sets = Vec::with_capacity(max_cameras as usize * frames_in_flight);
+        // let sets = Vec::with_capacity(max_capacity as usize * frames_in_flight);
 
         Ok(Self {
             camera_buffers,
             max_camera_index: 0,
             dynamic_offset,
-            max_cameras,
+            max_capacity,
         })
     }
 
@@ -145,6 +145,11 @@ impl CameraManager {
         )?;
 
         Ok(())
+    }
+
+    /// Return the max capacity of cameras.
+    pub fn max_capacity(&self) -> u32 {
+        self.max_capacity
     }
 }
 
