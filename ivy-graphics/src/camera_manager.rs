@@ -38,13 +38,6 @@ impl CameraManager {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        // let descriptor_allocator = DescriptorAllocator::new(
-        //     context.device().clone(),
-        //     max_capacity * frames_in_flight as u32,
-        // );
-
-        // let sets = Vec::with_capacity(max_capacity as usize * frames_in_flight);
-
         Ok(Self {
             camera_buffers,
             max_camera_index: 0,
@@ -70,29 +63,11 @@ impl CameraManager {
         camera: Entity,
         // descriptor_layout_cache: &mut DescriptorLayoutCache,
     ) -> Result<CameraIndex, Error> {
-        let index = self.max_camera_index.into();
+        if self.max_camera_index >= self.max_capacity {
+            return Err(Error::CameraLimit(self.max_capacity));
+        }
 
-        // self.sets.extend(
-        //     self.camera_buffers
-        //         .iter()
-        //         .map(|buffer| -> Result<DescriptorSet, Error> {
-        //             Ok(DescriptorBuilder::new()
-        //                 .bind_uniform_sub_buffer(
-        //                     0,
-        //                     ShaderStageFlags::VERTEX,
-        //                     self.max_camera_index as u64 * size_of::<CameraData>() as u64,
-        //                     size_of::<CameraData>() as u64,
-        //                     buffer,
-        //                 )
-        //                 .build_one(
-        //                     self.context.device(),
-        //                     descriptor_layout_cache,
-        //                     &mut self.descriptor_allocator,
-        //                 )?
-        //                 .0)
-        //         })
-        //         .collect::<Result<Vec<_>, _>>()?,
-        // );
+        let index = self.max_camera_index.into();
 
         self.max_camera_index += 1;
         world.insert_one(camera, index)?;
@@ -105,7 +80,7 @@ impl CameraManager {
         &mut self,
         world: &mut World,
         // descriptor_layout_cache: &mut DescriptorLayoutCache,
-    ) {
+    ) -> Result<(), Error> {
         let ids = world
             .query_mut::<&Camera>()
             .without::<CameraIndex>()
@@ -114,9 +89,10 @@ impl CameraManager {
             .into_iter()
             .collect::<Vec<_>>();
 
-        ids.into_iter().for_each(|e| {
-            let _ = self.register(world, e);
-        });
+        ids.into_iter()
+            .try_for_each(|e| self.register(world, e).map(|_| ()))?;
+
+        Ok(())
     }
 
     /// Get a reference to the camera manager's camera buffers.

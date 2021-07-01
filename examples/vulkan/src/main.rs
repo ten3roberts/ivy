@@ -654,7 +654,7 @@ impl Layer for VulkanLayer {
     ) -> anyhow::Result<()> {
         let current_frame = self.current_frame;
 
-        self.camera_manager.register_cameras(world);
+        self.camera_manager.register_cameras(world)?;
 
         let frame = &mut self.frames[current_frame];
 
