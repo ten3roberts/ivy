@@ -126,4 +126,4 @@ impl AngularVelocity {
     Mul,
     MulAssign,
 )]
-pub struct ModelMatrix(pub Mat4);
+pub(crate) struct ModelMatrix(pub Mat4);

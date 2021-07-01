@@ -1,5 +1,5 @@
 use derive_more::*;
-use ultraviolet::Vec2;
+use ultraviolet::{Mat4, Vec2};
 
 #[derive(
     Add,
@@ -54,5 +54,25 @@ impl Size2D {
         Self(Vec2::new(x, y))
     }
 }
+
+#[derive(
+    Add,
+    AddAssign,
+    AsRef,
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Deref,
+    DerefMut,
+    Div,
+    DivAssign,
+    From,
+    Into,
+    Mul,
+    MulAssign,
+)]
+pub struct ModelMatrix(pub Mat4);
+
 /// Marker type for UI and the UI hierarchy.
 pub struct Widget;

@@ -1,9 +1,9 @@
 use hecs::{Entity, World};
 use hecs_hierarchy::{Hierarchy, Parent};
-use ivy_graphics::{components::ModelMatrix, Camera};
+use ivy_graphics::Camera;
 use ultraviolet::{Mat4, Vec3};
 
-use crate::{constraints::ConstraintQuery, Error, Position2D, Size2D, Widget};
+use crate::{Error, ModelMatrix, Position2D, Size2D, Widget, constraints::ConstraintQuery};
 
 /// Updates the UI tree starting from `root`, usualy the canvas.
 pub fn update_ui(world: &World, root: Entity) -> Result<(), Error> {
@@ -80,4 +80,28 @@ pub fn update_model_matrices(world: &World) {
                 Mat4::from_translation(pos.xyz()) * Mat4::from_nonuniform_scale(size.xyz()),
             );
         })
+}
+
+/// Satisfies all widget by adding missing ModelMatrices, Position2D and Size2D
+pub fn statisfy_widgets(world: &mut World) {
+    let entities = world
+        .query_mut::<&Widget>()
+        .without::<ModelMatrix>()
+        .without::<Position2D>()
+        .without::<Size2D>()
+        .into_iter()
+        .map(|(e, _)| e)
+        .collect::<Vec<_>>();
+
+    entities.into_iter().for_each(|e| {
+        // Ignore errors, we just collected these entities and know they exist.
+        let _ = world.insert(
+            e,
+            (
+                ModelMatrix::default(),
+                Position2D::default(),
+                Size2D::default(),
+            ),
+        );
+    });
 }

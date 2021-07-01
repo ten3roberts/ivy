@@ -1,5 +1,5 @@
 use hecs::{Entity, World};
-use ivy_graphics::{components::ModelMatrix, Error, Mesh, ShaderPass};
+use ivy_graphics::{Error, Mesh, ShaderPass};
 use ivy_resources::{Handle, ResourceCache, ResourceManager};
 use ivy_vulkan::{
     commands::CommandBuffer, descriptors::*, vk, Buffer, BufferAccess, BufferType, VulkanContext,
@@ -7,7 +7,7 @@ use ivy_vulkan::{
 
 use std::{any::TypeId, collections::HashMap, marker::PhantomData, mem::size_of, sync::Arc};
 
-use crate::image::Image;
+use crate::{image::Image, ModelMatrix};
 
 /// Any entity with these components will be renderered.
 type RenderObject<'a, T> = (
