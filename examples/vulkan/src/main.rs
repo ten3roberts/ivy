@@ -6,15 +6,14 @@ use hecs::World;
 use hecs_hierarchy::Hierarchy;
 use ivy_core::{App, AppEvent, Clock, Events, FromDuration, IntoDuration, Layer, Logger};
 use ivy_graphics::{
-    components::{AngularVelocity, ModelMatrix, Position, Rotation, Scale},
-    systems,
+    components::{AngularVelocity, Position, Rotation, Scale},
     window::{WindowExt, WindowInfo, WindowMode},
     Camera, CameraIndex, CameraManager, IndirectMeshRenderer, Material, Mesh, ShaderPass,
 };
 use ivy_input::{Input, InputAxis, InputVector};
 use ivy_resources::{Handle, ResourceManager};
 use ivy_ui::{
-    constraints::{AbsoluteOffset, AbsoluteSize, RelativeOffset},
+    constraints::{AbsoluteOffset, AbsoluteSize, Aspect, RelativeOffset, RelativeSize},
     Canvas, Image, ImageRenderer, Position2D, Size2D, Widget,
 };
 use ivy_vulkan::{commands::*, descriptors::*, vk::DescriptorType, *};
@@ -22,11 +21,14 @@ use std::{
     sync::{mpsc, Arc},
     time::Duration,
 };
-use ultraviolet::{Mat4, Rotor3, Vec2, Vec3, Vec4};
+use ultraviolet::{Rotor3, Vec2, Vec3, Vec4};
 
 use log::*;
 use window_renderer::WindowRenderer;
 
+use crate::route::Route2D;
+
+mod route;
 mod window_renderer;
 
 const FRAMES_IN_FLIGHT: usize = 2;
@@ -44,7 +46,7 @@ fn main() -> anyhow::Result<()> {
         &mut glfw,
         "ivy-vulkan",
         WindowInfo {
-            extent: Some(Extent::new(800, 600)),
+            extent: None, //Some(Extent::new(800, 600)),
 
             resizable: false,
             mode: WindowMode::Windowed,
@@ -109,8 +111,8 @@ impl LogicLayer {
 
         world.spawn((
             Canvas,
-            Position2D::new(0.0, 0.0),
             Size2D(extent.as_vec()),
+            Position2D::new(0.0, 0.0),
             Camera::default(),
         ));
 
@@ -209,10 +211,12 @@ impl Layer for LogicLayer {
 
             *camera_pos += Position(camera_rot.into_matrix() * (movement * dt * self.camera_vel));
 
-            systems::update_view_matrices(world);
-            systems::integrate_angular_velocity(world, dt);
+            route::update_routes(world, dt);
 
-            systems::update_model_matrices(world);
+            ivy_graphics::systems::update_view_matrices(world);
+            ivy_graphics::systems::integrate_angular_velocity(world, dt);
+
+            ivy_graphics::systems::update_model_matrices(world);
             ivy_ui::systems::update_model_matrices(world);
 
             self.acc -= self.timestep.secs();
@@ -282,12 +286,10 @@ fn setup_ui(
     world.attach_new::<Widget, _>(
         canvas,
         (
-            ModelMatrix(Mat4::identity()),
+            Widget,
             image,
             diffuse_pass,
-            Position2D::new(-20.0, 0.0),
             RelativeOffset::new(-0.25, -0.25),
-            Size2D::new(50.0, 50.0),
             AbsoluteSize::new(50.0, 50.0),
         ),
     )?;
@@ -295,26 +297,32 @@ fn setup_ui(
     let widget2 = world.attach_new::<Widget, _>(
         canvas,
         (
-            ModelMatrix(Mat4::identity()),
+            Widget,
             image,
             diffuse_pass,
-            Position2D::new(10.0, 0.0),
-            RelativeOffset::new(0.3, 0.1),
-            AbsoluteSize::new(50.0, 50.0),
-            Size2D::new(50.0, 50.0),
+            RelativeOffset::new(0.3, -0.5),
+            AbsoluteSize::new(200.0, 100.0),
+            Aspect::new(1.0),
+            Route2D::new(
+                vec![
+                    RelativeOffset::new(0.0, 0.0),
+                    RelativeOffset::new(0.5, 0.5),
+                    RelativeOffset::new(-0.5, 0.5),
+                ],
+                0.05,
+            ),
         ),
     )?;
 
     world.attach_new::<Widget, _>(
         widget2,
         (
-            ModelMatrix(Mat4::identity()),
+            Widget,
             image2,
             diffuse_pass,
-            Position2D::default(),
-            Size2D::new(0.0, 0.0),
-            AbsoluteSize::new(30.0, 30.0),
-            AbsoluteOffset::new(10.0, -50.0),
+            RelativeSize::new(0.2, 0.2),
+            AbsoluteOffset::new(10.0, 0.0),
+            RelativeOffset::new(0.0, -1.0),
         ),
     )?;
 
@@ -333,7 +341,7 @@ impl VulkanLayer {
         let mut descriptor_allocator = DescriptorAllocator::new(context.device().clone(), 2);
 
         let swapchain_info = ivy_vulkan::SwapchainInfo {
-            present_mode: vk::PresentModeKHR::FIFO,
+            present_mode: vk::PresentModeKHR::MAILBOX,
             ..Default::default()
         };
 
@@ -607,7 +615,6 @@ impl VulkanLayer {
                 material,
             ));
 
-            log::debug!("ModelMatrix: {:#?}", std::any::type_name::<ModelMatrix>());
             setup_ui(world, image, image2, default_shaderpass)?;
         }
 
@@ -663,6 +670,7 @@ impl Layer for VulkanLayer {
             .ok_or(anyhow!("Missing canvas"))?
             .0;
 
+        ivy_ui::systems::statisfy_widgets(world);
         ivy_ui::systems::update_canvas(world, canvas)?;
         ivy_ui::systems::update_model_matrices(world);
 
@@ -695,7 +703,6 @@ impl Layer for VulkanLayer {
         for camera in cameras.into_iter() {
             let camera_offset = self.camera_manager.offset_of(world, camera)?;
 
-            debug!("Drawing camera: {:?}", camera);
             self.indirect_renderer.draw::<DiffusePass>(
                 world,
                 cmd,
