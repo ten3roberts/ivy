@@ -8,7 +8,7 @@ use ivy_vulkan::{
     vk::{self, Semaphore},
     AttachmentInfo, AttachmentReference, ClearValue, Error, Fence, Format, Framebuffer,
     ImageLayout, LoadOp, RenderPass, RenderPassInfo, SampleCountFlags, StoreOp, SubpassInfo,
-    Swapchain, Texture, TextureInfo, TextureUsage, VulkanContext,
+    Swapchain, SwapchainInfo, Texture, TextureInfo, TextureUsage, VulkanContext,
 };
 
 /// Renderer rendering to a glfw window
@@ -32,8 +32,9 @@ impl WindowRenderer {
     pub fn new(
         context: Arc<VulkanContext>,
         window: Arc<AtomicRefCell<Window>>,
+        swapchain_info: SwapchainInfo,
     ) -> Result<Self, Error> {
-        let swapchain = Swapchain::new(context.clone(), &window.borrow())?;
+        let swapchain = Swapchain::new(context.clone(), &window.borrow(), swapchain_info)?;
 
         let extent = swapchain.extent();
 

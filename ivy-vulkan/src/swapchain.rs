@@ -11,14 +11,33 @@ use super::{Error, Extent, Texture, TextureInfo, VulkanContext};
 /// This is to allow inline allocation of per swapchain image resources through `ArrayVec`.
 pub const MAX_FRAMES: usize = 5;
 
+/// Preferred swapchain create info.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SwapchainInfo {
+    pub present_mode: vk::PresentModeKHR,
+    pub format: vk::SurfaceFormatKHR,
+}
+
+impl Default for SwapchainInfo {
+    fn default() -> Self {
+        Self {
+            present_mode: vk::PresentModeKHR::IMMEDIATE,
+            format: vk::SurfaceFormatKHR {
+                format: vk::Format::B8G8R8A8_SRGB,
+                color_space: vk::ColorSpaceKHR::SRGB_NONLINEAR,
+            },
+        }
+    }
+}
+
 #[derive(Debug)]
-pub struct SwapchainSupport {
+pub(crate) struct SwapchainSupport {
     pub capabilities: vk::SurfaceCapabilitiesKHR,
     pub formats: Vec<vk::SurfaceFormatKHR>,
     pub present_modes: Vec<vk::PresentModeKHR>,
 }
 
-pub fn query_support(
+pub(crate) fn query_support(
     surface_loader: &Surface,
     surface: SurfaceKHR,
     physical_device: vk::PhysicalDevice,
@@ -41,12 +60,13 @@ pub fn query_support(
     })
 }
 
-fn pick_format(formats: &[vk::SurfaceFormatKHR]) -> vk::SurfaceFormatKHR {
+fn pick_format(
+    formats: &[vk::SurfaceFormatKHR],
+    preferred_format: vk::SurfaceFormatKHR,
+) -> vk::SurfaceFormatKHR {
     for surface_format in formats {
         // Preferred surface_format
-        if surface_format.format == vk::Format::B8G8R8A8_SRGB
-            && surface_format.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR
-        {
+        if *surface_format == preferred_format {
             return *surface_format;
         }
     }
@@ -93,10 +113,6 @@ fn pick_extent(window: &glfw::Window, capabilities: &vk::SurfaceCapabilitiesKHR)
     (width, height).into()
 }
 
-pub fn create_loader(instance: &Instance, device: &Device) -> SwapchainLoader {
-    SwapchainLoader::new(instance, device)
-}
-
 /// Contains a queue of images and is the link between vulkan and presenting image data to the
 /// system window.
 pub struct Swapchain {
@@ -108,7 +124,11 @@ pub struct Swapchain {
 }
 
 impl Swapchain {
-    pub fn new(context: Arc<VulkanContext>, window: &glfw::Window) -> Result<Self, Error> {
+    pub fn new(
+        context: Arc<VulkanContext>,
+        window: &glfw::Window,
+        info: SwapchainInfo,
+    ) -> Result<Self, Error> {
         let support = query_support(
             context.surface_loader(),
             context.surface(),
@@ -137,9 +157,9 @@ impl Swapchain {
                 (vk::SharingMode::CONCURRENT, &queue_family_indices)
             };
 
-        let surface_format = pick_format(&support.formats);
+        let surface_format = pick_format(&support.formats, info.format);
 
-        let present_mode = pick_present_mode(&support.present_modes, vk::PresentModeKHR::IMMEDIATE);
+        let present_mode = pick_present_mode(&support.present_modes, info.present_mode);
 
         let extent = pick_extent(window, &support.capabilities);
 
@@ -249,6 +269,10 @@ impl Swapchain {
     /// Get a reference to the swapchain's images
     pub fn images(&self) -> &Vec<Texture> {
         &self.images
+    }
+
+    pub fn create_loader(instance: &Instance, device: &Device) -> SwapchainLoader {
+        SwapchainLoader::new(instance, device)
     }
 }
 

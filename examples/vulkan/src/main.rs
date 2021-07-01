@@ -267,7 +267,12 @@ impl VulkanLayer {
 
         let mut descriptor_allocator = DescriptorAllocator::new(context.device().clone(), 2);
 
-        let window_renderer = WindowRenderer::new(context.clone(), window.clone())?;
+        let swapchain_info = ivy_vulkan::SwapchainInfo {
+            present_mode: vk::PresentModeKHR::FIFO,
+            ..Default::default()
+        };
+
+        let window_renderer = WindowRenderer::new(context.clone(), window.clone(), swapchain_info)?;
 
         let indirect_renderer = IndirectMeshRenderer::new(
             context.clone(),

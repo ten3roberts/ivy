@@ -53,7 +53,7 @@ impl VulkanContext {
         let (device, pdevice_info) =
             device::create(&instance, &surface_loader, surface, instance::get_layers())?;
 
-        let swapchain_loader = swapchain::create_loader(&instance, &device);
+        let swapchain_loader = Swapchain::create_loader(&instance, &device);
 
         // Get the physical device limits
         let limits = device::get_limits(&instance, pdevice_info.physical_device);
