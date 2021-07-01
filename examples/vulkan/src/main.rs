@@ -1,18 +1,22 @@
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use atomic_refcell::AtomicRefCell;
 use flume::Receiver;
 use glfw::{Action, CursorMode, Glfw, Key, Window, WindowEvent};
 use hecs::World;
+use hecs_hierarchy::Hierarchy;
 use ivy_core::{App, AppEvent, Clock, Events, FromDuration, IntoDuration, Layer, Logger};
 use ivy_graphics::{
-    components::{AngularVelocity, Position, Rotation, Scale},
+    components::{AngularVelocity, ModelMatrix, Position, Rotation, Scale},
     systems,
     window::{WindowExt, WindowInfo, WindowMode},
     Camera, CameraIndex, CameraManager, IndirectMeshRenderer, Material, Mesh, ShaderPass,
 };
 use ivy_input::{Input, InputAxis, InputVector};
 use ivy_resources::{Handle, ResourceManager};
-use ivy_ui::{Canvas, Image, ImageRenderer, Size2D};
+use ivy_ui::{
+    constraints::{AbsoluteOffset, AbsoluteSize, RelativeOffset},
+    Canvas, Image, ImageRenderer, Position2D, Size2D, Widget,
+};
 use ivy_vulkan::{commands::*, descriptors::*, vk::DescriptorType, *};
 use std::{
     sync::{mpsc, Arc},
@@ -98,12 +102,17 @@ impl LogicLayer {
         ));
 
         world.spawn((
-            Camera::orthographic(100.0 * extent.aspect(), 100.0, 0.1, 100.0),
+            Camera::orthographic(100.0 * extent.aspect(), 100.0, 0.1, 1000.0),
             Position(Vec3::new(0.0, 0.0, 50.0)),
             Rotation(Rotor3::identity()),
         ));
 
-        world.spawn((Canvas, Size2D(Vec2::new(0.0, 1.0))));
+        world.spawn((
+            Canvas,
+            Position2D::new(0.0, 0.0),
+            Size2D(extent.as_vec()),
+            Camera::default(),
+        ));
 
         let (tx, rx) = flume::unbounded();
         events.subscribe(tx);
@@ -203,7 +212,8 @@ impl Layer for LogicLayer {
             systems::update_view_matrices(world);
             systems::integrate_angular_velocity(world, dt);
 
-            systems::generate_model_matrices(world);
+            systems::update_model_matrices(world);
+            ivy_ui::systems::update_model_matrices(world);
 
             self.acc -= self.timestep.secs();
         }
@@ -256,6 +266,61 @@ struct VulkanLayer {
     window_events: Receiver<WindowEvent>,
 }
 
+fn setup_ui(
+    world: &mut World,
+    image: Handle<Image>,
+    image2: Handle<Image>,
+    diffuse_pass: Handle<DiffusePass>,
+) -> anyhow::Result<()> {
+    let canvas = world
+        .query::<&Canvas>()
+        .iter()
+        .next()
+        .ok_or(anyhow!("Missing canvas"))?
+        .0;
+
+    world.attach_new::<Widget, _>(
+        canvas,
+        (
+            ModelMatrix(Mat4::identity()),
+            image,
+            diffuse_pass,
+            Position2D::new(-20.0, 0.0),
+            RelativeOffset::new(-0.25, -0.25),
+            Size2D::new(50.0, 50.0),
+            AbsoluteSize::new(50.0, 50.0),
+        ),
+    )?;
+
+    let widget2 = world.attach_new::<Widget, _>(
+        canvas,
+        (
+            ModelMatrix(Mat4::identity()),
+            image,
+            diffuse_pass,
+            Position2D::new(10.0, 0.0),
+            RelativeOffset::new(0.3, 0.1),
+            AbsoluteSize::new(50.0, 50.0),
+            Size2D::new(50.0, 50.0),
+        ),
+    )?;
+
+    world.attach_new::<Widget, _>(
+        widget2,
+        (
+            ModelMatrix(Mat4::identity()),
+            image2,
+            diffuse_pass,
+            Position2D::default(),
+            Size2D::new(0.0, 0.0),
+            AbsoluteSize::new(30.0, 30.0),
+            AbsoluteOffset::new(10.0, -50.0),
+        ),
+    )?;
+
+    Ok(())
+}
+
 impl VulkanLayer {
     pub fn new(
         context: Arc<VulkanContext>,
@@ -288,7 +353,7 @@ impl VulkanLayer {
             FRAMES_IN_FLIGHT,
         )?;
 
-        let camera_manager = CameraManager::new(context.clone(), 2, FRAMES_IN_FLIGHT)?;
+        let camera_manager = CameraManager::new(context.clone(), 3, FRAMES_IN_FLIGHT)?;
 
         // Data that is tied and updated per swapchain image basis
         let frames = (0..FRAMES_IN_FLIGHT)
@@ -386,6 +451,16 @@ impl VulkanLayer {
                 &textures,
                 &samplers,
                 uv_grid,
+                sampler,
+            )?);
+
+            let image2: Handle<Image> = images.insert(Image::new(
+                &context,
+                &mut descriptor_layout_cache,
+                &mut descriptor_allocator,
+                &textures,
+                &samplers,
+                grid,
                 sampler,
             )?);
 
@@ -532,13 +607,8 @@ impl VulkanLayer {
                 material,
             ));
 
-            world.spawn_batch((0..100).map(|v| {
-                (
-                    Mat4::from_translation(Vec3::new(v as f32 * 2.0, 0.0, 0.0)),
-                    image,
-                    default_shaderpass,
-                )
-            }));
+            log::debug!("ModelMatrix: {:#?}", std::any::type_name::<ModelMatrix>());
+            setup_ui(world, image, image2, default_shaderpass)?;
         }
 
         // An example uniform containing global uniform data
@@ -585,6 +655,17 @@ impl Layer for VulkanLayer {
         fence::reset(self.context.device(), &[frame.fence])?;
 
         frame.global_uniformbuffer.fill(0, &[self.global_data])?;
+
+        let canvas = world
+            .query::<&Canvas>()
+            .iter()
+            .next()
+            .ok_or(anyhow!("Missing canvas"))?
+            .0;
+
+        ivy_ui::systems::update_canvas(world, canvas)?;
+        ivy_ui::systems::update_model_matrices(world);
+
         self.camera_manager
             .update_camera_data(world, current_frame)?;
 
@@ -605,17 +686,16 @@ impl Layer for VulkanLayer {
 
         let cameras = world
             .query::<&CameraIndex>()
+            .without::<&Canvas>()
             .iter()
-            .map(|(e, camera_index)| (e, *camera_index))
+            .map(|(e, _)| e)
             .collect::<Vec<_>>();
 
         // Bind the global uniform buffer
-        for (_, camera_index) in cameras.into_iter() {
-            let camera_offset = *camera_index * self.camera_manager.dynamic_offset();
+        for camera in cameras.into_iter() {
+            let camera_offset = self.camera_manager.offset_of(world, camera)?;
 
-            // let pipeline_layout = self.resources.get(self.k)
-            // cmd.push_constants(pipeline_layout, ShaderStageFlags::VERTEX, 0, &camera_offset);
-
+            debug!("Drawing camera: {:?}", camera);
             self.indirect_renderer.draw::<DiffusePass>(
                 world,
                 cmd,
@@ -627,18 +707,22 @@ impl Layer for VulkanLayer {
         }
 
         // Draw ui
-        // self.image_renderer
-        //     .register_entities::<DiffusePass>(world, &mut self.descriptor_layout_cache)?;
+        ivy_ui::systems::update_ui(world, canvas)?;
+        self.image_renderer
+            .register_entities::<DiffusePass>(world, &mut self.descriptor_layout_cache)?;
 
-        // self.image_renderer.update(world, current_frame)?;
+        self.image_renderer.update(world, current_frame)?;
 
-        // self.image_renderer.draw::<DiffusePass>(
-        //     world,
-        //     cmd,
-        //     current_frame,
-        //     frame.set,
-        //     &self.resources,
-        // )?;
+        let canvas_offset = self.camera_manager.offset_of(world, canvas)?;
+
+        self.image_renderer.draw::<DiffusePass>(
+            world,
+            cmd,
+            current_frame,
+            frame.set,
+            &[canvas_offset],
+            &self.resources,
+        )?;
 
         // Done
         frame.commandbuffer.end_renderpass();

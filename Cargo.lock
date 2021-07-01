@@ -313,6 +313,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hecs-hierarchy"
+version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "40ba79e4b9435e330a4e23454aebedb28bb1144bb9a52daa2a6fd51c0dbc5b30"
+dependencies = [
+ "hecs",
+]
+
+[[package]]
 name = "hecs-macros"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -413,9 +422,11 @@ version = "0.1.0"
 dependencies = [
  "derive_more",
  "hecs",
+ "hecs-hierarchy",
  "ivy-graphics",
  "ivy-resources",
  "ivy-vulkan",
+ "thiserror",
  "ultraviolet",
 ]
 
@@ -881,6 +892,7 @@ dependencies = [
  "flume",
  "glfw",
  "hecs",
+ "hecs-hierarchy",
  "ivy-core",
  "ivy-graphics",
  "ivy-input",

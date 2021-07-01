@@ -27,8 +27,6 @@ impl CameraManager {
         let dynamic_offset = (size_of::<CameraData>() as u32)
             .max(context.limits().min_uniform_buffer_offset_alignment as u32);
 
-        dbg!(dynamic_offset);
-
         let camera_buffers = (0..frames_in_flight)
             .map(|_| {
                 Buffer::new_uninit(
@@ -55,16 +53,21 @@ impl CameraManager {
         })
     }
 
-    /// Returns the dynamic offset per camera
+    /// Returns the dynamic offset per camera.
     pub fn dynamic_offset(&self) -> u32 {
         self.dynamic_offset
+    }
+
+    /// Returns the dynamic offset of camera.
+    pub fn offset_of(&self, world: &World, camera: Entity) -> Result<u32, Error> {
+        Ok(**world.get::<CameraIndex>(camera)? * self.dynamic_offset)
     }
 
     /// Registers a camera entity to the GPU side buffer.
     pub fn register(
         &mut self,
         world: &mut World,
-        entity: Entity,
+        camera: Entity,
         // descriptor_layout_cache: &mut DescriptorLayoutCache,
     ) -> Result<CameraIndex, Error> {
         let index = self.max_camera_index.into();
@@ -92,7 +95,7 @@ impl CameraManager {
         // );
 
         self.max_camera_index += 1;
-        world.insert_one(entity, index)?;
+        world.insert_one(camera, index)?;
 
         Ok(index)
     }

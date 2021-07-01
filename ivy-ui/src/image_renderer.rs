@@ -1,12 +1,11 @@
 use hecs::{Entity, World};
-use ivy_graphics::{Error, Mesh, ShaderPass};
+use ivy_graphics::{components::ModelMatrix, Error, Mesh, ShaderPass};
 use ivy_resources::{Handle, ResourceCache, ResourceManager};
 use ivy_vulkan::{
     commands::CommandBuffer, descriptors::*, vk, Buffer, BufferAccess, BufferType, VulkanContext,
 };
 
 use std::{any::TypeId, collections::HashMap, marker::PhantomData, mem::size_of, sync::Arc};
-use ultraviolet::Mat4;
 
 use crate::image::Image;
 
@@ -14,12 +13,12 @@ use crate::image::Image;
 type RenderObject<'a, T> = (
     &'a Handle<T>,
     &'a Handle<Image>,
-    &'a Mat4,
+    &'a ModelMatrix,
     &'a ObjectBufferMarker,
 );
 
 /// Same as RenderObject except without ObjectBufferMarker
-type RenderObjectUnregistered<'a, T> = (&'a Handle<T>, &'a Handle<Image>, &'a Mat4);
+type RenderObjectUnregistered<'a, T> = (&'a Handle<T>, &'a Handle<Image>, &'a ModelMatrix);
 
 type ObjectId = u32;
 
@@ -138,17 +137,19 @@ impl ImageRenderer {
             .into_iter()
             .map(|(e, _)| {
                 self.object_count += 1;
-                (
+                e
+            })
+            .collect::<Vec<_>>();
+
+        inserted.into_iter().for_each(|e| {
+            world
+                .insert_one(
                     e,
                     ObjectBufferMarker {
                         id: self.get_object_id(),
                     },
                 )
-            })
-            .collect::<Vec<_>>();
-
-        inserted.into_iter().for_each(|(e, marker)| {
-            world.insert_one(e, marker).unwrap();
+                .unwrap();
         });
 
         if self.max_object_id > self.capacity {
@@ -164,7 +165,7 @@ impl ImageRenderer {
 
     /// Updates all registered entities gpu side data
     pub fn update(&mut self, world: &mut World, current_frame: usize) -> Result<(), Error> {
-        let query = world.query_mut::<(&Mat4, &ObjectBufferMarker)>();
+        let query = world.query_mut::<(&ModelMatrix, &ObjectBufferMarker)>();
 
         let frame = &mut self.frames[current_frame];
 
@@ -186,6 +187,7 @@ impl ImageRenderer {
         cmd: &CommandBuffer,
         current_frame: usize,
         global_set: DescriptorSet,
+        dynamic_offsets: &[u32],
         resources: &ResourceManager,
     ) -> Result<(), Error> {
         let frame = &mut self.frames[current_frame];
@@ -213,6 +215,7 @@ impl ImageRenderer {
             current_frame,
             global_set,
             frame_set,
+            dynamic_offsets,
             &self.square,
             &images,
         )?;
@@ -379,6 +382,7 @@ impl PassData {
         current_frame: usize,
         global_set: DescriptorSet,
         frame_set: DescriptorSet,
+        dynamic_offsets: &[u32],
         square: &Mesh,
         images: &ResourceCache<Image>,
     ) -> Result<(), Error> {
@@ -398,6 +402,7 @@ impl PassData {
                 batch.pipeline_layout,
                 0,
                 &[global_set, frame_set, image.set()],
+                dynamic_offsets,
             );
 
             cmd.bind_pipeline(batch.pipeline);
@@ -491,7 +496,7 @@ impl FrameData {
 
 #[repr(C)]
 struct ObjectData {
-    mvp: Mat4,
+    mvp: ModelMatrix,
 }
 
 #[repr(C)]

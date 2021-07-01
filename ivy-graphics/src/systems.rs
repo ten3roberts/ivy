@@ -6,7 +6,7 @@ use crate::{
     Camera,
 };
 
-pub fn generate_model_matrices(world: &mut World) {
+pub fn update_model_matrices(world: &mut World) {
     let without = world
         .query_mut::<(&Position,)>()
         .without::<ModelMatrix>()

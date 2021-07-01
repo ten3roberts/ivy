@@ -6,6 +6,8 @@ use ultraviolet::{Mat4, Rotor3, Vec3};
     AddAssign,
     AsRef,
     Clone,
+    Copy,
+    Debug,
     Default,
     Deref,
     DerefMut,
@@ -20,11 +22,19 @@ use ultraviolet::{Mat4, Rotor3, Vec3};
 )]
 pub struct Position(pub Vec3);
 
+impl Position {
+    pub fn new(x: f32, y: f32, z: f32) -> Self {
+        Self(Vec3::new(x, y, z))
+    }
+}
+
 #[derive(
     Add,
     AddAssign,
     AsRef,
     Clone,
+    Copy,
+    Debug,
     Default,
     Deref,
     DerefMut,
@@ -39,11 +49,19 @@ pub struct Position(pub Vec3);
 )]
 pub struct Rotation(pub Rotor3);
 
+impl Rotation {
+    pub fn new(roll: f32, pitch: f32, yaw: f32) -> Self {
+        Self(Rotor3::from_euler_angles(roll, pitch, yaw))
+    }
+}
+
 #[derive(
     Add,
     AddAssign,
     AsRef,
     Clone,
+    Copy,
+    Debug,
     Default,
     Deref,
     DerefMut,
@@ -58,11 +76,19 @@ pub struct Rotation(pub Rotor3);
 )]
 pub struct Scale(pub Vec3);
 
+impl Scale {
+    pub fn new(x: f32, y: f32, z: f32) -> Self {
+        Self(Vec3::new(x, y, z))
+    }
+}
+
 #[derive(
     Add,
     AddAssign,
     AsRef,
     Clone,
+    Copy,
+    Debug,
     Default,
     Deref,
     DerefMut,
@@ -77,11 +103,19 @@ pub struct Scale(pub Vec3);
 )]
 pub struct AngularVelocity(pub Vec3);
 
+impl AngularVelocity {
+    pub fn new(x: f32, y: f32, z: f32) -> Self {
+        Self(Vec3::new(x, y, z))
+    }
+}
+
 #[derive(
     Add,
     AddAssign,
     AsRef,
     Clone,
+    Copy,
+    Debug,
     Default,
     Deref,
     DerefMut,

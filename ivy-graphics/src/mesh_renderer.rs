@@ -141,17 +141,19 @@ impl IndirectMeshRenderer {
             .into_iter()
             .map(|(e, _)| {
                 self.object_count += 1;
-                (
+                e
+            })
+            .collect::<Vec<_>>();
+
+        inserted.into_iter().for_each(|e| {
+            world
+                .insert_one(
                     e,
                     ObjectBufferMarker {
                         id: self.get_object_id(),
                     },
                 )
-            })
-            .collect::<Vec<_>>();
-
-        inserted.into_iter().for_each(|(e, marker)| {
-            world.insert_one(e, marker).unwrap();
+                .unwrap();
         });
 
         if self.max_object_id > self.capacity {

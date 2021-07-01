@@ -31,7 +31,6 @@ impl ResourceManager {
         if let Ok(cache) = RwLockReadGuard::try_map(guard, |guard| guard.get::<Cell<T>>()) {
             return Ok(OwningRef::new(cache));
         } else {
-            println!("Inserting new cache");
             // Ok(self.create_cache::<T>()?.borrow())
             todo!()
         }

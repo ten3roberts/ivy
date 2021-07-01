@@ -1,6 +1,5 @@
 # Ivy
-Ivy is a modular game engine in Rust using the vulkan
-graphics API.
+Ivy is a modular game and graphics framework in Rust.
 
 ## Application
 Represents the main application managing events and window

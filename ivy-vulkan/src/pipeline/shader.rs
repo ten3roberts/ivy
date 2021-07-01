@@ -108,8 +108,6 @@ pub fn reflect<S: AsRef<spirv_reflect::ShaderModule>>(
         }
     }
 
-    dbg!(&sets);
-
     let set_layouts = sets
         .iter_mut()
         .take_while(|set| !set.bindings().is_empty())

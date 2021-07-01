@@ -81,7 +81,6 @@ impl DescriptorLayoutInfo {
         let mut mid = (len / 2).max(1);
 
         loop {
-            dbg!(mid, len);
             if mid >= self.bindings.len() || len == 0 {
                 return None;
             }

@@ -28,7 +28,7 @@ pub use framebuffer::Framebuffer;
 pub use pipeline::*;
 pub use renderpass::*;
 pub use sampler::*;
-pub use swapchain::Swapchain;
+pub use swapchain::*;
 pub use texture::*;
 pub use vertex::VertexDesc;
 

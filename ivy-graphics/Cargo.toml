@@ -9,6 +9,7 @@ description = "Provides high level graphics abstractions like Meshes, Materials,
 
 [dependencies]
 ash = "0.32"
+derive_more = "0.99"
 glfw = "0.41"
 gltf = "0.15"
 hecs = "0.5"

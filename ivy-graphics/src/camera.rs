@@ -13,30 +13,39 @@ pub struct Camera {
 }
 
 impl Camera {
-    pub fn orthographic(width: f32, height: f32, near: f32, far: f32) -> Self {
-        let view = Mat4::identity();
-
-        let hw = width / 2.0;
-        let hh = height / 2.0;
-
-        let projection = ultraviolet::projection::orthographic_vk(-hw, hw, -hh, hh, near, far);
+    /// Creates a new camera with identity projection and view matrices.
+    pub fn new() -> Self {
         Self {
-            projection,
-            view,
-            viewproj: projection * view,
+            projection: Mat4::identity(),
+            view: Mat4::identity(),
+            viewproj: Mat4::identity(),
         }
     }
 
+    /// Sets the camera to use a orthographic projection matrix.
+    pub fn set_orthographic(&mut self, width: f32, height: f32, near: f32, far: f32) {
+        let hw = width / 2.0;
+        let hh = height / 2.0;
+
+        self.projection = ultraviolet::projection::orthographic_vk(-hw, hw, -hh, hh, near, far);
+        self.update_viewproj();
+    }
+
+    pub fn set_perspective(&mut self, fov: f32, aspect: f32, near: f32, far: f32) {
+        self.projection = ultraviolet::projection::perspective_vk(fov, aspect, near, far);
+        self.update_viewproj();
+    }
+
+    pub fn orthographic(width: f32, height: f32, near: f32, far: f32) -> Self {
+        let mut camera = Camera::new();
+        camera.set_orthographic(width, height, near, far);
+        camera
+    }
+
     pub fn perspective(fov: f32, aspect: f32, near: f32, far: f32) -> Self {
-        let view = Mat4::identity();
-
-        let projection = ultraviolet::projection::perspective_vk(fov, aspect, near, far);
-
-        Self {
-            projection,
-            view,
-            viewproj: projection * view,
-        }
+        let mut camera = Camera::new();
+        camera.set_perspective(fov, aspect, near, far);
+        camera
     }
 
     fn update_viewproj(&mut self) {
@@ -68,6 +77,12 @@ impl Camera {
     pub fn set_view(&mut self, view: Mat4) {
         self.view = view;
         self.update_viewproj();
+    }
+}
+
+impl Default for Camera {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

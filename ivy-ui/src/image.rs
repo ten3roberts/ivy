@@ -35,7 +35,8 @@ impl Image {
                 context.device(),
                 descriptor_layout_cache,
                 descriptor_allocator,
-            )?;
+            )?
+            .0;
 
         Ok(Self {
             set,
