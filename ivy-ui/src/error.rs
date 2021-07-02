@@ -1,5 +1,7 @@
 use thiserror::Error;
 
+pub type Result<T> = std::result::Result<T, Error>;
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
@@ -13,4 +15,10 @@ pub enum Error {
 
     #[error(transparent)]
     NoSuchEntity(#[from] hecs::NoSuchEntity),
+}
+
+impl From<ivy_vulkan::Error> for Error {
+    fn from(e: ivy_vulkan::Error) -> Self {
+        Self::Graphics(e.into())
+    }
 }

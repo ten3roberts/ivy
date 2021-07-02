@@ -1,3 +1,4 @@
+use crate::Result;
 use anyhow::{anyhow, Context};
 use atomic_refcell::AtomicRefCell;
 use flume::Receiver;
@@ -372,8 +373,9 @@ impl VulkanLayer {
                     &mut descriptor_layout_cache,
                     camera_manager.buffer(i),
                 )
+                .map_err(|e| e.into())
             })
-            .collect::<Result<Vec<FrameData>, _>>()?;
+            .collect::<Result<Vec<FrameData>>>()?;
 
         let mut resources = ResourceManager::new();
 
@@ -769,7 +771,7 @@ impl FrameData {
         descriptor_allocator: &mut DescriptorAllocator,
         descriptor_layout_cache: &mut DescriptorLayoutCache,
         camera_buffer: &Buffer,
-    ) -> Result<Self, ivy_vulkan::Error> {
+    ) -> Result<Self> {
         let global_uniformbuffer = Buffer::new(
             context.clone(),
             BufferType::Uniform,

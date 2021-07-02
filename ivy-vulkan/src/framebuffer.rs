@@ -1,6 +1,7 @@
+use crate::Result;
 use std::sync::Arc;
 
-use super::{renderpass::MAX_ATTACHMENTS, Error, Extent, RenderPass};
+use super::{renderpass::MAX_ATTACHMENTS, Extent, RenderPass};
 use arrayvec::ArrayVec;
 use ash::version::DeviceV1_0;
 use ash::vk;
@@ -22,7 +23,7 @@ impl Framebuffer {
         renderpass: &RenderPass,
         attachments: &[T],
         extent: Extent,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         let attachment_views = attachments
             .iter()
             .map(|attachment| *attachment.as_ref())

@@ -1,3 +1,4 @@
+use crate::Result;
 use super::commands::CommandPool;
 use super::*;
 use ash::extensions::ext::DebugUtils;
@@ -35,7 +36,7 @@ pub struct VulkanContext {
 }
 
 impl VulkanContext {
-    pub fn new(glfw: &Glfw, window: &glfw::Window) -> Result<Self, Error> {
+    pub fn new(glfw: &Glfw, window: &glfw::Window) -> Result<Self> {
         let entry = entry::create()?;
         let instance = instance::create(&entry, &glfw, "Vulkan Application", "Custom")?;
 

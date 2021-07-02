@@ -1,9 +1,9 @@
-use std::sync::Arc;
-
-use super::{Error, Sampler, Texture};
+use super::{Sampler, Texture};
+use crate::Result;
 use ash::version::DeviceV1_0;
 use ash::vk;
 use ash::Device;
+use std::sync::Arc;
 
 mod allocator;
 mod builder;
@@ -30,7 +30,7 @@ impl DescriptorPool {
         max_sets: u32,
         uniformbuffer_count: u32,
         texture_count: u32,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         let pool_sizes = [
             vk::DescriptorPoolSize {
                 ty: vk::DescriptorType::UNIFORM_BUFFER,
@@ -56,10 +56,7 @@ impl DescriptorPool {
 
     /// Allocates descriptor sets from pool
     /// Allocates one descriptor set for each element in `layouts`
-    pub fn allocate(
-        &self,
-        layouts: &[vk::DescriptorSetLayout],
-    ) -> Result<Vec<vk::DescriptorSet>, Error> {
+    pub fn allocate(&self, layouts: &[vk::DescriptorSetLayout]) -> Result<Vec<vk::DescriptorSet>> {
         let alloc_info = vk::DescriptorSetAllocateInfo {
             s_type: vk::StructureType::DESCRIPTOR_SET_ALLOCATE_INFO,
             p_next: std::ptr::null(),
@@ -75,7 +72,7 @@ impl DescriptorPool {
 
     /// Resets all descriptors allocated from pool
     /// Frees all allocated descriptor sets
-    pub fn reset(&self) -> Result<(), Error> {
+    pub fn reset(&self) -> Result<()> {
         unsafe {
             self.device
                 .reset_descriptor_pool(self.descriptor_pool, Default::default())?

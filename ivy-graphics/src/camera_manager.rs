@@ -1,3 +1,4 @@
+use crate::Result;
 use derive_more::{Deref, From, Into};
 use std::{mem::size_of, sync::Arc};
 
@@ -23,7 +24,7 @@ impl CameraManager {
         context: Arc<VulkanContext>,
         max_capacity: u32,
         frames_in_flight: usize,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         let dynamic_offset = (size_of::<CameraData>() as u32)
             .max(context.limits().min_uniform_buffer_offset_alignment as u32);
 
@@ -36,7 +37,7 @@ impl CameraManager {
                     max_capacity as u64 * dynamic_offset as u64,
                 )
             })
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<std::result::Result<Vec<_>, _>>()?;
 
         Ok(Self {
             camera_buffers,
@@ -52,7 +53,7 @@ impl CameraManager {
     }
 
     /// Returns the dynamic offset of camera.
-    pub fn offset_of(&self, world: &World, camera: Entity) -> Result<u32, Error> {
+    pub fn offset_of(&self, world: &World, camera: Entity) -> Result<u32> {
         Ok(**world.get::<CameraIndex>(camera)? * self.dynamic_offset)
     }
 
@@ -62,7 +63,7 @@ impl CameraManager {
         world: &mut World,
         camera: Entity,
         // descriptor_layout_cache: &mut DescriptorLayoutCache,
-    ) -> Result<CameraIndex, Error> {
+    ) -> Result<CameraIndex> {
         if self.max_camera_index >= self.max_capacity {
             return Err(Error::CameraLimit(self.max_capacity));
         }
@@ -80,7 +81,7 @@ impl CameraManager {
         &mut self,
         world: &mut World,
         // descriptor_layout_cache: &mut DescriptorLayoutCache,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         let ids = world
             .query_mut::<&Camera>()
             .without::<CameraIndex>()
@@ -106,7 +107,7 @@ impl CameraManager {
     }
 
     /// Update GPU side data for all registered cameras.
-    pub fn update_camera_data(&mut self, world: &World, current_frame: usize) -> Result<(), Error> {
+    pub fn update_camera_data(&mut self, world: &World, current_frame: usize) -> Result<()> {
         let dynamic_offset = self.dynamic_offset;
 
         self.camera_buffers[current_frame].write(

@@ -1,12 +1,12 @@
 //! Fences provide CPU to GPU synchronization where the CPU can wait for a fence to be signaled.
 //! Fences are useful when ensuring or checking completion of submitted commandbuffers.
-use super::Error;
+use crate::Result;
 use ash::version::DeviceV1_0;
 use ash::vk;
 use ash::Device;
 pub use vk::Fence;
 
-pub fn create(device: &Device, signaled: bool) -> Result<Fence, Error> {
+pub fn create(device: &Device, signaled: bool) -> Result<Fence> {
     let create_info = vk::FenceCreateInfo {
         s_type: vk::StructureType::FENCE_CREATE_INFO,
         p_next: std::ptr::null(),
@@ -21,12 +21,12 @@ pub fn create(device: &Device, signaled: bool) -> Result<Fence, Error> {
     Ok(fence)
 }
 
-pub fn wait(device: &Device, fences: &[Fence], wait_all: bool) -> Result<(), Error> {
+pub fn wait(device: &Device, fences: &[Fence], wait_all: bool) -> Result<()> {
     unsafe { device.wait_for_fences(fences, wait_all, std::u64::MAX)? }
     Ok(())
 }
 
-pub fn reset(device: &Device, fences: &[Fence]) -> Result<(), Error> {
+pub fn reset(device: &Device, fences: &[Fence]) -> Result<()> {
     unsafe { device.reset_fences(fences)? }
     Ok(())
 }

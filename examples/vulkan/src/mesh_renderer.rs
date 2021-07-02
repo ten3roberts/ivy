@@ -1,3 +1,4 @@
+use crate::Result;
 use hecs::World;
 use ivy_graphics::{Error, Material, Mesh, ShaderPass};
 use ivy_resources::{Handle, ResourceCache};
@@ -28,7 +29,7 @@ impl MeshRenderer {
         context: Arc<VulkanContext>,
         descriptor_layout_cache: &mut DescriptorLayoutCache,
         descriptor_allocator: &mut DescriptorAllocator,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         let frames = (0..FRAMES_IN_FLIGHT)
             .map(|_| {
                 FrameData::new(
@@ -37,7 +38,7 @@ impl MeshRenderer {
                     descriptor_allocator,
                 )
             })
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<_>>()?;
 
         Ok(Self { frames })
     }
@@ -52,7 +53,7 @@ impl MeshRenderer {
         materials: &ResourceCache<Material>,
         meshes: &ResourceCache<Mesh>,
         passes: &ResourceCache<T>,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         let query = world.query_mut::<RenderObject<T>>();
 
         let frame = &mut self.frames[current_frame];
@@ -62,7 +63,7 @@ impl MeshRenderer {
         frame.object_buffer.write_slice(
             MAX_OBJECTS as u64,
             0,
-            |data: &mut [ObjectData]| -> Result<(), Error> {
+            |data: &mut [ObjectData]| -> Result<()> {
                 for (i, (_, (shaderpass, mesh, material, modelmatrix))) in
                     query.into_iter().enumerate()
                 {
@@ -104,7 +105,7 @@ impl FrameData {
         context: Arc<VulkanContext>,
         descriptor_layout_cache: &mut DescriptorLayoutCache,
         descriptor_allocator: &mut DescriptorAllocator,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         let object_buffer = Buffer::new_uninit(
             context.clone(),
             BufferType::Storage,

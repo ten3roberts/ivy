@@ -1,4 +1,5 @@
-use crate::{Buffer, BufferType, Error, Sampler, Texture};
+use crate::Result;
+use crate::{Buffer, BufferType, Sampler, Texture};
 use arrayvec::ArrayVec;
 use ash::version::DeviceV1_0;
 use ash::vk::WriteDescriptorSet;
@@ -246,7 +247,7 @@ impl DescriptorBuilder {
         cache: &mut DescriptorLayoutCache,
         allocator: &mut DescriptorAllocator,
         set: &mut vk::DescriptorSet,
-    ) -> Result<&mut Self, Error> {
+    ) -> Result<&mut Self> {
         *set = self.build_one(device, cache, allocator)?.0;
         Ok(self)
     }
@@ -256,7 +257,7 @@ impl DescriptorBuilder {
         device: &Device,
         cache: &mut DescriptorLayoutCache,
         allocator: &mut DescriptorAllocator,
-    ) -> Result<(vk::DescriptorSet, vk::DescriptorSetLayout), Error> {
+    ) -> Result<(vk::DescriptorSet, vk::DescriptorSetLayout)> {
         let mut layout = Default::default();
 
         self.layout(cache, &mut layout)?;
@@ -279,7 +280,7 @@ impl DescriptorBuilder {
         &mut self,
         cache: &mut DescriptorLayoutCache,
         layout: &mut vk::DescriptorSetLayout,
-    ) -> Result<&mut Self, Error> {
+    ) -> Result<&mut Self> {
         // Create and store the layout if it isn't up to date
         if let Some(cached_layout) = self.cached_layout.as_ref() {
             *layout = cached_layout.0;
@@ -290,7 +291,7 @@ impl DescriptorBuilder {
         }
     }
 
-    fn recache_layout(&mut self, cache: &mut DescriptorLayoutCache) -> Result<(), Error> {
+    fn recache_layout(&mut self, cache: &mut DescriptorLayoutCache) -> Result<()> {
         let info = DescriptorLayoutInfo::new(&self.bindings);
         let cached_layout = cache.get(&info)?;
         self.cached_layout = Some((cached_layout, info));

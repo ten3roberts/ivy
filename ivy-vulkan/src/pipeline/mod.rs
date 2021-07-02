@@ -1,3 +1,4 @@
+use crate::Result;
 use crate::descriptors::DescriptorLayoutInfo;
 
 use super::{descriptors::DescriptorLayoutCache, Error};
@@ -57,7 +58,7 @@ impl Pipeline {
         layout_cache: &mut DescriptorLayoutCache,
         renderpass: &RenderPass,
         info: PipelineInfo,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         let mut vertexshader = File::open(&info.vertexshader)
             .map_err(|e| Error::Io(e, Some(info.vertexshader.clone())))?;
 

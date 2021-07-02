@@ -17,7 +17,7 @@ pub mod window;
 pub use camera::{Camera, CameraData, ColorAttachment, DepthAttachment};
 pub use camera_manager::{CameraIndex, CameraManager};
 pub use document::Document;
-pub use error::Error;
+pub use error::*;
 pub use material::Material;
 pub use mesh::{Mesh, Vertex};
 pub use mesh_renderer::IndirectMeshRenderer;

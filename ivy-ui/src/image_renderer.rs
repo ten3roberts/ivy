@@ -1,5 +1,6 @@
+use crate::Result;
 use hecs::{Entity, World};
-use ivy_graphics::{Error, Mesh, ShaderPass};
+use ivy_graphics::{Mesh, ShaderPass};
 use ivy_resources::{Handle, ResourceCache, ResourceManager};
 use ivy_vulkan::{
     commands::CommandBuffer, descriptors::*, vk, Buffer, BufferAccess, BufferType, VulkanContext,
@@ -44,7 +45,7 @@ impl ImageRenderer {
         descriptor_layout_cache: &mut DescriptorLayoutCache,
         capacity: ObjectId,
         frames_in_flight: usize,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         let mut descriptor_allocator =
             DescriptorAllocator::new(context.device().clone(), frames_in_flight as u32);
 
@@ -57,7 +58,7 @@ impl ImageRenderer {
                     capacity,
                 )
             })
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<_>>>()?;
 
         let passes = HashMap::new();
 
@@ -94,7 +95,7 @@ impl ImageRenderer {
         world: &mut World,
         capacity: ObjectId,
         descriptor_layout_cache: &mut DescriptorLayoutCache,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         self.free_indices.clear();
         self.max_object_id = 0;
 
@@ -128,7 +129,7 @@ impl ImageRenderer {
         &mut self,
         world: &mut World,
         descriptor_layout_cache: &mut DescriptorLayoutCache,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         let query = world
             .query_mut::<RenderObjectUnregistered<T>>()
             .without::<ObjectBufferMarker>();
@@ -164,7 +165,7 @@ impl ImageRenderer {
     }
 
     /// Updates all registered entities gpu side data
-    pub fn update(&mut self, world: &mut World, current_frame: usize) -> Result<(), Error> {
+    pub fn update(&mut self, world: &mut World, current_frame: usize) -> Result<()> {
         let query = world.query_mut::<(&ModelMatrix, &ObjectBufferMarker)>();
 
         let frame = &mut self.frames[current_frame];
@@ -189,7 +190,7 @@ impl ImageRenderer {
         global_set: DescriptorSet,
         dynamic_offsets: &[u32],
         resources: &ResourceManager,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         let frame = &mut self.frames[current_frame];
 
         let frame_set = frame.set;
@@ -240,10 +241,10 @@ impl PassData {
         context: Arc<VulkanContext>,
         capacity: ObjectId,
         frames_in_flight: usize,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         let indirect_buffers = (0..frames_in_flight)
             .map(|_| create_indirect_buffer(context.clone(), capacity))
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<_>>>()?;
 
         Ok(Self {
             context,
@@ -257,7 +258,7 @@ impl PassData {
     }
 
     /// Resizes the indirect buffers
-    pub fn resize_indirect_buffer(&mut self, capacity: ObjectId) -> Result<(), Error> {
+    pub fn resize_indirect_buffer(&mut self, capacity: ObjectId) -> Result<()> {
         // TODO use fence epoch garbage collection
         ivy_vulkan::device::wait_idle(self.context.device())?;
 
@@ -277,7 +278,7 @@ impl PassData {
         &mut self,
         world: &mut World,
         passes: &ResourceCache<T>,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         let query = world
             .query_mut::<RenderObject<T>>()
             .without::<BatchMarker<T>>();
@@ -285,7 +286,7 @@ impl PassData {
         let unbatched = query
             .into_iter()
             .map(|(e, renderobject)| self.insert_entity::<T>(e, renderobject, passes))
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<_>>>()?;
 
         if !unbatched.is_empty() {
             unbatched.into_iter().for_each(|(e, marker)| {
@@ -297,12 +298,12 @@ impl PassData {
     }
 
     /// Builds the indirect buffers for frame
-    pub fn build_indirect(&mut self, current_frame: usize) -> Result<(), Error> {
+    pub fn build_indirect(&mut self, current_frame: usize) -> Result<()> {
         let mut index = 0;
         let indirect_buffer = &mut self.indirect_buffers[current_frame];
         let batches = &mut self.batches;
 
-        indirect_buffer.write_slice(self.object_count as u64, 0, |data| -> Result<(), Error> {
+        indirect_buffer.write_slice(self.object_count as u64, 0, |data| -> Result<()> {
             for batch in batches {
                 // Update batch offset
                 batch.offset = index;
@@ -337,7 +338,7 @@ impl PassData {
         entity: Entity,
         renderobject: RenderObject<'a, T>,
         passes: &ResourceCache<T>,
-    ) -> Result<(Entity, BatchMarker<T>), Error> {
+    ) -> Result<(Entity, BatchMarker<T>)> {
         let (shaderpass, image, _modelmatrix, object_marker) = renderobject;
 
         let shaderpass = passes.get(*shaderpass)?;
@@ -385,7 +386,7 @@ impl PassData {
         dynamic_offsets: &[u32],
         square: &Mesh,
         images: &ResourceCache<Image>,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         // Indirect buffer is not large enough
         if self.object_count > self.capacity {
             self.resize_indirect_buffer(nearest_power_2(self.object_count as _) as _)?;
@@ -469,7 +470,7 @@ impl FrameData {
         descriptor_layout_cache: &mut DescriptorLayoutCache,
         descriptor_allocator: &mut DescriptorAllocator,
         capacity: ObjectId,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         let object_buffer = Buffer::new_uninit(
             context.clone(),
             BufferType::Storage,
@@ -504,16 +505,14 @@ struct IndirectObject {
     cmd: vk::DrawIndexedIndirectCommand,
 }
 
-fn create_indirect_buffer(
-    context: Arc<VulkanContext>,
-    capacity: ObjectId,
-) -> Result<Buffer, ivy_vulkan::Error> {
+fn create_indirect_buffer(context: Arc<VulkanContext>, capacity: ObjectId) -> Result<Buffer> {
     Buffer::new_uninit(
         context,
         BufferType::Indirect,
         BufferAccess::Mapped,
         capacity as u64 * size_of::<IndirectObject>() as u64,
     )
+    .map_err(|e| e.into())
 }
 
 fn nearest_power_2(val: usize) -> usize {

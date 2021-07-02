@@ -1,10 +1,9 @@
+use crate::Result;
 use ash::version::DeviceV1_0;
 use ash::vk;
 use ash::Device;
 use smallvec::SmallVec;
 use std::{collections::HashMap, iter::repeat, sync::Arc};
-
-use crate::Error;
 
 pub use vk::DescriptorSetLayout;
 
@@ -18,11 +17,7 @@ struct Pool {
 
 impl Pool {
     /// Creates a new fresh pool
-    fn new(
-        device: &Device,
-        set_count: u32,
-        sizes: &[vk::DescriptorPoolSize],
-    ) -> Result<Self, Error> {
+    fn new(device: &Device, set_count: u32, sizes: &[vk::DescriptorPoolSize]) -> Result<Self> {
         let create_info = vk::DescriptorPoolCreateInfo {
             max_sets: set_count,
             pool_size_count: sizes.len() as u32,
@@ -63,7 +58,7 @@ impl DescriptorAllocator {
         layout: vk::DescriptorSetLayout,
         layout_info: &DescriptorLayoutInfo,
         set_count: u32,
-    ) -> Result<Vec<vk::DescriptorSet>, Error> {
+    ) -> Result<Vec<vk::DescriptorSet>> {
         let device = &self.device;
         let self_set_count = self.set_count;
 
@@ -75,7 +70,7 @@ impl DescriptorAllocator {
     }
 
     /// Resets all allocated pools and descriptor sets.
-    pub fn reset(&mut self) -> Result<(), Error> {
+    pub fn reset(&mut self) -> Result<()> {
         self.sub_allocators
             .iter_mut()
             .try_for_each(|(_, sub_allocator)| sub_allocator.reset())?;
@@ -149,7 +144,7 @@ impl DescriptorLayoutAllocator {
 
     /// Allocates a descriptor set for each element in `layouts`. Will allocate a new pool if no free pools
     /// are available. Correctly handles when descriptor set count is more than preferred `set_count`.
-    pub fn allocate(&mut self, set_count: u32) -> Result<Vec<vk::DescriptorSet>, Error> {
+    pub fn allocate(&mut self, set_count: u32) -> Result<Vec<vk::DescriptorSet>> {
         let layouts = repeat(self.layout)
             .take(set_count as usize)
             .collect::<SmallVec<[_; 8]>>();
@@ -189,7 +184,7 @@ impl DescriptorLayoutAllocator {
     }
 
     /// Resets all allocated pools and descriptor sets.
-    pub fn reset(&mut self) -> Result<(), Error> {
+    pub fn reset(&mut self) -> Result<()> {
         // Move all full pools into pools
         self.pools.extend(self.full_pools.drain(..));
 
@@ -212,7 +207,7 @@ impl DescriptorLayoutAllocator {
     }
 
     /// Allocates a new pool with `set_count` descriptors. Ignores `self.set_count`
-    fn allocate_pool(&mut self, set_count: u32) -> Result<(usize, &mut Pool), Error> {
+    fn allocate_pool(&mut self, set_count: u32) -> Result<(usize, &mut Pool)> {
         let pool = Pool::new(&self.device, set_count, &self.sizes)?;
         self.pools.push(pool);
         let idx = self.pools.len() - 1;

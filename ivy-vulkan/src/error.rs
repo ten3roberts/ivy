@@ -3,6 +3,8 @@ use std::{ffi::CString, path::PathBuf};
 use ash::vk;
 use thiserror::Error;
 
+pub type Result<T> = std::result::Result<T, Error>;
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Failed to load vulkan library")]

@@ -1,3 +1,4 @@
+use crate::Result;
 use ash::vk;
 use gltf::{buffer, Semantic};
 use std::iter::repeat;
@@ -75,11 +76,7 @@ pub struct Mesh {
 
 impl Mesh {
     /// Creates a new mesh from provided vertices and indices.
-    pub fn new(
-        context: Arc<VulkanContext>,
-        vertices: &[Vertex],
-        indices: &[u32],
-    ) -> Result<Self, Error> {
+    pub fn new(context: Arc<VulkanContext>, vertices: &[Vertex], indices: &[u32]) -> Result<Self> {
         let vertex_buffer = Buffer::new(
             context.clone(),
             BufferType::Vertex,
@@ -99,7 +96,7 @@ impl Mesh {
     }
 
     /// Creates a new square or rectangle mesh.
-    pub fn new_square(context: Arc<VulkanContext>, width: f32, height: f32) -> Result<Self, Error> {
+    pub fn new_square(context: Arc<VulkanContext>, width: f32, height: f32) -> Result<Self> {
         let hw = width / 2.0;
         let hh = height / 2.0;
 
@@ -128,7 +125,7 @@ impl Mesh {
         normals: &[Vec3],
         texcoords: &[Vec2],
         indices: &[u32],
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         let mut vertices = Vec::with_capacity(positions.len());
 
         for i in 0..positions.len() {
@@ -143,7 +140,7 @@ impl Mesh {
         context: Arc<VulkanContext>,
         mesh: gltf::Mesh,
         buffers: &[buffer::Data],
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         let mut positions = Vec::new();
         let mut normals = Vec::new();
         let mut texcoords = Vec::new();

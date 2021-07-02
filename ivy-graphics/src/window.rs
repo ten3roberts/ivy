@@ -1,3 +1,4 @@
+use crate::Result;
 use std::sync::mpsc;
 
 use glfw::{ClientApiHint, Glfw, Window, WindowHint};
@@ -36,7 +37,7 @@ pub fn create(
     glfw: &mut Glfw,
     title: &str,
     info: WindowInfo,
-) -> Result<(Window, mpsc::Receiver<(f64, glfw::WindowEvent)>), Error> {
+) -> Result<(Window, mpsc::Receiver<(f64, glfw::WindowEvent)>)> {
     glfw.window_hint(WindowHint::ClientApi(ClientApiHint::NoApi));
 
     glfw.window_hint(WindowHint::Resizable(info.resizable));

@@ -1,3 +1,4 @@
+use crate::Result;
 use ash::{
     extensions::khr::Surface,
     version::InstanceV1_0,
@@ -7,14 +8,12 @@ use ash::{
 
 use glfw::Window;
 
-use super::Error;
-
 pub fn create_loader(entry: &Entry, instance: &Instance) -> Surface {
     Surface::new(entry, instance)
 }
 
 /// Creates a vulkan surface from window
-pub fn create(instance: &Instance, window: &Window) -> Result<SurfaceKHR, Error> {
+pub fn create(instance: &Instance, window: &Window) -> Result<SurfaceKHR> {
     let mut surface: u64 = 0_u64;
     let result = window.create_window_surface(
         instance.handle().as_raw() as _,

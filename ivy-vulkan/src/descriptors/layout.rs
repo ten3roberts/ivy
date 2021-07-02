@@ -1,3 +1,4 @@
+use crate::Result;
 use std::{cmp::Ord, collections::HashMap, sync::Arc};
 
 use arrayvec::ArrayVec;
@@ -5,8 +6,6 @@ use ash::version::DeviceV1_0;
 use ash::vk;
 use ash::Device;
 use std::hash::{Hash, Hasher};
-
-use crate::Error;
 
 use super::DescriptorSetBinding;
 use super::MAX_BINDINGS;
@@ -149,7 +148,7 @@ impl DescriptorLayoutCache {
 
     /// Gets the descriptor set layout matching info. If layout does not already exist it is
     /// created. Takes info as mutable since it needs to be sorted.
-    pub fn get(&mut self, info: &DescriptorLayoutInfo) -> Result<DescriptorSetLayout, Error> {
+    pub fn get(&mut self, info: &DescriptorLayoutInfo) -> Result<DescriptorSetLayout> {
         if let Some(layout) = self.layouts.get(&info) {
             Ok(*layout)
         } else {
@@ -175,7 +174,7 @@ impl Drop for DescriptorLayoutCache {
     }
 }
 
-pub fn create(device: &Device, info: &DescriptorLayoutInfo) -> Result<DescriptorSetLayout, Error> {
+pub fn create(device: &Device, info: &DescriptorLayoutInfo) -> Result<DescriptorSetLayout> {
     let create_info = vk::DescriptorSetLayoutCreateInfo {
         binding_count: info.bindings.len() as u32,
         p_bindings: info.bindings.as_ptr(),

@@ -1,10 +1,10 @@
+use crate::Result;
 use std::mem::size_of;
 use std::sync::Arc;
 
 use crate::ClearValue;
 
 use super::renderpass::RenderPass;
-use super::Error;
 use super::{
     buffer::{Buffer, BufferType},
     device,
@@ -34,7 +34,7 @@ impl CommandPool {
         queue_family: u32,
         transient: bool,
         reset: bool,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         let flags = if transient {
             vk::CommandPoolCreateFlags::TRANSIENT
         } else {
@@ -57,7 +57,7 @@ impl CommandPool {
         })
     }
 
-    pub fn allocate(&self, count: u32) -> Result<Vec<CommandBuffer>, Error> {
+    pub fn allocate(&self, count: u32) -> Result<Vec<CommandBuffer>> {
         let alloc_info = vk::CommandBufferAllocateInfo::builder()
             .command_pool(self.commandpool)
             .level(vk::CommandBufferLevel::PRIMARY)
@@ -78,7 +78,7 @@ impl CommandPool {
         Ok(commandbuffers)
     }
 
-    pub fn allocate_one(&self) -> Result<CommandBuffer, Error> {
+    pub fn allocate_one(&self) -> Result<CommandBuffer> {
         let alloc_info = vk::CommandBufferAllocateInfo::builder()
             .command_pool(self.commandpool)
             .level(vk::CommandBufferLevel::PRIMARY)
@@ -100,7 +100,7 @@ impl CommandPool {
     // `release`: Release all memory allocated back to the system, if
     // commandbuffers are to be rerecorded, this will need to once again
     // acquire memory
-    pub fn reset(&self, release: bool) -> Result<(), Error> {
+    pub fn reset(&self, release: bool) -> Result<()> {
         let flags = if release {
             vk::CommandPoolResetFlags::RELEASE_RESOURCES
         } else {
@@ -132,7 +132,7 @@ impl CommandPool {
         &self,
         queue: vk::Queue,
         func: F,
-    ) -> Result<R, Error> {
+    ) -> Result<R> {
         let commandbuffer = self.allocate(1)?.pop().unwrap();
 
         commandbuffer.begin(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT)?;
@@ -162,7 +162,7 @@ pub struct CommandBuffer {
 
 impl CommandBuffer {
     /// Starts recording of a commandbuffer
-    pub fn begin(&self, flags: vk::CommandBufferUsageFlags) -> Result<(), Error> {
+    pub fn begin(&self, flags: vk::CommandBufferUsageFlags) -> Result<()> {
         let begin_info = vk::CommandBufferBeginInfo {
             flags,
             ..Default::default()
@@ -177,7 +177,7 @@ impl CommandBuffer {
     }
 
     // Ends recording of commandbuffer
-    pub fn end(&self) -> Result<(), Error> {
+    pub fn end(&self) -> Result<()> {
         unsafe { self.device.end_command_buffer(self.commandbuffer)? };
         Ok(())
     }
@@ -461,7 +461,7 @@ impl CommandBuffer {
         signal_semaphores: &[vk::Semaphore],
         fence: vk::Fence,
         wait_stages: &[vk::PipelineStageFlags],
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         let submit_info = vk::SubmitInfo {
             s_type: vk::StructureType::SUBMIT_INFO,
             p_next: std::ptr::null(),
@@ -487,7 +487,7 @@ impl CommandBuffer {
         signal_semaphores: &[vk::Semaphore],
         fence: vk::Fence,
         wait_stages: &[vk::PipelineStageFlags],
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         let submit_info = vk::SubmitInfo {
             s_type: vk::StructureType::SUBMIT_INFO,
             p_next: std::ptr::null(),

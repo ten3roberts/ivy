@@ -1,5 +1,6 @@
 //! A buffer represents a piece of memory that can be accessed by the GPU and used to store and
 //! write data. Buffers
+use crate::Result;
 use std::{mem, sync::Arc};
 
 use ash::vk;
@@ -74,7 +75,7 @@ impl Buffer {
         ty: BufferType,
         access: BufferAccess,
         size: DeviceSize,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         // Calculate the buffer access flags
         let vk_usage = match ty {
             BufferType::Vertex => vk::BufferUsageFlags::VERTEX_BUFFER,
@@ -139,7 +140,7 @@ impl Buffer {
         ty: BufferType,
         access: BufferAccess,
         data: &[T],
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         let size = (mem::size_of::<T>() * data.len()) as DeviceSize;
 
         let mut buffer = Self::new_uninit(context, ty, access, size)?;
@@ -158,7 +159,7 @@ impl Buffer {
         len: DeviceSize,
         offset: DeviceSize,
         write_func: F,
-    ) -> Result<(), Error>
+    ) -> Result<()>
     where
         F: FnOnce(&mut [T]) -> R,
     {
@@ -173,12 +174,7 @@ impl Buffer {
     /// `size`: Specifies the number of bytes to map (is ignored with persistent
     /// access)
     /// `offset`: Specifies the offset in bytes into buffer to map
-    pub fn write<F, R>(
-        &mut self,
-        size: DeviceSize,
-        offset: DeviceSize,
-        write_func: F,
-    ) -> Result<(), Error>
+    pub fn write<F, R>(&mut self, size: DeviceSize, offset: DeviceSize, write_func: F) -> Result<()>
     where
         F: FnOnce(*mut u8) -> R,
     {
@@ -205,7 +201,7 @@ impl Buffer {
         size: DeviceSize,
         offset: DeviceSize,
         write_func: F,
-    ) -> Result<(), Error>
+    ) -> Result<()>
     where
         F: FnOnce(*mut u8) -> R,
     {
@@ -223,7 +219,7 @@ impl Buffer {
 
     // Updates memory by mapping and unmapping
     // Will map the whole buffer
-    fn write_mapped<F, R>(&self, offset: DeviceSize, write_func: F) -> Result<(), Error>
+    fn write_mapped<F, R>(&self, offset: DeviceSize, write_func: F) -> Result<()>
     where
         F: FnOnce(*mut u8) -> R,
     {
@@ -238,12 +234,7 @@ impl Buffer {
         Ok(())
     }
 
-    fn write_staged<F, R>(
-        &self,
-        size: DeviceSize,
-        offset: DeviceSize,
-        write_func: F,
-    ) -> Result<(), Error>
+    fn write_staged<F, R>(&self, size: DeviceSize, offset: DeviceSize, write_func: F) -> Result<()>
     where
         F: FnOnce(*mut u8) -> R,
     {
@@ -272,11 +263,7 @@ impl Buffer {
         Ok(())
     }
 
-    fn write_staged_persistent<F, R>(
-        &mut self,
-        offset: DeviceSize,
-        write_func: F,
-    ) -> Result<(), Error>
+    fn write_staged_persistent<F, R>(&mut self, offset: DeviceSize, write_func: F) -> Result<()>
     where
         F: FnOnce(*mut u8) -> R,
     {
@@ -314,7 +301,7 @@ impl Buffer {
     /// Fills the buffer  with provided data
     /// Uses write internally
     /// data cannot be larger in size than maximum buffer size
-    pub fn fill<T: Sized>(&mut self, offset: DeviceSize, data: &[T]) -> Result<(), Error> {
+    pub fn fill<T: Sized>(&mut self, offset: DeviceSize, data: &[T]) -> Result<()> {
         let size = mem::size_of::<T>() * data.len();
 
         self.write(size as _, offset, |mapped| unsafe {
@@ -374,7 +361,7 @@ pub fn create_staging(
     allocator: &Allocator,
     size: DeviceSize,
     mapped: bool,
-) -> Result<(vk::Buffer, vk_mem::Allocation, vk_mem::AllocationInfo), Error> {
+) -> Result<(vk::Buffer, vk_mem::Allocation, vk_mem::AllocationInfo)> {
     let (buffer, allocation, allocation_info) = allocator.create_buffer(
         &vk::BufferCreateInfo::builder()
             .size(size)
@@ -404,7 +391,7 @@ pub fn copy(
     dst_buffer: vk::Buffer,
     size: DeviceSize,
     offset: DeviceSize,
-) -> Result<(), Error> {
+) -> Result<()> {
     let region = vk::BufferCopy {
         src_offset: 0,
         dst_offset: offset,
@@ -423,7 +410,7 @@ pub fn copy_to_image(
     image: vk::Image,
     layout: vk::ImageLayout,
     extent: Extent,
-) -> Result<(), Error> {
+) -> Result<()> {
     let region = vk::BufferImageCopy {
         buffer_offset: 0,
         buffer_row_length: 0,

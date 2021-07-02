@@ -21,7 +21,7 @@ pub mod vertex;
 
 pub use buffer::*;
 pub use context::VulkanContext;
-pub use error::Error;
+pub use error::*;
 pub use extent::Extent;
 pub use fence::Fence;
 pub use framebuffer::Framebuffer;

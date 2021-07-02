@@ -1,3 +1,4 @@
+use crate::Result;
 use ash::extensions::khr::Surface;
 pub use ash::extensions::khr::Swapchain as SwapchainLoader;
 use ash::vk::{self, SurfaceKHR};
@@ -5,7 +6,7 @@ use ash::Device;
 use ash::Instance;
 use std::{cmp, sync::Arc};
 
-use super::{Error, Extent, Texture, TextureInfo, VulkanContext};
+use super::{Extent, Texture, TextureInfo, VulkanContext};
 
 /// The maximum number of images in the swapchain. Actual image count may be less but never more.
 /// This is to allow inline allocation of per swapchain image resources through `ArrayVec`.
@@ -41,7 +42,7 @@ pub(crate) fn query_support(
     surface_loader: &Surface,
     surface: SurfaceKHR,
     physical_device: vk::PhysicalDevice,
-) -> Result<SwapchainSupport, Error> {
+) -> Result<SwapchainSupport> {
     let capabilities = unsafe {
         surface_loader.get_physical_device_surface_capabilities(physical_device, surface)?
     };
@@ -128,7 +129,7 @@ impl Swapchain {
         context: Arc<VulkanContext>,
         window: &glfw::Window,
         info: SwapchainInfo,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         let support = query_support(
             context.surface_loader(),
             context.surface(),
@@ -196,7 +197,7 @@ impl Swapchain {
         let images = images
             .iter()
             .map(|image| Texture::from_image(context.clone(), image_info, *image, None))
-            .collect::<Result<_, _>>()?;
+            .collect::<std::result::Result<_, _>>()?;
 
         Ok(Swapchain {
             context,
@@ -207,7 +208,7 @@ impl Swapchain {
         })
     }
 
-    pub fn next_image(&self, semaphore: vk::Semaphore) -> Result<u32, vk::Result> {
+    pub fn next_image(&self, semaphore: vk::Semaphore) -> Result<u32> {
         let (image_index, _) = unsafe {
             self.context.swapchain_loader().acquire_next_image(
                 self.swapchain,
@@ -225,7 +226,7 @@ impl Swapchain {
         queue: vk::Queue,
         wait_semaphores: &[vk::Semaphore],
         image_index: u32,
-    ) -> Result<bool, vk::Result> {
+    ) -> Result<bool> {
         let present_info = vk::PresentInfoKHR {
             s_type: vk::StructureType::PRESENT_INFO_KHR,
             p_next: std::ptr::null(),

@@ -1,4 +1,5 @@
-use super::{Error, Texture, TextureUsage};
+use super::{Texture, TextureUsage};
+use crate::Result;
 use arrayvec::ArrayVec;
 use ash::version::DeviceV1_0;
 use ash::vk::SampleCountFlags;
@@ -162,7 +163,7 @@ pub struct RenderPass {
 }
 
 impl RenderPass {
-    pub fn new(device: Arc<Device>, info: &RenderPassInfo) -> Result<Self, Error> {
+    pub fn new(device: Arc<Device>, info: &RenderPassInfo) -> Result<Self> {
         // Convert attachment infos into vulkan equivalent
         let vk_attachments = info
             .attachments

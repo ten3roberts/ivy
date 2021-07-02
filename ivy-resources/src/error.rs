@@ -1,5 +1,7 @@
 use thiserror::Error;
 
+pub type Result<T> = std::result::Result<T, Error>;
+
 #[derive(Debug, Error, Clone, Copy)]
 pub enum Error {
     #[error("Invalid handle for {0}")]

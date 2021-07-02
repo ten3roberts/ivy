@@ -1,12 +1,13 @@
+use crate::Result;
 use hecs::{Entity, World};
 use hecs_hierarchy::{Hierarchy, Parent};
 use ivy_graphics::Camera;
 use ultraviolet::{Mat4, Vec3};
 
-use crate::{Error, ModelMatrix, Position2D, Size2D, Widget, constraints::ConstraintQuery};
+use crate::{constraints::ConstraintQuery, ModelMatrix, Position2D, Size2D, Widget};
 
 /// Updates the UI tree starting from `root`, usualy the canvas.
-pub fn update_ui(world: &World, root: Entity) -> Result<(), Error> {
+pub fn update_ui(world: &World, root: Entity) -> Result<()> {
     let mut query = world.query_one::<(&Position2D, &Size2D)>(root)?;
 
     let (position, size) = query.get().ok_or(hecs::NoSuchEntity)?;
@@ -27,7 +28,7 @@ fn apply_constaints(
     entity: Entity,
     parent_pos: &Position2D,
     parent_size: &Size2D,
-) -> Result<(), hecs::NoSuchEntity> {
+) -> Result<()> {
     let mut constaints_query = world.query_one::<ConstraintQuery>(entity)?;
     let constaints = constaints_query.get().ok_or(hecs::NoSuchEntity)?;
 
@@ -54,7 +55,7 @@ fn apply_constaints(
 }
 
 /// Updates the canvas and all associated widgets
-pub fn update_canvas(world: &World, canvas: Entity) -> Result<(), Error> {
+pub fn update_canvas(world: &World, canvas: Entity) -> Result<()> {
     let mut camera_query =
         world.query_one::<(&mut Camera, &Size2D, Option<&Position2D>)>(canvas)?;
 

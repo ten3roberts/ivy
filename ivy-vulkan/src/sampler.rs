@@ -1,6 +1,7 @@
+use crate::Result;
 use std::sync::Arc;
 
-use super::{Error, VulkanContext};
+use super::VulkanContext;
 use ash::version::DeviceV1_0;
 use ash::vk;
 
@@ -34,7 +35,7 @@ pub struct Sampler {
 
 impl Sampler {
     // Creates a new sampler from the specified sampling options
-    pub fn new(context: Arc<VulkanContext>, info: SamplerInfo) -> Result<Self, Error> {
+    pub fn new(context: Arc<VulkanContext>, info: SamplerInfo) -> Result<Self> {
         let max_anisotropy = info.anisotropy.max(context.limits().max_sampler_anisotropy);
         let anisotropy_enable = if max_anisotropy > 1.0 {
             vk::TRUE

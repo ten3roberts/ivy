@@ -1,3 +1,4 @@
+use crate::Result;
 use atomic_refcell::AtomicRefCell;
 use std::sync::Arc;
 
@@ -6,9 +7,9 @@ use ivy_vulkan::{
     commands::CommandBuffer,
     device, semaphore,
     vk::{self, Semaphore},
-    AttachmentInfo, AttachmentReference, ClearValue, Error, Fence, Format, Framebuffer,
-    ImageLayout, LoadOp, RenderPass, RenderPassInfo, SampleCountFlags, StoreOp, SubpassInfo,
-    Swapchain, SwapchainInfo, Texture, TextureInfo, TextureUsage, VulkanContext,
+    AttachmentInfo, AttachmentReference, ClearValue, Fence, Format, Framebuffer, ImageLayout,
+    LoadOp, RenderPass, RenderPassInfo, SampleCountFlags, StoreOp, SubpassInfo, Swapchain,
+    SwapchainInfo, Texture, TextureInfo, TextureUsage, VulkanContext,
 };
 
 /// Renderer rendering to a glfw window
@@ -33,7 +34,7 @@ impl WindowRenderer {
         context: Arc<VulkanContext>,
         window: Arc<AtomicRefCell<Window>>,
         swapchain_info: SwapchainInfo,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         let swapchain = Swapchain::new(context.clone(), &window.borrow(), swapchain_info)?;
 
         let extent = swapchain.extent();
@@ -93,8 +94,9 @@ impl WindowRenderer {
                     &[image, &depth_attachment],
                     extent,
                 )
+                .map_err(|e| e.into())
             })
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<_>>>()?;
 
         let render_semaphore = semaphore::create(context.device())?;
         let present_semaphore = semaphore::create(context.device())?;
@@ -113,7 +115,7 @@ impl WindowRenderer {
     }
 
     /// Acquires the next swapchain image and starts a renderpass in the passed commandbuffer
-    pub fn begin(&mut self, commandbuffer: &CommandBuffer) -> Result<(), Error> {
+    pub fn begin(&mut self, commandbuffer: &CommandBuffer) -> Result<()> {
         self.image_index = self.swapchain.next_image(self.present_semaphore).unwrap();
 
         let framebuffer = &self.framebuffers[self.image_index as usize];
@@ -133,7 +135,7 @@ impl WindowRenderer {
 
     /// Submits and presents the commandbuffer results to the window.
     /// Signals the provided fence when done.
-    pub fn submit(&mut self, commandbuffer: &CommandBuffer, fence: Fence) -> Result<(), Error> {
+    pub fn submit(&mut self, commandbuffer: &CommandBuffer, fence: Fence) -> Result<()> {
         // // Submit command buffers and signal fence `current_frame` when done
         commandbuffer
             .submit(

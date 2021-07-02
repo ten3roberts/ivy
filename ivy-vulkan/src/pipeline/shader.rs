@@ -1,3 +1,4 @@
+use crate::Result;
 use arrayvec::ArrayVec;
 use std::io::{Read, Seek};
 
@@ -19,7 +20,7 @@ pub struct ShaderModule {
 }
 
 impl ShaderModule {
-    pub fn new<R: Read + Seek>(device: &Device, code: &mut R) -> Result<Self, Error> {
+    pub fn new<R: Read + Seek>(device: &Device, code: &mut R) -> Result<Self> {
         let code = ash::util::read_spv(code).map_err(|e| Error::Io(e, None))?;
 
         let create_info = vk::ShaderModuleCreateInfo::builder().code(&code);
@@ -64,7 +65,7 @@ pub fn reflect<S: AsRef<spirv_reflect::ShaderModule>>(
     modules: &[S],
     layout_cache: &mut DescriptorLayoutCache,
     override_sets: &[DescriptorLayoutInfo],
-) -> Result<vk::PipelineLayout, Error> {
+) -> Result<vk::PipelineLayout> {
     let mut sets: [DescriptorLayoutInfo; MAX_SETS] = Default::default();
 
     let mut push_constant_ranges: ArrayVec<[vk::PushConstantRange; MAX_PUSH_CONSTANTS]> =
@@ -112,7 +113,7 @@ pub fn reflect<S: AsRef<spirv_reflect::ShaderModule>>(
         .iter_mut()
         .take_while(|set| !set.bindings().is_empty())
         .map(|set| layout_cache.get(set))
-        .collect::<Result<ArrayVec<[_; MAX_SETS]>, _>>()?;
+        .collect::<std::result::Result<ArrayVec<[_; MAX_SETS]>, _>>()?;
 
     let create_info = vk::PipelineLayoutCreateInfo {
         set_layout_count: set_layouts.len() as u32,

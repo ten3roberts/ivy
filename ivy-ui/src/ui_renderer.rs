@@ -1,3 +1,4 @@
+use crate::Result;
 use std::sync::Arc;
 
 use hecs::World;
@@ -26,7 +27,7 @@ impl UIRenderer {
         context: Arc<VulkanContext>,
         descriptor_layout_cache: &mut DescriptorLayoutCache,
         frames_in_flight: usize,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         let mut descriptor_allocator =
             DescriptorAllocator::new(context.device().clone(), frames_in_flight as u32);
 
@@ -38,7 +39,7 @@ impl UIRenderer {
                     &mut descriptor_allocator,
                 )
             })
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<_>>()?;
 
         let image_renderer = ImageRenderer::new(
             context.clone(),
@@ -60,7 +61,7 @@ impl UIRenderer {
         cmd: &CommandBuffer,
         current_frame: usize,
         resources: &ResourceManager,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         let frame = &mut self.frames[current_frame];
 
         let frame_set = frame.set;
@@ -82,7 +83,7 @@ impl FrameData {
         context: Arc<VulkanContext>,
         descriptor_layout_cache: &mut DescriptorLayoutCache,
         descriptor_allocator: &mut DescriptorAllocator,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         let uniformbuffer = Buffer::new(
             context.clone(),
             ivy_vulkan::BufferType::Uniform,

@@ -1,11 +1,10 @@
+use crate::Result;
 use ash::vk::{DescriptorSet, DescriptorSetLayout, ShaderStageFlags};
 use ivy_resources::{Handle, ResourceCache};
 use ivy_vulkan::{
     descriptors::{DescriptorAllocator, DescriptorBuilder, DescriptorLayoutCache},
     Sampler, Texture, VulkanContext,
 };
-
-use crate::Error;
 
 /// A material contains shader properties such as albedo and other parameters. A material does not
 /// define the graphics pipeline nor shaders as that is per pass dependent.
@@ -26,7 +25,7 @@ impl Material {
         samplers: &ResourceCache<Sampler>,
         albedo: Handle<Texture>,
         sampler: Handle<Sampler>,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         let (set, layout) = DescriptorBuilder::new()
             .bind_combined_image_sampler(
                 0,

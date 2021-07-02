@@ -1,4 +1,5 @@
 use super::Error;
+use crate::Result;
 use ash::{version::EntryV1_0, version::InstanceV1_0, Instance};
 use ash::{vk, Entry};
 use glfw::Glfw;
@@ -22,12 +23,7 @@ pub fn get_layers() -> &'static [&'static str] {
 }
 
 /// Creates a vulkan instance with the appropriate extensions and layers
-pub fn create(
-    entry: &Entry,
-    glfw: &Glfw,
-    name: &str,
-    engine_name: &str,
-) -> Result<Instance, Error> {
+pub fn create(entry: &Entry, glfw: &Glfw, name: &str, engine_name: &str) -> Result<Instance> {
     let name = CString::new(name).unwrap();
     let engine_name = CString::new(engine_name).unwrap();
 
@@ -41,7 +37,7 @@ pub fn create(
         .into_iter()
         .chain(INSTANCE_EXTENSIONS.iter().map(|s| s.to_string()))
         .map(CString::new)
-        .collect::<Result<Vec<_>, _>>()
+        .collect::<std::result::Result<Vec<_>, _>>()
         .unwrap();
 
     // Ensure extensions are present
@@ -61,7 +57,7 @@ pub fn create(
     let layers = instance_layers
         .iter()
         .map(|s| CString::new(*s))
-        .collect::<Result<Vec<_>, _>>()
+        .collect::<std::result::Result<Vec<_>, _>>()
         .unwrap();
 
     // Ensure all requested layers are present
@@ -90,10 +86,7 @@ pub fn destroy(instance: &Instance) {
 }
 
 /// Returns a vector of missing extensions
-fn get_missing_extensions(
-    entry: &Entry,
-    extensions: &[CString],
-) -> Result<Vec<CString>, vk::Result> {
+fn get_missing_extensions(entry: &Entry, extensions: &[CString]) -> Result<Vec<CString>> {
     let available = entry.enumerate_instance_extension_properties()?;
 
     Ok(extensions
@@ -111,7 +104,7 @@ fn get_missing_extensions(
 }
 
 /// Returns a vector of missing layers
-fn get_missing_layers(entry: &Entry, layers: &[CString]) -> Result<Vec<CString>, vk::Result> {
+fn get_missing_layers(entry: &Entry, layers: &[CString]) -> Result<Vec<CString>> {
     let available = entry.enumerate_instance_layer_properties()?;
 
     Ok(layers

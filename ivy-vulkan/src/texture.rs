@@ -1,3 +1,4 @@
+use crate::Result;
 use std::{path::Path, sync::Arc};
 
 use ash::version::DeviceV1_0;
@@ -66,7 +67,7 @@ impl Texture {
     /// Loads a color texture from an image file.
     /// Uses the width and height of the loaded image, no resizing.
     /// Uses mipmapping.
-    pub fn load<P: AsRef<Path>>(context: Arc<VulkanContext>, path: P) -> Result<Self, Error> {
+    pub fn load<P: AsRef<Path>>(context: Arc<VulkanContext>, path: P) -> Result<Self> {
         let image = ivy_stb::Image::load(&path, 4)
             .ok_or_else(|| Error::ImageLoading(path.as_ref().to_owned()))?;
 
@@ -86,7 +87,7 @@ impl Texture {
 
     /// Creates a texture from provided raw pixels
     /// Note, raw pixels must match format, width, and height
-    pub fn new(context: Arc<VulkanContext>, info: TextureInfo) -> Result<Self, Error> {
+    pub fn new(context: Arc<VulkanContext>, info: TextureInfo) -> Result<Self> {
         // Re-alias as mutable
         let mut info = info;
         let mut mip_levels = calculate_mip_levels(info.extent);
@@ -158,7 +159,7 @@ impl Texture {
         info: TextureInfo,
         image: vk::Image,
         allocation: Option<vk_mem::Allocation>,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         let aspect_mask = match info.usage {
             TextureUsage::Sampled => vk::ImageAspectFlags::COLOR,
             TextureUsage::ColorAttachment => vk::ImageAspectFlags::COLOR,
@@ -192,7 +193,7 @@ impl Texture {
         })
     }
 
-    pub fn write(&self, size: vk::DeviceSize, pixels: &[u8]) -> Result<(), Error> {
+    pub fn write(&self, size: vk::DeviceSize, pixels: &[u8]) -> Result<()> {
         let allocator = self.context.allocator();
         // Create a new or reuse staging buffer
         let (staging_buffer, staging_allocation, staging_info) =
@@ -323,7 +324,7 @@ fn generate_mipmaps(
     image: vk::Image,
     extent: Extent,
     mip_levels: u32,
-) -> Result<(), Error> {
+) -> Result<()> {
     let mut barrier = vk::ImageMemoryBarrier {
         s_type: vk::StructureType::IMAGE_MEMORY_BARRIER,
         p_next: std::ptr::null(),
@@ -449,7 +450,7 @@ fn transition_layout(
     mip_levels: u32,
     old_layout: vk::ImageLayout,
     new_layout: vk::ImageLayout,
-) -> Result<(), Error> {
+) -> Result<()> {
     let (src_access_mask, dst_access_mask, src_stage_mask, dst_stage_mask) =
         match (old_layout, new_layout) {
             (vk::ImageLayout::UNDEFINED, vk::ImageLayout::TRANSFER_DST_OPTIMAL) => (

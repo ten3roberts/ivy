@@ -1,3 +1,4 @@
+use crate::Result;
 use std::any;
 
 use anymap::AnyMap;
@@ -25,7 +26,7 @@ impl ResourceManager {
     }
 
     /// Returns a reference to ResourceCache for type `T`
-    pub fn cache<T: 'static>(&self) -> Result<OwningRef<AtomicRef<ResourceCache<T>>>, Error> {
+    pub fn cache<T: 'static>(&self) -> Result<OwningRef<AtomicRef<ResourceCache<T>>>> {
         let guard = self.caches.read();
 
         if let Ok(cache) = RwLockReadGuard::try_map(guard, |guard| guard.get::<Cell<T>>()) {
@@ -37,7 +38,7 @@ impl ResourceManager {
     }
 
     /// Returns a mutable reference to ResourceCache for type `T`
-    // pub fn cache_mut<T: 'static>(&self) -> Result<AtomicRefMut<ResourceCache<T>>, Error> {
+    // pub fn cache_mut<T: 'static>(&self) -> Result<AtomicRefMut<ResourceCache<T>>> {
     //     let guard = self.caches.read();
 
     //     if let Some(cache) = guard.get::<Cell<T>>().map(|val| val.borrow_mut()) {
@@ -49,7 +50,7 @@ impl ResourceManager {
     // }
 
     /// Returns a reference to the resource pointed to by Handle<T>. Equivalent to using `cache()` and then `get()`. If dereferencing many handles, prefer gettting the cache first and the using it directly.
-    // pub fn get<T: 'static>(&self, handle: Handle<T>) -> Result<AtomicRef<T>, Error> {
+    // pub fn get<T: 'static>(&self, handle: Handle<T>) -> Result<AtomicRef<T>> {
     //     let cache = self.cache::<T>()?;
 
     //     AtomicRef::filter_map(cache, |cache| cache.get(handle).ok())
@@ -57,7 +58,7 @@ impl ResourceManager {
     // }
 
     /// Returns a mutable reference to the resource pointed to by Handle<T>. Equivalent to using `cache()` and then `get()`. If dereferencing many handles, prefer gettting the cache first and the using it directly.
-    // pub fn get_mut<T: 'static>(&self, handle: Handle<T>) -> Result<AtomicRefMut<T>, Error> {
+    // pub fn get_mut<T: 'static>(&self, handle: Handle<T>) -> Result<AtomicRefMut<T>> {
     //     let cache = self.cache_mut::<T>()?;
 
     //     AtomicRefMut::filter_map(cache, |cache| cache.get_mut(handle).ok())
@@ -66,14 +67,14 @@ impl ResourceManager {
 
     /// Inserts a resource into the correct cache and returns a handle to acces the resource.
     /// Fails if the cache does not exists.
-    // pub fn insert<T: 'static>(&self, resource: T) -> Result<Handle<T>, Error> {
+    // pub fn insert<T: 'static>(&self, resource: T) -> Result<Handle<T>> {
     //     let mut cache = self.cache_mut::<T>()?;
 
     //     Ok(cache.insert(resource))
     // }
 
     /// Creates a resource cache for `T`. Does nothing if cache already exists.
-    pub fn create_cache<T: 'static>(&mut self) -> Result<&AtomicRefCell<ResourceCache<T>>, Error> {
+    pub fn create_cache<T: 'static>(&mut self) -> Result<&AtomicRefCell<ResourceCache<T>>> {
         let guard = self.caches.write();
         let val = guard
             .entry::<Cell<T>>()

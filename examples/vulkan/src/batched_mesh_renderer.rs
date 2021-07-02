@@ -1,3 +1,4 @@
+use crate::Result;
 use hecs::{Entity, World};
 use ivy_graphics::{Error, Material, Mesh, ShaderPass};
 use ivy_resources::{Handle, ResourceCache};
@@ -40,7 +41,7 @@ impl BatchedMeshRenderer {
         context: Arc<VulkanContext>,
         descriptor_layout_cache: &mut DescriptorLayoutCache,
         descriptor_allocator: &mut DescriptorAllocator,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         let frames = (0..FRAMES_IN_FLIGHT)
             .map(|_| {
                 FrameData::new(
@@ -49,7 +50,7 @@ impl BatchedMeshRenderer {
                     descriptor_allocator,
                 )
             })
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<_>>()?;
 
         let passes = HashMap::new();
 
@@ -90,7 +91,7 @@ impl BatchedMeshRenderer {
     }
 
     /// Updates all registered entities gpu side data
-    pub fn update(&mut self, world: &mut World, current_frame: usize) -> Result<(), Error> {
+    pub fn update(&mut self, world: &mut World, current_frame: usize) -> Result<()> {
         let query = world.query_mut::<(&ModelMatrix, &ObjectBufferMarker)>();
 
         let frame = &mut self.frames[current_frame];
@@ -116,7 +117,7 @@ impl BatchedMeshRenderer {
         materials: &ResourceCache<Material>,
         meshes: &ResourceCache<Mesh>,
         passes: &ResourceCache<T>,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         self.register_entities::<T>(world);
 
         let frame = &mut self.frames[current_frame];
@@ -154,7 +155,7 @@ impl PassData {
         &mut self,
         world: &mut World,
         passes: &ResourceCache<T>,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         let query = world
             .query_mut::<RenderObject<T>>()
             .without::<BatchMarker<T>>();
@@ -162,7 +163,7 @@ impl PassData {
         let unbatched = query
             .into_iter()
             .map(|(e, renderobject)| self.insert_entity::<T>(e, renderobject, passes))
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<_>>()?;
 
         unbatched.into_iter().for_each(|(e, marker)| {
             world.insert_one(e, marker).unwrap();
@@ -178,7 +179,7 @@ impl PassData {
         frame_set: DescriptorSet,
         meshes: &ResourceCache<Mesh>,
         materials: &ResourceCache<Material>,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         for batch in &self.batches {
             let material = materials.get(batch.material)?;
             let mesh = meshes.get(batch.mesh)?;
@@ -209,7 +210,7 @@ impl PassData {
         entity: Entity,
         renderobject: RenderObject<'a, T>,
         passes: &ResourceCache<T>,
-    ) -> Result<(Entity, BatchMarker<T>), Error> {
+    ) -> Result<(Entity, BatchMarker<T>)> {
         let (shaderpass, mesh, material, _modelmatrix, object_marker) = renderobject;
 
         let shaderpass = passes.get(*shaderpass)?;
@@ -302,7 +303,7 @@ impl FrameData {
         context: Arc<VulkanContext>,
         descriptor_layout_cache: &mut DescriptorLayoutCache,
         descriptor_allocator: &mut DescriptorAllocator,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         let object_buffer = Buffer::new_uninit(
             context.clone(),
             BufferType::Storage,

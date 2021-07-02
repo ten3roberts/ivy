@@ -1,3 +1,4 @@
+use crate::Result;
 use std::any::type_name;
 
 use generational_arena::Arena;
@@ -22,13 +23,13 @@ impl<T: 'static + Sized> ResourceCache<T> {
         self.resources.insert(resource).into()
     }
 
-    pub fn get(&self, handle: Handle<T>) -> Result<&T, Error> {
+    pub fn get(&self, handle: Handle<T>) -> Result<&T> {
         self.resources
             .get(handle.into())
             .ok_or_else(|| Error::InvalidHandle(type_name::<T>()))
     }
 
-    pub fn get_mut(&mut self, handle: Handle<T>) -> Result<&mut T, Error> {
+    pub fn get_mut(&mut self, handle: Handle<T>) -> Result<&mut T> {
         self.resources
             .get_mut(handle.into())
             .ok_or_else(|| Error::InvalidHandle(type_name::<T>()))

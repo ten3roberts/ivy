@@ -1,4 +1,4 @@
-use crate::Error;
+use crate::Result;
 use ash::extensions::ext::DebugUtils;
 use ash::vk;
 use ash::vk::DebugUtilsMessengerEXT;
@@ -6,10 +6,7 @@ use ash::Entry;
 use ash::Instance;
 use std::ffi::{c_void, CStr};
 
-pub fn create(
-    entry: &Entry,
-    instance: &Instance,
-) -> Result<(DebugUtils, DebugUtilsMessengerEXT), Error> {
+pub fn create(entry: &Entry, instance: &Instance) -> Result<(DebugUtils, DebugUtilsMessengerEXT)> {
     let debug_utils = DebugUtils::new(entry, instance);
 
     let create_info = vk::DebugUtilsMessengerCreateInfoEXT::builder()

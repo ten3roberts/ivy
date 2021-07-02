@@ -2,6 +2,7 @@
 //! communicating with the GPU.
 
 use super::{swapchain, Error};
+use crate::Result;
 use ash::{
     extensions::khr::Surface,
     vk::{self, SurfaceKHR},
@@ -26,7 +27,7 @@ impl QueueFamilies {
         device: vk::PhysicalDevice,
         surface_loader: &Surface,
         surface: SurfaceKHR,
-    ) -> Result<QueueFamilies, Error> {
+    ) -> Result<QueueFamilies> {
         let family_properties =
             unsafe { instance.get_physical_device_queue_family_properties(device) };
         let mut queue_families = QueueFamilies {
@@ -172,7 +173,7 @@ fn get_missing_extensions(
     instance: &Instance,
     device: vk::PhysicalDevice,
     extensions: &[CString],
-) -> Result<Vec<CString>, Error> {
+) -> Result<Vec<CString>> {
     let available = unsafe { instance.enumerate_device_extension_properties(device)? };
 
     Ok(extensions
@@ -195,7 +196,7 @@ fn pick_physical_device(
     surface_loader: &Surface,
     surface: SurfaceKHR,
     extensions: &[CString],
-) -> Result<PhysicalDeviceInfo, Error> {
+) -> Result<PhysicalDeviceInfo> {
     let devices = unsafe { instance.enumerate_physical_devices()? };
 
     devices
@@ -211,11 +212,11 @@ pub fn create(
     surface_loader: &Surface,
     surface: SurfaceKHR,
     layers: &[&str],
-) -> Result<(Arc<Device>, PhysicalDeviceInfo), Error> {
+) -> Result<(Arc<Device>, PhysicalDeviceInfo)> {
     let extensions = DEVICE_EXTENSIONS
         .iter()
         .map(|s| CString::new(*s))
-        .collect::<Result<Vec<_>, _>>()
+        .collect::<std::result::Result<Vec<_>, _>>()
         .unwrap();
 
     let pdevice_info = pick_physical_device(instance, surface_loader, surface, &extensions)?;
@@ -238,7 +239,7 @@ pub fn create(
     let layers = layers
         .iter()
         .map(|s| CString::new(*s))
-        .collect::<Result<Vec<_>, _>>()
+        .collect::<std::result::Result<Vec<_>, _>>()
         .unwrap();
 
     let layer_names_raw = layers
@@ -278,12 +279,12 @@ pub fn get_limits(
     properties.limits
 }
 
-pub fn wait_idle(device: &Device) -> Result<(), Error> {
+pub fn wait_idle(device: &Device) -> Result<()> {
     unsafe { device.device_wait_idle()? }
     Ok(())
 }
 
-pub fn queue_wait_idle(device: &Device, queue: vk::Queue) -> Result<(), Error> {
+pub fn queue_wait_idle(device: &Device, queue: vk::Queue) -> Result<()> {
     unsafe { device.queue_wait_idle(queue)? }
     Ok(())
 }

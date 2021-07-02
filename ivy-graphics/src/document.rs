@@ -1,3 +1,4 @@
+use crate::Result;
 use std::{path::Path, path::PathBuf, sync::Arc};
 
 use crate::Error;
@@ -29,7 +30,7 @@ impl Document {
         context: Arc<VulkanContext>,
         meshes: &mut ResourceCache<Mesh>,
         path: P,
-    ) -> Result<Self, Error>
+    ) -> Result<Self>
     where
         P: AsRef<Path> + ToOwned<Owned = O>,
         O: Into<PathBuf>,
@@ -47,13 +48,13 @@ impl Document {
         meshes: &mut ResourceCache<Mesh>,
         document: gltf::Document,
         buffers: &[gltf::buffer::Data],
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         let meshes = document
             .meshes()
             .map(|mesh| {
                 Mesh::from_gltf(context.clone(), mesh, buffers).map(|mesh| meshes.insert(mesh))
             })
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<_>>>()?;
 
         let nodes = document
             .nodes()

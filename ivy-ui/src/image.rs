@@ -1,4 +1,4 @@
-use ivy_graphics::Error;
+use crate::Result;
 use ivy_resources::{Handle, ResourceCache};
 use ivy_vulkan::{
     descriptors::{DescriptorAllocator, DescriptorBuilder, DescriptorLayoutCache, DescriptorSet},
@@ -23,7 +23,7 @@ impl Image {
         samplers: &ResourceCache<Sampler>,
         texture: Handle<Texture>,
         sampler: Handle<Sampler>,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self> {
         let set = DescriptorBuilder::new()
             .bind_combined_image_sampler(
                 0,
