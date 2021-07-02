@@ -4,7 +4,6 @@ use ash::vk;
 use ash::Device;
 use smallvec::SmallVec;
 use std::{collections::HashMap, iter::repeat, sync::Arc};
-
 pub use vk::DescriptorSetLayout;
 
 use super::DescriptorLayoutInfo;

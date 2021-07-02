@@ -1,10 +1,8 @@
-use crate::Result;
+use crate::{buffer, commands::*, context::VulkanContext, extent::Extent, Error, Result};
 use std::{path::Path, sync::Arc};
 
 use ash::version::DeviceV1_0;
 use ash::vk;
-
-use super::{buffer, commands::*, context::VulkanContext, extent::Extent, Error};
 
 pub use vk::Format;
 pub use vk::ImageLayout;

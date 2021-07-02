@@ -1,8 +1,7 @@
 //! A device represents an abstraction for the vulkan GPU driver and is the primary way of
 //! communicating with the GPU.
 
-use super::{swapchain, Error};
-use crate::Result;
+use crate::{swapchain, Error, Result};
 use ash::{
     extensions::khr::Surface,
     vk::{self, SurfaceKHR},

@@ -1,8 +1,8 @@
-use crate::Result;
-use crate::descriptors::DescriptorLayoutInfo;
-
-use super::{descriptors::DescriptorLayoutCache, Error};
-use super::{renderpass::*, Extent};
+use crate::{
+    descriptors::{DescriptorLayoutCache, DescriptorLayoutInfo},
+    renderpass::*,
+    Error, Extent, Result,
+};
 use ash::version::DeviceV1_0;
 use ash::Device;
 use std::{ffi::CString, sync::Arc};

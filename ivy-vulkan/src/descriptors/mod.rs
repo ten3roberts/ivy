@@ -1,5 +1,4 @@
-use super::{Sampler, Texture};
-use crate::Result;
+use crate::{Result, Sampler, Texture};
 use ash::version::DeviceV1_0;
 use ash::vk;
 use ash::Device;

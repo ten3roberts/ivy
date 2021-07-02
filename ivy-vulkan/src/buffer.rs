@@ -1,13 +1,11 @@
 //! A buffer represents a piece of memory that can be accessed by the GPU and used to store and
 //! write data. Buffers
-use crate::Result;
+use crate::{commands::*, context::VulkanContext, Error, Extent, Result};
 use std::{mem, sync::Arc};
 
 use ash::vk;
 use vk::DeviceSize;
 use vk_mem::Allocator;
-
-use super::{commands::*, context::VulkanContext, Error, Extent};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 // Defines the type of a buffer

@@ -1,5 +1,4 @@
-use super::Error;
-use crate::Result;
+use crate::{Error, Result};
 use ash::{version::EntryV1_0, version::InstanceV1_0, Instance};
 use ash::{vk, Entry};
 use glfw::Glfw;

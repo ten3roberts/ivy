@@ -1,9 +1,6 @@
-use crate::Result;
+use crate::{Error, Mesh, Result};
 use std::{path::Path, path::PathBuf, sync::Arc};
 
-use crate::Error;
-
-use super::Mesh;
 use ivy_resources::{Handle, ResourceCache};
 use ivy_vulkan::VulkanContext;
 use ultraviolet::*;

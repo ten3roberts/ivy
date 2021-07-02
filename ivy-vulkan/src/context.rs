@@ -1,14 +1,10 @@
-use crate::Result;
-use super::commands::CommandPool;
-use super::*;
+use crate::{commands::CommandPool, device::QueueFamilies, Result, *};
 use ash::extensions::ext::DebugUtils;
 use ash::extensions::khr::Surface;
 use ash::vk;
 
 use glfw::Glfw;
 use std::sync::Arc;
-
-use super::device::QueueFamilies;
 
 pub struct VulkanContext {
     _entry: ash::Entry,

@@ -1,12 +1,10 @@
-use crate::Result;
+use crate::{Extent, Result, Texture, TextureInfo, VulkanContext};
 use ash::extensions::khr::Surface;
 pub use ash::extensions::khr::Swapchain as SwapchainLoader;
 use ash::vk::{self, SurfaceKHR};
 use ash::Device;
 use ash::Instance;
 use std::{cmp, sync::Arc};
-
-use super::{Extent, Texture, TextureInfo, VulkanContext};
 
 /// The maximum number of images in the swapchain. Actual image count may be less but never more.
 /// This is to allow inline allocation of per swapchain image resources through `ArrayVec`.

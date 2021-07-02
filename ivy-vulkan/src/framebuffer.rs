@@ -1,7 +1,6 @@
-use crate::Result;
+use crate::{renderpass::MAX_ATTACHMENTS, Extent, RenderPass, Result};
 use std::sync::Arc;
 
-use super::{renderpass::MAX_ATTACHMENTS, Extent, RenderPass};
 use arrayvec::ArrayVec;
 use ash::version::DeviceV1_0;
 use ash::vk;

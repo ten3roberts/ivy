@@ -1,5 +1,4 @@
-use super::{Texture, TextureUsage};
-use crate::Result;
+use crate::{Result, Texture, TextureUsage};
 use arrayvec::ArrayVec;
 use ash::version::DeviceV1_0;
 use ash::vk::SampleCountFlags;

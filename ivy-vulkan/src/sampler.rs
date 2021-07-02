@@ -1,7 +1,6 @@
-use crate::Result;
+use crate::{Result, VulkanContext};
 use std::sync::Arc;
 
-use super::VulkanContext;
 use ash::version::DeviceV1_0;
 use ash::vk;
 

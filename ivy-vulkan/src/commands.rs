@@ -1,15 +1,13 @@
-use crate::Result;
+use crate::{
+    buffer::{Buffer, BufferType},
+    device,
+    framebuffer::Framebuffer,
+    renderpass::RenderPass,
+    ClearValue, Extent, Result,
+};
 use std::mem::size_of;
 use std::sync::Arc;
 
-use crate::ClearValue;
-
-use super::renderpass::RenderPass;
-use super::{
-    buffer::{Buffer, BufferType},
-    device,
-};
-use super::{framebuffer::Framebuffer, Extent};
 use arrayvec::ArrayVec;
 use ash::vk;
 use ash::vk::ShaderStageFlags;
