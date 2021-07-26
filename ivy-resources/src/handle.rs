@@ -6,6 +6,12 @@ use generational_arena::Index;
 #[derive(Debug)]
 pub struct Handle<T>(Index, PhantomData<T>);
 
+impl<T> Handle<T> {
+    pub fn invalid() -> Self {
+        Self(Index::from_raw_parts(usize::MAX, u64::MAX), PhantomData)
+    }
+}
+
 impl<T> Clone for Handle<T> {
     fn clone(&self) -> Self {
         Self(self.0, PhantomData)
