@@ -22,7 +22,12 @@ pub fn get_layers() -> &'static [&'static str] {
 }
 
 /// Creates a vulkan instance with the appropriate extensions and layers
-pub fn create(entry: &Entry, glfw: &Glfw, name: &str, engine_name: &str) -> Result<Instance> {
+pub fn create(
+    entry: &Entry,
+    glfw: Option<&Glfw>,
+    name: &str,
+    engine_name: &str,
+) -> Result<Instance> {
     let name = CString::new(name).unwrap();
     let engine_name = CString::new(engine_name).unwrap();
 
@@ -30,14 +35,28 @@ pub fn create(entry: &Entry, glfw: &Glfw, name: &str, engine_name: &str) -> Resu
         .application_name(&name)
         .engine_name(&engine_name);
 
-    let extensions: Vec<CString> = glfw
-        .get_required_instance_extensions()
+    let extensions = glfw
+        .map(Glfw::get_required_instance_extensions)
+        .unwrap_or_default()
         .ok_or(Error::SurfaceSupport)?
         .into_iter()
-        .chain(INSTANCE_EXTENSIONS.iter().map(|s| s.to_string()))
         .map(CString::new)
+        .chain(INSTANCE_EXTENSIONS.iter().map(|s| CString::new(*s)))
         .collect::<std::result::Result<Vec<_>, _>>()
         .unwrap();
+
+    // let extensions: Vec<CString> = glfw
+    //     .map(|glfw| -> Result<_> {
+    //         Ok(glfw
+    //             .get_required_instance_extensions()
+    //             .ok_or(Error::SurfaceSupport)?
+    //             .into_iter()
+    //             .chain(INSTANCE_EXTENSIONS.iter().map(|s| s.to_string()))
+    //             .map(CString::new)
+    //             .collect::<std::result::Result<Vec<_>, _>>()
+    //             .unwrap())
+    //     })
+    //     .unwrap_or_else(|| Ok(Vec::new()))?;
 
     // Ensure extensions are present
     let missing = get_missing_extensions(entry, &extensions)?;

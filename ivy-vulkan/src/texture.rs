@@ -1,4 +1,5 @@
 use crate::{buffer, commands::*, context::VulkanContext, extent::Extent, Error, Result};
+use ash::vk::ImageAspectFlags;
 use std::{path::Path, sync::Arc};
 
 use ash::version::DeviceV1_0;
@@ -6,6 +7,7 @@ use ash::vk;
 
 pub use vk::Format;
 pub use vk::ImageLayout;
+pub use vk::ImageUsageFlags as ImageUsage;
 pub use vk::SampleCountFlags;
 
 /// Specifies texture creation info.
@@ -15,9 +17,10 @@ pub struct TextureInfo {
     /// The maximum amount of mip levels to use.
     /// Actual value may be lower due to texture size.
     /// A value of zero uses the maximum mip levels.
+    /// NOTE: Multisampled images cannot use more than one miplevel
     pub mip_levels: u32,
     /// The type/aspect of texture.
-    pub usage: TextureUsage,
+    pub usage: ImageUsage,
     /// The pixel format.
     pub format: Format,
     pub samples: SampleCountFlags,
@@ -28,21 +31,11 @@ impl Default for TextureInfo {
         Self {
             extent: (512, 512).into(),
             mip_levels: 1,
-            usage: TextureUsage::Sampled,
+            usage: ImageUsage::SAMPLED,
             format: Format::R8G8B8A8_SRGB,
             samples: SampleCountFlags::TYPE_1,
         }
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TextureUsage {
-    /// The most common usage. Texture is sampled in shader and transferred from CPU rarely.
-    Sampled,
-    /// Texture is used as a color attachment. Lazily allocates image when possible.
-    ColorAttachment,
-    /// Texture is used as a depth attachment. Lazily allocates image when possible.
-    DepthAttachment,
 }
 
 // Represents a texture combining an image and image view. A texture also stores its own width,
@@ -58,7 +51,7 @@ pub struct Texture {
     extent: Extent,
     mip_levels: u32,
     samples: vk::SampleCountFlags,
-    usage: TextureUsage,
+    usage: ImageUsage,
 }
 
 impl Texture {
@@ -71,9 +64,8 @@ impl Texture {
 
         let texture = Self::new(
             context,
-            TextureInfo {
+            &TextureInfo {
                 extent: (image.width(), image.height()).into(),
-                mip_levels: 0,
                 ..Default::default()
             },
         )?;
@@ -85,37 +77,20 @@ impl Texture {
 
     /// Creates a texture from provided raw pixels
     /// Note, raw pixels must match format, width, and height
-    pub fn new(context: Arc<VulkanContext>, info: TextureInfo) -> Result<Self> {
-        // Re-alias as mutable
-        let mut info = info;
+    pub fn new(context: Arc<VulkanContext>, info: &TextureInfo) -> Result<Self> {
         let mut mip_levels = calculate_mip_levels(info.extent);
-
-        // Multisampled images cannot use more than one miplevel
-        if info.samples != vk::SampleCountFlags::TYPE_1 {
-            info.mip_levels = 1;
-        }
 
         // Don't use more mip_levels than info
         if info.mip_levels != 0 {
             mip_levels = mip_levels.min(info.mip_levels)
         }
 
-        // Override mip levels
-        info.mip_levels = mip_levels;
-
-        let vk_usage = match info.usage {
-            TextureUsage::Sampled => {
-                vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED
-            }
-            TextureUsage::ColorAttachment => {
-                vk::ImageUsageFlags::TRANSIENT_ATTACHMENT | vk::ImageUsageFlags::COLOR_ATTACHMENT
-            }
-            TextureUsage::DepthAttachment => vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
-        } | if mip_levels > 1 {
-            vk::ImageUsageFlags::TRANSFER_SRC
-        } else {
-            vk::ImageUsageFlags::default()
-        };
+        let usage = info.usage
+            | if mip_levels > 1 {
+                vk::ImageUsageFlags::TRANSFER_SRC | vk::ImageUsageFlags::TRANSFER_DST
+            } else {
+                vk::ImageUsageFlags::TRANSFER_DST
+            };
 
         let memory_usage = vk_mem::MemoryUsage::GpuOnly;
         let flags = vk_mem::AllocationCreateFlags::NONE;
@@ -132,7 +107,7 @@ impl Texture {
             .format(info.format)
             .tiling(vk::ImageTiling::OPTIMAL)
             .initial_layout(vk::ImageLayout::UNDEFINED)
-            .usage(vk_usage)
+            .usage(usage)
             .sharing_mode(vk::SharingMode::EXCLUSIVE)
             .samples(info.samples);
 
@@ -154,14 +129,20 @@ impl Texture {
     /// If allocation is provided, the image will be destroyed along with self
     pub fn from_image(
         context: Arc<VulkanContext>,
-        info: TextureInfo,
+        info: &TextureInfo,
         image: vk::Image,
         allocation: Option<vk_mem::Allocation>,
     ) -> Result<Self> {
-        let aspect_mask = match info.usage {
-            TextureUsage::Sampled => vk::ImageAspectFlags::COLOR,
-            TextureUsage::ColorAttachment => vk::ImageAspectFlags::COLOR,
-            TextureUsage::DepthAttachment => vk::ImageAspectFlags::DEPTH,
+        let aspect_mask = if info.usage.contains(ImageUsage::COLOR_ATTACHMENT)
+            || info.usage.contains(ImageUsage::SAMPLED)
+        {
+            ImageAspectFlags::COLOR
+        } else {
+            vk::ImageAspectFlags::default()
+        } | if info.usage.contains(ImageUsage::DEPTH_STENCIL_ATTACHMENT) {
+            ImageAspectFlags::DEPTH
+        } else {
+            ImageAspectFlags::default()
         };
 
         let create_info = vk::ImageViewCreateInfo::builder()
@@ -260,7 +241,7 @@ impl Texture {
     }
 
     /// Return a reference to the texture's type
-    pub fn usage(&self) -> TextureUsage {
+    pub fn usage(&self) -> ImageUsage {
         self.usage
     }
 

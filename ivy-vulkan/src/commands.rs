@@ -3,7 +3,7 @@ use crate::{
     device,
     framebuffer::Framebuffer,
     renderpass::RenderPass,
-    ClearValue, Extent, Result,
+    Extent, Result,
 };
 use std::mem::size_of;
 use std::sync::Arc;
@@ -97,7 +97,7 @@ impl CommandPool {
     // Resets all command buffers allocated from pool
     // `release`: Release all memory allocated back to the system, if
     // commandbuffers are to be rerecorded, this will need to once again
-    // acquire memory
+    // acquire memory, which is slower.
     pub fn reset(&self, release: bool) -> Result<()> {
         let flags = if release {
             vk::CommandPoolResetFlags::RELEASE_RESOURCES
@@ -186,13 +186,8 @@ impl CommandBuffer {
         renderpass: &RenderPass,
         framebuffer: &Framebuffer,
         extent: Extent,
-        clear_values: &[ClearValue],
+        clear_values: &[vk::ClearValue],
     ) {
-        let clear_values = clear_values
-            .iter()
-            .map(|val| val.into())
-            .collect::<ArrayVec<[_; 8]>>();
-
         let begin_info = vk::RenderPassBeginInfo {
             s_type: vk::StructureType::RENDER_PASS_BEGIN_INFO,
             p_next: std::ptr::null(),

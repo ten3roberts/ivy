@@ -8,11 +8,11 @@ layout(location = 2) in vec2 texCoord;
 layout(location = 0) out vec4 fragColor;
 layout(location = 1) out vec2 fragTexCoord;
 
-layout(binding = 0) uniform GlobalData {
-  vec4 color;
-} globalData;
+/* layout(binding = 0) uniform GlobalData { */
+/*   vec4 color; */
+/* } globalData; */
 
-layout(binding = 1) uniform CameraData {
+layout(binding = 0) uniform CameraData {
   mat4 viewproj;
 } cameraData;
 
@@ -28,7 +28,6 @@ void main() {
   ObjectData objectData = objectBuffer.objects[gl_BaseInstance];
   gl_Position = cameraData.viewproj * objectBuffer.objects[gl_BaseInstance].mvp * vec4(inPosition, 1.0);
 
-
-  fragColor = globalData.color;
+  /* fragColor = globalData.color; */
   fragTexCoord = texCoord;
 }

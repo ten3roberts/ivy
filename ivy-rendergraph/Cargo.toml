@@ -1,0 +1,15 @@
+[package]
+name = "ivy-rendergraph"
+version = "0.1.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.40"
+hecs = "0.5"
+ivy-graphics = { path = "../ivy-graphics", version = "*" }
+ivy-resources = { path = "../ivy-resources", version = "*" }
+ivy-vulkan = { path = "../ivy-vulkan", version = "*" }
+slab = "0.4"
+thiserror = "1.0"

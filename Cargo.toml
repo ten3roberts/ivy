@@ -4,6 +4,7 @@ members = [
   "ivy-graphics",
   "ivy-input",
   "ivy-resources",
+  "ivy-rendergraph",
   "ivy-stb",
   "ivy-ui",
   "ivy-vulkan",

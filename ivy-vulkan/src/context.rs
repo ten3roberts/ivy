@@ -15,7 +15,7 @@ pub struct VulkanContext {
     debug_utils: Option<(DebugUtils, vk::DebugUtilsMessengerEXT)>,
 
     surface_loader: Surface,
-    surface: vk::SurfaceKHR,
+    surface: Option<vk::SurfaceKHR>,
 
     swapchain_loader: ash::extensions::khr::Swapchain,
 
@@ -32,9 +32,22 @@ pub struct VulkanContext {
 }
 
 impl VulkanContext {
-    pub fn new(glfw: &Glfw, window: &glfw::Window) -> Result<Self> {
+    pub fn new_offscreen() -> Result<Self> {
+        Self::new(None)
+    }
+
+    pub fn new_with_window(glfw: &Glfw, window: &glfw::Window) -> Result<Self> {
+        Self::new(Some((glfw, window)))
+    }
+
+    pub fn new(window: Option<(&Glfw, &glfw::Window)>) -> Result<Self> {
         let entry = entry::create()?;
-        let instance = instance::create(&entry, &glfw, "Vulkan Application", "Custom")?;
+        let instance = instance::create(
+            &entry,
+            window.map(|(glfw, _)| glfw),
+            "Vulkan Application",
+            "Custom",
+        )?;
 
         // Create debug utils if validation layers are enabled
         let debug_utils = if instance::ENABLE_VALIDATION_LAYERS {
@@ -46,9 +59,16 @@ impl VulkanContext {
         // debug_utils::create(&entry, &instance)?;
         let surface_loader = surface::create_loader(&entry, &instance);
 
-        let surface = surface::create(&instance, &window)?;
-        let (device, pdevice_info) =
-            device::create(&instance, &surface_loader, surface, instance::get_layers())?;
+        let surface = match window {
+            Some((_, window)) => Some(surface::create(&instance, window)?),
+            None => None,
+        };
+
+        let (device, pdevice_info) = device::create(
+            &instance,
+            surface.map(|surface| (&surface_loader, surface)),
+            instance::get_layers(),
+        )?;
 
         let swapchain_loader = Swapchain::create_loader(&instance, &device);
 
@@ -123,7 +143,7 @@ impl VulkanContext {
         self.graphics_queue
     }
 
-    pub fn surface(&self) -> vk::SurfaceKHR {
+    pub fn surface(&self) -> Option<vk::SurfaceKHR> {
         self.surface
     }
 
@@ -179,7 +199,9 @@ impl Drop for VulkanContext {
             debug_utils::destroy(&debug_utils, debug_messenger)
         }
 
-        surface::destroy(&self.surface_loader, self.surface);
+        self.surface
+            .map(|surface| surface::destroy(&self.surface_loader, surface));
+
         instance::destroy(&self.instance);
     }
 }

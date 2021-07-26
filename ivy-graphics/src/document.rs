@@ -1,5 +1,5 @@
 use crate::{Error, Mesh, Result};
-use std::{path::Path, path::PathBuf, sync::Arc};
+use std::{ops::DerefMut, path::Path, path::PathBuf, sync::Arc};
 
 use ivy_resources::{Handle, ResourceCache};
 use ivy_vulkan::VulkanContext;
@@ -23,14 +23,11 @@ pub struct Document {
 
 impl Document {
     /// Loads a gltf document/asset from path
-    pub fn load<P, O>(
-        context: Arc<VulkanContext>,
-        meshes: &mut ResourceCache<Mesh>,
-        path: P,
-    ) -> Result<Self>
+    pub fn load<P, O, M>(context: Arc<VulkanContext>, meshes: M, path: P) -> Result<Self>
     where
         P: AsRef<Path> + ToOwned<Owned = O>,
         O: Into<PathBuf>,
+        M: DerefMut<Target = ResourceCache<Mesh>>,
     {
         let (document, buffers, _images) =
             gltf::import(&path).map_err(|e| Error::GltfImport(e, Some(path.to_owned().into())))?;
@@ -40,12 +37,15 @@ impl Document {
 
     /// Loads a gltf import document's meshes and scene data. Will insert the meshes into the
     /// provided resource cache.
-    pub fn from_gltf(
+    pub fn from_gltf<M>(
         context: Arc<VulkanContext>,
-        meshes: &mut ResourceCache<Mesh>,
+        mut meshes: M,
         document: gltf::Document,
         buffers: &[gltf::buffer::Data],
-    ) -> Result<Self> {
+    ) -> Result<Self>
+    where
+        M: DerefMut<Target = ResourceCache<Mesh>>,
+    {
         let meshes = document
             .meshes()
             .map(|mesh| {

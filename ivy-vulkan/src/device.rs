@@ -24,8 +24,7 @@ impl QueueFamilies {
     pub fn find(
         instance: &Instance,
         device: vk::PhysicalDevice,
-        surface_loader: &Surface,
-        surface: SurfaceKHR,
+        surface: Option<(&Surface, SurfaceKHR)>,
     ) -> Result<QueueFamilies> {
         let family_properties =
             unsafe { instance.get_physical_device_queue_family_properties(device) };
@@ -40,10 +39,11 @@ impl QueueFamilies {
                 queue_families.graphics = Some(i as u32);
             }
 
-            if unsafe {
-                surface_loader.get_physical_device_surface_support(device, i as u32, surface)?
-            } {
-                queue_families.present = Some(i as u32);
+            if let Some((loader, surface)) = surface {
+                if unsafe { loader.get_physical_device_surface_support(device, i as u32, surface)? }
+                {
+                    queue_families.present = Some(i as u32);
+                }
             }
 
             if family.queue_flags.contains(vk::QueueFlags::TRANSFER) {
@@ -98,8 +98,7 @@ pub struct PhysicalDeviceInfo {
 fn rate_physical_device(
     instance: &Instance,
     physical_device: vk::PhysicalDevice,
-    surface_loader: &Surface,
-    surface: SurfaceKHR,
+    surface: Option<(&Surface, SurfaceKHR)>,
     extensions: &[CString],
 ) -> Option<PhysicalDeviceInfo> {
     let properties = unsafe { instance.get_physical_device_properties(physical_device) };
@@ -121,16 +120,20 @@ fn rate_physical_device(
     }
 
     // Ensure swapchain capabilites
-    let swapchain_support =
-        swapchain::query_support(surface_loader, surface, physical_device).ok()?;
+    match surface {
+        None => {}
+        Some((loader, surface)) => {
+            let swapchain_support =
+                swapchain::query_support(loader, surface, physical_device).ok()?;
 
-    // Swapchain support isn't adequate
-    if swapchain_support.formats.is_empty() || swapchain_support.present_modes.is_empty() {
-        return None;
+            // Swapchain support isn't adequate
+            if swapchain_support.formats.is_empty() || swapchain_support.present_modes.is_empty() {
+                return None;
+            }
+        }
     }
 
-    let queue_families =
-        QueueFamilies::find(instance, physical_device, surface_loader, surface).ok()?;
+    let queue_families = QueueFamilies::find(instance, physical_device, surface).ok()?;
 
     // Graphics queue is required
     if !queue_families.has_graphics() {
@@ -192,15 +195,14 @@ fn get_missing_extensions(
 // Picks an appropriate physical device
 fn pick_physical_device(
     instance: &Instance,
-    surface_loader: &Surface,
-    surface: SurfaceKHR,
+    surface: Option<(&Surface, SurfaceKHR)>,
     extensions: &[CString],
 ) -> Result<PhysicalDeviceInfo> {
     let devices = unsafe { instance.enumerate_physical_devices()? };
 
     devices
         .into_iter()
-        .filter_map(|d| rate_physical_device(instance, d, surface_loader, surface, &extensions))
+        .filter_map(|d| rate_physical_device(instance, d, surface, &extensions))
         .max_by_key(|v| v.score)
         .ok_or(Error::UnsuitableDevice)
 }
@@ -208,8 +210,7 @@ fn pick_physical_device(
 /// Creates a logical device by choosing the best appropriate physical device
 pub fn create(
     instance: &Instance,
-    surface_loader: &Surface,
-    surface: SurfaceKHR,
+    surface: Option<(&Surface, SurfaceKHR)>,
     layers: &[&str],
 ) -> Result<(Arc<Device>, PhysicalDeviceInfo)> {
     let extensions = DEVICE_EXTENSIONS
@@ -218,7 +219,7 @@ pub fn create(
         .collect::<std::result::Result<Vec<_>, _>>()
         .unwrap();
 
-    let pdevice_info = pick_physical_device(instance, surface_loader, surface, &extensions)?;
+    let pdevice_info = pick_physical_device(instance, surface, &extensions)?;
 
     let mut unique_queue_families = HashSet::new();
     unique_queue_families.insert(pdevice_info.queue_families.graphics().unwrap());

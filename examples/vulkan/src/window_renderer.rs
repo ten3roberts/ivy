@@ -8,8 +8,8 @@ use ivy_vulkan::{
     device, semaphore,
     vk::{self, Semaphore},
     AttachmentInfo, AttachmentReference, ClearValue, Fence, Format, Framebuffer, ImageLayout,
-    LoadOp, RenderPass, RenderPassInfo, SampleCountFlags, StoreOp, SubpassInfo, Swapchain,
-    SwapchainInfo, Texture, TextureInfo, TextureUsage, VulkanContext,
+    ImageUsage, LoadOp, RenderPass, RenderPassInfo, SampleCountFlags, StoreOp, SubpassInfo,
+    Swapchain, SwapchainInfo, Texture, TextureInfo, VulkanContext,
 };
 
 /// Renderer rendering to a glfw window
@@ -42,10 +42,10 @@ impl WindowRenderer {
         // Depth buffer attachment
         let depth_attachment = Texture::new(
             context.clone(),
-            TextureInfo {
+            &TextureInfo {
                 extent: swapchain.extent(),
                 mip_levels: 1,
-                usage: TextureUsage::DepthAttachment,
+                usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT,
                 format: Format::D32_SFLOAT,
                 samples: SampleCountFlags::TYPE_1,
             },
@@ -55,7 +55,7 @@ impl WindowRenderer {
         let renderpass_info = RenderPassInfo {
             attachments: &[
                 AttachmentInfo::from_texture(
-                    swapchain.image(0),
+                    swapchain.images()[0],
                     LoadOp::CLEAR,
                     StoreOp::STORE,
                     ImageLayout::UNDEFINED,
@@ -75,6 +75,7 @@ impl WindowRenderer {
                     layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
                 }],
                 resolve_attachments: &[],
+                input_attachments: &[],
                 depth_attachment: Some(AttachmentReference {
                     attachment: 1,
                     layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,

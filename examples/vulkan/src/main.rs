@@ -9,30 +9,30 @@ use ivy_core::{App, AppEvent, Clock, Events, FromDuration, IntoDuration, Layer, 
 use ivy_graphics::{
     components::{AngularVelocity, Position, Rotation, Scale},
     window::{WindowExt, WindowInfo, WindowMode},
-    Camera, CameraIndex, CameraManager, IndirectMeshRenderer, Material, Mesh, ShaderPass,
+    Camera, CameraData, IndirectMeshRenderer, Material, Mesh, ShaderPass,
 };
 use ivy_input::{Input, InputAxis, InputVector};
+use ivy_rendergraph::{AttachmentInfo, NodeInfo, RenderGraph};
 use ivy_resources::{Handle, ResourceManager};
 use ivy_ui::{
     constraints::{AbsoluteOffset, AbsoluteSize, Aspect, RelativeOffset, RelativeSize},
     Canvas, Image, ImageRenderer, Position2D, Size2D, Widget,
 };
-use ivy_vulkan::{commands::*, descriptors::*, vk::DescriptorType, *};
+use ivy_vulkan::{commands::*, descriptors::*, vk::ShaderStageFlags, *};
 use std::{
     sync::{mpsc, Arc},
     time::Duration,
 };
-use ultraviolet::{Rotor3, Vec2, Vec3, Vec4};
+use ultraviolet::{Mat4, Rotor3, Vec2, Vec3, Vec4};
 
 use log::*;
-use window_renderer::WindowRenderer;
 
 use crate::route::Route2D;
 
+mod camera_renderer;
 mod route;
-mod window_renderer;
 
-const FRAMES_IN_FLIGHT: usize = 2;
+const FRAMES_IN_FLIGHT: usize = 3;
 
 fn main() -> anyhow::Result<()> {
     Logger {
@@ -56,7 +56,7 @@ fn main() -> anyhow::Result<()> {
 
     let window = Arc::new(AtomicRefCell::new(window));
 
-    let context = Arc::new(VulkanContext::new(&glfw, &window.borrow())?);
+    let context = Arc::new(VulkanContext::new_with_window(&glfw, &window.borrow())?);
 
     let mut app = App::builder()
         .push_layer(|_, _| WindowLayer::new(glfw, window.clone(), window_events))
@@ -251,11 +251,12 @@ impl ShaderPass for DiffusePass {
 struct VulkanLayer {
     context: Arc<VulkanContext>,
 
-    window_renderer: WindowRenderer,
     window: Arc<AtomicRefCell<Window>>,
+    swapchain: Swapchain,
     image_renderer: ImageRenderer,
-    indirect_renderer: IndirectMeshRenderer,
-    camera_manager: CameraManager,
+    indirect_renderer: Arc<AtomicRefCell<IndirectMeshRenderer>>,
+
+    rendergraph: RenderGraph,
 
     descriptor_layout_cache: DescriptorLayoutCache,
     descriptor_allocator: DescriptorAllocator,
@@ -263,7 +264,6 @@ struct VulkanLayer {
     frames: Vec<FrameData>,
 
     global_data: GlobalData,
-    current_frame: usize,
 
     clock: Clock,
     resources: ResourceManager,
@@ -310,7 +310,27 @@ fn setup_ui(
                     RelativeOffset::new(0.5, 0.5),
                     RelativeOffset::new(-0.5, 0.5),
                 ],
-                0.05,
+                0.1,
+            ),
+        ),
+    )?;
+
+    world.attach_new::<Widget, _>(
+        canvas,
+        (
+            Widget,
+            image,
+            diffuse_pass,
+            RelativeOffset::new(0.3, -0.5),
+            AbsoluteSize::new(200.0, 100.0),
+            Aspect::new(1.0),
+            Route2D::new(
+                vec![
+                    RelativeOffset::new(0.0, 0.0),
+                    RelativeOffset::new(0.5, 0.5),
+                    RelativeOffset::new(-0.5, 0.5),
+                ],
+                0.2,
             ),
         ),
     )?;
@@ -343,10 +363,39 @@ impl VulkanLayer {
 
         let swapchain_info = ivy_vulkan::SwapchainInfo {
             present_mode: vk::PresentModeKHR::MAILBOX,
+            image_count: FRAMES_IN_FLIGHT as _,
             ..Default::default()
         };
 
-        let window_renderer = WindowRenderer::new(context.clone(), window.clone(), swapchain_info)?;
+        let swapchain = Swapchain::new(context.clone(), &window.borrow(), swapchain_info)?;
+
+        let swapchain_image_info = TextureInfo {
+            extent: swapchain.extent(),
+            mip_levels: 1,
+            usage: ImageUsage::COLOR_ATTACHMENT,
+            format: swapchain.image_format(),
+            samples: SampleCountFlags::TYPE_1,
+        };
+
+        let mut resources = ResourceManager::new();
+        resources.create_cache::<Texture>();
+
+        let swapchain_images = swapchain
+            .images()
+            .iter()
+            .map(|image| -> anyhow::Result<_> {
+                resources
+                    .insert(Texture::from_image(
+                        context.clone(),
+                        &swapchain_image_info,
+                        *image,
+                        None,
+                    )?)
+                    .map_err(|e| e.into())
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?;
+
+        let mut rendergraph = RenderGraph::new(context.clone(), swapchain.image_count() as usize)?;
 
         let indirect_renderer = IndirectMeshRenderer::new(
             context.clone(),
@@ -355,6 +404,112 @@ impl VulkanLayer {
             FRAMES_IN_FLIGHT,
         )?;
 
+        let indirect_renderer = Arc::new(AtomicRefCell::new(indirect_renderer));
+
+        let swapchain_node = {
+            let indirect_renderer = indirect_renderer.clone();
+
+            let mut uniformbuffers = (0..FRAMES_IN_FLIGHT)
+                .map(|_| {
+                    Buffer::new(
+                        context.clone(),
+                        BufferType::Uniform,
+                        BufferAccess::MappedPersistent,
+                        &[CameraData {
+                            viewproj: Mat4::default(),
+                        }],
+                    )
+                })
+                .collect::<Result<Vec<_>>>()?;
+
+            let camera_sets = uniformbuffers
+                .iter()
+                .map(|u| {
+                    DescriptorBuilder::new()
+                        .bind_uniform_buffer(0, ShaderStageFlags::VERTEX, u)
+                        .build_one(
+                            context.device(),
+                            &mut descriptor_layout_cache,
+                            &mut descriptor_allocator,
+                        )
+                        .map(|(a, _)| a)
+                })
+                .collect::<Result<Vec<_>>>()?;
+
+            let camera_id = world
+                .query::<&Camera>()
+                .without::<Canvas>()
+                .iter()
+                .next()
+                .unwrap()
+                .0;
+
+            let depth_buffer = resources.insert(Texture::new(
+                context.clone(),
+                &TextureInfo {
+                    extent: swapchain.extent(),
+                    mip_levels: 1,
+                    usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT,
+                    format: Format::D32_SFLOAT,
+                    samples: SampleCountFlags::TYPE_1,
+                },
+            )?)?;
+
+            let swapchain_node = rendergraph.add_node(NodeInfo {
+                color_attachments: vec![AttachmentInfo {
+                    final_layout: ImageLayout::PRESENT_SRC_KHR,
+                    resource: swapchain_images.into(),
+                    ..Default::default()
+                }],
+                read_attachments: vec![],
+                depth_attachment: Some(AttachmentInfo {
+                    initial_layout: ImageLayout::UNDEFINED,
+                    final_layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                    resource: depth_buffer.into(),
+                    store_op: StoreOp::DONT_CARE,
+                    load_op: LoadOp::CLEAR,
+                }),
+                clear_values: vec![
+                    ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
+                    ClearValue::DepthStencil(1.0, 0).into(),
+                ],
+                node: Box::new(
+                    move |world: &mut World,
+                          cmd: &CommandBuffer,
+                          current_frame: usize,
+                          _global_set: DescriptorSet,
+                          resources: &ResourceManager|
+                          -> anyhow::Result<()> {
+                        let camera = world
+                            .query_one_mut::<&Camera>(camera_id)
+                            .context("Node camera does not exist")?;
+
+                        uniformbuffers[current_frame].fill(
+                            0,
+                            &[CameraData {
+                                viewproj: camera.viewproj(),
+                            }],
+                        )?;
+
+                        indirect_renderer.borrow_mut().draw::<DiffusePass>(
+                            world,
+                            cmd,
+                            current_frame,
+                            camera_sets[current_frame],
+                            &[],
+                            &resources,
+                        )?;
+
+                        Ok(())
+                    },
+                ),
+            });
+
+            rendergraph.build(resources.cache()?, swapchain.extent())?;
+
+            swapchain_node
+        };
+
         let image_renderer = ImageRenderer::new(
             context.clone(),
             &mut descriptor_layout_cache,
@@ -362,41 +517,28 @@ impl VulkanLayer {
             FRAMES_IN_FLIGHT,
         )?;
 
-        let camera_manager = CameraManager::new(context.clone(), 3, FRAMES_IN_FLIGHT)?;
-
         // Data that is tied and updated per swapchain image basis
         let frames = (0..FRAMES_IN_FLIGHT)
-            .map(|i| {
+            .map(|_| {
                 FrameData::new(
                     context.clone(),
                     &mut descriptor_allocator,
                     &mut descriptor_layout_cache,
-                    camera_manager.buffer(i),
                 )
                 .map_err(|e| e.into())
             })
             .collect::<Result<Vec<FrameData>>>()?;
 
-        let mut resources = ResourceManager::new();
-
         resources.create_cache::<Material>();
         resources.create_cache::<Mesh>();
-        resources.create_cache::<Texture>();
         resources.create_cache::<Sampler>();
         resources.create_cache::<DiffusePass>();
         resources.create_cache::<Image>();
 
         {
-            let mut materials = resources.cache_mut()?;
-            let mut meshes = resources.cache_mut()?;
-            let mut textures = resources.cache_mut()?;
-            let mut samplers = resources.cache_mut()?;
-            let mut diffuse_passes = resources.cache_mut()?;
-            let mut images = resources.cache_mut()?;
-
             let document = ivy_graphics::Document::load(
                 context.clone(),
-                &mut meshes,
+                resources.cache_mut()?,
                 "./res/models/cube.gltf",
             )
             .context("Failed to load cube model")?;
@@ -405,24 +547,24 @@ impl VulkanLayer {
 
             let document = ivy_graphics::Document::load(
                 context.clone(),
-                &mut meshes,
+                resources.cache_mut()?,
                 "./res/models/sphere.gltf",
             )
             .context("Failed to load sphere model")?;
 
             let sphere_mesh = document.mesh(0);
 
-            let grid = textures.insert(
+            let grid = resources.insert(
                 Texture::load(context.clone(), "./res/textures/grid.png")
                     .context("Failed to load grid texture")?,
-            );
+            )?;
 
-            let uv_grid = textures.insert(
+            let uv_grid = resources.insert(
                 Texture::load(context.clone(), "./res/textures/uv.png")
                     .context("Failed to load uv texture")?,
-            );
+            )?;
 
-            let sampler = samplers.insert(Sampler::new(
+            let sampler = resources.insert(Sampler::new(
                 context.clone(),
                 SamplerInfo {
                     address_mode: AddressMode::REPEAT,
@@ -432,98 +574,99 @@ impl VulkanLayer {
                     anisotropy: 16.0,
                     mip_levels: 4,
                 },
-            )?);
+            )?)?;
 
-            let material = materials.insert(Material::new(
+            let material = resources.insert(Material::new(
                 &context,
                 &mut descriptor_layout_cache,
                 &mut descriptor_allocator,
-                &textures,
-                &samplers,
+                resources.cache()?,
+                resources.cache()?,
                 grid,
                 sampler,
-            )?);
+            )?)?;
 
-            let material2 = materials.insert(Material::new(
+            let material2 = resources.insert(Material::new(
                 &context,
                 &mut descriptor_layout_cache,
                 &mut descriptor_allocator,
-                &textures,
-                &samplers,
+                resources.cache()?,
+                resources.cache()?,
                 uv_grid,
                 sampler,
-            )?);
+            )?)?;
 
-            let image: Handle<Image> = images.insert(Image::new(
+            let image: Handle<Image> = resources.insert(Image::new(
                 &context,
                 &mut descriptor_layout_cache,
                 &mut descriptor_allocator,
-                &textures,
-                &samplers,
+                resources.cache()?,
+                resources.cache()?,
                 uv_grid,
                 sampler,
-            )?);
+            )?)?;
 
-            let image2: Handle<Image> = images.insert(Image::new(
+            let image2: Handle<Image> = resources.insert(Image::new(
                 &context,
                 &mut descriptor_layout_cache,
                 &mut descriptor_allocator,
-                &textures,
-                &samplers,
+                resources.cache()?,
+                resources.cache()?,
                 grid,
                 sampler,
-            )?);
+            )?)?;
 
-            let set_layouts = [
-                DescriptorLayoutInfo::new(&[
-                    DescriptorSetBinding {
-                        binding: 0,
-                        descriptor_type: DescriptorType::UNIFORM_BUFFER,
-                        descriptor_count: 1,
-                        stage_flags: vk::ShaderStageFlags::VERTEX,
-                        ..Default::default()
-                    },
-                    DescriptorSetBinding {
-                        binding: 1,
-                        descriptor_type: DescriptorType::UNIFORM_BUFFER_DYNAMIC,
-                        descriptor_count: 1,
-                        stage_flags: vk::ShaderStageFlags::VERTEX,
-                        ..Default::default()
-                    },
-                ]),
-                DescriptorLayoutInfo::new(&[DescriptorSetBinding {
-                    binding: 0,
-                    descriptor_type: DescriptorType::STORAGE_BUFFER,
-                    descriptor_count: 1,
-                    stage_flags: vk::ShaderStageFlags::VERTEX,
-                    ..Default::default()
-                }]),
-                DescriptorLayoutInfo::new(&[DescriptorSetBinding {
-                    binding: 0,
-                    descriptor_type: DescriptorType::COMBINED_IMAGE_SAMPLER,
-                    descriptor_count: 1,
-                    stage_flags: vk::ShaderStageFlags::FRAGMENT,
-                    ..Default::default()
-                }]),
-            ];
+            // let set_layouts = [
+            //     DescriptorLayoutInfo::new(&[
+            //         DescriptorSetBinding {
+            //             binding: 0,
+            //             descriptor_type: DescriptorType::UNIFORM_BUFFER,
+            //             descriptor_count: 1,
+            //             stage_flags: vk::ShaderStageFlags::VERTEX,
+            //             ..Default::default()
+            //         },
+            //         DescriptorSetBinding {
+            //             binding: 1,
+            //             descriptor_type: DescriptorType::UNIFORM_BUFFER_DYNAMIC,
+            //             descriptor_count: 1,
+            //             stage_flags: vk::ShaderStageFlags::VERTEX,
+            //             ..Default::default()
+            //         },
+            //     ]),
+            //     DescriptorLayoutInfo::new(&[DescriptorSetBinding {
+            //         binding: 0,
+            //         descriptor_type: DescriptorType::STORAGE_BUFFER,
+            //         descriptor_count: 1,
+            //         stage_flags: vk::ShaderStageFlags::VERTEX,
+            //         ..Default::default()
+            //     }]),
+            //     DescriptorLayoutInfo::new(&[DescriptorSetBinding {
+            //         binding: 0,
+            //         descriptor_type: DescriptorType::COMBINED_IMAGE_SAMPLER,
+            //         descriptor_count: 1,
+            //         stage_flags: vk::ShaderStageFlags::FRAGMENT,
+            //         ..Default::default()
+            //     }]),
+            // ];
+
+            let swapchain_renderpass = rendergraph.node_renderpass(swapchain_node)?;
 
             // Create a pipeline from the shaders
             let pipeline = Pipeline::new(
                 context.device().clone(),
                 &mut descriptor_layout_cache,
-                &window_renderer.renderpass(),
+                swapchain_renderpass,
                 PipelineInfo {
                     vertexshader: "./res/shaders/default.vert.spv".into(),
                     fragmentshader: "./res/shaders/default.frag.spv".into(),
                     vertex_binding: Vertex::binding_description(),
                     vertex_attributes: Vertex::attribute_descriptions(),
                     samples: SampleCountFlags::TYPE_1,
-                    extent: window_renderer.swapchain().extent(),
+                    extent: swapchain.extent(),
                     subpass: 0,
                     polygon_mode: vk::PolygonMode::FILL,
                     cull_mode: vk::CullModeFlags::NONE,
                     front_face: vk::FrontFace::CLOCKWISE,
-                    set_layouts: &set_layouts,
                     ..Default::default()
                 },
             )?;
@@ -532,25 +675,24 @@ impl VulkanLayer {
             let uv_pipeline = Pipeline::new(
                 context.device().clone(),
                 &mut descriptor_layout_cache,
-                &window_renderer.renderpass(),
+                swapchain_renderpass,
                 PipelineInfo {
                     vertexshader: "./res/shaders/default.vert.spv".into(),
                     fragmentshader: "./res/shaders/uv.frag.spv".into(),
                     vertex_binding: Vertex::binding_description(),
                     vertex_attributes: Vertex::attribute_descriptions(),
                     samples: SampleCountFlags::TYPE_1,
-                    extent: window_renderer.swapchain().extent(),
+                    extent: swapchain.extent(),
                     subpass: 0,
                     polygon_mode: vk::PolygonMode::FILL,
                     cull_mode: vk::CullModeFlags::NONE,
                     front_face: vk::FrontFace::CLOCKWISE,
-                    set_layouts: &set_layouts,
                     ..Default::default()
                 },
             )?;
 
-            let default_shaderpass = diffuse_passes.insert(DiffusePass::new(pipeline));
-            let uv_shaderpass = diffuse_passes.insert(DiffusePass::new(uv_pipeline));
+            let default_shaderpass = resources.insert(DiffusePass::new(pipeline))?;
+            let uv_shaderpass = resources.insert(DiffusePass::new(uv_pipeline))?;
 
             world.spawn_batch(
                 [
@@ -630,16 +772,15 @@ impl VulkanLayer {
 
         Ok(Self {
             context,
-            window_renderer,
             window,
             image_renderer,
             indirect_renderer,
-            camera_manager,
+            swapchain,
+            rendergraph,
             descriptor_layout_cache,
             descriptor_allocator,
             frames,
             global_data,
-            current_frame: 0,
             clock: Clock::new(),
             resources,
             window_events,
@@ -654,93 +795,97 @@ impl Layer for VulkanLayer {
         _events: &mut Events,
         _frame_time: Duration,
     ) -> anyhow::Result<()> {
-        let current_frame = self.current_frame;
+        // let current_frame = self.current_frame;
 
-        self.camera_manager.register_cameras(world)?;
+        //         fence::wait(self.context.device(), &[frame.fence], true)?;
+        //         fence::reset(self.context.device(), &[frame.fence])?;
 
-        let frame = &mut self.frames[current_frame];
+        // let canvas = world
+        //     .query::<&Canvas>()
+        //     .iter()
+        //     .next()
+        //     .ok_or(anyhow!("Missing canvas"))?
+        //     .0;
 
-        fence::wait(self.context.device(), &[frame.fence], true)?;
-        fence::reset(self.context.device(), &[frame.fence])?;
-
-        frame.global_uniformbuffer.fill(0, &[self.global_data])?;
-
-        let canvas = world
-            .query::<&Canvas>()
-            .iter()
-            .next()
-            .ok_or(anyhow!("Missing canvas"))?
-            .0;
-
-        ivy_ui::systems::statisfy_widgets(world);
-        ivy_ui::systems::update_canvas(world, canvas)?;
-        ivy_ui::systems::update_model_matrices(world);
-
-        self.camera_manager
-            .update_camera_data(world, current_frame)?;
+        // ivy_ui::systems::statisfy_widgets(world);
+        // ivy_ui::systems::update_canvas(world, canvas)?;
+        // ivy_ui::systems::update_model_matrices(world);
 
         // Record commandbuffer
-        frame.commandpool.reset(false)?;
-        let cmd = &frame.commandbuffer;
+        // frame.commandpool.reset(false)?;
+        // let cmd = &frame.commandbuffer;
 
         // Begin recording the commandbuffer, hinting that it will only be used once
-        cmd.begin(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT)?;
+        // cmd.begin(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT)?;
 
         // Begin surface rendering renderpass
-        self.window_renderer.begin(cmd)?;
 
-        self.indirect_renderer
-            .register_entities::<DiffusePass>(world, &mut self.descriptor_layout_cache)?;
+        let current_frame = self
+            .swapchain
+            .next_image(self.rendergraph.wait_semaphore())? as usize;
 
-        self.indirect_renderer.update(world, current_frame)?;
+        debug!("Current frame: {}", current_frame);
 
-        let cameras = world
-            .query::<&CameraIndex>()
-            .without::<&Canvas>()
-            .iter()
-            .map(|(e, _)| e)
-            .collect::<Vec<_>>();
+        {
+            let mut indirect_renderer = self.indirect_renderer.borrow_mut();
+            indirect_renderer
+                .register_entities::<DiffusePass>(world, &mut self.descriptor_layout_cache)?;
 
-        // Bind the global uniform buffer
-        for camera in cameras.into_iter() {
-            let camera_offset = self.camera_manager.offset_of(world, camera)?;
-
-            self.indirect_renderer.draw::<DiffusePass>(
-                world,
-                cmd,
-                current_frame,
-                frame.set,
-                &[camera_offset],
-                &self.resources,
-            )?
+            indirect_renderer.update(world, current_frame)?;
         }
 
-        // Draw ui
-        ivy_ui::systems::update_ui(world, canvas)?;
-        self.image_renderer
-            .register_entities::<DiffusePass>(world, &mut self.descriptor_layout_cache)?;
+        let frame = &mut self.frames[current_frame];
+        frame.global_uniformbuffer.fill(0, &[self.global_data])?;
 
-        self.image_renderer.update(world, current_frame)?;
+        self.rendergraph
+            .execute(world, current_frame, frame.set, &self.resources)?;
 
-        let canvas_offset = self.camera_manager.offset_of(world, canvas)?;
-
-        self.image_renderer.draw::<DiffusePass>(
-            world,
-            cmd,
-            current_frame,
-            frame.set,
-            &[canvas_offset],
-            &self.resources,
+        self.swapchain.present(
+            self.context.present_queue(),
+            &[self.rendergraph.signal_semaphore()],
+            current_frame as u32,
         )?;
 
+        // // Bind the global uniform buffer
+        // for camera in cameras.into_iter() {
+        //     let camera_offset = self..offset_of(world, camera)?;
+
+        //     self.indirect_renderer.draw::<DiffusePass>(
+        //         world,
+        //         cmd,
+        //         current_frame,
+        //         frame.set,
+        //         &[camera_offset],
+        //         &self.resources,
+        //     )?
+        // }
+
+        // Draw ui
+        // ivy_ui::systems::update_ui(world, canvas)?;
+        // self.image_renderer
+        //     .register_entities::<DiffusePass>(world, &mut self.descriptor_layout_cache)?;
+
+        // self.image_renderer.update(world, current_frame)?;
+
+        // let canvas_offset = self.camera_manager.offset_of(world, canvas)?;
+
+        // self.image_renderer.draw::<DiffusePass>(
+        //     world,
+        //     cmd,
+        //     current_frame,
+        //     frame.set,
+        //     &[canvas_offset],
+        //     &self.resources,
+        // )?;
+
         // Done
-        frame.commandbuffer.end_renderpass();
-        cmd.end()?;
+        // frame.commandbuffer.end_renderpass();
+        // cmd.end()?;
 
         // Submit and present
-        self.window_renderer.submit(cmd, frame.fence)?;
+        // self.window_renderer.submit(cmd, frame.fence)?;
 
-        self.current_frame = (self.current_frame + 1) % FRAMES_IN_FLIGHT;
+        // self.current_frame = (self.current_frame + 1) % FRAMES_IN_FLIGHT;
 
         Ok(())
     }
@@ -761,8 +906,6 @@ struct FrameData {
     fence: Fence,
     set: DescriptorSet,
     global_uniformbuffer: Buffer,
-    commandpool: CommandPool,
-    commandbuffer: CommandBuffer,
 }
 
 impl FrameData {
@@ -770,7 +913,6 @@ impl FrameData {
         context: Arc<VulkanContext>,
         descriptor_allocator: &mut DescriptorAllocator,
         descriptor_layout_cache: &mut DescriptorLayoutCache,
-        camera_buffer: &Buffer,
     ) -> Result<Self> {
         let global_uniformbuffer = Buffer::new(
             context.clone(),
@@ -783,7 +925,6 @@ impl FrameData {
 
         let set = DescriptorBuilder::new()
             .bind_uniform_buffer(0, vk::ShaderStageFlags::VERTEX, &global_uniformbuffer)
-            .bind_dynamic_uniform_buffer(1, vk::ShaderStageFlags::VERTEX, &camera_buffer)
             .build_one(
                 context.device(),
                 descriptor_layout_cache,
@@ -791,14 +932,6 @@ impl FrameData {
             )?
             .0;
 
-        let commandpool = CommandPool::new(
-            context.device().clone(),
-            context.queue_families().graphics().unwrap(),
-            true,
-            false,
-        )?;
-
-        let commandbuffer = commandpool.allocate_one()?;
         let fence = fence::create(context.device(), true)?;
 
         Ok(FrameData {
@@ -806,8 +939,6 @@ impl FrameData {
             fence,
             set,
             global_uniformbuffer,
-            commandpool,
-            commandbuffer,
         })
     }
 }

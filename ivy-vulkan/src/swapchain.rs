@@ -1,7 +1,7 @@
-use crate::{Extent, Result, Texture, TextureInfo, VulkanContext};
+use crate::{Extent, Result, VulkanContext};
 use ash::extensions::khr::Surface;
 pub use ash::extensions::khr::Swapchain as SwapchainLoader;
-use ash::vk::{self, SurfaceKHR};
+use ash::vk::{self, Image, SurfaceKHR};
 use ash::Device;
 use ash::Instance;
 use std::{cmp, sync::Arc};
@@ -15,6 +15,8 @@ pub const MAX_FRAMES: usize = 5;
 pub struct SwapchainInfo {
     pub present_mode: vk::PresentModeKHR,
     pub format: vk::SurfaceFormatKHR,
+    /// The preferred number of images in the swapchain
+    pub image_count: u32,
 }
 
 impl Default for SwapchainInfo {
@@ -25,6 +27,7 @@ impl Default for SwapchainInfo {
                 format: vk::Format::B8G8R8A8_SRGB,
                 color_space: vk::ColorSpaceKHR::SRGB_NONLINEAR,
             },
+            image_count: 2,
         }
     }
 }
@@ -117,7 +120,7 @@ fn pick_extent(window: &glfw::Window, capabilities: &vk::SurfaceCapabilitiesKHR)
 pub struct Swapchain {
     context: Arc<VulkanContext>,
     swapchain: vk::SwapchainKHR,
-    images: Vec<Texture>,
+    images: Vec<Image>,
     extent: Extent,
     surface_format: vk::SurfaceFormatKHR,
 }
@@ -130,12 +133,12 @@ impl Swapchain {
     ) -> Result<Self> {
         let support = query_support(
             context.surface_loader(),
-            context.surface(),
+            context.surface().unwrap(),
             context.physical_device(),
         )?;
 
         // Use one more image than the minumum supported
-        let mut image_count = (support.capabilities.min_image_count + 1).min(MAX_FRAMES as u32);
+        let mut image_count = info.image_count.max(support.capabilities.min_image_count);
 
         // Make sure max image count isn't exceeded
         if support.capabilities.max_image_count != 0 {
@@ -163,7 +166,7 @@ impl Swapchain {
         let extent = pick_extent(window, &support.capabilities);
 
         let create_info = vk::SwapchainCreateInfoKHR::builder()
-            .surface(context.surface())
+            .surface(context.surface().unwrap())
             .min_image_count(image_count)
             .image_format(surface_format.format)
             .image_color_space(surface_format.color_space)
@@ -184,19 +187,6 @@ impl Swapchain {
 
         let images = unsafe { swapchain_loader.get_swapchain_images(swapchain)? };
 
-        let image_info = TextureInfo {
-            extent,
-            mip_levels: 1,
-            usage: super::TextureUsage::ColorAttachment,
-            format: surface_format.format,
-            samples: vk::SampleCountFlags::TYPE_1,
-        };
-
-        let images = images
-            .iter()
-            .map(|image| Texture::from_image(context.clone(), image_info, *image, None))
-            .collect::<std::result::Result<_, _>>()?;
-
         Ok(Swapchain {
             context,
             swapchain,
@@ -206,6 +196,7 @@ impl Swapchain {
         })
     }
 
+    // Returns the next available image in the swapchain.
     pub fn next_image(&self, semaphore: vk::Semaphore) -> Result<u32> {
         let (image_index, _) = unsafe {
             self.context.swapchain_loader().acquire_next_image(
@@ -219,6 +210,7 @@ impl Swapchain {
         Ok(image_index)
     }
 
+    // Presents image index using queue
     pub fn present(
         &self,
         queue: vk::Queue,
@@ -262,11 +254,12 @@ impl Swapchain {
     }
 
     /// Get a reference to a swapchain image by index
-    pub fn image(&self, index: usize) -> &Texture {
-        &self.images[index]
+    pub fn image(&self, index: usize) -> Image {
+        self.images[index]
     }
+
     /// Get a reference to the swapchain's images
-    pub fn images(&self) -> &Vec<Texture> {
+    pub fn images(&self) -> &Vec<Image> {
         &self.images
     }
 

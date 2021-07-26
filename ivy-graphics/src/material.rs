@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use crate::Result;
 use ash::vk::{DescriptorSet, DescriptorSetLayout, ShaderStageFlags};
 use ivy_resources::{Handle, ResourceCache};
@@ -17,15 +19,19 @@ pub struct Material {
 
 impl Material {
     /// Creates a new material with albedo using the provided sampler
-    pub fn new(
+    pub fn new<T, S>(
         context: &VulkanContext,
         descriptor_layout_cache: &mut DescriptorLayoutCache,
         descriptor_allocator: &mut DescriptorAllocator,
-        textures: &ResourceCache<Texture>,
-        samplers: &ResourceCache<Sampler>,
+        textures: T,
+        samplers: S,
         albedo: Handle<Texture>,
         sampler: Handle<Sampler>,
-    ) -> Result<Self> {
+    ) -> Result<Self>
+    where
+        T: Deref<Target = ResourceCache<Texture>>,
+        S: Deref<Target = ResourceCache<Sampler>>,
+    {
         let (set, layout) = DescriptorBuilder::new()
             .bind_combined_image_sampler(
                 0,
