@@ -62,10 +62,14 @@ impl Texture {
         let image = ivy_stb::Image::load(&path, 4)
             .ok_or_else(|| Error::ImageLoading(path.as_ref().to_owned()))?;
 
+        let extent = (image.width(), image.height()).into();
+
         let texture = Self::new(
             context,
             &TextureInfo {
-                extent: (image.width(), image.height()).into(),
+                extent,
+                usage: ImageUsage::TRANSFER_DST | ImageUsage::TRANSFER_SRC | ImageUsage::SAMPLED,
+                mip_levels: calculate_mip_levels(extent),
                 ..Default::default()
             },
         )?;
