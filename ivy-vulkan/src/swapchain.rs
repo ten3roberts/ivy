@@ -237,8 +237,8 @@ impl Swapchain {
     }
 
     /// Returns the number of image in the swapchain. The same as `color_attachments`.len()
-    pub fn image_count(&self) -> u32 {
-        self.images.len() as u32
+    pub fn image_count(&self) -> usize {
+        self.images.len()
     }
 
     pub fn image_format(&self) -> vk::Format {

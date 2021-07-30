@@ -1,3 +1,4 @@
+use crate::Pipeline;
 use crate::Result;
 use arrayvec::ArrayVec;
 use std::io::{Read, Seek};
@@ -109,21 +110,8 @@ pub fn reflect<S: AsRef<spirv_reflect::ShaderModule>>(
         }
     }
 
-    let set_layouts = sets
-        .iter_mut()
-        .take_while(|set| !set.bindings().is_empty())
-        .map(|set| layout_cache.get(set))
-        .collect::<std::result::Result<ArrayVec<[_; MAX_SETS]>, _>>()?;
-
-    let create_info = vk::PipelineLayoutCreateInfo {
-        set_layout_count: set_layouts.len() as u32,
-        p_set_layouts: set_layouts.as_ptr(),
-        push_constant_range_count: push_constant_ranges.len() as u32,
-        p_push_constant_ranges: push_constant_ranges.as_ptr(),
-        ..Default::default()
-    };
-
-    let pipeline_layout = unsafe { device.create_pipeline_layout(&create_info, None)? };
+    let pipeline_layout =
+        Pipeline::create_layout(device, &sets, &push_constant_ranges, layout_cache)?;
 
     Ok(pipeline_layout)
 }

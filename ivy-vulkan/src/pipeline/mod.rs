@@ -3,8 +3,9 @@ use crate::{
     renderpass::*,
     Error, Extent, Result,
 };
-use ash::version::DeviceV1_0;
-use ash::Device;
+use arrayvec::ArrayVec;
+use ash::{version::DeviceV1_0, vk::PipelineLayout};
+use ash::{vk::PushConstantRange, Device};
 use std::{ffi::CString, sync::Arc};
 use std::{fs::File, path::PathBuf};
 
@@ -202,6 +203,31 @@ impl Pipeline {
             pipeline,
             layout,
         })
+    }
+
+    // Creates a raw pipeline layout
+    pub fn create_layout(
+        device: &Device,
+        sets: &[DescriptorLayoutInfo],
+        push_constant_ranges: &[PushConstantRange],
+        layout_cache: &mut DescriptorLayoutCache,
+    ) -> Result<PipelineLayout> {
+        let set_layouts = sets
+            .iter()
+            .take_while(|set| !set.bindings().is_empty())
+            .map(|set| layout_cache.get(set))
+            .collect::<std::result::Result<ArrayVec<[_; MAX_SETS]>, _>>()?;
+
+        let create_info = vk::PipelineLayoutCreateInfo {
+            set_layout_count: set_layouts.len() as u32,
+            p_set_layouts: set_layouts.as_ptr(),
+            push_constant_range_count: push_constant_ranges.len() as u32,
+            p_push_constant_ranges: push_constant_ranges.as_ptr(),
+            ..Default::default()
+        };
+
+        let pipeline_layout = unsafe { device.create_pipeline_layout(&create_info, None)? };
+        Ok(pipeline_layout)
     }
 
     /// Returns the raw vulkan pipeline handle.

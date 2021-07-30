@@ -1,4 +1,4 @@
-use crate::Result;
+use crate::{GpuCameraData, Renderer, Result};
 use hecs::{Entity, World};
 use ivy_resources::{Handle, ResourceCache, ResourceManager};
 use ivy_vulkan::{
@@ -184,44 +184,53 @@ impl IndirectMeshRenderer {
 
         Ok(())
     }
+}
 
-    /// Will draw all entities with a Handle<Material>, Handle<Mesh>, Modelmatrix and Shaderpass `Handle<T>`
-    pub fn draw<T: 'static + ShaderPass + Sized + Sync + Send>(
+impl Renderer for IndirectMeshRenderer {
+    fn draw<Pass: 'static + ShaderPass + Sized + Sync + Send>(
         &mut self,
+        // The ecs world
         world: &mut World,
+        // The camera to use for rendering
+        camera: Entity,
+        // The commandbuffer to record into
         cmd: &CommandBuffer,
+        // The current swapchain image or backbuffer index
         current_frame: usize,
-        global_set: DescriptorSet,
-        dynamic_offsets: &[u32],
+        // Descriptor sets to bind before the sets bound by renderer
+        first_set: u32,
+        // Graphics resources like textures and materials
         resources: &ResourceManager,
     ) -> Result<()> {
         let frame = &mut self.frames[current_frame];
 
         let frame_set = frame.set;
 
-        let pass = match self.passes.get_mut(&TypeId::of::<T>()) {
+        let pass = match self.passes.get_mut(&TypeId::of::<Pass>()) {
             Some(pass) => pass,
             None => {
                 self.passes.insert(
-                    TypeId::of::<T>(),
+                    TypeId::of::<Pass>(),
                     PassData::new(self.context.clone(), 8, self.frames.len())?,
                 );
-                self.passes.get_mut(&TypeId::of::<T>()).unwrap()
+                self.passes.get_mut(&TypeId::of::<Pass>()).unwrap()
             }
         };
+
+        let camera_set = world.get::<GpuCameraData>(camera)?.set(current_frame);
 
         let passes = resources.cache()?;
         let materials = resources.cache()?;
         let meshes = resources.cache()?;
 
-        pass.build_batches::<T>(world, &passes)?;
+        pass.build_batches::<Pass>(world, &passes)?;
 
         pass.draw(
             cmd,
             current_frame,
-            global_set,
+            first_set,
+            camera_set,
             frame_set,
-            dynamic_offsets,
             &meshes,
             &materials,
         )?;
@@ -402,9 +411,9 @@ impl PassData {
         &mut self,
         cmd: &CommandBuffer,
         current_frame: usize,
-        global_set: DescriptorSet,
+        first_set: u32,
+        camera_set: DescriptorSet,
         frame_set: DescriptorSet,
-        dynamic_offsets: &[u32],
         meshes: &ResourceCache<Mesh>,
         materials: &ResourceCache<Material>,
     ) -> Result<()> {
@@ -421,11 +430,12 @@ impl PassData {
         for batch in &self.batches {
             let material = materials.get(batch.material)?;
             let mesh = meshes.get(batch.mesh)?;
+
             cmd.bind_descriptor_sets(
                 batch.pipeline_layout,
-                0,
-                &[global_set, frame_set, material.set()],
-                dynamic_offsets,
+                first_set,
+                &[camera_set, frame_set, material.set()],
+                &[],
             );
 
             cmd.bind_pipeline(batch.pipeline);

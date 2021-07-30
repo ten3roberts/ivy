@@ -9,7 +9,7 @@ use ivy_core::{App, AppEvent, Clock, Events, FromDuration, IntoDuration, Layer, 
 use ivy_graphics::{
     components::{AngularVelocity, Position, Rotation, Scale},
     window::{WindowExt, WindowInfo, WindowMode},
-    Camera, CameraData, IndirectMeshRenderer, Material, Mesh, ShaderPass,
+    Camera, GpuCameraData, IndirectMeshRenderer, Material, Mesh, Renderer, ShaderPass,
 };
 use ivy_input::{Input, InputAxis, InputVector};
 use ivy_rendergraph::{AttachmentInfo, NodeInfo, RenderGraph};
@@ -18,18 +18,17 @@ use ivy_ui::{
     constraints::{AbsoluteOffset, AbsoluteSize, Aspect, RelativeOffset, RelativeSize},
     Canvas, Image, ImageRenderer, Position2D, Size2D, Widget,
 };
-use ivy_vulkan::{commands::*, descriptors::*, vk::ShaderStageFlags, *};
+use ivy_vulkan::{commands::*, descriptors::*, *};
 use std::{
     sync::{mpsc, Arc},
     time::Duration,
 };
-use ultraviolet::{Mat4, Rotor3, Vec2, Vec3, Vec4};
+use ultraviolet::{Rotor3, Vec2, Vec3, Vec4};
 
 use log::*;
 
 use crate::route::Route2D;
 
-mod camera_renderer;
 mod route;
 
 const FRAMES_IN_FLIGHT: usize = 3;
@@ -409,34 +408,7 @@ impl VulkanLayer {
         let swapchain_node = {
             let indirect_renderer = indirect_renderer.clone();
 
-            let mut uniformbuffers = (0..FRAMES_IN_FLIGHT)
-                .map(|_| {
-                    Buffer::new(
-                        context.clone(),
-                        BufferType::Uniform,
-                        BufferAccess::MappedPersistent,
-                        &[CameraData {
-                            viewproj: Mat4::default(),
-                        }],
-                    )
-                })
-                .collect::<Result<Vec<_>>>()?;
-
-            let camera_sets = uniformbuffers
-                .iter()
-                .map(|u| {
-                    DescriptorBuilder::new()
-                        .bind_uniform_buffer(0, ShaderStageFlags::VERTEX, u)
-                        .build_one(
-                            context.device(),
-                            &mut descriptor_layout_cache,
-                            &mut descriptor_allocator,
-                        )
-                        .map(|(a, _)| a)
-                })
-                .collect::<Result<Vec<_>>>()?;
-
-            let camera_id = world
+            let camera = world
                 .query::<&Camera>()
                 .without::<Canvas>()
                 .iter()
@@ -473,6 +445,7 @@ impl VulkanLayer {
                     ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
                     ClearValue::DepthStencil(1.0, 0).into(),
                 ],
+
                 node: Box::new(
                     move |world: &mut World,
                           cmd: &CommandBuffer,
@@ -480,23 +453,13 @@ impl VulkanLayer {
                           _global_set: DescriptorSet,
                           resources: &ResourceManager|
                           -> anyhow::Result<()> {
-                        let camera = world
-                            .query_one_mut::<&Camera>(camera_id)
-                            .context("Node camera does not exist")?;
-
-                        uniformbuffers[current_frame].fill(
-                            0,
-                            &[CameraData {
-                                viewproj: camera.viewproj(),
-                            }],
-                        )?;
-
+                        log::debug!("Using camera: {:?}", camera);
                         indirect_renderer.borrow_mut().draw::<DiffusePass>(
                             world,
+                            camera,
                             cmd,
                             current_frame,
-                            camera_sets[current_frame],
-                            &[],
+                            0,
                             &resources,
                         )?;
 
@@ -795,30 +758,14 @@ impl Layer for VulkanLayer {
         _events: &mut Events,
         _frame_time: Duration,
     ) -> anyhow::Result<()> {
-        // let current_frame = self.current_frame;
-
-        //         fence::wait(self.context.device(), &[frame.fence], true)?;
-        //         fence::reset(self.context.device(), &[frame.fence])?;
-
-        // let canvas = world
-        //     .query::<&Canvas>()
-        //     .iter()
-        //     .next()
-        //     .ok_or(anyhow!("Missing canvas"))?
-        //     .0;
-
-        // ivy_ui::systems::statisfy_widgets(world);
-        // ivy_ui::systems::update_canvas(world, canvas)?;
-        // ivy_ui::systems::update_model_matrices(world);
-
-        // Record commandbuffer
-        // frame.commandpool.reset(false)?;
-        // let cmd = &frame.commandbuffer;
-
-        // Begin recording the commandbuffer, hinting that it will only be used once
-        // cmd.begin(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT)?;
-
-        // Begin surface rendering renderpass
+        // Ensure gpu side data for cameras
+        GpuCameraData::create_gpu_cameras(
+            self.context.clone(),
+            world,
+            &mut self.descriptor_layout_cache,
+            &mut self.descriptor_allocator,
+            self.swapchain.image_count(),
+        )?;
 
         let current_frame = self
             .swapchain
@@ -834,6 +781,8 @@ impl Layer for VulkanLayer {
             indirect_renderer.update(world, current_frame)?;
         }
 
+        GpuCameraData::update_all(world, current_frame)?;
+
         let frame = &mut self.frames[current_frame];
         frame.global_uniformbuffer.fill(0, &[self.global_data])?;
 
@@ -845,47 +794,6 @@ impl Layer for VulkanLayer {
             &[self.rendergraph.signal_semaphore()],
             current_frame as u32,
         )?;
-
-        // // Bind the global uniform buffer
-        // for camera in cameras.into_iter() {
-        //     let camera_offset = self..offset_of(world, camera)?;
-
-        //     self.indirect_renderer.draw::<DiffusePass>(
-        //         world,
-        //         cmd,
-        //         current_frame,
-        //         frame.set,
-        //         &[camera_offset],
-        //         &self.resources,
-        //     )?
-        // }
-
-        // Draw ui
-        // ivy_ui::systems::update_ui(world, canvas)?;
-        // self.image_renderer
-        //     .register_entities::<DiffusePass>(world, &mut self.descriptor_layout_cache)?;
-
-        // self.image_renderer.update(world, current_frame)?;
-
-        // let canvas_offset = self.camera_manager.offset_of(world, canvas)?;
-
-        // self.image_renderer.draw::<DiffusePass>(
-        //     world,
-        //     cmd,
-        //     current_frame,
-        //     frame.set,
-        //     &[canvas_offset],
-        //     &self.resources,
-        // )?;
-
-        // Done
-        // frame.commandbuffer.end_renderpass();
-        // cmd.end()?;
-
-        // Submit and present
-        // self.window_renderer.submit(cmd, frame.fence)?;
-
-        // self.current_frame = (self.current_frame + 1) % FRAMES_IN_FLIGHT;
 
         Ok(())
     }

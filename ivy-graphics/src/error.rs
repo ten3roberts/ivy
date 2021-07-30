@@ -26,6 +26,6 @@ pub enum Error {
     #[error(transparent)]
     NoSuchEntity(#[from] hecs::NoSuchEntity),
 
-    #[error("The maximum number of cameras have been reached ({0})")]
-    CameraLimit(u32),
+    #[error("The provided camera '{0:?}' does not have gpu side data")]
+    MissingGpuCamera(hecs::Entity),
 }

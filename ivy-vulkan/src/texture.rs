@@ -89,13 +89,6 @@ impl Texture {
             mip_levels = mip_levels.min(info.mip_levels)
         }
 
-        let usage = info.usage
-            | if mip_levels > 1 {
-                vk::ImageUsageFlags::TRANSFER_SRC | vk::ImageUsageFlags::TRANSFER_DST
-            } else {
-                vk::ImageUsageFlags::TRANSFER_DST
-            };
-
         let memory_usage = vk_mem::MemoryUsage::GpuOnly;
         let flags = vk_mem::AllocationCreateFlags::NONE;
 
@@ -111,7 +104,7 @@ impl Texture {
             .format(info.format)
             .tiling(vk::ImageTiling::OPTIMAL)
             .initial_layout(vk::ImageLayout::UNDEFINED)
-            .usage(usage)
+            .usage(info.usage)
             .sharing_mode(vk::SharingMode::EXCLUSIVE)
             .samples(info.samples);
 
