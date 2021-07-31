@@ -266,7 +266,7 @@ impl PassData {
             *buffer = create_indirect_buffer(self.context.clone(), capacity)?;
         }
 
-        self.dirty = vec![true; self.dirty.len()];
+        self.dirty.fill(true);
 
         self.capacity = capacity;
 
@@ -345,7 +345,7 @@ impl PassData {
         let (_, batch) = self.get_batch(shaderpass, *image);
 
         batch.ids.push(object_marker.id);
-        self.dirty = vec![true; self.dirty.len()];
+        self.dirty.fill(true);
         self.object_count += 1;
 
         Ok((

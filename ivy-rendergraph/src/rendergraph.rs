@@ -30,6 +30,8 @@ pub struct RenderGraph {
     /// nodes will be merged into subpasses. Indexed by the ordered nodes.
     renderpasses: Vec<RenderPass>,
     ordered_nodes: Vec<NodeIndex>,
+    // Maps from nodes to ordered nodes
+    ordered_map: HashMap<NodeIndex, usize>,
 
     // Data for each frame in flight
     frames: Vec<FrameData>,
@@ -55,6 +57,7 @@ impl RenderGraph {
             framebuffers: Vec::new(),
             renderpasses: Vec::new(),
             ordered_nodes: Vec::new(),
+            ordered_map: HashMap::new(),
             frames,
             wait_semaphore,
             signal_semaphore,
@@ -94,7 +97,7 @@ impl RenderGraph {
                             Some(Edge {
                                 src,
                                 dst,
-                                write_stage: vk::PipelineStageFlags::FRAGMENT_SHADER,
+                                write_stage: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
                                 read_stage: vk::PipelineStageFlags::FRAGMENT_SHADER,
                                 write_access: vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
                                 read_access: vk::AccessFlags::SHADER_READ,
@@ -134,9 +137,8 @@ impl RenderGraph {
 
     pub fn node_renderpass(&self, node_index: NodeIndex) -> Result<&RenderPass> {
         let index = self
-            .ordered_nodes
-            .iter()
-            .find(|node| **node == node_index)
+            .ordered_map
+            .get(&node_index)
             .ok_or(Error::InvalidNodeIndex(node_index))?;
 
         Ok(&self.renderpasses[*index])
@@ -155,12 +157,23 @@ impl RenderGraph {
 
         let nodes = &self.nodes;
 
+        self.ordered_map.clear();
+
+        let ordered_map = &mut self.ordered_map;
+
+        self.ordered_nodes
+            .iter()
+            .enumerate()
+            .for_each(|(i, node_idx)| {
+                ordered_map.insert(*node_idx, i);
+            });
+
         // Create all renderpasses for the graph
         self.renderpasses = self
             .ordered_nodes
             .iter()
-            .map(|idx| -> Result<RenderPass> {
-                let node = &nodes[*idx];
+            .map(|node_idx| -> Result<RenderPass> {
+                let node = &nodes[*node_idx];
                 let attachments = node
                     .color_attachments
                     .iter()
@@ -183,7 +196,7 @@ impl RenderGraph {
 
                 let dependency = self
                     .edges
-                    .get(&idx)
+                    .get(&node_idx)
                     .iter()
                     .flat_map(|edges| edges.iter())
                     .fold(
@@ -255,8 +268,9 @@ impl RenderGraph {
         self.framebuffers = self
             .ordered_nodes
             .iter()
-            .flat_map(|idx| {
-                let node = &nodes[*idx];
+            .enumerate()
+            .flat_map(|(i, node_idx)| {
+                let node = &nodes[*node_idx];
                 (0..frames_in_flight).map(move |frame| {
                     let attachments = node
                         .color_attachments
@@ -264,12 +278,8 @@ impl RenderGraph {
                         .chain(node.depth_attachment.iter())
                         .map(|attachment| Ok(textures.get(attachment.resource[frame])?))
                         .collect::<Result<Vec<_>>>()?;
-                    let framebuffer = Framebuffer::new(
-                        device.clone(),
-                        &renderpasses[*idx],
-                        &attachments,
-                        extent,
-                    )?;
+                    let framebuffer =
+                        Framebuffer::new(device.clone(), &renderpasses[i], &attachments, extent)?;
 
                     Ok(framebuffer)
                 })
@@ -315,12 +325,13 @@ impl RenderGraph {
         // Execute all nodes
         self.ordered_nodes
             .iter()
-            .try_for_each(|idx| -> Result<()> {
-                let node = &mut nodes[*idx];
+            .enumerate()
+            .try_for_each(|(i, node_idx)| -> Result<()> {
+                let node = &mut nodes[*node_idx];
 
                 commandbuffer.begin_renderpass(
-                    &renderpasses[*idx],
-                    &framebuffers[frames_in_flight * *idx + current_frame],
+                    &renderpasses[i],
+                    &framebuffers[frames_in_flight * i + current_frame],
                     extent,
                     &node.clear_values,
                 );
@@ -506,7 +517,7 @@ mod tests {
 
         let ordered_nodes = ordered
             .iter()
-            .map(|idx| (nodes[*idx], depths[idx]))
+            .map(|node_idx| (nodes[*node_idx], depths[node_idx]))
             .collect::<Vec<_>>();
 
         dbg!(ordered_nodes);

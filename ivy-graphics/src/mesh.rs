@@ -28,42 +28,37 @@ impl Vertex {
     }
 }
 
-const ATTRIBUTE_DESCRIPTIONS: &[vk::VertexInputAttributeDescription] = &[
-    // vec3 3*4 bytes
-    vk::VertexInputAttributeDescription {
-        binding: 0,
-        location: 0,
-        format: vk::Format::R32G32B32_SFLOAT,
-        offset: 0,
-    },
-    // vec3 3*4 bytes
-    vk::VertexInputAttributeDescription {
-        binding: 0,
-        location: 1,
-        format: vk::Format::R32G32B32_SFLOAT,
-        offset: 12,
-    },
-    // vec2 2*4 bytes
-    vk::VertexInputAttributeDescription {
-        binding: 0,
-        location: 2,
-        format: vk::Format::R32G32_SFLOAT,
-        offset: 12 + 12,
-    },
-];
-
 impl vulkan::VertexDesc for Vertex {
-    fn binding_description() -> vk::VertexInputBindingDescription {
+    const BINDING_DESCRIPTION: vk::VertexInputBindingDescription =
         vk::VertexInputBindingDescription {
             binding: 0,
             stride: mem::size_of::<Self>() as u32,
             input_rate: vk::VertexInputRate::VERTEX,
-        }
-    }
+        };
 
-    fn attribute_descriptions() -> &'static [vk::VertexInputAttributeDescription] {
-        ATTRIBUTE_DESCRIPTIONS
-    }
+    const ATTRIBUTE_DESCRIPTIONS: &'static [vk::VertexInputAttributeDescription] = &[
+        // vec3 3*4 bytes
+        vk::VertexInputAttributeDescription {
+            binding: 0,
+            location: 0,
+            format: vk::Format::R32G32B32_SFLOAT,
+            offset: 0,
+        },
+        // vec3 3*4 bytes
+        vk::VertexInputAttributeDescription {
+            binding: 0,
+            location: 1,
+            format: vk::Format::R32G32B32_SFLOAT,
+            offset: 12,
+        },
+        // vec2 2*4 bytes
+        vk::VertexInputAttributeDescription {
+            binding: 0,
+            location: 2,
+            format: vk::Format::R32G32_SFLOAT,
+            offset: 12 + 12,
+        },
+    ];
 }
 
 /// Represents a vertex and index buffer of `mesh::Vertex` mesh.

@@ -379,6 +379,7 @@ dependencies = [
 name = "ivy-graphics"
 version = "0.1.0"
 dependencies = [
+ "anymap",
  "ash",
  "derive_more",
  "glfw",

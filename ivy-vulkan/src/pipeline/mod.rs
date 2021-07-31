@@ -14,11 +14,12 @@ use ash::vk;
 mod shader;
 use shader::*;
 
-pub struct PipelineInfo<'a> {
+#[derive(Debug, Clone)]
+pub struct PipelineInfo<'a, 'b, 'c> {
     pub vertexshader: PathBuf,
     pub fragmentshader: PathBuf,
-    pub vertex_binding: vk::VertexInputBindingDescription,
-    pub vertex_attributes: &'static [vk::VertexInputAttributeDescription],
+    pub vertex_bindings: &'a [vk::VertexInputBindingDescription],
+    pub vertex_attributes: &'b [vk::VertexInputAttributeDescription],
     pub samples: vk::SampleCountFlags,
     pub extent: Extent,
     pub subpass: u32,
@@ -26,15 +27,15 @@ pub struct PipelineInfo<'a> {
     pub cull_mode: vk::CullModeFlags,
     pub front_face: vk::FrontFace,
     /// The bindings specified
-    pub set_layouts: &'a [DescriptorLayoutInfo],
+    pub set_layouts: &'c [DescriptorLayoutInfo],
 }
 
-impl<'a> Default for PipelineInfo<'a> {
+impl<'a, 'b, 'c> Default for PipelineInfo<'a, 'b, 'c> {
     fn default() -> Self {
         Self {
             vertexshader: "".into(),
             fragmentshader: "".into(),
-            vertex_binding: vk::VertexInputBindingDescription::default(),
+            vertex_bindings: &[],
             vertex_attributes: &[],
             samples: vk::SampleCountFlags::TYPE_1,
             extent: (0, 0).into(),
@@ -91,11 +92,9 @@ impl Pipeline {
                 .build(),
         ];
 
-        let vertex_binding_descriptions = [info.vertex_binding];
-
         // No vertices for now
         let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::builder()
-            .vertex_binding_descriptions(&vertex_binding_descriptions)
+            .vertex_binding_descriptions(&info.vertex_bindings)
             .vertex_attribute_descriptions(&info.vertex_attributes);
 
         let input_assembly = vk::PipelineInputAssemblyStateCreateInfo::builder()

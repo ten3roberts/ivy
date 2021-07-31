@@ -3,12 +3,18 @@ use std::marker::PhantomData;
 
 use generational_arena::Index;
 
-#[derive(Debug)]
 pub struct Handle<T>(Index, PhantomData<T>);
 
 impl<T> Handle<T> {
     pub fn invalid() -> Self {
         Self(Index::from_raw_parts(usize::MAX, u64::MAX), PhantomData)
+    }
+}
+
+impl<T> std::fmt::Debug for Handle<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let (index, generation) = self.0.into_raw_parts();
+        write!(f, "({},{})", index, generation)
     }
 }
 

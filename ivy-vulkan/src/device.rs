@@ -254,6 +254,7 @@ pub fn create(
 
     // TODO May not be present on all devices
     let enabled_features = vk::PhysicalDeviceFeatures {
+        fill_mode_non_solid: vk::TRUE,
         sampler_anisotropy: pdevice_info.features.sampler_anisotropy,
         multi_draw_indirect: vk::TRUE,
         ..Default::default()
@@ -280,11 +281,13 @@ pub fn get_limits(
 }
 
 pub fn wait_idle(device: &Device) -> Result<()> {
+    // log::debug!("Device wait idle");
     unsafe { device.device_wait_idle()? }
     Ok(())
 }
 
 pub fn queue_wait_idle(device: &Device, queue: vk::Queue) -> Result<()> {
+    // log::debug!("Queue wait idle");
     unsafe { device.queue_wait_idle(queue)? }
     Ok(())
 }

@@ -46,9 +46,7 @@ unsafe extern "system" fn debug_callback(
         vk::DebugUtilsMessageSeverityFlagsEXT::WARNING => log::warn!("{}", msg),
         vk::DebugUtilsMessageSeverityFlagsEXT::INFO => log::info!("{}", msg),
         vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE => log::trace!("{}", msg),
-        _ => {
-            panic!("Unexhaustive match")
-        }
+        _ => log::trace!("{}", msg),
     };
     vk::FALSE
 }

@@ -1,4 +1,4 @@
-use crate::{GpuCameraData, Renderer, Result};
+use crate::{Renderer, Result};
 use hecs::{Entity, World};
 use ivy_resources::{Handle, ResourceCache, ResourceManager};
 use ivy_vulkan::{
@@ -191,14 +191,14 @@ impl Renderer for IndirectMeshRenderer {
         &mut self,
         // The ecs world
         world: &mut World,
-        // The camera to use for rendering
-        camera: Entity,
         // The commandbuffer to record into
         cmd: &CommandBuffer,
         // The current swapchain image or backbuffer index
         current_frame: usize,
-        // Descriptor sets to bind before the sets bound by renderer
-        first_set: u32,
+        // Descriptor sets to bind before renderer specific sets
+        sets: &[DescriptorSet],
+        // Dynamic offsets for supplied sets
+        offsets: &[u32],
         // Graphics resources like textures and materials
         resources: &ResourceManager,
     ) -> Result<()> {
@@ -217,8 +217,6 @@ impl Renderer for IndirectMeshRenderer {
             }
         };
 
-        let camera_set = world.get::<GpuCameraData>(camera)?.set(current_frame);
-
         let passes = resources.cache()?;
         let materials = resources.cache()?;
         let meshes = resources.cache()?;
@@ -228,8 +226,8 @@ impl Renderer for IndirectMeshRenderer {
         pass.draw(
             cmd,
             current_frame,
-            first_set,
-            camera_set,
+            sets,
+            offsets,
             frame_set,
             &meshes,
             &materials,
@@ -411,8 +409,8 @@ impl PassData {
         &mut self,
         cmd: &CommandBuffer,
         current_frame: usize,
-        first_set: u32,
-        camera_set: DescriptorSet,
+        sets: &[DescriptorSet],
+        offsets: &[u32],
         frame_set: DescriptorSet,
         meshes: &ResourceCache<Mesh>,
         materials: &ResourceCache<Material>,
@@ -431,10 +429,14 @@ impl PassData {
             let material = materials.get(batch.material)?;
             let mesh = meshes.get(batch.mesh)?;
 
+            if !sets.is_empty() {
+                cmd.bind_descriptor_sets(batch.pipeline_layout, 0, sets, offsets);
+            }
+
             cmd.bind_descriptor_sets(
                 batch.pipeline_layout,
-                first_set,
-                &[camera_set, frame_set, material.set()],
+                sets.len() as u32,
+                &[frame_set, material.set()],
                 &[],
             );
 

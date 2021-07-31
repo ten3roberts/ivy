@@ -59,6 +59,7 @@ where
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct AttachmentInfo {
     // TODO, derive from edges
     pub store_op: StoreOp,
@@ -72,7 +73,7 @@ impl Default for AttachmentInfo {
     fn default() -> Self {
         Self {
             store_op: StoreOp::STORE,
-            load_op: LoadOp::CLEAR,
+            load_op: LoadOp::DONT_CARE,
             initial_layout: ImageLayout::UNDEFINED,
             final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
             resource: AttachmentResource::Single(Handle::invalid()),
@@ -86,7 +87,7 @@ impl PartialEq for AttachmentInfo {
     }
 }
 
-#[derive(PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum AttachmentResource {
     Single(Handle<Texture>),
     PerFrame(Vec<Handle<Texture>>),

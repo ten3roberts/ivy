@@ -38,7 +38,7 @@ where
         .unwrap_or_default();
 
     let process = match extension {
-        ".glsl" | "vert" | "frag" => Some(compile_glsl(path)?),
+        "glsl" | "vert" | "frag" => Some(compile_glsl(path)?),
         _ => None,
     };
 

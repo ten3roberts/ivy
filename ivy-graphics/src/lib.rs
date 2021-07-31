@@ -4,6 +4,7 @@
 mod camera;
 mod document;
 mod error;
+mod fullscreen_renderer;
 mod material;
 mod mesh;
 mod mesh_renderer;
@@ -17,6 +18,7 @@ pub mod window;
 pub use camera::*;
 pub use document::*;
 pub use error::*;
+pub use fullscreen_renderer::*;
 pub use material::*;
 pub use mesh::*;
 pub use mesh_renderer::*;

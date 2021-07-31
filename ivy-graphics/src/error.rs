@@ -25,7 +25,4 @@ pub enum Error {
 
     #[error(transparent)]
     NoSuchEntity(#[from] hecs::NoSuchEntity),
-
-    #[error("The provided camera '{0:?}' does not have gpu side data")]
-    MissingGpuCamera(hecs::Entity),
 }

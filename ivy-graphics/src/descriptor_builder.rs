@@ -1,5 +1,5 @@
 use crate::Result;
-use crate::{Buffer, BufferType};
+use crate::{Buffer, BufferType, Sampler, Texture};
 use arrayvec::ArrayVec;
 use ash::version::DeviceV1_0;
 use ash::vk::WriteDescriptorSet;
@@ -213,8 +213,8 @@ impl DescriptorBuilder {
         sampler: S,
     ) -> &mut Self
     where
-        T: Into<vk::ImageView>,
-        S: Into<vk::Sampler>,
+        T: Deref<Target = ResourceCache<Texture>>,
+        S: Deref<Target = ResourceCache<Sampler>>,
     {
         self.image_infos[binding as usize] = vk::DescriptorImageInfo {
             sampler: sampler.into(),
