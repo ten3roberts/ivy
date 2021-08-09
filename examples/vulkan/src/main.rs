@@ -425,7 +425,7 @@ impl VulkanLayer {
             context.clone(),
             &mut descriptor_layout_cache,
             16,
-            FRAMES_IN_FLIGHT,
+            swapchain.image_count(),
         )?;
 
         let indirect_renderer = Arc::new(AtomicRefCell::new(indirect_renderer));
@@ -642,11 +642,11 @@ impl VulkanLayer {
             context.clone(),
             &mut descriptor_layout_cache,
             16,
-            FRAMES_IN_FLIGHT,
+            swapchain.image_count(),
         )?;
 
         // Data that is tied and updated per swapchain image basis
-        let frames = (0..FRAMES_IN_FLIGHT)
+        let frames = (0..swapchain.image_count())
             .map(|_| {
                 FrameData::new(
                     context.clone(),
