@@ -17,7 +17,7 @@ use ivy_rendergraph::{AttachmentInfo, NodeInfo, RenderGraph};
 use ivy_resources::{Handle, Resources};
 use ivy_ui::{
     constraints::{AbsoluteOffset, AbsoluteSize, Aspect, RelativeOffset, RelativeSize},
-    Canvas, Image, ImageRenderer, Position2D, Size2D, Widget,
+    Canvas, Image, Position2D, Size2D, Widget,
 };
 use ivy_vulkan::{commands::*, descriptors::*, vk::CullModeFlags, *};
 use std::{
@@ -269,8 +269,6 @@ struct VulkanLayer {
 
     window: Arc<AtomicRefCell<Window>>,
     swapchain: Swapchain,
-    image_renderer: ImageRenderer,
-    indirect_renderer: Arc<AtomicRefCell<IndirectMeshRenderer>>,
 
     rendergraph: RenderGraph,
 
@@ -412,17 +410,14 @@ impl VulkanLayer {
 
         let mut rendergraph = RenderGraph::new(context.clone(), swapchain.image_count() as usize)?;
 
-        let indirect_renderer = IndirectMeshRenderer::new(
+        resources.insert_default(IndirectMeshRenderer::new(
             context.clone(),
             &mut descriptor_layout_cache,
             16,
             swapchain.image_count(),
-        )?;
+        )?)?;
 
-        let indirect_renderer = Arc::new(AtomicRefCell::new(indirect_renderer));
-
-        let fullscreen_renderer = FullscreenRenderer::new();
-        let fullscreen_renderer = Arc::new(AtomicRefCell::new(fullscreen_renderer));
+        resources.insert_default(FullscreenRenderer)?;
 
         let camera = world
             .query::<&Camera>()
@@ -495,8 +490,6 @@ impl VulkanLayer {
             )?
             .0;
 
-        let renderer = indirect_renderer.clone();
-
         let diffuse_node = rendergraph.add_node(NodeInfo {
             color_attachments: vec![AttachmentInfo {
                 final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
@@ -526,21 +519,23 @@ impl VulkanLayer {
                       -> anyhow::Result<()> {
                     let camera_set = world.get::<GpuCameraData>(camera)?.set(current_frame);
 
-                    renderer.borrow_mut().draw::<DiffusePass>(
-                        world,
-                        cmd,
-                        current_frame,
-                        &[camera_set],
-                        &[],
-                        &resources,
-                    )?;
+                    resources
+                        .default_mut::<IndirectMeshRenderer>()
+                        .context("No default indirect renderer")?
+                        .draw::<DiffusePass>(
+                            world,
+                            cmd,
+                            current_frame,
+                            &[camera_set],
+                            &[],
+                            &resources,
+                        )?;
 
                     Ok(())
                 },
             ),
         });
 
-        let renderer = indirect_renderer.clone();
         let wireframe_depth_buffer = resources.insert(Texture::new(
             context.clone(),
             &TextureInfo {
@@ -581,21 +576,22 @@ impl VulkanLayer {
                       -> anyhow::Result<()> {
                     let camera_set = world.get::<GpuCameraData>(camera)?.set(current_frame);
 
-                    renderer.borrow_mut().draw::<WireframePass>(
-                        world,
-                        cmd,
-                        current_frame,
-                        &[camera_set],
-                        &[],
-                        &resources,
-                    )?;
+                    resources
+                        .default_mut::<IndirectMeshRenderer>()
+                        .context("No default indirect renderer")?
+                        .draw::<WireframePass>(
+                            world,
+                            cmd,
+                            current_frame,
+                            &[camera_set],
+                            &[],
+                            &resources,
+                        )?;
 
                     Ok(())
                 },
             ),
         });
-
-        let renderer = fullscreen_renderer.clone();
 
         let fullscreen_node = rendergraph.add_node(NodeInfo {
             color_attachments: vec![AttachmentInfo {
@@ -613,14 +609,17 @@ impl VulkanLayer {
                       _global_set: DescriptorSet,
                       resources: &Resources|
                       -> anyhow::Result<()> {
-                    renderer.borrow_mut().draw::<PostProcessingPass>(
-                        world,
-                        cmd,
-                        current_frame,
-                        &[diffuse_descriptor],
-                        &[],
-                        resources,
-                    )?;
+                    resources
+                        .default_mut::<FullscreenRenderer>()
+                        .context("No default fullscreen renderer")?
+                        .draw::<PostProcessingPass>(
+                            world,
+                            cmd,
+                            current_frame,
+                            &[diffuse_descriptor],
+                            &[],
+                            resources,
+                        )?;
 
                     Ok(())
                 },
@@ -628,13 +627,6 @@ impl VulkanLayer {
         });
 
         rendergraph.build(resources.fetch()?, swapchain.extent())?;
-
-        let image_renderer = ImageRenderer::new(
-            context.clone(),
-            &mut descriptor_layout_cache,
-            16,
-            swapchain.image_count(),
-        )?;
 
         // Data that is tied and updated per swapchain image basis
         let frames = (0..swapchain.image_count())
@@ -808,13 +800,10 @@ impl VulkanLayer {
         let default_shaderpass = resources.insert(DiffusePass(pipeline))?;
         let uv_shaderpass = resources.insert(DiffusePass(uv_pipeline))?;
 
-        let fullscreen_shaderpass = resources.insert(PostProcessingPass(fullscreen_pipeline))?;
+        // Insert one default post processing pass
+        resources.insert_default(PostProcessingPass(fullscreen_pipeline))?;
 
         let wireframe_shaderpass = resources.insert(WireframePass(wireframe_pipeline))?;
-
-        fullscreen_renderer
-            .borrow_mut()
-            .insert_shaderpass(fullscreen_shaderpass);
 
         world.spawn_batch(
             [
@@ -900,8 +889,6 @@ impl VulkanLayer {
         Ok(Self {
             context,
             window,
-            image_renderer,
-            indirect_renderer,
             swapchain,
             rendergraph,
             descriptor_layout_cache,
@@ -936,7 +923,7 @@ impl Layer for VulkanLayer {
             .next_image(self.rendergraph.wait_semaphore())? as usize;
 
         {
-            let mut indirect_renderer = self.indirect_renderer.borrow_mut();
+            let mut indirect_renderer = self.resources.default_mut::<IndirectMeshRenderer>()?;
             indirect_renderer
                 .register_entities::<DiffusePass>(world, &mut self.descriptor_layout_cache)?;
 

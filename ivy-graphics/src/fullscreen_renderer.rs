@@ -1,24 +1,9 @@
 use crate::{Renderer, Result, ShaderPass};
-use anymap::AnyMap;
 use ash::vk::DescriptorSet;
-use ivy_resources::{Handle, Resources};
+use ivy_resources::Resources;
 
 // Renders a fullscreen quad using the supplied shader pass and descriptors
-pub struct FullscreenRenderer {
-    shaderpasses: AnyMap,
-}
-
-impl FullscreenRenderer {
-    pub fn new() -> Self {
-        Self {
-            shaderpasses: AnyMap::new(),
-        }
-    }
-
-    pub fn insert_shaderpass<Pass: 'static + ShaderPass>(&mut self, shaderpass: Handle<Pass>) {
-        self.shaderpasses.insert(shaderpass);
-    }
-}
+pub struct FullscreenRenderer;
 
 impl Renderer for FullscreenRenderer {
     fn draw<Pass: 'static + ShaderPass + Sized + Sync + Send>(
@@ -36,9 +21,7 @@ impl Renderer for FullscreenRenderer {
         // Graphics resources like textures and materials
         resources: &Resources,
     ) -> Result<()> {
-        let pass = *self.shaderpasses.get::<Handle<Pass>>().unwrap();
-
-        let pass = resources.get::<Pass>(pass)?;
+        let pass = resources.default::<Pass>()?;
 
         cmd.bind_pipeline(pass.pipeline());
 

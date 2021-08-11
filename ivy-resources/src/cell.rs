@@ -66,6 +66,7 @@ impl<'a, T> CellRef<'a, T>
 where
     T: 'static,
 {
+    #[inline]
     pub fn new(borrow: AtomicRef<'a, dyn Storage>) -> Result<Self> {
         let data = borrow
             .deref()
@@ -81,6 +82,7 @@ where
     }
 
     // Transforms the borrowed cell.
+    #[inline]
     pub fn map<U: 'static, F: FnOnce(&T) -> &U>(self, f: F) -> CellRef<'a, U> {
         CellRef {
             value: f(self.value),
@@ -90,6 +92,7 @@ where
     }
 
     // Fallible version of [`map`].
+    #[inline]
     pub fn try_map<U: 'static, F: FnOnce(&T) -> std::result::Result<&U, E>, E>(
         self,
         f: F,
@@ -124,6 +127,7 @@ impl<'a, T> CellRefMut<'a, T>
 where
     T: 'static,
 {
+    #[inline]
     pub fn new(mut borrow: AtomicRefMut<'a, dyn Storage>) -> Result<Self> {
         let data = borrow
             .deref_mut()
@@ -139,6 +143,7 @@ where
     }
 
     // Transforms the borrowed cell.
+    #[inline]
     pub fn map<U: 'static, F: FnOnce(&mut T) -> &mut U>(self, f: F) -> CellRefMut<'a, U> {
         CellRefMut {
             value: f(self.value),
@@ -148,6 +153,7 @@ where
     }
 
     // Fallible version of [`map`].
+    #[inline]
     pub fn try_map<U: 'static, F: FnOnce(&mut T) -> std::result::Result<&mut U, E>, E>(
         self,
         f: F,
@@ -192,10 +198,12 @@ impl<T> Storage for T
 where
     T: 'static + Sized + Send + Sync,
 {
+    #[inline]
     fn as_any(&self) -> &dyn std::any::Any {
         self as &dyn std::any::Any
     }
 
+    #[inline]
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self as &mut dyn std::any::Any
     }

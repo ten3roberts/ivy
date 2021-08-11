@@ -1,7 +1,6 @@
+pub use slotmap::{Key, KeyData};
 use std::hash::Hash;
 use std::marker::PhantomData;
-
-use slotmap::{Key, KeyData};
 
 #[derive()]
 pub struct Handle<T>(KeyData, PhantomData<T>);
