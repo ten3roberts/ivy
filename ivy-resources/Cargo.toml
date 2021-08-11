@@ -8,6 +8,6 @@ edition = "2018"
 
 [dependencies]
 atomic_refcell = "0.1.7"
-generational-arena = "0.2"
+slotmap = "1.0"
 parking_lot = "0.11"
 thiserror = "1.0"

@@ -1,7 +1,7 @@
 use crate::Result;
 use std::any::type_name;
 
-use generational_arena::Arena;
+use slotmap::SlotMap;
 
 use crate::{Error, Handle};
 
@@ -9,13 +9,13 @@ pub trait Resource {}
 
 /// Stores resources of a single type. Resources are inserted and accessed by a handle.
 pub struct ResourceCache<T> {
-    resources: Arena<T>,
+    resources: SlotMap<Handle<T>, T>,
 }
 
 impl<T: 'static + Sized> ResourceCache<T> {
     pub fn new() -> Self {
         Self {
-            resources: Arena::new(),
+            resources: SlotMap::with_key(),
         }
     }
 

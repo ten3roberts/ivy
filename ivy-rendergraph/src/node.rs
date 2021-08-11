@@ -39,13 +39,7 @@ pub trait Node {
 
 impl<T> Node for T
 where
-    T: FnMut(
-        &mut World,
-        &CommandBuffer,
-        usize,
-        DescriptorSet,
-        &Resources,
-    ) -> anyhow::Result<()>,
+    T: FnMut(&mut World, &CommandBuffer, usize, DescriptorSet, &Resources) -> anyhow::Result<()>,
 {
     fn execute(
         &mut self,
@@ -76,7 +70,7 @@ impl Default for AttachmentInfo {
             load_op: LoadOp::DONT_CARE,
             initial_layout: ImageLayout::UNDEFINED,
             final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-            resource: AttachmentResource::Single(Handle::invalid()),
+            resource: AttachmentResource::Single(Handle::null()),
         }
     }
 }

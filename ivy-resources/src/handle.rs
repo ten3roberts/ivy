@@ -1,20 +1,58 @@
 use std::hash::Hash;
 use std::marker::PhantomData;
 
-use generational_arena::Index;
+use slotmap::{Key, KeyData};
 
-pub struct Handle<T>(Index, PhantomData<T>);
+#[derive()]
+pub struct Handle<T>(KeyData, PhantomData<T>);
 
 impl<T> Handle<T> {
-    pub fn invalid() -> Self {
-        Self(Index::from_raw_parts(usize::MAX, u64::MAX), PhantomData)
+    /// Creates a new handle that is always invalid and distinct from any non-null
+    /// handle. A null key can only be created through this method (or default
+    /// initialization of handles made with [`new_key_type!`], which calls this
+    /// method).
+    ///
+    /// A null handle is always invalid, but an invalid key (that is, a key that
+    /// has been removed from the slot map) does not become a null handle. A null
+    /// is safe to use with any safe method of any slot map instance.
+    pub fn null() -> Self {
+        Key::null()
+    }
+
+    /// Checks if a handle is null. There is only a single null key, that is
+    /// `a.is_null() && b.is_null()` implies `a == b`.
+    pub fn is_null(&self) -> bool {
+        Key::is_null(self)
+    }
+}
+
+impl<T> Key for Handle<T> {
+    fn data(&self) -> KeyData {
+        self.0
+    }
+}
+
+impl<T> PartialOrd for Handle<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.0.cmp(&other.0))
+    }
+}
+
+impl<T> Ord for Handle<T> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0.cmp(&other.0)
+    }
+}
+
+impl<T> Default for Handle<T> {
+    fn default() -> Self {
+        Self(KeyData::default(), PhantomData)
     }
 }
 
 impl<T> std::fmt::Debug for Handle<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let (index, generation) = self.0.into_raw_parts();
-        write!(f, "({},{})", index, generation)
+        write!(f, "{:?}", self.0)
     }
 }
 
@@ -23,6 +61,8 @@ impl<T> Clone for Handle<T> {
         Self(self.0, PhantomData)
     }
 }
+
+impl<T> Copy for Handle<T> {}
 
 impl<T> PartialEq for Handle<T> {
     fn eq(&self, other: &Self) -> bool {
@@ -38,28 +78,8 @@ impl<T> Hash for Handle<T> {
     }
 }
 
-impl<T> Copy for Handle<T> {}
-
-impl<T> From<Index> for Handle<T> {
-    fn from(idx: Index) -> Self {
-        Self(idx, PhantomData)
-    }
-}
-
-impl<T> From<&Handle<T>> for Index {
-    fn from(handle: &Handle<T>) -> Index {
-        handle.0
-    }
-}
-
-impl<T> From<Handle<T>> for Index {
-    fn from(handle: Handle<T>) -> Index {
-        handle.0
-    }
-}
-
-impl<T> AsRef<Index> for Handle<T> {
-    fn as_ref(&self) -> &Index {
-        &self.0
+impl<T> From<KeyData> for Handle<T> {
+    fn from(k: KeyData) -> Self {
+        Self(k, PhantomData)
     }
 }
