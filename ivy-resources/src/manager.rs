@@ -8,15 +8,18 @@ use parking_lot::{MappedRwLockWriteGuard, RwLock, RwLockWriteGuard};
 
 use crate::{Handle, ResourceCache};
 
+pub type ResourceView<'a, T> = CellRef<'a, ResourceCache<T>>;
+pub type ResourceViewMut<'a, T> = CellRefMut<'a, ResourceCache<T>>;
+
 /// ResourceManager is a container for multi-valued strongly typed assets.
 /// Any static Send + Sync type can be stored in the container and a handle is returned to access
 /// the value using interior mutability. Containers for each used type is automatically
 /// created.
-pub struct ResourceManager {
+pub struct Resources {
     caches: RwLock<HashMap<TypeId, Cell>>,
 }
 
-impl ResourceManager {
+impl Resources {
     /// Creates a new empty resource manager. Caches will be added when requested.
     pub fn new() -> Self {
         Self {
@@ -29,7 +32,7 @@ impl ResourceManager {
     /// the same type to avoid having to lookup the entry multiple times.
     ///
     /// Fails if the type is already mutably borrowed.
-    pub fn fetch<T: Storage>(&self) -> Result<CellRef<ResourceCache<T>>> {
+    pub fn fetch<T: Storage>(&self) -> Result<ResourceView<T>> {
         // A raw pointer to the internally boxed AtomicRefCell is acquired. The pointer is
         // valid as long as self because caches can never be individually removed
         match self.caches.read().get(&TypeId::of::<T>()) {
@@ -46,7 +49,7 @@ impl ResourceManager {
     /// the same type to avoid having to lookup the entry multiple times.
     ///
     /// Fails if the type is already borrowed.
-    pub fn fetch_mut<T: Storage>(&self) -> Result<CellRefMut<ResourceCache<T>>> {
+    pub fn fetch_mut<T: Storage>(&self) -> Result<ResourceViewMut<T>> {
         // A raw pointer to the internally boxed AtomicRefCell is acquired. The pointer is
         // valid as long as self because caches can never be individually removed
         match self.caches.read().get(&TypeId::of::<T>()) {
@@ -96,7 +99,7 @@ impl ResourceManager {
     }
 }
 
-impl Default for ResourceManager {
+impl Default for Resources {
     fn default() -> Self {
         Self::new()
     }

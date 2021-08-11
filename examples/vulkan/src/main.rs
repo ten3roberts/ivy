@@ -14,7 +14,7 @@ use ivy_graphics::{
 };
 use ivy_input::{Input, InputAxis, InputVector};
 use ivy_rendergraph::{AttachmentInfo, NodeInfo, RenderGraph};
-use ivy_resources::{Handle, ResourceManager};
+use ivy_resources::{Handle, Resources};
 use ivy_ui::{
     constraints::{AbsoluteOffset, AbsoluteSize, Aspect, RelativeOffset, RelativeSize},
     Canvas, Image, ImageRenderer, Position2D, Size2D, Widget,
@@ -282,7 +282,7 @@ struct VulkanLayer {
     global_data: GlobalData,
 
     clock: Clock,
-    resources: ResourceManager,
+    resources: Resources,
 
     window_events: Receiver<WindowEvent>,
 }
@@ -393,7 +393,7 @@ impl VulkanLayer {
             samples: SampleCountFlags::TYPE_1,
         };
 
-        let resources = ResourceManager::new();
+        let resources = Resources::new();
 
         let swapchain_images = swapchain
             .images()
@@ -522,7 +522,7 @@ impl VulkanLayer {
                       cmd: &CommandBuffer,
                       current_frame: usize,
                       _global_set: DescriptorSet,
-                      resources: &ResourceManager|
+                      resources: &Resources|
                       -> anyhow::Result<()> {
                     let camera_set = world.get::<GpuCameraData>(camera)?.set(current_frame);
 
@@ -577,7 +577,7 @@ impl VulkanLayer {
                       cmd: &CommandBuffer,
                       current_frame: usize,
                       _global_set: DescriptorSet,
-                      resources: &ResourceManager|
+                      resources: &Resources|
                       -> anyhow::Result<()> {
                     let camera_set = world.get::<GpuCameraData>(camera)?.set(current_frame);
 
@@ -611,7 +611,7 @@ impl VulkanLayer {
                       cmd: &CommandBuffer,
                       current_frame: usize,
                       _global_set: DescriptorSet,
-                      resources: &ResourceManager|
+                      resources: &Resources|
                       -> anyhow::Result<()> {
                     renderer.borrow_mut().draw::<PostProcessingPass>(
                         world,

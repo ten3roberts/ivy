@@ -1,6 +1,6 @@
 use crate::{Renderer, Result};
 use hecs::{Entity, World};
-use ivy_resources::{Handle, ResourceCache, ResourceManager};
+use ivy_resources::{Handle, ResourceCache, Resources};
 use ivy_vulkan::{
     commands::CommandBuffer, descriptors::*, vk, Buffer, BufferAccess, BufferType, VulkanContext,
 };
@@ -201,7 +201,7 @@ impl Renderer for IndirectMeshRenderer {
         // Dynamic offsets for supplied sets
         offsets: &[u32],
         // Graphics resources like textures and materials
-        resources: &ResourceManager,
+        resources: &Resources,
     ) -> Result<()> {
         let frame = &mut self.frames[current_frame];
 
@@ -401,7 +401,7 @@ impl PassData {
         sets: &[DescriptorSet],
         offsets: &[u32],
         frame_set: DescriptorSet,
-        resources: &ResourceManager,
+        resources: &Resources,
     ) -> Result<()> {
         // Indirect buffer is not large enough
         if self.object_count > self.capacity {

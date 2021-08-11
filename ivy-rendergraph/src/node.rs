@@ -1,7 +1,7 @@
 use std::ops::Index;
 
 use hecs::World;
-use ivy_resources::{Handle, ResourceManager};
+use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
     commands::CommandBuffer, descriptors::DescriptorSet, vk::ClearValue, ImageLayout, LoadOp,
     StoreOp, Texture,
@@ -33,7 +33,7 @@ pub trait Node {
         commandbuffers: &CommandBuffer,
         current_frame: usize,
         global_set: DescriptorSet,
-        resources: &ResourceManager,
+        resources: &Resources,
     ) -> anyhow::Result<()>;
 }
 
@@ -44,7 +44,7 @@ where
         &CommandBuffer,
         usize,
         DescriptorSet,
-        &ResourceManager,
+        &Resources,
     ) -> anyhow::Result<()>,
 {
     fn execute(
@@ -53,7 +53,7 @@ where
         commandbuffers: &CommandBuffer,
         current_frame: usize,
         global_set: DescriptorSet,
-        resources: &ResourceManager,
+        resources: &Resources,
     ) -> anyhow::Result<()> {
         (self)(world, commandbuffers, current_frame, global_set, resources)
     }

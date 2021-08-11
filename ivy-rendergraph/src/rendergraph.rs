@@ -3,7 +3,7 @@ use std::{collections::HashMap, hash, ops::Deref, sync::Arc};
 
 use hash::Hash;
 use hecs::World;
-use ivy_resources::{ResourceCache, ResourceManager};
+use ivy_resources::{ResourceCache, Resources};
 use ivy_vulkan::{
     commands::{CommandBuffer, CommandPool},
     descriptors::DescriptorSet,
@@ -298,7 +298,7 @@ impl RenderGraph {
         world: &mut World,
         current_frame: usize,
         global_set: DescriptorSet,
-        resources: &ResourceManager,
+        resources: &Resources,
     ) -> Result<()> {
         let frame = &self.frames[current_frame];
         let device = self.context.device();

@@ -1,7 +1,7 @@
 use crate::Result;
 use hecs::{Entity, World};
 use ivy_graphics::{Mesh, ShaderPass};
-use ivy_resources::{Handle, ResourceCache, ResourceManager};
+use ivy_resources::{Handle, ResourceCache, Resources};
 use ivy_vulkan::{
     commands::CommandBuffer, descriptors::*, vk, Buffer, BufferAccess, BufferType, VulkanContext,
 };
@@ -189,7 +189,7 @@ impl ImageRenderer {
         current_frame: usize,
         global_set: DescriptorSet,
         dynamic_offsets: &[u32],
-        resources: &ResourceManager,
+        resources: &Resources,
     ) -> Result<()> {
         let frame = &mut self.frames[current_frame];
 

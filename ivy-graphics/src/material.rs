@@ -1,6 +1,6 @@
 use crate::Result;
 use ash::vk::{DescriptorSet, DescriptorSetLayout, ShaderStageFlags};
-use ivy_resources::{Handle, ResourceManager};
+use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
     descriptors::{DescriptorAllocator, DescriptorBuilder, DescriptorLayoutCache},
     Sampler, Texture, VulkanContext,
@@ -21,7 +21,7 @@ impl Material {
         context: &VulkanContext,
         descriptor_layout_cache: &mut DescriptorLayoutCache,
         descriptor_allocator: &mut DescriptorAllocator,
-        resources: &ResourceManager,
+        resources: &Resources,
         albedo: Handle<Texture>,
         sampler: Handle<Sampler>,
     ) -> Result<Self> {

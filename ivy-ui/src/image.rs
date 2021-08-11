@@ -1,5 +1,5 @@
 use crate::Result;
-use ivy_resources::{Handle, ResourceManager};
+use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
     descriptors::{DescriptorAllocator, DescriptorBuilder, DescriptorLayoutCache, DescriptorSet},
     vk::ShaderStageFlags,
@@ -19,7 +19,7 @@ impl Image {
         context: &VulkanContext,
         descriptor_layout_cache: &mut DescriptorLayoutCache,
         descriptor_allocator: &mut DescriptorAllocator,
-        resources: &ResourceManager,
+        resources: &Resources,
         texture: Handle<Texture>,
         sampler: Handle<Sampler>,
     ) -> Result<Self> {

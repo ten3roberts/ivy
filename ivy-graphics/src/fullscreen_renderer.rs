@@ -1,7 +1,7 @@
 use crate::{Renderer, Result, ShaderPass};
 use anymap::AnyMap;
 use ash::vk::DescriptorSet;
-use ivy_resources::{Handle, ResourceManager};
+use ivy_resources::{Handle, Resources};
 
 // Renders a fullscreen quad using the supplied shader pass and descriptors
 pub struct FullscreenRenderer {
@@ -34,7 +34,7 @@ impl Renderer for FullscreenRenderer {
         // Dynamic offsets for supplied sets
         offsets: &[u32],
         // Graphics resources like textures and materials
-        resources: &ResourceManager,
+        resources: &Resources,
     ) -> Result<()> {
         let pass = *self.shaderpasses.get::<Handle<Pass>>().unwrap();
 

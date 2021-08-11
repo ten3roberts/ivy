@@ -1,7 +1,7 @@
 use crate::{Result, ShaderPass};
 use ash::vk::DescriptorSet;
 use hecs::World;
-use ivy_resources::ResourceManager;
+use ivy_resources::Resources;
 use ivy_vulkan::commands::CommandBuffer;
 
 // Generic interface for a renderer.
@@ -21,6 +21,6 @@ pub trait Renderer {
         // Dynamic offsets for supplied sets
         offsets: &[u32],
         // Graphics resources like textures and materials
-        resources: &ResourceManager,
+        resources: &Resources,
     ) -> Result<()>;
 }
