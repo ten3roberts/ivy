@@ -1,4 +1,5 @@
 mod cache;
+mod cell;
 mod error;
 mod handle;
 mod manager;

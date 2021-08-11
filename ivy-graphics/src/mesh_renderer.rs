@@ -6,7 +6,8 @@ use ivy_vulkan::{
 };
 
 use std::{
-    any::TypeId, borrow::Borrow, collections::HashMap, marker::PhantomData, mem::size_of, sync::Arc,
+    any::TypeId, borrow::Borrow, collections::HashMap, marker::PhantomData, mem::size_of,
+    ops::Deref, sync::Arc,
 };
 use ultraviolet::Mat4;
 
@@ -217,21 +218,9 @@ impl Renderer for IndirectMeshRenderer {
             }
         };
 
-        let passes = resources.cache()?;
-        let materials = resources.cache()?;
-        let meshes = resources.cache()?;
+        pass.build_batches::<Pass, _>(world, &resources.fetch()?)?;
 
-        pass.build_batches::<Pass>(world, &passes)?;
-
-        pass.draw(
-            cmd,
-            current_frame,
-            sets,
-            offsets,
-            frame_set,
-            &meshes,
-            &materials,
-        )?;
+        pass.draw(cmd, current_frame, sets, offsets, frame_set, &resources)?;
 
         Ok(())
     }
@@ -286,11 +275,11 @@ impl PassData {
     }
 
     /// Builds rendering batches for shaderpass `T` for all objects not yet batched.
-    pub fn build_batches<T: 'static + ShaderPass + Send + Sync>(
-        &mut self,
-        world: &mut World,
-        passes: &ResourceCache<T>,
-    ) -> Result<()> {
+    pub fn build_batches<T, U>(&mut self, world: &mut World, passes: &U) -> Result<()>
+    where
+        U: Deref<Target = ResourceCache<T>>,
+        T: 'static + ShaderPass + Send + Sync,
+    {
         let query = world
             .query_mut::<RenderObject<T>>()
             .without::<BatchMarker<T>>();
@@ -412,13 +401,15 @@ impl PassData {
         sets: &[DescriptorSet],
         offsets: &[u32],
         frame_set: DescriptorSet,
-        meshes: &ResourceCache<Mesh>,
-        materials: &ResourceCache<Material>,
+        resources: &ResourceManager,
     ) -> Result<()> {
         // Indirect buffer is not large enough
         if self.object_count > self.capacity {
             self.resize_indirect_buffer(nearest_power_2(self.object_count as _) as _)?;
         }
+
+        let meshes = resources.fetch()?;
+        let materials = resources.fetch()?;
 
         // Rebuild indirect buffers for this frame
         if self.dirty[current_frame] {

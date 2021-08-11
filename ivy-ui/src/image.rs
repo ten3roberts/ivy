@@ -1,7 +1,5 @@
-use std::ops::Deref;
-
 use crate::Result;
-use ivy_resources::{Handle, ResourceCache};
+use ivy_resources::{Handle, ResourceManager};
 use ivy_vulkan::{
     descriptors::{DescriptorAllocator, DescriptorBuilder, DescriptorLayoutCache, DescriptorSet},
     vk::ShaderStageFlags,
@@ -17,25 +15,20 @@ pub struct Image {
 }
 
 impl Image {
-    pub fn new<T, S>(
+    pub fn new(
         context: &VulkanContext,
         descriptor_layout_cache: &mut DescriptorLayoutCache,
         descriptor_allocator: &mut DescriptorAllocator,
-        textures: T,
-        samplers: S,
+        resources: &ResourceManager,
         texture: Handle<Texture>,
         sampler: Handle<Sampler>,
-    ) -> Result<Self>
-    where
-        T: Deref<Target = ResourceCache<Texture>>,
-        S: Deref<Target = ResourceCache<Sampler>>,
-    {
+    ) -> Result<Self> {
         let set = DescriptorBuilder::new()
             .bind_combined_image_sampler(
                 0,
                 ShaderStageFlags::FRAGMENT,
-                textures.get(texture)?,
-                samplers.get(sampler)?,
+                resources.get(texture)?.image_view(),
+                resources.get(sampler)?.sampler(),
             )
             .build_one(
                 context.device(),

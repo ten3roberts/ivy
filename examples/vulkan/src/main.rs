@@ -9,7 +9,7 @@ use ivy_core::{App, AppEvent, Clock, Events, FromDuration, IntoDuration, Layer, 
 use ivy_graphics::{
     components::{AngularVelocity, Position, Rotation, Scale},
     window::{WindowExt, WindowInfo, WindowMode},
-    Camera, FullscreenRenderer, GpuCameraData, IndirectMeshRenderer, Material, Mesh, Renderer,
+    Camera, FullscreenRenderer, GpuCameraData, IndirectMeshRenderer, Material, Renderer,
     ShaderPass,
 };
 use ivy_input::{Input, InputAxis, InputVector};
@@ -378,7 +378,7 @@ impl VulkanLayer {
         let mut descriptor_allocator = DescriptorAllocator::new(context.device().clone(), 2);
 
         let swapchain_info = ivy_vulkan::SwapchainInfo {
-            present_mode: vk::PresentModeKHR::MAILBOX,
+            present_mode: vk::PresentModeKHR::IMMEDIATE,
             image_count: FRAMES_IN_FLIGHT as _,
             ..Default::default()
         };
@@ -393,16 +393,7 @@ impl VulkanLayer {
             samples: SampleCountFlags::TYPE_1,
         };
 
-        let mut resources = ResourceManager::new();
-
-        resources.create_cache::<Texture>();
-        resources.create_cache::<Material>();
-        resources.create_cache::<Mesh>();
-        resources.create_cache::<Sampler>();
-        resources.create_cache::<DiffusePass>();
-        resources.create_cache::<PostProcessingPass>();
-        resources.create_cache::<WireframePass>();
-        resources.create_cache::<Image>();
+        let resources = ResourceManager::new();
 
         let swapchain_images = swapchain
             .images()
@@ -636,7 +627,7 @@ impl VulkanLayer {
             ),
         });
 
-        rendergraph.build(resources.cache()?, swapchain.extent())?;
+        rendergraph.build(resources.fetch()?, swapchain.extent())?;
 
         let image_renderer = ImageRenderer::new(
             context.clone(),
@@ -659,7 +650,7 @@ impl VulkanLayer {
 
         let document = ivy_graphics::Document::load(
             context.clone(),
-            resources.cache_mut()?,
+            resources.fetch_mut()?,
             "./res/models/cube.gltf",
         )
         .context("Failed to load cube model")?;
@@ -668,7 +659,7 @@ impl VulkanLayer {
 
         let document = ivy_graphics::Document::load(
             context.clone(),
-            resources.cache_mut()?,
+            resources.fetch_mut()?,
             "./res/models/sphere.gltf",
         )
         .context("Failed to load sphere model")?;
@@ -701,8 +692,7 @@ impl VulkanLayer {
             &context,
             &mut descriptor_layout_cache,
             &mut descriptor_allocator,
-            resources.cache()?,
-            resources.cache()?,
+            &resources,
             grid,
             sampler,
         )?)?;
@@ -711,8 +701,7 @@ impl VulkanLayer {
             &context,
             &mut descriptor_layout_cache,
             &mut descriptor_allocator,
-            resources.cache()?,
-            resources.cache()?,
+            &resources,
             uv_grid,
             sampler,
         )?)?;
@@ -721,8 +710,7 @@ impl VulkanLayer {
             &context,
             &mut descriptor_layout_cache,
             &mut descriptor_allocator,
-            resources.cache()?,
-            resources.cache()?,
+            &resources,
             uv_grid,
             sampler,
         )?)?;
@@ -731,8 +719,7 @@ impl VulkanLayer {
             &context,
             &mut descriptor_layout_cache,
             &mut descriptor_allocator,
-            resources.cache()?,
-            resources.cache()?,
+            &resources,
             grid,
             sampler,
         )?)?;

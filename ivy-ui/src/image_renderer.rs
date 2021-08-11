@@ -206,8 +206,8 @@ impl ImageRenderer {
             }
         };
 
-        let passes = resources.cache()?;
-        let images = resources.cache()?;
+        let passes = resources.fetch()?;
+        let images = resources.fetch()?;
 
         pass.build_batches::<T>(world, &passes)?;
 

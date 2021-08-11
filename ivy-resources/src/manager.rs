@@ -1,79 +1,98 @@
-use crate::Result;
-use std::any;
+use crate::{
+    cell::{Cell, CellRef, CellRefMut, Storage},
+    Result,
+};
+use std::{any::TypeId, collections::HashMap};
 
-use anymap::AnyMap;
-use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
+use parking_lot::{MappedRwLockWriteGuard, RwLock, RwLockWriteGuard};
 
-use crate::{Error, Handle, ResourceCache};
+use crate::{Handle, ResourceCache};
 
-/// A ResourceManager abstracts and holds ResourceCaches for many different types. This is to avoid
-/// having to individually keep track of all Texture, Sampler, Material and other cache and wrap
-/// each in a RefCell or Rc.
-
+/// ResourceManager is a container for multi-valued strongly typed assets.
+/// Any static Send + Sync type can be stored in the container and a handle is returned to access
+/// the value using interior mutability. Containers for each used type is automatically
+/// created.
 pub struct ResourceManager {
-    caches: AnyMap,
+    caches: RwLock<HashMap<TypeId, Cell>>,
 }
 
 impl ResourceManager {
     /// Creates a new empty resource manager. Caches will be added when requested.
     pub fn new() -> Self {
         Self {
-            caches: AnyMap::new(),
+            caches: RwLock::new(HashMap::new()),
         }
     }
 
-    /// Returns a reference to ResourceCache for type `T`
-    pub fn cache<T: 'static>(&self) -> Result<AtomicRef<ResourceCache<T>>> {
-        self.caches
-            .get::<AtomicRefCell<ResourceCache<T>>>()
-            .ok_or_else(|| Error::MissingCache(any::type_name::<T>()))?
-            .try_borrow()
-            .map_err(|_| Error::Borrow(any::type_name::<T>()))
+    /// Returns a cache containing all resources of type `T`. Use this if accessing many
+    /// resources of
+    /// the same type to avoid having to lookup the entry multiple times.
+    ///
+    /// Fails if the type is already mutably borrowed.
+    pub fn fetch<T: Storage>(&self) -> Result<CellRef<ResourceCache<T>>> {
+        // A raw pointer to the internally boxed AtomicRefCell is acquired. The pointer is
+        // valid as long as self because caches can never be individually removed
+        match self.caches.read().get(&TypeId::of::<T>()) {
+            Some(val) => return val.borrow(),
+            None => {}
+        }
+
+        // Insert new cache
+        self.create_cache::<T>().borrow()
     }
 
-    /// Returns a mutable reference to ResourceCache for type `T`
-    pub fn cache_mut<T: 'static>(&self) -> Result<AtomicRefMut<ResourceCache<T>>> {
-        self.caches
-            .get::<AtomicRefCell<ResourceCache<T>>>()
-            .ok_or_else(|| Error::MissingCache(any::type_name::<T>()))?
-            .try_borrow_mut()
-            .map_err(|_| Error::BorrowMut(any::type_name::<T>()))
+    /// Returns a mutable cache containing all resources of type `T`. Use this if accessing many
+    /// resources of
+    /// the same type to avoid having to lookup the entry multiple times.
+    ///
+    /// Fails if the type is already borrowed.
+    pub fn fetch_mut<T: Storage>(&self) -> Result<CellRefMut<ResourceCache<T>>> {
+        // A raw pointer to the internally boxed AtomicRefCell is acquired. The pointer is
+        // valid as long as self because caches can never be individually removed
+        match self.caches.read().get(&TypeId::of::<T>()) {
+            Some(val) => return val.borrow_mut(),
+            None => {}
+        }
+
+        // Insert new cache
+        self.create_cache::<T>().borrow_mut()
     }
 
-    /// Returns a reference to the resource pointed to by Handle<T>. Equivalent to using `cache()` and then `get()`. If dereferencing many handles, prefer gettting the cache first and the using it directly.
-    pub fn get<T: 'static>(&self, handle: Handle<T>) -> Result<AtomicRef<T>> {
-        let cache = self.cache::<T>()?;
+    /// Returns a reference to the resource pointed to by Handle<T>. Equivalent to using `cache()`
+    /// and then `get()`. If dereferencing many handles, prefer gettting the cache first and the using
+    /// it directly.
+    ///
+    /// Fails if the type is already mutably borrowed.
+    pub fn get<T: Storage>(&self, handle: Handle<T>) -> Result<CellRef<T>> {
+        let cache = self.fetch::<T>()?;
 
-        AtomicRef::filter_map(cache, |cache| cache.get(handle).ok())
-            .ok_or_else(|| Error::InvalidHandle(any::type_name::<T>()))
+        cache.try_map(|cache| cache.get(handle))
     }
 
-    /// Returns a mutable reference to the resource pointed to by Handle<T>. Equivalent to using `cache()` and then `get()`. If dereferencing many handles, prefer gettting the cache first and the using it directly.
-    pub fn get_mut<T: 'static>(&self, handle: Handle<T>) -> Result<AtomicRefMut<T>> {
-        let cache = self.cache_mut::<T>()?;
+    /// Returns a mutable reference to the resource pointed to by Handle<T>. Equivalent to using
+    /// `cache()` and then `get()`. If dereferencing many handles, prefer gettting the cache first and
+    /// the using it directly.
+    ///
+    /// Fails if the type is already borrowed.
+    pub fn get_mut<T: Storage>(&self, handle: Handle<T>) -> Result<CellRefMut<T>> {
+        let cache = self.fetch_mut::<T>()?;
 
-        AtomicRefMut::filter_map(cache, |cache| cache.get_mut(handle).ok())
-            .ok_or_else(|| Error::InvalidHandle(any::type_name::<T>()))
+        cache.try_map(|cache| cache.get_mut(handle))
     }
 
     /// Inserts a resource into the correct cache and returns a handle to acces the resource.
-    /// Fails if the cache does not exists.
-    pub fn insert<T: 'static>(&self, resource: T) -> Result<Handle<T>> {
-        let mut cache = self.cache_mut::<T>()?;
-
-        Ok(cache.insert(resource))
+    ///
+    /// Fails if the type is already mutably borrowed.
+    pub fn insert<T: Storage>(&self, resource: T) -> Result<Handle<T>> {
+        self.fetch_mut().map(|mut val| val.insert(resource))
     }
 
-    /// Creates a resource cache for `T`. Does nothing if cache already exists.
-    pub fn create_cache<T: 'static>(&mut self) {
-        if self
-            .caches
-            .get::<AtomicRefCell<ResourceCache<T>>>()
-            .is_none()
-        {
-            self.caches
-                .insert(AtomicRefCell::new(ResourceCache::<T>::new()));
-        }
+    fn create_cache<T: Storage>(&self) -> MappedRwLockWriteGuard<Cell> {
+        RwLockWriteGuard::map(self.caches.write(), |guard| {
+            guard
+                .entry(TypeId::of::<T>())
+                .or_insert_with(|| Cell::new(ResourceCache::<T>::new()))
+        })
     }
 }
 
