@@ -21,7 +21,7 @@ impl Renderer for FullscreenRenderer {
         // Graphics resources like textures and materials
         resources: &Resources,
     ) -> Result<()> {
-        let pass = resources.default::<Pass>()?;
+        let pass = resources.get_default::<Pass>()?;
 
         cmd.bind_pipeline(pass.pipeline());
 

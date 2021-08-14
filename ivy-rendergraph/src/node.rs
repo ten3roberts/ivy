@@ -2,10 +2,7 @@ use std::ops::Index;
 
 use hecs::World;
 use ivy_resources::{Handle, Resources};
-use ivy_vulkan::{
-    commands::CommandBuffer, descriptors::DescriptorSet, vk::ClearValue, ImageLayout, LoadOp,
-    StoreOp, Texture,
-};
+use ivy_vulkan::{commands::CommandBuffer, vk::ClearValue, ImageLayout, LoadOp, StoreOp, Texture};
 
 /// Represents creation info for constructing a node.
 /// Dependencies between subpasses will be automatically generated.
@@ -30,26 +27,24 @@ pub trait Node {
     fn execute(
         &mut self,
         world: &mut World,
-        commandbuffers: &CommandBuffer,
+        cmd: &CommandBuffer,
         current_frame: usize,
-        global_set: DescriptorSet,
         resources: &Resources,
     ) -> anyhow::Result<()>;
 }
 
 impl<T> Node for T
 where
-    T: FnMut(&mut World, &CommandBuffer, usize, DescriptorSet, &Resources) -> anyhow::Result<()>,
+    T: FnMut(&mut World, &CommandBuffer, usize, &Resources) -> anyhow::Result<()>,
 {
     fn execute(
         &mut self,
         world: &mut World,
-        commandbuffers: &CommandBuffer,
+        cmd: &CommandBuffer,
         current_frame: usize,
-        global_set: DescriptorSet,
         resources: &Resources,
     ) -> anyhow::Result<()> {
-        (self)(world, commandbuffers, current_frame, global_set, resources)
+        (self)(world, cmd, current_frame, resources)
     }
 }
 

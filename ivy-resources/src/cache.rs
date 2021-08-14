@@ -70,7 +70,7 @@ impl<T: 'static + Sized> ResourceCache<T> {
     /// Note: The function still may fail to acquire a resource if the default is null
     #[inline]
     pub fn get_or_default(&self, handle: Handle<T>) -> Result<&T> {
-        self.get(handle).or_else(|_| self.default())
+        self.get(handle).or_else(|_| self.get_default())
     }
 
     /// Returns the resource by handle, or the default is the handle is invalid.
@@ -92,7 +92,7 @@ impl<T: 'static + Sized> ResourceCache<T> {
 
     // Returns the current default resource
     #[inline]
-    pub fn default(&self) -> Result<&T> {
+    pub fn get_default(&self) -> Result<&T> {
         self.get(self.default)
             .map_err(|_| Error::MissingDefault(type_name::<T>()))
     }
@@ -109,6 +109,11 @@ impl<T: 'static + Sized> ResourceCache<T> {
     #[inline]
     pub fn set_default(&mut self, handle: Handle<T>) {
         self.default = handle;
+    }
+
+    #[inline]
+    pub fn default(&self) -> Handle<T> {
+        self.default
     }
 }
 

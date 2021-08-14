@@ -84,7 +84,7 @@ impl Resources {
     /// Returns the resource by handle, or the default is the handle is invalid.
     /// Note: The function still may fail to acquire a resource if the default is null
     #[inline]
-    pub fn get_or_default_mut<T: Storage>(&mut self, handle: Handle<T>) -> Result<CellRefMut<T>> {
+    pub fn get_or_default_mut<T: Storage>(&self, handle: Handle<T>) -> Result<CellRefMut<T>> {
         self.fetch_mut::<T>()?
             .try_map(|cache| cache.get_or_default_mut(handle))
     }
@@ -102,8 +102,8 @@ impl Resources {
 
     // Returns the current default resource for T.
     #[inline]
-    pub fn default<T: Storage>(&self) -> Result<CellRef<T>> {
-        self.fetch::<T>()?.try_map(|cache| cache.default())
+    pub fn get_default<T: Storage>(&self) -> Result<CellRef<T>> {
+        self.fetch::<T>()?.try_map(|cache| cache.get_default())
     }
 
     // Returns the current default resource for T.
@@ -115,9 +115,14 @@ impl Resources {
     // Sets the default resource.
     // Pass Handle::null to remove the default.
     #[inline]
-    pub fn set_default<T: Storage>(&mut self, handle: Handle<T>) -> Result<()> {
+    pub fn set_default<T: Storage>(&self, handle: Handle<T>) -> Result<()> {
         self.fetch_mut::<T>()
             .map(|mut cache| cache.set_default(handle))
+    }
+
+    #[inline]
+    pub fn default<T: Storage>(&self) -> Result<Handle<T>> {
+        self.fetch::<T>().map(|cache| cache.default())
     }
 
     /// Inserts a resource into the correct cache and returns a handle to acces the resource.

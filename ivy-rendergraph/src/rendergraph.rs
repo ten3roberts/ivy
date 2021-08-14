@@ -6,7 +6,6 @@ use hecs::World;
 use ivy_resources::{ResourceCache, Resources};
 use ivy_vulkan::{
     commands::{CommandBuffer, CommandPool},
-    descriptors::DescriptorSet,
     fence, semaphore,
     vk::{self, CommandBufferUsageFlags, PipelineStageFlags, Semaphore},
     AttachmentDescription, AttachmentReference, Extent, Fence, Framebuffer, ImageLayout, LoadOp,
@@ -297,7 +296,6 @@ impl RenderGraph {
         &mut self,
         world: &mut World,
         current_frame: usize,
-        global_set: DescriptorSet,
         resources: &Resources,
     ) -> Result<()> {
         let frame = &self.frames[current_frame];
@@ -337,7 +335,7 @@ impl RenderGraph {
                 );
 
                 node.node
-                    .execute(world, &commandbuffer, current_frame, global_set, resources)?;
+                    .execute(world, &commandbuffer, current_frame, resources)?;
 
                 commandbuffer.end_renderpass();
 

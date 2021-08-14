@@ -13,7 +13,7 @@ use ivy_graphics::{
     ShaderPass,
 };
 use ivy_input::{Input, InputAxis, InputVector};
-use ivy_rendergraph::{AttachmentInfo, NodeInfo, RenderGraph};
+use ivy_rendergraph::{AttachmentInfo, CameraNode, NodeInfo, RenderGraph};
 use ivy_resources::{Handle, Resources};
 use ivy_ui::{
     constraints::{AbsoluteOffset, AbsoluteSize, Aspect, RelativeOffset, RelativeSize},
@@ -510,30 +510,10 @@ impl VulkanLayer {
                 ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
                 ClearValue::DepthStencil(1.0, 0).into(),
             ],
-            node: Box::new(
-                move |world: &mut World,
-                      cmd: &CommandBuffer,
-                      current_frame: usize,
-                      _global_set: DescriptorSet,
-                      resources: &Resources|
-                      -> anyhow::Result<()> {
-                    let camera_set = world.get::<GpuCameraData>(camera)?.set(current_frame);
-
-                    resources
-                        .default_mut::<IndirectMeshRenderer>()
-                        .context("No default indirect renderer")?
-                        .draw::<DiffusePass>(
-                            world,
-                            cmd,
-                            current_frame,
-                            &[camera_set],
-                            &[],
-                            &resources,
-                        )?;
-
-                    Ok(())
-                },
-            ),
+            node: Box::new(CameraNode::<DiffusePass, IndirectMeshRenderer>::new(
+                camera,
+                resources.default::<IndirectMeshRenderer>()?,
+            )),
         });
 
         let wireframe_depth_buffer = resources.insert(Texture::new(
@@ -567,30 +547,10 @@ impl VulkanLayer {
                 ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
                 ClearValue::DepthStencil(1.0, 0).into(),
             ],
-            node: Box::new(
-                move |world: &mut World,
-                      cmd: &CommandBuffer,
-                      current_frame: usize,
-                      _global_set: DescriptorSet,
-                      resources: &Resources|
-                      -> anyhow::Result<()> {
-                    let camera_set = world.get::<GpuCameraData>(camera)?.set(current_frame);
-
-                    resources
-                        .default_mut::<IndirectMeshRenderer>()
-                        .context("No default indirect renderer")?
-                        .draw::<WireframePass>(
-                            world,
-                            cmd,
-                            current_frame,
-                            &[camera_set],
-                            &[],
-                            &resources,
-                        )?;
-
-                    Ok(())
-                },
-            ),
+            node: Box::new(CameraNode::<WireframePass, IndirectMeshRenderer>::new(
+                camera,
+                resources.default::<IndirectMeshRenderer>()?,
+            )),
         });
 
         let fullscreen_node = rendergraph.add_node(NodeInfo {
@@ -606,7 +566,6 @@ impl VulkanLayer {
                 move |world: &mut World,
                       cmd: &CommandBuffer,
                       current_frame: usize,
-                      _global_set: DescriptorSet,
                       resources: &Resources|
                       -> anyhow::Result<()> {
                     resources
@@ -630,14 +589,7 @@ impl VulkanLayer {
 
         // Data that is tied and updated per swapchain image basis
         let frames = (0..swapchain.image_count())
-            .map(|_| {
-                FrameData::new(
-                    context.clone(),
-                    &mut descriptor_allocator,
-                    &mut descriptor_layout_cache,
-                )
-                .map_err(|e| e.into())
-            })
+            .map(|_| FrameData::new(context.clone()).map_err(|e| e.into()))
             .collect::<Result<Vec<FrameData>>>()?;
 
         let document = ivy_graphics::Document::load(
@@ -936,15 +888,13 @@ impl Layer for VulkanLayer {
         frame.global_uniformbuffer.fill(0, &[self.global_data])?;
 
         self.rendergraph
-            .execute(world, current_frame, frame.set, &self.resources)?;
+            .execute(world, current_frame, &self.resources)?;
 
         self.swapchain.present(
             self.context.present_queue(),
             &[self.rendergraph.signal_semaphore()],
             current_frame as u32,
         )?;
-
-        // std::thread::sleep(500.ms());
 
         Ok(())
     }
@@ -961,18 +911,11 @@ impl Drop for VulkanLayer {
 
 /// Represents data needed to be duplicated for each swapchain image
 struct FrameData {
-    context: Arc<VulkanContext>,
-    fence: Fence,
-    set: DescriptorSet,
     global_uniformbuffer: Buffer,
 }
 
 impl FrameData {
-    fn new(
-        context: Arc<VulkanContext>,
-        descriptor_allocator: &mut DescriptorAllocator,
-        descriptor_layout_cache: &mut DescriptorLayoutCache,
-    ) -> Result<Self> {
+    fn new(context: Arc<VulkanContext>) -> Result<Self> {
         let global_uniformbuffer = Buffer::new(
             context.clone(),
             BufferType::Uniform,
@@ -982,31 +925,9 @@ impl FrameData {
             }],
         )?;
 
-        let set = DescriptorBuilder::new()
-            .bind_uniform_buffer(0, vk::ShaderStageFlags::VERTEX, &global_uniformbuffer)
-            .build_one(
-                context.device(),
-                descriptor_layout_cache,
-                descriptor_allocator,
-            )?
-            .0;
-
-        let fence = fence::create(context.device(), true)?;
-
         Ok(FrameData {
-            context,
-            fence,
-            set,
             global_uniformbuffer,
         })
-    }
-}
-
-impl Drop for FrameData {
-    fn drop(&mut self) {
-        let device = self.context.device();
-
-        fence::destroy(device, self.fence);
     }
 }
 
