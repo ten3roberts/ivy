@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::NodeIndex;
+use crate::{NodeIndex, NodeKind};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -21,9 +21,12 @@ pub enum Error {
     #[error("Node read attachment is missing corresponding write attachment")]
     MissingWrite,
 
-    #[error("Invalid resource handle {0}")]
-    InvalidHandle(#[from] ivy_resources::Error),
+    #[error("Resource acquisition error {0}")]
+    Resource(#[from] ivy_resources::Error),
 
-    #[error("Invalid node index {0}")]
+    #[error("Invalid node index {0:?}")]
     InvalidNodeIndex(NodeIndex),
+
+    #[error("Specified node {0:?} is not the correct kind. Expected {1:?}, found {2:?}")]
+    InvalidNodeKind(NodeIndex, NodeKind, NodeKind),
 }

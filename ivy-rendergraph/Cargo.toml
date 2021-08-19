@@ -8,8 +8,9 @@ edition = "2018"
 [dependencies]
 anyhow = "1.0.40"
 hecs = "0.5"
+itertools = "0.10"
 ivy-graphics = { path = "../ivy-graphics", version = "*" }
 ivy-resources = { path = "../ivy-resources", version = "0.2" }
 ivy-vulkan = { path = "../ivy-vulkan", version = "*" }
-slab = "0.4"
+slotmap = "1.0"
 thiserror = "1.0"

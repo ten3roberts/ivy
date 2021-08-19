@@ -41,4 +41,7 @@ pub enum Error {
 
     #[error("SPIR-V reflection error: {0}")]
     SpirvReflection(&'static str),
+
+    #[error("Can not access unaquired swapchain image index")]
+    NoCurrentSwapchainImage,
 }

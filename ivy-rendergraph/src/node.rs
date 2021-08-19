@@ -1,29 +1,22 @@
-use std::ops::Index;
-
 use hecs::World;
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{commands::CommandBuffer, vk::ClearValue, ImageLayout, LoadOp, StoreOp, Texture};
 
-/// Represents creation info for constructing a node.
-/// Dependencies between subpasses will be automatically generated.
-/// Each node corresponds to a single renderpass with a subpass.
-/// TODO merge adjacent nodes into multiple subpasses.
-pub struct NodeInfo {
-    // Specifies the color attachments written to by node.
-    pub color_attachments: Vec<AttachmentInfo>,
-    // Species all the attachment the shaders will use in this pass as descriptors. Dependencies
-    // will be generated such that passes with the same `write_attachments` will be executed before and
-    // synced.
-    pub read_attachments: Vec<AttachmentResource>,
-    // An optional depth attachment. Dependencies will be generated the same way as for a
-    // `write_attachment`
-    pub depth_attachment: Option<AttachmentInfo>,
-    pub clear_values: Vec<ClearValue>,
-    pub node: Box<dyn Node>,
-}
-
-// Trait for the executable functionality of a node
+/// Represents a node in the renderpass.
 pub trait Node {
+    /// Returns the color attachments for this node. Should not be execution heavy function
+    fn color_attachments(&self) -> &[AttachmentInfo];
+    /// Returns the read attachments for this node. Should not be execution heavy function
+    fn read_attachments(&self) -> &[Handle<Texture>];
+    /// Returns the optional depth attachment for this node. Should not be execution heavy function
+    fn depth_attachment(&self) -> Option<&AttachmentInfo>;
+
+    /// Returns the clear values to initiate this renderpass
+    fn clear_values(&self) -> &[ClearValue];
+
+    fn node_kind(&self) -> NodeKind;
+
+    /// Execute this node inside a compatible renderpass
     fn execute(
         &mut self,
         world: &mut World,
@@ -33,19 +26,15 @@ pub trait Node {
     ) -> anyhow::Result<()>;
 }
 
-impl<T> Node for T
-where
-    T: FnMut(&mut World, &CommandBuffer, usize, &Resources) -> anyhow::Result<()>,
-{
-    fn execute(
-        &mut self,
-        world: &mut World,
-        cmd: &CommandBuffer,
-        current_frame: usize,
-        resources: &Resources,
-    ) -> anyhow::Result<()> {
-        (self)(world, cmd, current_frame, resources)
-    }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NodeKind {
+    // A graphics rendering node. Renderpass and framebuffer will automatically be created.
+    Graphics,
+    // execution
+    // A node that will be executed on the transfer queue. Appropriate pipeline barriers will
+    // be inserted
+    Transfer,
+    // Compute,
 }
 
 #[derive(Debug, Clone)]
@@ -55,7 +44,7 @@ pub struct AttachmentInfo {
     pub load_op: LoadOp,
     pub initial_layout: ImageLayout,
     pub final_layout: ImageLayout,
-    pub resource: AttachmentResource,
+    pub resource: Handle<Texture>,
 }
 
 impl Default for AttachmentInfo {
@@ -65,42 +54,7 @@ impl Default for AttachmentInfo {
             load_op: LoadOp::DONT_CARE,
             initial_layout: ImageLayout::UNDEFINED,
             final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-            resource: AttachmentResource::Single(Handle::null()),
+            resource: Handle::null(),
         }
-    }
-}
-
-impl PartialEq for AttachmentInfo {
-    fn eq(&self, other: &Self) -> bool {
-        self.resource == other.resource
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum AttachmentResource {
-    Single(Handle<Texture>),
-    PerFrame(Vec<Handle<Texture>>),
-}
-
-impl Index<usize> for AttachmentResource {
-    type Output = Handle<Texture>;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        match self {
-            AttachmentResource::Single(a) => &a,
-            AttachmentResource::PerFrame(a) => &a[index],
-        }
-    }
-}
-
-impl From<Vec<Handle<Texture>>> for AttachmentResource {
-    fn from(handles: Vec<Handle<Texture>>) -> Self {
-        AttachmentResource::PerFrame(handles)
-    }
-}
-
-impl From<Handle<Texture>> for AttachmentResource {
-    fn from(handle: Handle<Texture>) -> Self {
-        AttachmentResource::Single(handle)
     }
 }

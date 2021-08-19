@@ -1,4 +1,5 @@
-use crate::{Extent, Result, VulkanContext};
+use crate::ImageUsage;
+use crate::{Error, Extent, Result, VulkanContext};
 use ash::extensions::khr::Surface;
 pub use ash::extensions::khr::Swapchain as SwapchainLoader;
 use ash::vk::{self, Image, SurfaceKHR};
@@ -17,6 +18,7 @@ pub struct SwapchainInfo {
     pub format: vk::SurfaceFormatKHR,
     /// The preferred number of images in the swapchain
     pub image_count: u32,
+    pub usage: ImageUsage,
 }
 
 impl Default for SwapchainInfo {
@@ -28,6 +30,7 @@ impl Default for SwapchainInfo {
                 color_space: vk::ColorSpaceKHR::SRGB_NONLINEAR,
             },
             image_count: 2,
+            usage: ImageUsage::TRANSFER_DST | ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED,
         }
     }
 }
@@ -122,6 +125,8 @@ pub struct Swapchain {
     swapchain: vk::SwapchainKHR,
     images: Vec<Image>,
     extent: Extent,
+    // The currently acquired swapchain image
+    image_index: Option<u32>,
     surface_format: vk::SurfaceFormatKHR,
 }
 
@@ -173,7 +178,7 @@ impl Swapchain {
             .image_extent(extent.into())
             .image_array_layers(1)
             // For now, render directly to the images
-            .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
+            .image_usage(info.usage)
             .image_sharing_mode(sharing_mode)
             .queue_family_indices(queue_family_indices)
             .pre_transform(support.capabilities.current_transform)
@@ -193,11 +198,14 @@ impl Swapchain {
             images,
             extent,
             surface_format,
+            image_index: None,
         })
     }
 
-    // Returns the next available image in the swapchain.
-    pub fn next_image(&self, semaphore: vk::Semaphore) -> Result<u32> {
+    // Returns the next available image in the swapchain. Remembers the acquired image index in
+    // self. image index is set to None on failure
+    pub fn acquire_next_image(&mut self, semaphore: vk::Semaphore) -> Result<u32> {
+        self.image_index = None;
         let (image_index, _) = unsafe {
             self.context.swapchain_loader().acquire_next_image(
                 self.swapchain,
@@ -207,16 +215,13 @@ impl Swapchain {
             )?
         };
 
+        self.image_index = Some(image_index);
+
         Ok(image_index)
     }
 
-    // Presents image index using queue
-    pub fn present(
-        &self,
-        queue: vk::Queue,
-        wait_semaphores: &[vk::Semaphore],
-        image_index: u32,
-    ) -> Result<bool> {
+    // Presents the currently acquired swapchain image
+    pub fn present(&self, queue: vk::Queue, wait_semaphores: &[vk::Semaphore]) -> Result<bool> {
         let present_info = vk::PresentInfoKHR {
             s_type: vk::StructureType::PRESENT_INFO_KHR,
             p_next: std::ptr::null(),
@@ -224,7 +229,7 @@ impl Swapchain {
             p_wait_semaphores: wait_semaphores.as_ptr(),
             swapchain_count: 1,
             p_swapchains: &self.swapchain,
-            p_image_indices: &image_index,
+            p_image_indices: &self.image_index()?,
             p_results: std::ptr::null_mut(),
         };
         let suboptimal = unsafe {
@@ -234,6 +239,10 @@ impl Swapchain {
         };
 
         Ok(suboptimal)
+    }
+
+    pub fn image_index(&self) -> Result<u32> {
+        self.image_index.ok_or(Error::NoCurrentSwapchainImage)
     }
 
     /// Returns the number of image in the swapchain. The same as `color_attachments`.len()
@@ -265,6 +274,11 @@ impl Swapchain {
 
     pub fn create_loader(instance: &Instance, device: &Device) -> SwapchainLoader {
         SwapchainLoader::new(instance, device)
+    }
+
+    /// Get a reference to the swapchain's context.
+    pub fn context(&self) -> &Arc<VulkanContext> {
+        &self.context
     }
 }
 

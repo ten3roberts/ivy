@@ -1,8 +1,7 @@
-use crate::{Error, Result};
-use std::{collections::HashMap, hash, ops::Deref, sync::Arc};
-
+use crate::{Error, Node, NodeKind, Result};
 use hash::Hash;
 use hecs::World;
+// use itertools::Itertools;
 use ivy_resources::{ResourceCache, Resources};
 use ivy_vulkan::{
     commands::{CommandBuffer, CommandPool},
@@ -11,32 +10,29 @@ use ivy_vulkan::{
     AttachmentDescription, AttachmentReference, Extent, Fence, Framebuffer, ImageLayout, LoadOp,
     RenderPass, RenderPassInfo, StoreOp, SubpassDependency, SubpassInfo, Texture, VulkanContext,
 };
-use slab::Slab;
+use slotmap::{new_key_type, SecondaryMap, SlotMap};
+use std::{hash, ops::Deref, sync::Arc};
 
-use crate::NodeInfo;
-
-pub type NodeIndex = usize;
+new_key_type! {
+    pub struct NodeIndex;
+    pub struct PassIndex;
+}
 
 /// Direct acyclic graph abstraction for renderpasses, barriers and subpass dependencies.
 pub struct RenderGraph {
     context: Arc<VulkanContext>,
     /// The unordered nodes in the arena.
-    nodes: Slab<NodeInfo>,
-    edges: HashMap<NodeIndex, Vec<Edge>>,
-    /// The framebuffers created from the NodeInfos. Indexed by the ordered nodes.
-    framebuffers: Vec<Framebuffer>,
-    /// Renderpasses in order. May or may not directly correspond to a single node as compatible
-    /// nodes will be merged into subpasses. Indexed by the ordered nodes.
-    renderpasses: Vec<RenderPass>,
-    ordered_nodes: Vec<NodeIndex>,
-    // Maps from nodes to ordered nodes
-    ordered_map: HashMap<NodeIndex, usize>,
+    nodes: SlotMap<NodeIndex, Box<dyn Node>>,
+    edges: SecondaryMap<NodeIndex, Vec<Edge>>,
+    passes: SlotMap<PassIndex, Pass>,
+    // Maps a node to a pass index
+    node_pass_map: SecondaryMap<NodeIndex, PassIndex>,
 
     // Data for each frame in flight
     frames: Vec<FrameData>,
-    wait_semaphore: Semaphore,
-    signal_semaphore: Semaphore,
     extent: Extent,
+    frames_in_flight: usize,
+    current_frame: usize,
 }
 
 impl RenderGraph {
@@ -46,28 +42,23 @@ impl RenderGraph {
             .map(|_| FrameData::new(context.clone()).map_err(|e| e.into()))
             .collect::<Result<Vec<_>>>()?;
 
-        let wait_semaphore = semaphore::create(context.device())?;
-        let signal_semaphore = semaphore::create(context.device())?;
-
         Ok(Self {
             context,
-            nodes: Slab::new(),
-            edges: HashMap::new(),
-            framebuffers: Vec::new(),
-            renderpasses: Vec::new(),
-            ordered_nodes: Vec::new(),
-            ordered_map: HashMap::new(),
+            nodes: SlotMap::with_key(),
+            edges: SecondaryMap::new(),
+            passes: SlotMap::with_key(),
+            node_pass_map: SecondaryMap::new(),
             frames,
-            wait_semaphore,
-            signal_semaphore,
             extent: Extent::new(0, 0),
+            frames_in_flight,
+            current_frame: 0,
         })
     }
 
     /// Adds a new node into the rendergraph.
     /// **Note**: The new node won't take effect until [`RenderGraph::Build`] is called.
-    pub fn add_node(&mut self, node_info: NodeInfo) -> NodeIndex {
-        self.nodes.insert(node_info)
+    pub fn add_node<T: 'static + Node>(&mut self, node: T) -> NodeIndex {
+        self.nodes.insert(Box::new(node))
     }
 
     pub fn build_edges(&mut self) -> Result<()> {
@@ -83,11 +74,11 @@ impl RenderGraph {
             .iter()
             .flat_map(|(dst, dst_node)| {
                 // Find the corresponding write attachment
-                dst_node.read_attachments.iter().map(move |read| {
+                dst_node.read_attachments().iter().map(move |read| {
                     nodes.iter().find_map(|(src, src_node)| {
                         // Found color attachment output
                         if src_node
-                            .color_attachments
+                            .color_attachments()
                             .iter()
                             .map(|w| &w.resource)
                             .find(|w| *w == read)
@@ -101,8 +92,8 @@ impl RenderGraph {
                                 write_access: vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
                                 read_access: vk::AccessFlags::SHADER_READ,
                             })
-                        // Found depth attachment output
-                        } else if src_node.depth_attachment.as_ref().map(|d| &d.resource)
+                            // Found depth attachment output
+                        } else if src_node.depth_attachment().as_ref().map(|d| &d.resource)
                             == Some(read)
                         {
                             Some(Edge {
@@ -123,7 +114,11 @@ impl RenderGraph {
             .map(|val| val.ok_or(Error::MissingWrite))
             .try_for_each(|entry| -> Result<_> {
                 let entry = entry?;
-                edges.entry(entry.src).or_insert_with(Vec::new).push(entry);
+                edges
+                    .entry(entry.src)
+                    .unwrap()
+                    .or_insert_with(Vec::new)
+                    .push(entry);
 
                 Ok(())
             })
@@ -131,16 +126,31 @@ impl RenderGraph {
 
     /// Adds a new dependency between two nodes by introducing an edge.
     pub fn add_edge(&mut self, src: NodeIndex, edge: Edge) {
-        self.edges.entry(src).or_insert_with(Vec::new).push(edge);
+        self.edges
+            .entry(src)
+            .unwrap()
+            .or_insert_with(Vec::new)
+            .push(edge);
     }
 
-    pub fn node_renderpass(&self, node_index: NodeIndex) -> Result<&RenderPass> {
-        let index = self
-            .ordered_map
-            .get(&node_index)
+    pub fn node_renderpass<'a>(&'a self, node_index: NodeIndex) -> Result<&'a RenderPass> {
+        let pass = self
+            .node_pass_map
+            .get(node_index)
+            .and_then(|index| self.passes.get(*index))
             .ok_or(Error::InvalidNodeIndex(node_index))?;
 
-        Ok(&self.renderpasses[*index])
+        match &pass.kind {
+            PassKind::Graphics {
+                renderpass,
+                framebuffer: _,
+            } => Ok(&renderpass),
+            PassKind::Transfer => Err(Error::InvalidNodeKind(
+                node_index,
+                NodeKind::Graphics,
+                self.nodes[node_index].node_kind(),
+            )),
+        }
     }
 
     /// Builds or rebuilds the rendergraph and creates appropriate renderpasses and framebuffers.
@@ -150,162 +160,61 @@ impl RenderGraph {
     {
         self.build_edges()?;
         let (ordered, _depths) = topological_sort(&self.nodes, &self.edges)?;
-        self.ordered_nodes = ordered;
 
-        let device = self.context.device();
+        let context = &self.context;
 
         let nodes = &self.nodes;
 
-        self.ordered_map.clear();
+        self.node_pass_map.clear();
 
-        let ordered_map = &mut self.ordered_map;
+        let node_pass_map = &mut self.node_pass_map;
+        node_pass_map.clear();
 
-        self.ordered_nodes
+        let passes = &mut self.passes;
+        passes.clear();
+
+        let edges = &self.edges;
+
+        // Build all graphics nodes
+        ordered
             .iter()
             .enumerate()
-            .for_each(|(i, node_idx)| {
-                ordered_map.insert(*node_idx, i);
-            });
+            .map(|(i, node_index)| (i, *node_index, nodes.get(*node_index).unwrap()))
+            .try_for_each(|(i, node_index, node)| -> Result<_> {
+                let pass = Pass::new(
+                    context,
+                    nodes,
+                    &textures,
+                    edges,
+                    &ordered[i..],
+                    node.node_kind(),
+                    extent,
+                )?;
 
-        // Create all renderpasses for the graph
-        self.renderpasses = self
-            .ordered_nodes
-            .iter()
-            .map(|node_idx| -> Result<RenderPass> {
-                let node = &nodes[*node_idx];
-                let attachments = node
-                    .color_attachments
-                    .iter()
-                    .chain(node.depth_attachment.iter())
-                    .map(|attachment| -> Result<_> {
-                        let texture = textures.get(attachment.resource[0])?;
-                        Ok(AttachmentDescription {
-                            format: texture.format(),
-                            samples: texture.samples(),
-                            store_op: attachment.store_op,
-                            load_op: attachment.load_op,
-                            initial_layout: attachment.initial_layout,
-                            final_layout: attachment.final_layout,
-                            stencil_load_op: LoadOp::DONT_CARE,
-                            stencil_store_op: StoreOp::DONT_CARE,
-                            flags: vk::AttachmentDescriptionFlags::default(),
-                        })
-                    })
-                    .collect::<Result<Vec<_>>>()?;
+                let pass_index = passes.insert(pass);
 
-                let dependency = self
-                    .edges
-                    .get(&node_idx)
-                    .iter()
-                    .flat_map(|edges| edges.iter())
-                    .fold(
-                        None,
-                        |dependency: Option<SubpassDependency>, edge| match dependency {
-                            Some(dependency) => Some(SubpassDependency {
-                                src_stage_mask: dependency.src_stage_mask | edge.write_stage,
-                                dst_stage_mask: dependency.dst_stage_mask | edge.read_stage,
-                                src_access_mask: dependency.src_access_mask | edge.write_access,
-                                dst_access_mask: dependency.dst_access_mask | edge.read_access,
-                                ..dependency
-                            }),
-                            None => Some(SubpassDependency {
-                                src_subpass: 0,
-                                dst_subpass: vk::SUBPASS_EXTERNAL,
-                                src_stage_mask: edge.write_stage,
-                                dst_stage_mask: edge.read_stage,
-                                src_access_mask: edge.write_access,
-                                dst_access_mask: edge.read_access,
-                                dependency_flags: Default::default(),
-                            }),
-                        },
-                    );
+                node_pass_map.insert(node_index, pass_index);
 
-                let dependencies = [dependency.unwrap_or_default()];
-
-                let color_attachments = node
-                    .color_attachments
-                    .iter()
-                    .enumerate()
-                    .map(|(i, _)| AttachmentReference {
-                        attachment: i as u32,
-                        layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                    })
-                    .collect::<Vec<_>>();
-
-                let depth_attachment =
-                    node.depth_attachment.as_ref().map(|_| AttachmentReference {
-                        attachment: node.color_attachments.len() as u32,
-                        layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                    });
-
-                let renderpass_info = RenderPassInfo {
-                    attachments: &attachments,
-                    subpasses: &[SubpassInfo {
-                        color_attachments: &color_attachments,
-                        resolve_attachments: &[],
-                        input_attachments: &[],
-                        depth_attachment,
-                    }],
-                    dependencies: if dependency.is_some() {
-                        &dependencies
-                    } else {
-                        &[]
-                    },
-                };
-
-                let renderpass = RenderPass::new(device.clone(), &renderpass_info)?;
-
-                Ok(renderpass)
-            })
-            .collect::<Result<Vec<_>>>()?;
-
-        let renderpasses = &self.renderpasses;
-        let frames_in_flight = self.frames.len();
-
-        let textures = &textures;
-
-        self.framebuffers = self
-            .ordered_nodes
-            .iter()
-            .enumerate()
-            .flat_map(|(i, node_idx)| {
-                let node = &nodes[*node_idx];
-                (0..frames_in_flight).map(move |frame| {
-                    let attachments = node
-                        .color_attachments
-                        .iter()
-                        .chain(node.depth_attachment.iter())
-                        .map(|attachment| Ok(textures.get(attachment.resource[frame])?))
-                        .collect::<Result<Vec<_>>>()?;
-                    let framebuffer =
-                        Framebuffer::new(device.clone(), &renderpasses[i], &attachments, extent)?;
-
-                    Ok(framebuffer)
-                })
-            })
-            .collect::<Result<Vec<_>>>()?;
+                Ok(())
+            })?;
 
         self.extent = extent;
 
         Ok(())
     }
 
-    // Executes the whole rendergraph by starting renderpass recording and filling it using the
-    // node execution functions. Submits the resulting commandbuffer.
-    pub fn execute(
-        &mut self,
-        world: &mut World,
-        current_frame: usize,
-        resources: &Resources,
-    ) -> Result<()> {
-        let frame = &self.frames[current_frame];
+    // Begins the current frame and ensures resources are ready by waiting on fences.
+    // Begins recording of the commandbuffers.
+    // Returns the current frame in flight
+    pub fn begin(&self) -> Result<usize> {
+        let frame = &self.frames[self.current_frame];
         let device = self.context.device();
 
         // Make sure frame is available before beginning execution
         fence::wait(device, &[frame.fence], true)?;
         fence::reset(device, &[frame.fence])?;
 
-        // Reset all commandbuffers for this frame
+        // Reset commandbuffers for this frame
         frame.commandpool.reset(false)?;
 
         // Get the commandbuffer for this frame
@@ -314,64 +223,71 @@ impl RenderGraph {
         // Start recording
         commandbuffer.begin(CommandBufferUsageFlags::ONE_TIME_SUBMIT)?;
 
+        Ok(self.current_frame)
+    }
+
+    // Executes the whole rendergraph by starting renderpass recording and filling it using the
+    // node execution functions. Submits the resulting commandbuffer.
+    pub fn execute(&mut self, world: &mut World, resources: &Resources) -> Result<()> {
+        // Reset all commandbuffers for this frame
+        let frame = &mut self.frames[self.current_frame];
+
         let nodes = &mut self.nodes;
-        let renderpasses = &self.renderpasses;
-        let framebuffers = &self.framebuffers;
+        let passes = &self.passes;
         let extent = self.extent;
-        let frames_in_flight = self.frames.len();
+        let current_frame = self.current_frame;
+
+        let cmd = &frame.commandbuffer;
 
         // Execute all nodes
-        self.ordered_nodes
+        passes
             .iter()
-            .enumerate()
-            .try_for_each(|(i, node_idx)| -> Result<()> {
-                let node = &mut nodes[*node_idx];
-
-                commandbuffer.begin_renderpass(
-                    &renderpasses[i],
-                    &framebuffers[frames_in_flight * i + current_frame],
-                    extent,
-                    &node.clear_values,
-                );
-
-                node.node
-                    .execute(world, &commandbuffer, current_frame, resources)?;
-
-                commandbuffer.end_renderpass();
-
-                Ok(())
+            .try_for_each(|(_pass_index, pass)| -> Result<()> {
+                pass.execute(world, &cmd, nodes, current_frame, resources, extent)
             })?;
 
+        Ok(())
+    }
+
+    /// Ends and submits recording of commandbuffer for the current frame, and increments the
+    /// current_frame.
+    pub fn end(&mut self) -> Result<()> {
+        let frame = &self.frames[self.current_frame];
+        let commandbuffer = &frame.commandbuffer;
         commandbuffer.end()?;
 
         // Submit the results
         commandbuffer.submit(
             self.context.graphics_queue(),
-            &[self.wait_semaphore],
-            &[self.signal_semaphore],
+            &[frame.wait_semaphore],
+            &[frame.signal_semaphore],
             frame.fence,
             &[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT],
         )?;
 
+        // Move to the next frame in flight and wrap around to n-buffer
+        self.current_frame = (self.current_frame + 1) % self.frames_in_flight;
+
         Ok(())
     }
 
-    /// Get a reference to the render graph's signal semaphore.
-    pub fn signal_semaphore(&self) -> Semaphore {
-        self.signal_semaphore
+    /// Get a reference to the current signal semaphore for the specified frame
+    pub fn signal_semaphore(&self, current_frame: usize) -> Semaphore {
+        self.frames[current_frame].signal_semaphore
     }
 
-    /// Get a reference to the render graph's wait semaphore.
-    pub fn wait_semaphore(&self) -> Semaphore {
-        self.wait_semaphore
+    /// Get a reference to the current wait semaphore for the specified frame
+    pub fn wait_semaphore(&self, current_frame: usize) -> Semaphore {
+        self.frames[current_frame].wait_semaphore
     }
-}
-impl Drop for RenderGraph {
-    fn drop(&mut self) {
-        let device = self.context.device();
 
-        semaphore::destroy(device, self.wait_semaphore);
-        semaphore::destroy(device, self.signal_semaphore);
+    /// Get a reference to the current fence for the specified frame
+    pub fn fence(&self, current_frame: usize) -> Fence {
+        self.frames[current_frame].fence
+    }
+
+    pub fn commandbuffer(&self, current_frame: usize) -> &CommandBuffer {
+        &self.frames[current_frame].commandbuffer
     }
 }
 
@@ -388,27 +304,28 @@ type Depth = u32;
 // TODO: Move graph functionality into separate crate.
 fn topological_sort<T, N>(
     nodes: N,
-    edges: &HashMap<NodeIndex, Vec<Edge>>,
-) -> Result<(Vec<NodeIndex>, HashMap<NodeIndex, Depth>)>
+    edges: &SecondaryMap<NodeIndex, Vec<Edge>>,
+) -> Result<(Vec<NodeIndex>, SecondaryMap<NodeIndex, Depth>)>
 where
     N: IntoIterator<Item = (NodeIndex, T)>,
 {
     fn internal(
         stack: &mut Vec<NodeIndex>,
-        visited: &mut HashMap<NodeIndex, VisitedState>,
-        depths: &mut HashMap<NodeIndex, Depth>,
+        visited: &mut SecondaryMap<NodeIndex, VisitedState>,
+        depths: &mut SecondaryMap<NodeIndex, Depth>,
         current_node: NodeIndex,
-        edges: &HashMap<NodeIndex, Vec<Edge>>,
+        edges: &SecondaryMap<NodeIndex, Vec<Edge>>,
         depth: Depth,
     ) -> Result<()> {
         // Update maximum recursion depth
         depths
             .entry(current_node)
+            .unwrap()
             .and_modify(|d| *d = (*d).max(depth))
             .or_insert(depth);
 
         // Node is already visited
-        match visited.get(&current_node) {
+        match visited.get(current_node) {
             Some(VisitedState::Pending) => return Err(Error::DependencyCycle),
             Some(VisitedState::Visited) => return Ok(()),
             _ => {}
@@ -418,7 +335,7 @@ where
 
         // Add all children of `node`, before node to the stack.
         edges
-            .get(&current_node)
+            .get(current_node)
             .iter()
             .flat_map(|node_edges| node_edges.iter())
             .try_for_each(|edge| internal(stack, visited, depths, edge.dst, edges, depth + 1))?;
@@ -432,8 +349,8 @@ where
     let mut nodes_iter = nodes.into_iter();
     let cap = nodes_iter.size_hint().1.unwrap_or_default();
     let mut stack = Vec::with_capacity(cap);
-    let mut visited = HashMap::with_capacity(cap);
-    let mut depths = HashMap::with_capacity(cap);
+    let mut visited = SecondaryMap::with_capacity(cap);
+    let mut depths = SecondaryMap::with_capacity(cap);
 
     loop {
         if let Some(node) = nodes_iter.next().map(|(i, _)| i) {
@@ -454,7 +371,7 @@ mod tests {
 
     #[test]
     fn test_topological_sort() {
-        let mut nodes = Slab::new();
+        let mut nodes = SlotMap::with_key();
 
         let a = nodes.insert('a');
         let b = nodes.insert('b');
@@ -462,7 +379,7 @@ mod tests {
         let d = nodes.insert('d');
         let e = nodes.insert('e');
 
-        let mut edges = HashMap::new();
+        let mut edges = SecondaryMap::new();
         // edges.insert(a, vec![c]);
         // edges.insert(b, vec![a, c]);
         // // edges.insert(e, vec![d]);
@@ -515,7 +432,7 @@ mod tests {
 
         let ordered_nodes = ordered
             .iter()
-            .map(|node_idx| (nodes[*node_idx], depths[node_idx]))
+            .map(|node_idx| (nodes[*node_idx], depths[*node_idx]))
             .collect::<Vec<_>>();
 
         dbg!(ordered_nodes);
@@ -524,7 +441,7 @@ mod tests {
 
     #[test]
     fn test_sort_cyclic() {
-        let mut nodes = Slab::new();
+        let mut nodes = SlotMap::with_key();
 
         let a = nodes.insert('a');
         let b = nodes.insert('b');
@@ -532,7 +449,7 @@ mod tests {
         let d = nodes.insert('d');
         let e = nodes.insert('e');
 
-        let mut edges = HashMap::new();
+        let mut edges = SecondaryMap::new();
 
         edges.insert(
             a,
@@ -607,6 +524,8 @@ struct FrameData {
     fence: Fence,
     commandpool: CommandPool,
     commandbuffer: CommandBuffer,
+    wait_semaphore: Semaphore,
+    signal_semaphore: Semaphore,
 }
 
 impl FrameData {
@@ -621,11 +540,16 @@ impl FrameData {
         let commandbuffer = commandpool.allocate_one()?;
         let fence = fence::create(context.device(), true)?;
 
+        let wait_semaphore = semaphore::create(context.device())?;
+        let signal_semaphore = semaphore::create(context.device())?;
+
         Ok(Self {
             context,
             fence,
             commandpool,
             commandbuffer,
+            wait_semaphore,
+            signal_semaphore,
         })
     }
 }
@@ -635,5 +559,202 @@ impl Drop for FrameData {
         let device = self.context.device();
 
         fence::destroy(device, self.fence);
+        semaphore::destroy(device, self.wait_semaphore);
+        semaphore::destroy(device, self.signal_semaphore);
+    }
+}
+
+struct Pass {
+    kind: PassKind,
+    nodes: Vec<NodeIndex>,
+}
+
+impl Pass {
+    // Creates a new pass from a group of compatible nodes.
+    // Two nodes are compatible if:
+    // * They have no full read dependencies to another.
+    // * Belong to the same kind and queue.
+    // * Have the same dependency level.
+    pub fn new<T>(
+        context: &Arc<VulkanContext>,
+        nodes: &SlotMap<NodeIndex, Box<dyn Node>>,
+        textures: &T,
+        edges: &SecondaryMap<NodeIndex, Vec<Edge>>,
+        ordered_nodes: &[NodeIndex],
+        kind: NodeKind,
+        extent: Extent,
+    ) -> Result<Self>
+    where
+        T: Deref<Target = ResourceCache<Texture>>,
+    {
+        let kind = match kind {
+            NodeKind::Graphics => {
+                PassKind::graphics(context, nodes, textures, edges, ordered_nodes, extent)?
+            }
+            NodeKind::Transfer => PassKind::transfer(context, nodes, edges, ordered_nodes, extent)?,
+        };
+
+        Ok(Self {
+            kind,
+            nodes: ordered_nodes.to_owned(),
+        })
+    }
+
+    pub fn execute(
+        &self,
+        world: &mut World,
+        cmd: &CommandBuffer,
+        nodes: &mut SlotMap<NodeIndex, Box<dyn Node>>,
+        current_frame: usize,
+        resources: &Resources,
+        extent: Extent,
+    ) -> Result<()> {
+        let node = &mut nodes[self.nodes[0]];
+
+        match &self.kind {
+            PassKind::Graphics {
+                renderpass,
+                framebuffer,
+            } => {
+                cmd.begin_renderpass(&renderpass, &framebuffer, extent, &node.clear_values());
+
+                node.execute(world, cmd, current_frame, resources)?;
+
+                cmd.end_renderpass();
+            }
+            PassKind::Transfer => node.execute(world, cmd, current_frame, resources)?,
+        }
+
+        Ok(())
+    }
+}
+
+enum PassKind {
+    Graphics {
+        renderpass: RenderPass,
+        framebuffer: Framebuffer,
+        // Index into first node of ordered_nodes
+    },
+
+    Transfer,
+}
+
+impl PassKind {
+    fn graphics<T>(
+        context: &Arc<VulkanContext>,
+        nodes: &SlotMap<NodeIndex, Box<dyn Node>>,
+        textures: &T,
+        edges: &SecondaryMap<NodeIndex, Vec<Edge>>,
+        ordered_nodes: &[NodeIndex],
+        extent: Extent,
+    ) -> Result<Self>
+    where
+        T: Deref<Target = ResourceCache<Texture>>,
+    {
+        let node = &nodes[ordered_nodes[0]];
+
+        let attachments = node
+            .color_attachments()
+            .iter()
+            .chain(node.depth_attachment().into_iter())
+            .map(|attachment| -> Result<_> {
+                let texture = textures.get(attachment.resource)?;
+                Ok(AttachmentDescription {
+                    format: texture.format(),
+                    samples: texture.samples(),
+                    store_op: attachment.store_op,
+                    load_op: attachment.load_op,
+                    initial_layout: attachment.initial_layout,
+                    final_layout: attachment.final_layout,
+                    stencil_load_op: LoadOp::DONT_CARE,
+                    stencil_store_op: StoreOp::DONT_CARE,
+                    flags: vk::AttachmentDescriptionFlags::default(),
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        let dependency = edges[ordered_nodes[0]].iter().fold(
+            None,
+            |dependency: Option<SubpassDependency>, edge| match dependency {
+                Some(dependency) => Some(SubpassDependency {
+                    src_stage_mask: dependency.src_stage_mask | edge.write_stage,
+                    dst_stage_mask: dependency.dst_stage_mask | edge.read_stage,
+                    src_access_mask: dependency.src_access_mask | edge.write_access,
+                    dst_access_mask: dependency.dst_access_mask | edge.read_access,
+                    ..dependency
+                }),
+                None => Some(SubpassDependency {
+                    src_subpass: 0,
+                    dst_subpass: vk::SUBPASS_EXTERNAL,
+                    src_stage_mask: edge.write_stage,
+                    dst_stage_mask: edge.read_stage,
+                    src_access_mask: edge.write_access,
+                    dst_access_mask: edge.read_access,
+                    dependency_flags: Default::default(),
+                }),
+            },
+        );
+
+        let dependencies = [dependency.unwrap_or_default()];
+
+        let color_attachments = node
+            .color_attachments()
+            .iter()
+            .enumerate()
+            .map(|(i, _)| AttachmentReference {
+                attachment: i as u32,
+                layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+            })
+            .collect::<Vec<_>>();
+
+        let depth_attachment = node
+            .depth_attachment()
+            .as_ref()
+            .map(|_| AttachmentReference {
+                attachment: node.color_attachments().len() as u32,
+                layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            });
+
+        let renderpass_info = RenderPassInfo {
+            attachments: &attachments,
+            subpasses: &[SubpassInfo {
+                color_attachments: &color_attachments,
+                resolve_attachments: &[],
+                input_attachments: &[],
+                depth_attachment,
+            }],
+            dependencies: if dependency.is_some() {
+                &dependencies
+            } else {
+                &[]
+            },
+        };
+
+        let renderpass = RenderPass::new(context.device().clone(), &renderpass_info)?;
+
+        let attachments = node
+            .color_attachments()
+            .iter()
+            .chain(node.depth_attachment().into_iter())
+            .map(|attachment| Ok(textures.get(attachment.resource)?))
+            .collect::<Result<Vec<_>>>()?;
+
+        let framebuffer =
+            Framebuffer::new(context.device().clone(), &renderpass, &attachments, extent)?;
+
+        Ok(PassKind::Graphics {
+            renderpass,
+            framebuffer,
+        })
+    }
+
+    fn transfer(
+        _context: &Arc<VulkanContext>,
+        _nodes: &SlotMap<NodeIndex, Box<dyn Node>>,
+        _edges: &SecondaryMap<NodeIndex, Vec<Edge>>,
+        _ordered_nodes: &[NodeIndex],
+        _extent: Extent,
+    ) -> Result<Self> {
+        Ok(Self::Transfer)
     }
 }

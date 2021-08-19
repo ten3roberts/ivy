@@ -9,17 +9,16 @@ use ivy_core::{App, AppEvent, Clock, Events, FromDuration, IntoDuration, Layer, 
 use ivy_graphics::{
     components::{AngularVelocity, Position, Rotation, Scale},
     window::{WindowExt, WindowInfo, WindowMode},
-    Camera, FullscreenRenderer, GpuCameraData, IndirectMeshRenderer, Material, Renderer,
-    ShaderPass,
+    Camera, FullscreenRenderer, GpuCameraData, IndirectMeshRenderer, Material, ShaderPass,
 };
 use ivy_input::{Input, InputAxis, InputVector};
-use ivy_rendergraph::{AttachmentInfo, CameraNode, NodeInfo, RenderGraph};
+use ivy_rendergraph::{AttachmentInfo, CameraNode, RenderGraph, SwapchainNode};
 use ivy_resources::{Handle, Resources};
 use ivy_ui::{
     constraints::{AbsoluteOffset, AbsoluteSize, Aspect, RelativeOffset, RelativeSize},
     Canvas, Image, Position2D, Size2D, Widget,
 };
-use ivy_vulkan::{commands::*, descriptors::*, vk::CullModeFlags, *};
+use ivy_vulkan::{descriptors::*, *};
 use std::{
     sync::{mpsc, Arc},
     time::Duration,
@@ -135,7 +134,6 @@ impl LogicLayer {
 
     pub fn handle_events(&mut self) {
         for event in self.window_events.try_iter() {
-            debug!("Event: {:?}", event);
             match event {
                 WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
                     if self.cursor_mode == CursorMode::Normal {
@@ -268,7 +266,7 @@ struct VulkanLayer {
     context: Arc<VulkanContext>,
 
     window: Arc<AtomicRefCell<Window>>,
-    swapchain: Swapchain,
+    swapchain: Handle<Swapchain>,
 
     rendergraph: RenderGraph,
 
@@ -381,40 +379,20 @@ impl VulkanLayer {
             ..Default::default()
         };
 
-        let swapchain = Swapchain::new(context.clone(), &window.borrow(), swapchain_info)?;
-
-        let swapchain_image_info = TextureInfo {
-            extent: swapchain.extent(),
-            mip_levels: 1,
-            usage: ImageUsage::COLOR_ATTACHMENT,
-            format: swapchain.image_format(),
-            samples: SampleCountFlags::TYPE_1,
-        };
-
         let resources = Resources::new();
+        let swapchain = resources.insert_default(Swapchain::new(
+            context.clone(),
+            &window.borrow(),
+            swapchain_info,
+        )?)?;
 
-        let swapchain_images = swapchain
-            .images()
-            .iter()
-            .map(|image| -> anyhow::Result<_> {
-                resources
-                    .insert(Texture::from_image(
-                        context.clone(),
-                        &swapchain_image_info,
-                        *image,
-                        None,
-                    )?)
-                    .map_err(|e| e.into())
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
-
-        let mut rendergraph = RenderGraph::new(context.clone(), swapchain.image_count() as usize)?;
+        let mut rendergraph = RenderGraph::new(context.clone(), FRAMES_IN_FLIGHT)?;
 
         resources.insert_default(IndirectMeshRenderer::new(
             context.clone(),
             &mut descriptor_layout_cache,
             16,
-            swapchain.image_count(),
+            FRAMES_IN_FLIGHT,
         )?)?;
 
         resources.insert_default(FullscreenRenderer)?;
@@ -427,10 +405,12 @@ impl VulkanLayer {
             .unwrap()
             .0;
 
+        let swapchain_extent = resources.get(swapchain)?.extent();
+
         let depth_buffer = resources.insert(Texture::new(
             context.clone(),
             &TextureInfo {
-                extent: swapchain.extent(),
+                extent: swapchain_extent,
                 mip_levels: 1,
                 usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT,
                 format: Format::D32_SFLOAT,
@@ -441,154 +421,166 @@ impl VulkanLayer {
         let diffuse_buffer = resources.insert(Texture::new(
             context.clone(),
             &TextureInfo {
-                extent: swapchain.extent(),
+                extent: resources.get(swapchain)?.extent(),
                 mip_levels: 1,
-                usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED,
+                usage: ImageUsage::COLOR_ATTACHMENT
+                    | ImageUsage::SAMPLED
+                    | ImageUsage::TRANSFER_SRC,
                 ..Default::default()
             },
         )?)?;
 
-        let wireframe_buffer = resources.insert(Texture::new(
-            context.clone(),
-            &TextureInfo {
-                extent: swapchain.extent(),
-                mip_levels: 1,
-                usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED,
-                ..Default::default()
-            },
-        )?)?;
+        // let final_diffuse = resources.insert(Texture::new(
+        //     context.clone(),
+        //     &TextureInfo {
+        //         extent: swapchain_extent,
+        //         mip_levels: 1,
+        //         usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED,
+        //         ..Default::default()
+        //     },
+        // )?)?;
 
-        let diffuse_sampler = resources.insert(Sampler::new(
-            context.clone(),
-            SamplerInfo {
-                address_mode: AddressMode::REPEAT,
-                mag_filter: FilterMode::NEAREST,
-                min_filter: FilterMode::NEAREST,
-                unnormalized_coordinates: false,
-                anisotropy: 1.0,
-                mip_levels: 1,
-            },
-        )?)?;
+        // let wireframe_buffer = resources.insert(Texture::new(
+        //     context.clone(),
+        //     &TextureInfo {
+        //         extent: swapchain_extent,
+        //         mip_levels: 1,
+        //         usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED,
+        //         ..Default::default()
+        //     },
+        // )?)?;
 
-        let diffuse_descriptor = DescriptorBuilder::new()
-            .bind_combined_image_sampler(
-                0,
-                vk::ShaderStageFlags::FRAGMENT,
-                resources.get(diffuse_buffer)?.image_view(),
-                resources.get(diffuse_sampler)?.sampler(),
-            )
-            .bind_combined_image_sampler(
-                1,
-                vk::ShaderStageFlags::FRAGMENT,
-                resources.get(wireframe_buffer)?.image_view(),
-                resources.get(diffuse_sampler)?.sampler(),
-            )
-            .build_one(
-                context.device(),
-                &mut descriptor_layout_cache,
-                &mut descriptor_allocator,
-            )?
-            .0;
+        // let diffuse_sampler = resources.insert(Sampler::new(
+        //     context.clone(),
+        //     SamplerInfo {
+        //         address_mode: AddressMode::REPEAT,
+        //         mag_filter: FilterMode::NEAREST,
+        //         min_filter: FilterMode::NEAREST,
+        //         unnormalized_coordinates: false,
+        //         anisotropy: 1.0,
+        //         mip_levels: 1,
+        //     },
+        // )?)?;
 
-        let diffuse_node = rendergraph.add_node(NodeInfo {
-            color_attachments: vec![AttachmentInfo {
-                final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-                initial_layout: ImageLayout::UNDEFINED,
-                resource: diffuse_buffer.into(),
-                store_op: StoreOp::STORE,
-                load_op: LoadOp::CLEAR,
-            }],
-            read_attachments: vec![],
-            depth_attachment: Some(AttachmentInfo {
-                initial_layout: ImageLayout::UNDEFINED,
-                final_layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                resource: depth_buffer.into(),
-                store_op: StoreOp::DONT_CARE,
-                load_op: LoadOp::CLEAR,
-            }),
-            clear_values: vec![
-                ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
-                ClearValue::DepthStencil(1.0, 0).into(),
-            ],
-            node: Box::new(CameraNode::<DiffusePass, IndirectMeshRenderer>::new(
+        // let diffuse_descriptor = DescriptorBuilder::new()
+        //     .bind_combined_image_sampler(
+        //         0,
+        //         vk::ShaderStageFlags::FRAGMENT,
+        //         resources.get(diffuse_buffer)?.image_view(),
+        //         resources.get(diffuse_sampler)?.sampler(),
+        //     )
+        //     .bind_combined_image_sampler(
+        //         1,
+        //         vk::ShaderStageFlags::FRAGMENT,
+        //         resources.get(wireframe_buffer)?.image_view(),
+        //         resources.get(diffuse_sampler)?.sampler(),
+        //     )
+        //     .build_one(
+        //         context.device(),
+        //         &mut descriptor_layout_cache,
+        //         &mut descriptor_allocator,
+        //     )?
+        //     .0;
+
+        let diffuse_node =
+            rendergraph.add_node(CameraNode::<DiffusePass, IndirectMeshRenderer>::new(
                 camera,
                 resources.default::<IndirectMeshRenderer>()?,
-            )),
-        });
+                vec![AttachmentInfo {
+                    final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                    initial_layout: ImageLayout::UNDEFINED,
+                    resource: diffuse_buffer.into(),
+                    store_op: StoreOp::STORE,
+                    load_op: LoadOp::CLEAR,
+                }],
+                vec![],
+                Some(AttachmentInfo {
+                    initial_layout: ImageLayout::UNDEFINED,
+                    final_layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                    resource: depth_buffer.into(),
+                    store_op: StoreOp::DONT_CARE,
+                    load_op: LoadOp::CLEAR,
+                }),
+                vec![
+                    ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
+                    ClearValue::DepthStencil(1.0, 0).into(),
+                ],
+            ));
 
-        let wireframe_depth_buffer = resources.insert(Texture::new(
-            context.clone(),
-            &TextureInfo {
-                extent: swapchain.extent(),
-                mip_levels: 1,
-                usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT,
-                format: Format::D32_SFLOAT,
-                samples: SampleCountFlags::TYPE_1,
-            },
-        )?)?;
+        // let wireframe_depth_buffer = resources.insert(Texture::new(
+        //     context.clone(),
+        //     &TextureInfo {
+        //         extent: swapchain.extent(),
+        //         mip_levels: 1,
+        //         usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT,
+        //         format: Format::D32_SFLOAT,
+        //         samples: SampleCountFlags::TYPE_1,
+        //     },
+        // )?)?;
 
-        let wireframe_node = rendergraph.add_node(NodeInfo {
-            color_attachments: vec![AttachmentInfo {
-                final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-                initial_layout: ImageLayout::UNDEFINED,
-                resource: wireframe_buffer.into(),
-                store_op: StoreOp::STORE,
-                load_op: LoadOp::CLEAR,
-            }],
-            read_attachments: vec![],
-            depth_attachment: Some(AttachmentInfo {
-                initial_layout: ImageLayout::UNDEFINED,
-                final_layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                resource: wireframe_depth_buffer.into(),
-                store_op: StoreOp::DONT_CARE,
-                load_op: LoadOp::CLEAR,
-            }),
-            clear_values: vec![
-                ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
-                ClearValue::DepthStencil(1.0, 0).into(),
-            ],
-            node: Box::new(CameraNode::<WireframePass, IndirectMeshRenderer>::new(
-                camera,
-                resources.default::<IndirectMeshRenderer>()?,
-            )),
-        });
+        // let wireframe_node =
+        //     rendergraph.add_node(CameraNode::<DiffusePass, IndirectMeshRenderer>::new(
+        //         camera,
+        //         resources.default::<IndirectMeshRenderer>()?,
+        //         vec![AttachmentInfo {
+        //             final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        //             initial_layout: ImageLayout::UNDEFINED,
+        //             resource: wireframe_buffer.into(),
+        //             store_op: StoreOp::STORE,
+        //             load_op: LoadOp::CLEAR,
+        //         }],
+        //         vec![],
+        //         Some(AttachmentInfo {
+        //             initial_layout: ImageLayout::UNDEFINED,
+        //             final_layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        //             resource: wireframe_depth_buffer.into(),
+        //             store_op: StoreOp::DONT_CARE,
+        //             load_op: LoadOp::CLEAR,
+        //         }),
+        //         vec![
+        //             ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
+        //             ClearValue::DepthStencil(1.0, 0).into(),
+        //         ],
+        //     ));
 
-        let fullscreen_node = rendergraph.add_node(NodeInfo {
-            color_attachments: vec![AttachmentInfo {
-                final_layout: ImageLayout::PRESENT_SRC_KHR,
-                resource: swapchain_images.into(),
-                ..Default::default()
-            }],
-            read_attachments: vec![diffuse_buffer.into(), wireframe_buffer.into()],
-            depth_attachment: None,
-            clear_values: vec![],
-            node: Box::new(
-                move |world: &mut World,
-                      cmd: &CommandBuffer,
-                      current_frame: usize,
-                      resources: &Resources|
-                      -> anyhow::Result<()> {
-                    resources
-                        .default_mut::<FullscreenRenderer>()
-                        .context("No default fullscreen renderer")?
-                        .draw::<PostProcessingPass>(
-                            world,
-                            cmd,
-                            current_frame,
-                            &[diffuse_descriptor],
-                            &[],
-                            resources,
-                        )?;
+        // let fullscreen_node =
+        //     rendergraph.add_node(CameraNode::<DiffusePass, IndirectMeshRenderer>::new(
+        //         camera,
+        //         resources.default::<IndirectMeshRenderer>()?,
+        //         vec![AttachmentInfo {
+        //             final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        //             initial_layout: ImageLayout::UNDEFINED,
+        //             resource: wireframe_buffer.into(),
+        //             store_op: StoreOp::STORE,
+        //             load_op: LoadOp::CLEAR,
+        //         }],
+        //         vec![],
+        //         Some(AttachmentInfo {
+        //             initial_layout: ImageLayout::UNDEFINED,
+        //             final_layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        //             resource: depth_buffer.into(),
+        //             store_op: StoreOp::DONT_CARE,
+        //             load_op: LoadOp::CLEAR,
+        //         }),
+        //         vec![
+        //             ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
+        //             ClearValue::DepthStencil(1.0, 0).into(),
+        //         ],
+        //     ));
 
-                    Ok(())
-                },
-            ),
-        });
+        let swapchain_node = rendergraph.add_node(SwapchainNode::new(
+            swapchain,
+            diffuse_buffer,
+            vec![],
+            &resources,
+        )?);
 
-        rendergraph.build(resources.fetch()?, swapchain.extent())?;
+        rendergraph.build(resources.fetch()?, swapchain_extent)?;
+
+        assert!(rendergraph.node_renderpass(swapchain_node).is_err());
 
         // Data that is tied and updated per swapchain image basis
-        let frames = (0..swapchain.image_count())
+        let frames = (0..FRAMES_IN_FLIGHT)
             .map(|_| FrameData::new(context.clone()).map_err(|e| e.into()))
             .collect::<Result<Vec<FrameData>>>()?;
 
@@ -670,24 +662,24 @@ impl VulkanLayer {
 
         let diffuse_renderpass = rendergraph.node_renderpass(diffuse_node)?;
 
-        let fullscreen_renderpass = rendergraph.node_renderpass(fullscreen_node)?;
+        // let fullscreen_renderpass = rendergraph.node_renderpass(fullscreen_node)?;
 
-        let fullscreen_pipeline = Pipeline::new(
-            context.device().clone(),
-            &mut descriptor_layout_cache,
-            fullscreen_renderpass,
-            PipelineInfo {
-                vertexshader: "./res/shaders/fullscreen.vert.spv".into(),
-                fragmentshader: "./res/shaders/post_processing.frag.spv".into(),
-                vertex_bindings: &[],
-                vertex_attributes: &[],
-                samples: SampleCountFlags::TYPE_1,
-                extent: swapchain.extent(),
-                subpass: 0,
-                cull_mode: CullModeFlags::NONE,
-                ..Default::default()
-            },
-        )?;
+        // let fullscreen_pipeline = Pipeline::new(
+        //     context.device().clone(),
+        //     &mut descriptor_layout_cache,
+        //     fullscreen_renderpass,
+        //     PipelineInfo {
+        //         vertexshader: "./res/shaders/fullscreen.vert.spv".into(),
+        //         fragmentshader: "./res/shaders/post_processing.frag.spv".into(),
+        //         vertex_bindings: &[],
+        //         vertex_attributes: &[],
+        //         samples: SampleCountFlags::TYPE_1,
+        //         extent: swapchain.extent(),
+        //         subpass: 0,
+        //         cull_mode: CullModeFlags::NONE,
+        //         ..Default::default()
+        //     },
+        // )?;
 
         // Create a pipeline from the shaders
         let pipeline = Pipeline::new(
@@ -700,7 +692,7 @@ impl VulkanLayer {
                 vertex_bindings: &[Vertex::BINDING_DESCRIPTION],
                 vertex_attributes: Vertex::ATTRIBUTE_DESCRIPTIONS,
                 samples: SampleCountFlags::TYPE_1,
-                extent: swapchain.extent(),
+                extent: swapchain_extent,
                 subpass: 0,
                 polygon_mode: vk::PolygonMode::FILL,
                 cull_mode: vk::CullModeFlags::NONE,
@@ -720,7 +712,7 @@ impl VulkanLayer {
                 vertex_bindings: &[Vertex::BINDING_DESCRIPTION],
                 vertex_attributes: Vertex::ATTRIBUTE_DESCRIPTIONS,
                 samples: SampleCountFlags::TYPE_1,
-                extent: swapchain.extent(),
+                extent: swapchain_extent,
                 subpass: 0,
                 polygon_mode: vk::PolygonMode::FILL,
                 cull_mode: vk::CullModeFlags::NONE,
@@ -729,33 +721,33 @@ impl VulkanLayer {
             },
         )?;
 
-        // Create a pipeline from the shaders
-        let wireframe_pipeline = Pipeline::new(
-            context.device().clone(),
-            &mut descriptor_layout_cache,
-            rendergraph.node_renderpass(wireframe_node)?,
-            PipelineInfo {
-                vertexshader: "./res/shaders/default.vert.spv".into(),
-                fragmentshader: "./res/shaders/default.frag.spv".into(),
-                vertex_bindings: &[Vertex::BINDING_DESCRIPTION],
-                vertex_attributes: Vertex::ATTRIBUTE_DESCRIPTIONS,
-                samples: SampleCountFlags::TYPE_1,
-                extent: swapchain.extent(),
-                subpass: 0,
-                polygon_mode: vk::PolygonMode::LINE,
-                cull_mode: vk::CullModeFlags::NONE,
-                front_face: vk::FrontFace::CLOCKWISE,
-                ..Default::default()
-            },
-        )?;
+        // // Create a pipeline from the shaders
+        // let wireframe_pipeline = Pipeline::new(
+        //     context.device().clone(),
+        //     &mut descriptor_layout_cache,
+        //     rendergraph.node_renderpass(wireframe_node)?,
+        //     PipelineInfo {
+        //         vertexshader: "./res/shaders/default.vert.spv".into(),
+        //         fragmentshader: "./res/shaders/default.frag.spv".into(),
+        //         vertex_bindings: &[Vertex::BINDING_DESCRIPTION],
+        //         vertex_attributes: Vertex::ATTRIBUTE_DESCRIPTIONS,
+        //         samples: SampleCountFlags::TYPE_1,
+        //         extent: swapchain.extent(),
+        //         subpass: 0,
+        //         polygon_mode: vk::PolygonMode::LINE,
+        //         cull_mode: vk::CullModeFlags::NONE,
+        //         front_face: vk::FrontFace::CLOCKWISE,
+        //         ..Default::default()
+        //     },
+        // )?;
 
         let default_shaderpass = resources.insert(DiffusePass(pipeline))?;
         let uv_shaderpass = resources.insert(DiffusePass(uv_pipeline))?;
 
         // Insert one default post processing pass
-        resources.insert_default(PostProcessingPass(fullscreen_pipeline))?;
+        // resources.insert_default(PostProcessingPass(fullscreen_pipeline))?;
 
-        let wireframe_shaderpass = resources.insert(WireframePass(wireframe_pipeline))?;
+        // let wireframe_shaderpass = resources.insert(WireframePass(wireframe_pipeline))?;
 
         world.spawn_batch(
             [
@@ -764,21 +756,21 @@ impl VulkanLayer {
                     cube_mesh,
                     material,
                     default_shaderpass,
-                    wireframe_shaderpass,
+                    // wireframe_shaderpass,
                 ),
                 (
                     Position(Vec3::new(4.0, 0.0, 0.0)),
                     cube_mesh,
                     material,
                     default_shaderpass,
-                    wireframe_shaderpass,
+                    // wireframe_shaderpass,
                 ),
                 (
                     Position(Vec3::new(0.0, 0.0, -3.0)),
                     cube_mesh,
                     material2,
                     default_shaderpass,
-                    wireframe_shaderpass,
+                    // wireframe_shaderpass,
                 ),
             ]
             .iter()
@@ -800,7 +792,7 @@ impl VulkanLayer {
                         )),
                         material,
                         default_shaderpass,
-                        wireframe_shaderpass,
+                        // wireframe_shaderpass,
                         // Scale(Vec3::new(0.1, 0.1, 0.1)),
                         Rotation(Rotor3::identity()),
                         AngularVelocity(Vec3::new(0.0, y as f32 * 0.5, x as f32)),
@@ -814,7 +806,7 @@ impl VulkanLayer {
             Rotation::default(),
             Scale(Vec3::one() * 0.5),
             default_shaderpass,
-            wireframe_shaderpass,
+            // wireframe_shaderpass,
             material2,
         ));
 
@@ -824,7 +816,7 @@ impl VulkanLayer {
             Rotation::default(),
             AngularVelocity(Vec3::new(0.0, 0.1, 1.0)),
             uv_shaderpass,
-            wireframe_shaderpass,
+            // wireframe_shaderpass,
             material,
         ));
 
@@ -867,12 +859,14 @@ impl Layer for VulkanLayer {
             world,
             &mut self.descriptor_layout_cache,
             &mut self.descriptor_allocator,
-            self.swapchain.image_count(),
+            FRAMES_IN_FLIGHT,
         )?;
 
-        let current_frame = self
-            .swapchain
-            .next_image(self.rendergraph.wait_semaphore())? as usize;
+        let current_frame = self.rendergraph.begin()?;
+
+        self.resources
+            .get_mut(self.swapchain)?
+            .acquire_next_image(self.rendergraph.wait_semaphore(current_frame))?;
 
         {
             let mut indirect_renderer = self.resources.default_mut::<IndirectMeshRenderer>()?;
@@ -887,14 +881,16 @@ impl Layer for VulkanLayer {
         let frame = &mut self.frames[current_frame];
         frame.global_uniformbuffer.fill(0, &[self.global_data])?;
 
-        self.rendergraph
-            .execute(world, current_frame, &self.resources)?;
+        self.rendergraph.execute(world, &self.resources)?;
+        self.rendergraph.end()?;
 
-        self.swapchain.present(
+        // Present results
+        self.resources.get(self.swapchain)?.present(
             self.context.present_queue(),
-            &[self.rendergraph.signal_semaphore()],
-            current_frame as u32,
+            &[self.rendergraph.signal_semaphore(current_frame)],
         )?;
+
+        // std::thread::sleep(500.ms());
 
         Ok(())
     }
