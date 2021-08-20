@@ -74,7 +74,7 @@ struct LogicLayer {
     input: Input,
     input_vec: InputVector,
 
-    camera_vel: f32,
+    cemra_speed: f32,
     camera_euler: Vec3,
 
     cursor_mode: CursorMode,
@@ -122,7 +122,7 @@ impl LogicLayer {
         Self {
             window,
             input,
-            camera_vel: 5.0,
+            cemra_speed: 5.0,
             camera_euler: Vec3::zero(),
             input_vec,
             timestep: 20.ms(),
@@ -153,8 +153,8 @@ impl LogicLayer {
                     self.window.borrow_mut().set_cursor_mode(self.cursor_mode)
                 }
                 WindowEvent::Scroll(_, scroll) => {
-                    self.camera_vel += scroll as f32;
-                    self.camera_vel = self.camera_vel.clamp(0.0, 10.0);
+                    self.cemra_speed += scroll as f32;
+                    self.cemra_speed = self.cemra_speed.clamp(0.0, 20.0);
                 }
                 _ => {}
             }
@@ -208,7 +208,7 @@ impl Layer for LogicLayer {
 
             let movement = self.input_vec.get(&self.input);
 
-            *camera_pos += Position(camera_rot.into_matrix() * (movement * dt * self.camera_vel));
+            *camera_pos += Position(camera_rot.into_matrix() * (movement * dt * self.cemra_speed));
 
             route::update_routes(world, dt);
 

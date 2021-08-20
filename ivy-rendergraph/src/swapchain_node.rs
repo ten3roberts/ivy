@@ -14,7 +14,6 @@ pub struct SwapchainNode {
     clear_values: Vec<ClearValue>,
     swapchain_images: Vec<Handle<Texture>>,
     // Barrier from renderpass to transfer
-    src_barrier: vk::ImageMemoryBarrier,
     dst_barrier: vk::ImageMemoryBarrier,
     // Barrier from transfer to presentation
     output_barrier: vk::ImageMemoryBarrier,
@@ -49,23 +48,23 @@ impl SwapchainNode {
             })
             .collect::<Result<Vec<_>>>()?;
 
-        // Transition read attachment to transfer src
-        let src_barrier = vk::ImageMemoryBarrier {
-            src_access_mask: vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
-            dst_access_mask: vk::AccessFlags::TRANSFER_READ,
-            old_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-            new_layout: ImageLayout::TRANSFER_SRC_OPTIMAL,
-            src_queue_family_index: context.queue_families().transfer().unwrap(),
-            dst_queue_family_index: context.queue_families().transfer().unwrap(),
-            subresource_range: vk::ImageSubresourceRange {
-                aspect_mask: vk::ImageAspectFlags::COLOR,
-                base_mip_level: 0,
-                level_count: 1,
-                base_array_layer: 0,
-                layer_count: 1,
-            },
-            ..Default::default()
-        };
+        // // Transition read attachment to transfer src
+        // let src_barrier = vk::ImageMemoryBarrier {
+        //     src_access_mask: vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+        //     dst_access_mask: vk::AccessFlags::TRANSFER_READ,
+        //     old_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        //     new_layout: ImageLayout::TRANSFER_SRC_OPTIMAL,
+        //     src_queue_family_index: context.queue_families().transfer().unwrap(),
+        //     dst_queue_family_index: context.queue_families().transfer().unwrap(),
+        //     subresource_range: vk::ImageSubresourceRange {
+        //         aspect_mask: vk::ImageAspectFlags::COLOR,
+        //         base_mip_level: 0,
+        //         level_count: 1,
+        //         base_array_layer: 0,
+        //         layer_count: 1,
+        //     },
+        //     ..Default::default()
+        // };
 
         // Transition swapchain image to transfer dst
         let dst_barrier = vk::ImageMemoryBarrier {
@@ -107,7 +106,6 @@ impl SwapchainNode {
             read_attachments: [read_attachment],
             clear_values,
             swapchain_images,
-            src_barrier,
             dst_barrier,
             output_barrier,
         })
@@ -152,11 +150,6 @@ impl Node for SwapchainNode {
 
         let src = resources.get(self.read_attachments[0])?;
 
-        let src_barrier = vk::ImageMemoryBarrier {
-            image: src.image(),
-            ..self.src_barrier
-        };
-
         let dst_barrier = vk::ImageMemoryBarrier {
             image: dst.image(),
             ..self.dst_barrier
@@ -165,7 +158,7 @@ impl Node for SwapchainNode {
         cmd.pipeline_barrier(
             PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
             PipelineStageFlags::TRANSFER,
-            &[src_barrier, dst_barrier],
+            &[dst_barrier],
         );
 
         cmd.copy_image(

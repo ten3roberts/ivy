@@ -2,11 +2,11 @@ use crate::{Error, Node, NodeKind, Result};
 use hash::Hash;
 use hecs::World;
 // use itertools::Itertools;
-use ivy_resources::{ResourceCache, Resources};
+use ivy_resources::{Handle, ResourceCache, Resources};
 use ivy_vulkan::{
     commands::{CommandBuffer, CommandPool},
     fence, semaphore,
-    vk::{self, CommandBufferUsageFlags, PipelineStageFlags, Semaphore},
+    vk::{self, CommandBufferUsageFlags, ImageMemoryBarrier, PipelineStageFlags, Semaphore},
     AttachmentDescription, AttachmentReference, Extent, Fence, Framebuffer, ImageLayout, LoadOp,
     RenderPass, RenderPassInfo, StoreOp, SubpassDependency, SubpassInfo, Texture, VulkanContext,
 };
@@ -24,6 +24,7 @@ pub struct RenderGraph {
     /// The unordered nodes in the arena.
     nodes: SlotMap<NodeIndex, Box<dyn Node>>,
     edges: SecondaryMap<NodeIndex, Vec<Edge>>,
+    dependencies: SecondaryMap<NodeIndex, Vec<Edge>>,
     passes: SlotMap<PassIndex, Pass>,
     // Maps a node to a pass index
     node_pass_map: SecondaryMap<NodeIndex, PassIndex>,
@@ -46,6 +47,7 @@ impl RenderGraph {
             context,
             nodes: SlotMap::with_key(),
             edges: SecondaryMap::new(),
+            dependencies: SecondaryMap::new(),
             passes: SlotMap::with_key(),
             node_pass_map: SecondaryMap::new(),
             frames,
@@ -70,6 +72,7 @@ impl RenderGraph {
         // Finally, automatically construct edges.
         let nodes = &self.nodes;
         let edges = &mut self.edges;
+        let dependencies = &mut self.dependencies;
         nodes
             .iter()
             .flat_map(|(dst, dst_node)| {
@@ -77,28 +80,32 @@ impl RenderGraph {
                 dst_node.read_attachments().iter().map(move |read| {
                     nodes.iter().find_map(|(src, src_node)| {
                         // Found color attachment output
-                        if src_node
+                        if let Some(write) = src_node
                             .color_attachments()
                             .iter()
-                            .map(|w| &w.resource)
-                            .find(|w| *w == read)
-                            .is_some()
+                            .find(|w| w.resource == *read)
                         {
                             Some(Edge {
                                 src,
                                 dst,
+                                resource: *read,
+                                layout: write.final_layout,
                                 write_stage: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
                                 read_stage: vk::PipelineStageFlags::FRAGMENT_SHADER,
                                 write_access: vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
                                 read_access: vk::AccessFlags::SHADER_READ,
                             })
                             // Found depth attachment output
-                        } else if src_node.depth_attachment().as_ref().map(|d| &d.resource)
-                            == Some(read)
+                        } else if let Some(write) = src_node
+                            .depth_attachment()
+                            .as_ref()
+                            .filter(|d| d.resource == *read)
                         {
                             Some(Edge {
                                 src,
                                 dst,
+                                resource: *read,
+                                layout: write.final_layout,
                                 // Write stage is between
                                 write_stage: vk::PipelineStageFlags::LATE_FRAGMENT_TESTS,
                                 read_stage: vk::PipelineStageFlags::FRAGMENT_SHADER,
@@ -116,6 +123,12 @@ impl RenderGraph {
                 let entry = entry?;
                 edges
                     .entry(entry.src)
+                    .unwrap()
+                    .or_insert_with(Vec::new)
+                    .push(entry);
+
+                dependencies
+                    .entry(entry.dst)
                     .unwrap()
                     .or_insert_with(Vec::new)
                     .push(entry);
@@ -145,7 +158,7 @@ impl RenderGraph {
                 renderpass,
                 framebuffer: _,
             } => Ok(&renderpass),
-            PassKind::Transfer => Err(Error::InvalidNodeKind(
+            PassKind::Transfer { .. } => Err(Error::InvalidNodeKind(
                 node_index,
                 NodeKind::Graphics,
                 self.nodes[node_index].node_kind(),
@@ -173,7 +186,7 @@ impl RenderGraph {
         let passes = &mut self.passes;
         passes.clear();
 
-        let edges = &self.edges;
+        let dependencies = &self.dependencies;
 
         // Build all graphics nodes
         ordered
@@ -185,7 +198,7 @@ impl RenderGraph {
                     context,
                     nodes,
                     &textures,
-                    edges,
+                    dependencies,
                     &ordered[i..],
                     node.node_kind(),
                     extent,
@@ -365,6 +378,326 @@ where
     Ok((stack, depths))
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Default)]
+pub struct Edge {
+    pub src: NodeIndex,
+    pub dst: NodeIndex,
+    pub resource: Handle<Texture>,
+    pub write_stage: PipelineStageFlags,
+    pub read_stage: PipelineStageFlags,
+    pub write_access: vk::AccessFlags,
+    pub read_access: vk::AccessFlags,
+    pub layout: ImageLayout,
+}
+
+struct FrameData {
+    context: Arc<VulkanContext>,
+    fence: Fence,
+    commandpool: CommandPool,
+    commandbuffer: CommandBuffer,
+    wait_semaphore: Semaphore,
+    signal_semaphore: Semaphore,
+}
+
+impl FrameData {
+    pub fn new(context: Arc<VulkanContext>) -> Result<Self> {
+        let commandpool = CommandPool::new(
+            context.device().clone(),
+            context.queue_families().graphics().unwrap(),
+            true,
+            false,
+        )?;
+
+        let commandbuffer = commandpool.allocate_one()?;
+        let fence = fence::create(context.device(), true)?;
+
+        let wait_semaphore = semaphore::create(context.device())?;
+        let signal_semaphore = semaphore::create(context.device())?;
+
+        Ok(Self {
+            context,
+            fence,
+            commandpool,
+            commandbuffer,
+            wait_semaphore,
+            signal_semaphore,
+        })
+    }
+}
+
+impl Drop for FrameData {
+    fn drop(&mut self) {
+        let device = self.context.device();
+
+        fence::destroy(device, self.fence);
+        semaphore::destroy(device, self.wait_semaphore);
+        semaphore::destroy(device, self.signal_semaphore);
+    }
+}
+
+struct Pass {
+    kind: PassKind,
+    nodes: Vec<NodeIndex>,
+}
+
+impl Pass {
+    // Creates a new pass from a group of compatible nodes.
+    // Two nodes are compatible if:
+    // * They have no full read dependencies to another.
+    // * Belong to the same kind and queue.
+    // * Have the same dependency level.
+    pub fn new<T>(
+        context: &Arc<VulkanContext>,
+        nodes: &SlotMap<NodeIndex, Box<dyn Node>>,
+        textures: &T,
+        dependencies: &SecondaryMap<NodeIndex, Vec<Edge>>,
+        ordered_nodes: &[NodeIndex],
+        kind: NodeKind,
+        extent: Extent,
+    ) -> Result<Self>
+    where
+        T: Deref<Target = ResourceCache<Texture>>,
+    {
+        let kind = match kind {
+            NodeKind::Graphics => PassKind::graphics(
+                context,
+                nodes,
+                textures,
+                dependencies,
+                ordered_nodes,
+                extent,
+            )?,
+            NodeKind::Transfer => PassKind::transfer(
+                context,
+                nodes,
+                textures,
+                dependencies,
+                ordered_nodes,
+                extent,
+            )?,
+        };
+
+        Ok(Self {
+            kind,
+            nodes: ordered_nodes.to_owned(),
+        })
+    }
+
+    pub fn execute(
+        &self,
+        world: &mut World,
+        cmd: &CommandBuffer,
+        nodes: &mut SlotMap<NodeIndex, Box<dyn Node>>,
+        current_frame: usize,
+        resources: &Resources,
+        extent: Extent,
+    ) -> Result<()> {
+        let node = &mut nodes[self.nodes[0]];
+
+        match &self.kind {
+            PassKind::Graphics {
+                renderpass,
+                framebuffer,
+            } => {
+                cmd.begin_renderpass(&renderpass, &framebuffer, extent, &node.clear_values());
+
+                node.execute(world, cmd, current_frame, resources)?;
+
+                cmd.end_renderpass();
+            }
+            PassKind::Transfer {
+                src_stage,
+                image_barriers,
+            } => {
+                cmd.pipeline_barrier(*src_stage, vk::PipelineStageFlags::TRANSFER, image_barriers);
+                node.execute(world, cmd, current_frame, resources)?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+enum PassKind {
+    Graphics {
+        renderpass: RenderPass,
+        framebuffer: Framebuffer,
+        // Index into first node of ordered_nodes
+    },
+
+    Transfer {
+        src_stage: vk::PipelineStageFlags,
+        image_barriers: Vec<ImageMemoryBarrier>,
+    },
+}
+
+impl PassKind {
+    fn graphics<T>(
+        context: &Arc<VulkanContext>,
+        nodes: &SlotMap<NodeIndex, Box<dyn Node>>,
+        textures: &T,
+        dependencies: &SecondaryMap<NodeIndex, Vec<Edge>>,
+        ordered_nodes: &[NodeIndex],
+        extent: Extent,
+    ) -> Result<Self>
+    where
+        T: Deref<Target = ResourceCache<Texture>>,
+    {
+        let node = &nodes[ordered_nodes[0]];
+
+        let attachments = node
+            .color_attachments()
+            .iter()
+            .chain(node.depth_attachment().into_iter())
+            .map(|attachment| -> Result<_> {
+                let texture = textures.get(attachment.resource)?;
+                Ok(AttachmentDescription {
+                    format: texture.format(),
+                    samples: texture.samples(),
+                    store_op: attachment.store_op,
+                    load_op: attachment.load_op,
+                    initial_layout: attachment.initial_layout,
+                    final_layout: attachment.final_layout,
+                    stencil_load_op: LoadOp::DONT_CARE,
+                    stencil_store_op: StoreOp::DONT_CARE,
+                    flags: vk::AttachmentDescriptionFlags::default(),
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        // Get the dependencies of node.
+        let dependency = dependencies
+            .get(ordered_nodes[0])
+            .into_iter()
+            .flat_map(|val| val.iter())
+            .fold(
+                None,
+                |dependency: Option<SubpassDependency>, edge| match dependency {
+                    Some(dependency) => Some(SubpassDependency {
+                        src_stage_mask: dependency.src_stage_mask | edge.write_stage,
+                        dst_stage_mask: dependency.dst_stage_mask | edge.read_stage,
+                        src_access_mask: dependency.src_access_mask | edge.write_access,
+                        dst_access_mask: dependency.dst_access_mask | edge.read_access,
+                        ..dependency
+                    }),
+                    None => Some(SubpassDependency {
+                        src_subpass: vk::SUBPASS_EXTERNAL,
+                        dst_subpass: 0,
+                        src_stage_mask: edge.write_stage,
+                        dst_stage_mask: edge.read_stage,
+                        src_access_mask: edge.write_access,
+                        dst_access_mask: edge.read_access,
+                        dependency_flags: Default::default(),
+                    }),
+                },
+            );
+
+        let dependencies = [dependency.unwrap_or_default()];
+
+        let color_attachments = node
+            .color_attachments()
+            .iter()
+            .enumerate()
+            .map(|(i, _)| AttachmentReference {
+                attachment: i as u32,
+                layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+            })
+            .collect::<Vec<_>>();
+
+        let depth_attachment = node
+            .depth_attachment()
+            .as_ref()
+            .map(|_| AttachmentReference {
+                attachment: node.color_attachments().len() as u32,
+                layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            });
+
+        let renderpass_info = RenderPassInfo {
+            attachments: &attachments,
+            subpasses: &[SubpassInfo {
+                color_attachments: &color_attachments,
+                resolve_attachments: &[],
+                input_attachments: &[],
+                depth_attachment,
+            }],
+            dependencies: if dependency.is_some() {
+                &dependencies
+            } else {
+                &[]
+            },
+        };
+
+        let renderpass = RenderPass::new(context.device().clone(), &renderpass_info)?;
+
+        let attachments = node
+            .color_attachments()
+            .iter()
+            .chain(node.depth_attachment().into_iter())
+            .map(|attachment| Ok(textures.get(attachment.resource)?))
+            .collect::<Result<Vec<_>>>()?;
+
+        let framebuffer =
+            Framebuffer::new(context.device().clone(), &renderpass, &attachments, extent)?;
+
+        Ok(PassKind::Graphics {
+            renderpass,
+            framebuffer,
+        })
+    }
+
+    fn transfer(
+        context: &Arc<VulkanContext>,
+        nodes: &SlotMap<NodeIndex, Box<dyn Node>>,
+        textures: &ResourceCache<Texture>,
+        dependencies: &SecondaryMap<NodeIndex, Vec<Edge>>,
+        ordered_nodes: &[NodeIndex],
+        extent: Extent,
+    ) -> Result<Self> {
+        // Get the dependencies of node.
+        let mut src_stage = vk::PipelineStageFlags::default();
+
+        let image_barriers = dependencies
+            .get(ordered_nodes[0])
+            .into_iter()
+            .flat_map(|val| val.iter())
+            .map(|edge| -> Result<_> {
+                let src = textures.get(edge.resource)?;
+
+                let aspect_mask =
+                    if edge.read_access == vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE {
+                        vk::ImageAspectFlags::DEPTH
+                    } else {
+                        vk::ImageAspectFlags::COLOR
+                    };
+                src_stage = edge.write_stage.max(src_stage);
+
+                Ok(ImageMemoryBarrier {
+                    src_access_mask: edge.write_access,
+                    dst_access_mask: vk::AccessFlags::TRANSFER_READ,
+                    old_layout: edge.layout,
+                    new_layout: ImageLayout::TRANSFER_SRC_OPTIMAL,
+                    src_queue_family_index: context.queue_families().graphics().unwrap(),
+                    dst_queue_family_index: context.queue_families().transfer().unwrap(),
+                    image: src.image(),
+                    subresource_range: vk::ImageSubresourceRange {
+                        aspect_mask,
+                        base_mip_level: 0,
+                        level_count: src.mip_levels(),
+                        base_array_layer: 0,
+                        layer_count: 1,
+                    },
+                    ..Default::default()
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        Ok(Self::Transfer {
+            src_stage,
+            image_barriers,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -506,255 +839,5 @@ mod tests {
             ),
             "Did not detected cyclic graph"
         );
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Default)]
-pub struct Edge {
-    pub src: NodeIndex,
-    pub dst: NodeIndex,
-    pub write_stage: PipelineStageFlags,
-    pub read_stage: PipelineStageFlags,
-    pub write_access: vk::AccessFlags,
-    pub read_access: vk::AccessFlags,
-}
-
-struct FrameData {
-    context: Arc<VulkanContext>,
-    fence: Fence,
-    commandpool: CommandPool,
-    commandbuffer: CommandBuffer,
-    wait_semaphore: Semaphore,
-    signal_semaphore: Semaphore,
-}
-
-impl FrameData {
-    pub fn new(context: Arc<VulkanContext>) -> Result<Self> {
-        let commandpool = CommandPool::new(
-            context.device().clone(),
-            context.queue_families().graphics().unwrap(),
-            true,
-            false,
-        )?;
-
-        let commandbuffer = commandpool.allocate_one()?;
-        let fence = fence::create(context.device(), true)?;
-
-        let wait_semaphore = semaphore::create(context.device())?;
-        let signal_semaphore = semaphore::create(context.device())?;
-
-        Ok(Self {
-            context,
-            fence,
-            commandpool,
-            commandbuffer,
-            wait_semaphore,
-            signal_semaphore,
-        })
-    }
-}
-
-impl Drop for FrameData {
-    fn drop(&mut self) {
-        let device = self.context.device();
-
-        fence::destroy(device, self.fence);
-        semaphore::destroy(device, self.wait_semaphore);
-        semaphore::destroy(device, self.signal_semaphore);
-    }
-}
-
-struct Pass {
-    kind: PassKind,
-    nodes: Vec<NodeIndex>,
-}
-
-impl Pass {
-    // Creates a new pass from a group of compatible nodes.
-    // Two nodes are compatible if:
-    // * They have no full read dependencies to another.
-    // * Belong to the same kind and queue.
-    // * Have the same dependency level.
-    pub fn new<T>(
-        context: &Arc<VulkanContext>,
-        nodes: &SlotMap<NodeIndex, Box<dyn Node>>,
-        textures: &T,
-        edges: &SecondaryMap<NodeIndex, Vec<Edge>>,
-        ordered_nodes: &[NodeIndex],
-        kind: NodeKind,
-        extent: Extent,
-    ) -> Result<Self>
-    where
-        T: Deref<Target = ResourceCache<Texture>>,
-    {
-        let kind = match kind {
-            NodeKind::Graphics => {
-                PassKind::graphics(context, nodes, textures, edges, ordered_nodes, extent)?
-            }
-            NodeKind::Transfer => PassKind::transfer(context, nodes, edges, ordered_nodes, extent)?,
-        };
-
-        Ok(Self {
-            kind,
-            nodes: ordered_nodes.to_owned(),
-        })
-    }
-
-    pub fn execute(
-        &self,
-        world: &mut World,
-        cmd: &CommandBuffer,
-        nodes: &mut SlotMap<NodeIndex, Box<dyn Node>>,
-        current_frame: usize,
-        resources: &Resources,
-        extent: Extent,
-    ) -> Result<()> {
-        let node = &mut nodes[self.nodes[0]];
-
-        match &self.kind {
-            PassKind::Graphics {
-                renderpass,
-                framebuffer,
-            } => {
-                cmd.begin_renderpass(&renderpass, &framebuffer, extent, &node.clear_values());
-
-                node.execute(world, cmd, current_frame, resources)?;
-
-                cmd.end_renderpass();
-            }
-            PassKind::Transfer => node.execute(world, cmd, current_frame, resources)?,
-        }
-
-        Ok(())
-    }
-}
-
-enum PassKind {
-    Graphics {
-        renderpass: RenderPass,
-        framebuffer: Framebuffer,
-        // Index into first node of ordered_nodes
-    },
-
-    Transfer,
-}
-
-impl PassKind {
-    fn graphics<T>(
-        context: &Arc<VulkanContext>,
-        nodes: &SlotMap<NodeIndex, Box<dyn Node>>,
-        textures: &T,
-        edges: &SecondaryMap<NodeIndex, Vec<Edge>>,
-        ordered_nodes: &[NodeIndex],
-        extent: Extent,
-    ) -> Result<Self>
-    where
-        T: Deref<Target = ResourceCache<Texture>>,
-    {
-        let node = &nodes[ordered_nodes[0]];
-
-        let attachments = node
-            .color_attachments()
-            .iter()
-            .chain(node.depth_attachment().into_iter())
-            .map(|attachment| -> Result<_> {
-                let texture = textures.get(attachment.resource)?;
-                Ok(AttachmentDescription {
-                    format: texture.format(),
-                    samples: texture.samples(),
-                    store_op: attachment.store_op,
-                    load_op: attachment.load_op,
-                    initial_layout: attachment.initial_layout,
-                    final_layout: attachment.final_layout,
-                    stencil_load_op: LoadOp::DONT_CARE,
-                    stencil_store_op: StoreOp::DONT_CARE,
-                    flags: vk::AttachmentDescriptionFlags::default(),
-                })
-            })
-            .collect::<Result<Vec<_>>>()?;
-
-        let dependency = edges[ordered_nodes[0]].iter().fold(
-            None,
-            |dependency: Option<SubpassDependency>, edge| match dependency {
-                Some(dependency) => Some(SubpassDependency {
-                    src_stage_mask: dependency.src_stage_mask | edge.write_stage,
-                    dst_stage_mask: dependency.dst_stage_mask | edge.read_stage,
-                    src_access_mask: dependency.src_access_mask | edge.write_access,
-                    dst_access_mask: dependency.dst_access_mask | edge.read_access,
-                    ..dependency
-                }),
-                None => Some(SubpassDependency {
-                    src_subpass: 0,
-                    dst_subpass: vk::SUBPASS_EXTERNAL,
-                    src_stage_mask: edge.write_stage,
-                    dst_stage_mask: edge.read_stage,
-                    src_access_mask: edge.write_access,
-                    dst_access_mask: edge.read_access,
-                    dependency_flags: Default::default(),
-                }),
-            },
-        );
-
-        let dependencies = [dependency.unwrap_or_default()];
-
-        let color_attachments = node
-            .color_attachments()
-            .iter()
-            .enumerate()
-            .map(|(i, _)| AttachmentReference {
-                attachment: i as u32,
-                layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-            })
-            .collect::<Vec<_>>();
-
-        let depth_attachment = node
-            .depth_attachment()
-            .as_ref()
-            .map(|_| AttachmentReference {
-                attachment: node.color_attachments().len() as u32,
-                layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-            });
-
-        let renderpass_info = RenderPassInfo {
-            attachments: &attachments,
-            subpasses: &[SubpassInfo {
-                color_attachments: &color_attachments,
-                resolve_attachments: &[],
-                input_attachments: &[],
-                depth_attachment,
-            }],
-            dependencies: if dependency.is_some() {
-                &dependencies
-            } else {
-                &[]
-            },
-        };
-
-        let renderpass = RenderPass::new(context.device().clone(), &renderpass_info)?;
-
-        let attachments = node
-            .color_attachments()
-            .iter()
-            .chain(node.depth_attachment().into_iter())
-            .map(|attachment| Ok(textures.get(attachment.resource)?))
-            .collect::<Result<Vec<_>>>()?;
-
-        let framebuffer =
-            Framebuffer::new(context.device().clone(), &renderpass, &attachments, extent)?;
-
-        Ok(PassKind::Graphics {
-            renderpass,
-            framebuffer,
-        })
-    }
-
-    fn transfer(
-        _context: &Arc<VulkanContext>,
-        _nodes: &SlotMap<NodeIndex, Box<dyn Node>>,
-        _edges: &SecondaryMap<NodeIndex, Vec<Edge>>,
-        _ordered_nodes: &[NodeIndex],
-        _extent: Extent,
-    ) -> Result<Self> {
-        Ok(Self::Transfer)
     }
 }
