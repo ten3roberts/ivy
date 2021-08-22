@@ -48,32 +48,14 @@ impl SwapchainNode {
             })
             .collect::<Result<Vec<_>>>()?;
 
-        // // Transition read attachment to transfer src
-        // let src_barrier = vk::ImageMemoryBarrier {
-        //     src_access_mask: vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
-        //     dst_access_mask: vk::AccessFlags::TRANSFER_READ,
-        //     old_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-        //     new_layout: ImageLayout::TRANSFER_SRC_OPTIMAL,
-        //     src_queue_family_index: context.queue_families().transfer().unwrap(),
-        //     dst_queue_family_index: context.queue_families().transfer().unwrap(),
-        //     subresource_range: vk::ImageSubresourceRange {
-        //         aspect_mask: vk::ImageAspectFlags::COLOR,
-        //         base_mip_level: 0,
-        //         level_count: 1,
-        //         base_array_layer: 0,
-        //         layer_count: 1,
-        //     },
-        //     ..Default::default()
-        // };
-
         // Transition swapchain image to transfer dst
         let dst_barrier = vk::ImageMemoryBarrier {
             src_access_mask: vk::AccessFlags::default(),
             dst_access_mask: vk::AccessFlags::TRANSFER_READ,
             old_layout: ImageLayout::UNDEFINED,
             new_layout: ImageLayout::TRANSFER_DST_OPTIMAL,
-            src_queue_family_index: context.queue_families().transfer().unwrap(),
-            dst_queue_family_index: context.queue_families().transfer().unwrap(),
+            src_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
+            dst_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
             subresource_range: vk::ImageSubresourceRange {
                 aspect_mask: vk::ImageAspectFlags::COLOR,
                 base_mip_level: 0,
@@ -89,8 +71,8 @@ impl SwapchainNode {
             dst_access_mask: vk::AccessFlags::MEMORY_READ,
             old_layout: ImageLayout::TRANSFER_DST_OPTIMAL,
             new_layout: ImageLayout::PRESENT_SRC_KHR,
-            src_queue_family_index: context.queue_families().transfer().unwrap(),
-            dst_queue_family_index: context.queue_families().transfer().unwrap(),
+            src_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
+            dst_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
             subresource_range: vk::ImageSubresourceRange {
                 aspect_mask: vk::ImageAspectFlags::COLOR,
                 base_mip_level: 0,

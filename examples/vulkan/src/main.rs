@@ -12,13 +12,13 @@ use ivy_graphics::{
     Camera, FullscreenRenderer, GpuCameraData, IndirectMeshRenderer, Material, ShaderPass,
 };
 use ivy_input::{Input, InputAxis, InputVector};
-use ivy_rendergraph::{AttachmentInfo, CameraNode, RenderGraph, SwapchainNode};
+use ivy_rendergraph::{AttachmentInfo, CameraNode, FullscreenNode, RenderGraph, SwapchainNode};
 use ivy_resources::{Handle, Resources};
 use ivy_ui::{
     constraints::{AbsoluteOffset, AbsoluteSize, Aspect, RelativeOffset, RelativeSize},
     Canvas, Image, Position2D, Size2D, Widget,
 };
-use ivy_vulkan::{descriptors::*, *};
+use ivy_vulkan::{descriptors::*, vk::CullModeFlags, *};
 use std::{
     sync::{mpsc, Arc},
     time::Duration,
@@ -423,6 +423,16 @@ impl VulkanLayer {
             &TextureInfo {
                 extent: resources.get(swapchain)?.extent(),
                 mip_levels: 1,
+                usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED,
+                ..Default::default()
+            },
+        )?)?;
+
+        let final_diffuse = resources.insert(Texture::new(
+            context.clone(),
+            &TextureInfo {
+                extent: swapchain_extent,
+                mip_levels: 1,
                 usage: ImageUsage::COLOR_ATTACHMENT
                     | ImageUsage::SAMPLED
                     | ImageUsage::TRANSFER_SRC,
@@ -430,57 +440,47 @@ impl VulkanLayer {
             },
         )?)?;
 
-        // let final_diffuse = resources.insert(Texture::new(
-        //     context.clone(),
-        //     &TextureInfo {
-        //         extent: swapchain_extent,
-        //         mip_levels: 1,
-        //         usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED,
-        //         ..Default::default()
-        //     },
-        // )?)?;
+        let wireframe_buffer = resources.insert(Texture::new(
+            context.clone(),
+            &TextureInfo {
+                extent: swapchain_extent,
+                mip_levels: 1,
+                usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED,
+                ..Default::default()
+            },
+        )?)?;
 
-        // let wireframe_buffer = resources.insert(Texture::new(
-        //     context.clone(),
-        //     &TextureInfo {
-        //         extent: swapchain_extent,
-        //         mip_levels: 1,
-        //         usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED,
-        //         ..Default::default()
-        //     },
-        // )?)?;
+        let diffuse_sampler = resources.insert(Sampler::new(
+            context.clone(),
+            SamplerInfo {
+                address_mode: AddressMode::REPEAT,
+                mag_filter: FilterMode::NEAREST,
+                min_filter: FilterMode::NEAREST,
+                unnormalized_coordinates: false,
+                anisotropy: 1.0,
+                mip_levels: 1,
+            },
+        )?)?;
 
-        // let diffuse_sampler = resources.insert(Sampler::new(
-        //     context.clone(),
-        //     SamplerInfo {
-        //         address_mode: AddressMode::REPEAT,
-        //         mag_filter: FilterMode::NEAREST,
-        //         min_filter: FilterMode::NEAREST,
-        //         unnormalized_coordinates: false,
-        //         anisotropy: 1.0,
-        //         mip_levels: 1,
-        //     },
-        // )?)?;
-
-        // let diffuse_descriptor = DescriptorBuilder::new()
-        //     .bind_combined_image_sampler(
-        //         0,
-        //         vk::ShaderStageFlags::FRAGMENT,
-        //         resources.get(diffuse_buffer)?.image_view(),
-        //         resources.get(diffuse_sampler)?.sampler(),
-        //     )
-        //     .bind_combined_image_sampler(
-        //         1,
-        //         vk::ShaderStageFlags::FRAGMENT,
-        //         resources.get(wireframe_buffer)?.image_view(),
-        //         resources.get(diffuse_sampler)?.sampler(),
-        //     )
-        //     .build_one(
-        //         context.device(),
-        //         &mut descriptor_layout_cache,
-        //         &mut descriptor_allocator,
-        //     )?
-        //     .0;
+        let diffuse_set = DescriptorBuilder::new()
+            .bind_combined_image_sampler(
+                0,
+                vk::ShaderStageFlags::FRAGMENT,
+                resources.get(diffuse_buffer)?.image_view(),
+                resources.get(diffuse_sampler)?.sampler(),
+            )
+            .bind_combined_image_sampler(
+                1,
+                vk::ShaderStageFlags::FRAGMENT,
+                resources.get(wireframe_buffer)?.image_view(),
+                resources.get(diffuse_sampler)?.sampler(),
+            )
+            .build_one(
+                context.device(),
+                &mut descriptor_layout_cache,
+                &mut descriptor_allocator,
+            )?
+            .0;
 
         let diffuse_node =
             rendergraph.add_node(CameraNode::<DiffusePass, IndirectMeshRenderer>::new(
@@ -489,7 +489,7 @@ impl VulkanLayer {
                 vec![AttachmentInfo {
                     final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
                     initial_layout: ImageLayout::UNDEFINED,
-                    resource: diffuse_buffer.into(),
+                    resource: diffuse_buffer,
                     store_op: StoreOp::STORE,
                     load_op: LoadOp::CLEAR,
                 }],
@@ -497,7 +497,7 @@ impl VulkanLayer {
                 Some(AttachmentInfo {
                     initial_layout: ImageLayout::UNDEFINED,
                     final_layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                    resource: depth_buffer.into(),
+                    resource: depth_buffer,
                     store_op: StoreOp::DONT_CARE,
                     load_op: LoadOp::CLEAR,
                 }),
@@ -507,70 +507,66 @@ impl VulkanLayer {
                 ],
             ));
 
-        // let wireframe_depth_buffer = resources.insert(Texture::new(
-        //     context.clone(),
-        //     &TextureInfo {
-        //         extent: swapchain.extent(),
-        //         mip_levels: 1,
-        //         usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT,
-        //         format: Format::D32_SFLOAT,
-        //         samples: SampleCountFlags::TYPE_1,
-        //     },
-        // )?)?;
+        let wireframe_depth_buffer = resources.insert(Texture::new(
+            context.clone(),
+            &TextureInfo {
+                extent: swapchain_extent,
+                mip_levels: 1,
+                usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT,
+                format: Format::D32_SFLOAT,
+                samples: SampleCountFlags::TYPE_1,
+            },
+        )?)?;
 
-        // let wireframe_node =
-        //     rendergraph.add_node(CameraNode::<DiffusePass, IndirectMeshRenderer>::new(
-        //         camera,
-        //         resources.default::<IndirectMeshRenderer>()?,
-        //         vec![AttachmentInfo {
-        //             final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-        //             initial_layout: ImageLayout::UNDEFINED,
-        //             resource: wireframe_buffer.into(),
-        //             store_op: StoreOp::STORE,
-        //             load_op: LoadOp::CLEAR,
-        //         }],
-        //         vec![],
-        //         Some(AttachmentInfo {
-        //             initial_layout: ImageLayout::UNDEFINED,
-        //             final_layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-        //             resource: wireframe_depth_buffer.into(),
-        //             store_op: StoreOp::DONT_CARE,
-        //             load_op: LoadOp::CLEAR,
-        //         }),
-        //         vec![
-        //             ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
-        //             ClearValue::DepthStencil(1.0, 0).into(),
-        //         ],
-        //     ));
+        let wireframe_node =
+            rendergraph.add_node(CameraNode::<WireframePass, IndirectMeshRenderer>::new(
+                camera,
+                resources.default::<IndirectMeshRenderer>()?,
+                vec![AttachmentInfo {
+                    final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                    initial_layout: ImageLayout::UNDEFINED,
+                    resource: wireframe_buffer.into(),
+                    store_op: StoreOp::STORE,
+                    load_op: LoadOp::CLEAR,
+                }],
+                vec![],
+                Some(AttachmentInfo {
+                    initial_layout: ImageLayout::UNDEFINED,
+                    final_layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                    resource: wireframe_depth_buffer.into(),
+                    store_op: StoreOp::DONT_CARE,
+                    load_op: LoadOp::CLEAR,
+                }),
+                vec![
+                    ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
+                    ClearValue::DepthStencil(1.0, 0).into(),
+                ],
+            ));
 
-        // let fullscreen_node =
-        //     rendergraph.add_node(CameraNode::<DiffusePass, IndirectMeshRenderer>::new(
-        //         camera,
-        //         resources.default::<IndirectMeshRenderer>()?,
-        //         vec![AttachmentInfo {
-        //             final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-        //             initial_layout: ImageLayout::UNDEFINED,
-        //             resource: wireframe_buffer.into(),
-        //             store_op: StoreOp::STORE,
-        //             load_op: LoadOp::CLEAR,
-        //         }],
-        //         vec![],
-        //         Some(AttachmentInfo {
-        //             initial_layout: ImageLayout::UNDEFINED,
-        //             final_layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-        //             resource: depth_buffer.into(),
-        //             store_op: StoreOp::DONT_CARE,
-        //             load_op: LoadOp::CLEAR,
-        //         }),
-        //         vec![
-        //             ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
-        //             ClearValue::DepthStencil(1.0, 0).into(),
-        //         ],
-        //     ));
+        let fullscreen_node = rendergraph.add_node(FullscreenNode::<
+            PostProcessingPass,
+            FullscreenRenderer,
+        >::new(
+            resources.default::<FullscreenRenderer>()?,
+            vec![AttachmentInfo {
+                final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                initial_layout: ImageLayout::UNDEFINED,
+                resource: final_diffuse.into(),
+                store_op: StoreOp::STORE,
+                load_op: LoadOp::CLEAR,
+            }],
+            vec![diffuse_buffer, wireframe_buffer],
+            None,
+            vec![
+                ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
+                ClearValue::DepthStencil(1.0, 0).into(),
+            ],
+            vec![diffuse_set],
+        ));
 
         let swapchain_node = rendergraph.add_node(SwapchainNode::new(
             swapchain,
-            diffuse_buffer,
+            final_diffuse,
             vec![],
             &resources,
         )?);
@@ -662,24 +658,24 @@ impl VulkanLayer {
 
         let diffuse_renderpass = rendergraph.node_renderpass(diffuse_node)?;
 
-        // let fullscreen_renderpass = rendergraph.node_renderpass(fullscreen_node)?;
+        let fullscreen_renderpass = rendergraph.node_renderpass(fullscreen_node)?;
 
-        // let fullscreen_pipeline = Pipeline::new(
-        //     context.device().clone(),
-        //     &mut descriptor_layout_cache,
-        //     fullscreen_renderpass,
-        //     PipelineInfo {
-        //         vertexshader: "./res/shaders/fullscreen.vert.spv".into(),
-        //         fragmentshader: "./res/shaders/post_processing.frag.spv".into(),
-        //         vertex_bindings: &[],
-        //         vertex_attributes: &[],
-        //         samples: SampleCountFlags::TYPE_1,
-        //         extent: swapchain.extent(),
-        //         subpass: 0,
-        //         cull_mode: CullModeFlags::NONE,
-        //         ..Default::default()
-        //     },
-        // )?;
+        let fullscreen_pipeline = Pipeline::new(
+            context.device().clone(),
+            &mut descriptor_layout_cache,
+            fullscreen_renderpass,
+            PipelineInfo {
+                vertexshader: "./res/shaders/fullscreen.vert.spv".into(),
+                fragmentshader: "./res/shaders/post_processing.frag.spv".into(),
+                vertex_bindings: &[],
+                vertex_attributes: &[],
+                samples: SampleCountFlags::TYPE_1,
+                extent: swapchain_extent,
+                subpass: 0,
+                cull_mode: CullModeFlags::NONE,
+                ..Default::default()
+            },
+        )?;
 
         // Create a pipeline from the shaders
         let pipeline = Pipeline::new(
@@ -721,33 +717,33 @@ impl VulkanLayer {
             },
         )?;
 
-        // // Create a pipeline from the shaders
-        // let wireframe_pipeline = Pipeline::new(
-        //     context.device().clone(),
-        //     &mut descriptor_layout_cache,
-        //     rendergraph.node_renderpass(wireframe_node)?,
-        //     PipelineInfo {
-        //         vertexshader: "./res/shaders/default.vert.spv".into(),
-        //         fragmentshader: "./res/shaders/default.frag.spv".into(),
-        //         vertex_bindings: &[Vertex::BINDING_DESCRIPTION],
-        //         vertex_attributes: Vertex::ATTRIBUTE_DESCRIPTIONS,
-        //         samples: SampleCountFlags::TYPE_1,
-        //         extent: swapchain.extent(),
-        //         subpass: 0,
-        //         polygon_mode: vk::PolygonMode::LINE,
-        //         cull_mode: vk::CullModeFlags::NONE,
-        //         front_face: vk::FrontFace::CLOCKWISE,
-        //         ..Default::default()
-        //     },
-        // )?;
+        // Create a pipeline from the shaders
+        let wireframe_pipeline = Pipeline::new(
+            context.device().clone(),
+            &mut descriptor_layout_cache,
+            rendergraph.node_renderpass(wireframe_node)?,
+            PipelineInfo {
+                vertexshader: "./res/shaders/default.vert.spv".into(),
+                fragmentshader: "./res/shaders/default.frag.spv".into(),
+                vertex_bindings: &[Vertex::BINDING_DESCRIPTION],
+                vertex_attributes: Vertex::ATTRIBUTE_DESCRIPTIONS,
+                samples: SampleCountFlags::TYPE_1,
+                extent: swapchain_extent,
+                subpass: 0,
+                polygon_mode: vk::PolygonMode::LINE,
+                cull_mode: vk::CullModeFlags::NONE,
+                front_face: vk::FrontFace::CLOCKWISE,
+                ..Default::default()
+            },
+        )?;
 
         let default_shaderpass = resources.insert(DiffusePass(pipeline))?;
         let uv_shaderpass = resources.insert(DiffusePass(uv_pipeline))?;
 
         // Insert one default post processing pass
-        // resources.insert_default(PostProcessingPass(fullscreen_pipeline))?;
+        resources.insert_default(PostProcessingPass(fullscreen_pipeline))?;
 
-        // let wireframe_shaderpass = resources.insert(WireframePass(wireframe_pipeline))?;
+        let wireframe_shaderpass = resources.insert(WireframePass(wireframe_pipeline))?;
 
         world.spawn_batch(
             [
@@ -756,21 +752,21 @@ impl VulkanLayer {
                     cube_mesh,
                     material,
                     default_shaderpass,
-                    // wireframe_shaderpass,
+                    wireframe_shaderpass,
                 ),
                 (
                     Position(Vec3::new(4.0, 0.0, 0.0)),
                     cube_mesh,
                     material,
                     default_shaderpass,
-                    // wireframe_shaderpass,
+                    wireframe_shaderpass,
                 ),
                 (
                     Position(Vec3::new(0.0, 0.0, -3.0)),
                     cube_mesh,
                     material2,
                     default_shaderpass,
-                    // wireframe_shaderpass,
+                    wireframe_shaderpass,
                 ),
             ]
             .iter()
@@ -792,7 +788,7 @@ impl VulkanLayer {
                         )),
                         material,
                         default_shaderpass,
-                        // wireframe_shaderpass,
+                        wireframe_shaderpass,
                         // Scale(Vec3::new(0.1, 0.1, 0.1)),
                         Rotation(Rotor3::identity()),
                         AngularVelocity(Vec3::new(0.0, y as f32 * 0.5, x as f32)),
@@ -806,7 +802,7 @@ impl VulkanLayer {
             Rotation::default(),
             Scale(Vec3::one() * 0.5),
             default_shaderpass,
-            // wireframe_shaderpass,
+            wireframe_shaderpass,
             material2,
         ));
 
@@ -816,7 +812,7 @@ impl VulkanLayer {
             Rotation::default(),
             AngularVelocity(Vec3::new(0.0, 0.1, 1.0)),
             uv_shaderpass,
-            // wireframe_shaderpass,
+            wireframe_shaderpass,
             material,
         ));
 

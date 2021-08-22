@@ -647,11 +647,11 @@ impl PassKind {
 
     fn transfer(
         context: &Arc<VulkanContext>,
-        nodes: &SlotMap<NodeIndex, Box<dyn Node>>,
+        _nodes: &SlotMap<NodeIndex, Box<dyn Node>>,
         textures: &ResourceCache<Texture>,
         dependencies: &SecondaryMap<NodeIndex, Vec<Edge>>,
         ordered_nodes: &[NodeIndex],
-        extent: Extent,
+        _extent: Extent,
     ) -> Result<Self> {
         // Get the dependencies of node.
         let mut src_stage = vk::PipelineStageFlags::default();
@@ -676,8 +676,8 @@ impl PassKind {
                     dst_access_mask: vk::AccessFlags::TRANSFER_READ,
                     old_layout: edge.layout,
                     new_layout: ImageLayout::TRANSFER_SRC_OPTIMAL,
-                    src_queue_family_index: context.queue_families().graphics().unwrap(),
-                    dst_queue_family_index: context.queue_families().transfer().unwrap(),
+                    src_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
+                    dst_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
                     image: src.image(),
                     subresource_range: vk::ImageSubresourceRange {
                         aspect_mask,

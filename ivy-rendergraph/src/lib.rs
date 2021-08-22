@@ -1,11 +1,13 @@
 mod camera_node;
 mod error;
+mod fullscreen_node;
 mod node;
 mod rendergraph;
 mod swapchain_node;
 
 pub use camera_node::*;
 pub use error::*;
+pub use fullscreen_node::*;
 pub use node::*;
 pub use rendergraph::*;
 pub use swapchain_node::*;
