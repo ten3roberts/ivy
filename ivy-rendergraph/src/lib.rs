@@ -2,6 +2,7 @@ mod camera_node;
 mod error;
 mod fullscreen_node;
 mod node;
+pub(crate) mod pass;
 mod rendergraph;
 mod swapchain_node;
 
