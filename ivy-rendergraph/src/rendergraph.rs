@@ -9,9 +9,10 @@ use itertools::Itertools;
 use ivy_resources::{Handle, ResourceCache, Resources};
 use ivy_vulkan::{
     commands::{CommandBuffer, CommandPool},
+    descriptors::DescriptorLayoutCache,
     fence, semaphore,
     vk::{self, CommandBufferUsageFlags, PipelineStageFlags, Semaphore},
-    Extent, Fence, ImageLayout, RenderPass, Texture, VulkanContext,
+    Extent, Fence, ImageLayout, Pipeline, PipelineInfo, RenderPass, Texture, VulkanContext,
 };
 use slotmap::{new_key_type, SecondaryMap, SlotMap};
 use std::{hash, ops::Deref, sync::Arc};
@@ -149,12 +150,12 @@ impl RenderGraph {
             .push(edge);
     }
 
-    pub fn node_renderpass<'a>(&'a self, node_index: NodeIndex) -> Result<(&'a RenderPass, u32)> {
+    pub fn node_renderpass<'a>(&'a self, node: NodeIndex) -> Result<(&'a RenderPass, u32)> {
         let (pass, index) = self
             .node_pass_map
-            .get(node_index)
+            .get(node)
             .and_then(|(pass, subpass_index)| Some((self.passes.get(*pass)?, *subpass_index)))
-            .ok_or(Error::InvalidNodeIndex(node_index))?;
+            .ok_or(Error::InvalidNodeIndex(node))?;
 
         match pass.kind() {
             PassKind::Graphics {
@@ -163,11 +164,30 @@ impl RenderGraph {
                 clear_values: _,
             } => Ok((renderpass, index)),
             PassKind::Transfer { .. } => Err(Error::InvalidNodeKind(
-                node_index,
+                node,
                 NodeKind::Graphics,
-                self.nodes[node_index].node_kind(),
+                self.nodes[node].node_kind(),
             )),
         }
+    }
+
+    /// Creates a pipeline compatible with node from the supplied info.
+    pub fn create_pipeline(
+        &self,
+        node: NodeIndex,
+        layout_cache: &mut DescriptorLayoutCache,
+        pipeline_info: &PipelineInfo,
+    ) -> Result<Pipeline> {
+        let (pass, subpass) = self.node_renderpass(node)?;
+        let pipeline = Pipeline::new(
+            self.context.device().clone(),
+            layout_cache,
+            pass,
+            subpass,
+            pipeline_info,
+        )?;
+
+        Ok(pipeline)
     }
 
     /// Builds or rebuilds the rendergraph and creates appropriate renderpasses and framebuffers.

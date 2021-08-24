@@ -58,7 +58,7 @@ impl Pipeline {
         layout_cache: &mut DescriptorLayoutCache,
         renderpass: &RenderPass,
         subpass: u32,
-        info: PipelineInfo,
+        info: &PipelineInfo,
     ) -> Result<Self> {
         let mut vertexshader = File::open(&info.vertexshader)
             .map_err(|e| Error::Io(e, Some(info.vertexshader.clone())))?;

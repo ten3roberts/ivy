@@ -33,15 +33,6 @@ impl Pass {
     where
         T: Deref<Target = ResourceCache<Texture>>,
     {
-        #[cfg(debug_assertions)]
-        println!(
-            "Nodes: {:?}",
-            nodes
-                .iter()
-                .map(|node| node.1.debug_name())
-                .collect::<Vec<_>>()
-        );
-
         let kind = match kind {
             NodeKind::Graphics => {
                 PassKind::graphics(context, nodes, textures, dependencies, &pass_nodes, extent)?

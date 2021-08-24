@@ -657,16 +657,10 @@ impl VulkanLayer {
             sampler,
         )?)?;
 
-        let diffuse_renderpass = rendergraph.node_renderpass(diffuse_node)?;
-
-        let fullscreen_renderpass = rendergraph.node_renderpass(fullscreen_node)?;
-
-        let fullscreen_pipeline = Pipeline::new(
-            context.device().clone(),
+        let fullscreen_pipeline = rendergraph.create_pipeline(
+            fullscreen_node,
             &mut descriptor_layout_cache,
-            fullscreen_renderpass.0,
-            fullscreen_renderpass.1,
-            PipelineInfo {
+            &PipelineInfo {
                 vertexshader: "./res/shaders/fullscreen.vert.spv".into(),
                 fragmentshader: "./res/shaders/post_processing.frag.spv".into(),
                 vertex_bindings: &[],
@@ -679,12 +673,10 @@ impl VulkanLayer {
         )?;
 
         // Create a pipeline from the shaders
-        let pipeline = Pipeline::new(
-            context.device().clone(),
+        let pipeline = rendergraph.create_pipeline(
+            diffuse_node,
             &mut descriptor_layout_cache,
-            diffuse_renderpass.0,
-            diffuse_renderpass.1,
-            PipelineInfo {
+            &PipelineInfo {
                 vertexshader: "./res/shaders/default.vert.spv".into(),
                 fragmentshader: "./res/shaders/default.frag.spv".into(),
                 vertex_bindings: &[Vertex::BINDING_DESCRIPTION],
@@ -699,12 +691,10 @@ impl VulkanLayer {
         )?;
 
         // Create a pipeline from the shaders
-        let uv_pipeline = Pipeline::new(
-            context.device().clone(),
+        let uv_pipeline = rendergraph.create_pipeline(
+            diffuse_node,
             &mut descriptor_layout_cache,
-            diffuse_renderpass.0,
-            diffuse_renderpass.1,
-            PipelineInfo {
+            &PipelineInfo {
                 vertexshader: "./res/shaders/default.vert.spv".into(),
                 fragmentshader: "./res/shaders/uv.frag.spv".into(),
                 vertex_bindings: &[Vertex::BINDING_DESCRIPTION],
@@ -718,14 +708,11 @@ impl VulkanLayer {
             },
         )?;
 
-        let wireframe_pass = rendergraph.node_renderpass(wireframe_node)?;
         // Create a pipeline from the shaders
-        let wireframe_pipeline = Pipeline::new(
-            context.device().clone(),
+        let wireframe_pipeline = rendergraph.create_pipeline(
+            wireframe_node,
             &mut descriptor_layout_cache,
-            wireframe_pass.0,
-            wireframe_pass.1,
-            PipelineInfo {
+            &PipelineInfo {
                 vertexshader: "./res/shaders/default.vert.spv".into(),
                 fragmentshader: "./res/shaders/default.frag.spv".into(),
                 vertex_bindings: &[Vertex::BINDING_DESCRIPTION],
