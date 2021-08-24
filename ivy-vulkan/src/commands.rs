@@ -210,12 +210,17 @@ impl CommandBuffer {
         }
     }
 
-    // Ends current renderpass
+    /// Ends current renderpass
     pub fn end_renderpass(&self) {
         unsafe { self.device.cmd_end_render_pass(self.commandbuffer) }
     }
 
-    // Binds a graphics pipeline
+    /// Begins the next subpass
+    pub fn next_subpass(&self, contents: vk::SubpassContents) {
+        unsafe { self.device.cmd_next_subpass(self.commandbuffer, contents) }
+    }
+
+    /// Binds a graphics pipeline
     pub fn bind_pipeline<T: Into<vk::Pipeline>>(&self, pipeline: T) {
         unsafe {
             self.device.cmd_bind_pipeline(

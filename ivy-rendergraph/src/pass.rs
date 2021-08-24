@@ -26,35 +26,34 @@ impl Pass {
         nodes: &SlotMap<NodeIndex, Box<dyn Node>>,
         textures: &T,
         dependencies: &SecondaryMap<NodeIndex, Vec<Edge>>,
-        ordered_nodes: &[NodeIndex],
+        pass_nodes: Vec<NodeIndex>,
         kind: NodeKind,
         extent: Extent,
     ) -> Result<Self>
     where
         T: Deref<Target = ResourceCache<Texture>>,
     {
+        #[cfg(debug_assertions)]
+        println!(
+            "Nodes: {:?}",
+            nodes
+                .iter()
+                .map(|node| node.1.debug_name())
+                .collect::<Vec<_>>()
+        );
+
         let kind = match kind {
-            NodeKind::Graphics => PassKind::graphics(
-                context,
-                nodes,
-                textures,
-                dependencies,
-                ordered_nodes,
-                extent,
-            )?,
-            NodeKind::Transfer => PassKind::transfer(
-                context,
-                nodes,
-                textures,
-                dependencies,
-                ordered_nodes,
-                extent,
-            )?,
+            NodeKind::Graphics => {
+                PassKind::graphics(context, nodes, textures, dependencies, &pass_nodes, extent)?
+            }
+            NodeKind::Transfer => {
+                PassKind::transfer(context, nodes, textures, dependencies, &pass_nodes, extent)?
+            }
         };
 
         Ok(Self {
             kind,
-            nodes: ordered_nodes.to_owned(),
+            nodes: pass_nodes,
         })
     }
 
@@ -67,16 +66,23 @@ impl Pass {
         resources: &Resources,
         extent: Extent,
     ) -> Result<()> {
-        let node = &mut nodes[self.nodes[0]];
-
         match &self.kind {
             PassKind::Graphics {
                 renderpass,
                 framebuffer,
+                clear_values,
             } => {
-                cmd.begin_renderpass(&renderpass, &framebuffer, extent, &node.clear_values());
+                cmd.begin_renderpass(&renderpass, &framebuffer, extent, clear_values);
 
-                node.execute(world, cmd, current_frame, resources)?;
+                self.nodes().first().iter().try_for_each(|node| {
+                    nodes[**node].execute(world, cmd, current_frame, resources)
+                })?;
+
+                self.nodes[1..].iter().try_for_each(|node| -> Result<_> {
+                    cmd.next_subpass(vk::SubpassContents::INLINE);
+                    nodes[*node].execute(world, cmd, current_frame, resources)?;
+                    Ok(())
+                })?;
 
                 cmd.end_renderpass();
             }
@@ -85,7 +91,9 @@ impl Pass {
                 image_barriers,
             } => {
                 cmd.pipeline_barrier(*src_stage, vk::PipelineStageFlags::TRANSFER, image_barriers);
-                node.execute(world, cmd, current_frame, resources)?;
+                self.nodes.iter().try_for_each(|node| {
+                    nodes[*node].execute(world, cmd, current_frame, resources)
+                })?;
             }
         }
 
@@ -96,13 +104,19 @@ impl Pass {
     pub fn kind(&self) -> &PassKind {
         &self.kind
     }
+
+    /// Get a reference to the pass's nodes.
+    pub fn nodes(&self) -> &[NodeIndex] {
+        self.nodes.as_slice()
+    }
 }
 
 pub enum PassKind {
     Graphics {
         renderpass: RenderPass,
         framebuffer: Framebuffer,
-        // Index into first node of ordered_nodes
+        clear_values: Vec<vk::ClearValue>,
+        // Index into first node of pass_nodes
     },
 
     Transfer {
@@ -117,104 +131,110 @@ impl PassKind {
         nodes: &SlotMap<NodeIndex, Box<dyn Node>>,
         textures: &T,
         dependencies: &SecondaryMap<NodeIndex, Vec<Edge>>,
-        ordered_nodes: &[NodeIndex],
+        pass_nodes: &[NodeIndex],
         extent: Extent,
     ) -> Result<Self>
     where
         T: Deref<Target = ResourceCache<Texture>>,
     {
-        let node = &nodes[ordered_nodes[0]];
-
-        let attachments = node
-            .color_attachments()
+        // Collect clear values
+        let clear_values = pass_nodes
             .iter()
-            .chain(node.depth_attachment().into_iter())
-            .map(|attachment| -> Result<_> {
-                let texture = textures.get(attachment.resource)?;
-                Ok(AttachmentDescription {
-                    flags: vk::AttachmentDescriptionFlags::default(),
-                    format: texture.format(),
-                    samples: texture.samples(),
-                    load_op: attachment.load_op,
-                    store_op: attachment.store_op,
-                    stencil_load_op: LoadOp::DONT_CARE,
-                    stencil_store_op: StoreOp::DONT_CARE,
-                    initial_layout: attachment.initial_layout,
-                    final_layout: attachment.final_layout,
-                })
-            })
-            .collect::<Result<Vec<_>>>()?;
+            .flat_map(|node| nodes[*node].clear_values().into_iter().cloned())
+            .collect::<Vec<_>>();
 
-        // Get the dependencies of node.
-        let dependency = dependencies
-            .get(ordered_nodes[0])
-            .into_iter()
-            .flat_map(|val| val.iter())
-            .fold(
-                None,
-                |dependency: Option<SubpassDependency>, edge| match dependency {
-                    Some(dependency) => Some(SubpassDependency {
-                        src_stage_mask: dependency.src_stage_mask | edge.write_stage,
-                        dst_stage_mask: dependency.dst_stage_mask | edge.read_stage,
-                        src_access_mask: dependency.src_access_mask | edge.write_access,
-                        dst_access_mask: dependency.dst_access_mask | edge.read_access,
-                        ..dependency
-                    }),
-                    None => Some(SubpassDependency {
+        // Generate subpass dependencies
+        let dependencies = pass_nodes
+            .iter()
+            .enumerate()
+            .flat_map(|(subpass_index, node_index)| {
+                // Get the dependencies of node.
+                dependencies
+                    .get(*node_index)
+                    .into_iter()
+                    .flat_map(|val| val.iter())
+                    .map(move |edge| SubpassDependency {
                         src_subpass: vk::SUBPASS_EXTERNAL,
-                        dst_subpass: 0,
+                        dst_subpass: subpass_index as u32,
                         src_stage_mask: edge.write_stage,
                         dst_stage_mask: edge.read_stage,
                         src_access_mask: edge.write_access,
                         dst_access_mask: edge.read_access,
                         dependency_flags: Default::default(),
-                    }),
-                },
-            );
-
-        let dependencies = [dependency.unwrap_or_default()];
-
-        let color_attachments = node
-            .color_attachments()
-            .iter()
-            .enumerate()
-            .map(|(i, _)| AttachmentReference {
-                attachment: i as u32,
-                layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                    })
             })
             .collect::<Vec<_>>();
 
-        let depth_attachment = node
-            .depth_attachment()
-            .as_ref()
-            .map(|_| AttachmentReference {
-                attachment: node.color_attachments().len() as u32,
-                layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-            });
+        let mut attachment_descriptions = Vec::new();
+        let mut attachments = Vec::new();
 
-        let renderpass_info = RenderPassInfo {
-            attachments: &attachments,
-            subpasses: &[SubpassInfo {
-                color_attachments: &color_attachments,
+        let attachment_refs = pass_nodes
+            .iter()
+            .enumerate()
+            .map(|(_, node_index)| -> Result<_> {
+                let node = &nodes[*node_index];
+
+                let offset = attachments.len();
+                let color_attachments = node
+                    .color_attachments()
+                    .iter()
+                    .enumerate()
+                    .map(|(i, _)| AttachmentReference {
+                        attachment: (i + offset) as u32,
+                        layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                    })
+                    .collect::<Vec<_>>();
+
+                let depth_attachment =
+                    node.depth_attachment()
+                        .as_ref()
+                        .map(|_| AttachmentReference {
+                            attachment: (node.color_attachments().len() + offset) as u32,
+                            layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                        });
+
+                for attachment in node
+                    .color_attachments()
+                    .iter()
+                    .chain(node.depth_attachment().into_iter())
+                {
+                    let texture = textures.get(attachment.resource)?;
+
+                    attachments.push(texture.image_view());
+
+                    attachment_descriptions.push(AttachmentDescription {
+                        flags: vk::AttachmentDescriptionFlags::default(),
+                        format: texture.format(),
+                        samples: texture.samples(),
+                        load_op: attachment.load_op,
+                        store_op: attachment.store_op,
+                        stencil_load_op: LoadOp::DONT_CARE,
+                        stencil_store_op: StoreOp::DONT_CARE,
+                        initial_layout: attachment.initial_layout,
+                        final_layout: attachment.final_layout,
+                    })
+                }
+                Ok((color_attachments, depth_attachment))
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        let subpasses = attachment_refs
+            .iter()
+            .map(|(color_attachments, depth_attachment)| SubpassInfo {
+                color_attachments,
                 resolve_attachments: &[],
                 input_attachments: &[],
-                depth_attachment,
-            }],
-            dependencies: if dependency.is_some() {
-                &dependencies
-            } else {
-                &[]
-            },
+                depth_attachment: *depth_attachment,
+            })
+            .collect::<Vec<_>>();
+
+        let renderpass_info = RenderPassInfo {
+            attachments: &attachment_descriptions,
+            subpasses: &subpasses,
+            dependencies: &dependencies,
         };
 
         let renderpass = RenderPass::new(context.device().clone(), &renderpass_info)?;
-
-        let attachments = node
-            .color_attachments()
-            .iter()
-            .chain(node.depth_attachment().into_iter())
-            .map(|attachment| Ok(textures.get(attachment.resource)?))
-            .collect::<Result<Vec<_>>>()?;
 
         let framebuffer =
             Framebuffer::new(context.device().clone(), &renderpass, &attachments, extent)?;
@@ -222,22 +242,26 @@ impl PassKind {
         Ok(PassKind::Graphics {
             renderpass,
             framebuffer,
+            clear_values,
         })
     }
 
-    fn transfer(
+    fn transfer<T>(
         _context: &Arc<VulkanContext>,
         _nodes: &SlotMap<NodeIndex, Box<dyn Node>>,
-        textures: &ResourceCache<Texture>,
+        textures: &T,
         dependencies: &SecondaryMap<NodeIndex, Vec<Edge>>,
-        ordered_nodes: &[NodeIndex],
+        pass_nodes: &[NodeIndex],
         _extent: Extent,
-    ) -> Result<Self> {
+    ) -> Result<Self>
+    where
+        T: Deref<Target = ResourceCache<Texture>>,
+    {
         // Get the dependencies of node.
         let mut src_stage = vk::PipelineStageFlags::default();
 
         let image_barriers = dependencies
-            .get(ordered_nodes[0])
+            .get(pass_nodes[0])
             .into_iter()
             .flat_map(|val| val.iter())
             .map(|edge| -> Result<_> {

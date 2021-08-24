@@ -105,10 +105,7 @@ where
     }
 }
 
-impl<'a, T> Deref for CellRef<'a, T>
-where
-    T: Storage,
-{
+impl<'a, T> Deref for CellRef<'a, T> {
     type Target = T;
 
     #[inline]
@@ -166,10 +163,7 @@ where
     }
 }
 
-impl<'a, T> Deref for CellRefMut<'a, T>
-where
-    T: Storage,
-{
+impl<'a, T> Deref for CellRefMut<'a, T> {
     type Target = T;
 
     #[inline]
@@ -178,10 +172,7 @@ where
     }
 }
 
-impl<'a, T> DerefMut for CellRefMut<'a, T>
-where
-    T: Storage,
-{
+impl<'a, T> DerefMut for CellRefMut<'a, T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.value

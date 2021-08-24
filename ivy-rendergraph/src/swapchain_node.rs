@@ -1,9 +1,11 @@
+use std::{ops::Deref, sync::Arc};
+
 use crate::{NodeKind, Result};
 use anyhow::Context;
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
     vk::{self, ClearValue, ImageCopy, ImageSubresourceLayers, PipelineStageFlags},
-    ImageLayout, ImageUsage, SampleCountFlags, Swapchain, Texture, TextureInfo,
+    ImageLayout, ImageUsage, SampleCountFlags, Swapchain, Texture, TextureInfo, VulkanContext,
 };
 
 use crate::{AttachmentInfo, Node};
@@ -21,6 +23,7 @@ pub struct SwapchainNode {
 
 impl SwapchainNode {
     pub fn new(
+        context: Arc<VulkanContext>,
         swapchain: Handle<Swapchain>,
         read_attachment: Handle<Texture>,
         clear_values: Vec<ClearValue>,
@@ -35,8 +38,6 @@ impl SwapchainNode {
             format: swapchain_ref.image_format(),
             samples: SampleCountFlags::TYPE_1,
         };
-
-        let context = swapchain_ref.context();
 
         let swapchain_images = swapchain_ref
             .images()
@@ -115,6 +116,10 @@ impl Node for SwapchainNode {
         NodeKind::Transfer
     }
 
+    fn debug_name(&self) -> &str {
+        "swapchain node"
+    }
+
     fn execute(
         &mut self,
         _world: &mut hecs::World,
@@ -133,7 +138,7 @@ impl Node for SwapchainNode {
         let src = resources.get(self.read_attachments[0])?;
 
         let dst_barrier = vk::ImageMemoryBarrier {
-            image: dst.image(),
+            image: dst.deref().image(),
             ..self.dst_barrier
         };
 

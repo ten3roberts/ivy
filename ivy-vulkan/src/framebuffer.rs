@@ -1,9 +1,9 @@
-use crate::{renderpass::MAX_ATTACHMENTS, Extent, RenderPass, Result};
+use crate::{Extent, RenderPass, Result};
 use std::sync::Arc;
 
-use arrayvec::ArrayVec;
 use ash::version::DeviceV1_0;
 use ash::vk;
+use ash::vk::ImageView;
 use ash::Device;
 
 /// A framebuffer wraps one or more Textures contained in a renderpass.
@@ -17,20 +17,15 @@ pub struct Framebuffer {
 }
 
 impl Framebuffer {
-    pub fn new<T: AsRef<vk::ImageView>>(
+    pub fn new(
         device: Arc<Device>,
         renderpass: &RenderPass,
-        attachments: &[T],
+        attachments: &[ImageView],
         extent: Extent,
     ) -> Result<Self> {
-        let attachment_views = attachments
-            .iter()
-            .map(|attachment| *attachment.as_ref())
-            .collect::<ArrayVec<[vk::ImageView; MAX_ATTACHMENTS]>>();
-
         let create_info = vk::FramebufferCreateInfo::builder()
             .render_pass(renderpass.renderpass())
-            .attachments(&attachment_views)
+            .attachments(&attachments)
             .width(extent.width)
             .height(extent.height)
             .layers(1);

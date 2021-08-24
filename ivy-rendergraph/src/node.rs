@@ -16,6 +16,11 @@ pub trait Node {
 
     fn node_kind(&self) -> NodeKind;
 
+    // Optional name, can be empty string
+    fn debug_name(&self) -> &str {
+        "Unnamed node"
+    }
+
     /// Execute this node inside a compatible renderpass
     fn execute(
         &mut self,

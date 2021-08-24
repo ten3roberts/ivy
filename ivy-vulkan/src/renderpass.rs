@@ -13,7 +13,6 @@ pub use vk::Format;
 pub use vk::ImageLayout;
 pub use vk::SubpassDependency;
 
-pub const MAX_ATTACHMENTS: usize = 8;
 pub const MAX_SUBPASSES: usize = 8;
 
 #[derive(Debug, Clone, Copy)]

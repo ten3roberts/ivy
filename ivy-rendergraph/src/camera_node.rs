@@ -68,6 +68,10 @@ where
         NodeKind::Graphics
     }
 
+    fn debug_name(&self) -> &str {
+        "camera node"
+    }
+
     fn execute(
         &mut self,
         world: &mut hecs::World,

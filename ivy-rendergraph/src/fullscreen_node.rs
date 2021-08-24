@@ -67,6 +67,10 @@ where
         NodeKind::Graphics
     }
 
+    fn debug_name(&self) -> &str {
+        "fullscreen node"
+    }
+
     fn execute(
         &mut self,
         world: &mut hecs::World,

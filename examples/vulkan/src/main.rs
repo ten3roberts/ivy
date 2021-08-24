@@ -565,6 +565,7 @@ impl VulkanLayer {
         ));
 
         let swapchain_node = rendergraph.add_node(SwapchainNode::new(
+            context.clone(),
             swapchain,
             final_diffuse,
             vec![],
@@ -663,7 +664,8 @@ impl VulkanLayer {
         let fullscreen_pipeline = Pipeline::new(
             context.device().clone(),
             &mut descriptor_layout_cache,
-            fullscreen_renderpass,
+            fullscreen_renderpass.0,
+            fullscreen_renderpass.1,
             PipelineInfo {
                 vertexshader: "./res/shaders/fullscreen.vert.spv".into(),
                 fragmentshader: "./res/shaders/post_processing.frag.spv".into(),
@@ -671,7 +673,6 @@ impl VulkanLayer {
                 vertex_attributes: &[],
                 samples: SampleCountFlags::TYPE_1,
                 extent: swapchain_extent,
-                subpass: 0,
                 cull_mode: CullModeFlags::NONE,
                 ..Default::default()
             },
@@ -681,7 +682,8 @@ impl VulkanLayer {
         let pipeline = Pipeline::new(
             context.device().clone(),
             &mut descriptor_layout_cache,
-            diffuse_renderpass,
+            diffuse_renderpass.0,
+            diffuse_renderpass.1,
             PipelineInfo {
                 vertexshader: "./res/shaders/default.vert.spv".into(),
                 fragmentshader: "./res/shaders/default.frag.spv".into(),
@@ -689,7 +691,6 @@ impl VulkanLayer {
                 vertex_attributes: Vertex::ATTRIBUTE_DESCRIPTIONS,
                 samples: SampleCountFlags::TYPE_1,
                 extent: swapchain_extent,
-                subpass: 0,
                 polygon_mode: vk::PolygonMode::FILL,
                 cull_mode: vk::CullModeFlags::NONE,
                 front_face: vk::FrontFace::CLOCKWISE,
@@ -701,7 +702,8 @@ impl VulkanLayer {
         let uv_pipeline = Pipeline::new(
             context.device().clone(),
             &mut descriptor_layout_cache,
-            diffuse_renderpass,
+            diffuse_renderpass.0,
+            diffuse_renderpass.1,
             PipelineInfo {
                 vertexshader: "./res/shaders/default.vert.spv".into(),
                 fragmentshader: "./res/shaders/uv.frag.spv".into(),
@@ -709,7 +711,6 @@ impl VulkanLayer {
                 vertex_attributes: Vertex::ATTRIBUTE_DESCRIPTIONS,
                 samples: SampleCountFlags::TYPE_1,
                 extent: swapchain_extent,
-                subpass: 0,
                 polygon_mode: vk::PolygonMode::FILL,
                 cull_mode: vk::CullModeFlags::NONE,
                 front_face: vk::FrontFace::CLOCKWISE,
@@ -717,11 +718,13 @@ impl VulkanLayer {
             },
         )?;
 
+        let wireframe_pass = rendergraph.node_renderpass(wireframe_node)?;
         // Create a pipeline from the shaders
         let wireframe_pipeline = Pipeline::new(
             context.device().clone(),
             &mut descriptor_layout_cache,
-            rendergraph.node_renderpass(wireframe_node)?,
+            wireframe_pass.0,
+            wireframe_pass.1,
             PipelineInfo {
                 vertexshader: "./res/shaders/default.vert.spv".into(),
                 fragmentshader: "./res/shaders/default.frag.spv".into(),
@@ -729,7 +732,6 @@ impl VulkanLayer {
                 vertex_attributes: Vertex::ATTRIBUTE_DESCRIPTIONS,
                 samples: SampleCountFlags::TYPE_1,
                 extent: swapchain_extent,
-                subpass: 0,
                 polygon_mode: vk::PolygonMode::LINE,
                 cull_mode: vk::CullModeFlags::NONE,
                 front_face: vk::FrontFace::CLOCKWISE,

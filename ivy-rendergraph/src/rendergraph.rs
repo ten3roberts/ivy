@@ -4,6 +4,7 @@ use crate::{
 };
 use hash::Hash;
 use hecs::World;
+use itertools::Itertools;
 // use itertools::Itertools;
 use ivy_resources::{Handle, ResourceCache, Resources};
 use ivy_vulkan::{
@@ -29,7 +30,7 @@ pub struct RenderGraph {
     dependencies: SecondaryMap<NodeIndex, Vec<Edge>>,
     passes: SlotMap<PassIndex, Pass>,
     // Maps a node to a pass index
-    node_pass_map: SecondaryMap<NodeIndex, PassIndex>,
+    node_pass_map: SecondaryMap<NodeIndex, (PassIndex, u32)>,
 
     // Data for each frame in flight
     frames: Vec<FrameData>,
@@ -148,18 +149,19 @@ impl RenderGraph {
             .push(edge);
     }
 
-    pub fn node_renderpass<'a>(&'a self, node_index: NodeIndex) -> Result<&'a RenderPass> {
-        let pass = self
+    pub fn node_renderpass<'a>(&'a self, node_index: NodeIndex) -> Result<(&'a RenderPass, u32)> {
+        let (pass, index) = self
             .node_pass_map
             .get(node_index)
-            .and_then(|index| self.passes.get(*index))
+            .and_then(|(pass, subpass_index)| Some((self.passes.get(*pass)?, *subpass_index)))
             .ok_or(Error::InvalidNodeIndex(node_index))?;
 
         match pass.kind() {
             PassKind::Graphics {
                 renderpass,
                 framebuffer: _,
-            } => Ok(&renderpass),
+                clear_values: _,
+            } => Ok((renderpass, index)),
             PassKind::Transfer { .. } => Err(Error::InvalidNodeKind(
                 node_index,
                 NodeKind::Graphics,
@@ -191,27 +193,32 @@ impl RenderGraph {
         let dependencies = &self.dependencies;
 
         // Build all graphics nodes
-        ordered
-            .iter()
-            .enumerate()
-            .map(|(i, node_index)| (i, *node_index, nodes.get(*node_index).unwrap()))
-            .try_for_each(|(i, node_index, node)| -> Result<_> {
-                let pass = Pass::new(
-                    context,
-                    nodes,
-                    &textures,
-                    dependencies,
-                    &ordered[i..],
-                    node.node_kind(),
-                    extent,
-                )?;
+        let groups = ordered.iter().cloned().group_by(|node| {
+            return (_depths[*node], nodes[*node].node_kind());
+        });
 
-                let pass_index = passes.insert(pass);
+        for (key, pass_nodes) in &groups {
+            let pass_nodes = pass_nodes.collect::<Vec<_>>();
+            let pass = Pass::new(
+                context,
+                nodes,
+                &textures,
+                dependencies,
+                pass_nodes,
+                key.1,
+                extent,
+            )?;
 
-                node_pass_map.insert(node_index, pass_index);
+            // Insert pass into slotmap
+            let pass_index = passes.insert(pass);
 
-                Ok(())
-            })?;
+            let pass_nodes = passes[pass_index].nodes();
+
+            // Map the node into the pass
+            for (i, node) in pass_nodes.iter().enumerate() {
+                node_pass_map.insert(*node, (pass_index, i as u32));
+            }
+        }
 
         self.extent = extent;
 

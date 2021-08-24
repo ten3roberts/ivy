@@ -22,7 +22,6 @@ pub struct PipelineInfo<'a, 'b, 'c> {
     pub vertex_attributes: &'b [vk::VertexInputAttributeDescription],
     pub samples: vk::SampleCountFlags,
     pub extent: Extent,
-    pub subpass: u32,
     pub polygon_mode: vk::PolygonMode,
     pub cull_mode: vk::CullModeFlags,
     pub front_face: vk::FrontFace,
@@ -39,7 +38,6 @@ impl<'a, 'b, 'c> Default for PipelineInfo<'a, 'b, 'c> {
             vertex_attributes: &[],
             samples: vk::SampleCountFlags::TYPE_1,
             extent: (0, 0).into(),
-            subpass: 0,
             polygon_mode: vk::PolygonMode::FILL,
             cull_mode: vk::CullModeFlags::BACK,
             front_face: vk::FrontFace::COUNTER_CLOCKWISE,
@@ -59,6 +57,7 @@ impl Pipeline {
         device: Arc<Device>,
         layout_cache: &mut DescriptorLayoutCache,
         renderpass: &RenderPass,
+        subpass: u32,
         info: PipelineInfo,
     ) -> Result<Self> {
         let mut vertexshader = File::open(&info.vertexshader)
@@ -184,7 +183,7 @@ impl Pipeline {
             .depth_stencil_state(&depth_stencil)
             .layout(layout)
             .render_pass(renderpass.renderpass())
-            .subpass(info.subpass)
+            .subpass(subpass)
             .build();
 
         let pipeline = unsafe {
