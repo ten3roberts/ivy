@@ -8,8 +8,9 @@ use hecs_hierarchy::Hierarchy;
 use ivy_core::{App, AppEvent, Clock, Events, FromDuration, IntoDuration, Layer, Logger};
 use ivy_graphics::{
     components::{AngularVelocity, Position, Rotation, Scale},
+    new_shaderpass,
     window::{WindowExt, WindowInfo, WindowMode},
-    Camera, FullscreenRenderer, GpuCameraData, IndirectMeshRenderer, Material, ShaderPass,
+    Camera, FullscreenRenderer, GpuCameraData, IndirectMeshRenderer, Material,
 };
 use ivy_input::{Input, InputAxis, InputVector};
 use ivy_rendergraph::{AttachmentInfo, CameraNode, FullscreenNode, RenderGraph, SwapchainNode};
@@ -225,40 +226,10 @@ impl Layer for LogicLayer {
     }
 }
 
-struct DiffusePass(pub Pipeline);
-
-impl ShaderPass for DiffusePass {
-    fn pipeline(&self) -> &Pipeline {
-        &self.0
-    }
-
-    fn pipeline_layout(&self) -> vk::PipelineLayout {
-        self.0.layout()
-    }
-}
-
-struct WireframePass(pub Pipeline);
-
-impl ShaderPass for WireframePass {
-    fn pipeline(&self) -> &Pipeline {
-        &self.0
-    }
-
-    fn pipeline_layout(&self) -> vk::PipelineLayout {
-        self.0.layout()
-    }
-}
-
-struct PostProcessingPass(pub Pipeline);
-
-impl ShaderPass for PostProcessingPass {
-    fn pipeline(&self) -> &Pipeline {
-        &self.0
-    }
-
-    fn pipeline_layout(&self) -> vk::PipelineLayout {
-        self.0.layout()
-    }
+new_shaderpass! {
+    pub struct DiffusePass;
+        pub struct WireframePass;
+            pub struct PostProcessingPass;
 }
 
 #[allow(dead_code)]
@@ -715,7 +686,7 @@ impl VulkanLayer {
             },
         )?;
 
-        let default_shaderpass = resources.insert(DiffusePass(pipeline))?;
+        let default_shaderpass = resources.insert(DiffusePass::new(pipeline))?;
         let uv_shaderpass = resources.insert(DiffusePass(uv_pipeline))?;
 
         // Insert one default post processing pass
