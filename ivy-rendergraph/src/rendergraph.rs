@@ -77,68 +77,40 @@ impl RenderGraph {
         let nodes = &self.nodes;
         let edges = &mut self.edges;
         let dependencies = &mut self.dependencies;
+
         nodes
             .iter()
-            .flat_map(|(dst, dst_node)| {
-                // Find the corresponding write attachment
-                dst_node.read_attachments().iter().map(move |read| {
-                    nodes.iter().find_map(|(src, src_node)| {
-                        // Found color attachment output
-                        if let Some(write) = src_node
-                            .color_attachments()
-                            .iter()
-                            .find(|w| w.resource == *read)
-                        {
-                            Some(Edge {
-                                src,
-                                dst,
-                                resource: *read,
-                                layout: write.final_layout,
-                                write_stage: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
-                                read_stage: vk::PipelineStageFlags::FRAGMENT_SHADER,
-                                write_access: vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
-                                read_access: vk::AccessFlags::SHADER_READ,
-                            })
-                            // Found depth attachment output
-                        } else if let Some(write) = src_node
-                            .depth_attachment()
-                            .as_ref()
-                            .filter(|d| d.resource == *read)
-                        {
-                            Some(Edge {
-                                src,
-                                dst,
-                                resource: *read,
-                                layout: write.final_layout,
-                                // Write stage is between
-                                write_stage: vk::PipelineStageFlags::LATE_FRAGMENT_TESTS,
-                                read_stage: vk::PipelineStageFlags::FRAGMENT_SHADER,
-                                write_access: vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
-                                read_access: vk::AccessFlags::SHADER_READ,
-                            })
-                        } else {
-                            None
-                        }
-                    })
+            .flat_map(|node| {
+                EdgeConstructor {
+                    nodes,
+                    dst: node.0,
+                    reads: node.1.input_attachments().into_iter(),
+                    kind: EdgeKind::Input,
+                }
+                .chain(EdgeConstructor {
+                    nodes,
+                    dst: node.0,
+                    reads: node.1.read_attachments().into_iter(),
+                    kind: EdgeKind::Sampled,
                 })
             })
-            .map(|val| val.ok_or(Error::MissingWrite))
-            .try_for_each(|entry| -> Result<_> {
-                let entry = entry?;
+            .try_for_each(|edge: Result<Edge>| -> Result<_> {
+                let edge = edge?;
                 edges
-                    .entry(entry.src)
+                    .entry(edge.src)
                     .unwrap()
                     .or_insert_with(Vec::new)
-                    .push(entry);
+                    .push(edge);
 
                 dependencies
-                    .entry(entry.dst)
+                    .entry(edge.dst)
                     .unwrap()
                     .or_insert_with(Vec::new)
-                    .push(entry);
+                    .push(edge);
 
                 Ok(())
-            })
+            })?;
+        Ok(())
     }
 
     /// Adds a new dependency between two nodes by introducing an edge.
@@ -234,6 +206,8 @@ impl RenderGraph {
 
             let pass_nodes = passes[pass_index].nodes();
 
+            println!("Building pass with {:?}", pass_nodes);
+
             // Map the node into the pass
             for (i, node) in pass_nodes.iter().enumerate() {
                 node_pass_map.insert(*node, (pass_index, i as u32));
@@ -241,6 +215,8 @@ impl RenderGraph {
         }
 
         self.extent = extent;
+
+        println!("Number of passes: {:?}", self.passes.len());
 
         Ok(())
     }
@@ -380,7 +356,20 @@ where
             .get(current_node)
             .iter()
             .flat_map(|node_edges| node_edges.iter())
-            .try_for_each(|edge| internal(stack, visited, depths, edge.dst, edges, depth + 1))?;
+            .try_for_each(|edge| {
+                internal(
+                    stack,
+                    visited,
+                    depths,
+                    edge.dst,
+                    edges,
+                    if edge.kind == EdgeKind::Input {
+                        depth
+                    } else {
+                        depth + 1
+                    },
+                )
+            })?;
 
         stack.push(current_node);
 
@@ -417,6 +406,21 @@ pub struct Edge {
     pub write_access: vk::AccessFlags,
     pub read_access: vk::AccessFlags,
     pub layout: ImageLayout,
+    pub kind: EdgeKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum EdgeKind {
+    /// Dependency is sampled and requires the whole attachment to be ready.
+    Sampled,
+    /// Dependency is used as input attachment and can use dependency by region.
+    Input,
+}
+
+impl Default for EdgeKind {
+    fn default() -> Self {
+        Self::Sampled
+    }
 }
 
 struct FrameData {
@@ -599,5 +603,67 @@ mod tests {
             ),
             "Did not detected cyclic graph"
         );
+    }
+}
+
+struct EdgeConstructor<'a> {
+    nodes: &'a SlotMap<NodeIndex, Box<dyn Node>>,
+    dst: NodeIndex,
+    reads: std::slice::Iter<'a, Handle<Texture>>,
+    kind: EdgeKind,
+}
+
+impl<'a> Iterator for EdgeConstructor<'a> {
+    type Item = Result<Edge>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.reads
+            .next()
+            // Find the corresponding write attachment
+            .map(move |read| {
+                self.nodes
+                    .iter()
+                    .find_map(|(src, src_node)| {
+                        // Found color attachment output
+                        if let Some(write) = src_node
+                            .color_attachments()
+                            .iter()
+                            .find(|w| w.resource == *read)
+                        {
+                            Some(Edge {
+                                src,
+                                dst: self.dst,
+                                resource: *read,
+                                layout: write.final_layout,
+                                write_stage: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+                                read_stage: vk::PipelineStageFlags::FRAGMENT_SHADER,
+                                write_access: vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+                                read_access: vk::AccessFlags::SHADER_READ,
+                                kind: self.kind,
+                            })
+                            // Found depth attachment output
+                        } else if let Some(write) = src_node
+                            .depth_attachment()
+                            .as_ref()
+                            .filter(|d| d.resource == *read)
+                        {
+                            Some(Edge {
+                                src,
+                                dst: self.dst,
+                                resource: *read,
+                                layout: write.final_layout,
+                                // Write stage is between
+                                write_stage: vk::PipelineStageFlags::LATE_FRAGMENT_TESTS,
+                                read_stage: vk::PipelineStageFlags::FRAGMENT_SHADER,
+                                write_access: vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
+                                read_access: vk::AccessFlags::SHADER_READ,
+                                kind: self.kind,
+                            })
+                        } else {
+                            None
+                        }
+                    })
+                    .ok_or(Error::MissingWrite(self.dst, *read))
+            })
     }
 }

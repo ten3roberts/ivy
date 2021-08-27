@@ -1,3 +1,5 @@
+use ivy_resources::Handle;
+use ivy_vulkan::Texture;
 use thiserror::Error;
 
 use crate::{NodeIndex, NodeKind};
@@ -18,8 +20,8 @@ pub enum Error {
     #[error("Dependency cycle in rendergraph")]
     DependencyCycle,
 
-    #[error("Node read attachment is missing corresponding write attachment")]
-    MissingWrite,
+    #[error("Node read attachment is missing corresponding write attachment for {0:?}{1:?}")]
+    MissingWrite(NodeIndex, Handle<Texture>),
 
     #[error("Resource acquisition error {0}")]
     Resource(#[from] ivy_resources::Error),

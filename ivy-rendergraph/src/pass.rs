@@ -1,4 +1,4 @@
-use crate::{Edge, Node, NodeIndex, NodeKind, Result};
+use crate::{Edge, EdgeKind, Node, NodeIndex, NodeKind, Result};
 use hecs::World;
 use ivy_resources::{ResourceCache, Resources};
 use ivy_vulkan::{
@@ -33,6 +33,14 @@ impl Pass {
     where
         T: Deref<Target = ResourceCache<Texture>>,
     {
+        println!(
+            "Pass with nodes: {:?}",
+            pass_nodes
+                .iter()
+                .map(|node| nodes[*node].debug_name())
+                .collect::<Vec<_>>()
+        );
+
         let kind = match kind {
             NodeKind::Graphics => {
                 PassKind::graphics(context, nodes, textures, dependencies, &pass_nodes, extent)?
@@ -144,14 +152,41 @@ impl PassKind {
                     .get(*node_index)
                     .into_iter()
                     .flat_map(|val| val.iter())
-                    .map(move |edge| SubpassDependency {
-                        src_subpass: vk::SUBPASS_EXTERNAL,
-                        dst_subpass: subpass_index as u32,
-                        src_stage_mask: edge.write_stage,
-                        dst_stage_mask: edge.read_stage,
-                        src_access_mask: edge.write_access,
-                        dst_access_mask: edge.read_access,
-                        dependency_flags: Default::default(),
+                    .map(move |edge| match edge.kind {
+                        EdgeKind::Sampled => SubpassDependency {
+                            src_subpass: vk::SUBPASS_EXTERNAL,
+                            dst_subpass: subpass_index as u32,
+                            src_stage_mask: edge.write_stage,
+                            dst_stage_mask: edge.read_stage,
+                            src_access_mask: edge.write_access,
+                            dst_access_mask: edge.read_access,
+                            dependency_flags: Default::default(),
+                        },
+                        EdgeKind::Input => {
+                            println!(
+                                "Input: {:?}",
+                                pass_nodes
+                                    .iter()
+                                    .enumerate()
+                                    .find(|(_, node)| **node == edge.src)
+                                    .unwrap()
+                                    .0 as u32
+                            );
+                            SubpassDependency {
+                                src_subpass: pass_nodes
+                                    .iter()
+                                    .enumerate()
+                                    .find(|(_, node)| **node == edge.src)
+                                    .unwrap()
+                                    .0 as u32,
+                                dst_subpass: subpass_index as u32,
+                                src_stage_mask: edge.write_stage,
+                                dst_stage_mask: edge.read_stage,
+                                src_access_mask: edge.write_access,
+                                dst_access_mask: edge.read_access,
+                                dependency_flags: vk::DependencyFlags::BY_REGION,
+                            }
+                        }
                     })
             })
             .collect::<Vec<_>>();
@@ -166,6 +201,7 @@ impl PassKind {
                 let node = &nodes[*node_index];
 
                 let offset = attachments.len();
+
                 let color_attachments = node
                     .color_attachments()
                     .iter()
@@ -176,11 +212,29 @@ impl PassKind {
                     })
                     .collect::<Vec<_>>();
 
+                let input_attachments = node
+                    .input_attachments()
+                    .iter()
+                    .map(|tex| -> Result<_> {
+                        let view = textures.get(*tex)?.image_view();
+                        Ok(AttachmentReference {
+                            attachment: attachments
+                                .iter()
+                                .enumerate()
+                                .find(|(_, val)| view == **val)
+                                .unwrap()
+                                .0 as u32,
+                            layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                        })
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+
                 let depth_attachment =
                     node.depth_attachment()
                         .as_ref()
                         .map(|_| AttachmentReference {
-                            attachment: (node.color_attachments().len() + offset) as u32,
+                            attachment: (color_attachments.len() + input_attachments.len() + offset)
+                                as u32,
                             layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
                         });
 
@@ -192,6 +246,7 @@ impl PassKind {
                     let texture = textures.get(attachment.resource)?;
 
                     attachments.push(texture.image_view());
+                    println!("attachments: {:?}", attachment.resource);
 
                     attachment_descriptions.push(AttachmentDescription {
                         flags: vk::AttachmentDescriptionFlags::default(),
@@ -205,18 +260,20 @@ impl PassKind {
                         final_layout: attachment.final_layout,
                     })
                 }
-                Ok((color_attachments, depth_attachment))
+                Ok((color_attachments, input_attachments, depth_attachment))
             })
             .collect::<Result<Vec<_>>>()?;
 
         let subpasses = attachment_refs
             .iter()
-            .map(|(color_attachments, depth_attachment)| SubpassInfo {
-                color_attachments,
-                resolve_attachments: &[],
-                input_attachments: &[],
-                depth_attachment: *depth_attachment,
-            })
+            .map(
+                |(color_attachments, input_attachments, depth_attachment)| SubpassInfo {
+                    color_attachments,
+                    resolve_attachments: &[],
+                    input_attachments: &input_attachments,
+                    depth_attachment: *depth_attachment,
+                },
+            )
             .collect::<Vec<_>>();
 
         let renderpass_info = RenderPassInfo {

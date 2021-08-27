@@ -423,7 +423,7 @@ impl VulkanLayer {
             &TextureInfo {
                 extent: resources.get(swapchain)?.extent(),
                 mip_levels: 1,
-                usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED,
+                usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::INPUT_ATTACHMENT,
                 ..Default::default()
             },
         )?)?;
@@ -445,35 +445,21 @@ impl VulkanLayer {
             &TextureInfo {
                 extent: swapchain_extent,
                 mip_levels: 1,
-                usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED,
+                usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::INPUT_ATTACHMENT,
                 ..Default::default()
             },
         )?)?;
 
-        let diffuse_sampler = resources.insert(Sampler::new(
-            context.clone(),
-            SamplerInfo {
-                address_mode: AddressMode::REPEAT,
-                mag_filter: FilterMode::NEAREST,
-                min_filter: FilterMode::NEAREST,
-                unnormalized_coordinates: false,
-                anisotropy: 1.0,
-                mip_levels: 1,
-            },
-        )?)?;
-
-        let diffuse_set = DescriptorBuilder::new()
-            .bind_combined_image_sampler(
+        let fullscreen_set = DescriptorBuilder::new()
+            .bind_input_attachment(
                 0,
                 vk::ShaderStageFlags::FRAGMENT,
                 resources.get(diffuse_buffer)?.image_view(),
-                resources.get(diffuse_sampler)?.sampler(),
             )
-            .bind_combined_image_sampler(
+            .bind_input_attachment(
                 1,
                 vk::ShaderStageFlags::FRAGMENT,
                 resources.get(wireframe_buffer)?.image_view(),
-                resources.get(diffuse_sampler)?.sampler(),
             )
             .build_one(
                 context.device(),
@@ -493,6 +479,7 @@ impl VulkanLayer {
                     store_op: StoreOp::STORE,
                     load_op: LoadOp::CLEAR,
                 }],
+                vec![],
                 vec![],
                 Some(AttachmentInfo {
                     initial_layout: ImageLayout::UNDEFINED,
@@ -530,6 +517,7 @@ impl VulkanLayer {
                     load_op: LoadOp::CLEAR,
                 }],
                 vec![],
+                vec![],
                 Some(AttachmentInfo {
                     initial_layout: ImageLayout::UNDEFINED,
                     final_layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
@@ -555,13 +543,14 @@ impl VulkanLayer {
                 store_op: StoreOp::STORE,
                 load_op: LoadOp::CLEAR,
             }],
+            vec![],
             vec![diffuse_buffer, wireframe_buffer],
             None,
             vec![
                 ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
                 ClearValue::DepthStencil(1.0, 0).into(),
             ],
-            vec![diffuse_set],
+            vec![fullscreen_set],
         ));
 
         let swapchain_node = rendergraph.add_node(SwapchainNode::new(

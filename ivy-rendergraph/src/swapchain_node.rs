@@ -104,6 +104,10 @@ impl Node for SwapchainNode {
         &self.read_attachments
     }
 
+    fn input_attachments(&self) -> &[Handle<Texture>] {
+        &[]
+    }
+
     fn depth_attachment(&self) -> Option<&AttachmentInfo> {
         None
     }

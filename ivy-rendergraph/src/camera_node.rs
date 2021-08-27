@@ -14,6 +14,7 @@ pub struct CameraNode<Pass, T> {
     marker: PhantomData<Pass>,
     color_attachments: Vec<AttachmentInfo>,
     read_attachments: Vec<Handle<Texture>>,
+    input_attachments: Vec<Handle<Texture>>,
     depth_attachment: Option<AttachmentInfo>,
     clear_values: Vec<ClearValue>,
 }
@@ -28,6 +29,7 @@ where
         renderer: Handle<T>,
         color_attachments: Vec<AttachmentInfo>,
         read_attachments: Vec<Handle<Texture>>,
+        input_attachments: Vec<Handle<Texture>>,
         depth_attachment: Option<AttachmentInfo>,
         clear_values: Vec<ClearValue>,
     ) -> Self {
@@ -37,6 +39,7 @@ where
             marker: PhantomData,
             color_attachments,
             read_attachments,
+            input_attachments,
             depth_attachment,
             clear_values,
         }
@@ -54,6 +57,10 @@ where
 
     fn read_attachments(&self) -> &[Handle<Texture>] {
         &self.read_attachments
+    }
+
+    fn input_attachments(&self) -> &[Handle<Texture>] {
+        &self.input_attachments
     }
 
     fn depth_attachment(&self) -> Option<&AttachmentInfo> {

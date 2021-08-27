@@ -244,6 +244,45 @@ impl DescriptorBuilder {
         self
     }
 
+    /// Binds a input attachment descriptor type.
+    /// The texture is expected to be in in SHADER_READ_ONLY_OPTIMAL.
+    pub fn bind_input_attachment<T>(
+        &mut self,
+        binding: u32,
+        stage: ShaderStageFlags,
+        texture: T,
+    ) -> &mut Self
+    where
+        T: Into<vk::ImageView>,
+    {
+        self.image_infos[binding as usize] = vk::DescriptorImageInfo {
+            sampler: vk::Sampler::null(),
+            image_view: texture.into(),
+            image_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        };
+
+        let write = WriteDescriptorSet {
+            dst_binding: binding,
+            dst_array_element: 0,
+            descriptor_count: 1,
+            descriptor_type: DescriptorType::INPUT_ATTACHMENT,
+            p_image_info: &self.image_infos[binding as usize],
+            ..Default::default()
+        };
+
+        let binding = DescriptorSetBinding {
+            binding,
+            descriptor_type: DescriptorType::INPUT_ATTACHMENT,
+            descriptor_count: 1,
+            stage_flags: stage,
+            p_immutable_samplers: std::ptr::null(),
+        };
+
+        self.add(binding, write);
+
+        self
+    }
+
     /// Allocates and writes descriptor set into `set`. Can be chained.
     pub fn build(
         &mut self,
