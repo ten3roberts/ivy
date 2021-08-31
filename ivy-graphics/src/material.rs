@@ -1,4 +1,6 @@
-use crate::Result;
+use std::slice;
+
+use crate::{IntoSet, Result};
 use ash::vk::{DescriptorSet, DescriptorSetLayout, ShaderStageFlags};
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
@@ -51,16 +53,21 @@ impl Material {
         self.layout
     }
 
-    /// Get a reference to the material's descriptor set.
-    pub fn set(&self) -> DescriptorSet {
-        self.set
-    }
-
     pub fn albedo(&self) -> Handle<Texture> {
         self.albedo
     }
 
     pub fn sampler(&self) -> Handle<Sampler> {
         self.sampler
+    }
+}
+
+impl IntoSet for Material {
+    fn set(&self, _: usize) -> DescriptorSet {
+        self.set
+    }
+
+    fn sets(&self) -> &[DescriptorSet] {
+        slice::from_ref(&self.set)
     }
 }

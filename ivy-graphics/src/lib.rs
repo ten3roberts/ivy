@@ -12,6 +12,7 @@ mod renderer;
 mod shaderpass;
 
 pub mod components;
+mod light;
 pub mod systems;
 pub mod window;
 
@@ -19,6 +20,7 @@ pub use camera::*;
 pub use document::*;
 pub use error::*;
 pub use fullscreen_renderer::*;
+pub use light::*;
 pub use material::*;
 pub use mesh::*;
 pub use mesh_renderer::*;

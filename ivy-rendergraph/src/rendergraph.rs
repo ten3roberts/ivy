@@ -206,8 +206,6 @@ impl RenderGraph {
 
             let pass_nodes = passes[pass_index].nodes();
 
-            println!("Building pass with {:?}", pass_nodes);
-
             // Map the node into the pass
             for (i, node) in pass_nodes.iter().enumerate() {
                 node_pass_map.insert(*node, (pass_index, i as u32));
@@ -215,8 +213,6 @@ impl RenderGraph {
         }
 
         self.extent = extent;
-
-        println!("Number of passes: {:?}", self.passes.len());
 
         Ok(())
     }

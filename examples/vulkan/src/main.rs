@@ -10,7 +10,7 @@ use ivy_graphics::{
     components::{AngularVelocity, Position, Rotation, Scale},
     new_shaderpass,
     window::{WindowExt, WindowInfo, WindowMode},
-    Camera, FullscreenRenderer, GpuCameraData, IndirectMeshRenderer, Material,
+    Camera, FullscreenRenderer, GpuCameraData, IndirectMeshRenderer, Light, LightManager, Material,
 };
 use ivy_input::{Input, InputAxis, InputVector};
 use ivy_rendergraph::{AttachmentInfo, CameraNode, FullscreenNode, RenderGraph, SwapchainNode};
@@ -20,6 +20,7 @@ use ivy_ui::{
     Canvas, Image, Position2D, Size2D, Widget,
 };
 use ivy_vulkan::{descriptors::*, vk::CullModeFlags, *};
+use std::ops::Deref;
 use std::{
     sync::{mpsc, Arc},
     time::Duration,
@@ -357,6 +358,14 @@ impl VulkanLayer {
             swapchain_info,
         )?)?;
 
+        let light_manager = resources.insert_default(LightManager::new(
+            context.clone(),
+            &mut descriptor_layout_cache,
+            &mut descriptor_allocator,
+            FRAMES_IN_FLIGHT,
+            10,
+        )?)?;
+
         let mut rendergraph = RenderGraph::new(context.clone(), FRAMES_IN_FLIGHT)?;
 
         resources.insert_default(IndirectMeshRenderer::new(
@@ -389,12 +398,34 @@ impl VulkanLayer {
             },
         )?)?;
 
-        let diffuse_buffer = resources.insert(Texture::new(
+        let albedo_buffer = resources.insert(Texture::new(
             context.clone(),
             &TextureInfo {
                 extent: resources.get(swapchain)?.extent(),
                 mip_levels: 1,
                 usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::INPUT_ATTACHMENT,
+                ..Default::default()
+            },
+        )?)?;
+
+        let position_buffer = resources.insert(Texture::new(
+            context.clone(),
+            &TextureInfo {
+                extent: resources.get(swapchain)?.extent(),
+                mip_levels: 1,
+                usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::INPUT_ATTACHMENT,
+                format: vk::Format::R32G32B32A32_SFLOAT,
+                ..Default::default()
+            },
+        )?)?;
+
+        let normal_buffer = resources.insert(Texture::new(
+            context.clone(),
+            &TextureInfo {
+                extent: resources.get(swapchain)?.extent(),
+                mip_levels: 1,
+                usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::INPUT_ATTACHMENT,
+                format: vk::Format::R8G8B8A8_SNORM,
                 ..Default::default()
             },
         )?)?;
@@ -411,26 +442,21 @@ impl VulkanLayer {
             },
         )?)?;
 
-        let wireframe_buffer = resources.insert(Texture::new(
-            context.clone(),
-            &TextureInfo {
-                extent: swapchain_extent,
-                mip_levels: 1,
-                usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::INPUT_ATTACHMENT,
-                ..Default::default()
-            },
-        )?)?;
-
         let fullscreen_set = DescriptorBuilder::new()
             .bind_input_attachment(
                 0,
                 vk::ShaderStageFlags::FRAGMENT,
-                resources.get(diffuse_buffer)?.image_view(),
+                resources.get(albedo_buffer)?.image_view(),
             )
             .bind_input_attachment(
                 1,
                 vk::ShaderStageFlags::FRAGMENT,
-                resources.get(wireframe_buffer)?.image_view(),
+                resources.get(position_buffer)?.image_view(),
+            )
+            .bind_input_attachment(
+                2,
+                vk::ShaderStageFlags::FRAGMENT,
+                resources.get(normal_buffer)?.image_view(),
             )
             .build_one(
                 context.device(),
@@ -443,13 +469,29 @@ impl VulkanLayer {
             rendergraph.add_node(CameraNode::<DiffusePass, IndirectMeshRenderer>::new(
                 camera,
                 resources.default::<IndirectMeshRenderer>()?,
-                vec![AttachmentInfo {
-                    final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-                    initial_layout: ImageLayout::UNDEFINED,
-                    resource: diffuse_buffer,
-                    store_op: StoreOp::STORE,
-                    load_op: LoadOp::CLEAR,
-                }],
+                vec![
+                    AttachmentInfo {
+                        final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                        initial_layout: ImageLayout::UNDEFINED,
+                        resource: albedo_buffer,
+                        store_op: StoreOp::STORE,
+                        load_op: LoadOp::CLEAR,
+                    },
+                    AttachmentInfo {
+                        final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                        initial_layout: ImageLayout::UNDEFINED,
+                        resource: position_buffer,
+                        store_op: StoreOp::STORE,
+                        load_op: LoadOp::CLEAR,
+                    },
+                    AttachmentInfo {
+                        final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                        initial_layout: ImageLayout::UNDEFINED,
+                        resource: normal_buffer,
+                        store_op: StoreOp::STORE,
+                        load_op: LoadOp::CLEAR,
+                    },
+                ],
                 vec![],
                 vec![],
                 Some(AttachmentInfo {
@@ -461,42 +503,7 @@ impl VulkanLayer {
                 }),
                 vec![
                     ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
-                    ClearValue::DepthStencil(1.0, 0).into(),
-                ],
-            ));
-
-        let wireframe_depth_buffer = resources.insert(Texture::new(
-            context.clone(),
-            &TextureInfo {
-                extent: swapchain_extent,
-                mip_levels: 1,
-                usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT,
-                format: Format::D32_SFLOAT,
-                samples: SampleCountFlags::TYPE_1,
-            },
-        )?)?;
-
-        let wireframe_node =
-            rendergraph.add_node(CameraNode::<WireframePass, IndirectMeshRenderer>::new(
-                camera,
-                resources.default::<IndirectMeshRenderer>()?,
-                vec![AttachmentInfo {
-                    final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-                    initial_layout: ImageLayout::UNDEFINED,
-                    resource: wireframe_buffer.into(),
-                    store_op: StoreOp::STORE,
-                    load_op: LoadOp::CLEAR,
-                }],
-                vec![],
-                vec![],
-                Some(AttachmentInfo {
-                    initial_layout: ImageLayout::UNDEFINED,
-                    final_layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                    resource: wireframe_depth_buffer.into(),
-                    store_op: StoreOp::DONT_CARE,
-                    load_op: LoadOp::CLEAR,
-                }),
-                vec![
+                    ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
                     ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
                     ClearValue::DepthStencil(1.0, 0).into(),
                 ],
@@ -515,13 +522,14 @@ impl VulkanLayer {
                 load_op: LoadOp::CLEAR,
             }],
             vec![],
-            vec![diffuse_buffer, wireframe_buffer],
+            vec![albedo_buffer, position_buffer, normal_buffer],
             None,
             vec![
                 ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
                 ClearValue::DepthStencil(1.0, 0).into(),
             ],
-            vec![fullscreen_set],
+            vec![&fullscreen_set, resources.get(light_manager)?.deref()],
+            FRAMES_IN_FLIGHT,
         ));
 
         let swapchain_node = rendergraph.add_node(SwapchainNode::new(
@@ -646,53 +654,15 @@ impl VulkanLayer {
                 polygon_mode: vk::PolygonMode::FILL,
                 cull_mode: vk::CullModeFlags::NONE,
                 front_face: vk::FrontFace::CLOCKWISE,
+                color_attachment_count: 3,
                 ..Default::default()
             },
         )?;
 
-        // Create a pipeline from the shaders
-        let uv_pipeline = rendergraph.create_pipeline(
-            diffuse_node,
-            &mut descriptor_layout_cache,
-            &PipelineInfo {
-                vertexshader: "./res/shaders/default.vert.spv".into(),
-                fragmentshader: "./res/shaders/uv.frag.spv".into(),
-                vertex_bindings: &[Vertex::BINDING_DESCRIPTION],
-                vertex_attributes: Vertex::ATTRIBUTE_DESCRIPTIONS,
-                samples: SampleCountFlags::TYPE_1,
-                extent: swapchain_extent,
-                polygon_mode: vk::PolygonMode::FILL,
-                cull_mode: vk::CullModeFlags::NONE,
-                front_face: vk::FrontFace::CLOCKWISE,
-                ..Default::default()
-            },
-        )?;
-
-        // Create a pipeline from the shaders
-        let wireframe_pipeline = rendergraph.create_pipeline(
-            wireframe_node,
-            &mut descriptor_layout_cache,
-            &PipelineInfo {
-                vertexshader: "./res/shaders/default.vert.spv".into(),
-                fragmentshader: "./res/shaders/default.frag.spv".into(),
-                vertex_bindings: &[Vertex::BINDING_DESCRIPTION],
-                vertex_attributes: Vertex::ATTRIBUTE_DESCRIPTIONS,
-                samples: SampleCountFlags::TYPE_1,
-                extent: swapchain_extent,
-                polygon_mode: vk::PolygonMode::LINE,
-                cull_mode: vk::CullModeFlags::NONE,
-                front_face: vk::FrontFace::CLOCKWISE,
-                ..Default::default()
-            },
-        )?;
-
-        let default_shaderpass = resources.insert(DiffusePass::new(pipeline))?;
-        let uv_shaderpass = resources.insert(DiffusePass(uv_pipeline))?;
+        let default_shaderpass = resources.insert(DiffusePass(pipeline))?;
 
         // Insert one default post processing pass
         resources.insert_default(PostProcessingPass(fullscreen_pipeline))?;
-
-        let wireframe_shaderpass = resources.insert(WireframePass(wireframe_pipeline))?;
 
         world.spawn_batch(
             [
@@ -701,21 +671,18 @@ impl VulkanLayer {
                     cube_mesh,
                     material,
                     default_shaderpass,
-                    wireframe_shaderpass,
                 ),
                 (
                     Position(Vec3::new(4.0, 0.0, 0.0)),
                     cube_mesh,
                     material,
                     default_shaderpass,
-                    wireframe_shaderpass,
                 ),
                 (
                     Position(Vec3::new(0.0, 0.0, -3.0)),
                     cube_mesh,
                     material2,
                     default_shaderpass,
-                    wireframe_shaderpass,
                 ),
             ]
             .iter()
@@ -737,7 +704,6 @@ impl VulkanLayer {
                         )),
                         material,
                         default_shaderpass,
-                        wireframe_shaderpass,
                         // Scale(Vec3::new(0.1, 0.1, 0.1)),
                         Rotation(Rotor3::identity()),
                         AngularVelocity(Vec3::new(0.0, y as f32 * 0.5, x as f32)),
@@ -751,7 +717,6 @@ impl VulkanLayer {
             Rotation::default(),
             Scale(Vec3::one() * 0.5),
             default_shaderpass,
-            wireframe_shaderpass,
             material2,
         ));
 
@@ -760,10 +725,10 @@ impl VulkanLayer {
             sphere_mesh,
             Rotation::default(),
             AngularVelocity(Vec3::new(0.0, 0.1, 1.0)),
-            uv_shaderpass,
-            wireframe_shaderpass,
             material,
         ));
+
+        world.spawn((Position(Vec3::new(0.0, 3.0, 5.0)), Light::new(10.0)));
 
         setup_ui(world, image, image2, default_shaderpass)?;
 
@@ -814,7 +779,7 @@ impl Layer for VulkanLayer {
             .acquire_next_image(self.rendergraph.wait_semaphore(current_frame))?;
 
         {
-            let mut indirect_renderer = self.resources.default_mut::<IndirectMeshRenderer>()?;
+            let mut indirect_renderer = self.resources.get_default_mut::<IndirectMeshRenderer>()?;
             indirect_renderer
                 .register_entities::<DiffusePass>(world, &mut self.descriptor_layout_cache)?;
 
@@ -822,6 +787,12 @@ impl Layer for VulkanLayer {
         }
 
         GpuCameraData::update_all(world, current_frame)?;
+
+        self.resources.get_default_mut::<LightManager>()?.update(
+            world,
+            Vec3::zero(),
+            current_frame,
+        )?;
 
         let frame = &mut self.frames[current_frame];
         frame.global_uniformbuffer.fill(0, &[self.global_data])?;

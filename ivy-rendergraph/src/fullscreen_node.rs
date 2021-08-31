@@ -1,9 +1,8 @@
-use std::marker::PhantomData;
-
 use anyhow::Context;
-use ivy_graphics::{Renderer, ShaderPass};
+use ivy_graphics::{IntoSet, Renderer, ShaderPass};
 use ivy_resources::{Handle, Storage};
 use ivy_vulkan::{descriptors::DescriptorSet, vk::ClearValue, Texture};
+use std::marker::PhantomData;
 
 use crate::{AttachmentInfo, Node, NodeKind};
 
@@ -16,6 +15,7 @@ pub struct FullscreenNode<Pass, T> {
     depth_attachment: Option<AttachmentInfo>,
     clear_values: Vec<ClearValue>,
     sets: Vec<DescriptorSet>,
+    set_count: usize,
 }
 
 impl<Pass, T> FullscreenNode<Pass, T>
@@ -30,8 +30,17 @@ where
         input_attachments: Vec<Handle<Texture>>,
         depth_attachment: Option<AttachmentInfo>,
         clear_values: Vec<ClearValue>,
-        sets: Vec<DescriptorSet>,
+        sets: Vec<&dyn IntoSet>,
+        frames_in_flight: usize,
     ) -> Self {
+        let set_count = sets.len();
+
+        let set_iter = sets.iter().map(|val| val.sets().into_iter().cycle());
+
+        let sets = (0..frames_in_flight)
+            .flat_map(|_| set_iter.clone().map(|mut val| (*val.next().unwrap())))
+            .collect::<Vec<_>>();
+
         Self {
             renderer,
             marker: PhantomData,
@@ -41,6 +50,7 @@ where
             depth_attachment,
             clear_values,
             sets,
+            set_count,
         }
     }
 }
@@ -85,9 +95,17 @@ where
         current_frame: usize,
         resources: &ivy_resources::Resources,
     ) -> anyhow::Result<()> {
+        let offset = self.set_count * current_frame;
         resources
             .get_mut(self.renderer)?
-            .draw::<Pass>(world, cmd, current_frame, &self.sets, &[], resources)
+            .draw::<Pass>(
+                world,
+                cmd,
+                current_frame,
+                &self.sets[offset..offset + self.set_count],
+                &[],
+                resources,
+            )
             .context("FullscreenNode failed to draw using supplied renderer")?;
 
         Ok(())

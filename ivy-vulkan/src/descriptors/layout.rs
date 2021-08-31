@@ -55,7 +55,7 @@ impl DescriptorLayoutInfo {
             match self.bindings[mid].binding.cmp(&binding.binding) {
                 std::cmp::Ordering::Less => {
                     len /= 2;
-                    mid += (len as f32 / 2.0).ceil() as usize;
+                    mid += (len as f32 / 2.0).floor() as usize;
                 }
                 std::cmp::Ordering::Equal => {
                     self.bindings[mid] = binding;

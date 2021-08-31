@@ -1,4 +1,4 @@
-use crate::{Renderer, Result};
+use crate::{IntoSet, Renderer, Result};
 use hecs::{Entity, World};
 use ivy_resources::{Handle, ResourceCache, Resources};
 use ivy_vulkan::{
@@ -427,7 +427,7 @@ impl PassData {
             cmd.bind_descriptor_sets(
                 batch.pipeline_layout,
                 sets.len() as u32,
-                &[frame_set, material.set()],
+                &[frame_set, material.set(0)],
                 &[],
             );
 

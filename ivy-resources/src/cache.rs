@@ -79,7 +79,7 @@ impl<T: 'static + Sized> ResourceCache<T> {
         if self.slots.contains_key(handle) {
             Ok(self.slots.get_mut(handle).unwrap())
         } else {
-            self.default_mut()
+            self.get_default_mut()
         }
     }
 
@@ -99,7 +99,7 @@ impl<T: 'static + Sized> ResourceCache<T> {
 
     // Returns a mutable reference to the default resource
     #[inline]
-    pub fn default_mut(&mut self) -> Result<&mut T> {
+    pub fn get_default_mut(&mut self) -> Result<&mut T> {
         self.get_mut(self.default)
             .map_err(|_| Error::MissingDefault(type_name::<T>()))
     }

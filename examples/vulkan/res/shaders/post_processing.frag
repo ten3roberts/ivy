@@ -2,25 +2,50 @@
 #extension GL_ARB_separate_shader_objects : enable
 
 layout (input_attachment_index = 0, set = 0, binding = 0) uniform subpassInput
-diffuse;
-
+albedoBuffer;
 layout (input_attachment_index = 1, set = 0, binding = 1) uniform subpassInput
-wireframe;
-
-layout(location = 0) in vec2 fragTexCoord;
-layout(location = 1) in vec4 fragPosition;
-
+positionBuffer;
+layout (input_attachment_index = 2, set = 0, binding = 2) uniform subpassInput
+normalBuffer;
 layout(location = 0) out vec4 outColor;
 
-/* layout(set = 2, binding = 0) uniform sampler2D albedo; */ 
+struct LightData {
+  vec3 position;
+  float intensity;
+  float distance_to_center;
+};
 
-const float E = 2.7182818284;
+layout(set = 1, binding = 0) uniform LightSceneData {
+  uint num_lights;
+} lightSceneData;
+
+layout(set = 1, binding = 1) readonly buffer LightBufferData {
+  LightData lights[]; 
+} lightBuffer;
+
 
 void main() {
-  float dropoff = -100;
-  /* float along_diagonal = length(( fragTexCoord - vec2(0, 1)) * 0.707106781187); */
-  float blend = 1/ (1 + pow(E, dropoff * (fragTexCoord.x - 0.5)));
+  /* outColor = subpassLoad(albedo) / pow(length(subpassLoad(position)), 2); */
 
-  outColor = mix(subpassLoad(diffuse), subpassLoad(wireframe), blend);
-  /* outColor = vec4(0, along_diagonal, 0, 1); */
+  vec3 albedo = subpassLoad(albedoBuffer).xyz;
+
+  vec3 diffuse = vec3(0, 0, 0);
+
+  vec3 normal = normalize(subpassLoad(normalBuffer).xyz);
+  vec3 pos = subpassLoad(positionBuffer).xyz;
+
+  for (int i = 0; i < lightSceneData.num_lights; i++) {
+    LightData light = lightBuffer.lights[i];
+    vec3 lightDir = light.position - pos;
+    float lightDistSqr = lightDir.x * lightDir.x + lightDir.y * lightDir.y +
+      lightDir.z * lightDir.z;
+
+    float brightness =
+      clamp(dot(normalize(lightDir), normal)
+      * light.intensity / lightDistSqr, 0, 1);
+
+    diffuse += albedo * brightness;
+  }
+
+  outColor = vec4(diffuse, 1);
 }

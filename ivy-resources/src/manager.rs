@@ -108,8 +108,9 @@ impl Resources {
 
     // Returns the current default resource for T.
     #[inline]
-    pub fn default_mut<T: Storage>(&self) -> Result<CellRefMut<T>> {
-        self.fetch_mut::<T>()?.try_map(|cache| cache.default_mut())
+    pub fn get_default_mut<T: Storage>(&self) -> Result<CellRefMut<T>> {
+        self.fetch_mut::<T>()?
+            .try_map(|cache| cache.get_default_mut())
     }
 
     // Sets the default resource.

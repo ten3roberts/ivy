@@ -27,6 +27,8 @@ pub struct PipelineInfo<'a, 'b, 'c> {
     pub front_face: vk::FrontFace,
     /// The bindings specified
     pub set_layouts: &'c [DescriptorLayoutInfo],
+    pub color_attachment_count: u32,
+    pub depth_attachment: bool,
 }
 
 impl<'a, 'b, 'c> Default for PipelineInfo<'a, 'b, 'c> {
@@ -42,6 +44,8 @@ impl<'a, 'b, 'c> Default for PipelineInfo<'a, 'b, 'c> {
             cull_mode: vk::CullModeFlags::BACK,
             front_face: vk::FrontFace::COUNTER_CLOCKWISE,
             set_layouts: &[],
+            color_attachment_count: 1,
+            depth_attachment: true,
         }
     }
 }
@@ -139,21 +143,25 @@ impl Pipeline {
             .alpha_to_coverage_enable(false)
             .alpha_to_one_enable(false);
 
-        let color_blend_attachments = [vk::PipelineColorBlendAttachmentState::builder()
-            .color_write_mask(
-                vk::ColorComponentFlags::R
-                    | vk::ColorComponentFlags::G
-                    | vk::ColorComponentFlags::B
-                    | vk::ColorComponentFlags::A,
-            )
-            .blend_enable(false)
-            .src_color_blend_factor(vk::BlendFactor::ONE)
-            .dst_color_blend_factor(vk::BlendFactor::ZERO)
-            .color_blend_op(vk::BlendOp::ADD)
-            .src_alpha_blend_factor(vk::BlendFactor::ONE)
-            .dst_alpha_blend_factor(vk::BlendFactor::ZERO)
-            .alpha_blend_op(vk::BlendOp::ADD)
-            .build()];
+        let color_blend_attachments = (0..info.color_attachment_count)
+            .map(|_| {
+                vk::PipelineColorBlendAttachmentState::builder()
+                    .color_write_mask(
+                        vk::ColorComponentFlags::R
+                            | vk::ColorComponentFlags::G
+                            | vk::ColorComponentFlags::B
+                            | vk::ColorComponentFlags::A,
+                    )
+                    .blend_enable(false)
+                    .src_color_blend_factor(vk::BlendFactor::ONE)
+                    .dst_color_blend_factor(vk::BlendFactor::ZERO)
+                    .color_blend_op(vk::BlendOp::ADD)
+                    .src_alpha_blend_factor(vk::BlendFactor::ONE)
+                    .dst_alpha_blend_factor(vk::BlendFactor::ZERO)
+                    .alpha_blend_op(vk::BlendOp::ADD)
+                    .build()
+            })
+            .collect::<Vec<_>>();
 
         let color_blending = vk::PipelineColorBlendStateCreateInfo::builder()
             .logic_op_enable(false)
@@ -180,11 +188,17 @@ impl Pipeline {
             .rasterization_state(&rasterizer)
             .multisample_state(&multisampling)
             .color_blend_state(&color_blending)
-            .depth_stencil_state(&depth_stencil)
             .layout(layout)
             .render_pass(renderpass.renderpass())
-            .subpass(subpass)
-            .build();
+            .subpass(subpass);
+
+        let create_info = if info.depth_attachment {
+            create_info.depth_stencil_state(&depth_stencil)
+        } else {
+            create_info
+        };
+
+        let create_info = create_info.build();
 
         let pipeline = unsafe {
             device

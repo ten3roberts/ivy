@@ -33,14 +33,6 @@ impl Pass {
     where
         T: Deref<Target = ResourceCache<Texture>>,
     {
-        println!(
-            "Pass with nodes: {:?}",
-            pass_nodes
-                .iter()
-                .map(|node| nodes[*node].debug_name())
-                .collect::<Vec<_>>()
-        );
-
         let kind = match kind {
             NodeKind::Graphics => {
                 PassKind::graphics(context, nodes, textures, dependencies, &pass_nodes, extent)?
@@ -162,31 +154,20 @@ impl PassKind {
                             dst_access_mask: edge.read_access,
                             dependency_flags: Default::default(),
                         },
-                        EdgeKind::Input => {
-                            println!(
-                                "Input: {:?}",
-                                pass_nodes
-                                    .iter()
-                                    .enumerate()
-                                    .find(|(_, node)| **node == edge.src)
-                                    .unwrap()
-                                    .0 as u32
-                            );
-                            SubpassDependency {
-                                src_subpass: pass_nodes
-                                    .iter()
-                                    .enumerate()
-                                    .find(|(_, node)| **node == edge.src)
-                                    .unwrap()
-                                    .0 as u32,
-                                dst_subpass: subpass_index as u32,
-                                src_stage_mask: edge.write_stage,
-                                dst_stage_mask: edge.read_stage,
-                                src_access_mask: edge.write_access,
-                                dst_access_mask: edge.read_access,
-                                dependency_flags: vk::DependencyFlags::BY_REGION,
-                            }
-                        }
+                        EdgeKind::Input => SubpassDependency {
+                            src_subpass: pass_nodes
+                                .iter()
+                                .enumerate()
+                                .find(|(_, node)| **node == edge.src)
+                                .unwrap()
+                                .0 as u32,
+                            dst_subpass: subpass_index as u32,
+                            src_stage_mask: edge.write_stage,
+                            dst_stage_mask: edge.read_stage,
+                            src_access_mask: edge.write_access,
+                            dst_access_mask: edge.read_access,
+                            dependency_flags: vk::DependencyFlags::BY_REGION,
+                        },
                     })
             })
             .collect::<Vec<_>>();
@@ -246,7 +227,6 @@ impl PassKind {
                     let texture = textures.get(attachment.resource)?;
 
                     attachments.push(texture.image_view());
-                    println!("attachments: {:?}", attachment.resource);
 
                     attachment_descriptions.push(AttachmentDescription {
                         flags: vk::AttachmentDescriptionFlags::default(),

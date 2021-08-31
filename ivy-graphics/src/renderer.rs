@@ -1,3 +1,5 @@
+use std::slice;
+
 use crate::{Result, ShaderPass};
 use ash::vk::DescriptorSet;
 use hecs::World;
@@ -23,4 +25,28 @@ pub trait Renderer {
         // Graphics resources like textures and materials
         resources: &Resources,
     ) -> Result<()>;
+}
+
+// Traits for types holding one or more descriptor sets for use in rendering.
+pub trait IntoSet {
+    /// Get the descriptor set for the current frame
+    fn set(&self, current_frame: usize) -> DescriptorSet {
+        *self
+            .sets()
+            .get(current_frame)
+            .unwrap_or_else(|| &self.sets()[0])
+    }
+    // Retrieve descriptor sets for all frames. May be less than frames_in_flight if the same set is
+    // to be used
+    fn sets(&self) -> &[DescriptorSet];
+}
+
+impl IntoSet for DescriptorSet {
+    fn set(&self, _: usize) -> DescriptorSet {
+        *self
+    }
+
+    fn sets(&self) -> &[DescriptorSet] {
+        slice::from_ref(self)
+    }
 }

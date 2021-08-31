@@ -1,0 +1,156 @@
+use crate::{components::Position, IntoSet, Result};
+use std::{mem::size_of, sync::Arc};
+
+use ash::vk::{DescriptorSet, ShaderStageFlags};
+use hecs::World;
+use ivy_vulkan::{
+    descriptors::{DescriptorAllocator, DescriptorBuilder, DescriptorLayoutCache},
+    Buffer, VulkanContext,
+};
+use ultraviolet::Vec3;
+
+pub struct Light {
+    intensity: f32,
+}
+
+impl Light {
+    pub fn new(intensity: f32) -> Self {
+        Self { intensity }
+    }
+}
+
+pub struct LightManager {
+    light_buffers: Vec<(Buffer, Buffer)>,
+    sets: Vec<DescriptorSet>,
+    // All registered lights. Note: not all lights may be uploaded to the GPU
+    lights: Vec<LightData>,
+
+    max_lights: u64,
+    num_lights: u64,
+}
+
+impl LightManager {
+    pub fn new(
+        context: Arc<VulkanContext>,
+        descriptor_layout_cache: &mut DescriptorLayoutCache,
+        descriptor_allocator: &mut DescriptorAllocator,
+        frames_in_flight: usize,
+        max_lights: u64,
+    ) -> Result<Self> {
+        let light_buffers = (0..frames_in_flight)
+            .map(|_| -> Result<_> {
+                Ok((
+                    Buffer::new_uninit(
+                        context.clone(),
+                        ivy_vulkan::BufferType::Uniform,
+                        ivy_vulkan::BufferAccess::MappedPersistent,
+                        size_of::<LightSceneData>() as u64,
+                    )?,
+                    Buffer::new_uninit(
+                        context.clone(),
+                        ivy_vulkan::BufferType::Storage,
+                        ivy_vulkan::BufferAccess::MappedPersistent,
+                        size_of::<LightData>() as u64 * max_lights,
+                    )?,
+                ))
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        let device = context.device();
+
+        let sets = light_buffers
+            .iter()
+            .map(|buffer| {
+                DescriptorBuilder::new()
+                    .bind_buffer(0, ShaderStageFlags::FRAGMENT, &buffer.0)
+                    .bind_buffer(1, ShaderStageFlags::FRAGMENT, &buffer.1)
+                    .build_one(device, descriptor_layout_cache, descriptor_allocator)
+                    .map_err(|e| e.into())
+                    .map(|val| val.0)
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        Ok(Self {
+            light_buffers,
+            sets,
+            lights: Vec::new(),
+            num_lights: 0,
+            max_lights,
+        })
+    }
+
+    /// Updates the GPU side data of the world lights.
+    /// Each light which has a [`Light`] and [`Position`] will be considered.
+    /// The lights will be sorted in reference to centered. If there are more lights than `max_lights`,
+    /// then the n closest will be used.
+    pub fn update(&mut self, world: &World, center: Vec3, current_frame: usize) -> Result<()> {
+        self.lights.clear();
+        self.lights
+            .extend(
+                world
+                    .query::<(&Light, &Position)>()
+                    .iter()
+                    .map(|(_, (light, position))| LightData {
+                        position: **position,
+                        distance_to_center: (center - **position).mag(),
+                        intensity: light.intensity,
+                    }),
+            );
+
+        self.lights.sort_unstable();
+
+        // Use the first `max_lights` lights and upload to gpu
+        self.num_lights = self.max_lights.min(self.lights.len() as u64);
+        self.light_buffers[current_frame]
+            .1
+            .fill(0, &self.lights[0..self.num_lights as usize])?;
+
+        self.light_buffers[current_frame].0.fill(
+            0,
+            &[LightSceneData {
+                num_lights: self.num_lights as u32,
+            }],
+        )?;
+
+        Ok(())
+    }
+}
+
+impl IntoSet for LightManager {
+    fn set(&self, current_frame: usize) -> DescriptorSet {
+        self.sets[current_frame]
+    }
+
+    fn sets(&self) -> &[DescriptorSet] {
+        &self.sets
+    }
+}
+
+/// Per light data
+#[repr(C)]
+#[derive(PartialEq)]
+struct LightData {
+    position: Vec3,
+    intensity: f32,
+    distance_to_center: f32,
+}
+
+impl std::cmp::Eq for LightData {}
+
+impl std::cmp::PartialOrd for LightData {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.distance_to_center
+            .partial_cmp(&other.distance_to_center)
+    }
+}
+
+impl std::cmp::Ord for LightData {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.partial_cmp(other).unwrap_or(std::cmp::Ordering::Equal)
+    }
+}
+
+#[repr(C)]
+struct LightSceneData {
+    num_lights: u32,
+}

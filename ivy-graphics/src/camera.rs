@@ -1,4 +1,4 @@
-use crate::Result;
+use crate::{IntoSet, Result};
 use ash::vk::{DescriptorSet, ShaderStageFlags};
 use derive_more::{AsRef, Deref, From, Into};
 use hecs::World;
@@ -193,10 +193,6 @@ impl GpuCameraData {
         &self.uniformbuffers[index]
     }
 
-    pub fn set(&self, index: usize) -> DescriptorSet {
-        self.sets[index]
-    }
-
     // Updates the camera gpu side data from cpu side data for the current frame.
     pub fn update(&mut self, camera: &Camera, current_frame: usize) -> Result<()> {
         self.uniformbuffers[current_frame]
@@ -240,5 +236,15 @@ impl GpuCameraData {
             )?;
             world.insert_one(camera, gpu_camera).map_err(|e| e.into())
         })
+    }
+}
+
+impl IntoSet for GpuCameraData {
+    fn set(&self, current_frame: usize) -> DescriptorSet {
+        self.sets[current_frame]
+    }
+
+    fn sets(&self) -> &[DescriptorSet] {
+        &self.sets
     }
 }

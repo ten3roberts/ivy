@@ -1,4 +1,7 @@
+use std::slice;
+
 use crate::Result;
+use ivy_graphics::IntoSet;
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
     descriptors::{DescriptorAllocator, DescriptorBuilder, DescriptorLayoutCache, DescriptorSet},
@@ -53,9 +56,14 @@ impl Image {
     pub fn sampler(&self) -> Handle<Sampler> {
         self.sampler
     }
+}
 
-    /// Get a reference to the image's set.
-    pub fn set(&self) -> DescriptorSet {
+impl IntoSet for Image {
+    fn set(&self, _: usize) -> DescriptorSet {
         self.set
+    }
+
+    fn sets(&self) -> &[DescriptorSet] {
+        slice::from_ref(&self.set)
     }
 }

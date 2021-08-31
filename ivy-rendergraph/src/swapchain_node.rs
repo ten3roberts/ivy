@@ -1,4 +1,4 @@
-use std::{ops::Deref, sync::Arc};
+use std::{ops::Deref, slice, sync::Arc};
 
 use crate::{NodeKind, Result};
 use anyhow::Context;
@@ -12,7 +12,7 @@ use crate::{AttachmentInfo, Node};
 
 pub struct SwapchainNode {
     swapchain: Handle<Swapchain>,
-    read_attachments: [Handle<Texture>; 1],
+    read_attachment: Handle<Texture>,
     clear_values: Vec<ClearValue>,
     swapchain_images: Vec<Handle<Texture>>,
     // Barrier from renderpass to transfer
@@ -86,7 +86,7 @@ impl SwapchainNode {
 
         Ok(Self {
             swapchain,
-            read_attachments: [read_attachment],
+            read_attachment,
             clear_values,
             swapchain_images,
             dst_barrier,
@@ -101,7 +101,7 @@ impl Node for SwapchainNode {
     }
 
     fn read_attachments(&self) -> &[Handle<Texture>] {
-        &self.read_attachments
+        slice::from_ref(&self.read_attachment)
     }
 
     fn input_attachments(&self) -> &[Handle<Texture>] {
@@ -139,7 +139,7 @@ impl Node for SwapchainNode {
 
         let dst = resources.get(self.swapchain_images[image_index as usize])?;
 
-        let src = resources.get(self.read_attachments[0])?;
+        let src = resources.get(self.read_attachment)?;
 
         let dst_barrier = vk::ImageMemoryBarrier {
             image: dst.deref().image(),

@@ -1,6 +1,6 @@
 use crate::Result;
 use hecs::{Entity, World};
-use ivy_graphics::{Mesh, ShaderPass};
+use ivy_graphics::{IntoSet, Mesh, ShaderPass};
 use ivy_resources::{Handle, ResourceCache, Resources};
 use ivy_vulkan::{
     commands::CommandBuffer, descriptors::*, vk, Buffer, BufferAccess, BufferType, VulkanContext,
@@ -402,7 +402,7 @@ impl PassData {
             cmd.bind_descriptor_sets(
                 batch.pipeline_layout,
                 0,
-                &[global_set, frame_set, image.set()],
+                &[global_set, frame_set, image.set(0)],
                 dynamic_offsets,
             );
 
