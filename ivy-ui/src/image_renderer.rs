@@ -482,7 +482,7 @@ impl FrameData {
         let mut set_layout = Default::default();
 
         DescriptorBuilder::new()
-            .bind_storage_buffer(0, vk::ShaderStageFlags::VERTEX, &object_buffer)
+            .bind_buffer(0, vk::ShaderStageFlags::VERTEX, &object_buffer)
             .build(
                 context.device(),
                 descriptor_layout_cache,

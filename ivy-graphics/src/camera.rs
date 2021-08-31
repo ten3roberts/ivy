@@ -162,7 +162,7 @@ impl GpuCameraData {
             .iter()
             .map(|u| {
                 DescriptorBuilder::new()
-                    .bind_uniform_buffer(0, ShaderStageFlags::VERTEX, u)
+                    .bind_buffer(0, ShaderStageFlags::VERTEX, u)
                     .build_one(
                         context.device(),
                         descriptor_layout_cache,
