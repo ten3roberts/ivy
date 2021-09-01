@@ -67,6 +67,35 @@ impl From<Extent> for vk::Extent2D {
     }
 }
 
+impl From<Extent> for vk::Extent3D {
+    fn from(val: Extent) -> Self {
+        vk::Extent3D {
+            width: val.width,
+            height: val.height,
+            depth: 1,
+        }
+    }
+}
+
+impl From<Extent> for vk::Offset2D {
+    fn from(val: Extent) -> Self {
+        vk::Offset2D {
+            x: val.width as i32,
+            y: val.height as i32,
+        }
+    }
+}
+
+impl From<Extent> for vk::Offset3D {
+    fn from(val: Extent) -> Self {
+        vk::Offset3D {
+            x: val.width as i32,
+            y: val.height as i32,
+            z: 1,
+        }
+    }
+}
+
 impl From<Extent> for [u32; 2] {
     fn from(val: Extent) -> Self {
         [val.width, val.height]
