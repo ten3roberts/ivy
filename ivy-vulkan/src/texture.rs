@@ -130,16 +130,10 @@ impl Texture {
         image: vk::Image,
         allocation: Option<vk_mem::Allocation>,
     ) -> Result<Self> {
-        let aspect_mask = if info.usage.contains(ImageUsage::COLOR_ATTACHMENT)
-            || info.usage.contains(ImageUsage::SAMPLED)
-        {
-            ImageAspectFlags::COLOR
-        } else {
-            vk::ImageAspectFlags::default()
-        } | if info.usage.contains(ImageUsage::DEPTH_STENCIL_ATTACHMENT) {
+        let aspect_mask = if info.usage.contains(ImageUsage::DEPTH_STENCIL_ATTACHMENT) {
             ImageAspectFlags::DEPTH
         } else {
-            ImageAspectFlags::default()
+            vk::ImageAspectFlags::COLOR
         };
 
         let create_info = vk::ImageViewCreateInfo::builder()

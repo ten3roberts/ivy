@@ -9,13 +9,15 @@ use ivy_vulkan::{
 };
 use ultraviolet::Vec3;
 
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Light {
     intensity: f32,
+    color: Vec3,
 }
 
 impl Light {
-    pub fn new(intensity: f32) -> Self {
-        Self { intensity }
+    pub fn new(intensity: f32, color: Vec3) -> Self {
+        Self { intensity, color }
     }
 }
 
@@ -34,8 +36,8 @@ impl LightManager {
         context: Arc<VulkanContext>,
         descriptor_layout_cache: &mut DescriptorLayoutCache,
         descriptor_allocator: &mut DescriptorAllocator,
-        frames_in_flight: usize,
         max_lights: u64,
+        frames_in_flight: usize,
     ) -> Result<Self> {
         let light_buffers = (0..frames_in_flight)
             .map(|_| -> Result<_> {
@@ -91,16 +93,18 @@ impl LightManager {
                     .query::<(&Light, &Position)>()
                     .iter()
                     .map(|(_, (light, position))| LightData {
-                        position: **position,
-                        distance_to_center: (center - **position).mag(),
+                        position: position.0,
+                        color: light.color,
                         intensity: light.intensity,
+                        distance_to_center: (center - position.0).mag(),
+                        ..Default::default()
                     }),
             );
 
         self.lights.sort_unstable();
+        self.num_lights = self.max_lights.min(self.lights.len() as u64);
 
         // Use the first `max_lights` lights and upload to gpu
-        self.num_lights = self.max_lights.min(self.lights.len() as u64);
         self.light_buffers[current_frame]
             .1
             .fill(0, &self.lights[0..self.num_lights as usize])?;
@@ -128,10 +132,11 @@ impl IntoSet for LightManager {
 
 /// Per light data
 #[repr(C)]
-#[derive(PartialEq)]
+#[derive(Default, PartialEq, Debug)]
 struct LightData {
     position: Vec3,
     intensity: f32,
+    color: Vec3,
     distance_to_center: f32,
 }
 

@@ -4,7 +4,7 @@ use crate::{NodeKind, Result};
 use anyhow::Context;
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
-    vk::{self, ClearValue, ImageCopy, ImageSubresourceLayers, PipelineStageFlags},
+    vk::{self, ClearValue, ImageBlit, ImageSubresourceLayers, Offset3D, PipelineStageFlags},
     ImageLayout, ImageUsage, SampleCountFlags, Swapchain, Texture, TextureInfo, VulkanContext,
 };
 
@@ -34,7 +34,7 @@ impl SwapchainNode {
         let texture_info = TextureInfo {
             extent: swapchain_ref.extent(),
             mip_levels: 1,
-            usage: ImageUsage::COLOR_ATTACHMENT,
+            usage: ImageUsage::TRANSFER_DST,
             format: swapchain_ref.image_format(),
             samples: SampleCountFlags::TYPE_1,
         };
@@ -132,6 +132,8 @@ impl Node for SwapchainNode {
         resources: &ivy_resources::Resources,
     ) -> anyhow::Result<()> {
         let swapchain = resources.get(self.swapchain)?;
+        let extent = swapchain.extent();
+        let offset = extent.into();
 
         let image_index = swapchain
             .image_index()
@@ -152,32 +154,28 @@ impl Node for SwapchainNode {
             &[dst_barrier],
         );
 
-        cmd.copy_image(
+        cmd.blit_image(
             src.image(),
             ImageLayout::TRANSFER_SRC_OPTIMAL,
             dst.image(),
             ImageLayout::TRANSFER_DST_OPTIMAL,
-            &[ImageCopy {
+            &[ImageBlit {
                 src_subresource: ImageSubresourceLayers {
                     aspect_mask: vk::ImageAspectFlags::COLOR,
                     mip_level: 0,
                     base_array_layer: 0,
                     layer_count: 1,
                 },
-                src_offset: vk::Offset3D::default(),
                 dst_subresource: ImageSubresourceLayers {
                     aspect_mask: vk::ImageAspectFlags::COLOR,
                     mip_level: 0,
                     base_array_layer: 0,
                     layer_count: 1,
                 },
-                dst_offset: vk::Offset3D::default(),
-                extent: vk::Extent3D {
-                    width: swapchain.extent().width,
-                    height: swapchain.extent().height,
-                    depth: 1,
-                },
+                src_offsets: [Offset3D::default(), offset],
+                dst_offsets: [Offset3D::default(), offset],
             }],
+            vk::Filter::NEAREST,
         );
 
         let barrier = vk::ImageMemoryBarrier {

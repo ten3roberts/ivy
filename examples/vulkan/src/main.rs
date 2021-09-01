@@ -362,8 +362,8 @@ impl VulkanLayer {
             context.clone(),
             &mut descriptor_layout_cache,
             &mut descriptor_allocator,
-            FRAMES_IN_FLIGHT,
             10,
+            FRAMES_IN_FLIGHT,
         )?)?;
 
         let mut rendergraph = RenderGraph::new(context.clone(), FRAMES_IN_FLIGHT)?;
@@ -728,7 +728,15 @@ impl VulkanLayer {
             material,
         ));
 
-        world.spawn((Position(Vec3::new(0.0, 3.0, 5.0)), Light::new(10.0)));
+        world.spawn((
+            Position(Vec3::new(7.0, 0.0, 0.0)),
+            Light::new(20.0, Vec3::new(0.0, 0.0, 1.0)),
+        ));
+
+        world.spawn((
+            Position(Vec3::new(0.0, 2.0, 5.0)),
+            Light::new(20.0, Vec3::new(1.0, 0.0, 0.0)),
+        ));
 
         setup_ui(world, image, image2, default_shaderpass)?;
 

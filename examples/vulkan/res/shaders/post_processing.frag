@@ -12,6 +12,7 @@ layout(location = 0) out vec4 outColor;
 struct LightData {
   vec3 position;
   float intensity;
+  vec3 color;
   float distance_to_center;
 };
 
@@ -29,8 +30,7 @@ void main() {
 
   vec3 albedo = subpassLoad(albedoBuffer).xyz;
 
-  vec3 diffuse = vec3(0, 0, 0);
-
+  float illuminance = 0;
   vec3 normal = normalize(subpassLoad(normalBuffer).xyz);
   vec3 pos = subpassLoad(positionBuffer).xyz;
 
@@ -44,7 +44,7 @@ void main() {
       clamp(dot(normalize(lightDir), normal)
       * light.intensity / lightDistSqr, 0, 1);
 
-    diffuse += albedo * brightness;
+    illuminance += light.color * brightness;
   }
 
   outColor = vec4(diffuse, 1);

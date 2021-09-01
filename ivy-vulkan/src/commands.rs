@@ -160,6 +160,7 @@ pub struct CommandBuffer {
 
 impl CommandBuffer {
     /// Starts recording of a commandbuffer
+    #[inline]
     pub fn begin(&self, flags: vk::CommandBufferUsageFlags) -> Result<()> {
         let begin_info = vk::CommandBufferBeginInfo {
             flags,
@@ -175,12 +176,14 @@ impl CommandBuffer {
     }
 
     // Ends recording of commandbuffer
+    #[inline]
     pub fn end(&self) -> Result<()> {
         unsafe { self.device.end_command_buffer(self.commandbuffer)? };
         Ok(())
     }
 
     // Begins a renderpass
+    #[inline]
     pub fn begin_renderpass(
         &self,
         renderpass: &RenderPass,
@@ -211,16 +214,19 @@ impl CommandBuffer {
     }
 
     /// Ends current renderpass
+    #[inline]
     pub fn end_renderpass(&self) {
         unsafe { self.device.cmd_end_render_pass(self.commandbuffer) }
     }
 
     /// Begins the next subpass
+    #[inline]
     pub fn next_subpass(&self, contents: vk::SubpassContents) {
         unsafe { self.device.cmd_next_subpass(self.commandbuffer, contents) }
     }
 
     /// Binds a graphics pipeline
+    #[inline]
     pub fn bind_pipeline<T: Into<vk::Pipeline>>(&self, pipeline: T) {
         unsafe {
             self.device.cmd_bind_pipeline(
@@ -231,6 +237,7 @@ impl CommandBuffer {
         }
     }
 
+    #[inline]
     pub fn bind_vertexbuffer<B: AsRef<vk::Buffer>>(&self, first_binding: u32, vertexbuffer: B) {
         unsafe {
             self.device.cmd_bind_vertex_buffers(
@@ -314,6 +321,7 @@ impl CommandBuffer {
     }
 
     // Issues a draw command using the currently vertex buffer
+    #[inline]
     pub fn draw(
         &self,
         vertex_count: u32,
@@ -333,6 +341,7 @@ impl CommandBuffer {
     }
 
     // Issues a draw command using the currently bound vertex and index buffers
+    #[inline]
     pub fn draw_indexed(
         &self,
         index_count: u32,
@@ -353,6 +362,7 @@ impl CommandBuffer {
         }
     }
 
+    #[inline]
     pub fn draw_indexed_indirect<B: AsRef<vk::Buffer>>(
         &self,
         buffer: B,
@@ -371,6 +381,7 @@ impl CommandBuffer {
         }
     }
 
+    #[inline]
     pub fn draw_indirect<B: AsRef<vk::Buffer>>(
         &self,
         buffer: B,
@@ -389,6 +400,7 @@ impl CommandBuffer {
         }
     }
 
+    #[inline]
     pub fn copy_buffer(&self, src: vk::Buffer, dst: vk::Buffer, regions: &[vk::BufferCopy]) {
         unsafe {
             self.device
@@ -396,59 +408,7 @@ impl CommandBuffer {
         }
     }
 
-    pub fn copy_image(
-        &self,
-        src: vk::Image,
-        src_layout: vk::ImageLayout,
-        dst: vk::Image,
-        dst_layout: vk::ImageLayout,
-        regions: &[vk::ImageCopy],
-    ) {
-        unsafe {
-            self.device.cmd_copy_image(
-                self.commandbuffer,
-                src,
-                src_layout,
-                dst,
-                dst_layout,
-                regions,
-            )
-        }
-    }
-
-    /// Copies a buffer to an image
-    pub fn copy_buffer_image(
-        &self,
-        src: vk::Buffer,
-        dst: vk::Image,
-        layout: vk::ImageLayout,
-        regions: &[vk::BufferImageCopy],
-    ) {
-        unsafe {
-            self.device
-                .cmd_copy_buffer_to_image(self.commandbuffer, src, dst, layout, regions)
-        }
-    }
-
-    pub fn pipeline_barrier(
-        &self,
-        src_stage_mask: vk::PipelineStageFlags,
-        dst_stage_mask: vk::PipelineStageFlags,
-        image_barriers: &[vk::ImageMemoryBarrier],
-    ) {
-        unsafe {
-            self.device.cmd_pipeline_barrier(
-                self.commandbuffer,
-                src_stage_mask,
-                dst_stage_mask,
-                vk::DependencyFlags::default(),
-                &[],
-                &[],
-                image_barriers,
-            )
-        }
-    }
-
+    #[inline]
     pub fn blit_image(
         &self,
         src: vk::Image,
@@ -471,6 +431,63 @@ impl CommandBuffer {
         }
     }
 
+    #[inline]
+    pub fn copy_image(
+        &self,
+        src: vk::Image,
+        src_layout: vk::ImageLayout,
+        dst: vk::Image,
+        dst_layout: vk::ImageLayout,
+        regions: &[vk::ImageCopy],
+    ) {
+        unsafe {
+            self.device.cmd_copy_image(
+                self.commandbuffer,
+                src,
+                src_layout,
+                dst,
+                dst_layout,
+                regions,
+            )
+        }
+    }
+
+    /// Copies a buffer to an image
+    #[inline]
+    pub fn copy_buffer_image(
+        &self,
+        src: vk::Buffer,
+        dst: vk::Image,
+        layout: vk::ImageLayout,
+        regions: &[vk::BufferImageCopy],
+    ) {
+        unsafe {
+            self.device
+                .cmd_copy_buffer_to_image(self.commandbuffer, src, dst, layout, regions)
+        }
+    }
+
+    #[inline]
+    pub fn pipeline_barrier(
+        &self,
+        src_stage_mask: vk::PipelineStageFlags,
+        dst_stage_mask: vk::PipelineStageFlags,
+        image_barriers: &[vk::ImageMemoryBarrier],
+    ) {
+        unsafe {
+            self.device.cmd_pipeline_barrier(
+                self.commandbuffer,
+                src_stage_mask,
+                dst_stage_mask,
+                vk::DependencyFlags::default(),
+                &[],
+                &[],
+                image_barriers,
+            )
+        }
+    }
+
+    #[inline]
     pub fn submit_multiple(
         device: &Device,
         commandbuffers: &[vk::CommandBuffer],
@@ -498,6 +515,7 @@ impl CommandBuffer {
     }
 
     /// Submits a single commandbuffer.
+    #[inline]
     pub fn submit(
         &self,
         queue: vk::Queue,
