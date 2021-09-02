@@ -5,14 +5,12 @@ use crate::{
 use hash::Hash;
 use hecs::World;
 use itertools::Itertools;
-// use itertools::Itertools;
 use ivy_resources::{Handle, ResourceCache, Resources};
 use ivy_vulkan::{
     commands::{CommandBuffer, CommandPool},
-    descriptors::DescriptorLayoutCache,
     fence, semaphore,
     vk::{self, CommandBufferUsageFlags, PipelineStageFlags, Semaphore},
-    Extent, Fence, ImageLayout, Pipeline, PipelineInfo, RenderPass, Texture, VulkanContext,
+    Extent, Fence, ImageLayout, PipelineInfo, RenderPass, Texture, VulkanContext,
 };
 use slotmap::{new_key_type, SecondaryMap, SlotMap};
 use std::{hash, ops::Deref, sync::Arc};
@@ -122,6 +120,13 @@ impl RenderGraph {
             .push(edge);
     }
 
+    pub fn node(&self, node: NodeIndex) -> Result<&dyn Node> {
+        self.nodes
+            .get(node)
+            .ok_or_else(|| Error::InvalidNodeIndex(node))
+            .map(|val| val.as_ref())
+    }
+
     pub fn node_renderpass<'a>(&'a self, node: NodeIndex) -> Result<(&'a RenderPass, u32)> {
         let (pass, index) = self
             .node_pass_map
@@ -143,23 +148,18 @@ impl RenderGraph {
         }
     }
 
-    /// Creates a pipeline compatible with node from the supplied info.
-    pub fn create_pipeline(
-        &self,
-        node: NodeIndex,
-        layout_cache: &mut DescriptorLayoutCache,
-        pipeline_info: &PipelineInfo,
-    ) -> Result<Pipeline> {
+    /// Returns a pipeline info compatible with the specified node
+    pub fn pipeline_info(&self, node: NodeIndex) -> Result<PipelineInfo> {
         let (pass, subpass) = self.node_renderpass(node)?;
-        let pipeline = Pipeline::new(
-            self.context.device().clone(),
-            layout_cache,
-            pass,
-            subpass,
-            pipeline_info,
-        )?;
+        let node = self.node(node)?;
 
-        Ok(pipeline)
+        Ok(PipelineInfo {
+            renderpass: pass.renderpass(),
+            subpass,
+            color_attachment_count: node.color_attachments().len() as u32,
+            depth_attachment: node.depth_attachment().is_some(),
+            ..Default::default()
+        })
     }
 
     /// Builds or rebuilds the rendergraph and creates appropriate renderpasses and framebuffers.

@@ -1,4 +1,3 @@
-use crate::Result;
 use anyhow::{anyhow, Context};
 use atomic_refcell::AtomicRefCell;
 use flume::Receiver;
@@ -11,6 +10,7 @@ use ivy_graphics::{
     new_shaderpass,
     window::{WindowExt, WindowInfo, WindowMode},
     Camera, FullscreenRenderer, GpuCameraData, IndirectMeshRenderer, Light, LightManager, Material,
+    Vertex,
 };
 use ivy_input::{Input, InputAxis, InputVector};
 use ivy_rendergraph::{AttachmentInfo, CameraNode, FullscreenNode, RenderGraph, SwapchainNode};
@@ -19,13 +19,16 @@ use ivy_ui::{
     constraints::{AbsoluteOffset, AbsoluteSize, Aspect, RelativeOffset, RelativeSize},
     Canvas, Image, Position2D, Size2D, Widget,
 };
-use ivy_vulkan::{descriptors::*, vk::CullModeFlags, *};
-use std::ops::Deref;
+use ivy_vulkan::{
+    descriptors::*,
+    vk::{CullModeFlags, ShaderStageFlags},
+    *,
+};
 use std::{
     sync::{mpsc, Arc},
     time::Duration,
 };
-use ultraviolet::{Rotor3, Vec2, Vec3, Vec4};
+use ultraviolet::{Rotor3, Vec3};
 
 use log::*;
 
@@ -245,10 +248,6 @@ struct VulkanLayer {
     descriptor_layout_cache: DescriptorLayoutCache,
     descriptor_allocator: DescriptorAllocator,
 
-    frames: Vec<FrameData>,
-
-    global_data: GlobalData,
-
     clock: Clock,
     resources: Resources,
 
@@ -352,13 +351,14 @@ impl VulkanLayer {
         };
 
         let resources = Resources::new();
+
         let swapchain = resources.insert_default(Swapchain::new(
             context.clone(),
             &window.borrow(),
             swapchain_info,
         )?)?;
 
-        let light_manager = resources.insert_default(LightManager::new(
+        resources.insert_default(LightManager::new(
             context.clone(),
             &mut descriptor_layout_cache,
             &mut descriptor_allocator,
@@ -376,6 +376,14 @@ impl VulkanLayer {
         )?)?;
 
         resources.insert_default(FullscreenRenderer)?;
+
+        GpuCameraData::create_gpu_cameras(
+            context.clone(),
+            world,
+            &mut &mut descriptor_layout_cache,
+            &mut descriptor_allocator,
+            FRAMES_IN_FLIGHT,
+        )?;
 
         let camera = world
             .query::<&Camera>()
@@ -430,6 +438,17 @@ impl VulkanLayer {
             },
         )?)?;
 
+        let metallic_roughness_buffer = resources.insert(Texture::new(
+            context.clone(),
+            &TextureInfo {
+                extent: resources.get(swapchain)?.extent(),
+                mip_levels: 1,
+                usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::INPUT_ATTACHMENT,
+                format: vk::Format::R8G8_UNORM,
+                ..Default::default()
+            },
+        )?)?;
+
         let final_diffuse = resources.insert(Texture::new(
             context.clone(),
             &TextureInfo {
@@ -442,28 +461,34 @@ impl VulkanLayer {
             },
         )?)?;
 
-        let fullscreen_set = DescriptorBuilder::new()
-            .bind_input_attachment(
-                0,
-                vk::ShaderStageFlags::FRAGMENT,
-                resources.get(albedo_buffer)?.image_view(),
-            )
-            .bind_input_attachment(
-                1,
-                vk::ShaderStageFlags::FRAGMENT,
-                resources.get(position_buffer)?.image_view(),
-            )
-            .bind_input_attachment(
-                2,
-                vk::ShaderStageFlags::FRAGMENT,
-                resources.get(normal_buffer)?.image_view(),
-            )
-            .build_one(
-                context.device(),
-                &mut descriptor_layout_cache,
-                &mut descriptor_allocator,
-            )?
-            .0;
+        let albedo_view = resources.get(albedo_buffer)?.image_view();
+        let position_view = resources.get(position_buffer)?.image_view();
+        let normal_view = resources.get(normal_buffer)?.image_view();
+        let mr_view = resources.get(metallic_roughness_buffer)?.image_view();
+
+        let camera_data = world.get::<GpuCameraData>(camera)?;
+        let light_manager = resources.get_default::<LightManager>()?;
+
+        let fullscreen_sets = (0..FRAMES_IN_FLIGHT)
+            .map(move |i| {
+                DescriptorBuilder::from_resources(&[
+                    (&InputAttachment(albedo_view), ShaderStageFlags::FRAGMENT),
+                    (&InputAttachment(position_view), ShaderStageFlags::FRAGMENT),
+                    (&InputAttachment(normal_view), ShaderStageFlags::FRAGMENT),
+                    (&InputAttachment(mr_view), ShaderStageFlags::FRAGMENT),
+                    (camera_data.buffer(i), ShaderStageFlags::FRAGMENT),
+                    (light_manager.scene_buffer(i), ShaderStageFlags::FRAGMENT),
+                    (light_manager.light_buffer(i), ShaderStageFlags::FRAGMENT),
+                ])
+            })
+            .map(|mut builder| {
+                builder.build(
+                    context.device(),
+                    &mut descriptor_layout_cache,
+                    &mut descriptor_allocator,
+                )
+            })
+            .collect::<Result<Vec<_>>>()?;
 
         let diffuse_node =
             rendergraph.add_node(CameraNode::<DiffusePass, IndirectMeshRenderer>::new(
@@ -491,6 +516,13 @@ impl VulkanLayer {
                         store_op: StoreOp::STORE,
                         load_op: LoadOp::CLEAR,
                     },
+                    AttachmentInfo {
+                        final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                        initial_layout: ImageLayout::UNDEFINED,
+                        resource: metallic_roughness_buffer,
+                        store_op: StoreOp::STORE,
+                        load_op: LoadOp::CLEAR,
+                    },
                 ],
                 vec![],
                 vec![],
@@ -502,6 +534,7 @@ impl VulkanLayer {
                     load_op: LoadOp::CLEAR,
                 }),
                 vec![
+                    ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
                     ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
                     ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
                     ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
@@ -522,13 +555,18 @@ impl VulkanLayer {
                 load_op: LoadOp::CLEAR,
             }],
             vec![],
-            vec![albedo_buffer, position_buffer, normal_buffer],
+            vec![
+                albedo_buffer,
+                position_buffer,
+                normal_buffer,
+                metallic_roughness_buffer,
+            ],
             None,
             vec![
                 ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
                 ClearValue::DepthStencil(1.0, 0).into(),
             ],
-            vec![&fullscreen_set, resources.get(light_manager)?.deref()],
+            vec![&fullscreen_sets],
             FRAMES_IN_FLIGHT,
         ));
 
@@ -543,11 +581,6 @@ impl VulkanLayer {
         rendergraph.build(resources.fetch()?, swapchain_extent)?;
 
         assert!(rendergraph.node_renderpass(swapchain_node).is_err());
-
-        // Data that is tied and updated per swapchain image basis
-        let frames = (0..FRAMES_IN_FLIGHT)
-            .map(|_| FrameData::new(context.clone()).map_err(|e| e.into()))
-            .collect::<Result<Vec<FrameData>>>()?;
 
         let document = ivy_graphics::Document::load(
             context.clone(),
@@ -590,21 +623,25 @@ impl VulkanLayer {
         )?)?;
 
         let material = resources.insert(Material::new(
-            &context,
+            context.clone(),
             &mut descriptor_layout_cache,
             &mut descriptor_allocator,
             &resources,
             grid,
             sampler,
+            0.3,
+            0.4,
         )?)?;
 
         let material2 = resources.insert(Material::new(
-            &context,
+            context.clone(),
             &mut descriptor_layout_cache,
             &mut descriptor_allocator,
             &resources,
             uv_grid,
             sampler,
+            0.0,
+            0.9,
         )?)?;
 
         let image: Handle<Image> = resources.insert(Image::new(
@@ -625,37 +662,32 @@ impl VulkanLayer {
             sampler,
         )?)?;
 
-        let fullscreen_pipeline = rendergraph.create_pipeline(
-            fullscreen_node,
+        let fullscreen_pipeline = Pipeline::new::<()>(
+            context.device().clone(),
             &mut descriptor_layout_cache,
             &PipelineInfo {
                 vertexshader: "./res/shaders/fullscreen.vert.spv".into(),
                 fragmentshader: "./res/shaders/post_processing.frag.spv".into(),
-                vertex_bindings: &[],
-                vertex_attributes: &[],
                 samples: SampleCountFlags::TYPE_1,
                 extent: swapchain_extent,
                 cull_mode: CullModeFlags::NONE,
-                ..Default::default()
+                ..rendergraph.pipeline_info(fullscreen_node)?
             },
         )?;
 
         // Create a pipeline from the shaders
-        let pipeline = rendergraph.create_pipeline(
-            diffuse_node,
+        let pipeline = Pipeline::new::<Vertex>(
+            context.device().clone(),
             &mut descriptor_layout_cache,
             &PipelineInfo {
                 vertexshader: "./res/shaders/default.vert.spv".into(),
                 fragmentshader: "./res/shaders/default.frag.spv".into(),
-                vertex_bindings: &[Vertex::BINDING_DESCRIPTION],
-                vertex_attributes: Vertex::ATTRIBUTE_DESCRIPTIONS,
                 samples: SampleCountFlags::TYPE_1,
                 extent: swapchain_extent,
                 polygon_mode: vk::PolygonMode::FILL,
                 cull_mode: vk::CullModeFlags::NONE,
                 front_face: vk::FrontFace::CLOCKWISE,
-                color_attachment_count: 3,
-                ..Default::default()
+                ..rendergraph.pipeline_info(diffuse_node)?
             },
         )?;
 
@@ -706,7 +738,7 @@ impl VulkanLayer {
                         default_shaderpass,
                         // Scale(Vec3::new(0.1, 0.1, 0.1)),
                         Rotation(Rotor3::identity()),
-                        AngularVelocity(Vec3::new(0.0, y as f32 * 0.5, x as f32)),
+                        AngularVelocity(Vec3::new(0.0, y as f32 * 0.1, x as f32 * 0.1)),
                     )
                 }),
         );
@@ -728,22 +760,22 @@ impl VulkanLayer {
             material,
         ));
 
+        // world.spawn((
+        //     Position(Vec3::new(3.0, 5.0, 7.0)),
+        //     Light::new(Vec3::new(100.0, 100.0, 100.0)),
+        // ));
+
         world.spawn((
             Position(Vec3::new(7.0, 0.0, 0.0)),
-            Light::new(20.0, Vec3::new(0.0, 0.0, 1.0)),
+            Light::new(Vec3::new(0.0, 0.0, 20.0)),
         ));
 
         world.spawn((
             Position(Vec3::new(0.0, 2.0, 5.0)),
-            Light::new(20.0, Vec3::new(1.0, 0.0, 0.0)),
+            Light::new(Vec3::new(20.0, 0.0, 0.0)),
         ));
 
         setup_ui(world, image, image2, default_shaderpass)?;
-
-        // An example uniform containing global uniform data
-        let global_data = GlobalData {
-            color: Vec4::new(0.3, 0.0, 8.0, 1.0),
-        };
 
         let (tx, window_events) = flume::unbounded();
         events.subscribe(tx);
@@ -755,8 +787,6 @@ impl VulkanLayer {
             rendergraph,
             descriptor_layout_cache,
             descriptor_allocator,
-            frames,
-            global_data,
             clock: Clock::new(),
             resources,
             window_events,
@@ -802,9 +832,6 @@ impl Layer for VulkanLayer {
             current_frame,
         )?;
 
-        let frame = &mut self.frames[current_frame];
-        frame.global_uniformbuffer.fill(0, &[self.global_data])?;
-
         self.rendergraph.execute(world, &self.resources)?;
         self.rendergraph.end()?;
 
@@ -813,8 +840,6 @@ impl Layer for VulkanLayer {
             self.context.present_queue(),
             &[self.rendergraph.signal_semaphore(current_frame)],
         )?;
-
-        // std::thread::sleep(500.ms());
 
         Ok(())
     }
@@ -826,28 +851,6 @@ impl Drop for VulkanLayer {
         log::info!("Dropping vulkan layer");
         // Wait for everything to be done before cleaning up
         device::wait_idle(device).unwrap();
-    }
-}
-
-/// Represents data needed to be duplicated for each swapchain image
-struct FrameData {
-    global_uniformbuffer: Buffer,
-}
-
-impl FrameData {
-    fn new(context: Arc<VulkanContext>) -> Result<Self> {
-        let global_uniformbuffer = Buffer::new(
-            context.clone(),
-            BufferType::Uniform,
-            BufferAccess::MappedPersistent,
-            &[GlobalData {
-                color: Vec4::new(1.0, 0.0, 0.0, 1.0),
-            }],
-        )?;
-
-        Ok(FrameData {
-            global_uniformbuffer,
-        })
     }
 }
 
@@ -954,60 +957,4 @@ impl Layer for PerformanceLayer {
 
         Ok(())
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Vertex {
-    position: Vec3,
-    normal: Vec3,
-    texcoord: Vec2,
-}
-
-impl Vertex {
-    pub fn new(position: Vec3, normal: Vec3, texcoord: Vec2) -> Self {
-        Self {
-            position,
-            normal,
-            texcoord,
-        }
-    }
-}
-
-impl VertexDesc for Vertex {
-    const BINDING_DESCRIPTION: vk::VertexInputBindingDescription =
-        vk::VertexInputBindingDescription {
-            binding: 0,
-            stride: std::mem::size_of::<Self>() as u32,
-            input_rate: vk::VertexInputRate::VERTEX,
-        };
-
-    const ATTRIBUTE_DESCRIPTIONS: &'static [vk::VertexInputAttributeDescription] = &[
-        // vec3 3*4 bytes
-        vk::VertexInputAttributeDescription {
-            binding: 0,
-            location: 0,
-            format: vk::Format::R32G32B32_SFLOAT,
-            offset: 0,
-        },
-        // vec3 3*4 bytes
-        vk::VertexInputAttributeDescription {
-            binding: 0,
-            location: 1,
-            format: vk::Format::R32G32B32_SFLOAT,
-            offset: 12,
-        },
-        // vec2 2*4 bytes
-        vk::VertexInputAttributeDescription {
-            binding: 0,
-            location: 2,
-            format: vk::Format::R32G32_SFLOAT,
-            offset: 12 + 12,
-        },
-    ];
-}
-
-#[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-struct GlobalData {
-    color: Vec4,
 }

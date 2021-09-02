@@ -1,6 +1,6 @@
 use crate::Result;
 use hecs::{Entity, World};
-use ivy_graphics::{IntoSet, Mesh, ShaderPass};
+use ivy_graphics::{Mesh, ShaderPass};
 use ivy_resources::{Handle, ResourceCache, Resources};
 use ivy_vulkan::{
     commands::CommandBuffer, descriptors::*, vk, Buffer, BufferAccess, BufferType, VulkanContext,
@@ -478,29 +478,24 @@ impl FrameData {
             size_of::<ObjectData>() as u64 * capacity as u64,
         )?;
 
-        let mut set = Default::default();
-        let mut set_layout = Default::default();
-
-        DescriptorBuilder::new()
+        let set = DescriptorBuilder::new()
             .bind_buffer(0, vk::ShaderStageFlags::VERTEX, &object_buffer)
             .build(
                 context.device(),
                 descriptor_layout_cache,
                 descriptor_allocator,
-                &mut set,
-            )?
-            .layout(descriptor_layout_cache, &mut set_layout)?;
+            )?;
 
         Ok(Self { set, object_buffer })
     }
 }
 
-#[repr(C)]
+#[repr(C, align(16))]
 struct ObjectData {
     mvp: ModelMatrix,
 }
 
-#[repr(C)]
+#[repr(C, align(16))]
 struct IndirectObject {
     cmd: vk::DrawIndexedIndirectCommand,
 }

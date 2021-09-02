@@ -7,10 +7,12 @@ use std::sync::Arc;
 mod allocator;
 mod builder;
 mod layout;
+mod traits;
 
 pub use allocator::*;
 pub use builder::*;
 pub use layout::*;
+pub use traits::*;
 pub use vk::DescriptorSet;
 
 /// Highest binding allowed for descriptor set. This is deliberately set low as the bindings should

@@ -1,10 +1,11 @@
 use std::slice;
 
 use crate::Result;
-use ivy_graphics::IntoSet;
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
-    descriptors::{DescriptorAllocator, DescriptorBuilder, DescriptorLayoutCache, DescriptorSet},
+    descriptors::{
+        DescriptorAllocator, DescriptorBuilder, DescriptorLayoutCache, DescriptorSet, IntoSet,
+    },
     vk::ShaderStageFlags,
     Sampler, Texture, VulkanContext,
 };
@@ -33,12 +34,11 @@ impl Image {
                 resources.get(texture)?.image_view(),
                 resources.get(sampler)?.sampler(),
             )
-            .build_one(
+            .build(
                 context.device(),
                 descriptor_layout_cache,
                 descriptor_allocator,
-            )?
-            .0;
+            )?;
 
         Ok(Self {
             set,

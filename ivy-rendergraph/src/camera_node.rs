@@ -2,9 +2,9 @@ use std::marker::PhantomData;
 
 use anyhow::Context;
 use hecs::Entity;
-use ivy_graphics::{GpuCameraData, IntoSet, Renderer, ShaderPass};
+use ivy_graphics::{GpuCameraData, Renderer, ShaderPass};
 use ivy_resources::{Handle, Storage};
-use ivy_vulkan::{vk::ClearValue, Texture};
+use ivy_vulkan::{descriptors::IntoSet, vk::ClearValue, Texture};
 
 use crate::{AttachmentInfo, Node, NodeKind};
 

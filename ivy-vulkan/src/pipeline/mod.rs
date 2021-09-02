@@ -1,7 +1,6 @@
 use crate::{
     descriptors::{DescriptorLayoutCache, DescriptorLayoutInfo},
-    renderpass::*,
-    Error, Extent, Result,
+    Error, Extent, Result, VertexDesc,
 };
 use arrayvec::ArrayVec;
 use ash::{version::DeviceV1_0, vk::PipelineLayout};
@@ -14,30 +13,30 @@ use ash::vk;
 mod shader;
 use shader::*;
 
-#[derive(Debug, Clone)]
-pub struct PipelineInfo<'a, 'b, 'c> {
+#[derive(Clone)]
+pub struct PipelineInfo<'a> {
+    pub renderpass: vk::RenderPass,
+    pub subpass: u32,
     pub vertexshader: PathBuf,
     pub fragmentshader: PathBuf,
-    pub vertex_bindings: &'a [vk::VertexInputBindingDescription],
-    pub vertex_attributes: &'b [vk::VertexInputAttributeDescription],
     pub samples: vk::SampleCountFlags,
     pub extent: Extent,
     pub polygon_mode: vk::PolygonMode,
     pub cull_mode: vk::CullModeFlags,
     pub front_face: vk::FrontFace,
     /// The bindings specified
-    pub set_layouts: &'c [DescriptorLayoutInfo],
+    pub set_layouts: &'a [DescriptorLayoutInfo],
     pub color_attachment_count: u32,
     pub depth_attachment: bool,
 }
 
-impl<'a, 'b, 'c> Default for PipelineInfo<'a, 'b, 'c> {
+impl<'a> Default for PipelineInfo<'a> {
     fn default() -> Self {
         Self {
+            renderpass: vk::RenderPass::null(),
+            subpass: 0,
             vertexshader: "".into(),
             fragmentshader: "".into(),
-            vertex_bindings: &[],
-            vertex_attributes: &[],
             samples: vk::SampleCountFlags::TYPE_1,
             extent: (0, 0).into(),
             polygon_mode: vk::PolygonMode::FILL,
@@ -57,13 +56,14 @@ pub struct Pipeline {
 }
 
 impl Pipeline {
-    pub fn new(
+    pub fn new<V>(
         device: Arc<Device>,
         layout_cache: &mut DescriptorLayoutCache,
-        renderpass: &RenderPass,
-        subpass: u32,
         info: &PipelineInfo,
-    ) -> Result<Self> {
+    ) -> Result<Self>
+    where
+        V: VertexDesc,
+    {
         let mut vertexshader = File::open(&info.vertexshader)
             .map_err(|e| Error::Io(e, Some(info.vertexshader.clone())))?;
 
@@ -97,8 +97,8 @@ impl Pipeline {
 
         // No vertices for now
         let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::builder()
-            .vertex_binding_descriptions(&info.vertex_bindings)
-            .vertex_attribute_descriptions(&info.vertex_attributes);
+            .vertex_binding_descriptions(V::BINDING_DESCRIPTIONS)
+            .vertex_attribute_descriptions(V::ATTRIBUTE_DESCRIPTIONS);
 
         let input_assembly = vk::PipelineInputAssemblyStateCreateInfo::builder()
             .topology(vk::PrimitiveTopology::TRIANGLE_LIST)
@@ -189,8 +189,8 @@ impl Pipeline {
             .multisample_state(&multisampling)
             .color_blend_state(&color_blending)
             .layout(layout)
-            .render_pass(renderpass.renderpass())
-            .subpass(subpass);
+            .render_pass(info.renderpass)
+            .subpass(info.subpass);
 
         let create_info = if info.depth_attachment {
             create_info.depth_stencil_state(&depth_stencil)

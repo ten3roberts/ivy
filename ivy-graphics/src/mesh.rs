@@ -29,12 +29,12 @@ impl Vertex {
 }
 
 impl vulkan::VertexDesc for Vertex {
-    const BINDING_DESCRIPTION: vk::VertexInputBindingDescription =
-        vk::VertexInputBindingDescription {
+    const BINDING_DESCRIPTIONS: &'static [vk::VertexInputBindingDescription] =
+        &[vk::VertexInputBindingDescription {
             binding: 0,
             stride: mem::size_of::<Self>() as u32,
             input_rate: vk::VertexInputRate::VERTEX,
-        };
+        }];
 
     const ATTRIBUTE_DESCRIPTIONS: &'static [vk::VertexInputAttributeDescription] = &[
         // vec3 3*4 bytes

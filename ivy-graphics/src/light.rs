@@ -1,23 +1,30 @@
-use crate::{components::Position, IntoSet, Result};
+use crate::{components::Position, Result};
 use std::{mem::size_of, sync::Arc};
 
 use ash::vk::{DescriptorSet, ShaderStageFlags};
 use hecs::World;
 use ivy_vulkan::{
-    descriptors::{DescriptorAllocator, DescriptorBuilder, DescriptorLayoutCache},
+    descriptors::{DescriptorAllocator, DescriptorBuilder, DescriptorLayoutCache, IntoSet},
     Buffer, VulkanContext,
 };
 use ultraviolet::Vec3;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Light {
-    intensity: f32,
-    color: Vec3,
+    pub radiance: Vec3,
 }
 
 impl Light {
-    pub fn new(intensity: f32, color: Vec3) -> Self {
-        Self { intensity, color }
+    /// Creates a new light from color radience
+    pub fn new(radiance: Vec3) -> Self {
+        Self { radiance }
+    }
+
+    /// Creates a light from color and intensity
+    pub fn from_color(intensity: f32, color: Vec3) -> Self {
+        Self {
+            radiance: intensity * color,
+        }
     }
 }
 
@@ -66,9 +73,8 @@ impl LightManager {
                 DescriptorBuilder::new()
                     .bind_buffer(0, ShaderStageFlags::FRAGMENT, &buffer.0)
                     .bind_buffer(1, ShaderStageFlags::FRAGMENT, &buffer.1)
-                    .build_one(device, descriptor_layout_cache, descriptor_allocator)
+                    .build(device, descriptor_layout_cache, descriptor_allocator)
                     .map_err(|e| e.into())
-                    .map(|val| val.0)
             })
             .collect::<Result<Vec<_>>>()?;
 
@@ -94,9 +100,9 @@ impl LightManager {
                     .iter()
                     .map(|(_, (light, position))| LightData {
                         position: position.0,
-                        color: light.color,
-                        intensity: light.intensity,
-                        distance_to_center: (center - position.0).mag(),
+                        radiance: light.radiance,
+                        reference_illuminance: (light.radiance / (center - position.0).mag_sq())
+                            .mag(),
                         ..Default::default()
                     }),
             );
@@ -118,6 +124,19 @@ impl LightManager {
 
         Ok(())
     }
+
+    /// Get a reference to the light manager's light buffers.
+    pub fn buffers(&self) -> &[(Buffer, Buffer)] {
+        &self.light_buffers
+    }
+
+    pub fn scene_buffer(&self, current_frame: usize) -> &Buffer {
+        &self.light_buffers[current_frame].0
+    }
+
+    pub fn light_buffer(&self, current_frame: usize) -> &Buffer {
+        &self.light_buffers[current_frame].1
+    }
 }
 
 impl IntoSet for LightManager {
@@ -131,21 +150,20 @@ impl IntoSet for LightManager {
 }
 
 /// Per light data
-#[repr(C)]
+#[repr(C, align(16))]
 #[derive(Default, PartialEq, Debug)]
 struct LightData {
     position: Vec3,
-    intensity: f32,
-    color: Vec3,
-    distance_to_center: f32,
+    reference_illuminance: f32,
+    radiance: Vec3,
 }
 
 impl std::cmp::Eq for LightData {}
 
 impl std::cmp::PartialOrd for LightData {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.distance_to_center
-            .partial_cmp(&other.distance_to_center)
+        self.reference_illuminance
+            .partial_cmp(&other.reference_illuminance)
     }
 }
 

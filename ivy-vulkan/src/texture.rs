@@ -1,5 +1,7 @@
+use crate::descriptors::DescriptorBindable;
 use crate::{buffer, commands::*, context::VulkanContext, extent::Extent, Error, Result};
-use ash::vk::ImageAspectFlags;
+use ash::vk::{ImageAspectFlags, ImageView};
+use std::ops::Deref;
 use std::{path::Path, sync::Arc};
 
 use ash::version::DeviceV1_0;
@@ -461,4 +463,48 @@ fn transition_layout(
     commandpool.single_time_command(queue, |commandbuffer| {
         commandbuffer.pipeline_barrier(src_stage_mask, dst_stage_mask, &[barrier])
     })
+}
+
+impl DescriptorBindable for Texture {
+    fn bind_descriptor_resource<'a>(
+        &self,
+        binding: u32,
+        stage: vk::ShaderStageFlags,
+        builder: &'a mut crate::descriptors::DescriptorBuilder,
+    ) -> &'a mut crate::descriptors::DescriptorBuilder {
+        builder.bind_image(binding, stage, self)
+    }
+}
+
+pub struct InputAttachment(pub ImageView);
+
+impl From<InputAttachment> for ImageView {
+    fn from(val: InputAttachment) -> Self {
+        val.0
+    }
+}
+
+impl AsRef<ImageView> for InputAttachment {
+    fn as_ref(&self) -> &ImageView {
+        &self.0
+    }
+}
+
+impl DescriptorBindable for InputAttachment {
+    fn bind_descriptor_resource<'a>(
+        &self,
+        binding: u32,
+        stage: vk::ShaderStageFlags,
+        builder: &'a mut crate::descriptors::DescriptorBuilder,
+    ) -> &'a mut crate::descriptors::DescriptorBuilder {
+        builder.bind_input_attachment(binding, stage, self.0)
+    }
+}
+
+impl Deref for InputAttachment {
+    type Target = ImageView;
+
+    fn deref(&self) -> &ImageView {
+        &self.0
+    }
 }

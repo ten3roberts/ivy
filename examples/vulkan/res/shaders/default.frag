@@ -8,11 +8,19 @@ layout(location = 2) in vec2 fragTexCoord;
 layout(location = 0) out vec4 outAlbedo;
 layout(location = 1) out vec4 outPosition;
 layout(location = 2) out vec3 outNormal;
+layout(location = 3) out vec2 metallicRoughness;
 
 layout(set = 2, binding = 0) uniform sampler2D albedo; 
+
+layout(set = 2, binding = 1) uniform MaterialData {
+  float roughness;
+  float metallic;
+} materialData;
 
 void main() {
   outAlbedo = texture(albedo, fragTexCoord);
   outPosition = vec4(fragPosition, 0);
   outNormal = fragNormal;
+
+  metallicRoughness = vec2(materialData.roughness, materialData.metallic);
 }

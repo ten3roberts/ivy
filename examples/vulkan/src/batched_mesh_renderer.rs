@@ -328,7 +328,7 @@ impl FrameData {
     }
 }
 
-#[repr(C)]
+#[repr(C, align(16))]
 struct ObjectData {
     mvp: Mat4,
 }

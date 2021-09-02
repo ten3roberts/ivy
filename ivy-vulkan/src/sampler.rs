@@ -1,4 +1,5 @@
-use crate::{Result, VulkanContext};
+use crate::descriptors::DescriptorBindable;
+use crate::{Result, Texture, VulkanContext};
 use std::sync::Arc;
 
 use ash::version::DeviceV1_0;
@@ -89,5 +90,27 @@ impl Drop for Sampler {
         unsafe {
             self.context.device().destroy_sampler(self.sampler, None);
         }
+    }
+}
+
+impl DescriptorBindable for Sampler {
+    fn bind_descriptor_resource<'a>(
+        &self,
+        binding: u32,
+        stage: vk::ShaderStageFlags,
+        builder: &'a mut crate::descriptors::DescriptorBuilder,
+    ) -> &'a mut crate::descriptors::DescriptorBuilder {
+        builder.bind_sampler(binding, stage, self)
+    }
+}
+
+impl DescriptorBindable for (Texture, Sampler) {
+    fn bind_descriptor_resource<'a>(
+        &self,
+        binding: u32,
+        stage: vk::ShaderStageFlags,
+        builder: &'a mut crate::descriptors::DescriptorBuilder,
+    ) -> &'a mut crate::descriptors::DescriptorBuilder {
+        builder.bind_combined_image_sampler(binding, stage, &self.0, &self.1)
     }
 }

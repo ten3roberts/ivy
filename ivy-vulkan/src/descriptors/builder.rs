@@ -1,12 +1,12 @@
-use crate::Result;
-use crate::{Buffer, BufferType};
+use crate::{Buffer, BufferType, Result};
 use arrayvec::ArrayVec;
-use ash::version::DeviceV1_0;
-use ash::vk::WriteDescriptorSet;
-use ash::vk::{self, ImageLayout};
-use ash::Device;
+use ash::{
+    version::DeviceV1_0,
+    vk::{self, ImageLayout, WriteDescriptorSet},
+    Device,
+};
 
-use super::{DescriptorAllocator, DescriptorLayoutCache, DescriptorSetBinding};
+use super::{DescriptorAllocator, DescriptorBindable, DescriptorLayoutCache, DescriptorSetBinding};
 use super::{DescriptorLayoutInfo, MAX_BINDINGS};
 use vk::{DescriptorType, ShaderStageFlags};
 
@@ -38,6 +38,19 @@ impl Default for DescriptorBuilder {
 impl DescriptorBuilder {
     pub fn new() -> Self {
         Default::default()
+    }
+
+    pub fn from_resources(resources: &[(&dyn DescriptorBindable, ShaderStageFlags)]) -> Self {
+        let mut builder = Self::new();
+
+        resources
+            .iter()
+            .enumerate()
+            .fold(&mut builder, |builder, (i, (resource, stage))| {
+                resource.bind_descriptor_resource(i as u32, *stage, builder)
+            });
+
+        builder
     }
 
     fn add(&mut self, binding: DescriptorSetBinding, write: WriteDescriptorSet) {
@@ -140,6 +153,74 @@ impl DescriptorBuilder {
         self
     }
 
+    pub fn bind_sampler<S>(
+        &mut self,
+        binding: u32,
+        stage: ShaderStageFlags,
+        sampler: S,
+    ) -> &mut Self
+    where
+        S: Into<vk::Sampler>,
+    {
+        self.image_infos[binding as usize] = vk::DescriptorImageInfo {
+            sampler: sampler.into(),
+            image_view: vk::ImageView::null(),
+            image_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        };
+
+        let write = WriteDescriptorSet {
+            dst_binding: binding,
+            dst_array_element: 0,
+            descriptor_count: 1,
+            descriptor_type: DescriptorType::SAMPLED_IMAGE,
+            p_image_info: &self.image_infos[binding as usize],
+            ..Default::default()
+        };
+
+        let binding = DescriptorSetBinding {
+            binding,
+            descriptor_type: DescriptorType::COMBINED_IMAGE_SAMPLER,
+            descriptor_count: 1,
+            stage_flags: stage,
+            p_immutable_samplers: std::ptr::null(),
+        };
+
+        self.add(binding, write);
+
+        self
+    }
+    pub fn bind_image<T>(&mut self, binding: u32, stage: ShaderStageFlags, texture: T) -> &mut Self
+    where
+        T: Into<vk::ImageView>,
+    {
+        self.image_infos[binding as usize] = vk::DescriptorImageInfo {
+            sampler: vk::Sampler::null(),
+            image_view: texture.into(),
+            image_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        };
+
+        let write = WriteDescriptorSet {
+            dst_binding: binding,
+            dst_array_element: 0,
+            descriptor_count: 1,
+            descriptor_type: DescriptorType::SAMPLED_IMAGE,
+            p_image_info: &self.image_infos[binding as usize],
+            ..Default::default()
+        };
+
+        let binding = DescriptorSetBinding {
+            binding,
+            descriptor_type: DescriptorType::COMBINED_IMAGE_SAMPLER,
+            descriptor_count: 1,
+            stage_flags: stage,
+            p_immutable_samplers: std::ptr::null(),
+        };
+
+        self.add(binding, write);
+
+        self
+    }
+
     /// Binds a combined image sampler descriptor type.
     /// The texture is expected to be in in SHADER_READ_ONLY_OPTIMAL.
     pub fn bind_combined_image_sampler<T, S>(
@@ -221,23 +302,24 @@ impl DescriptorBuilder {
     }
 
     /// Allocates and writes descriptor set into `set`. Can be chained.
-    pub fn build(
+    pub fn build_multiple(
         &mut self,
         device: &Device,
         cache: &mut DescriptorLayoutCache,
         allocator: &mut DescriptorAllocator,
         set: &mut vk::DescriptorSet,
     ) -> Result<&mut Self> {
-        *set = self.build_one(device, cache, allocator)?.0;
+        *set = self.build(device, cache, allocator)?;
         Ok(self)
     }
 
-    pub fn build_one(
+    // Builds a descriptor set from the builder and returns it
+    pub fn build(
         &mut self,
         device: &Device,
         cache: &mut DescriptorLayoutCache,
         allocator: &mut DescriptorAllocator,
-    ) -> Result<(vk::DescriptorSet, vk::DescriptorSetLayout)> {
+    ) -> Result<vk::DescriptorSet> {
         let mut layout = Default::default();
 
         self.layout(cache, &mut layout)?;
@@ -251,7 +333,7 @@ impl DescriptorBuilder {
 
         unsafe { device.update_descriptor_sets(&self.writes, &[]) };
 
-        Ok((set, layout))
+        Ok(set)
     }
 
     /// Returns the descriptor set layout by writing to `layout`. Uses the provided cache to fetch

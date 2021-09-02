@@ -1,56 +1,68 @@
-use std::slice;
+use std::{slice, sync::Arc};
 
-use crate::{IntoSet, Result};
-use ash::vk::{DescriptorSet, DescriptorSetLayout, ShaderStageFlags};
+use crate::Result;
+use ash::vk::{DescriptorSet, ShaderStageFlags};
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
-    descriptors::{DescriptorAllocator, DescriptorBuilder, DescriptorLayoutCache},
-    Sampler, Texture, VulkanContext,
+    descriptors::{DescriptorAllocator, DescriptorBuilder, DescriptorLayoutCache, IntoSet},
+    Buffer, Sampler, Texture, VulkanContext,
 };
 
 /// A material contains shader properties such as albedo and other parameters. A material does not
 /// define the graphics pipeline nor shaders as that is per pass dependent.
 pub struct Material {
-    layout: DescriptorSetLayout,
     set: DescriptorSet,
     albedo: Handle<Texture>,
     sampler: Handle<Sampler>,
+    roughness: f32,
+    metallic: f32,
+    buffer: Buffer,
 }
 
 impl Material {
     /// Creates a new material with albedo using the provided sampler
     pub fn new(
-        context: &VulkanContext,
+        context: Arc<VulkanContext>,
         descriptor_layout_cache: &mut DescriptorLayoutCache,
         descriptor_allocator: &mut DescriptorAllocator,
         resources: &Resources,
         albedo: Handle<Texture>,
         sampler: Handle<Sampler>,
+        roughness: f32,
+        metallic: f32,
     ) -> Result<Self> {
-        let (set, layout) = DescriptorBuilder::new()
+        let buffer = Buffer::new(
+            context.clone(),
+            ivy_vulkan::BufferType::Uniform,
+            ivy_vulkan::BufferAccess::Staged,
+            &[MaterialData {
+                roughness,
+                metallic,
+            }],
+        )?;
+
+        let set = DescriptorBuilder::new()
             .bind_combined_image_sampler(
                 0,
                 ShaderStageFlags::FRAGMENT,
                 resources.get(albedo)?.image_view(),
                 resources.get(sampler)?.sampler(),
             )
-            .build_one(
+            .bind_buffer(1, ShaderStageFlags::FRAGMENT, &buffer)
+            .build(
                 context.device(),
                 descriptor_layout_cache,
                 descriptor_allocator,
             )?;
 
         Ok(Self {
-            layout,
             set,
             albedo,
             sampler,
+            roughness,
+            metallic,
+            buffer,
         })
-    }
-
-    /// Get a reference to the material's descriptor set.
-    pub fn layout(&self) -> DescriptorSetLayout {
-        self.layout
     }
 
     pub fn albedo(&self) -> Handle<Texture> {
@@ -59,6 +71,21 @@ impl Material {
 
     pub fn sampler(&self) -> Handle<Sampler> {
         self.sampler
+    }
+
+    /// Get the material's roughness.
+    pub fn roughness(&self) -> f32 {
+        self.roughness
+    }
+
+    /// Get the material's metallic.
+    pub fn metallic(&self) -> f32 {
+        self.metallic
+    }
+
+    /// Get a reference to the material's buffer.
+    pub fn buffer(&self) -> &Buffer {
+        &self.buffer
     }
 }
 
@@ -70,4 +97,10 @@ impl IntoSet for Material {
     fn sets(&self) -> &[DescriptorSet] {
         slice::from_ref(&self.set)
     }
+}
+
+#[repr(C)]
+struct MaterialData {
+    roughness: f32,
+    metallic: f32,
 }

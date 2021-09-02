@@ -386,7 +386,7 @@ dependencies = [
 
 [[package]]
 name = "ivy-graphics"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anymap",
  "ash",
@@ -412,7 +412,7 @@ dependencies = [
 
 [[package]]
 name = "ivy-rendergraph"
-version = "0.1.0"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "hecs",
@@ -458,7 +458,7 @@ dependencies = [
 
 [[package]]
 name = "ivy-vulkan"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "arrayvec",
  "ash",

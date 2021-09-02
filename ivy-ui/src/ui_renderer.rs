@@ -98,7 +98,7 @@ impl FrameData {
     }
 }
 
-#[repr(C)]
+#[repr(C, align(16))]
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct UIData {
     color: Vec4,

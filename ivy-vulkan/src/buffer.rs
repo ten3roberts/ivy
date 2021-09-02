@@ -1,6 +1,8 @@
 //! A buffer represents a piece of memory that can be accessed by the GPU and used to store and
 //! write data. Buffers
-use crate::{commands::*, context::VulkanContext, Error, Extent, Result};
+use crate::{
+    commands::*, context::VulkanContext, descriptors::DescriptorBindable, Error, Extent, Result,
+};
 use std::{mem, sync::Arc};
 
 use ash::vk;
@@ -430,4 +432,15 @@ pub fn copy_to_image(
     commandpool.single_time_command(queue, |commandbuffer| {
         commandbuffer.copy_buffer_image(buffer, image, layout, &[region])
     })
+}
+
+impl DescriptorBindable for Buffer {
+    fn bind_descriptor_resource<'a>(
+        &self,
+        binding: u32,
+        stage: vk::ShaderStageFlags,
+        builder: &'a mut crate::descriptors::DescriptorBuilder,
+    ) -> &'a mut crate::descriptors::DescriptorBuilder {
+        builder.bind_buffer(binding, stage, self)
+    }
 }

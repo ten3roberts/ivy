@@ -1,14 +1,14 @@
-use crate::{IntoSet, Result};
+use crate::{components::Position, Result};
 use ash::vk::{DescriptorSet, ShaderStageFlags};
 use derive_more::{AsRef, Deref, From, Into};
 use hecs::World;
 use ivy_resources::Handle;
 use ivy_vulkan::{
-    descriptors::{DescriptorAllocator, DescriptorBuilder, DescriptorLayoutCache},
+    descriptors::{DescriptorAllocator, DescriptorBuilder, DescriptorLayoutCache, IntoSet},
     Buffer, Texture, VulkanContext,
 };
 use std::sync::Arc;
-use ultraviolet::Mat4;
+use ultraviolet::{Mat4, Vec4};
 
 /// A camera holds a view and projection matrix.
 /// Use a system to update view matrix according to position and rotation.
@@ -93,25 +93,12 @@ impl Default for Camera {
     }
 }
 
-#[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[repr(C, align(16))]
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
 /// GPU side camera data
 pub struct CameraData {
     pub viewproj: Mat4,
-}
-
-impl CameraData {
-    pub fn new(viewproj: Mat4) -> Self {
-        Self { viewproj }
-    }
-}
-
-impl Default for CameraData {
-    fn default() -> Self {
-        Self {
-            viewproj: Mat4::identity(),
-        }
-    }
+    pub position: Vec4,
 }
 
 #[derive(AsRef, Deref, Into, From)]
@@ -163,12 +150,11 @@ impl GpuCameraData {
             .map(|u| {
                 DescriptorBuilder::new()
                     .bind_buffer(0, ShaderStageFlags::VERTEX, u)
-                    .build_one(
+                    .build(
                         context.device(),
                         descriptor_layout_cache,
                         descriptor_allocator,
                     )
-                    .map(|(a, _)| a)
                     .map_err(|e| e.into())
             })
             .collect::<Result<Vec<_>>>()?;
@@ -180,26 +166,27 @@ impl GpuCameraData {
     }
 
     /// Get a reference to the g p u camera data's uniformbuffers.
-    pub fn uniformbuffers(&self) -> &[Buffer] {
+    pub fn buffers(&self) -> &[Buffer] {
         &self.uniformbuffers
     }
 
-    /// Get a reference to the g p u camera data's sets.
-    pub fn sets(&self) -> &[DescriptorSet] {
-        &self.sets
-    }
-
-    pub fn uniformbuffer(&self, index: usize) -> &Buffer {
+    pub fn buffer(&self, index: usize) -> &Buffer {
         &self.uniformbuffers[index]
     }
 
     // Updates the camera gpu side data from cpu side data for the current frame.
-    pub fn update(&mut self, camera: &Camera, current_frame: usize) -> Result<()> {
+    pub fn update(
+        &mut self,
+        camera: &Camera,
+        position: Position,
+        current_frame: usize,
+    ) -> Result<()> {
         self.uniformbuffers[current_frame]
             .fill(
                 0,
                 &[CameraData {
                     viewproj: camera.viewproj(),
+                    position: position.0.into_homogeneous_vector(),
                 }],
             )
             .map_err(|e| e.into())
@@ -207,9 +194,11 @@ impl GpuCameraData {
 
     pub fn update_all(world: &mut World, current_frame: usize) -> Result<()> {
         world
-            .query_mut::<(&Camera, &mut GpuCameraData)>()
+            .query_mut::<(&Camera, &mut GpuCameraData, &Position)>()
             .into_iter()
-            .try_for_each(|(_, (camera, gpu_camera))| gpu_camera.update(camera, current_frame))
+            .try_for_each(|(_, (camera, gpu_camera, position))| {
+                gpu_camera.update(camera, *position, current_frame)
+            })
     }
 
     // Creates gpu side data for all camera which do not already have any.

@@ -1,4 +1,4 @@
-use crate::{IntoSet, Renderer, Result};
+use crate::{Renderer, Result};
 use hecs::{Entity, World};
 use ivy_resources::{Handle, ResourceCache, Resources};
 use ivy_vulkan::{
@@ -505,18 +505,13 @@ impl FrameData {
             size_of::<ObjectData>() as u64 * capacity as u64,
         )?;
 
-        let mut set = Default::default();
-        let mut set_layout = Default::default();
-
-        DescriptorBuilder::new()
+        let set = DescriptorBuilder::new()
             .bind_buffer(0, vk::ShaderStageFlags::VERTEX, &object_buffer)
             .build(
                 context.device(),
                 descriptor_layout_cache,
                 descriptor_allocator,
-                &mut set,
-            )?
-            .layout(descriptor_layout_cache, &mut set_layout)?;
+            )?;
 
         Ok(Self { set, object_buffer })
     }

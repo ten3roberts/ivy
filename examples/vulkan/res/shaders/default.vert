@@ -11,6 +11,7 @@ layout(location = 2) out vec2 fragTexCoord;
 
 layout(binding = 0) uniform CameraData {
   mat4 viewproj;
+  vec4 position;
 } cameraData;
 
 struct ObjectData {
