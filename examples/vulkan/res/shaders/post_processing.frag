@@ -24,6 +24,7 @@ layout(binding = 4) uniform CameraData {
 } cameraData;
 
 layout(binding = 5) uniform LightSceneData {
+  vec3 ambient;
   uint num_lights;
 } lightSceneData;
 
@@ -112,9 +113,7 @@ vec3 PBR(vec3 albedo, vec3 pos, vec3 normal, float roughness, float metallic) {
     Lo += (kD * albedo / PI + specular) * radiance * ndotL;
   }
 
-  /* Lo += vec3(1.0) * dot(cameraDir, vec3(0,0,1)); */
-
-  return Lo;
+  return Lo + lightSceneData.ambient * albedo;
 }
 
 void main() {

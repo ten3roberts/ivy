@@ -363,6 +363,7 @@ impl VulkanLayer {
             &mut descriptor_layout_cache,
             &mut descriptor_allocator,
             10,
+            Vec3::one() * 0.01,
             FRAMES_IN_FLIGHT,
         )?)?;
 
