@@ -20,7 +20,7 @@ pub enum Error {
     #[error("Dependency cycle in rendergraph")]
     DependencyCycle,
 
-    #[error("Node read attachment is missing corresponding write attachment for {0:?}{1:?}")]
+    #[error("Node read attachment is missing corresponding write attachment for {1:?} required by node {0:?}")]
     MissingWrite(NodeIndex, Handle<Texture>),
 
     #[error("Resource acquisition error {0}")]

@@ -411,8 +411,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "ivy-pbr"
+name = "ivy-postprocessing"
 version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "hecs",
+ "itertools",
+ "ivy-graphics",
+ "ivy-rendergraph",
+ "ivy-resources",
+ "ivy-vulkan",
+ "ultraviolet",
+]
 
 [[package]]
 name = "ivy-rendergraph"
@@ -970,6 +980,7 @@ dependencies = [
  "ivy-core",
  "ivy-graphics",
  "ivy-input",
+ "ivy-postprocessing",
  "ivy-rendergraph",
  "ivy-resources",
  "ivy-ui",

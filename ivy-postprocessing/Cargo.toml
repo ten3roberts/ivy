@@ -1,0 +1,17 @@
+[package]
+name = "ivy-postprocessing"
+version = "0.1.0"
+edition = "2018"
+description = "post processing helpers for ivy"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0"
+hecs = { version = "0.5", features = [ "macros" ] }
+itertools = "0.10"
+ivy-graphics = { path = "../ivy-graphics", version = "*" }
+ivy-rendergraph = { path = "../ivy-rendergraph", version = "*" }
+ivy-resources = { path = "../ivy-resources", version = "0.2" }
+ivy-vulkan = { path = "../ivy-vulkan", version = "*" }
+ultraviolet = "0.8"

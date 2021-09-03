@@ -476,17 +476,27 @@ impl DescriptorBindable for Texture {
     }
 }
 
-pub struct InputAttachment(pub ImageView);
+pub struct InputAttachment {
+    pub image: ImageView,
+}
+
+impl InputAttachment {
+    pub fn new<T: AsRef<ImageView>>(texture: T) -> Self {
+        Self {
+            image: *texture.as_ref(),
+        }
+    }
+}
 
 impl From<InputAttachment> for ImageView {
     fn from(val: InputAttachment) -> Self {
-        val.0
+        val.image
     }
 }
 
 impl AsRef<ImageView> for InputAttachment {
     fn as_ref(&self) -> &ImageView {
-        &self.0
+        &self.image
     }
 }
 
@@ -497,7 +507,7 @@ impl DescriptorBindable for InputAttachment {
         stage: vk::ShaderStageFlags,
         builder: &'a mut crate::descriptors::DescriptorBuilder,
     ) -> &'a mut crate::descriptors::DescriptorBuilder {
-        builder.bind_input_attachment(binding, stage, self.0)
+        builder.bind_input_attachment(binding, stage, self.image)
     }
 }
 
@@ -505,6 +515,30 @@ impl Deref for InputAttachment {
     type Target = ImageView;
 
     fn deref(&self) -> &ImageView {
-        &self.0
+        &self.image
+    }
+}
+
+pub struct CombinedImageSampler {
+    pub image: ImageView,
+    pub sampler: vk::Sampler,
+}
+
+impl CombinedImageSampler {
+    pub fn new<T: AsRef<ImageView>, S: AsRef<vk::Sampler>>(texture: T, sampler: S) -> Self {
+        Self {
+            image: *texture.as_ref(),
+            sampler: *sampler.as_ref(),
+        }
+    }
+}
+impl DescriptorBindable for CombinedImageSampler {
+    fn bind_resource<'a>(
+        &self,
+        binding: u32,
+        stage: vk::ShaderStageFlags,
+        builder: &'a mut crate::descriptors::DescriptorBuilder,
+    ) -> &'a mut crate::descriptors::DescriptorBuilder {
+        builder.bind_combined_image_sampler(binding, stage, self.image, self.sampler)
     }
 }

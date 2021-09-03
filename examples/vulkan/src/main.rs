@@ -13,17 +13,15 @@ use ivy_graphics::{
     Vertex,
 };
 use ivy_input::{Input, InputAxis, InputVector};
-use ivy_rendergraph::{AttachmentInfo, CameraNode, FullscreenNode, RenderGraph, SwapchainNode};
+use ivy_postprocessing::node::PostProcessingNode;
+use ivy_postprocessing::pbr::PBRAttachments;
+use ivy_rendergraph::{AttachmentInfo, CameraNode, RenderGraph, SwapchainNode};
 use ivy_resources::{Handle, Resources};
 use ivy_ui::{
     constraints::{AbsoluteOffset, AbsoluteSize, Aspect, RelativeOffset, RelativeSize},
     Canvas, Image, Position2D, Size2D, Widget,
 };
-use ivy_vulkan::{
-    descriptors::*,
-    vk::{CullModeFlags, ShaderStageFlags},
-    *,
-};
+use ivy_vulkan::{vk::CullModeFlags, *};
 use std::{
     sync::{mpsc, Arc},
     time::Duration,
@@ -391,49 +389,6 @@ impl VulkanLayer {
             },
         )?)?;
 
-        let albedo_buffer = resources.insert(Texture::new(
-            context.clone(),
-            &TextureInfo {
-                extent: resources.get(swapchain)?.extent(),
-                mip_levels: 1,
-                usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::INPUT_ATTACHMENT,
-                ..Default::default()
-            },
-        )?)?;
-
-        let position_buffer = resources.insert(Texture::new(
-            context.clone(),
-            &TextureInfo {
-                extent: resources.get(swapchain)?.extent(),
-                mip_levels: 1,
-                usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::INPUT_ATTACHMENT,
-                format: vk::Format::R32G32B32A32_SFLOAT,
-                ..Default::default()
-            },
-        )?)?;
-
-        let normal_buffer = resources.insert(Texture::new(
-            context.clone(),
-            &TextureInfo {
-                extent: resources.get(swapchain)?.extent(),
-                mip_levels: 1,
-                usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::INPUT_ATTACHMENT,
-                format: vk::Format::R8G8B8A8_SNORM,
-                ..Default::default()
-            },
-        )?)?;
-
-        let metallic_roughness_buffer = resources.insert(Texture::new(
-            context.clone(),
-            &TextureInfo {
-                extent: resources.get(swapchain)?.extent(),
-                mip_levels: 1,
-                usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::INPUT_ATTACHMENT,
-                format: vk::Format::R8G8_UNORM,
-                ..Default::default()
-            },
-        )?)?;
-
         let final_diffuse = resources.insert(Texture::new(
             context.clone(),
             &TextureInfo {
@@ -446,30 +401,24 @@ impl VulkanLayer {
             },
         )?)?;
 
-        let albedo_view = resources.get(albedo_buffer)?.image_view();
-        let position_view = resources.get(position_buffer)?.image_view();
-        let normal_view = resources.get(normal_buffer)?.image_view();
-        let mr_view = resources.get(metallic_roughness_buffer)?.image_view();
+        let pbr_attachments = PBRAttachments::new(context.clone(), &resources, swapchain_extent)?;
 
         let camera_data = world.get::<GpuCameraData>(camera)?;
         let light_manager = resources.get_default::<LightManager>()?;
 
-        let fullscreen_sets = DescriptorBuilder::from_mutliple_resources(
-            &context,
-            &[
-                (&InputAttachment(albedo_view), ShaderStageFlags::FRAGMENT),
-                (&InputAttachment(position_view), ShaderStageFlags::FRAGMENT),
-                (&InputAttachment(normal_view), ShaderStageFlags::FRAGMENT),
-                (&InputAttachment(mr_view), ShaderStageFlags::FRAGMENT),
-                (&camera_data.buffers(), ShaderStageFlags::FRAGMENT),
-                (&light_manager.scene_buffers(), ShaderStageFlags::FRAGMENT),
-                (&light_manager.light_buffers(), ShaderStageFlags::FRAGMENT),
-            ],
-            FRAMES_IN_FLIGHT,
-        )?;
-
-        drop(camera_data);
-        drop(light_manager);
+        // let fullscreen_sets = DescriptorBuilder::from_mutliple_resources(
+        //     &context,
+        //     &[
+        //         (&InputAttachment(albedo_view), ShaderStageFlags::FRAGMENT),
+        //         (&InputAttachment(position_view), ShaderStageFlags::FRAGMENT),
+        //         (&InputAttachment(normal_view), ShaderStageFlags::FRAGMENT),
+        //         (&InputAttachment(mr_view), ShaderStageFlags::FRAGMENT),
+        //         (&camera_data.buffers(), ShaderStageFlags::FRAGMENT),
+        //         (&light_manager.scene_buffers(), ShaderStageFlags::FRAGMENT),
+        //         (&light_manager.light_buffers(), ShaderStageFlags::FRAGMENT),
+        //     ],
+        //     FRAMES_IN_FLIGHT,
+        // )?;
 
         let diffuse_node =
             rendergraph.add_node(CameraNode::<DiffusePass, IndirectMeshRenderer>::new(
@@ -479,28 +428,28 @@ impl VulkanLayer {
                     AttachmentInfo {
                         final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
                         initial_layout: ImageLayout::UNDEFINED,
-                        resource: albedo_buffer,
+                        resource: pbr_attachments.albedo,
                         store_op: StoreOp::STORE,
                         load_op: LoadOp::CLEAR,
                     },
                     AttachmentInfo {
                         final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
                         initial_layout: ImageLayout::UNDEFINED,
-                        resource: position_buffer,
+                        resource: pbr_attachments.position,
                         store_op: StoreOp::STORE,
                         load_op: LoadOp::CLEAR,
                     },
                     AttachmentInfo {
                         final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
                         initial_layout: ImageLayout::UNDEFINED,
-                        resource: normal_buffer,
+                        resource: pbr_attachments.normal,
                         store_op: StoreOp::STORE,
                         load_op: LoadOp::CLEAR,
                     },
                     AttachmentInfo {
                         final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
                         initial_layout: ImageLayout::UNDEFINED,
-                        resource: metallic_roughness_buffer,
+                        resource: pbr_attachments.roughness_metallic,
                         store_op: StoreOp::STORE,
                         load_op: LoadOp::CLEAR,
                     },
@@ -523,33 +472,22 @@ impl VulkanLayer {
                 ],
             ));
 
-        let fullscreen_node = rendergraph.add_node(FullscreenNode::<
-            PostProcessingPass,
-            FullscreenRenderer,
-        >::new(
-            resources.default::<FullscreenRenderer>()?,
-            vec![AttachmentInfo {
-                final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-                initial_layout: ImageLayout::UNDEFINED,
-                resource: final_diffuse.into(),
-                store_op: StoreOp::STORE,
-                load_op: LoadOp::CLEAR,
-            }],
-            vec![],
-            vec![
-                albedo_buffer,
-                position_buffer,
-                normal_buffer,
-                metallic_roughness_buffer,
+        let fullscreen_node = rendergraph.add_node(PostProcessingNode::<PostProcessingPass>::new(
+            context.clone(),
+            &resources,
+            &[],
+            &pbr_attachments.as_slice(),
+            &[
+                &camera_data.buffers(),
+                &light_manager.scene_buffers(),
+                &light_manager.light_buffers(),
             ],
-            None,
-            vec![
-                ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
-                ClearValue::DepthStencil(1.0, 0).into(),
-            ],
-            vec![&fullscreen_sets],
+            &[final_diffuse],
             FRAMES_IN_FLIGHT,
-        ));
+        )?);
+
+        drop(camera_data);
+        drop(light_manager);
 
         let swapchain_node = rendergraph.add_node(SwapchainNode::new(
             context.clone(),

@@ -82,7 +82,7 @@ pub trait MultiDescriptorBindable {
 
 impl<T> MultiDescriptorBindable for &[T]
 where
-    T: DescriptorBindable + Sized,
+    T: DescriptorBindable,
 {
     fn bind_resource_for<'a>(
         &self,

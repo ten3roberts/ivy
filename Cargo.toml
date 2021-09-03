@@ -8,7 +8,7 @@ members = [
   "ivy-stb",
   "ivy-ui",
   "ivy-vulkan",
-  "ivy-pbr",
+  "ivy-postprocessing",
 
   "examples/sandbox",
   "examples/vulkan"
