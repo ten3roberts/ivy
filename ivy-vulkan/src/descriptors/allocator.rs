@@ -38,7 +38,7 @@ impl Pool {
 /// Manages descriptor allocations by automatically managing pools for each layout
 pub struct DescriptorAllocator {
     device: Arc<Device>,
-    sub_allocators: RwLock<HashMap<DescriptorSetLayout, Mutex<DescriptorLayoutAllocator>>>,
+    sub_allocators: RwLock<HashMap<DescriptorSetLayout, Mutex<DescriptorSubAllocator>>>,
     set_count: u32,
 }
 
@@ -61,7 +61,6 @@ impl DescriptorAllocator {
         set_count: u32,
     ) -> Result<Vec<vk::DescriptorSet>> {
         let device = &self.device;
-        let self_set_count = self.set_count;
 
         let guard = self.sub_allocators.read();
 
@@ -74,11 +73,11 @@ impl DescriptorAllocator {
                 .write()
                 .entry(layout)
                 .or_insert_with(|| {
-                    Mutex::new(DescriptorLayoutAllocator::new(
+                    Mutex::new(DescriptorSubAllocator::new(
                         device.clone(),
                         layout,
                         layout_info,
-                        self_set_count,
+                        self.set_count,
                     ))
                 })
                 .lock()
@@ -123,7 +122,7 @@ impl DescriptorAllocator {
 /// pools when no free are available
 
 /// Manages allocation for a single descriptor set layout
-struct DescriptorLayoutAllocator {
+struct DescriptorSubAllocator {
     device: Arc<Device>,
     layout: DescriptorSetLayout,
     set_count: u32,
@@ -134,7 +133,7 @@ struct DescriptorLayoutAllocator {
     sizes: Vec<vk::DescriptorPoolSize>,
 }
 
-impl DescriptorLayoutAllocator {
+impl DescriptorSubAllocator {
     /// Creates a new descriptor allocator. Stores several pools contains `set_count` available
     /// descriptors each. `sizes` describes the relative
     pub fn new(
@@ -143,12 +142,14 @@ impl DescriptorLayoutAllocator {
         layout_info: &DescriptorLayoutInfo,
         set_count: u32,
     ) -> Self {
+        assert!(layout_info.bindings().len() > 0);
+
         let sizes = layout_info
             .bindings()
             .iter()
             .map(|binding| vk::DescriptorPoolSize {
                 ty: binding.descriptor_type,
-                descriptor_count: set_count,
+                descriptor_count: set_count * binding.descriptor_count,
             })
             .collect();
 
@@ -245,7 +246,7 @@ impl DescriptorLayoutAllocator {
     }
 }
 
-impl Drop for DescriptorLayoutAllocator {
+impl Drop for DescriptorSubAllocator {
     fn drop(&mut self) {
         self.clear();
     }

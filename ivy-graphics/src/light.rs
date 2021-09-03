@@ -29,7 +29,8 @@ impl Light {
 }
 
 pub struct LightManager {
-    light_buffers: Vec<(Buffer, Buffer)>,
+    scene_buffers: Vec<Buffer>,
+    light_buffers: Vec<Buffer>,
     sets: Vec<DescriptorSet>,
     // All registered lights. Note: not all lights may be uploaded to the GPU
     lights: Vec<LightData>,
@@ -46,37 +47,44 @@ impl LightManager {
         ambient_radience: Vec3,
         frames_in_flight: usize,
     ) -> Result<Self> {
-        let light_buffers = (0..frames_in_flight)
+        let scene_buffers = (0..frames_in_flight)
             .map(|_| -> Result<_> {
-                Ok((
-                    Buffer::new_uninit(
-                        context.clone(),
-                        ivy_vulkan::BufferType::Uniform,
-                        ivy_vulkan::BufferAccess::MappedPersistent,
-                        size_of::<LightSceneData>() as u64,
-                    )?,
-                    Buffer::new_uninit(
-                        context.clone(),
-                        ivy_vulkan::BufferType::Storage,
-                        ivy_vulkan::BufferAccess::MappedPersistent,
-                        size_of::<LightData>() as u64 * max_lights,
-                    )?,
-                ))
+                Buffer::new_uninit(
+                    context.clone(),
+                    ivy_vulkan::BufferType::Uniform,
+                    ivy_vulkan::BufferAccess::MappedPersistent,
+                    size_of::<LightSceneData>() as u64,
+                )
+                .map_err(|e| e.into())
             })
             .collect::<Result<Vec<_>>>()?;
 
-        let sets = light_buffers
+        let light_buffers = (0..frames_in_flight)
+            .map(|_| -> Result<_> {
+                Buffer::new_uninit(
+                    context.clone(),
+                    ivy_vulkan::BufferType::Storage,
+                    ivy_vulkan::BufferAccess::MappedPersistent,
+                    size_of::<LightData>() as u64 * max_lights,
+                )
+                .map_err(|e| e.into())
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        let sets = scene_buffers
             .iter()
+            .zip(&light_buffers)
             .map(|buffer| {
                 DescriptorBuilder::new()
-                    .bind_buffer(0, ShaderStageFlags::FRAGMENT, &buffer.0)
-                    .bind_buffer(1, ShaderStageFlags::FRAGMENT, &buffer.1)
+                    .bind_buffer(0, ShaderStageFlags::FRAGMENT, buffer.0)
+                    .bind_buffer(1, ShaderStageFlags::FRAGMENT, buffer.1)
                     .build(&context)
                     .map_err(|e| e.into())
             })
             .collect::<Result<Vec<_>>>()?;
 
         Ok(Self {
+            scene_buffers,
             light_buffers,
             sets,
             lights: Vec::new(),
@@ -110,11 +118,9 @@ impl LightManager {
         self.num_lights = self.max_lights.min(self.lights.len() as u64);
 
         // Use the first `max_lights` lights and upload to gpu
-        self.light_buffers[current_frame]
-            .1
-            .fill(0, &self.lights[0..self.num_lights as usize])?;
+        self.light_buffers[current_frame].fill(0, &self.lights[0..self.num_lights as usize])?;
 
-        self.light_buffers[current_frame].0.fill(
+        self.scene_buffers[current_frame].fill(
             0,
             &[LightSceneData {
                 num_lights: self.num_lights as u32,
@@ -125,17 +131,20 @@ impl LightManager {
         Ok(())
     }
 
-    /// Get a reference to the light manager's light buffers.
-    pub fn buffers(&self) -> &[(Buffer, Buffer)] {
+    pub fn scene_buffers(&self) -> &[Buffer] {
+        &self.scene_buffers
+    }
+
+    pub fn light_buffers(&self) -> &[Buffer] {
         &self.light_buffers
     }
 
     pub fn scene_buffer(&self, current_frame: usize) -> &Buffer {
-        &self.light_buffers[current_frame].0
+        &self.scene_buffers[current_frame]
     }
 
     pub fn light_buffer(&self, current_frame: usize) -> &Buffer {
-        &self.light_buffers[current_frame].1
+        &self.light_buffers[current_frame]
     }
 }
 

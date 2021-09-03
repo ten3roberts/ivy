@@ -31,6 +31,7 @@ impl DescriptorPool {
         max_sets: u32,
         uniformbuffer_count: u32,
         texture_count: u32,
+        input_count: u32,
     ) -> Result<Self> {
         let pool_sizes = [
             vk::DescriptorPoolSize {
@@ -40,6 +41,10 @@ impl DescriptorPool {
             vk::DescriptorPoolSize {
                 ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                 descriptor_count: texture_count,
+            },
+            vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::INPUT_ATTACHMENT,
+                descriptor_count: input_count,
             },
         ];
 

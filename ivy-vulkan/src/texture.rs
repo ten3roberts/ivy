@@ -466,7 +466,7 @@ fn transition_layout(
 }
 
 impl DescriptorBindable for Texture {
-    fn bind_descriptor_resource<'a>(
+    fn bind_resource<'a>(
         &self,
         binding: u32,
         stage: vk::ShaderStageFlags,
@@ -491,7 +491,7 @@ impl AsRef<ImageView> for InputAttachment {
 }
 
 impl DescriptorBindable for InputAttachment {
-    fn bind_descriptor_resource<'a>(
+    fn bind_resource<'a>(
         &self,
         binding: u32,
         stage: vk::ShaderStageFlags,

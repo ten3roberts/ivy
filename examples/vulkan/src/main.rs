@@ -454,20 +454,22 @@ impl VulkanLayer {
         let camera_data = world.get::<GpuCameraData>(camera)?;
         let light_manager = resources.get_default::<LightManager>()?;
 
-        let fullscreen_sets = (0..FRAMES_IN_FLIGHT)
-            .map(move |i| {
-                DescriptorBuilder::from_resources(&[
-                    (&InputAttachment(albedo_view), ShaderStageFlags::FRAGMENT),
-                    (&InputAttachment(position_view), ShaderStageFlags::FRAGMENT),
-                    (&InputAttachment(normal_view), ShaderStageFlags::FRAGMENT),
-                    (&InputAttachment(mr_view), ShaderStageFlags::FRAGMENT),
-                    (camera_data.buffer(i), ShaderStageFlags::FRAGMENT),
-                    (light_manager.scene_buffer(i), ShaderStageFlags::FRAGMENT),
-                    (light_manager.light_buffer(i), ShaderStageFlags::FRAGMENT),
-                ])
-            })
-            .map(|mut builder| builder.build(&context))
-            .collect::<Result<Vec<_>>>()?;
+        let fullscreen_sets = DescriptorBuilder::from_mutliple_resources(
+            &context,
+            &[
+                (&InputAttachment(albedo_view), ShaderStageFlags::FRAGMENT),
+                (&InputAttachment(position_view), ShaderStageFlags::FRAGMENT),
+                (&InputAttachment(normal_view), ShaderStageFlags::FRAGMENT),
+                (&InputAttachment(mr_view), ShaderStageFlags::FRAGMENT),
+                (&camera_data.buffers(), ShaderStageFlags::FRAGMENT),
+                (&light_manager.scene_buffers(), ShaderStageFlags::FRAGMENT),
+                (&light_manager.light_buffers(), ShaderStageFlags::FRAGMENT),
+            ],
+            FRAMES_IN_FLIGHT,
+        )?;
+
+        drop(camera_data);
+        drop(light_manager);
 
         let diffuse_node =
             rendergraph.add_node(CameraNode::<DiffusePass, IndirectMeshRenderer>::new(

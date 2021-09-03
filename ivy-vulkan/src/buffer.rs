@@ -435,7 +435,7 @@ pub fn copy_to_image(
 }
 
 impl DescriptorBindable for Buffer {
-    fn bind_descriptor_resource<'a>(
+    fn bind_resource<'a>(
         &self,
         binding: u32,
         stage: vk::ShaderStageFlags,

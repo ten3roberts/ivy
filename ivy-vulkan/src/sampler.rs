@@ -94,7 +94,7 @@ impl Drop for Sampler {
 }
 
 impl DescriptorBindable for Sampler {
-    fn bind_descriptor_resource<'a>(
+    fn bind_resource<'a>(
         &self,
         binding: u32,
         stage: vk::ShaderStageFlags,
@@ -105,7 +105,7 @@ impl DescriptorBindable for Sampler {
 }
 
 impl DescriptorBindable for (Texture, Sampler) {
-    fn bind_descriptor_resource<'a>(
+    fn bind_resource<'a>(
         &self,
         binding: u32,
         stage: vk::ShaderStageFlags,

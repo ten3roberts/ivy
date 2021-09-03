@@ -2,10 +2,12 @@ use crate::{Buffer, BufferType, Result, VulkanContext};
 use arrayvec::ArrayVec;
 use ash::{
     version::DeviceV1_0,
-    vk::{self, ImageLayout, WriteDescriptorSet},
+    vk::{self, DescriptorSet, ImageLayout, WriteDescriptorSet},
 };
 
-use super::{DescriptorBindable, DescriptorLayoutCache, DescriptorSetBinding};
+use super::{
+    DescriptorBindable, DescriptorLayoutCache, DescriptorSetBinding, MultiDescriptorBindable,
+};
 use super::{DescriptorLayoutInfo, MAX_BINDINGS};
 use vk::{DescriptorType, ShaderStageFlags};
 
@@ -39,17 +41,40 @@ impl DescriptorBuilder {
         Default::default()
     }
 
-    pub fn from_resources(resources: &[(&dyn DescriptorBindable, ShaderStageFlags)]) -> Self {
+    pub fn from_resources<'a>(
+        resources: &[(&'a dyn DescriptorBindable, ShaderStageFlags)],
+    ) -> Self {
         let mut builder = Self::new();
 
         resources
-            .iter()
+            .into_iter()
             .enumerate()
             .fold(&mut builder, |builder, (i, (resource, stage))| {
-                resource.bind_descriptor_resource(i as u32, *stage, builder)
+                resource.bind_resource(i as u32, *stage, builder)
             });
 
         builder
+    }
+
+    /// Creates descriptor sets for multiple frames in flight and builds them
+    pub fn from_mutliple_resources<'a>(
+        context: &VulkanContext,
+        resources: &[(&'a dyn MultiDescriptorBindable, ShaderStageFlags)],
+        count: usize,
+    ) -> Result<Vec<DescriptorSet>> {
+        (0..count)
+            .map(|current_frame| {
+                let mut builder = Self::new();
+                resources.into_iter().enumerate().fold(
+                    &mut builder,
+                    |builder, (i, (resource, stage))| {
+                        resource.bind_resource_for(i as u32, *stage, builder, current_frame)
+                    },
+                );
+
+                builder.build(context)
+            })
+            .collect::<Result<Vec<_>>>()
     }
 
     fn add(&mut self, binding: DescriptorSetBinding, write: WriteDescriptorSet) {
@@ -304,14 +329,14 @@ impl DescriptorBuilder {
     pub fn build_multiple(
         &mut self,
         context: &VulkanContext,
-        set: &mut vk::DescriptorSet,
+        set: &mut DescriptorSet,
     ) -> Result<&mut Self> {
         *set = self.build(context)?;
         Ok(self)
     }
 
     // Builds a descriptor set from the builder and returns it
-    pub fn build(&mut self, context: &VulkanContext) -> Result<vk::DescriptorSet> {
+    pub fn build(&mut self, context: &VulkanContext) -> Result<DescriptorSet> {
         let mut layout = Default::default();
 
         self.layout(context.layout_cache(), &mut layout)?;

@@ -39,7 +39,7 @@ impl IntoSet for Vec<DescriptorSet> {
 }
 
 pub trait DescriptorBindable {
-    fn bind_descriptor_resource<'a>(
+    fn bind_resource<'a>(
         &self,
         binding: u32,
         stage: ShaderStageFlags,
@@ -48,7 +48,7 @@ pub trait DescriptorBindable {
 }
 
 impl DescriptorBindable for ImageView {
-    fn bind_descriptor_resource<'a>(
+    fn bind_resource<'a>(
         &self,
         binding: u32,
         stage: ShaderStageFlags,
@@ -59,12 +59,53 @@ impl DescriptorBindable for ImageView {
 }
 
 impl DescriptorBindable for Sampler {
-    fn bind_descriptor_resource<'a>(
+    fn bind_resource<'a>(
         &self,
         binding: u32,
         stage: ShaderStageFlags,
         builder: &'a mut DescriptorBuilder,
     ) -> &'a mut DescriptorBuilder {
         builder.bind_sampler(binding, stage, *self)
+    }
+}
+
+/// Helper trait for binding a list of resources for multiple frames in flight
+pub trait MultiDescriptorBindable {
+    fn bind_resource_for<'a>(
+        &self,
+        binding: u32,
+        stage: ShaderStageFlags,
+        builder: &'a mut DescriptorBuilder,
+        current_frame: usize,
+    ) -> &'a mut DescriptorBuilder;
+}
+
+impl<T> MultiDescriptorBindable for &[T]
+where
+    T: DescriptorBindable + Sized,
+{
+    fn bind_resource_for<'a>(
+        &self,
+        binding: u32,
+        stage: ShaderStageFlags,
+        builder: &'a mut DescriptorBuilder,
+        current_frame: usize,
+    ) -> &'a mut DescriptorBuilder {
+        self[current_frame].bind_resource(binding, stage, builder)
+    }
+}
+
+impl<T> MultiDescriptorBindable for T
+where
+    T: DescriptorBindable,
+{
+    fn bind_resource_for<'a>(
+        &self,
+        binding: u32,
+        stage: ShaderStageFlags,
+        builder: &'a mut DescriptorBuilder,
+        _: usize,
+    ) -> &'a mut DescriptorBuilder {
+        self.bind_resource(binding, stage, builder)
     }
 }
