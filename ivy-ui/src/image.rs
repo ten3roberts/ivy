@@ -3,9 +3,7 @@ use std::slice;
 use crate::Result;
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
-    descriptors::{
-        DescriptorAllocator, DescriptorBuilder, DescriptorLayoutCache, DescriptorSet, IntoSet,
-    },
+    descriptors::{DescriptorBuilder, DescriptorSet, IntoSet},
     vk::ShaderStageFlags,
     Sampler, Texture, VulkanContext,
 };
@@ -21,8 +19,6 @@ pub struct Image {
 impl Image {
     pub fn new(
         context: &VulkanContext,
-        descriptor_layout_cache: &mut DescriptorLayoutCache,
-        descriptor_allocator: &mut DescriptorAllocator,
         resources: &Resources,
         texture: Handle<Texture>,
         sampler: Handle<Sampler>,
@@ -34,11 +30,7 @@ impl Image {
                 resources.get(texture)?.image_view(),
                 resources.get(sampler)?.sampler(),
             )
-            .build(
-                context.device(),
-                descriptor_layout_cache,
-                descriptor_allocator,
-            )?;
+            .build(&context)?;
 
         Ok(Self {
             set,

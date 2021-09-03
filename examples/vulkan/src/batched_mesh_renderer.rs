@@ -39,8 +39,6 @@ pub struct BatchedMeshRenderer {
 impl BatchedMeshRenderer {
     pub fn new(
         context: Arc<VulkanContext>,
-        descriptor_layout_cache: &mut DescriptorLayoutCache,
-        descriptor_allocator: &mut DescriptorAllocator,
     ) -> Result<Self> {
         let frames = (0..FRAMES_IN_FLIGHT)
             .map(|_| {
@@ -301,8 +299,6 @@ struct FrameData {
 impl FrameData {
     pub fn new(
         context: Arc<VulkanContext>,
-        descriptor_layout_cache: &mut DescriptorLayoutCache,
-        descriptor_allocator: &mut DescriptorAllocator,
     ) -> Result<Self> {
         let object_buffer = Buffer::new_uninit(
             context.clone(),

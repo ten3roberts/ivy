@@ -58,12 +58,7 @@ impl CameraManager {
     }
 
     /// Registers a camera entity to the GPU side buffer.
-    pub fn register(
-        &mut self,
-        world: &mut World,
-        camera: Entity,
-        // descriptor_layout_cache: &mut DescriptorLayoutCache,
-    ) -> Result<CameraIndex> {
+    pub fn register(&mut self, world: &mut World, camera: Entity) -> Result<CameraIndex> {
         if self.max_camera_index >= self.max_capacity {
             return Err(Error::CameraLimit(self.max_capacity));
         }
@@ -77,11 +72,7 @@ impl CameraManager {
     }
 
     /// Registers all unregistered camera entities.
-    pub fn register_cameras(
-        &mut self,
-        world: &mut World,
-        // descriptor_layout_cache: &mut DescriptorLayoutCache,
-    ) -> Result<()> {
+    pub fn register_cameras(&mut self, world: &mut World) -> Result<()> {
         let ids = world
             .query_mut::<&Camera>()
             .without::<CameraIndex>()

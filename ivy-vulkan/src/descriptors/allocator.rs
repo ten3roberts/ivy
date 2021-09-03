@@ -2,6 +2,8 @@ use crate::Result;
 use ash::version::DeviceV1_0;
 use ash::vk;
 use ash::Device;
+use parking_lot::Mutex;
+use parking_lot::RwLock;
 use smallvec::SmallVec;
 use std::{collections::HashMap, iter::repeat, sync::Arc};
 pub use vk::DescriptorSetLayout;
@@ -36,7 +38,7 @@ impl Pool {
 /// Manages descriptor allocations by automatically managing pools for each layout
 pub struct DescriptorAllocator {
     device: Arc<Device>,
-    sub_allocators: HashMap<DescriptorSetLayout, DescriptorLayoutAllocator>,
+    sub_allocators: RwLock<HashMap<DescriptorSetLayout, Mutex<DescriptorLayoutAllocator>>>,
     set_count: u32,
 }
 
@@ -46,14 +48,14 @@ impl DescriptorAllocator {
     pub fn new(device: Arc<Device>, set_count: u32) -> Self {
         Self {
             device,
-            sub_allocators: HashMap::new(),
+            sub_allocators: RwLock::new(HashMap::new()),
             set_count,
         }
     }
 
     /// Allocates descriptors by using the layout cache based on layout_info
     pub fn allocate(
-        &mut self,
+        &self,
         layout: vk::DescriptorSetLayout,
         layout_info: &DescriptorLayoutInfo,
         set_count: u32,
@@ -61,39 +63,58 @@ impl DescriptorAllocator {
         let device = &self.device;
         let self_set_count = self.set_count;
 
-        let sub_allocator = self.sub_allocators.entry(layout).or_insert_with(|| {
-            DescriptorLayoutAllocator::new(device.clone(), layout, layout_info, self_set_count)
-        });
+        let guard = self.sub_allocators.read();
 
-        sub_allocator.allocate(set_count)
+        if let Some(sub_allocator) = guard.get(&layout) {
+            sub_allocator.lock().allocate(set_count)
+        } else {
+            drop(guard);
+
+            self.sub_allocators
+                .write()
+                .entry(layout)
+                .or_insert_with(|| {
+                    Mutex::new(DescriptorLayoutAllocator::new(
+                        device.clone(),
+                        layout,
+                        layout_info,
+                        self_set_count,
+                    ))
+                })
+                .lock()
+                .allocate(set_count)
+        }
     }
 
     /// Resets all allocated pools and descriptor sets.
     pub fn reset(&mut self) -> Result<()> {
         self.sub_allocators
+            .write()
             .iter_mut()
-            .try_for_each(|(_, sub_allocator)| sub_allocator.reset())?;
+            .try_for_each(|(_, sub_allocator)| sub_allocator.lock().reset())?;
 
         Ok(())
     }
 
     // Clears and destroys all allocated pools.
     pub fn clear(&mut self) {
-        self.sub_allocators.clear();
+        self.sub_allocators.write().clear();
     }
 
     /// Returns the number of descriptor pools allocated for `layout`.
     pub fn pool_count(&self, layout: vk::DescriptorSetLayout) -> Option<usize> {
         self.sub_allocators
+            .read()
             .get(&layout)
-            .map(DescriptorLayoutAllocator::total_pool_count)
+            .map(|val| val.lock().total_pool_count())
     }
 
     /// Returns the number of completely full descriptor pools for `layout`.
     pub fn full_pool_count(&self, layout: vk::DescriptorSetLayout) -> Option<usize> {
         self.sub_allocators
+            .read()
             .get(&layout)
-            .map(DescriptorLayoutAllocator::full_pool_count)
+            .map(|val| val.lock().full_pool_count())
     }
 }
 

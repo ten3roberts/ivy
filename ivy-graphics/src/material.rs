@@ -4,7 +4,7 @@ use crate::Result;
 use ash::vk::{DescriptorSet, ShaderStageFlags};
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
-    descriptors::{DescriptorAllocator, DescriptorBuilder, DescriptorLayoutCache, IntoSet},
+    descriptors::{DescriptorBuilder, IntoSet},
     Buffer, Sampler, Texture, VulkanContext,
 };
 
@@ -23,8 +23,6 @@ impl Material {
     /// Creates a new material with albedo using the provided sampler
     pub fn new(
         context: Arc<VulkanContext>,
-        descriptor_layout_cache: &mut DescriptorLayoutCache,
-        descriptor_allocator: &mut DescriptorAllocator,
         resources: &Resources,
         albedo: Handle<Texture>,
         sampler: Handle<Sampler>,
@@ -49,11 +47,7 @@ impl Material {
                 resources.get(sampler)?.sampler(),
             )
             .bind_buffer(1, ShaderStageFlags::FRAGMENT, &buffer)
-            .build(
-                context.device(),
-                descriptor_layout_cache,
-                descriptor_allocator,
-            )?;
+            .build(&context)?;
 
         Ok(Self {
             set,

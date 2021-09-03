@@ -1,10 +1,7 @@
-use crate::{
-    descriptors::{DescriptorLayoutCache, DescriptorLayoutInfo},
-    Error, Extent, Result, VertexDesc,
-};
+use crate::{descriptors::DescriptorLayoutInfo, Error, Extent, Result, VertexDesc, VulkanContext};
 use arrayvec::ArrayVec;
+use ash::vk::PushConstantRange;
 use ash::{version::DeviceV1_0, vk::PipelineLayout};
-use ash::{vk::PushConstantRange, Device};
 use std::{ffi::CString, sync::Arc};
 use std::{fs::File, path::PathBuf};
 
@@ -50,17 +47,13 @@ impl<'a> Default for PipelineInfo<'a> {
 }
 
 pub struct Pipeline {
-    device: Arc<Device>,
+    context: Arc<VulkanContext>,
     pipeline: vk::Pipeline,
     layout: vk::PipelineLayout,
 }
 
 impl Pipeline {
-    pub fn new<V>(
-        device: Arc<Device>,
-        layout_cache: &mut DescriptorLayoutCache,
-        info: &PipelineInfo,
-    ) -> Result<Self>
+    pub fn new<V>(context: Arc<VulkanContext>, info: &PipelineInfo) -> Result<Self>
     where
         V: VertexDesc,
     {
@@ -70,13 +63,14 @@ impl Pipeline {
         let mut fragmentshader = File::open(&info.fragmentshader)
             .map_err(|e| Error::Io(e, Some(info.fragmentshader.clone())))?;
 
-        let vertexshader = ShaderModule::new(&device, &mut vertexshader)?;
-        let fragmentshader = ShaderModule::new(&device, &mut fragmentshader)?;
+        let device = context.device();
+
+        let vertexshader = ShaderModule::new(device, &mut vertexshader)?;
+        let fragmentshader = ShaderModule::new(device, &mut fragmentshader)?;
 
         let layout = shader::reflect(
-            &device,
+            &context,
             &[&vertexshader, &fragmentshader],
-            layout_cache,
             info.set_layouts,
         )?;
 
@@ -211,7 +205,7 @@ impl Pipeline {
         fragmentshader.destroy(&device);
 
         Ok(Pipeline {
-            device,
+            context,
             pipeline,
             layout,
         })
@@ -219,11 +213,12 @@ impl Pipeline {
 
     // Creates a raw pipeline layout
     pub fn create_layout(
-        device: &Device,
+        context: &VulkanContext,
         sets: &[DescriptorLayoutInfo],
         push_constant_ranges: &[PushConstantRange],
-        layout_cache: &mut DescriptorLayoutCache,
     ) -> Result<PipelineLayout> {
+        let layout_cache = context.layout_cache();
+
         let set_layouts = sets
             .iter()
             .take_while(|set| !set.bindings().is_empty())
@@ -238,7 +233,11 @@ impl Pipeline {
             ..Default::default()
         };
 
-        let pipeline_layout = unsafe { device.create_pipeline_layout(&create_info, None)? };
+        let pipeline_layout = unsafe {
+            context
+                .device()
+                .create_pipeline_layout(&create_info, None)?
+        };
         Ok(pipeline_layout)
     }
 
@@ -279,7 +278,11 @@ impl From<&Pipeline> for vk::PipelineLayout {
 
 impl Drop for Pipeline {
     fn drop(&mut self) {
-        unsafe { self.device.destroy_pipeline(self.pipeline, None) }
-        unsafe { self.device.destroy_pipeline_layout(self.layout, None) }
+        unsafe { self.context.device().destroy_pipeline(self.pipeline, None) }
+        unsafe {
+            self.context
+                .device()
+                .destroy_pipeline_layout(self.layout, None)
+        }
     }
 }

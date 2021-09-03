@@ -5,6 +5,7 @@ use arrayvec::ArrayVec;
 use ash::version::DeviceV1_0;
 use ash::vk;
 use ash::Device;
+use parking_lot::RwLock;
 use std::hash::{Hash, Hasher};
 
 use super::DescriptorSetBinding;
@@ -17,6 +18,10 @@ pub struct DescriptorLayoutInfo {
     // The bindings for the layout
     bindings: ArrayVec<[DescriptorSetBinding; MAX_BINDINGS]>,
 }
+
+// Impl send and sync because of the immutable sampler in bindings not implementing it
+unsafe impl Send for DescriptorLayoutInfo {}
+unsafe impl Sync for DescriptorLayoutInfo {}
 
 impl DescriptorLayoutInfo {
     pub fn new(bindings: &[DescriptorSetBinding]) -> Self {
@@ -135,34 +140,37 @@ impl Eq for DescriptorLayoutInfo {}
 
 pub struct DescriptorLayoutCache {
     device: Arc<Device>,
-    layouts: HashMap<DescriptorLayoutInfo, DescriptorSetLayout>,
+    layouts: RwLock<HashMap<DescriptorLayoutInfo, DescriptorSetLayout>>,
 }
 
 impl DescriptorLayoutCache {
     pub fn new(device: Arc<Device>) -> Self {
         Self {
             device,
-            layouts: HashMap::new(),
+            layouts: RwLock::new(HashMap::new()),
         }
     }
 
     /// Gets the descriptor set layout matching info. If layout does not already exist it is
-    /// created. Takes info as mutable since it needs to be sorted.
-    pub fn get(&mut self, info: &DescriptorLayoutInfo) -> Result<DescriptorSetLayout> {
-        if let Some(layout) = self.layouts.get(&info) {
+    /// created.
+    pub fn get(&self, info: &DescriptorLayoutInfo) -> Result<DescriptorSetLayout> {
+        let guard = self.layouts.read();
+        if let Some(layout) = guard.get(&info) {
             Ok(*layout)
         } else {
+            drop(guard);
+
             let info = info.clone();
             // Create layout
             let layout = create(&self.device, &info)?;
-            Ok(*self.layouts.entry(info).or_insert(layout))
+            Ok(*self.layouts.write().entry(info).or_insert(layout))
         }
     }
 
     /// Clears and destroys all cached layouts. This is often not needed as there's no limit to
     /// allocating descriptors from the same layout.
     pub fn clear(&mut self) {
-        for (_, layout) in self.layouts.drain() {
+        for (_, layout) in self.layouts.write().drain() {
             destroy(&self.device, layout);
         }
     }

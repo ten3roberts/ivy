@@ -1,12 +1,11 @@
-use crate::{Buffer, BufferType, Result};
+use crate::{Buffer, BufferType, Result, VulkanContext};
 use arrayvec::ArrayVec;
 use ash::{
     version::DeviceV1_0,
     vk::{self, ImageLayout, WriteDescriptorSet},
-    Device,
 };
 
-use super::{DescriptorAllocator, DescriptorBindable, DescriptorLayoutCache, DescriptorSetBinding};
+use super::{DescriptorBindable, DescriptorLayoutCache, DescriptorSetBinding};
 use super::{DescriptorLayoutInfo, MAX_BINDINGS};
 use vk::{DescriptorType, ShaderStageFlags};
 
@@ -304,34 +303,29 @@ impl DescriptorBuilder {
     /// Allocates and writes descriptor set into `set`. Can be chained.
     pub fn build_multiple(
         &mut self,
-        device: &Device,
-        cache: &mut DescriptorLayoutCache,
-        allocator: &mut DescriptorAllocator,
+        context: &VulkanContext,
         set: &mut vk::DescriptorSet,
     ) -> Result<&mut Self> {
-        *set = self.build(device, cache, allocator)?;
+        *set = self.build(context)?;
         Ok(self)
     }
 
     // Builds a descriptor set from the builder and returns it
-    pub fn build(
-        &mut self,
-        device: &Device,
-        cache: &mut DescriptorLayoutCache,
-        allocator: &mut DescriptorAllocator,
-    ) -> Result<vk::DescriptorSet> {
+    pub fn build(&mut self, context: &VulkanContext) -> Result<vk::DescriptorSet> {
         let mut layout = Default::default();
 
-        self.layout(cache, &mut layout)?;
+        self.layout(context.layout_cache(), &mut layout)?;
 
         let layout_info = &self.cached_layout.as_ref().unwrap().1;
 
         // Allocate the descriptor sets
-        let set = allocator.allocate(layout, &layout_info, 1)?[0];
+        let set = context
+            .descriptor_allocator()
+            .allocate(layout, &layout_info, 1)?[0];
 
         self.writes.iter_mut().for_each(|write| write.dst_set = set);
 
-        unsafe { device.update_descriptor_sets(&self.writes, &[]) };
+        unsafe { context.device().update_descriptor_sets(&self.writes, &[]) };
 
         Ok(set)
     }
@@ -340,7 +334,7 @@ impl DescriptorBuilder {
     /// or create the appropriate layout.
     pub fn layout(
         &mut self,
-        cache: &mut DescriptorLayoutCache,
+        cache: &DescriptorLayoutCache,
         layout: &mut vk::DescriptorSetLayout,
     ) -> Result<&mut Self> {
         // Create and store the layout if it isn't up to date
@@ -353,7 +347,7 @@ impl DescriptorBuilder {
         }
     }
 
-    fn recache_layout(&mut self, cache: &mut DescriptorLayoutCache) -> Result<()> {
+    fn recache_layout(&mut self, cache: &DescriptorLayoutCache) -> Result<()> {
         let info = DescriptorLayoutInfo::new(&self.bindings);
         let cached_layout = cache.get(&info)?;
         self.cached_layout = Some((cached_layout, info));

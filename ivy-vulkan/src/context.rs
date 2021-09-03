@@ -1,3 +1,4 @@
+use crate::descriptors::{DescriptorAllocator, DescriptorLayoutCache};
 use crate::{commands::CommandPool, device::QueueFamilies, Result, *};
 use ash::extensions::ext::DebugUtils;
 use ash::extensions::khr::Surface;
@@ -14,6 +15,8 @@ pub struct VulkanContext {
     queue_families: QueueFamilies,
     debug_utils: Option<(DebugUtils, vk::DebugUtilsMessengerEXT)>,
 
+    descriptor_layout_cache: DescriptorLayoutCache,
+    descriptor_allocator: DescriptorAllocator,
     surface_loader: Surface,
     surface: Option<vk::SurfaceKHR>,
 
@@ -103,6 +106,9 @@ impl VulkanContext {
             limits.framebuffer_color_sample_counts & limits.sampled_image_color_sample_counts,
         );
 
+        let descriptor_layout_cache = DescriptorLayoutCache::new(device.clone());
+        let descriptor_allocator = DescriptorAllocator::new(device.clone(), 64);
+
         Ok(VulkanContext {
             _entry: entry,
             instance,
@@ -110,9 +116,11 @@ impl VulkanContext {
             physical_device: pdevice_info.physical_device,
             queue_families: pdevice_info.queue_families,
             debug_utils,
+            descriptor_layout_cache,
+            descriptor_allocator,
             surface_loader,
-            swapchain_loader,
             surface,
+            swapchain_loader,
             graphics_queue,
             present_queue,
             allocator,
@@ -123,6 +131,7 @@ impl VulkanContext {
     }
 
     // Returns the device
+    #[inline]
     pub fn device(&self) -> &Arc<ash::Device> {
         &self.device
     }
@@ -155,6 +164,7 @@ impl VulkanContext {
         &self.instance
     }
 
+    #[inline]
     pub fn allocator(&self) -> &vk_mem::Allocator {
         &self.allocator
     }
@@ -181,10 +191,25 @@ impl VulkanContext {
     pub fn swapchain_loader(&self) -> &ash::extensions::khr::Swapchain {
         &self.swapchain_loader
     }
+
+    /// Get a reference to the vulkan context's descriptor layout cache.
+    #[inline]
+    pub fn layout_cache(&self) -> &DescriptorLayoutCache {
+        &self.descriptor_layout_cache
+    }
+
+    /// Get a reference to the vulkan context's descriptor allocator.
+    #[inline]
+    pub fn descriptor_allocator(&self) -> &DescriptorAllocator {
+        &self.descriptor_allocator
+    }
 }
 
 impl Drop for VulkanContext {
     fn drop(&mut self) {
+        self.descriptor_allocator.clear();
+        self.descriptor_layout_cache.clear();
+
         // Destroy the allocator
         self.allocator.destroy();
 

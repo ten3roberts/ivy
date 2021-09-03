@@ -1,5 +1,6 @@
 use crate::Pipeline;
 use crate::Result;
+use crate::VulkanContext;
 use arrayvec::ArrayVec;
 use std::io::{Read, Seek};
 
@@ -62,9 +63,8 @@ impl From<&ShaderModule> for vk::ShaderModule {
 
 /// Creates a pipeline layout from shader reflection.
 pub fn reflect<S: AsRef<spirv_reflect::ShaderModule>>(
-    device: &Device,
+    context: &VulkanContext,
     modules: &[S],
-    layout_cache: &mut DescriptorLayoutCache,
     override_sets: &[DescriptorLayoutInfo],
 ) -> Result<vk::PipelineLayout> {
     let mut sets: [DescriptorLayoutInfo; MAX_SETS] = Default::default();
@@ -110,8 +110,7 @@ pub fn reflect<S: AsRef<spirv_reflect::ShaderModule>>(
         }
     }
 
-    let pipeline_layout =
-        Pipeline::create_layout(device, &sets, &push_constant_ranges, layout_cache)?;
+    let pipeline_layout = Pipeline::create_layout(&context, &sets, &push_constant_ranges)?;
 
     Ok(pipeline_layout)
 }

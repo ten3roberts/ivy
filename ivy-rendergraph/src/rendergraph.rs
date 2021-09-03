@@ -65,6 +65,16 @@ impl RenderGraph {
         self.nodes.insert(Box::new(node))
     }
 
+    /// Add several nodes into the rendergraph.
+    /// Due to the concrete type of iterators, the nodes need to already be boxed.
+    /// Returns the node indices in order.
+    pub fn add_nodes<I: IntoIterator<Item = Box<dyn Node>>>(&mut self, nodes: I) -> Vec<NodeIndex> {
+        nodes
+            .into_iter()
+            .map(|node| self.nodes.insert(node))
+            .collect_vec()
+    }
+
     pub fn build_edges(&mut self) -> Result<()> {
         // Clear edges
         self.edges.clear();

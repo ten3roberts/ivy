@@ -411,6 +411,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "ivy-pbr"
+version = "0.1.0"
+
+[[package]]
 name = "ivy-rendergraph"
 version = "0.2.2"
 dependencies = [
@@ -465,6 +469,7 @@ dependencies = [
  "glfw",
  "ivy-stb",
  "log",
+ "parking_lot",
  "smallvec",
  "spirv-reflect",
  "thiserror",

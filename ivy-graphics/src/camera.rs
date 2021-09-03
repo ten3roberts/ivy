@@ -4,7 +4,7 @@ use derive_more::{AsRef, Deref, From, Into};
 use hecs::World;
 use ivy_resources::Handle;
 use ivy_vulkan::{
-    descriptors::{DescriptorAllocator, DescriptorBuilder, DescriptorLayoutCache, IntoSet},
+    descriptors::{DescriptorBuilder, IntoSet},
     Buffer, Texture, VulkanContext,
 };
 use std::sync::Arc;
@@ -127,12 +127,7 @@ pub struct GpuCameraData {
 }
 
 impl GpuCameraData {
-    pub fn new(
-        context: Arc<VulkanContext>,
-        descriptor_layout_cache: &mut DescriptorLayoutCache,
-        descriptor_allocator: &mut DescriptorAllocator,
-        frames_in_flight: usize,
-    ) -> Result<Self> {
+    pub fn new(context: Arc<VulkanContext>, frames_in_flight: usize) -> Result<Self> {
         let uniformbuffers = (0..frames_in_flight)
             .map(|_| {
                 Buffer::new(
@@ -150,11 +145,7 @@ impl GpuCameraData {
             .map(|u| {
                 DescriptorBuilder::new()
                     .bind_buffer(0, ShaderStageFlags::VERTEX, u)
-                    .build(
-                        context.device(),
-                        descriptor_layout_cache,
-                        descriptor_allocator,
-                    )
+                    .build(&context)
                     .map_err(|e| e.into())
             })
             .collect::<Result<Vec<_>>>()?;
@@ -205,8 +196,6 @@ impl GpuCameraData {
     pub fn create_gpu_cameras(
         context: Arc<VulkanContext>,
         world: &mut World,
-        descriptor_layout_cache: &mut DescriptorLayoutCache,
-        descriptor_allocator: &mut DescriptorAllocator,
         frames_in_flight: usize,
     ) -> Result<()> {
         let cameras = world
@@ -217,12 +206,7 @@ impl GpuCameraData {
             .collect::<Vec<_>>();
 
         cameras.into_iter().try_for_each(|camera| -> Result<()> {
-            let gpu_camera = GpuCameraData::new(
-                context.clone(),
-                descriptor_layout_cache,
-                descriptor_allocator,
-                frames_in_flight,
-            )?;
+            let gpu_camera = GpuCameraData::new(context.clone(), frames_in_flight)?;
             world.insert_one(camera, gpu_camera).map_err(|e| e.into())
         })
     }

@@ -4,7 +4,7 @@ use std::{mem::size_of, sync::Arc};
 use ash::vk::{DescriptorSet, ShaderStageFlags};
 use hecs::World;
 use ivy_vulkan::{
-    descriptors::{DescriptorAllocator, DescriptorBuilder, DescriptorLayoutCache, IntoSet},
+    descriptors::{DescriptorBuilder, IntoSet},
     Buffer, VulkanContext,
 };
 use ultraviolet::Vec3;
@@ -42,8 +42,6 @@ pub struct LightManager {
 impl LightManager {
     pub fn new(
         context: Arc<VulkanContext>,
-        descriptor_layout_cache: &mut DescriptorLayoutCache,
-        descriptor_allocator: &mut DescriptorAllocator,
         max_lights: u64,
         ambient_radience: Vec3,
         frames_in_flight: usize,
@@ -67,15 +65,13 @@ impl LightManager {
             })
             .collect::<Result<Vec<_>>>()?;
 
-        let device = context.device();
-
         let sets = light_buffers
             .iter()
             .map(|buffer| {
                 DescriptorBuilder::new()
                     .bind_buffer(0, ShaderStageFlags::FRAGMENT, &buffer.0)
                     .bind_buffer(1, ShaderStageFlags::FRAGMENT, &buffer.1)
-                    .build(device, descriptor_layout_cache, descriptor_allocator)
+                    .build(&context)
                     .map_err(|e| e.into())
             })
             .collect::<Result<Vec<_>>>()?;

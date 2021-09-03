@@ -25,7 +25,6 @@ pub struct UIRenderer {
 impl UIRenderer {
     pub fn new(
         context: Arc<VulkanContext>,
-        descriptor_layout_cache: &mut DescriptorLayoutCache,
         frames_in_flight: usize,
     ) -> Result<Self> {
         let mut descriptor_allocator =
@@ -81,8 +80,6 @@ struct FrameData {
 impl FrameData {
     pub fn new(
         context: Arc<VulkanContext>,
-        descriptor_layout_cache: &mut DescriptorLayoutCache,
-        descriptor_allocator: &mut DescriptorAllocator,
     ) -> Result<Self> {
         let uniformbuffer = Buffer::new(
             context.clone(),

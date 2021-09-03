@@ -42,22 +42,14 @@ pub struct ImageRenderer {
 impl ImageRenderer {
     pub fn new(
         context: Arc<VulkanContext>,
-        descriptor_layout_cache: &mut DescriptorLayoutCache,
         capacity: ObjectId,
         frames_in_flight: usize,
     ) -> Result<Self> {
-        let mut descriptor_allocator =
+        let descriptor_allocator =
             DescriptorAllocator::new(context.device().clone(), frames_in_flight as u32);
 
         let frames = (0..frames_in_flight)
-            .map(|_| {
-                FrameData::new(
-                    context.clone(),
-                    descriptor_layout_cache,
-                    &mut descriptor_allocator,
-                    capacity,
-                )
-            })
+            .map(|_| FrameData::new(context.clone(), capacity))
             .collect::<Result<Vec<_>>>()?;
 
         let passes = HashMap::new();
@@ -90,12 +82,7 @@ impl ImageRenderer {
         }
     }
 
-    fn resize_object_buffer(
-        &mut self,
-        world: &mut World,
-        capacity: ObjectId,
-        descriptor_layout_cache: &mut DescriptorLayoutCache,
-    ) -> Result<()> {
+    fn resize_object_buffer(&mut self, world: &mut World, capacity: ObjectId) -> Result<()> {
         self.free_indices.clear();
         self.max_object_id = 0;
 
@@ -103,12 +90,8 @@ impl ImageRenderer {
         self.descriptor_allocator.reset()?;
 
         for _ in 0..self.frames_in_flight {
-            self.frames.push(FrameData::new(
-                self.context.clone(),
-                descriptor_layout_cache,
-                &mut self.descriptor_allocator,
-                capacity,
-            )?);
+            self.frames
+                .push(FrameData::new(self.context.clone(), capacity)?);
         }
 
         self.capacity = capacity;
@@ -128,7 +111,6 @@ impl ImageRenderer {
     pub fn register_entities<T: 'static + ShaderPass + Send + Sync>(
         &mut self,
         world: &mut World,
-        descriptor_layout_cache: &mut DescriptorLayoutCache,
     ) -> Result<()> {
         let query = world
             .query_mut::<RenderObjectUnregistered<T>>()
@@ -154,11 +136,7 @@ impl ImageRenderer {
         });
 
         if self.max_object_id > self.capacity {
-            self.resize_object_buffer(
-                world,
-                nearest_power_2(self.object_count as _) as _,
-                descriptor_layout_cache,
-            )?;
+            self.resize_object_buffer(world, nearest_power_2(self.object_count as _) as _)?;
         }
 
         Ok(())
@@ -465,12 +443,7 @@ struct FrameData {
 }
 
 impl FrameData {
-    pub fn new(
-        context: Arc<VulkanContext>,
-        descriptor_layout_cache: &mut DescriptorLayoutCache,
-        descriptor_allocator: &mut DescriptorAllocator,
-        capacity: ObjectId,
-    ) -> Result<Self> {
+    pub fn new(context: Arc<VulkanContext>, capacity: ObjectId) -> Result<Self> {
         let object_buffer = Buffer::new_uninit(
             context.clone(),
             BufferType::Storage,
@@ -480,11 +453,7 @@ impl FrameData {
 
         let set = DescriptorBuilder::new()
             .bind_buffer(0, vk::ShaderStageFlags::VERTEX, &object_buffer)
-            .build(
-                context.device(),
-                descriptor_layout_cache,
-                descriptor_allocator,
-            )?;
+            .build(&context)?;
 
         Ok(Self { set, object_buffer })
     }

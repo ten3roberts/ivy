@@ -245,9 +245,6 @@ struct VulkanLayer {
 
     rendergraph: RenderGraph,
 
-    descriptor_layout_cache: DescriptorLayoutCache,
-    descriptor_allocator: DescriptorAllocator,
-
     clock: Clock,
     resources: Resources,
 
@@ -340,10 +337,6 @@ impl VulkanLayer {
         window: Arc<AtomicRefCell<Window>>,
         events: &mut Events,
     ) -> anyhow::Result<Self> {
-        let mut descriptor_layout_cache = DescriptorLayoutCache::new(context.device().clone());
-
-        let mut descriptor_allocator = DescriptorAllocator::new(context.device().clone(), 2);
-
         let swapchain_info = ivy_vulkan::SwapchainInfo {
             present_mode: vk::PresentModeKHR::IMMEDIATE,
             image_count: FRAMES_IN_FLIGHT as _,
@@ -360,8 +353,6 @@ impl VulkanLayer {
 
         resources.insert_default(LightManager::new(
             context.clone(),
-            &mut descriptor_layout_cache,
-            &mut descriptor_allocator,
             10,
             Vec3::one() * 0.01,
             FRAMES_IN_FLIGHT,
@@ -371,20 +362,13 @@ impl VulkanLayer {
 
         resources.insert_default(IndirectMeshRenderer::new(
             context.clone(),
-            &mut descriptor_layout_cache,
             16,
             FRAMES_IN_FLIGHT,
         )?)?;
 
         resources.insert_default(FullscreenRenderer)?;
 
-        GpuCameraData::create_gpu_cameras(
-            context.clone(),
-            world,
-            &mut &mut descriptor_layout_cache,
-            &mut descriptor_allocator,
-            FRAMES_IN_FLIGHT,
-        )?;
+        GpuCameraData::create_gpu_cameras(context.clone(), world, FRAMES_IN_FLIGHT)?;
 
         let camera = world
             .query::<&Camera>()
@@ -482,13 +466,7 @@ impl VulkanLayer {
                     (light_manager.light_buffer(i), ShaderStageFlags::FRAGMENT),
                 ])
             })
-            .map(|mut builder| {
-                builder.build(
-                    context.device(),
-                    &mut descriptor_layout_cache,
-                    &mut descriptor_allocator,
-                )
-            })
+            .map(|mut builder| builder.build(&context))
             .collect::<Result<Vec<_>>>()?;
 
         let diffuse_node =
@@ -625,8 +603,6 @@ impl VulkanLayer {
 
         let material = resources.insert(Material::new(
             context.clone(),
-            &mut descriptor_layout_cache,
-            &mut descriptor_allocator,
             &resources,
             grid,
             sampler,
@@ -636,8 +612,6 @@ impl VulkanLayer {
 
         let material2 = resources.insert(Material::new(
             context.clone(),
-            &mut descriptor_layout_cache,
-            &mut descriptor_allocator,
             &resources,
             uv_grid,
             sampler,
@@ -645,27 +619,14 @@ impl VulkanLayer {
             0.9,
         )?)?;
 
-        let image: Handle<Image> = resources.insert(Image::new(
-            &context,
-            &mut descriptor_layout_cache,
-            &mut descriptor_allocator,
-            &resources,
-            uv_grid,
-            sampler,
-        )?)?;
+        let image: Handle<Image> =
+            resources.insert(Image::new(&context, &resources, uv_grid, sampler)?)?;
 
-        let image2: Handle<Image> = resources.insert(Image::new(
-            &context,
-            &mut descriptor_layout_cache,
-            &mut descriptor_allocator,
-            &resources,
-            grid,
-            sampler,
-        )?)?;
+        let image2: Handle<Image> =
+            resources.insert(Image::new(&context, &resources, grid, sampler)?)?;
 
         let fullscreen_pipeline = Pipeline::new::<()>(
-            context.device().clone(),
-            &mut descriptor_layout_cache,
+            context.clone(),
             &PipelineInfo {
                 vertexshader: "./res/shaders/fullscreen.vert.spv".into(),
                 fragmentshader: "./res/shaders/post_processing.frag.spv".into(),
@@ -678,8 +639,7 @@ impl VulkanLayer {
 
         // Create a pipeline from the shaders
         let pipeline = Pipeline::new::<Vertex>(
-            context.device().clone(),
-            &mut descriptor_layout_cache,
+            context.clone(),
             &PipelineInfo {
                 vertexshader: "./res/shaders/default.vert.spv".into(),
                 fragmentshader: "./res/shaders/default.frag.spv".into(),
@@ -786,8 +746,6 @@ impl VulkanLayer {
             window,
             swapchain,
             rendergraph,
-            descriptor_layout_cache,
-            descriptor_allocator,
             clock: Clock::new(),
             resources,
             window_events,
@@ -803,13 +761,7 @@ impl Layer for VulkanLayer {
         _frame_time: Duration,
     ) -> anyhow::Result<()> {
         // Ensure gpu side data for cameras
-        GpuCameraData::create_gpu_cameras(
-            self.context.clone(),
-            world,
-            &mut self.descriptor_layout_cache,
-            &mut self.descriptor_allocator,
-            FRAMES_IN_FLIGHT,
-        )?;
+        GpuCameraData::create_gpu_cameras(self.context.clone(), world, FRAMES_IN_FLIGHT)?;
 
         let current_frame = self.rendergraph.begin()?;
 
@@ -819,8 +771,7 @@ impl Layer for VulkanLayer {
 
         {
             let mut indirect_renderer = self.resources.get_default_mut::<IndirectMeshRenderer>()?;
-            indirect_renderer
-                .register_entities::<DiffusePass>(world, &mut self.descriptor_layout_cache)?;
+            indirect_renderer.register_entities::<DiffusePass>(world)?;
 
             indirect_renderer.update(world, current_frame)?;
         }
