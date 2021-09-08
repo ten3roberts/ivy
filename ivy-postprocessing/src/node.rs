@@ -103,7 +103,7 @@ impl<Pass: 'static + ShaderPass> PostProcessingNode<Pass> {
     }
 }
 
-impl<Pass: 'static + ShaderPass + Send + Sync> Node for PostProcessingNode<Pass> {
+impl<Pass: ShaderPass> Node for PostProcessingNode<Pass> {
     fn color_attachments(&self) -> &[AttachmentInfo] {
         &self.color_attachments
     }

@@ -42,7 +42,7 @@ impl MeshRenderer {
     }
 
     /// Will draw all entities with a `Handle<Material>`, `Handle<Mesh>`, Modelmatrix and Shaderpass `Handle<T>`
-    pub fn draw<T: 'static + ShaderPass + Sized + Sync + Send>(
+    pub fn draw<T: ShaderPass>(
         &mut self,
         world: &mut World,
         cmd: &CommandBuffer,

@@ -10,11 +10,11 @@ use ivy_vulkan::{
 use ultraviolet::Vec3;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Light {
+pub struct PointLight {
     pub radiance: Vec3,
 }
 
-impl Light {
+impl PointLight {
     /// Creates a new light from color radience
     pub fn new(radiance: Vec3) -> Self {
         Self { radiance }
@@ -98,21 +98,22 @@ impl LightManager {
     /// Each light which has a [`Light`] and [`Position`] will be considered.
     /// The lights will be sorted in reference to centered. If there are more lights than `max_lights`,
     /// then the n closest will be used.
-    pub fn update(&mut self, world: &World, center: Vec3, current_frame: usize) -> Result<()> {
+    pub fn update_system(
+        &mut self,
+        world: &World,
+        center: Vec3,
+        current_frame: usize,
+    ) -> Result<()> {
         self.lights.clear();
         self.lights
-            .extend(
-                world
-                    .query::<(&Light, &Position)>()
-                    .iter()
-                    .map(|(_, (light, position))| LightData {
-                        position: position.0,
-                        radiance: light.radiance,
-                        reference_illuminance: (light.radiance / (center - position.0).mag_sq())
-                            .mag(),
-                        ..Default::default()
-                    }),
-            );
+            .extend(world.query::<(&PointLight, &Position)>().iter().map(
+                |(_, (light, position))| LightData {
+                    position: position.0,
+                    radiance: light.radiance,
+                    reference_illuminance: (light.radiance / (center - position.0).mag_sq()).mag(),
+                    ..Default::default()
+                },
+            ));
 
         self.lights.sort_unstable();
         self.num_lights = self.max_lights.min(self.lights.len() as u64);
@@ -129,6 +130,15 @@ impl LightManager {
         )?;
 
         Ok(())
+    }
+
+    pub fn update_all_system(world: &World, current_frame: usize) -> Result<()> {
+        world
+            .query::<(&mut LightManager, &Position)>()
+            .iter()
+            .try_for_each(|(_, (light_manager, position))| {
+                light_manager.update_system(world, position.0, current_frame)
+            })
     }
 
     pub fn scene_buffers(&self) -> &[Buffer] {

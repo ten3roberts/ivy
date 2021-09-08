@@ -54,7 +54,7 @@ impl UIRenderer {
     }
 
     /// Begins drawing of UI.
-    pub fn draw<T: 'static + ShaderPass + Sized + Sync + Send>(
+    pub fn draw<T: ShaderPass>(
         &mut self,
         world: &mut World,
         cmd: &CommandBuffer,

@@ -108,10 +108,7 @@ impl ImageRenderer {
     /// nothing if entities are already registered. Call this function after adding new entities to the world.
     /// # Failures
     /// Fails if object buffer cannot be reallocated to accomodate new entities.
-    pub fn register_entities<T: 'static + ShaderPass + Send + Sync>(
-        &mut self,
-        world: &mut World,
-    ) -> Result<()> {
+    pub fn register_entities<T: ShaderPass>(&mut self, world: &mut World) -> Result<()> {
         let query = world
             .query_mut::<RenderObjectUnregistered<T>>()
             .without::<ObjectBufferMarker>();
@@ -160,7 +157,7 @@ impl ImageRenderer {
     }
 
     /// Will draw all entities with a Handle<Material>, Handle<Mesh>, Modelmatrix and Shaderpass `Handle<T>`
-    pub fn draw<T: 'static + ShaderPass + Sized + Sync + Send>(
+    pub fn draw<T: ShaderPass>(
         &mut self,
         world: &mut World,
         cmd: &CommandBuffer,
@@ -252,7 +249,7 @@ impl PassData {
     }
 
     /// Builds rendering batches for shaderpass `T` for all objects not yet batched.
-    pub fn build_batches<T: 'static + ShaderPass + Send + Sync>(
+    pub fn build_batches<T: ShaderPass>(
         &mut self,
         world: &mut World,
         passes: &ResourceCache<T>,

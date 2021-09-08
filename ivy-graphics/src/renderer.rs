@@ -8,7 +8,7 @@ use ivy_vulkan::commands::CommandBuffer;
 pub trait Renderer {
     // Draws the scene using the pass [`Pass`] and the provided camera.
     // Note: camera must have gpu side data.
-    fn draw<Pass: 'static + ShaderPass + Sized + Sync + Send>(
+    fn draw<Pass: ShaderPass>(
         &mut self,
         // The ecs world
         world: &mut World,

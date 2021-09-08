@@ -183,7 +183,7 @@ impl GpuCameraData {
             .map_err(|e| e.into())
     }
 
-    pub fn update_all(world: &mut World, current_frame: usize) -> Result<()> {
+    pub fn update_all_system(world: &mut World, current_frame: usize) -> Result<()> {
         world
             .query_mut::<(&Camera, &mut GpuCameraData, &Position)>()
             .into_iter()

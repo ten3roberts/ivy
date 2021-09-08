@@ -113,10 +113,7 @@ impl IndirectMeshRenderer {
     /// nothing if entities are already registered. Call this function after adding new entities to the world.
     /// # Failures
     /// Fails if object buffer cannot be reallocated to accomodate new entities.
-    pub fn register_entities<T: 'static + ShaderPass + Send + Sync>(
-        &mut self,
-        world: &mut World,
-    ) -> Result<()> {
+    pub fn register_entities<T: ShaderPass>(&mut self, world: &mut World) -> Result<()> {
         let query = world
             .query_mut::<RenderObjectUnregistered<T>>()
             .without::<ObjectBufferMarker>();
@@ -166,7 +163,7 @@ impl IndirectMeshRenderer {
 }
 
 impl Renderer for IndirectMeshRenderer {
-    fn draw<Pass: 'static + ShaderPass + Sized + Sync + Send>(
+    fn draw<Pass: ShaderPass>(
         &mut self,
         // The ecs world
         world: &mut World,
@@ -256,7 +253,7 @@ impl PassData {
     pub fn build_batches<T, U>(&mut self, world: &mut World, passes: &U) -> Result<()>
     where
         U: Deref<Target = ResourceCache<T>>,
-        T: 'static + ShaderPass + Send + Sync,
+        T: ShaderPass,
     {
         let query = world
             .query_mut::<RenderObject<T>>()

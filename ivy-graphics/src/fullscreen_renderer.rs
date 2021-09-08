@@ -6,7 +6,7 @@ use ivy_resources::Resources;
 pub struct FullscreenRenderer;
 
 impl Renderer for FullscreenRenderer {
-    fn draw<Pass: 'static + ShaderPass + Sized + Sync + Send>(
+    fn draw<Pass: ShaderPass>(
         &mut self,
         // The ecs world
         _world: &mut hecs::World,

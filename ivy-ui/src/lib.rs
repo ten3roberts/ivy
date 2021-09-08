@@ -1,10 +1,10 @@
 mod canvas;
 mod components;
+pub mod constraints;
 mod error;
 mod image;
 mod image_renderer;
 pub mod systems;
-pub mod constraints;
 
 pub use canvas::*;
 pub use components::*;

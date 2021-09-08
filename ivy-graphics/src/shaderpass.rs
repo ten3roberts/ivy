@@ -4,7 +4,7 @@ use ivy_vulkan::Pipeline;
 /// Represents a single pass containing the pipeline and other data. Since
 /// [Material](crate::Material) does not
 /// contain a pipeline, a `ShaderPass` can be considered a master material.
-pub trait ShaderPass {
+pub trait ShaderPass: 'static + Send + Sync {
     /// Returns the pipeline used for this shaderpass.
     fn pipeline(&self) -> &Pipeline;
 

@@ -1,7 +1,11 @@
 use anyhow::Context;
 use ivy_graphics::{Renderer, ShaderPass};
 use ivy_resources::{Handle, Storage};
-use ivy_vulkan::{Texture, descriptors::{DescriptorSet, IntoSet}, vk::ClearValue};
+use ivy_vulkan::{
+    descriptors::{DescriptorSet, IntoSet},
+    vk::ClearValue,
+    Texture,
+};
 use std::marker::PhantomData;
 
 use crate::{AttachmentInfo, Node, NodeKind};

@@ -73,7 +73,7 @@ impl BatchedMeshRenderer {
 
     /// Registers all unregisters entities capable of being rendered for specified pass. Does
     /// nothing if entities are already registered.
-    fn register_entities<T: 'static + ShaderPass + Send + Sync>(&mut self, world: &mut World) {
+    fn register_entities<T: ShaderPass>(&mut self, world: &mut World) {
         let query = world
             .query_mut::<RenderObjectUnregistered<T>>()
             .without::<ObjectBufferMarker>();
@@ -105,7 +105,7 @@ impl BatchedMeshRenderer {
         Ok(())
     }
     /// Will draw all entities with a Handle<Material>, Handle<Mesh>, Modelmatrix and Shaderpass `Handle<T>`
-    pub fn draw<T: 'static + ShaderPass + Sized + Sync + Send>(
+    pub fn draw<T: ShaderPass>(
         &mut self,
         world: &mut World,
         cmd: &CommandBuffer,
@@ -149,7 +149,7 @@ impl PassData {
     }
 
     /// Builds rendering batches for shaderpass `T` for all objects not yet batched.
-    pub fn build_batches<T: 'static + ShaderPass + Send + Sync>(
+    pub fn build_batches<T: ShaderPass>(
         &mut self,
         world: &mut World,
         passes: &ResourceCache<T>,

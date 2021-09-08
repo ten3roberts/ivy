@@ -8,6 +8,7 @@ description = "post processing helpers for ivy"
 
 [dependencies]
 anyhow = "1.0"
+derive_more = "0.99"
 hecs = { version = "0.5", features = [ "macros" ] }
 itertools = "0.10"
 ivy-graphics = { path = "../ivy-graphics", version = "*" }

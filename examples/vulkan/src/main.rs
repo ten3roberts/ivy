@@ -9,13 +9,13 @@ use ivy_graphics::{
     components::{AngularVelocity, Position, Rotation, Scale},
     new_shaderpass,
     window::{WindowExt, WindowInfo, WindowMode},
-    Camera, FullscreenRenderer, GpuCameraData, IndirectMeshRenderer, Light, LightManager, Material,
-    Vertex,
+    Camera, FullscreenRenderer, GpuCameraData, IndirectMeshRenderer, LightManager, Material,
+    PointLight, Vertex,
 };
 use ivy_input::{Input, InputAxis, InputVector};
-use ivy_postprocessing::node::PostProcessingNode;
-use ivy_postprocessing::pbr::PBRAttachments;
-use ivy_rendergraph::{AttachmentInfo, CameraNode, RenderGraph, SwapchainNode};
+use ivy_postprocessing::pbr::create_pbr_pipeline;
+use ivy_postprocessing::pbr::PBRInfo;
+use ivy_rendergraph::{RenderGraph, SwapchainNode};
 use ivy_resources::{Handle, Resources};
 use ivy_ui::{
     constraints::{AbsoluteOffset, AbsoluteSize, Aspect, RelativeOffset, RelativeSize},
@@ -366,8 +366,6 @@ impl VulkanLayer {
 
         resources.insert_default(FullscreenRenderer)?;
 
-        GpuCameraData::create_gpu_cameras(context.clone(), world, FRAMES_IN_FLIGHT)?;
-
         let camera = world
             .query::<&Camera>()
             .without::<Canvas>()
@@ -377,17 +375,6 @@ impl VulkanLayer {
             .0;
 
         let swapchain_extent = resources.get(swapchain)?.extent();
-
-        let depth_buffer = resources.insert(Texture::new(
-            context.clone(),
-            &TextureInfo {
-                extent: swapchain_extent,
-                mip_levels: 1,
-                usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT,
-                format: Format::D32_SFLOAT,
-                samples: SampleCountFlags::TYPE_1,
-            },
-        )?)?;
 
         let final_diffuse = resources.insert(Texture::new(
             context.clone(),
@@ -401,93 +388,25 @@ impl VulkanLayer {
             },
         )?)?;
 
-        let pbr_attachments = PBRAttachments::new(context.clone(), &resources, swapchain_extent)?;
-
-        let camera_data = world.get::<GpuCameraData>(camera)?;
-        let light_manager = resources.get_default::<LightManager>()?;
-
-        // let fullscreen_sets = DescriptorBuilder::from_mutliple_resources(
-        //     &context,
-        //     &[
-        //         (&InputAttachment(albedo_view), ShaderStageFlags::FRAGMENT),
-        //         (&InputAttachment(position_view), ShaderStageFlags::FRAGMENT),
-        //         (&InputAttachment(normal_view), ShaderStageFlags::FRAGMENT),
-        //         (&InputAttachment(mr_view), ShaderStageFlags::FRAGMENT),
-        //         (&camera_data.buffers(), ShaderStageFlags::FRAGMENT),
-        //         (&light_manager.scene_buffers(), ShaderStageFlags::FRAGMENT),
-        //         (&light_manager.light_buffers(), ShaderStageFlags::FRAGMENT),
-        //     ],
-        //     FRAMES_IN_FLIGHT,
-        // )?;
-
-        let diffuse_node =
-            rendergraph.add_node(CameraNode::<DiffusePass, IndirectMeshRenderer>::new(
+        let pbr_nodes =
+            rendergraph.add_nodes(create_pbr_pipeline::<DiffusePass, PostProcessingPass>(
+                context.clone(),
+                world,
+                &resources,
                 camera,
-                resources.default::<IndirectMeshRenderer>()?,
-                vec![
-                    AttachmentInfo {
-                        final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-                        initial_layout: ImageLayout::UNDEFINED,
-                        resource: pbr_attachments.albedo,
-                        store_op: StoreOp::STORE,
-                        load_op: LoadOp::CLEAR,
-                    },
-                    AttachmentInfo {
-                        final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-                        initial_layout: ImageLayout::UNDEFINED,
-                        resource: pbr_attachments.position,
-                        store_op: StoreOp::STORE,
-                        load_op: LoadOp::CLEAR,
-                    },
-                    AttachmentInfo {
-                        final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-                        initial_layout: ImageLayout::UNDEFINED,
-                        resource: pbr_attachments.normal,
-                        store_op: StoreOp::STORE,
-                        load_op: LoadOp::CLEAR,
-                    },
-                    AttachmentInfo {
-                        final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-                        initial_layout: ImageLayout::UNDEFINED,
-                        resource: pbr_attachments.roughness_metallic,
-                        store_op: StoreOp::STORE,
-                        load_op: LoadOp::CLEAR,
-                    },
-                ],
-                vec![],
-                vec![],
-                Some(AttachmentInfo {
-                    initial_layout: ImageLayout::UNDEFINED,
-                    final_layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                    resource: depth_buffer,
-                    store_op: StoreOp::DONT_CARE,
-                    load_op: LoadOp::CLEAR,
-                }),
-                vec![
-                    ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
-                    ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
-                    ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
-                    ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
-                    ClearValue::DepthStencil(1.0, 0).into(),
-                ],
-            ));
+                swapchain_extent,
+                FRAMES_IN_FLIGHT,
+                &[],
+                &[final_diffuse],
+                &[],
+                PBRInfo {
+                    ambient_radience: Vec3::one() * 0.01,
+                    max_lights: 10,
+                },
+            )?);
 
-        let fullscreen_node = rendergraph.add_node(PostProcessingNode::<PostProcessingPass>::new(
-            context.clone(),
-            &resources,
-            &[],
-            &pbr_attachments.as_slice(),
-            &[
-                &camera_data.buffers(),
-                &light_manager.scene_buffers(),
-                &light_manager.light_buffers(),
-            ],
-            &[final_diffuse],
-            FRAMES_IN_FLIGHT,
-        )?);
-
-        drop(camera_data);
-        drop(light_manager);
+        let geometry_node = pbr_nodes[0];
+        let post_processing_node = pbr_nodes[1];
 
         let swapchain_node = rendergraph.add_node(SwapchainNode::new(
             context.clone(),
@@ -573,7 +492,7 @@ impl VulkanLayer {
                 samples: SampleCountFlags::TYPE_1,
                 extent: swapchain_extent,
                 cull_mode: CullModeFlags::NONE,
-                ..rendergraph.pipeline_info(fullscreen_node)?
+                ..rendergraph.pipeline_info(post_processing_node)?
             },
         )?;
 
@@ -588,7 +507,7 @@ impl VulkanLayer {
                 polygon_mode: vk::PolygonMode::FILL,
                 cull_mode: vk::CullModeFlags::NONE,
                 front_face: vk::FrontFace::CLOCKWISE,
-                ..rendergraph.pipeline_info(diffuse_node)?
+                ..rendergraph.pipeline_info(geometry_node)?
             },
         )?;
 
@@ -668,12 +587,12 @@ impl VulkanLayer {
 
         world.spawn((
             Position(Vec3::new(7.0, 0.0, 0.0)),
-            Light::new(Vec3::new(0.0, 0.0, 20.0)),
+            PointLight::new(Vec3::new(0.0, 0.0, 20.0)),
         ));
 
         world.spawn((
             Position(Vec3::new(0.0, 2.0, 5.0)),
-            Light::new(Vec3::new(20.0, 0.0, 0.0)),
+            PointLight::new(Vec3::new(20.0, 0.0, 0.0)),
         ));
 
         setup_ui(world, image, image2, default_shaderpass)?;
@@ -716,13 +635,8 @@ impl Layer for VulkanLayer {
             indirect_renderer.update(world, current_frame)?;
         }
 
-        GpuCameraData::update_all(world, current_frame)?;
-
-        self.resources.get_default_mut::<LightManager>()?.update(
-            world,
-            Vec3::zero(),
-            current_frame,
-        )?;
+        GpuCameraData::update_all_system(world, current_frame)?;
+        LightManager::update_all_system(world, current_frame)?;
 
         self.rendergraph.execute(world, &self.resources)?;
         self.rendergraph.end()?;
