@@ -9,6 +9,8 @@ members = [
   "ivy-ui",
   "ivy-vulkan",
   "ivy-postprocessing",
+  "ivy-physics",
+  "ivy-random",
 
   "examples/sandbox",
   "examples/vulkan"

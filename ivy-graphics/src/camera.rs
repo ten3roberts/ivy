@@ -1,7 +1,8 @@
-use crate::{components::Position, Result};
+use crate::Result;
 use ash::vk::{DescriptorSet, ShaderStageFlags};
 use derive_more::{AsRef, Deref, From, Into};
 use hecs::World;
+use ivy_core::Position;
 use ivy_resources::Handle;
 use ivy_vulkan::{
     descriptors::{DescriptorBuilder, IntoSet},

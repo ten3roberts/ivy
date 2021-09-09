@@ -1,10 +1,8 @@
 use hecs::World;
-use ultraviolet::{Mat4, Rotor3};
+use ivy_core::{Position, Rotation, Scale};
+use ultraviolet::Mat4;
 
-use crate::{
-    components::{AngularVelocity, ModelMatrix, Position, Rotation, Scale},
-    Camera,
-};
+use crate::{components::ModelMatrix, Camera};
 
 pub fn update_model_matrices(world: &mut World) {
     let without = world
@@ -54,16 +52,6 @@ pub fn update_model_matrices(world: &mut World) {
         .for_each(|(_, (model, pos, scale))| {
             *model =
                 ModelMatrix(Mat4::from_translation(**pos)) * Mat4::from_nonuniform_scale(**scale)
-        });
-}
-
-pub fn integrate_angular_velocity(world: &mut World, dt: f32) {
-    world
-        .query_mut::<(&mut Rotation, &AngularVelocity)>()
-        .into_iter()
-        .for_each(|(_, (rot, ang))| {
-            let (x, y, z) = (ang.x, ang.y, ang.z);
-            *rot = Rotation(**rot * Rotor3::from_euler_angles(x * dt, y * dt, z * dt));
         });
 }
 

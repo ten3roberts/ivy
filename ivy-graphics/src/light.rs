@@ -1,8 +1,9 @@
-use crate::{components::Position, Result};
+use crate::Result;
 use std::{mem::size_of, sync::Arc};
 
 use ash::vk::{DescriptorSet, ShaderStageFlags};
 use hecs::World;
+use ivy_core::Position;
 use ivy_vulkan::{
     descriptors::{DescriptorBuilder, IntoSet},
     Buffer, VulkanContext,

@@ -4,17 +4,20 @@ use flume::Receiver;
 use glfw::{Action, CursorMode, Glfw, Key, Window, WindowEvent};
 use hecs::World;
 use hecs_hierarchy::Hierarchy;
-use ivy_core::{App, AppEvent, Clock, Events, FromDuration, IntoDuration, Layer, Logger};
+use ivy_core::{
+    App, AppEvent, Clock, Events, FromDuration, IntoDuration, Layer, Logger, Position, Rotation,
+};
 use ivy_graphics::{
-    components::{AngularVelocity, Position, Rotation, Scale},
     new_shaderpass,
     window::{WindowExt, WindowInfo, WindowMode},
     Camera, FullscreenRenderer, GpuCameraData, IndirectMeshRenderer, LightManager, Material,
     PointLight, Vertex,
 };
 use ivy_input::{Input, InputAxis, InputVector};
+use ivy_physics::components::{AngularVelocity, Velocity};
 use ivy_postprocessing::pbr::create_pbr_pipeline;
 use ivy_postprocessing::pbr::PBRInfo;
+use ivy_random::Random;
 use ivy_rendergraph::{RenderGraph, SwapchainNode};
 use ivy_resources::{Handle, Resources};
 use ivy_ui::{
@@ -22,6 +25,7 @@ use ivy_ui::{
     Canvas, Image, Position2D, Size2D, Widget,
 };
 use ivy_vulkan::{vk::CullModeFlags, *};
+use rand::{prelude::StdRng, SeedableRng};
 use std::{
     sync::{mpsc, Arc},
     time::Duration,
@@ -29,8 +33,6 @@ use std::{
 use ultraviolet::{Rotor3, Vec3};
 
 use log::*;
-
-use crate::route::Route2D;
 
 mod route;
 
@@ -213,10 +215,11 @@ impl Layer for LogicLayer {
 
             *camera_pos += Position(camera_rot.into_matrix() * (movement * dt * self.cemra_speed));
 
-            route::update_routes(world, dt);
+            // route::update_routes(world, dt);
 
             ivy_graphics::systems::update_view_matrices(world);
-            ivy_graphics::systems::integrate_angular_velocity(world, dt);
+            ivy_physics::systems::integrate_angular_velocity_system(world, dt);
+            ivy_physics::systems::integrate_velocity_system(world, dt);
 
             ivy_graphics::systems::update_model_matrices(world);
             ivy_ui::systems::update_model_matrices(world);
@@ -282,14 +285,6 @@ fn setup_ui(
             RelativeOffset::new(0.3, -0.5),
             AbsoluteSize::new(200.0, 100.0),
             Aspect::new(1.0),
-            Route2D::new(
-                vec![
-                    RelativeOffset::new(0.0, 0.0),
-                    RelativeOffset::new(0.5, 0.5),
-                    RelativeOffset::new(-0.5, 0.5),
-                ],
-                0.1,
-            ),
         ),
     )?;
 
@@ -302,14 +297,6 @@ fn setup_ui(
             RelativeOffset::new(0.3, -0.5),
             AbsoluteSize::new(200.0, 100.0),
             Aspect::new(1.0),
-            Route2D::new(
-                vec![
-                    RelativeOffset::new(0.0, 0.0),
-                    RelativeOffset::new(0.5, 0.5),
-                    RelativeOffset::new(-0.5, 0.5),
-                ],
-                0.2,
-            ),
         ),
     )?;
 
@@ -400,7 +387,7 @@ impl VulkanLayer {
                 &[final_diffuse],
                 &[],
                 PBRInfo {
-                    ambient_radience: Vec3::one() * 0.01,
+                    ambient_radience: Vec3::one() * 0.05,
                     max_lights: 10,
                 },
             )?);
@@ -428,15 +415,6 @@ impl VulkanLayer {
         .context("Failed to load cube model")?;
 
         let cube_mesh = document.mesh(0);
-
-        let document = ivy_graphics::Document::load(
-            context.clone(),
-            resources.fetch_mut()?,
-            "./res/models/sphere.gltf",
-        )
-        .context("Failed to load sphere model")?;
-
-        let sphere_mesh = document.mesh(0);
 
         let grid = resources.insert(
             Texture::load(context.clone(), "./res/textures/grid.png")
@@ -541,58 +519,28 @@ impl VulkanLayer {
             .cloned(),
         );
 
-        let cube_side = 10;
-        world.spawn_batch(
-            (0..cube_side)
-                .flat_map(move |x| (0..cube_side).map(move |y| (x, y)))
-                .flat_map(move |(x, y)| (0..cube_side).map(move |z| (x, y, z)))
-                .map(|(x, y, z)| {
-                    (
-                        cube_mesh,
-                        Position(Vec3::new(
-                            x as f32 * 3.0 - 5.0,
-                            y as f32 * 3.0,
-                            -z as f32 * 3.0,
-                        )),
-                        material,
-                        default_shaderpass,
-                        // Scale(Vec3::new(0.1, 0.1, 0.1)),
-                        Rotation(Rotor3::identity()),
-                        AngularVelocity(Vec3::new(0.0, y as f32 * 0.1, x as f32 * 0.1)),
-                    )
-                }),
-        );
+        let mut rng = StdRng::seed_from_u64(42);
 
-        world.spawn((
-            Position(Vec3::new(1.0, -2.0, 3.0)),
-            cube_mesh,
-            Rotation::default(),
-            Scale(Vec3::one() * 0.5),
-            default_shaderpass,
-            material2,
-        ));
-
-        world.spawn((
-            Position(Vec3::new(0.0, 0.0, 3.0)),
-            sphere_mesh,
-            Rotation::default(),
-            AngularVelocity(Vec3::new(0.0, 0.1, 1.0)),
-            material,
-        ));
-
-        // world.spawn((
-        //     Position(Vec3::new(3.0, 5.0, 7.0)),
-        //     Light::new(Vec3::new(100.0, 100.0, 100.0)),
-        // ));
+        world.spawn_batch((0..500).map(|_| {
+            (
+                Position(Vec3::rand_sphere(&mut rng) * 100.0),
+                Rotation::default(),
+                AngularVelocity(Vec3::rand_uniform(&mut rng)),
+                Velocity(Vec3::rand_sphere(&mut rng) * 5.0),
+                cube_mesh,
+                material,
+                default_shaderpass,
+            )
+        }));
 
         world.spawn((
             Position(Vec3::new(7.0, 0.0, 0.0)),
-            PointLight::new(Vec3::new(0.0, 0.0, 20.0)),
+            PointLight::new(Vec3::new(0.0, 0.0, 500.0)),
         ));
 
         world.spawn((
             Position(Vec3::new(0.0, 2.0, 5.0)),
-            PointLight::new(Vec3::new(20.0, 0.0, 0.0)),
+            PointLight::new(Vec3::new(500.0, 0.0, 0.0)),
         ));
 
         setup_ui(world, image, image2, default_shaderpass)?;

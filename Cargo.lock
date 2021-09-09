@@ -377,11 +377,13 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "crossbeam-channel",
+ "derive_more",
  "downcast-rs",
  "flume",
  "hecs",
  "log",
  "thiserror",
+ "ultraviolet",
 ]
 
 [[package]]
@@ -394,6 +396,7 @@ dependencies = [
  "glfw",
  "gltf",
  "hecs",
+ "ivy-core",
  "ivy-resources",
  "ivy-vulkan",
  "thiserror",
@@ -411,6 +414,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ivy-physics"
+version = "0.1.0"
+dependencies = [
+ "derive_more",
+ "hecs",
+ "ivy-core",
+ "thiserror",
+ "ultraviolet",
+]
+
+[[package]]
 name = "ivy-postprocessing"
 version = "0.1.0"
 dependencies = [
@@ -422,6 +436,14 @@ dependencies = [
  "ivy-rendergraph",
  "ivy-resources",
  "ivy-vulkan",
+ "ultraviolet",
+]
+
+[[package]]
+name = "ivy-random"
+version = "0.1.0"
+dependencies = [
+ "rand",
  "ultraviolet",
 ]
 
@@ -981,12 +1003,15 @@ dependencies = [
  "ivy-core",
  "ivy-graphics",
  "ivy-input",
+ "ivy-physics",
  "ivy-postprocessing",
+ "ivy-random",
  "ivy-rendergraph",
  "ivy-resources",
  "ivy-ui",
  "ivy-vulkan",
  "log",
+ "rand",
  "ultraviolet",
 ]
 
