@@ -1,0 +1,11 @@
+[package]
+name = "ivy-random"
+version = "0.1.0"
+edition = "2018"
+description = "Provides random utility functions to the ivy framework"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rand = "0.8"
+ultraviolet = "0.8"
