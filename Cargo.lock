@@ -372,6 +372,31 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd25036021b0de88a0aff6b850051563c6516d0bf53f8638938edbb9de732736"
 
 [[package]]
+name = "ivy"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "atomic_refcell",
+ "flume",
+ "glfw",
+ "hecs",
+ "hecs-hierarchy",
+ "ivy-core",
+ "ivy-graphics",
+ "ivy-input",
+ "ivy-physics",
+ "ivy-postprocessing",
+ "ivy-random",
+ "ivy-rendergraph",
+ "ivy-resources",
+ "ivy-stb",
+ "ivy-ui",
+ "ivy-vulkan",
+ "log",
+ "ultraviolet",
+]
+
+[[package]]
 name = "ivy-core"
 version = "0.1.0"
 dependencies = [
@@ -806,18 +831,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sandbox"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "flume",
- "hecs",
- "ivy-core",
- "log",
- "rand",
-]
-
-[[package]]
 name = "scopeguard"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -988,32 +1001,6 @@ name = "vk-sys"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "36f5fd4a7d6d5d19808610583131c0aed271556527cad4cb71c436831a28e059"
-
-[[package]]
-name = "vulkan"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "atomic_refcell",
- "derive_more",
- "flume",
- "glfw",
- "hecs",
- "hecs-hierarchy",
- "ivy-core",
- "ivy-graphics",
- "ivy-input",
- "ivy-physics",
- "ivy-postprocessing",
- "ivy-random",
- "ivy-rendergraph",
- "ivy-resources",
- "ivy-ui",
- "ivy-vulkan",
- "log",
- "rand",
- "ultraviolet",
-]
 
 [[package]]
 name = "wasi"

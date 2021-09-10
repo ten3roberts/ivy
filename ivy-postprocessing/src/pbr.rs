@@ -128,7 +128,7 @@ pub fn create_pbr_pipeline<GeometryPass: ShaderPass, PostProcessingPass: ShaderP
     extent: Extent,
     frames_in_flight: usize,
     read_attachments: &[Handle<Texture>],
-    color_attachments: &[Handle<Texture>],
+    color_attachments: &[AttachmentInfo],
     bindables: &[&dyn MultiDescriptorBindable],
     info: PBRInfo,
 ) -> Result<[Box<dyn Node>; 2]> {

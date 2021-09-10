@@ -168,6 +168,20 @@ impl PassKind {
                             dst_access_mask: edge.read_access,
                             dependency_flags: vk::DependencyFlags::BY_REGION,
                         },
+                        EdgeKind::Attachment => SubpassDependency {
+                            src_subpass: pass_nodes
+                                .iter()
+                                .enumerate()
+                                .find(|(_, node)| **node == edge.src)
+                                .unwrap()
+                                .0 as u32,
+                            dst_subpass: subpass_index as u32,
+                            src_stage_mask: edge.write_stage,
+                            dst_stage_mask: edge.read_stage,
+                            src_access_mask: edge.write_access,
+                            dst_access_mask: edge.read_access,
+                            dependency_flags: vk::DependencyFlags::BY_REGION,
+                        },
                     })
             })
             .collect::<Vec<_>>();

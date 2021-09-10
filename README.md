@@ -1,56 +1,35 @@
-# Ivy
-Ivy is a modular game and graphics framework in Rust.
+# ivy
 
-## Application
-Represents the main application managing events and window
+## Ivy
 
-### Application creation
-  ```rust
-let app = Application::builder()
-.name("Sandbox")
-.with_layer(SandboxLayer::new)
-  .name("Sandbox")
-  .with_step(Step::Tied,)
+### What it is
 
-  app.run();
-  ```
+Ivy is a modular application and game framework for Rust.
 
-## Layers
-  Layers can be added to an application and allow for low
-  level engine control. Each layer can interact directly and
-  control the application. Used to represent low level logic
-  and dispatch different workloads.
+This crate exports all ivy crates, but the separate crates can just as well be used manually.
 
-  ```rust
-  struct SandboxLayer {
-frame: usize,
-         accumulator: f32,
-         clock: Clock,
-         dt: f32,
-  }
+### How it works
 
-impl SandboxLayer {
-  pub fn new(world: &mut World, events: &mut Events) -> Self {
-    Self {
-frame: 0,
-         accumulator: 0.0,
-         clock: Clock::new(),
-         dt: 0.02,
-    }
-  }
-}
+#### Layers
+The core of the program is an application. [`core::App`]. It defines the
+update loop, and event handling.
 
-impl Layer for SandboxLayer {
-  fn on_update(&mut self, app: &Application) {
-    println!("Updating");
-    frame_time = self.clock.reset();
+From there, logic is extracted into layers which are run for each iteration.
+Within a layer, the user is free to do whatever they want, from reading from
+sockets, rendering using vulkan, or dispatching ECS workloads.
 
-    // Run physics at a fixed deltatime of 0.02
-    self.accumulator += self.dt;
-    while self.accumulator >= self.dt {
-      app.world.run_workload("Physics");
-      self.accumulator -= dt;
-    }
-  }
-}
-```
+Due to the layered design, several high level concepts can work together and
+not interfere, aswell as being inserted based on different configurations.
+
+#### Inter-layer communication
+The application exposes different ways in which two layers can influence
+each other.
+
+- `world` contains the ECS world with all entities and components.
+- `resources` is a typed storage accessed by handles. This is useful for
+storing textures, models, or singletons that are to be shared between layers
+and inside layers with dynamic borrow checking.
+- `events` facilitates a broadcasting channel in which events can be sent
+and listen to. Each layer can set up a receiver and iterate the sent events
+of a specific type. This is best used for low frequency data to avoid busy
+checking, like user input, state changes, or alike.

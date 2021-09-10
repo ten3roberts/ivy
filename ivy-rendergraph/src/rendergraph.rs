@@ -60,7 +60,7 @@ impl RenderGraph {
     }
 
     /// Adds a new node into the rendergraph.
-    /// **Note**: The new node won't take effect until [`RenderGraph::Build`] is called.
+    /// **Note**: The new node won't take effect until [`RenderGraph::build`] is called.
     pub fn add_node<T: 'static + Node>(&mut self, node: T) -> NodeIndex {
         self.nodes.insert(Box::new(node))
     }
@@ -92,15 +92,26 @@ impl RenderGraph {
                 EdgeConstructor {
                     nodes,
                     dst: node.0,
-                    reads: node.1.input_attachments().into_iter(),
+                    reads: node.1.input_attachments().into_iter().cloned(),
                     kind: EdgeKind::Input,
                 }
                 .chain(EdgeConstructor {
                     nodes,
                     dst: node.0,
-                    reads: node.1.read_attachments().into_iter(),
+                    reads: node.1.read_attachments().into_iter().cloned(),
                     kind: EdgeKind::Sampled,
                 })
+                .chain(EdgeConstructor {
+                    nodes,
+                    dst: node.0,
+                    reads: node
+                        .1
+                        .color_attachments()
+                        .into_iter()
+                        .map(|val| val.resource),
+                    kind: EdgeKind::Attachment,
+                })
+                .filter(|val| !matches!(*val, Err(Error::MissingWrite(_, _, _))))
             })
             .try_for_each(|edge: Result<Edge>| -> Result<_> {
                 let edge = edge?;
@@ -118,6 +129,8 @@ impl RenderGraph {
 
                 Ok(())
             })?;
+
+        dbg!(&self.edges);
         Ok(())
     }
 
@@ -369,10 +382,11 @@ where
                     depths,
                     edge.dst,
                     edges,
-                    if edge.kind == EdgeKind::Input {
-                        depth
-                    } else {
+                    // Break depth if sampling is required since they can't share subpasses
+                    if edge.kind == EdgeKind::Sampled {
                         depth + 1
+                    } else {
+                        depth
                     },
                 )
             })?;
@@ -421,6 +435,8 @@ pub enum EdgeKind {
     Sampled,
     /// Dependency is used as input attachment and can use dependency by region.
     Input,
+    /// The attachment is loaded and written to. Depend on earlier nodes
+    Attachment,
 }
 
 impl Default for EdgeKind {
@@ -612,14 +628,14 @@ mod tests {
     }
 }
 
-struct EdgeConstructor<'a> {
+struct EdgeConstructor<'a, I> {
     nodes: &'a SlotMap<NodeIndex, Box<dyn Node>>,
     dst: NodeIndex,
-    reads: std::slice::Iter<'a, Handle<Texture>>,
+    reads: I,
     kind: EdgeKind,
 }
 
-impl<'a> Iterator for EdgeConstructor<'a> {
+impl<'a, I: Iterator<Item = Handle<Texture>>> Iterator for EdgeConstructor<'a, I> {
     type Item = Result<Edge>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -629,17 +645,18 @@ impl<'a> Iterator for EdgeConstructor<'a> {
             .map(move |read| {
                 self.nodes
                     .iter()
-                    .find_map(|(src, src_node)| {
+                    .take_while(|(src, _)| *src != self.dst)
+                    .filter_map(|(src, src_node)| {
                         // Found color attachment output
                         if let Some(write) = src_node
                             .color_attachments()
                             .iter()
-                            .find(|w| w.resource == *read)
+                            .find(|w| w.resource == read)
                         {
                             Some(Edge {
                                 src,
                                 dst: self.dst,
-                                resource: *read,
+                                resource: read,
                                 layout: write.final_layout,
                                 write_stage: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
                                 read_stage: vk::PipelineStageFlags::FRAGMENT_SHADER,
@@ -651,12 +668,12 @@ impl<'a> Iterator for EdgeConstructor<'a> {
                         } else if let Some(write) = src_node
                             .depth_attachment()
                             .as_ref()
-                            .filter(|d| d.resource == *read)
+                            .filter(|d| d.resource == read)
                         {
                             Some(Edge {
                                 src,
                                 dst: self.dst,
-                                resource: *read,
+                                resource: read,
                                 layout: write.final_layout,
                                 // Write stage is between
                                 write_stage: vk::PipelineStageFlags::LATE_FRAGMENT_TESTS,
@@ -669,7 +686,12 @@ impl<'a> Iterator for EdgeConstructor<'a> {
                             None
                         }
                     })
-                    .ok_or(Error::MissingWrite(self.dst, *read))
+                    .last()
+                    .ok_or(Error::MissingWrite(
+                        self.dst,
+                        self.nodes[self.dst].debug_name(),
+                        read,
+                    ))
             })
     }
 }

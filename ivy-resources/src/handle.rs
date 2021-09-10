@@ -8,7 +8,7 @@ pub struct Handle<T>(KeyData, PhantomData<T>);
 impl<T> Handle<T> {
     /// Creates a new handle that is always invalid and distinct from any non-null
     /// handle. A null key can only be created through this method (or default
-    /// initialization of handles made with [`new_key_type!`], which calls this
+    /// initialization of handles made with `new_key_type!`, which calls this
     /// method).
     ///
     /// A null handle is always invalid, but an invalid key (that is, a key that

@@ -96,7 +96,7 @@ impl LightManager {
     }
 
     /// Updates the GPU side data of the world lights.
-    /// Each light which has a [`Light`] and [`Position`] will be considered.
+    /// Each light which has a [`PointLight`] and [`Position`] will be considered.
     /// The lights will be sorted in reference to centered. If there are more lights than `max_lights`,
     /// then the n closest will be used.
     pub fn update_system(

@@ -8,6 +8,7 @@ use ivy_vulkan::{descriptors::IntoSet, vk::ClearValue, Texture};
 
 use crate::{AttachmentInfo, Node, NodeKind};
 
+/// A rendergraph node rendering the scene using the provided camera.
 pub struct CameraNode<Pass, T> {
     camera: Entity,
     renderer: Handle<T>,
@@ -75,7 +76,7 @@ where
         NodeKind::Graphics
     }
 
-    fn debug_name(&self) -> &str {
+    fn debug_name(&self) -> &'static str {
         "camera node"
     }
 

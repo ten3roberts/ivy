@@ -20,8 +20,8 @@ pub enum Error {
     #[error("Dependency cycle in rendergraph")]
     DependencyCycle,
 
-    #[error("Node read attachment is missing corresponding write attachment for {1:?} required by node {0:?}")]
-    MissingWrite(NodeIndex, Handle<Texture>),
+    #[error("Node read attachment is missing corresponding write attachment for {2:?} required by node {0:?}: {1:?}")]
+    MissingWrite(NodeIndex, &'static str, Handle<Texture>),
 
     #[error("Resource acquisition error {0}")]
     Resource(#[from] ivy_resources::Error),

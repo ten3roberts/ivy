@@ -8,7 +8,7 @@ pub trait Node {
     fn color_attachments(&self) -> &[AttachmentInfo];
     /// Returns the read attachments for this node. Should not be execution heavy function
     fn read_attachments(&self) -> &[Handle<Texture>];
-    /// Partially samples input attachments. Read from the same pixel coord we write to
+    /// Partially sampled input attachments. Read from the same pixel coord we write to
     fn input_attachments(&self) -> &[Handle<Texture>];
     /// Returns the optional depth attachment for this node. Should not be execution heavy function
     fn depth_attachment(&self) -> Option<&AttachmentInfo>;
@@ -19,7 +19,7 @@ pub trait Node {
     fn node_kind(&self) -> NodeKind;
 
     // Optional name, can be empty string
-    fn debug_name(&self) -> &str {
+    fn debug_name(&self) -> &'static str {
         "Unnamed node"
     }
 

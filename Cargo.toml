@@ -1,3 +1,10 @@
+[package]
+name = "ivy"
+version = "0.1.0"
+authors = ["Tim Roberts <ten3roberts@gmail.com>"]
+edition = "2018"
+description = "Application and game framework for Rust"
+
 [workspace]
 members = [
   "ivy-core",
@@ -11,7 +18,28 @@ members = [
   "ivy-postprocessing",
   "ivy-physics",
   "ivy-random",
-
-  "examples/sandbox",
-  "examples/vulkan"
 ]
+
+[dependencies]
+ivy-core = { path = "./ivy-core" }
+ivy-graphics = { path = "./ivy-graphics" }
+ivy-input = { path = "./ivy-input" }
+ivy-physics = { path = "./ivy-physics" }
+ivy-postprocessing = { path = "./ivy-postprocessing" }
+ivy-random = { path = "./ivy-random" }
+ivy-rendergraph = { path = "./ivy-rendergraph" }
+ivy-resources = { path = "./ivy-resources" }
+ivy-stb = { path = "./ivy-stb" }
+ivy-ui = { path = "./ivy-ui" }
+ivy-vulkan = { path = "./ivy-vulkan" }
+
+[dev-dependencies]
+anyhow = "1.0.40"
+atomic_refcell = "0.1.7"
+
+flume = "0.10"
+hecs = "0.5"
+glfw = { version = "0.41.0", features = [ "vulkan" ] }
+hecs-hierarchy = "0.1"
+ultraviolet = "0.8"
+log = "0.4"

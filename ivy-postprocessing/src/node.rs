@@ -6,8 +6,7 @@ use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
     descriptors::{DescriptorBuilder, DescriptorSet, MultiDescriptorBindable},
     vk::{self, ShaderStageFlags},
-    CombinedImageSampler, ImageLayout, InputAttachment, LoadOp, Sampler, SamplerInfo, StoreOp,
-    Texture, VulkanContext,
+    CombinedImageSampler, InputAttachment, Sampler, SamplerInfo, Texture, VulkanContext,
 };
 
 pub struct PostProcessingNode<Pass> {
@@ -21,8 +20,8 @@ pub struct PostProcessingNode<Pass> {
 
 /// Creates a post processing node that will execute using the default shaderpass of the provided
 /// type.
-/// A descriptor for each frame in flight referencing all [ `read_attachments` ], [`input_attachments`], and
-/// [`bindables`] in order are automatically created, and need to be matched in the shader at set
+/// A descriptor for each frame in flight referencing all `read_attachments`, `input_attachments`, and
+/// `bindables` in order are automatically created, and need to be matched in the shader at set
 /// = 0;
 impl<Pass: 'static + ShaderPass> PostProcessingNode<Pass> {
     pub fn new(
@@ -31,7 +30,7 @@ impl<Pass: 'static + ShaderPass> PostProcessingNode<Pass> {
         read_attachments: &[Handle<Texture>],
         input_attachments: &[Handle<Texture>],
         bindables: &[&dyn MultiDescriptorBindable],
-        color_attachments: &[Handle<Texture>],
+        color_attachments: &[AttachmentInfo],
         frames_in_flight: usize,
     ) -> Result<Self> {
         let sampler = Sampler::new(
@@ -76,22 +75,11 @@ impl<Pass: 'static + ShaderPass> PostProcessingNode<Pass> {
         let sets =
             DescriptorBuilder::from_mutliple_resources(&context, &bindables, frames_in_flight)?;
 
-        let color_attachments = color_attachments
-            .iter()
-            .map(|val| AttachmentInfo {
-                store_op: StoreOp::STORE,
-                load_op: LoadOp::DONT_CARE,
-                initial_layout: ImageLayout::UNDEFINED,
-                final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-                resource: *val,
-            })
-            .collect::<Vec<_>>();
-
         Ok(Self {
             sets,
             read_attachments: read_attachments.to_owned(),
             input_attachments: input_attachments.to_owned(),
-            color_attachments,
+            color_attachments: color_attachments.to_owned(),
             sampler,
             marker: PhantomData,
         })

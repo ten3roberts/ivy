@@ -1,6 +1,7 @@
 mod camera_node;
 mod error;
 mod fullscreen_node;
+pub mod multi_node;
 mod node;
 pub(crate) mod pass;
 mod rendergraph;

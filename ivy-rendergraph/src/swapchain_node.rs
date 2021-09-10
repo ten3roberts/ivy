@@ -120,7 +120,7 @@ impl Node for SwapchainNode {
         NodeKind::Transfer
     }
 
-    fn debug_name(&self) -> &str {
+    fn debug_name(&self) -> &'static str {
         "swapchain node"
     }
 

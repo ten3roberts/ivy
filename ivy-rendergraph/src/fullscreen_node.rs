@@ -88,7 +88,7 @@ where
         NodeKind::Graphics
     }
 
-    fn debug_name(&self) -> &str {
+    fn debug_name(&self) -> &'static str {
         "fullscreen node"
     }
 
