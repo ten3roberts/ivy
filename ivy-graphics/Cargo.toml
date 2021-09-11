@@ -1,6 +1,6 @@
 [package]
 name = "ivy-graphics"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Tim Roberts <ten3roberts@gmail.com>"]
 edition = "2018"
 description = "Provides high level graphics abstractions like Meshes, Materials, etc. Builds on top of ivy-vulkan"
@@ -9,7 +9,7 @@ description = "Provides high level graphics abstractions like Meshes, Materials,
 
 [dependencies]
 anymap = "0.12.1"
-ash = "0.32"
+ash = "0.33"
 derive_more = "0.99"
 glfw = "0.41"
 gltf = "0.15"
