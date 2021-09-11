@@ -173,6 +173,7 @@ impl GpuCameraData {
         position: Position,
         current_frame: usize,
     ) -> Result<()> {
+        dbg!(position);
         self.uniformbuffers[current_frame]
             .fill(
                 0,
@@ -186,10 +187,14 @@ impl GpuCameraData {
 
     pub fn update_all_system(world: &mut World, current_frame: usize) -> Result<()> {
         world
-            .query_mut::<(&Camera, &mut GpuCameraData, &Position)>()
+            .query_mut::<(&Camera, &mut GpuCameraData, Option<&Position>)>()
             .into_iter()
             .try_for_each(|(_, (camera, gpu_camera, position))| {
-                gpu_camera.update(camera, *position, current_frame)
+                gpu_camera.update(
+                    camera,
+                    *position.unwrap_or(&Position::default()),
+                    current_frame,
+                )
             })
     }
 

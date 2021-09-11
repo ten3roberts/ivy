@@ -1,0 +1,32 @@
+[package]
+name = "vulkan"
+version = "0.1.0"
+authors = ["Tim Roberts <ten3roberts@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0"
+atomic_refcell = "0.1"
+derive_more = "0.99"
+flume = "0.10"
+glfw = { version = "0.41.0", features = [ "vulkan" ] }
+hecs = { version = "0.5", features = [ "macros" ] }
+hecs-hierarchy = "0.1"
+ivy-core = { path = "../../ivy-core", version = "0.1.0" }
+ivy-graphics = { path = "../../ivy-graphics", version = "*" }
+ivy-input = { path = "../../ivy-input", version = "0.1.0" }
+ivy-physics = { path = "../../ivy-physics", version = "0.1.0" }
+ivy-postprocessing = { path = "../../ivy-postprocessing", version = "0.1.0" }
+ivy-random = { path = "../../ivy-random", version = "0.1.0" }
+ivy-rendergraph = { path = "../../ivy-rendergraph", version = "*" }
+ivy-resources = { path = "../../ivy-resources", version = "0.2" }
+ivy-ui = { path = "../../ivy-ui", version = "0.1.0" }
+ivy-vulkan = { path = "../../ivy-vulkan", version = "*" }
+log = "0.4"
+rand = "0.8"
+ultraviolet = "0.8"
+
+[build-dependencies]
+anyhow = "1.0"

@@ -1,35 +1,27 @@
+use std::{
+    sync::{mpsc, Arc},
+    time::Duration,
+};
+
 use anyhow::{anyhow, Context};
 use atomic_refcell::AtomicRefCell;
 use flume::Receiver;
 use glfw::{Action, CursorMode, Glfw, Key, Window, WindowEvent};
 use hecs::*;
 use hecs_hierarchy::Hierarchy;
-use ivy_core::{
-    App, AppEvent, Clock, Events, FromDuration, IntoDuration, Layer, Logger, Position, Rotation,
+use ivy::{
+    core::*,
+    graphics::{
+        window::{WindowExt, WindowInfo, WindowMode},
+        *,
+    },
+    input::*,
+    rendergraph::*,
+    resources::*,
+    ui::{constraints::*, *},
+    vulkan::*,
 };
-use ivy_graphics::{
-    new_shaderpass,
-    window::{WindowExt, WindowInfo, WindowMode},
-    Camera, FullscreenRenderer, GpuCameraData, IndirectMeshRenderer, LightManager, Material,
-    PointLight, Vertex,
-};
-use ivy_input::{Input, InputAxis, InputVector};
-use ivy_physics::components::{AngularVelocity, Velocity};
-use ivy_postprocessing::pbr::create_pbr_pipeline;
-use ivy_postprocessing::pbr::PBRInfo;
-use ivy_random::{rand::prelude::*, Random};
-use ivy_rendergraph::{AttachmentInfo, CameraNode, RenderGraph, SwapchainNode};
-use ivy_resources::{Handle, Resources};
-use ivy_ui::{
-    constraints::{AbsoluteOffset, AbsoluteSize, Aspect, RelativeOffset, RelativeSize},
-    Canvas, Image, ImageRenderer, Position2D, Size2D, Widget,
-};
-use ivy_vulkan::{vk::CullModeFlags, *};
-use std::{
-    sync::{mpsc, Arc},
-    time::Duration,
-};
-use ultraviolet::{Rotor3, Vec3};
+use ultraviolet::{Rotor3, Vec2, Vec3};
 
 use log::*;
 
@@ -101,17 +93,11 @@ impl LogicLayer {
 
         let extent = window.borrow().extent();
 
-        world.spawn((
-            Camera::perspective(1.0, extent.aspect(), 0.1, 100.0),
-            Position(Vec3::new(0.0, 0.0, 5.0)),
-            Rotation(Rotor3::identity()),
-        ));
-
-        world.spawn((
-            Camera::orthographic(100.0 * extent.aspect(), 100.0, 0.1, 1000.0),
-            Position(Vec3::new(0.0, 0.0, 50.0)),
-            Rotation(Rotor3::identity()),
-        ));
+        // world.spawn((
+        //     Camera::perspective(1.0, extent.aspect(), 0.1, 100.0),
+        //     Position(Vec3::new(0.0, 0.0, 5.0)),
+        //     Rotation(Rotor3::identity()),
+        // ));
 
         world.spawn((
             Canvas,
@@ -182,37 +168,37 @@ impl Layer for LogicLayer {
         let dt = self.timestep.secs();
 
         {
-            let (_e, camera_rot) = world
-                .query_mut::<&mut Rotation>()
-                .with::<Camera>()
-                .into_iter()
-                .next()
-                .unwrap();
+            // let (_e, camera_rot) = world
+            //     .query_mut::<&mut Rotation>()
+            //     .with::<Camera>()
+            //     .into_iter()
+            //     .next()
+            //     .unwrap();
 
-            let mouse_movement =
-                self.input.rel_mouse_pos() / self.window.borrow().extent().as_vec();
+            // let mouse_movement =
+            //     self.input.rel_mouse_pos() / self.window.borrow().extent().as_vec();
 
-            self.camera_euler += mouse_movement.xyz();
+            // self.camera_euler += mouse_movement.xyz();
 
-            *camera_rot = Rotor3::from_euler_angles(
-                self.camera_euler.z,
-                self.camera_euler.y,
-                -self.camera_euler.x,
-            )
-            .into();
+            // *camera_rot = Rotor3::from_euler_angles(
+            //     self.camera_euler.z,
+            //     self.camera_euler.y,
+            //     -self.camera_euler.x,
+            // )
+            // .into();
         }
 
         while self.acc > 0.0 {
-            let (_e, (camera_pos, camera_rot)) = world
-                .query_mut::<(&mut Position, &Rotation)>()
-                .with::<Camera>()
-                .into_iter()
-                .next()
-                .unwrap();
+            // let (_e, (camera_pos, camera_rot)) = world
+            //     .query_mut::<(&mut Position, &Rotation)>()
+            //     .with::<Camera>()
+            //     .into_iter()
+            //     .next()
+            //     .unwrap();
 
-            let movement = self.input_vec.get(&self.input);
+            // let movement = self.input_vec.get(&self.input);
 
-            *camera_pos += Position(camera_rot.into_matrix() * (movement * dt * self.cemra_speed));
+            // *camera_pos += Position(camera_rot.into_matrix() * (movement * dt * self.cemra_speed));
 
             ivy_graphics::systems::update_view_matrices(world);
             ivy_physics::systems::integrate_angular_velocity_system(world, dt);
@@ -279,8 +265,11 @@ fn setup_ui(
             Widget,
             image,
             ui_pass,
+            Position2D::default(),
+            Size2D::default(),
             RelativeOffset::new(-0.25, -0.25),
-            AbsoluteSize::new(50.0, 50.0),
+            AbsoluteSize::new(500.0, 500.0),
+            ModelMatrix::default(),
         ),
     )?;
 
@@ -290,9 +279,12 @@ fn setup_ui(
             Widget,
             image,
             ui_pass,
-            RelativeOffset::new(0.3, -0.5),
-            AbsoluteSize::new(200.0, 100.0),
+            Position2D::default(),
+            Size2D::default(),
+            RelativeOffset::new(0.4, -0.1),
+            RelativeSize(Vec2::new(0.5, 0.5)),
             Aspect::new(1.0),
+            ModelMatrix::default(),
         ),
     )?;
 
@@ -302,9 +294,12 @@ fn setup_ui(
             Widget,
             image,
             ui_pass,
-            RelativeOffset::new(0.3, -0.5),
+            Position2D::default(),
+            Size2D::default(),
+            RelativeOffset::new(0.3, 0.0),
             AbsoluteSize::new(200.0, 100.0),
             Aspect::new(1.0),
+            ModelMatrix::default(),
         ),
     )?;
 
@@ -314,9 +309,12 @@ fn setup_ui(
             Widget,
             image2,
             ui_pass,
+            Position2D::default(),
+            Size2D::default(),
             RelativeSize::new(0.2, 0.2),
             AbsoluteOffset::new(10.0, 0.0),
             RelativeOffset::new(0.0, -1.0),
+            ModelMatrix::default(),
         ),
     )?;
 
@@ -361,13 +359,13 @@ impl VulkanLayer {
 
         resources.insert_default(FullscreenRenderer)?;
 
-        let camera = world
-            .query::<&Camera>()
-            .without::<Canvas>()
-            .iter()
-            .next()
-            .unwrap()
-            .0;
+        // let camera = world
+        //     .query::<&Camera>()
+        //     .without::<Canvas>()
+        //     .iter()
+        //     .next()
+        //     .unwrap()
+        //     .0;
 
         let swapchain_extent = resources.get(swapchain)?.extent();
 
@@ -420,8 +418,8 @@ impl VulkanLayer {
             resources.default::<ImageRenderer>()?,
             vec![AttachmentInfo {
                 store_op: StoreOp::STORE,
-                load_op: LoadOp::LOAD,
-                initial_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                load_op: LoadOp::CLEAR,
+                initial_layout: ImageLayout::UNDEFINED,
                 final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
                 resource: final_lit,
             }],
@@ -453,7 +451,7 @@ impl VulkanLayer {
         )
         .context("Failed to load cube model")?;
 
-        let cube_mesh = document.mesh(0);
+        let _cube_mesh = document.mesh(0);
 
         let grid = resources.insert(
             Texture::load(context.clone(), "./res/textures/grid.png")
@@ -477,7 +475,7 @@ impl VulkanLayer {
             },
         )?)?;
 
-        let material = resources.insert(Material::new(
+        let _material = resources.insert(Material::new(
             context.clone(),
             &resources,
             grid,
@@ -486,7 +484,7 @@ impl VulkanLayer {
             0.4,
         )?)?;
 
-        let material2 = resources.insert(Material::new(
+        let _material2 = resources.insert(Material::new(
             context.clone(),
             &resources,
             uv_grid,
@@ -586,8 +584,8 @@ impl VulkanLayer {
         let ui_pipeline = Pipeline::new::<Vertex>(
             context.clone(),
             &PipelineInfo {
-                vertexshader: "./res/shaders/uv.vert.spv".into(),
-                fragmentshader: "./res/shaders/uv.frag.spv".into(),
+                vertexshader: "./res/shaders/ui.vert.spv".into(),
+                fragmentshader: "./res/shaders/ui.frag.spv".into(),
                 samples: SampleCountFlags::TYPE_1,
                 extent: swapchain_extent,
                 polygon_mode: vk::PolygonMode::FILL,
@@ -634,9 +632,10 @@ impl Layer for VulkanLayer {
 
         {
             let mut indirect_renderer = self.resources.get_default_mut::<IndirectMeshRenderer>()?;
-            indirect_renderer.register_entities::<GeometryPass>(world)?;
-
             indirect_renderer.update(world, current_frame)?;
+
+            let mut image_renderer = self.resources.get_default_mut::<ImageRenderer>()?;
+            image_renderer.update(world, current_frame)?;
         }
 
         GpuCameraData::update_all_system(world, current_frame)?;

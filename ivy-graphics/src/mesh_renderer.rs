@@ -22,14 +22,6 @@ type RenderObject<'a, T> = (
     &'a ObjectBufferMarker,
 );
 
-/// Same as RenderObject except without ObjectBufferMarker
-type RenderObjectUnregistered<'a, T> = (
-    &'a Handle<T>,
-    &'a Handle<Mesh>,
-    &'a Handle<Material>,
-    &'a ModelMatrix,
-);
-
 type ObjectId = u32;
 
 /// A mesh renderer using vkCmdDrawIndirectIndexed and efficient batching.
@@ -113,9 +105,9 @@ impl IndirectMeshRenderer {
     /// nothing if entities are already registered. Call this function after adding new entities to the world.
     /// # Failures
     /// Fails if object buffer cannot be reallocated to accomodate new entities.
-    pub fn register_entities<T: ShaderPass>(&mut self, world: &mut World) -> Result<()> {
+    fn register_entities(&mut self, world: &mut World) -> Result<()> {
         let query = world
-            .query_mut::<RenderObjectUnregistered<T>>()
+            .query_mut::<(&Handle<Mesh>, &Handle<Material>, &ModelMatrix)>()
             .without::<ObjectBufferMarker>();
 
         let inserted = query
@@ -146,6 +138,8 @@ impl IndirectMeshRenderer {
 
     /// Updates all registered entities gpu side data
     pub fn update(&mut self, world: &mut World, current_frame: usize) -> Result<()> {
+        self.register_entities(world)?;
+
         let query = world.query_mut::<(&ModelMatrix, &ObjectBufferMarker)>();
 
         let frame = &mut self.frames[current_frame];

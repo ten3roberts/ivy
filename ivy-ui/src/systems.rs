@@ -1,7 +1,7 @@
-use crate::Result;
 use hecs::{Entity, World};
 use hecs_hierarchy::{Hierarchy, Parent};
 use ivy_graphics::Camera;
+use ivy_graphics::Result;
 use ultraviolet::{Mat4, Vec3};
 
 use crate::{constraints::ConstraintQuery, ModelMatrix, Position2D, Size2D, Widget};
@@ -61,6 +61,7 @@ pub fn update_canvas(world: &World, canvas: Entity) -> Result<()> {
 
     let (camera, size, position) = camera_query.get().ok_or(hecs::NoSuchEntity)?;
 
+    println!("Canvas size: {:?}", size);
     camera.set_orthographic(size.x, size.y, 0.0, 100.0);
 
     if let Some(position) = position {
@@ -80,6 +81,7 @@ pub fn update_model_matrices(world: &World) {
             *model = ModelMatrix(
                 Mat4::from_translation(pos.xyz()) * Mat4::from_nonuniform_scale(size.xyz()),
             );
+            println!("Pos: {:?}, Size: {:?}", pos, size);
         })
 }
 
@@ -87,9 +89,6 @@ pub fn update_model_matrices(world: &World) {
 pub fn statisfy_widgets(world: &mut World) {
     let entities = world
         .query_mut::<&Widget>()
-        .without::<ModelMatrix>()
-        .without::<Position2D>()
-        .without::<Size2D>()
         .into_iter()
         .map(|(e, _)| e)
         .collect::<Vec<_>>();

@@ -1,6 +1,6 @@
 use std::slice;
 
-use crate::Result;
+use ivy_graphics::Result;
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
     descriptors::{DescriptorBuilder, DescriptorSet, IntoSet},

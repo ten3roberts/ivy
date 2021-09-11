@@ -1,11 +1,12 @@
-use crate::Result;
 use hecs::{Entity, World};
-use ivy_graphics::{Mesh, ShaderPass};
+use ivy_graphics::Result;
+use ivy_graphics::{Mesh, Renderer, ShaderPass};
 use ivy_resources::{Handle, ResourceCache, Resources};
 use ivy_vulkan::{
     commands::CommandBuffer, descriptors::*, vk, Buffer, BufferAccess, BufferType, VulkanContext,
 };
 
+use std::ops::Deref;
 use std::{any::TypeId, collections::HashMap, marker::PhantomData, mem::size_of, sync::Arc};
 
 use crate::{image::Image, ModelMatrix};
@@ -19,8 +20,6 @@ type RenderObject<'a, T> = (
 );
 
 /// Same as RenderObject except without ObjectBufferMarker
-type RenderObjectUnregistered<'a, T> = (&'a Handle<T>, &'a Handle<Image>, &'a ModelMatrix);
-
 type ObjectId = u32;
 
 /// A mesh renderer using vkCmdDrawIndirectIndexed and efficient batching.
@@ -108,9 +107,9 @@ impl ImageRenderer {
     /// nothing if entities are already registered. Call this function after adding new entities to the world.
     /// # Failures
     /// Fails if object buffer cannot be reallocated to accomodate new entities.
-    pub fn register_entities<T: ShaderPass>(&mut self, world: &mut World) -> Result<()> {
+    fn register_entities(&mut self, world: &mut World) -> Result<()> {
         let query = world
-            .query_mut::<RenderObjectUnregistered<T>>()
+            .query_mut::<(&Handle<Image>, &ModelMatrix)>()
             .without::<ObjectBufferMarker>();
 
         let inserted = query
@@ -121,16 +120,19 @@ impl ImageRenderer {
             })
             .collect::<Vec<_>>();
 
-        inserted.into_iter().for_each(|e| {
-            world
-                .insert_one(
-                    e,
-                    ObjectBufferMarker {
-                        id: self.get_object_id(),
-                    },
-                )
-                .unwrap();
-        });
+        inserted
+            .into_iter()
+            .inspect(|val| println!("Registerng: {:?}", val))
+            .for_each(|e| {
+                world
+                    .insert_one(
+                        e,
+                        ObjectBufferMarker {
+                            id: self.get_object_id(),
+                        },
+                    )
+                    .unwrap();
+            });
 
         if self.max_object_id > self.capacity {
             self.resize_object_buffer(world, nearest_power_2(self.object_count as _) as _)?;
@@ -141,6 +143,8 @@ impl ImageRenderer {
 
     /// Updates all registered entities gpu side data
     pub fn update(&mut self, world: &mut World, current_frame: usize) -> Result<()> {
+        self.register_entities(world)?;
+
         let query = world.query_mut::<(&ModelMatrix, &ObjectBufferMarker)>();
 
         let frame = &mut self.frames[current_frame];
@@ -155,45 +159,53 @@ impl ImageRenderer {
 
         Ok(())
     }
+}
 
+impl Renderer for ImageRenderer {
     /// Will draw all entities with a Handle<Material>, Handle<Mesh>, Modelmatrix and Shaderpass `Handle<T>`
-    pub fn draw<T: ShaderPass>(
+    fn draw<Pass: ShaderPass>(
         &mut self,
+        // The ecs world
         world: &mut World,
+        // The commandbuffer to record into
         cmd: &CommandBuffer,
+        // The current swapchain image or backbuffer index
         current_frame: usize,
-        global_set: DescriptorSet,
-        dynamic_offsets: &[u32],
+        // Descriptor sets to bind before renderer specific sets
+        sets: &[DescriptorSet],
+        // Dynamic offsets for supplied sets
+        offsets: &[u32],
+        // Graphics resources like textures and materials
         resources: &Resources,
     ) -> Result<()> {
         let frame = &mut self.frames[current_frame];
 
         let frame_set = frame.set;
 
-        let pass = match self.passes.get_mut(&TypeId::of::<T>()) {
+        let pass = match self.passes.get_mut(&TypeId::of::<Pass>()) {
             Some(pass) => pass,
             None => {
                 self.passes.insert(
-                    TypeId::of::<T>(),
+                    TypeId::of::<Pass>(),
                     PassData::new(self.context.clone(), 8, self.frames_in_flight)?,
                 );
-                self.passes.get_mut(&TypeId::of::<T>()).unwrap()
+                self.passes.get_mut(&TypeId::of::<Pass>()).unwrap()
             }
         };
 
         let passes = resources.fetch()?;
         let images = resources.fetch()?;
 
-        pass.build_batches::<T>(world, &passes)?;
+        pass.build_batches::<Pass>(world, &passes)?;
 
         pass.draw(
             cmd,
             current_frame,
-            global_set,
+            sets,
+            offsets,
             frame_set,
-            dynamic_offsets,
+            images.deref(),
             &self.square,
-            &images,
         )?;
 
         Ok(())
@@ -356,11 +368,11 @@ impl PassData {
         &mut self,
         cmd: &CommandBuffer,
         current_frame: usize,
-        global_set: DescriptorSet,
+        sets: &[DescriptorSet],
+        offsets: &[u32],
         frame_set: DescriptorSet,
-        dynamic_offsets: &[u32],
-        square: &Mesh,
         images: &ResourceCache<Image>,
+        square_mesh: &Mesh,
     ) -> Result<()> {
         // Indirect buffer is not large enough
         if self.object_count > self.capacity {
@@ -374,16 +386,21 @@ impl PassData {
 
         for batch in &self.batches {
             let image = images.get(batch.image)?;
+
+            if !sets.is_empty() {
+                cmd.bind_descriptor_sets(batch.pipeline_layout, 0, sets, offsets);
+            }
+
             cmd.bind_descriptor_sets(
                 batch.pipeline_layout,
-                0,
-                &[global_set, frame_set, image.set(0)],
-                dynamic_offsets,
+                sets.len() as u32,
+                &[frame_set, image.set(0)],
+                &[],
             );
 
             cmd.bind_pipeline(batch.pipeline);
-            cmd.bind_vertexbuffer(0, square.vertex_buffer());
-            cmd.bind_indexbuffer(square.index_buffer(), 0);
+            cmd.bind_vertexbuffer(0, square_mesh.vertex_buffer());
+            cmd.bind_indexbuffer(square_mesh.index_buffer(), 0);
 
             cmd.draw_indexed_indirect(
                 &self.indirect_buffers[current_frame],
@@ -400,6 +417,7 @@ impl PassData {
 pub type BatchKey = (vk::Pipeline, Handle<Image>);
 
 /// A batch contains objects of the same shaderpass and material.
+#[derive(Debug, Clone, PartialEq)]
 struct BatchData {
     pipeline: vk::Pipeline,
     pipeline_layout: vk::PipelineLayout,

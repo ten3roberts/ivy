@@ -43,3 +43,7 @@ glfw = { version = "0.41.0", features = [ "vulkan" ] }
 hecs-hierarchy = "0.1"
 ultraviolet = "0.8"
 log = "0.4"
+
+
+[build-dependencies]
+anyhow = "1.0"
