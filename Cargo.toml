@@ -34,16 +34,16 @@ ivy-ui = { path = "./ivy-ui" }
 ivy-vulkan = { path = "./ivy-vulkan" }
 
 [dev-dependencies]
-anyhow = "1.0.40"
+anyhow = "1.0.41"
 atomic_refcell = "0.1.7"
 
-flume = "0.10"
-hecs = "0.5"
+flume = "0.10.7"
+hecs = "0.5.2"
 glfw = { version = "0.41.0", features = [ "vulkan" ] }
-hecs-hierarchy = "0.1"
-ultraviolet = "0.8"
-log = "0.4"
+hecs-hierarchy = "0.1.8"
+ultraviolet = "0.8.1"
+log = "0.4.14"
 
 
 [build-dependencies]
-anyhow = "1.0"
+anyhow = "1.0.41"

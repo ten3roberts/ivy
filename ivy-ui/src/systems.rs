@@ -1,25 +1,27 @@
 use hecs::{Entity, World};
-use hecs_hierarchy::{Hierarchy, Parent};
+use hecs_hierarchy::Hierarchy;
 use ivy_graphics::Camera;
 use ivy_graphics::Result;
-use ultraviolet::{Mat4, Vec3};
+use ultraviolet::Mat4;
 
+use crate::Canvas;
 use crate::{constraints::ConstraintQuery, ModelMatrix, Position2D, Size2D, Widget};
 
-/// Updates the UI tree starting from `root`, usualy the canvas.
-pub fn update_ui(world: &World, root: Entity) -> Result<()> {
-    let mut query = world.query_one::<(&Position2D, &Size2D)>(root)?;
-
-    let (position, size) = query.get().ok_or(hecs::NoSuchEntity)?;
-
-    for child in world.children::<Widget>(root) {
-        apply_constaints(world, child, position, size)?;
-        if world.get::<Parent<Widget>>(child).is_ok() {
-            update_ui(world, child)?;
+/// Updates all UI trees and applies constraints.
+/// Also updates canvas cameras.
+pub fn update(world: &World) -> Result<()> {
+    world.roots::<Widget>().iter().try_for_each(|(root, _)| {
+        if world.get::<Canvas>(root).is_ok() {
+            update_canvas(world, root)?;
         }
-    }
 
-    Ok(())
+        let mut query = world.query_one::<(&Position2D, &Size2D)>(root)?;
+        let (position, size) = query.get().ok_or(hecs::NoSuchEntity)?;
+
+        world
+            .descendants_depth_first::<Widget>(root)
+            .try_for_each(|child| apply_constaints(world, child, position, size))
+    })
 }
 
 /// Applies the constaints associated to entity and uses the given parent.
@@ -54,24 +56,21 @@ fn apply_constaints(
     Ok(())
 }
 
-/// Updates the canvas and all associated widgets
+/// Updates the canvas view and projection
 pub fn update_canvas(world: &World, canvas: Entity) -> Result<()> {
     let mut camera_query =
         world.query_one::<(&mut Camera, &Size2D, Option<&Position2D>)>(canvas)?;
 
     let (camera, size, position) = camera_query.get().ok_or(hecs::NoSuchEntity)?;
+    let position = *position.unwrap_or(&Position2D::default());
 
     camera.set_orthographic(size.x, size.y, 0.0, 100.0);
-
-    if let Some(position) = position {
-        camera.set_view(Mat4::from_translation(-position.xyz()))
-    } else {
-        camera.set_view(Mat4::from_translation(-Vec3::new(0.0, 0.0, 50.0)))
-    }
+    camera.set_view(Mat4::from_translation(-position.xyz()));
 
     Ok(())
 }
 
+/// Updates model matrices for UI widgets
 pub fn update_model_matrices(world: &World) {
     world
         .query::<(&mut ModelMatrix, &Position2D, &Size2D)>()

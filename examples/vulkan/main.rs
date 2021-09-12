@@ -230,7 +230,7 @@ impl Layer for LogicLayer {
 
             ui::systems::statisfy_widgets(world);
             ui::systems::update_canvas(world, canvas)?;
-            ui::systems::update_ui(world, canvas)?;
+            ui::systems::update(world)?;
             ui::systems::update_model_matrices(world);
 
             self.acc -= self.timestep.secs();

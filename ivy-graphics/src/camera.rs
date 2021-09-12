@@ -2,7 +2,6 @@ use crate::Result;
 use ash::vk::{DescriptorSet, ShaderStageFlags};
 use derive_more::{AsRef, Deref, From, Into};
 use hecs::World;
-use ivy_core::Position;
 use ivy_resources::Handle;
 use ivy_vulkan::{
     descriptors::{DescriptorBuilder, IntoSet},
@@ -167,34 +166,29 @@ impl GpuCameraData {
     }
 
     // Updates the camera gpu side data from cpu side data for the current frame.
-    pub fn update(
-        &mut self,
-        camera: &Camera,
-        position: Position,
-        current_frame: usize,
-    ) -> Result<()> {
+    pub fn update(&mut self, camera: &Camera, current_frame: usize) -> Result<()> {
+        let view = camera.view();
+
+        let position = Vec4::new(view[0][3], view[1][3], view[2][2], 0.0);
+
         self.uniformbuffers[current_frame]
             .fill(
                 0,
                 &[CameraData {
                     viewproj: camera.viewproj(),
-                    position: position.0.into_homogeneous_vector(),
+                    position,
                 }],
             )
             .map_err(|e| e.into())
     }
 
+    /// Updates all GPU camera data from the CPU side camera view and projection
+    /// matrix. Position is automatically extracted from the camera's view matrix.
     pub fn update_all_system(world: &mut World, current_frame: usize) -> Result<()> {
         world
-            .query_mut::<(&Camera, &mut GpuCameraData, Option<&Position>)>()
+            .query_mut::<(&Camera, &mut GpuCameraData)>()
             .into_iter()
-            .try_for_each(|(_, (camera, gpu_camera, position))| {
-                gpu_camera.update(
-                    camera,
-                    *position.unwrap_or(&Position::default()),
-                    current_frame,
-                )
-            })
+            .try_for_each(|(_, (camera, gpu_camera))| gpu_camera.update(camera, current_frame))
     }
 
     // Creates gpu side data for all camera which do not already have any.

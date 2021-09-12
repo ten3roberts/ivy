@@ -55,7 +55,7 @@ pub fn update_model_matrices(world: &mut World) {
         });
 }
 
-/// Updates the view matrix from camera position and optional rotation
+/// Updates the view matrix from camera [ `Position` ] and optional [ `Rotation` ]
 pub fn update_view_matrices(world: &World) {
     world
         .query::<(&mut Camera, &Position, Option<&Rotation>)>()
@@ -66,7 +66,7 @@ pub fn update_view_matrices(world: &World) {
                     * rotation.into_matrix().into_homogeneous())
                 .inversed(),
 
-                None => Mat4::from_translation(**position).inversed(),
+                None => Mat4::from_translation(-**position),
             };
 
             camera.set_view(view);

@@ -25,7 +25,7 @@ impl<T> Handle<T> {
     }
 }
 
-impl<T> Key for Handle<T> {
+unsafe impl<T> Key for Handle<T> {
     fn data(&self) -> KeyData {
         self.0
     }
