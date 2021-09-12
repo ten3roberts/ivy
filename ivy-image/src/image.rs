@@ -1,3 +1,4 @@
+use crate::{Error, Result};
 use libc::*;
 use std::path::Path;
 
@@ -39,12 +40,14 @@ impl Image {
     }
 
     /// Loads an image from a path
-    pub fn load<P: AsRef<Path>>(path: P, desired_channels: i32) -> Option<Self> {
-        let filename = std::ffi::CString::new(path.as_ref().as_os_str().to_str()?).ok()?;
+    pub fn load<P: AsRef<Path>>(path: P, desired_channels: i32) -> Result<Self> {
+        let filename = std::ffi::CString::new(path.as_ref().as_os_str().to_str().unwrap())
+            .ok()
+            .unwrap();
+
         let mut width: c_int = 0;
         let mut height: c_int = 0;
         let mut channels: c_int = desired_channels;
-        // let desired_channels: c_int = 0;
 
         let pixels_raw = unsafe {
             stbi_load(
@@ -57,7 +60,7 @@ impl Image {
         };
 
         if pixels_raw.is_null() {
-            return None;
+            return Err(Error::FileLoading(path.as_ref().to_owned()));
         }
 
         // Desired channels override channels
@@ -69,7 +72,7 @@ impl Image {
         let pixels = unsafe { Vec::from_raw_parts(pixels_raw, image_size, image_size) };
         let pixels = pixels.into_boxed_slice();
 
-        Some(Image::new(width as _, height as _, channels as _, pixels))
+        Ok(Image::new(width as _, height as _, channels as _, pixels))
     }
 
     /// Loads an image from memory, such as a memory mapped file

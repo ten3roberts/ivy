@@ -11,11 +11,13 @@ mod mesh_renderer;
 mod renderer;
 mod shaderpass;
 
+mod atlas;
 pub mod components;
 mod light;
 pub mod systems;
 pub mod window;
 
+pub use atlas::*;
 pub use camera::*;
 pub use document::*;
 pub use error::*;

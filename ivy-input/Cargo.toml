@@ -1,6 +1,6 @@
 [package]
 name = "ivy-input"
-version = "0.1.0"
+version = "1.4.0"
 authors = ["Tim Roberts <ten3roberts@gmail.com>"]
 edition = "2018"
 
@@ -9,5 +9,5 @@ edition = "2018"
 [dependencies]
 flume = "0.10"
 glfw = { version = "0.41.0", features = [ "vulkan" ] }
-ivy-core = { path = "../ivy-core", version = "0.1.0" }
+ivy-core = { path = "../ivy-core", version = "1.4.0" }
 ultraviolet = "0.8"

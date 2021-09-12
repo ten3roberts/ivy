@@ -1,6 +1,6 @@
 [package]
 name = "ivy-postprocessing"
-version = "0.1.0"
+version = "1.4.0"
 edition = "2018"
 description = "post processing helpers for ivy"
 
@@ -13,6 +13,6 @@ hecs = { version = "0.5", features = [ "macros" ] }
 itertools = "0.10"
 ivy-graphics = { path = "../ivy-graphics", version = "*" }
 ivy-rendergraph = { path = "../ivy-rendergraph", version = "*" }
-ivy-resources = { path = "../ivy-resources", version = "0.2" }
+ivy-resources = { path = "../ivy-resources", version = "1.4.0" }
 ivy-vulkan = { path = "../ivy-vulkan", version = "*" }
 ultraviolet = "0.8"

@@ -1,6 +1,6 @@
 [package]
 name = "ivy-vulkan"
-version = "1.3.1"
+version = "1.4.0"
 authors = ["Tim Roberts <ten3roberts@gmail.com>"]
 edition = "2018"
 description = "Low level vulkan abstractions for the Ivy game engine."
@@ -11,7 +11,7 @@ description = "Low level vulkan abstractions for the Ivy game engine."
 arrayvec = "0.5"
 ash = "0.33"
 glfw = { version = "0.41.0", features = [ "vulkan" ] }
-ivy-stb = { path = "../ivy-stb", version = "0.1.0" }
+ivy-image = { path = "../ivy-image", version = "1.1.0" }
 log = "0.4"
 parking_lot = "0.11"
 smallvec = "1.6"

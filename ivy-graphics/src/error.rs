@@ -1,3 +1,4 @@
+use ivy_vulkan::Extent;
 use std::path::PathBuf;
 use thiserror::Error;
 
@@ -25,4 +26,10 @@ pub enum Error {
 
     #[error(transparent)]
     NoSuchEntity(#[from] hecs::NoSuchEntity),
+
+    #[error("Failed to pack rectangles for texture atlas of size: {0:?}")]
+    RectanglePack(Extent),
+
+    #[error("Key does not exist in the atlas")]
+    InvalidAtlasKey,
 }

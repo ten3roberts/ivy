@@ -2,7 +2,6 @@ use crate::Result;
 use ash::vk::{DescriptorSet, ShaderStageFlags};
 use derive_more::{AsRef, Deref, From, Into};
 use hecs::World;
-use ivy_core::Position;
 use ivy_resources::Handle;
 use ivy_vulkan::{
     descriptors::{DescriptorBuilder, IntoSet},
@@ -191,7 +190,6 @@ impl GpuCameraData {
     pub fn update_all_system(world: &mut World, current_frame: usize) -> Result<()> {
         world
             .query_mut::<(&Camera, &mut GpuCameraData)>()
-            .with::<Position>()
             .into_iter()
             .try_for_each(|(_, (camera, gpu_camera))| gpu_camera.update(camera, current_frame))
     }

@@ -1,6 +1,6 @@
 [package]
 name = "ivy"
-version = "0.1.0"
+version = "1.4.0"
 authors = ["Tim Roberts <ten3roberts@gmail.com>"]
 edition = "2018"
 description = "Application and game framework for Rust"
@@ -12,7 +12,7 @@ members = [
   "ivy-input",
   "ivy-resources",
   "ivy-rendergraph",
-  "ivy-stb",
+  "ivy-image",
   "ivy-ui",
   "ivy-vulkan",
   "ivy-postprocessing",
@@ -29,7 +29,7 @@ ivy-postprocessing = { path = "./ivy-postprocessing" }
 ivy-random = { path = "./ivy-random" }
 ivy-rendergraph = { path = "./ivy-rendergraph" }
 ivy-resources = { path = "./ivy-resources" }
-ivy-stb = { path = "./ivy-stb" }
+ivy-image = { path = "./ivy-image" }
 ivy-ui = { path = "./ivy-ui" }
 ivy-vulkan = { path = "./ivy-vulkan" }
 

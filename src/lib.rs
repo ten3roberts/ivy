@@ -37,12 +37,12 @@
 /// Rexports
 pub use ivy_core as core;
 pub use ivy_graphics as graphics;
+pub use ivy_image as image;
 pub use ivy_input as input;
 pub use ivy_physics as physics;
 pub use ivy_postprocessing as postprocessing;
 pub use ivy_random as random;
 pub use ivy_rendergraph as rendergraph;
 pub use ivy_resources as resources;
-pub use ivy_stb as stb;
 pub use ivy_ui as ui;
 pub use ivy_vulkan as vulkan;

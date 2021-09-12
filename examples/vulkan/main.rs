@@ -325,7 +325,7 @@ fn setup_ui(
         canvas,
         (
             Widget,
-            image,
+            image2,
             ui_pass,
             RelativeOffset::new(0.4, -0.1),
             RelativeSize(Vec2::new(0.5, 0.5)),
@@ -495,6 +495,25 @@ impl VulkanLayer {
                 .context("Failed to load uv texture")?,
         )?;
 
+        let atlas = resources.insert(TextureAtlas::new(
+            context.clone(),
+            &resources,
+            &TextureInfo {
+                extent: Extent::new(128, 128),
+                mip_levels: 1,
+                usage: ImageUsage::SAMPLED | ImageUsage::TRANSFER_DST,
+                format: Format::R8G8B8A8_SRGB,
+                samples: SampleCountFlags::TYPE_1,
+            },
+            4,
+            vec![
+                ("red", image::Image::load("./res/textures/red.png", 4)?),
+                ("green", image::Image::load("./res/textures/green.png", 4)?),
+                ("blue", image::Image::load("./res/textures/blue.png", 4)?),
+                ("heart", image::Image::load("./res/textures/heart.png", 4)?),
+            ],
+        )?)?;
+
         let sampler = resources.insert(Sampler::new(
             context.clone(),
             SamplerInfo {
@@ -504,6 +523,18 @@ impl VulkanLayer {
                 unnormalized_coordinates: false,
                 anisotropy: 16.0,
                 mip_levels: 4,
+            },
+        )?)?;
+
+        let ui_sampler = resources.insert(Sampler::new(
+            context.clone(),
+            SamplerInfo {
+                address_mode: AddressMode::CLAMP_TO_EDGE,
+                mag_filter: FilterMode::NEAREST,
+                min_filter: FilterMode::NEAREST,
+                unnormalized_coordinates: false,
+                anisotropy: 16.0,
+                mip_levels: 1,
             },
         )?)?;
 
@@ -526,10 +557,14 @@ impl VulkanLayer {
         )?)?;
 
         let image: Handle<Image> =
-            resources.insert(Image::new(&context, &resources, uv_grid, sampler)?)?;
+            resources.insert(Image::new(&context, &resources, uv_grid, ui_sampler)?)?;
 
-        let image2: Handle<Image> =
-            resources.insert(Image::new(&context, &resources, grid, sampler)?)?;
+        let image2: Handle<Image> = resources.insert(Image::new(
+            &context,
+            &resources,
+            resources.get(atlas)?.texture(),
+            ui_sampler,
+        )?)?;
 
         let fullscreen_pipeline = Pipeline::new::<()>(
             context.clone(),

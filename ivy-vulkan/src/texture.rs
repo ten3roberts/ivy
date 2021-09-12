@@ -63,8 +63,7 @@ impl Texture {
     /// Uses the width and height of the loaded image, no resizing.
     /// Uses mipmapping.
     pub fn load<P: AsRef<Path>>(context: Arc<VulkanContext>, path: P) -> Result<Self> {
-        let image = ivy_stb::Image::load(&path, 4)
-            .ok_or_else(|| Error::ImageLoading(path.as_ref().to_owned()))?;
+        let image = ivy_image::Image::load(&path, 4)?;
 
         let extent = (image.width(), image.height()).into();
 

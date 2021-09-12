@@ -34,8 +34,8 @@ pub enum Error {
         size: vk::DeviceSize,
         max_size: vk::DeviceSize,
     },
-    #[error("Failed to load image file {0}")]
-    ImageLoading(PathBuf),
+    #[error("Failed to load image file: {0:?}")]
+    ImageLoading(#[from] ivy_image::Error),
 
     #[error("Unsupported layout transition from {0:?} to {1:?}")]
     UnsupportedLayoutTransition(vk::ImageLayout, vk::ImageLayout),

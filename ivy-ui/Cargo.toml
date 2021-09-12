@@ -1,6 +1,6 @@
 [package]
 name = "ivy-ui"
-version = "0.1.0"
+version = "1.4.0"
 authors = ["Tim Roberts <ten3roberts@gmail.com>"]
 edition = "2018"
 description = "GUI library for Ivy"
@@ -13,7 +13,7 @@ derive_more = "0.99"
 hecs = "0.5"
 hecs-hierarchy = "0.1"
 ivy-graphics = { path = "../ivy-graphics", version = "*" }
-ivy-resources = { path = "../ivy-resources", version = "0.2" }
+ivy-resources = { path = "../ivy-resources", version = "1.4.0" }
 ivy-vulkan = { path = "../ivy-vulkan", version = "*" }
 thiserror = "1.0"
 ultraviolet = "0.8"
