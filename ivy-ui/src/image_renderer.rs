@@ -2,8 +2,9 @@ use hecs::{Entity, World};
 use ivy_graphics::Result;
 use ivy_graphics::{Mesh, Renderer, ShaderPass};
 use ivy_resources::{Handle, ResourceCache, Resources};
+use ivy_vulkan::vk::IndexType;
 use ivy_vulkan::{
-    commands::CommandBuffer, descriptors::*, vk, Buffer, BufferAccess, BufferType, VulkanContext,
+    commands::CommandBuffer, descriptors::*, vk, Buffer, BufferAccess, BufferUsage, VulkanContext,
 };
 
 use std::ops::Deref;
@@ -85,6 +86,7 @@ impl ImageRenderer {
         self.free_indices.clear();
         self.max_object_id = 0;
 
+        println!("Here");
         self.frames.clear();
         self.descriptor_allocator.reset()?;
 
@@ -94,11 +96,14 @@ impl ImageRenderer {
         }
 
         self.capacity = capacity;
+        println!("Here2");
 
         world
             .query_mut::<&mut ObjectBufferMarker>()
             .into_iter()
             .for_each(|(_, marker)| marker.id = self.get_object_id());
+
+        println!("Done");
 
         Ok(())
     }
@@ -120,21 +125,19 @@ impl ImageRenderer {
             })
             .collect::<Vec<_>>();
 
-        inserted
-            .into_iter()
-            .inspect(|val| println!("Registerng: {:?}", val))
-            .for_each(|e| {
-                world
-                    .insert_one(
-                        e,
-                        ObjectBufferMarker {
-                            id: self.get_object_id(),
-                        },
-                    )
-                    .unwrap();
-            });
+        inserted.into_iter().for_each(|e| {
+            world
+                .insert_one(
+                    e,
+                    ObjectBufferMarker {
+                        id: self.get_object_id(),
+                    },
+                )
+                .unwrap();
+        });
 
         if self.max_object_id > self.capacity {
+            println!("Resizing object buffer");
             self.resize_object_buffer(world, nearest_power_2(self.object_count as _) as _)?;
         }
 
@@ -311,7 +314,7 @@ impl PassData {
                 }
             }
             Ok(())
-        })?;
+        })??;
 
         self.dirty[current_frame] = false;
 
@@ -400,7 +403,7 @@ impl PassData {
 
             cmd.bind_pipeline(batch.pipeline);
             cmd.bind_vertexbuffer(0, square_mesh.vertex_buffer());
-            cmd.bind_indexbuffer(square_mesh.index_buffer(), 0);
+            cmd.bind_indexbuffer(square_mesh.index_buffer(), IndexType::UINT32, 0);
 
             cmd.draw_indexed_indirect(
                 &self.indirect_buffers[current_frame],
@@ -461,13 +464,13 @@ impl FrameData {
     pub fn new(context: Arc<VulkanContext>, capacity: ObjectId) -> Result<Self> {
         let object_buffer = Buffer::new_uninit(
             context.clone(),
-            BufferType::Storage,
-            BufferAccess::MappedPersistent,
+            BufferUsage::STORAGE_BUFFER,
+            BufferAccess::Mapped,
             size_of::<ObjectData>() as u64 * capacity as u64,
         )?;
 
         let set = DescriptorBuilder::new()
-            .bind_buffer(0, vk::ShaderStageFlags::VERTEX, &object_buffer)
+            .bind_buffer(0, vk::ShaderStageFlags::VERTEX, &object_buffer)?
             .build(&context)?;
 
         Ok(Self { set, object_buffer })
@@ -487,7 +490,7 @@ struct IndirectObject {
 fn create_indirect_buffer(context: Arc<VulkanContext>, capacity: ObjectId) -> Result<Buffer> {
     Buffer::new_uninit(
         context,
-        BufferType::Indirect,
+        BufferUsage::INDIRECT_BUFFER,
         BufferAccess::Mapped,
         capacity as u64 * size_of::<IndirectObject>() as u64,
     )

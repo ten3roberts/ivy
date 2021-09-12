@@ -6,7 +6,6 @@ use ash::{
     extensions::khr::Surface,
     vk::{self, SurfaceKHR},
 };
-use ash::{version::DeviceV1_0, version::InstanceV1_0};
 use ash::{Device, Instance};
 use std::{
     collections::HashSet,

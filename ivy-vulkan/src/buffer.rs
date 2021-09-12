@@ -3,33 +3,22 @@
 use crate::{
     commands::*, context::VulkanContext, descriptors::DescriptorBindable, Error, Extent, Result,
 };
-use std::{mem, sync::Arc};
+use gpu_allocator::{
+    vulkan::{self, *},
+    MemoryLocation,
+};
+use std::{
+    ffi::c_void,
+    mem,
+    ptr::{copy_nonoverlapping, NonNull},
+    sync::Arc,
+};
 
 use ash::vk;
 use vk::DeviceSize;
-use vk_mem::Allocator;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-// Defines the type of a buffer
-pub enum BufferType {
-    /// Vertex buffer
-    Vertex,
-    /// 16 bit index buffer
-    Index16,
-    /// 32 bit index buffer
-    Index32,
-    /// Uniform buffer
-    Uniform,
-
-    /// Dynamically offsetted uniform buffer
-    UniformDynamic,
-
-    /// Storage buffer
-    Storage,
-
-    /// Indirect draw command buffer
-    Indirect,
-}
+/// Re-export
+pub use vk::BufferUsageFlags as BufferUsage;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 // Defines the expected access pattern of a buffer
@@ -37,17 +26,10 @@ pub enum BufferAccess {
     /// Buffer data will be set once or rarely and frequently times
     /// Uses temporary staging buffers and optimizes for GPU read access
     Staged,
-    /// Buffer data will seldom be set but frequently times
-    /// Uses a persistent staging buffer and optimizes for GPU read access
-    StagedPersistent,
 
     /// Buffer data is often updated and frequently used
     /// Uses temporarily mapped host memory
     Mapped,
-
-    /// Buffer data is very often updated and frequently used
-    /// Uses persistently mapped memory
-    MappedPersistent,
 }
 
 /// Higher level construct abstracting buffer and buffer memory for index,
@@ -56,96 +38,79 @@ pub enum BufferAccess {
 pub struct Buffer {
     context: Arc<VulkanContext>,
     buffer: vk::Buffer,
-    allocation: vk_mem::Allocation,
-    allocation_info: vk_mem::AllocationInfo,
+    allocation: Option<vulkan::Allocation>,
 
-    // Maximum allocated size of the buffer
-    size: DeviceSize,
-    ty: BufferType,
+    usage: BufferUsage,
     access: BufferAccess,
-
-    // If a staging buffer is persisted
-    staging_buffer: Option<(vk::Buffer, vk_mem::Allocation, vk_mem::AllocationInfo)>,
+    size: DeviceSize,
 }
 
 impl Buffer {
     /// Creates a new buffer with size and uninitialized contents.
     pub fn new_uninit(
         context: Arc<VulkanContext>,
-        ty: BufferType,
+        usage: BufferUsage,
         access: BufferAccess,
         size: DeviceSize,
     ) -> Result<Self> {
-        // Calculate the buffer access flags
-        let vk_usage = match ty {
-            BufferType::Vertex => vk::BufferUsageFlags::VERTEX_BUFFER,
-            BufferType::Index16 | BufferType::Index32 => vk::BufferUsageFlags::INDEX_BUFFER,
-            BufferType::Uniform | BufferType::UniformDynamic => {
-                vk::BufferUsageFlags::UNIFORM_BUFFER
-            }
-            BufferType::Storage => vk::BufferUsageFlags::STORAGE_BUFFER,
-            BufferType::Indirect => vk::BufferUsageFlags::INDIRECT_BUFFER,
-        } | match access {
-            BufferAccess::Mapped | BufferAccess::MappedPersistent => {
-                vk::BufferUsageFlags::default()
-            }
-            BufferAccess::Staged | BufferAccess::StagedPersistent => {
-                vk::BufferUsageFlags::TRANSFER_DST
-            }
+        let location = match access {
+            BufferAccess::Staged => MemoryLocation::GpuOnly,
+            BufferAccess::Mapped => MemoryLocation::CpuToGpu,
         };
 
-        let memory_usage = match access {
-            BufferAccess::Staged | BufferAccess::StagedPersistent => vk_mem::MemoryUsage::GpuOnly,
-            BufferAccess::Mapped | BufferAccess::MappedPersistent => vk_mem::MemoryUsage::CpuToGpu,
+        let usage = match access {
+            BufferAccess::Staged => usage | BufferUsage::TRANSFER_DST,
+            _ => usage,
         };
 
-        let flags = match access {
-            BufferAccess::MappedPersistent => vk_mem::AllocationCreateFlags::MAPPED,
-            _ => vk_mem::AllocationCreateFlags::NONE,
-        };
+        let device = context.device();
 
         // Create the main GPU side buffer
         let buffer_info = vk::BufferCreateInfo::builder()
             .size(size as _)
-            .usage(vk_usage)
+            .usage(usage)
             .sharing_mode(vk::SharingMode::EXCLUSIVE);
+
+        let buffer = unsafe { device.create_buffer(&buffer_info, None)? };
+
+        let requirements = unsafe { device.get_buffer_memory_requirements(buffer) };
 
         let allocator = context.allocator();
 
         // Create the buffer
-        let (buffer, allocation, allocation_info) = allocator.create_buffer(
-            &buffer_info,
-            &vk_mem::AllocationCreateInfo {
-                usage: memory_usage,
-                flags,
-                ..Default::default()
-            },
-        )?;
+        let allocation = allocator.write().allocate(&AllocationCreateDesc {
+            name: "Buffer",
+            requirements,
+            location,
+            linear: true,
+        })?;
+
+        unsafe { device.bind_buffer_memory(buffer, allocation.memory(), allocation.offset())? };
 
         Ok(Self {
             size,
             context,
             buffer,
-            allocation,
-            allocation_info,
-            ty,
+            allocation: Some(allocation),
+            usage,
             access,
-            staging_buffer: None,
         })
     }
     /// Creates a new buffer and fills it with vertex data using staging
     /// buffer. Buffer will be the same size as provided data.
     pub fn new<T>(
         context: Arc<VulkanContext>,
-        ty: BufferType,
+        usage: BufferUsage,
         access: BufferAccess,
         data: &[T],
     ) -> Result<Self> {
         let size = (mem::size_of::<T>() * data.len()) as DeviceSize;
 
-        let mut buffer = Self::new_uninit(context, ty, access, size)?;
+        let mut buffer = Self::new_uninit(context, usage, access, size)?;
+
         // Fill the buffer with provided data
         buffer.fill(0, data)?;
+
         Ok(buffer)
     }
 
@@ -159,13 +124,14 @@ impl Buffer {
         len: DeviceSize,
         offset: DeviceSize,
         write_func: F,
-    ) -> Result<()>
+    ) -> Result<R>
     where
         F: FnOnce(&mut [T]) -> R,
+        R: std::fmt::Debug,
     {
         let size = len * mem::size_of::<T>() as u64;
         self.write(size, offset * mem::size_of::<T>() as u64, |ptr| {
-            write_func(unsafe { std::slice::from_raw_parts_mut(ptr as *mut T, len as usize) })
+            write_func(unsafe { std::slice::from_raw_parts_mut(ptr.cast().as_ptr(), len as usize) })
         })
     }
 
@@ -174,9 +140,14 @@ impl Buffer {
     /// `size`: Specifies the number of bytes to map (is ignored with persistent
     /// access)
     /// `offset`: Specifies the offset in bytes into buffer to map
-    pub fn write<F, R>(&mut self, size: DeviceSize, offset: DeviceSize, write_func: F) -> Result<()>
+    pub fn write<F, R: std::fmt::Debug>(
+        &mut self,
+        size: DeviceSize,
+        offset: DeviceSize,
+        write_func: F,
+    ) -> Result<R>
     where
-        F: FnOnce(*mut u8) -> R,
+        F: FnOnce(NonNull<c_void>) -> R,
     {
         if size > self.size {
             return Err(Error::BufferOverflow {
@@ -184,129 +155,72 @@ impl Buffer {
                 max_size: self.size,
             });
         }
-        match self.access {
-            BufferAccess::Staged => self.write_staged(size, offset, write_func),
-            BufferAccess::StagedPersistent => self.write_staged_persistent(offset, write_func),
-            BufferAccess::Mapped => self.write_mapped(offset, write_func),
-            BufferAccess::MappedPersistent => {
-                self.write_mapped_persistent(size, offset, write_func)
-            }
+        match self.allocation.as_ref().and_then(|val| val.mapped_ptr()) {
+            None => self.write_staged(size, offset, write_func),
+            Some(ptr) => Ok(write_func(
+                NonNull::new(unsafe { ptr.as_ptr().offset(offset as _) }).unwrap(),
+            )),
         }
     }
 
-    // Updates memory by mapping and unmapping
-    // Will map the whole buffer
-    fn write_mapped_persistent<F, R>(
-        &self,
-        size: DeviceSize,
-        offset: DeviceSize,
-        write_func: F,
-    ) -> Result<()>
+    fn write_staged<F, R>(&self, size: DeviceSize, offset: DeviceSize, write_func: F) -> Result<R>
     where
-        F: FnOnce(*mut u8) -> R,
+        F: FnOnce(NonNull<c_void>) -> R,
+        R: std::fmt::Debug,
     {
-        let allocator = self.context.allocator();
-        let mapped = self.allocation_info.get_mapped_data();
-
-        unsafe {
-            write_func(mapped.offset(offset as _));
-        }
-
-        allocator.flush_allocation(&self.allocation, offset as _, size as _)?;
-
-        Ok(())
-    }
-
-    // Updates memory by mapping and unmapping
-    // Will map the whole buffer
-    fn write_mapped<F, R>(&self, offset: DeviceSize, write_func: F) -> Result<()>
-    where
-        F: FnOnce(*mut u8) -> R,
-    {
-        let allocator = self.context.allocator();
-        let mapped = allocator.map_memory(&self.allocation)?;
-
-        unsafe {
-            write_func(mapped.offset(offset as _));
-        }
-
-        allocator.unmap_memory(&self.allocation)?;
-        Ok(())
-    }
-
-    fn write_staged<F, R>(&self, size: DeviceSize, offset: DeviceSize, write_func: F) -> Result<()>
-    where
-        F: FnOnce(*mut u8) -> R,
-    {
-        let allocator = self.context.allocator();
-        // Create a new or reuse staging buffer
-        let (staging_buffer, staging_allocation, staging_info) =
-            create_staging(allocator, size as _, true)?;
-
-        let mapped = staging_info.get_mapped_data();
+        let mut staging = Buffer::new_uninit(
+            self.context.clone(),
+            BufferUsage::TRANSFER_SRC,
+            BufferAccess::Mapped,
+            size,
+        )?;
 
         // Use the write function to write into the mapped memory
-        write_func(mapped);
+        let r = staging.write(size, offset, write_func)?;
 
         copy(
             self.context.transfer_pool(),
             self.context.graphics_queue(),
-            staging_buffer,
+            staging.buffer(),
             self.buffer,
             size as _,
             offset,
         )?;
 
-        // Destroy the staging buffer
-        allocator.destroy_buffer(staging_buffer, &staging_allocation)?;
+        Ok(r)
+    }
+
+    /// Fills the buffer with provided data
+    /// data can not be larger in size than maximum buffer size
+    pub fn fill<T: Sized>(&mut self, offset: DeviceSize, data: &[T]) -> Result<()> {
+        match self.allocation.as_ref().and_then(|val| val.mapped_ptr()) {
+            Some(ptr) => unsafe {
+                copy_nonoverlapping(data.as_ptr(), ptr.cast().as_ptr(), data.len());
+            },
+            None => self.fill_staged(offset, data)?,
+        }
 
         Ok(())
     }
 
-    fn write_staged_persistent<F, R>(&mut self, offset: DeviceSize, write_func: F) -> Result<()>
-    where
-        F: FnOnce(*mut u8) -> R,
-    {
-        let allocator = self.context.allocator();
-
-        let (staging_buffer, staging_memory, _) = match &self.staging_buffer {
-            Some(v) => v,
-            // Create persistent staging buffer
-            None => {
-                self.staging_buffer = Some(create_staging(allocator, self.size, false)?);
-                self.staging_buffer.as_ref().unwrap()
-            }
-        };
-
-        // Map the staging buffer
-        let mapped = allocator.map_memory(&staging_memory)?;
-
-        // Use the write function to write into the mapped memory
-        write_func(mapped);
+    fn fill_staged<T: Sized>(&self, offset: DeviceSize, data: &[T]) -> Result<()> {
+        let staging = Buffer::new(
+            self.context.clone(),
+            BufferUsage::TRANSFER_SRC,
+            BufferAccess::Mapped,
+            data,
+        )?;
 
         copy(
             self.context.transfer_pool(),
             self.context.graphics_queue(),
-            *staging_buffer,
+            staging.buffer(),
             self.buffer,
-            self.size as _,
+            staging.size,
             offset,
         )?;
 
-        // Unmap but keep staging buffer
-        allocator.unmap_memory(&staging_memory)?;
         Ok(())
-    }
-
-    /// Fills the buffer  with provided data
-    /// Uses write internally
-    /// data cannot be larger in size than maximum buffer size
-    pub fn fill<T: Sized>(&mut self, offset: DeviceSize, data: &[T]) -> Result<()> {
-        let size = mem::size_of::<T>() * data.len();
-
-        self.write(size as _, offset, |mapped| unsafe {
-            std::ptr::copy_nonoverlapping(data.as_ptr() as *const T as *const u8, mapped, size)
-        })
     }
 
     pub fn size(&self) -> DeviceSize {
@@ -324,8 +238,8 @@ impl Buffer {
     }
 
     /// Returns the buffer type
-    pub fn ty(&self) -> BufferType {
-        self.ty
+    pub fn usage(&self) -> BufferUsage {
+        self.usage
     }
 }
 
@@ -344,41 +258,15 @@ impl From<&Buffer> for vk::Buffer {
 impl Drop for Buffer {
     fn drop(&mut self) {
         let allocator = self.context.allocator();
+        let device = self.context.device();
+
         allocator
-            .destroy_buffer(self.buffer, &self.allocation)
+            .write()
+            .free(self.allocation.take().unwrap())
             .unwrap();
 
-        // Destroy persistent staging buffer
-        if let Some((buffer, memory, _)) = self.staging_buffer.take() {
-            allocator.unmap_memory(&memory).unwrap();
-            allocator.destroy_buffer(buffer, &memory).unwrap();
-        }
+        unsafe { device.destroy_buffer(self.buffer, None) }
     }
-}
-
-/// Creates a suitable general purpose staging buffer
-pub fn create_staging(
-    allocator: &Allocator,
-    size: DeviceSize,
-    mapped: bool,
-) -> Result<(vk::Buffer, vk_mem::Allocation, vk_mem::AllocationInfo)> {
-    let (buffer, allocation, allocation_info) = allocator.create_buffer(
-        &vk::BufferCreateInfo::builder()
-            .size(size)
-            .usage(vk::BufferUsageFlags::TRANSFER_SRC)
-            .sharing_mode(vk::SharingMode::EXCLUSIVE),
-        &vk_mem::AllocationCreateInfo {
-            usage: vk_mem::MemoryUsage::CpuToGpu,
-            flags: if mapped {
-                vk_mem::AllocationCreateFlags::MAPPED
-            } else {
-                vk_mem::AllocationCreateFlags::NONE
-            },
-            ..Default::default()
-        },
-    )?;
-
-    Ok((buffer, allocation, allocation_info))
 }
 
 /// Copies the contents of one buffer to another
@@ -440,7 +328,7 @@ impl DescriptorBindable for Buffer {
         binding: u32,
         stage: vk::ShaderStageFlags,
         builder: &'a mut crate::descriptors::DescriptorBuilder,
-    ) -> &'a mut crate::descriptors::DescriptorBuilder {
+    ) -> Result<&'a mut crate::descriptors::DescriptorBuilder> {
         builder.bind_buffer(binding, stage, self)
     }
 }

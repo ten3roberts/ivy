@@ -1,7 +1,6 @@
 //! Fences provide CPU to GPU synchronization where the CPU can wait for a fence to be signaled.
 //! Fences are useful when ensuring or checking completion of submitted commandbuffers.
 use crate::Result;
-use ash::version::DeviceV1_0;
 use ash::vk;
 use ash::Device;
 pub use vk::Fence;

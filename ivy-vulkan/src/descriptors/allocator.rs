@@ -1,5 +1,4 @@
 use crate::Result;
-use ash::version::DeviceV1_0;
 use ash::vk;
 use ash::Device;
 use parking_lot::Mutex;

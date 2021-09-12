@@ -5,6 +5,8 @@ use ash::extensions::khr::Surface;
 use ash::vk;
 
 use glfw::Glfw;
+use gpu_allocator::vulkan::{Allocator, AllocatorCreateDesc};
+use parking_lot::RwLock;
 use std::sync::Arc;
 
 pub struct VulkanContext {
@@ -24,7 +26,7 @@ pub struct VulkanContext {
 
     graphics_queue: vk::Queue,
     present_queue: vk::Queue,
-    allocator: vk_mem::Allocator,
+    allocator: Option<RwLock<Allocator>>,
 
     /// CommandPool for allocatig transfer command buffers
     /// Wrap in option to drop early
@@ -83,17 +85,15 @@ impl VulkanContext {
         let present_queue =
             device::get_queue(&device, pdevice_info.queue_families.present().unwrap(), 0);
 
-        let allocator_info = vk_mem::AllocatorCreateInfo {
+        let allocator_info = AllocatorCreateDesc {
             physical_device: pdevice_info.physical_device,
             device: (*device).clone(),
             instance: instance.clone(),
-            flags: vk_mem::AllocatorCreateFlags::default(),
-            preferred_large_heap_block_size: 0, // Use default
-            frame_in_use_count: 0,
-            heap_size_limits: None,
+            debug_settings: Default::default(),
+            buffer_device_address: false,
         };
 
-        let allocator = vk_mem::Allocator::new(&allocator_info)?;
+        let allocator = Some(RwLock::new(Allocator::new(&allocator_info)?));
 
         let transfer_pool = CommandPool::new(
             device.clone(),
@@ -165,8 +165,8 @@ impl VulkanContext {
     }
 
     #[inline]
-    pub fn allocator(&self) -> &vk_mem::Allocator {
-        &self.allocator
+    pub fn allocator(&self) -> &RwLock<Allocator> {
+        self.allocator.as_ref().unwrap()
     }
 
     pub fn limits(&self) -> &vk::PhysicalDeviceLimits {
@@ -210,11 +210,10 @@ impl Drop for VulkanContext {
         self.descriptor_allocator.clear();
         self.descriptor_layout_cache.clear();
 
-        // Destroy the allocator
-        self.allocator.destroy();
-
         // Destroy the transfer pool before device destruction
         self.transfer_pool.take();
+
+        self.allocator.take();
 
         // Destroy the device
         device::destroy(&self.device);

@@ -1,6 +1,5 @@
 use crate::{Error, Result};
-use ash::{version::EntryV1_0, version::InstanceV1_0, Instance};
-use ash::{vk, Entry};
+use ash::{vk, Entry, Instance};
 use glfw::Glfw;
 use std::ffi::{CStr, CString};
 

@@ -1,7 +1,6 @@
 use crate::Result;
 use ash::{
     extensions::khr::Surface,
-    version::InstanceV1_0,
     vk::{self, Handle, SurfaceKHR},
     Entry, Instance,
 };

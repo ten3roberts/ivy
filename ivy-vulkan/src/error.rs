@@ -1,6 +1,7 @@
 use std::{ffi::CString, path::PathBuf};
 
-use ash::vk;
+use ash::vk::{self, BufferUsageFlags};
+use gpu_allocator::AllocationError;
 use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -12,7 +13,7 @@ pub enum Error {
     #[error("Vulkan Error {0}")]
     Vulkan(#[from] vk::Result),
     #[error("Failed to allocate device memory. {0}")]
-    MemoryAllocation(#[from] vk_mem::Error),
+    MemoryAllocation(#[from] AllocationError),
     #[error("GLFW is not capable of creating vulkan surfaces")]
     SurfaceSupport,
     #[error("Failed to create a vulkan instance. {0}")]
@@ -44,4 +45,7 @@ pub enum Error {
 
     #[error("Can not access unaquired swapchain image index")]
     NoCurrentSwapchainImage,
+
+    #[error("Unable to determine descriptor type for buffer with usage: {0:?}")]
+    DescriptorType(BufferUsageFlags),
 }

@@ -1,10 +1,12 @@
 use crate::descriptors::DescriptorBindable;
 use crate::{buffer, commands::*, context::VulkanContext, extent::Extent, Error, Result};
-use ash::vk::{ImageAspectFlags, ImageView};
+use crate::{Buffer, BufferAccess};
+use ash::vk::{ImageAspectFlags, ImageView, SharingMode};
+use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc};
+use gpu_allocator::MemoryLocation;
 use std::ops::Deref;
 use std::{path::Path, sync::Arc};
 
-use ash::version::DeviceV1_0;
 use ash::vk;
 
 pub use vk::Format;
@@ -49,7 +51,7 @@ pub struct Texture {
     image_view: vk::ImageView,
     format: vk::Format,
     // May not necessarily own the allocation
-    allocation: Option<vk_mem::Allocation>,
+    allocation: Option<Allocation>,
     extent: Extent,
     mip_levels: u32,
     samples: vk::SampleCountFlags,
@@ -77,7 +79,10 @@ impl Texture {
         )?;
 
         let size = image.width() as u64 * image.height() as u64 * 4;
-        texture.write(size, image.pixels())?;
+
+        assert_eq!(size, image.pixels().len() as _);
+
+        texture.write(image.pixels())?;
         Ok(texture)
     }
 
@@ -91,35 +96,37 @@ impl Texture {
             mip_levels = mip_levels.min(info.mip_levels)
         }
 
-        let memory_usage = vk_mem::MemoryUsage::GpuOnly;
-        let flags = vk_mem::AllocationCreateFlags::NONE;
+        let location = MemoryLocation::GpuOnly;
 
-        let image_info = vk::ImageCreateInfo::builder()
-            .image_type(vk::ImageType::TYPE_2D)
-            .extent(vk::Extent3D {
-                width: info.extent.width,
-                height: info.extent.height,
-                depth: 1,
-            })
-            .mip_levels(mip_levels)
-            .array_layers(1)
-            .format(info.format)
-            .tiling(vk::ImageTiling::OPTIMAL)
-            .initial_layout(vk::ImageLayout::UNDEFINED)
-            .usage(info.usage)
-            .sharing_mode(vk::SharingMode::EXCLUSIVE)
-            .samples(info.samples);
+        let image_info = vk::ImageCreateInfo {
+            image_type: vk::ImageType::TYPE_2D,
+            format: info.format,
+            extent: info.extent.into(),
+            mip_levels,
+            array_layers: 1,
+            samples: info.samples,
+            tiling: vk::ImageTiling::OPTIMAL,
+            usage: info.usage,
+            sharing_mode: SharingMode::EXCLUSIVE,
+            initial_layout: vk::ImageLayout::UNDEFINED,
+            ..Default::default()
+        };
 
         let allocator = context.allocator();
 
-        let (image, allocation, _allocation_info) = allocator.create_image(
-            &image_info,
-            &vk_mem::AllocationCreateInfo {
-                usage: memory_usage,
-                flags,
-                ..Default::default()
-            },
-        )?;
+        let device = context.device();
+        let image = unsafe { device.create_image(&image_info, None)? };
+
+        let requirements = unsafe { device.get_image_memory_requirements(image) };
+
+        let allocation = allocator.write().allocate(&AllocationCreateDesc {
+            name: "Image",
+            requirements,
+            location,
+            linear: false,
+        })?;
+
+        unsafe { device.bind_image_memory(image, allocation.memory(), allocation.offset())? };
 
         Self::from_image(context, info, image, Some(allocation))
     }
@@ -130,7 +137,7 @@ impl Texture {
         context: Arc<VulkanContext>,
         info: &TextureInfo,
         image: vk::Image,
-        allocation: Option<vk_mem::Allocation>,
+        allocation: Option<Allocation>,
     ) -> Result<Self> {
         let aspect_mask = if info.usage.contains(ImageUsage::DEPTH_STENCIL_ATTACHMENT) {
             ImageAspectFlags::DEPTH
@@ -165,16 +172,14 @@ impl Texture {
         })
     }
 
-    pub fn write(&self, size: vk::DeviceSize, pixels: &[u8]) -> Result<()> {
-        let allocator = self.context.allocator();
+    pub fn write(&self, pixels: &[u8]) -> Result<()> {
         // Create a new or reuse staging buffer
-        let (staging_buffer, staging_allocation, staging_info) =
-            buffer::create_staging(allocator, size as _, true)?;
-
-        let mapped = staging_info.get_mapped_data();
-
-        // Use the write function to write into the mapped memory
-        unsafe { std::ptr::copy_nonoverlapping(pixels.as_ptr(), mapped, size as _) }
+        let staging = Buffer::new(
+            self.context.clone(),
+            vk::BufferUsageFlags::TRANSFER_SRC,
+            BufferAccess::Mapped,
+            pixels,
+        )?;
 
         let transfer_pool = self.context.transfer_pool();
         let graphics_queue = self.context.graphics_queue();
@@ -192,7 +197,7 @@ impl Texture {
         buffer::copy_to_image(
             transfer_pool,
             graphics_queue,
-            staging_buffer,
+            staging.buffer(),
             self.image,
             vk::ImageLayout::TRANSFER_DST_OPTIMAL,
             self.extent,
@@ -207,8 +212,6 @@ impl Texture {
             self.mip_levels,
         )?;
 
-        // Destroy the staging buffer
-        allocator.destroy_buffer(staging_buffer, &staging_allocation)?;
         Ok(())
     }
 
@@ -272,16 +275,17 @@ impl Drop for Texture {
     fn drop(&mut self) {
         let allocator = self.context.allocator();
 
+        let device = self.context.device();
+
         // Destroy allocation if texture owns image
         if let Some(allocation) = self.allocation.take() {
-            allocator.destroy_image(self.image, &allocation).unwrap();
+            allocator.write().free(allocation).unwrap();
+            unsafe { device.destroy_image(self.image(), None) };
         }
 
         // Destroy image view
         unsafe {
-            self.context
-                .device()
-                .destroy_image_view(self.image_view, None);
+            device.destroy_image_view(self.image_view, None);
         }
     }
 }
@@ -471,8 +475,8 @@ impl DescriptorBindable for Texture {
         binding: u32,
         stage: vk::ShaderStageFlags,
         builder: &'a mut crate::descriptors::DescriptorBuilder,
-    ) -> &'a mut crate::descriptors::DescriptorBuilder {
-        builder.bind_image(binding, stage, self)
+    ) -> Result<&'a mut crate::descriptors::DescriptorBuilder> {
+        Ok(builder.bind_image(binding, stage, self))
     }
 }
 
@@ -506,8 +510,8 @@ impl DescriptorBindable for InputAttachment {
         binding: u32,
         stage: vk::ShaderStageFlags,
         builder: &'a mut crate::descriptors::DescriptorBuilder,
-    ) -> &'a mut crate::descriptors::DescriptorBuilder {
-        builder.bind_input_attachment(binding, stage, self.image)
+    ) -> Result<&'a mut crate::descriptors::DescriptorBuilder> {
+        Ok(builder.bind_input_attachment(binding, stage, self.image))
     }
 }
 
@@ -538,7 +542,7 @@ impl DescriptorBindable for CombinedImageSampler {
         binding: u32,
         stage: vk::ShaderStageFlags,
         builder: &'a mut crate::descriptors::DescriptorBuilder,
-    ) -> &'a mut crate::descriptors::DescriptorBuilder {
-        builder.bind_combined_image_sampler(binding, stage, self.image, self.sampler)
+    ) -> Result<&'a mut crate::descriptors::DescriptorBuilder> {
+        Ok(builder.bind_combined_image_sampler(binding, stage, self.image, self.sampler))
     }
 }

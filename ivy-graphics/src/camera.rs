@@ -133,7 +133,7 @@ impl GpuCameraData {
             .map(|_| {
                 Buffer::new(
                     context.clone(),
-                    ivy_vulkan::BufferType::Uniform,
+                    ivy_vulkan::BufferUsage::UNIFORM_BUFFER,
                     ivy_vulkan::BufferAccess::Mapped,
                     &[CameraData::default()],
                 )
@@ -145,7 +145,7 @@ impl GpuCameraData {
             .iter()
             .map(|u| {
                 DescriptorBuilder::new()
-                    .bind_buffer(0, ShaderStageFlags::VERTEX, u)
+                    .bind_buffer(0, ShaderStageFlags::VERTEX, u)?
                     .build(&context)
                     .map_err(|e| e.into())
             })
@@ -173,7 +173,6 @@ impl GpuCameraData {
         position: Position,
         current_frame: usize,
     ) -> Result<()> {
-        dbg!(position);
         self.uniformbuffers[current_frame]
             .fill(
                 0,

@@ -1,9 +1,6 @@
-use crate::{Buffer, BufferType, Result, VulkanContext};
+use crate::{Buffer, BufferUsage, Error, Result, VulkanContext};
 use arrayvec::ArrayVec;
-use ash::{
-    version::DeviceV1_0,
-    vk::{self, DescriptorSet, ImageLayout, WriteDescriptorSet},
-};
+use ash::vk::{self, DescriptorSet, ImageLayout, WriteDescriptorSet};
 
 use super::{
     DescriptorBindable, DescriptorLayoutCache, DescriptorSetBinding, MultiDescriptorBindable,
@@ -43,17 +40,17 @@ impl DescriptorBuilder {
 
     pub fn from_resources<'a>(
         resources: &[(&'a dyn DescriptorBindable, ShaderStageFlags)],
-    ) -> Self {
+    ) -> Result<Self> {
         let mut builder = Self::new();
 
         resources
             .into_iter()
             .enumerate()
-            .fold(&mut builder, |builder, (i, (resource, stage))| {
+            .try_fold(&mut builder, |builder, (i, (resource, stage))| {
                 resource.bind_resource(i as u32, *stage, builder)
-            });
+            })?;
 
-        builder
+        Ok(builder)
     }
 
     /// Creates descriptor sets for multiple frames in flight and builds them
@@ -65,12 +62,12 @@ impl DescriptorBuilder {
         (0..count)
             .map(|current_frame| {
                 let mut builder = Self::new();
-                resources.into_iter().enumerate().fold(
+                resources.into_iter().enumerate().try_fold(
                     &mut builder,
                     |builder, (i, (resource, stage))| {
                         resource.bind_resource_for(i as u32, *stage, builder, current_frame)
                     },
-                );
+                )?;
 
                 builder.build(context)
             })
@@ -102,7 +99,7 @@ impl DescriptorBuilder {
         binding: u32,
         stage: ShaderStageFlags,
         uniform_buffer: &Buffer,
-    ) -> &mut Self {
+    ) -> Result<&mut Self> {
         // assert_eq!(uniform_buffer.ty(), BufferType::Uniform);
         self.buffer_infos[binding as usize] = vk::DescriptorBufferInfo {
             buffer: *uniform_buffer.as_ref(),
@@ -110,11 +107,13 @@ impl DescriptorBuilder {
             range: vk::WHOLE_SIZE,
         };
 
-        let descriptor_type = match uniform_buffer.ty() {
-            BufferType::Uniform => DescriptorType::UNIFORM_BUFFER,
-            BufferType::UniformDynamic => DescriptorType::UNIFORM_BUFFER_DYNAMIC,
-            BufferType::Storage => DescriptorType::STORAGE_BUFFER,
-            _ => DescriptorType::default(),
+        let usage = uniform_buffer.usage();
+        let descriptor_type = if usage.contains(BufferUsage::UNIFORM_BUFFER) {
+            DescriptorType::UNIFORM_BUFFER
+        } else if usage.contains(BufferUsage::STORAGE_BUFFER) {
+            DescriptorType::STORAGE_BUFFER
+        } else {
+            return Err(Error::DescriptorType(usage));
         };
 
         let write = WriteDescriptorSet {
@@ -136,7 +135,7 @@ impl DescriptorBuilder {
 
         self.add(binding, write);
 
-        self
+        Ok(self)
     }
 
     /// Binds part of a buffer.
@@ -146,11 +145,12 @@ impl DescriptorBuilder {
         stage: ShaderStageFlags,
         offset: u64,
         range: u64,
-        uniform_buffer: &Buffer,
+        buffer: &Buffer,
     ) -> &mut Self {
-        assert_eq!(uniform_buffer.ty(), BufferType::Uniform);
+        assert!(buffer.usage().contains(BufferUsage::UNIFORM_BUFFER));
+
         self.buffer_infos[binding as usize] = vk::DescriptorBufferInfo {
-            buffer: *uniform_buffer.as_ref(),
+            buffer: *buffer.as_ref(),
             offset,
             range,
         };

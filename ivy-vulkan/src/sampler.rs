@@ -2,7 +2,6 @@ use crate::descriptors::DescriptorBindable;
 use crate::{Result, Texture, VulkanContext};
 use std::sync::Arc;
 
-use ash::version::DeviceV1_0;
 use ash::vk;
 
 // Re-export enums
@@ -99,8 +98,8 @@ impl DescriptorBindable for Sampler {
         binding: u32,
         stage: vk::ShaderStageFlags,
         builder: &'a mut crate::descriptors::DescriptorBuilder,
-    ) -> &'a mut crate::descriptors::DescriptorBuilder {
-        builder.bind_sampler(binding, stage, self)
+    ) -> Result<&'a mut crate::descriptors::DescriptorBuilder> {
+        Ok(builder.bind_sampler(binding, stage, self))
     }
 }
 
@@ -110,7 +109,7 @@ impl DescriptorBindable for (Texture, Sampler) {
         binding: u32,
         stage: vk::ShaderStageFlags,
         builder: &'a mut crate::descriptors::DescriptorBuilder,
-    ) -> &'a mut crate::descriptors::DescriptorBuilder {
-        builder.bind_combined_image_sampler(binding, stage, &self.0, &self.1)
+    ) -> Result<&'a mut crate::descriptors::DescriptorBuilder> {
+        Ok(builder.bind_combined_image_sampler(binding, stage, &self.0, &self.1))
     }
 }

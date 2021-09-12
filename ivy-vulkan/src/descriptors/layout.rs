@@ -2,7 +2,6 @@ use crate::Result;
 use std::{cmp::Ord, collections::HashMap, sync::Arc};
 
 use arrayvec::ArrayVec;
-use ash::version::DeviceV1_0;
 use ash::vk;
 use ash::Device;
 use parking_lot::RwLock;

@@ -1,18 +1,13 @@
 use crate::{
-    buffer::{Buffer, BufferType},
-    device,
-    framebuffer::Framebuffer,
-    renderpass::RenderPass,
-    Extent, Result,
+    buffer::Buffer, device, framebuffer::Framebuffer, renderpass::RenderPass, Extent, Result,
 };
 use std::mem::size_of;
 use std::sync::Arc;
 
 use arrayvec::ArrayVec;
-use ash::vk;
-use ash::vk::ShaderStageFlags;
+use ash::vk::{self, PipelineLayout};
+use ash::vk::{IndexType, ShaderStageFlags};
 use ash::Device;
-use ash::{version::DeviceV1_0, vk::PipelineLayout};
 
 /// Maximum number of bound vertex buffers
 /// This is required to avoid dynamically allocating a list of buffers when
@@ -266,13 +261,12 @@ impl CommandBuffer {
         }
     }
 
-    pub fn bind_indexbuffer(&self, indexbuffer: &Buffer, offset: vk::DeviceSize) {
-        let index_type = match indexbuffer.ty() {
-            BufferType::Index16 => vk::IndexType::UINT16,
-            BufferType::Index32 => vk::IndexType::UINT32,
-            _ => vk::IndexType::NONE_KHR,
-        };
-
+    pub fn bind_indexbuffer(
+        &self,
+        indexbuffer: &Buffer,
+        index_type: IndexType,
+        offset: vk::DeviceSize,
+    ) {
         unsafe {
             self.device.cmd_bind_index_buffer(
                 self.commandbuffer,

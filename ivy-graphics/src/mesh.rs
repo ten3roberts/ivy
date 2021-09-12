@@ -8,7 +8,7 @@ use ultraviolet::{Vec2, Vec3};
 
 use crate::Error;
 use ivy_vulkan as vulkan;
-use vulkan::{Buffer, BufferAccess, BufferType, VulkanContext};
+use vulkan::{Buffer, BufferAccess, BufferUsage, VulkanContext};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 /// A simple vertex type with position, normal and texcoord.
@@ -74,13 +74,17 @@ impl Mesh {
     pub fn new(context: Arc<VulkanContext>, vertices: &[Vertex], indices: &[u32]) -> Result<Self> {
         let vertex_buffer = Buffer::new(
             context.clone(),
-            BufferType::Vertex,
+            BufferUsage::VERTEX_BUFFER,
             BufferAccess::Staged,
             vertices,
         )?;
 
-        let index_buffer =
-            Buffer::new(context, BufferType::Index32, BufferAccess::Staged, indices)?;
+        let index_buffer = Buffer::new(
+            context,
+            BufferUsage::INDEX_BUFFER,
+            BufferAccess::Staged,
+            indices,
+        )?;
 
         Ok(Self {
             vertex_buffer,

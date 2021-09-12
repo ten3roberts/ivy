@@ -1,3 +1,4 @@
+use crate::Result;
 use std::slice;
 
 use ash::vk::{DescriptorSet, ImageView, Sampler, ShaderStageFlags};
@@ -44,7 +45,7 @@ pub trait DescriptorBindable {
         binding: u32,
         stage: ShaderStageFlags,
         builder: &'a mut DescriptorBuilder,
-    ) -> &'a mut DescriptorBuilder;
+    ) -> Result<&'a mut DescriptorBuilder>;
 }
 
 impl DescriptorBindable for ImageView {
@@ -53,8 +54,8 @@ impl DescriptorBindable for ImageView {
         binding: u32,
         stage: ShaderStageFlags,
         builder: &'a mut DescriptorBuilder,
-    ) -> &'a mut DescriptorBuilder {
-        builder.bind_image(binding, stage, *self)
+    ) -> Result<&'a mut DescriptorBuilder> {
+        Ok(builder.bind_image(binding, stage, *self))
     }
 }
 
@@ -64,8 +65,8 @@ impl DescriptorBindable for Sampler {
         binding: u32,
         stage: ShaderStageFlags,
         builder: &'a mut DescriptorBuilder,
-    ) -> &'a mut DescriptorBuilder {
-        builder.bind_sampler(binding, stage, *self)
+    ) -> Result<&'a mut DescriptorBuilder> {
+        Ok(builder.bind_sampler(binding, stage, *self))
     }
 }
 
@@ -77,7 +78,7 @@ pub trait MultiDescriptorBindable {
         stage: ShaderStageFlags,
         builder: &'a mut DescriptorBuilder,
         current_frame: usize,
-    ) -> &'a mut DescriptorBuilder;
+    ) -> Result<&'a mut DescriptorBuilder>;
 }
 
 impl<T> MultiDescriptorBindable for &[T]
@@ -90,7 +91,7 @@ where
         stage: ShaderStageFlags,
         builder: &'a mut DescriptorBuilder,
         current_frame: usize,
-    ) -> &'a mut DescriptorBuilder {
+    ) -> Result<&'a mut DescriptorBuilder> {
         self[current_frame].bind_resource(binding, stage, builder)
     }
 }
@@ -105,7 +106,7 @@ where
         stage: ShaderStageFlags,
         builder: &'a mut DescriptorBuilder,
         _: usize,
-    ) -> &'a mut DescriptorBuilder {
+    ) -> Result<&'a mut DescriptorBuilder> {
         self.bind_resource(binding, stage, builder)
     }
 }

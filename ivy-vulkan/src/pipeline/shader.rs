@@ -5,7 +5,6 @@ use arrayvec::ArrayVec;
 use std::io::{Read, Seek};
 
 use crate::descriptors;
-use ash::version::DeviceV1_0;
 use ash::vk;
 use ash::Device;
 use descriptors::*;

@@ -1,7 +1,6 @@
 use crate::{descriptors::DescriptorLayoutInfo, Error, Extent, Result, VertexDesc, VulkanContext};
 use arrayvec::ArrayVec;
-use ash::vk::PushConstantRange;
-use ash::{version::DeviceV1_0, vk::PipelineLayout};
+use ash::vk::{PipelineLayout, PushConstantRange};
 use std::{ffi::CString, sync::Arc};
 use std::{fs::File, path::PathBuf};
 

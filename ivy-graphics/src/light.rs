@@ -52,8 +52,8 @@ impl LightManager {
             .map(|_| -> Result<_> {
                 Buffer::new_uninit(
                     context.clone(),
-                    ivy_vulkan::BufferType::Uniform,
-                    ivy_vulkan::BufferAccess::MappedPersistent,
+                    ivy_vulkan::BufferUsage::UNIFORM_BUFFER,
+                    ivy_vulkan::BufferAccess::Mapped,
                     size_of::<LightSceneData>() as u64,
                 )
                 .map_err(|e| e.into())
@@ -64,8 +64,8 @@ impl LightManager {
             .map(|_| -> Result<_> {
                 Buffer::new_uninit(
                     context.clone(),
-                    ivy_vulkan::BufferType::Storage,
-                    ivy_vulkan::BufferAccess::MappedPersistent,
+                    ivy_vulkan::BufferUsage::STORAGE_BUFFER,
+                    ivy_vulkan::BufferAccess::Mapped,
                     size_of::<LightData>() as u64 * max_lights,
                 )
                 .map_err(|e| e.into())
@@ -77,8 +77,8 @@ impl LightManager {
             .zip(&light_buffers)
             .map(|buffer| {
                 DescriptorBuilder::new()
-                    .bind_buffer(0, ShaderStageFlags::FRAGMENT, buffer.0)
-                    .bind_buffer(1, ShaderStageFlags::FRAGMENT, buffer.1)
+                    .bind_buffer(0, ShaderStageFlags::FRAGMENT, buffer.0)?
+                    .bind_buffer(1, ShaderStageFlags::FRAGMENT, buffer.1)?
                     .build(&context)
                     .map_err(|e| e.into())
             })

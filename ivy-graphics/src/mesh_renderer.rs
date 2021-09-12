@@ -1,8 +1,9 @@
 use crate::{Renderer, Result};
+use ash::vk::IndexType;
 use hecs::{Entity, World};
 use ivy_resources::{Handle, ResourceCache, Resources};
 use ivy_vulkan::{
-    commands::CommandBuffer, descriptors::*, vk, Buffer, BufferAccess, BufferType, VulkanContext,
+    commands::CommandBuffer, descriptors::*, vk, Buffer, BufferAccess, BufferUsage, VulkanContext,
 };
 
 use std::{
@@ -305,7 +306,7 @@ impl PassData {
                 }
             }
             Ok(())
-        })?;
+        })??;
 
         self.dirty[current_frame] = false;
 
@@ -402,7 +403,7 @@ impl PassData {
 
             cmd.bind_pipeline(batch.pipeline);
             cmd.bind_vertexbuffer(0, mesh.vertex_buffer());
-            cmd.bind_indexbuffer(mesh.index_buffer(), 0);
+            cmd.bind_indexbuffer(mesh.index_buffer(), IndexType::UINT32, 0);
 
             cmd.draw_indexed_indirect(
                 &self.indirect_buffers[current_frame],
@@ -464,13 +465,13 @@ impl FrameData {
     pub fn new(context: Arc<VulkanContext>, capacity: ObjectId) -> Result<Self> {
         let object_buffer = Buffer::new_uninit(
             context.clone(),
-            BufferType::Storage,
-            BufferAccess::MappedPersistent,
+            BufferUsage::STORAGE_BUFFER,
+            BufferAccess::Mapped,
             size_of::<ObjectData>() as u64 * capacity as u64,
         )?;
 
         let set = DescriptorBuilder::new()
-            .bind_buffer(0, vk::ShaderStageFlags::VERTEX, &object_buffer)
+            .bind_buffer(0, vk::ShaderStageFlags::VERTEX, &object_buffer)?
             .build(&context)?;
 
         Ok(Self { set, object_buffer })
@@ -490,7 +491,7 @@ struct IndirectObject {
 fn create_indirect_buffer(context: Arc<VulkanContext>, capacity: ObjectId) -> Result<Buffer> {
     Buffer::new_uninit(
         context,
-        BufferType::Indirect,
+        BufferUsage::INDIRECT_BUFFER,
         BufferAccess::Mapped,
         capacity as u64 * size_of::<IndirectObject>() as u64,
     )

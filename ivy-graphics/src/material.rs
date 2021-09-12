@@ -31,7 +31,7 @@ impl Material {
     ) -> Result<Self> {
         let buffer = Buffer::new(
             context.clone(),
-            ivy_vulkan::BufferType::Uniform,
+            ivy_vulkan::BufferUsage::UNIFORM_BUFFER,
             ivy_vulkan::BufferAccess::Staged,
             &[MaterialData {
                 roughness,
@@ -46,7 +46,7 @@ impl Material {
                 resources.get(albedo)?.image_view(),
                 resources.get(sampler)?.sampler(),
             )
-            .bind_buffer(1, ShaderStageFlags::FRAGMENT, &buffer)
+            .bind_buffer(1, ShaderStageFlags::FRAGMENT, &buffer)?
             .build(&context)?;
 
         Ok(Self {

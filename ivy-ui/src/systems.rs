@@ -61,7 +61,6 @@ pub fn update_canvas(world: &World, canvas: Entity) -> Result<()> {
 
     let (camera, size, position) = camera_query.get().ok_or(hecs::NoSuchEntity)?;
 
-    println!("Canvas size: {:?}", size);
     camera.set_orthographic(size.x, size.y, 0.0, 100.0);
 
     if let Some(position) = position {
@@ -81,7 +80,6 @@ pub fn update_model_matrices(world: &World) {
             *model = ModelMatrix(
                 Mat4::from_translation(pos.xyz()) * Mat4::from_nonuniform_scale(size.xyz()),
             );
-            println!("Pos: {:?}, Size: {:?}", pos, size);
         })
 }
 

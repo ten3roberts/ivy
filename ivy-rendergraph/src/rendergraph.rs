@@ -130,7 +130,6 @@ impl RenderGraph {
                 Ok(())
             })?;
 
-        dbg!(&self.edges);
         Ok(())
     }
 
@@ -554,7 +553,6 @@ mod tests {
             .map(|node_idx| (nodes[*node_idx], depths[*node_idx]))
             .collect::<Vec<_>>();
 
-        dbg!(ordered_nodes);
         assert_eq!(&ordered, &[d, b, a, c, e,]);
     }
 
