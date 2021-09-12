@@ -24,7 +24,9 @@ impl DepthAttachment {
             &TextureInfo {
                 extent,
                 mip_levels: 1,
-                usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT | ImageUsage::SAMPLED,
+                usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT
+                    | ImageUsage::SAMPLED
+                    | ImageUsage::INPUT_ATTACHMENT,
                 format: Format::D32_SFLOAT,
                 samples: SampleCountFlags::TYPE_1,
             },
@@ -188,18 +190,34 @@ pub fn create_pbr_pipeline<GeometryPass: ShaderPass, PostProcessingPass: ShaderP
         .chain(bindables.into_iter().cloned())
         .collect::<Vec<_>>();
 
+    let input_attachments = [
+        pbr_attachments.albedo,
+        pbr_attachments.position,
+        pbr_attachments.normal,
+        pbr_attachments.roughness_metallic,
+        *depth_attachment,
+    ];
+
     let post_processing_node = Box::new(PostProcessingNode::<PostProcessingPass>::new(
         context.clone(),
         resources,
         read_attachments,
-        &pbr_attachments.as_slice(),
+        &input_attachments,
         &bindables,
         color_attachments,
         frames_in_flight,
     )?);
 
     // Store data in camera
-    world.insert(camera, (light_manager, camera_data, pbr_attachments))?;
+    world.insert(
+        camera,
+        (
+            light_manager,
+            camera_data,
+            pbr_attachments,
+            depth_attachment,
+        ),
+    )?;
 
     Ok([camera_node, post_processing_node])
 }

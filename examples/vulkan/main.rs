@@ -1,4 +1,5 @@
 use std::{
+    ops::{Add, Mul},
     sync::{mpsc, Arc},
     time::Duration,
 };
@@ -36,6 +37,38 @@ use log::*;
 mod route;
 
 const FRAMES_IN_FLIGHT: usize = 2;
+
+struct SineWave<T> {
+    amplitude: T,
+    frequency: f32,
+    base_value: T,
+    elapsed: f32,
+}
+
+impl<T> SineWave<T>
+where
+    T: 'static + Send + Sync + Copy + Mul<f32, Output = T> + Add<T, Output = T>,
+{
+    fn new(amplitude: T, frequency: f32, base_value: T) -> Self {
+        Self {
+            amplitude,
+            frequency,
+            base_value,
+            elapsed: 0.0,
+        }
+    }
+
+    fn update(world: &mut World, dt: f32) {
+        world
+            .query::<(&mut SineWave<T>, &mut T)>()
+            .iter()
+            .for_each(|(_, (wave, val))| {
+                wave.elapsed += dt;
+                let current = (wave.elapsed * wave.frequency * std::f32::consts::TAU).sin();
+                *val = wave.amplitude * current + wave.base_value;
+            });
+    }
+}
 
 fn main() -> anyhow::Result<()> {
     Logger {
@@ -215,6 +248,8 @@ impl Layer for LogicLayer {
 
             *camera_pos += Position(camera_rot.into_matrix() * (movement * dt * self.cemra_speed));
 
+            SineWave::<Position>::update(world, dt);
+
             graphics::systems::update_view_matrices(world);
             physics::systems::integrate_angular_velocity_system(world, dt);
             physics::systems::integrate_velocity_system(world, dt);
@@ -344,13 +379,6 @@ impl VulkanLayer {
             context.clone(),
             &window.borrow(),
             swapchain_info,
-        )?)?;
-
-        resources.insert_default(LightManager::new(
-            context.clone(),
-            10,
-            Vec3::one() * 0.01,
-            FRAMES_IN_FLIGHT,
         )?)?;
 
         let mut rendergraph = RenderGraph::new(context.clone(), FRAMES_IN_FLIGHT)?;
@@ -573,12 +601,17 @@ impl VulkanLayer {
 
         world.spawn((
             Position(Vec3::new(7.0, 0.0, 0.0)),
-            PointLight::new(Vec3::new(0.0, 0.0, 500.0)),
+            PointLight::new(1.0, Vec3::new(0.0, 0.0, 500.0)),
         ));
 
         world.spawn((
             Position(Vec3::new(0.0, 2.0, 5.0)),
-            PointLight::new(Vec3::new(500.0, 0.0, 0.0)),
+            PointLight::new(0.3, Vec3::new(500.0, 0.0, 0.0)),
+            SineWave::<Position>::new(
+                Position(Vec3::unit_y() * 5.0),
+                1.0 / 10.0,
+                Position(Vec3::new(0.0, 2.0, 5.0)),
+            ),
         ));
 
         // Create a pipeline from the shaders

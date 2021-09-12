@@ -13,17 +13,20 @@ use ultraviolet::Vec3;
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PointLight {
     pub radiance: Vec3,
+    // Visible radius of the light source
+    pub radius: f32,
 }
 
 impl PointLight {
     /// Creates a new light from color radience
-    pub fn new(radiance: Vec3) -> Self {
-        Self { radiance }
+    pub fn new(radius: f32, radiance: Vec3) -> Self {
+        Self { radius, radiance }
     }
 
     /// Creates a light from color and intensity
-    pub fn from_color(intensity: f32, color: Vec3) -> Self {
+    pub fn from_color(radius: f32, intensity: f32, color: Vec3) -> Self {
         Self {
+            radius,
             radiance: intensity * color,
         }
     }
@@ -112,6 +115,7 @@ impl LightManager {
                     position: position.0,
                     radiance: light.radiance,
                     reference_illuminance: (light.radiance / (center - position.0).mag_sq()).mag(),
+                    radius: light.radius,
                     ..Default::default()
                 },
             ));
@@ -176,6 +180,7 @@ struct LightData {
     position: Vec3,
     reference_illuminance: f32,
     radiance: Vec3,
+    radius: f32,
 }
 
 impl std::cmp::Eq for LightData {}

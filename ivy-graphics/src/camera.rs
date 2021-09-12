@@ -2,6 +2,7 @@ use crate::Result;
 use ash::vk::{DescriptorSet, ShaderStageFlags};
 use derive_more::{AsRef, Deref, From, Into};
 use hecs::World;
+use ivy_core::Position;
 use ivy_resources::Handle;
 use ivy_vulkan::{
     descriptors::{DescriptorBuilder, IntoSet},
@@ -98,6 +99,8 @@ impl Default for Camera {
 /// GPU side camera data
 pub struct CameraData {
     pub viewproj: Mat4,
+    pub view: Mat4,
+    pub projection: Mat4,
     pub position: Vec4,
 }
 
@@ -168,14 +171,15 @@ impl GpuCameraData {
     // Updates the camera gpu side data from cpu side data for the current frame.
     pub fn update(&mut self, camera: &Camera, current_frame: usize) -> Result<()> {
         let view = camera.view();
-
-        let position = Vec4::new(view[0][3], view[1][3], view[2][2], 0.0);
+        let position = view.inversed()[3].xyz().into_homogeneous_point();
 
         self.uniformbuffers[current_frame]
             .fill(
                 0,
                 &[CameraData {
                     viewproj: camera.viewproj(),
+                    view,
+                    projection: camera.projection(),
                     position,
                 }],
             )
@@ -187,6 +191,7 @@ impl GpuCameraData {
     pub fn update_all_system(world: &mut World, current_frame: usize) -> Result<()> {
         world
             .query_mut::<(&Camera, &mut GpuCameraData)>()
+            .with::<Position>()
             .into_iter()
             .try_for_each(|(_, (camera, gpu_camera))| gpu_camera.update(camera, current_frame))
     }

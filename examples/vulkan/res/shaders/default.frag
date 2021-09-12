@@ -20,7 +20,7 @@ layout(set = 2, binding = 1) uniform MaterialData {
 void main() {
   outAlbedo = texture(albedo, fragTexCoord);
   outPosition = vec4(fragPosition, 0);
-  outNormal = fragNormal;
+  outNormal = normalize(fragNormal);
 
   metallicRoughness = vec2(materialData.roughness, materialData.metallic);
 }
