@@ -104,11 +104,11 @@ impl Mesh {
             Vertex::new(
                 Vec3::new(-hw, -hh, 0.0),
                 Vec3::unit_x(),
-                Vec2::new(1.0, 0.0),
+                Vec2::new(0.0, 1.0),
             ),
-            Vertex::new(Vec3::new(hw, -hh, 0.0), Vec3::unit_x(), Vec2::new(0.0, 0.0)),
-            Vertex::new(Vec3::new(hw, hh, 0.0), Vec3::unit_x(), Vec2::new(0.0, 1.0)),
-            Vertex::new(Vec3::new(-hw, hh, 0.0), Vec3::unit_x(), Vec2::new(1.0, 1.0)),
+            Vertex::new(Vec3::new(hw, -hh, 0.0), Vec3::unit_x(), Vec2::new(1.0, 1.0)),
+            Vertex::new(Vec3::new(hw, hh, 0.0), Vec3::unit_x(), Vec2::new(1.0, 0.0)),
+            Vertex::new(Vec3::new(-hw, hh, 0.0), Vec3::unit_x(), Vec2::new(0.0, 0.0)),
         ];
 
         let indices: [u32; 6] = [0, 1, 2, 2, 3, 0];

@@ -556,10 +556,12 @@ impl VulkanLayer {
             0.9,
         )?)?;
 
-        let image: Handle<Image> =
-            resources.insert(Image::new(&context, &resources, uv_grid, ui_sampler)?)?;
+        let heart =
+            resources.insert(Texture::load(context.clone(), "./res/textures/heart.png")?)?;
 
-        let image2: Handle<Image> = resources.insert(Image::new(
+        let image = resources.insert(Image::new(&context, &resources, heart, ui_sampler)?)?;
+
+        let image2 = resources.insert(Image::new(
             &context,
             &resources,
             resources.get(atlas)?.texture(),
