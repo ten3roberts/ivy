@@ -131,7 +131,7 @@ where
             (0..height).for_each(|row| unsafe {
                 dbg!("Copying row", row);
                 std::ptr::copy_nonoverlapping(
-                    &image_pixels[width * (height - (row + 1)) * stride] as *const u8,
+                    &image_pixels[width * row * stride] as *const u8,
                     &mut pixels[(extent.width as usize * (row + y) + x) * stride] as *mut u8,
                     width * stride,
                 )

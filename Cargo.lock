@@ -422,7 +422,7 @@ checksum = "b71991ff56294aa922b450139ee08b3bfc70982c6b2c7562771375cf73542dd4"
 
 [[package]]
 name = "ivy"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "anyhow",
  "atomic_refcell",
@@ -462,7 +462,7 @@ dependencies = [
 
 [[package]]
 name = "ivy-graphics"
-version = "1.4.0"
+version = "1.5.0"
 dependencies = [
  "anymap",
  "ash",

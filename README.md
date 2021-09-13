@@ -30,6 +30,8 @@ each other.
 storing textures, models, or singletons that are to be shared between layers
 and inside layers with dynamic borrow checking.
 - `events` facilitates a broadcasting channel in which events can be sent
-and listen to. Each layer can set up a receiver and iterate the sent events
+and listened to. Each layer can set up a receiver and iterate the sent events
 of a specific type. This is best used for low frequency data to avoid busy
 checking, like user input, state changes, or alike.
+
+See the documentation for [`core::Layer`]
