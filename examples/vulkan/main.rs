@@ -327,7 +327,7 @@ fn setup_ui(
             Widget,
             image2,
             ui_pass,
-            RelativeOffset::new(0.4, -0.1),
+            RelativeOffset::new(0.2, -0.1),
             RelativeSize(Vec2::new(0.5, 0.5)),
             Aspect::new(1.0),
         ),
@@ -501,7 +501,7 @@ impl VulkanLayer {
             "./res/fonts/Lora/Lora-VariableFont_wght.ttf",
             &FontInfo {
                 size: 58.0,
-                glyphs: '!'..'~',
+                ..Default::default()
             },
         )?;
 

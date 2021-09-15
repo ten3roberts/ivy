@@ -9,6 +9,17 @@ pub struct FontInfo {
     // Font size
     pub size: f32,
     pub glyphs: Range<char>,
+    pub padding: u32,
+}
+
+impl Default for FontInfo {
+    fn default() -> Self {
+        Self {
+            size: 36.0,
+            glyphs: '!'..'~',
+            padding: 10,
+        }
+    }
 }
 
 pub struct Font {
@@ -53,6 +64,7 @@ impl Font {
             },
             1,
             images,
+            info.padding,
         )?;
 
         dbg!("Metrics", &metrics);
@@ -68,7 +80,6 @@ impl Font {
             .clone()
             .map(|c| {
                 let (metrics, pixels) = font.rasterize(c, info.size);
-                dbg!("Pixels: ", &pixels);
                 let image = ivy_image::Image::new(
                     metrics.width as _,
                     metrics.height as _,

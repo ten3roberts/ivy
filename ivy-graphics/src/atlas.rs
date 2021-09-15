@@ -74,6 +74,7 @@ where
         texture_info: &TextureInfo,
         channels: u32,
         images: Vec<(K, Image)>,
+        padding: u32,
     ) -> Result<Self> {
         let mut packer = GroupedRectsToPlace::<K, BinId>::new();
         let extent = texture_info.extent;
@@ -85,7 +86,7 @@ where
             packer.push_rect(
                 k.clone(),
                 None,
-                RectToInsert::new(image.width(), image.height(), 1),
+                RectToInsert::new(image.width() + padding, image.height() + padding, 1),
             );
         });
 
@@ -119,22 +120,20 @@ where
             let location = locations[k];
             let x = location.1.x() as usize;
             let y = location.1.y() as usize;
-            let width = location.1.width() as usize;
-            let height = location.1.height() as usize;
+            let img_width = image.width() as usize;
+            let img_height = image.height() as usize;
 
-            dbg!(x, y, width, height);
-
-            assert_eq!(width, image.width() as usize);
-            assert_eq!(height, image.height() as usize);
+            // assert_eq!(width, image.width() as usize);
+            // assert_eq!(height, image.height() as usize);
 
             let image_pixels = image.pixels();
 
-            (0..height).for_each(|row| unsafe {
+            (0..img_height).for_each(|row| unsafe {
                 dbg!("Copying row", row);
                 std::ptr::copy_nonoverlapping(
-                    &image_pixels[width * row * stride] as *const u8,
+                    &image_pixels[img_width * row * stride] as *const u8,
                     &mut pixels[(extent.width as usize * (row + y) + x) * stride] as *mut u8,
-                    width * stride,
+                    img_width * stride,
                 )
             })
         });
