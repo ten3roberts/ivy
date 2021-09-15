@@ -4,14 +4,15 @@ use ivy_image::Image;
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{Extent, Texture, TextureInfo, VulkanContext};
 use rectangle_pack::{
-    contains_smallest_box, volume_heuristic, GroupedRectsToPlace, PackedLocation, RectToInsert,
-    RectanglePackOk, TargetBin,
+    contains_smallest_box, volume_heuristic, GroupedRectsToPlace, RectToInsert, RectanglePackOk,
+    TargetBin,
 };
 use std::collections::BTreeMap;
 use std::hash::Hash;
 use std::sync::Arc;
 
 pub type BinId = ();
+pub use rectangle_pack::PackedLocation;
 
 pub struct NormalizedLocation {
     x: f32,

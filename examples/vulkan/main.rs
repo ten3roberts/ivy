@@ -495,24 +495,34 @@ impl VulkanLayer {
                 .context("Failed to load uv texture")?,
         )?;
 
-        let atlas = resources.insert(TextureAtlas::new(
+        let font = Font::new(
             context.clone(),
             &resources,
-            &TextureInfo {
-                extent: Extent::new(128, 128),
-                mip_levels: 1,
-                usage: ImageUsage::SAMPLED | ImageUsage::TRANSFER_DST,
-                format: Format::R8G8B8A8_SRGB,
-                samples: SampleCountFlags::TYPE_1,
+            "./res/fonts/Lora/Lora-VariableFont_wght.ttf",
+            &FontInfo {
+                size: 58.0,
+                glyphs: '!'..'~',
             },
-            4,
-            vec![
-                ("red", image::Image::load("./res/textures/red.png", 4)?),
-                ("green", image::Image::load("./res/textures/green.png", 4)?),
-                ("blue", image::Image::load("./res/textures/blue.png", 4)?),
-                ("heart", image::Image::load("./res/textures/heart.png", 4)?),
-            ],
-        )?)?;
+        )?;
+
+        // let atlas = resources.insert(TextureAtlas::new(
+        //     context.clone(),
+        //     &resources,
+        //     &TextureInfo {
+        //         extent: Extent::new(128, 128),
+        //         mip_levels: 1,
+        //         usage: ImageUsage::SAMPLED | ImageUsage::TRANSFER_DST,
+        //         format: Format::R8G8B8A8_SRGB,
+        //         samples: SampleCountFlags::TYPE_1,
+        //     },
+        //     4,
+        //     vec![
+        //         ("red", image::Image::load("./res/textures/red.png", 4)?),
+        //         ("green", image::Image::load("./res/textures/green.png", 4)?),
+        //         ("blue", image::Image::load("./res/textures/blue.png", 4)?),
+        //         ("heart", image::Image::load("./res/textures/heart.png", 4)?),
+        //     ],
+        // )?)?;
 
         let sampler = resources.insert(Sampler::new(
             context.clone(),
@@ -564,7 +574,7 @@ impl VulkanLayer {
         let image2 = resources.insert(Image::new(
             &context,
             &resources,
-            resources.get(atlas)?.texture(),
+            font.atlas().texture(),
             ui_sampler,
         )?)?;
 

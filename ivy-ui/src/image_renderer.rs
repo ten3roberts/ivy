@@ -1,6 +1,5 @@
 use hecs::{Entity, World};
-use ivy_graphics::Result;
-use ivy_graphics::{Mesh, Renderer, ShaderPass};
+use ivy_graphics::{Mesh, Renderer, Result, ShaderPass};
 use ivy_resources::{Handle, ResourceCache, Resources};
 use ivy_vulkan::vk::IndexType;
 use ivy_vulkan::{

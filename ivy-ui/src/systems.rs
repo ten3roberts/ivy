@@ -1,7 +1,7 @@
+use crate::Result;
 use hecs::{Entity, World};
 use hecs_hierarchy::Hierarchy;
 use ivy_graphics::Camera;
-use ivy_graphics::Result;
 use ultraviolet::Mat4;
 
 use crate::Canvas;

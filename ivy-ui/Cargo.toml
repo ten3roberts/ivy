@@ -10,9 +10,11 @@ readme = "README.md"
 
 [dependencies]
 derive_more = "0.99"
+fontdue = "0.5.2"
 hecs = "0.5"
 hecs-hierarchy = "0.1"
 ivy-graphics = { path = "../ivy-graphics", version = "*" }
+ivy-image = { path = "../ivy-image", version = "1.4" }
 ivy-resources = { path = "../ivy-resources", version = "1.4.0" }
 ivy-vulkan = { path = "../ivy-vulkan", version = "*" }
 thiserror = "1.0"
