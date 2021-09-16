@@ -6,6 +6,9 @@ mod font;
 mod image;
 mod image_renderer;
 pub mod systems;
+mod text;
+mod text_renderer;
+mod vertex;
 
 pub use canvas::*;
 pub use components::*;
@@ -14,3 +17,6 @@ pub use font::*;
 pub use image::*;
 pub use image_renderer::*;
 pub use systems::*;
+pub use text::*;
+pub use text_renderer::*;
+pub use vertex::*;

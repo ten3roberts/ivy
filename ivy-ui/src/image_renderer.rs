@@ -5,10 +5,12 @@ use ivy_vulkan::vk::IndexType;
 use ivy_vulkan::{
     commands::CommandBuffer, descriptors::*, vk, Buffer, BufferAccess, BufferUsage, VulkanContext,
 };
+use ultraviolet::{Vec2, Vec3};
 
 use std::ops::Deref;
 use std::{any::TypeId, collections::HashMap, marker::PhantomData, mem::size_of, sync::Arc};
 
+use crate::UIVertex;
 use crate::{image::Image, ModelMatrix};
 
 /// Any entity with these components will be renderered.
@@ -26,7 +28,7 @@ type ObjectId = u32;
 pub struct ImageRenderer {
     context: Arc<VulkanContext>,
     descriptor_allocator: DescriptorAllocator,
-    square: Mesh,
+    square: Mesh<UIVertex>,
     frames: Vec<FrameData>,
     passes: HashMap<TypeId, PassData>,
     max_object_id: ObjectId,
@@ -53,7 +55,23 @@ impl ImageRenderer {
 
         let passes = HashMap::new();
 
-        let square = Mesh::new_square(context.clone(), 1.0, 1.0)?;
+        let square = {
+            let context = context.clone();
+            let hw = 1.0 / 2.0;
+            let hh = 1.0 / 2.0;
+
+            // Simple quad
+            let vertices = [
+                UIVertex::new(Vec3::new(-hw, -hh, 0.0), Vec2::new(0.0, 1.0)),
+                UIVertex::new(Vec3::new(hw, -hh, 0.0), Vec2::new(1.0, 1.0)),
+                UIVertex::new(Vec3::new(hw, hh, 0.0), Vec2::new(1.0, 0.0)),
+                UIVertex::new(Vec3::new(-hw, hh, 0.0), Vec2::new(0.0, 0.0)),
+            ];
+
+            let indices: [u32; 6] = [0, 1, 2, 2, 3, 0];
+
+            Mesh::new(context, &vertices, &indices)
+        }?;
 
         Ok(Self {
             context,
@@ -374,7 +392,7 @@ impl PassData {
         offsets: &[u32],
         frame_set: DescriptorSet,
         images: &ResourceCache<Image>,
-        square_mesh: &Mesh,
+        square_mesh: &Mesh<UIVertex>,
     ) -> Result<()> {
         // Indirect buffer is not large enough
         if self.object_count > self.capacity {

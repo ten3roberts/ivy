@@ -299,7 +299,7 @@ impl PassData {
                             vertex_offset: 0,
                             first_index: 0,
                             instance_count: 1,
-                            index_count,
+                            index_count: index_count as _,
                         },
                     };
                     index += 1;

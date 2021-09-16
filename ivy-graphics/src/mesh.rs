@@ -1,14 +1,14 @@
 use crate::Result;
 use ash::vk;
 use gltf::{buffer, Semantic};
-use std::iter::repeat;
 use std::mem;
 use std::sync::Arc;
+use std::{iter::repeat, marker::PhantomData};
 use ultraviolet::{Vec2, Vec3};
 
 use crate::Error;
 use ivy_vulkan as vulkan;
-use vulkan::{Buffer, BufferAccess, BufferUsage, VulkanContext};
+use vulkan::{Buffer, BufferAccess, BufferUsage, VertexDesc, VulkanContext};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 /// A simple vertex type with position, normal and texcoord.
@@ -62,16 +62,17 @@ impl vulkan::VertexDesc for Vertex {
 }
 
 /// Represents a vertex and index buffer of `mesh::Vertex` mesh.
-pub struct Mesh {
+pub struct Mesh<V = Vertex> {
     vertex_buffer: Buffer,
     index_buffer: Buffer,
-    vertex_count: u32,
-    index_count: u32,
+    vertex_count: u64,
+    index_count: u64,
+    marker: PhantomData<V>,
 }
 
-impl Mesh {
+impl<V: VertexDesc> Mesh<V> {
     /// Creates a new mesh from provided vertices and indices.
-    pub fn new(context: Arc<VulkanContext>, vertices: &[Vertex], indices: &[u32]) -> Result<Self> {
+    pub fn new(context: Arc<VulkanContext>, vertices: &[V], indices: &[u32]) -> Result<Self> {
         let vertex_buffer = Buffer::new(
             context.clone(),
             BufferUsage::VERTEX_BUFFER,
@@ -89,11 +90,72 @@ impl Mesh {
         Ok(Self {
             vertex_buffer,
             index_buffer,
-            vertex_count: vertices.len() as u32,
-            index_count: indices.len() as u32,
+            vertex_count: vertices.len() as u64,
+            index_count: indices.len() as u64,
+            marker: PhantomData,
         })
     }
 
+    /// Creates a new mesh from provided vertices and indices.
+    pub fn new_uninit(
+        context: Arc<VulkanContext>,
+        vertex_count: u64,
+        index_count: u64,
+    ) -> Result<Self> {
+        let vertex_buffer = Buffer::new_uninit(
+            context.clone(),
+            BufferUsage::VERTEX_BUFFER,
+            BufferAccess::Staged,
+            vertex_count,
+        )?;
+
+        let index_buffer = Buffer::new_uninit(
+            context,
+            BufferUsage::INDEX_BUFFER,
+            BufferAccess::Staged,
+            index_count,
+        )?;
+
+        Ok(Self {
+            vertex_buffer,
+            index_buffer,
+            vertex_count,
+            index_count,
+            marker: PhantomData,
+        })
+    }
+    // Returns the internal vertex buffer
+    pub fn vertex_buffer(&self) -> &Buffer {
+        &self.vertex_buffer
+    }
+
+    // Returns the internal index buffer
+    pub fn index_buffer(&self) -> &Buffer {
+        &self.index_buffer
+    }
+
+    // Returns the number of vertices
+    pub fn vertex_count(&self) -> u64 {
+        self.vertex_count
+    }
+
+    // Returns the number of indices
+    pub fn index_count(&self) -> u64 {
+        self.index_count
+    }
+
+    /// Get a mutable reference to the mesh's index buffer.
+    pub fn index_buffer_mut(&mut self) -> &mut Buffer {
+        &mut self.index_buffer
+    }
+
+    /// Get a mutable reference to the mesh's vertex buffer.
+    pub fn vertex_buffer_mut(&mut self) -> &mut Buffer {
+        &mut self.vertex_buffer
+    }
+}
+
+impl Mesh<Vertex> {
     /// Creates a new square or rectangle mesh.
     pub fn new_square(context: Arc<VulkanContext>, width: f32, height: f32) -> Result<Self> {
         let hw = width / 2.0;
@@ -131,7 +193,7 @@ impl Mesh {
             vertices.push(Vertex::new(positions[i], normals[i], texcoords[i]));
         }
 
-        Self::new(context, &vertices, &indices)
+        Self::new(context, vertices.as_slice(), &indices)
     }
 
     /// Loads a mesh from gltf asset. Loads positions, normals, and texture coordinates.
@@ -174,26 +236,6 @@ impl Mesh {
         pad_vec(&mut texcoords, Vec2::zero(), positions.len());
 
         Self::from_soa(context, &positions, &normals, &texcoords, &raw_indices)
-    }
-
-    // Returns the internal vertex buffer
-    pub fn vertex_buffer(&self) -> &Buffer {
-        &self.vertex_buffer
-    }
-
-    // Returns the internal index buffer
-    pub fn index_buffer(&self) -> &Buffer {
-        &self.index_buffer
-    }
-
-    // Returns the number of vertices
-    pub fn vertex_count(&self) -> u32 {
-        self.vertex_count
-    }
-
-    // Returns the number of indices
-    pub fn index_count(&self) -> u32 {
-        self.index_count
     }
 }
 

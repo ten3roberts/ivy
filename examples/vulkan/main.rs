@@ -662,7 +662,7 @@ impl VulkanLayer {
         ));
 
         // Create a pipeline from the shaders
-        let ui_pipeline = Pipeline::new::<Vertex>(
+        let ui_pipeline = Pipeline::new::<UIVertex>(
             context.clone(),
             &PipelineInfo {
                 vertexshader: "./res/shaders/ui.vert.spv".into(),
