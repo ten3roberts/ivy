@@ -15,10 +15,10 @@ fontdue = "0.5.2"
 hecs = "0.5"
 hecs-hierarchy = "0.1"
 ivy-core = { path = "../ivy-core", version = "1.4" }
-ivy-graphics = { path = "../ivy-graphics", version = "*" }
-ivy-rendergraph = { path = "../ivy-rendergraph", version = "*" }
+ivy-graphics = { path = "../ivy-graphics", version = "1.7" }
+ivy-rendergraph = { path = "../ivy-rendergraph", version = "1.7" }
 ivy-image = { path = "../ivy-image", version = "1.4" }
 ivy-resources = { path = "../ivy-resources", version = "1.4.0" }
-ivy-vulkan = { path = "../ivy-vulkan", version = "*" }
+ivy-vulkan = { path = "../ivy-vulkan", version = "1.7" }
 thiserror = "1.0"
 ultraviolet = { version = "0.8", features =  [ "int" ] }

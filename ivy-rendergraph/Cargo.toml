@@ -9,8 +9,8 @@ edition = "2018"
 anyhow = "1.0.40"
 hecs = "0.5"
 itertools = "0.10"
-ivy-graphics = { path = "../ivy-graphics", version = "*" }
+ivy-graphics = { path = "../ivy-graphics", version = "1.7" }
 ivy-resources = { path = "../ivy-resources", version = "1.4.0" }
-ivy-vulkan = { path = "../ivy-vulkan", version = "*" }
+ivy-vulkan = { path = "../ivy-vulkan", version = "1.7" }
 slotmap = "1.0"
 thiserror = "1.0"
