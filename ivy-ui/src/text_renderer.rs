@@ -33,6 +33,9 @@ impl BufferAllocation {
     }
 }
 
+/// Renders arbitrary text using associated font and text objects attached to
+/// entity. TextUpdateNode needs to be added to rendergraph before as the text
+/// vertex data needs to be updated with a transfer.
 pub struct TextRenderer {
     mesh: Mesh<UIVertex>,
     // Free contiguos blocks in mesh
@@ -136,8 +139,7 @@ impl TextRenderer {
             .into_iter()
             .try_for_each(|(e, block)| world.insert_one(e, block))?;
 
-        self.base_renderer
-            .register_entities::<ObjectDataQuery, _>(world)?;
+        self.base_renderer.register_entities::<KeyQuery, _>(world)?;
 
         Ok(())
     }
@@ -245,6 +247,8 @@ impl Renderer for TextRenderer {
         cmd.bind_vertexbuffer(0, self.mesh.vertex_buffer());
         cmd.bind_indexbuffer(self.mesh.index_buffer(), IndexType::UINT32, 0);
 
+        let frame_set = self.base_renderer.set(current_frame);
+
         let passes = resources.fetch::<Pass>()?;
 
         {
@@ -263,11 +267,10 @@ impl Renderer for TextRenderer {
             let key = batch.key();
 
             let font = resources.get(key.font)?;
+
             if !sets.is_empty() {
                 cmd.bind_descriptor_sets(batch.layout(), 0, sets, offsets);
             }
-
-            let frame_set = self.base_renderer.set(current_frame);
 
             cmd.bind_descriptor_sets(
                 batch.layout(),
@@ -277,13 +280,11 @@ impl Renderer for TextRenderer {
             );
 
             cmd.bind_pipeline(batch.pipeline());
-            cmd.bind_vertexbuffer(0, self.mesh.vertex_buffer());
-            cmd.bind_indexbuffer(self.mesh.index_buffer(), IndexType::UINT32, 0);
 
             for id in batch.ids() {
                 let data = &object_data[*id as usize];
 
-                cmd.draw_indexed(data.len * 6, 1, 0, data.offset as i32 * 4, *id);
+                cmd.draw_indexed(data.len * 6, 1, 0, 0, *id);
             }
         }
 
@@ -315,7 +316,7 @@ impl<'a> Into<ObjectData> for ObjectDataQuery<'a> {
     }
 }
 
-#[derive(Query, Hash, PartialEq, Eq)]
+#[derive(Query, PartialEq, Eq)]
 pub struct KeyQuery<'a> {
     font: &'a Handle<Font>,
 }

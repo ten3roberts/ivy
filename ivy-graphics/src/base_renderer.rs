@@ -166,14 +166,15 @@ where
             self.resize_object_buffer(world, nearest_power_2(self.object_count as _) as _)?;
         }
 
-        let query = world.query_mut::<(U, &ObjectBufferMarker)>();
+        let query = world.query_mut::<(U, Q, &ObjectBufferMarker)>();
 
         let frame = &mut self.frames[current_frame];
 
         frame
             .object_buffer
-            .write_slice(self.max_object_id as u64, 0, |data| {
-                query.into_iter().for_each(|(_, (g, marker))| {
+            .write_slice::<Obj, _, _>(self.max_object_id as u64, 0, |data| {
+                query.into_iter().for_each(|(_, (g, _, marker))| {
+                    println!("Writing into: {:?}", marker.id);
                     data[marker.id as usize] = g.into();
                 });
             })?;
@@ -240,6 +241,24 @@ impl<K: Key> PassData<K> {
         }
     }
 
+    /// Collects all entities added to the base renderer that have yet to be
+    /// placed into a batch for this shaderpass.
+    pub fn get_unbatched<'a, Pass, Q, F>(&mut self, world: &'a mut World)
+    where
+        Pass: ShaderPass,
+        Q: Query<Fetch = F> + KeyQuery<K = K>,
+        F: Fetch<'a, Item = Q>,
+    {
+        let query = world
+            .query_mut::<(&Handle<Pass>, &ObjectBufferMarker, Q)>()
+            .without::<BatchMarker<Pass>>();
+
+        self.unbatched
+            .extend(query.into_iter().map(|(e, (pass, marker, keyq))| {
+                (e, pass.into_untyped(), marker.to_owned(), keyq.into_key())
+            }));
+    }
+
     /// Builds rendering batches for shaderpass `T` for all objects not yet batched.
     /// Note: [`get_unbatched`] needs to be run before to collect unbatched
     /// entities, this is due to lifetime limitations on world mutations.
@@ -276,24 +295,6 @@ impl<K: Key> PassData<K> {
             })?;
 
         Ok(())
-    }
-
-    /// Collects all entities added to the base renderer that have yet to be
-    /// placed into a batch for this shaderpass.
-    pub fn get_unbatched<'a, Pass, Q, F>(&mut self, world: &'a mut World)
-    where
-        Pass: ShaderPass,
-        Q: Query<Fetch = F> + KeyQuery<K = K>,
-        F: Fetch<'a, Item = Q>,
-    {
-        let query = world
-            .query_mut::<(&Handle<Pass>, &ObjectBufferMarker, Q)>()
-            .without::<BatchMarker<Pass>>();
-
-        self.unbatched
-            .extend(query.into_iter().map(|(e, (pass, marker, keyq))| {
-                (e, pass.into_untyped(), marker.to_owned(), keyq.into_key())
-            }));
     }
 
     /// Inserts a new entity into the correct batch. Note: The entity should not already exist in pass,
