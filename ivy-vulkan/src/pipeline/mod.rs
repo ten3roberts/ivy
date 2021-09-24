@@ -1,6 +1,9 @@
 use crate::{descriptors::DescriptorLayoutInfo, Error, Extent, Result, VertexDesc, VulkanContext};
 use arrayvec::ArrayVec;
-use ash::vk::{PipelineLayout, PushConstantRange};
+use ash::vk::{
+    BlendFactor, BlendOp, ColorComponentFlags, PipelineColorBlendAttachmentState, PipelineLayout,
+    PrimitiveTopology, PushConstantRange,
+};
 use std::{ffi::CString, sync::Arc};
 use std::{fs::File, path::PathBuf};
 
@@ -13,6 +16,9 @@ use shader::*;
 pub struct PipelineInfo<'a> {
     pub renderpass: vk::RenderPass,
     pub subpass: u32,
+    // Enable alpha blending,
+    pub blending: bool,
+    pub topology: PrimitiveTopology,
     pub vertexshader: PathBuf,
     pub fragmentshader: PathBuf,
     pub samples: vk::SampleCountFlags,
@@ -30,6 +36,7 @@ impl<'a> Default for PipelineInfo<'a> {
     fn default() -> Self {
         Self {
             renderpass: vk::RenderPass::null(),
+            blending: false,
             subpass: 0,
             vertexshader: "".into(),
             fragmentshader: "".into(),
@@ -41,6 +48,7 @@ impl<'a> Default for PipelineInfo<'a> {
             set_layouts: &[],
             color_attachment_count: 1,
             depth_attachment: true,
+            topology: PrimitiveTopology::TRIANGLE_LIST,
         }
     }
 }
@@ -94,7 +102,7 @@ impl Pipeline {
             .vertex_attribute_descriptions(V::ATTRIBUTE_DESCRIPTIONS);
 
         let input_assembly = vk::PipelineInputAssemblyStateCreateInfo::builder()
-            .topology(vk::PrimitiveTopology::TRIANGLE_LIST)
+            .topology(info.topology)
             .primitive_restart_enable(false);
 
         let viewports = [vk::Viewport {
@@ -138,21 +146,35 @@ impl Pipeline {
 
         let color_blend_attachments = (0..info.color_attachment_count)
             .map(|_| {
-                vk::PipelineColorBlendAttachmentState::builder()
-                    .color_write_mask(
-                        vk::ColorComponentFlags::R
-                            | vk::ColorComponentFlags::G
-                            | vk::ColorComponentFlags::B
-                            | vk::ColorComponentFlags::A,
-                    )
-                    .blend_enable(false)
-                    .src_color_blend_factor(vk::BlendFactor::ONE)
-                    .dst_color_blend_factor(vk::BlendFactor::ZERO)
-                    .color_blend_op(vk::BlendOp::ADD)
-                    .src_alpha_blend_factor(vk::BlendFactor::ONE)
-                    .dst_alpha_blend_factor(vk::BlendFactor::ZERO)
-                    .alpha_blend_op(vk::BlendOp::ADD)
-                    .build()
+                if info.blending {
+                    PipelineColorBlendAttachmentState {
+                        blend_enable: vk::TRUE,
+                        src_color_blend_factor: BlendFactor::SRC_ALPHA,
+                        dst_color_blend_factor: BlendFactor::ONE_MINUS_SRC_ALPHA,
+                        color_blend_op: BlendOp::ADD,
+                        src_alpha_blend_factor: BlendFactor::ONE,
+                        dst_alpha_blend_factor: BlendFactor::ZERO,
+                        alpha_blend_op: BlendOp::ADD,
+                        color_write_mask: ColorComponentFlags::R
+                            | ColorComponentFlags::G
+                            | ColorComponentFlags::B
+                            | ColorComponentFlags::A,
+                    }
+                } else {
+                    PipelineColorBlendAttachmentState {
+                        blend_enable: vk::FALSE,
+                        src_color_blend_factor: BlendFactor::ONE,
+                        dst_color_blend_factor: BlendFactor::ZERO,
+                        color_blend_op: BlendOp::ADD,
+                        src_alpha_blend_factor: BlendFactor::ONE,
+                        dst_alpha_blend_factor: BlendFactor::ZERO,
+                        alpha_blend_op: BlendOp::ADD,
+                        color_write_mask: ColorComponentFlags::R
+                            | ColorComponentFlags::G
+                            | ColorComponentFlags::B
+                            | ColorComponentFlags::A,
+                    }
+                }
             })
             .collect::<Vec<_>>();
 
