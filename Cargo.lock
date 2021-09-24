@@ -447,7 +447,7 @@ checksum = "b71991ff56294aa922b450139ee08b3bfc70982c6b2c7562771375cf73542dd4"
 
 [[package]]
 name = "ivy"
-version = "1.7.0"
+version = "1.7.1"
 dependencies = [
  "anyhow",
  "atomic_refcell",
@@ -487,7 +487,7 @@ dependencies = [
 
 [[package]]
 name = "ivy-graphics"
-version = "1.7.0"
+version = "1.7.1"
 dependencies = [
  "anymap",
  "ash",
@@ -525,7 +525,7 @@ dependencies = [
 
 [[package]]
 name = "ivy-physics"
-version = "1.4.0"
+version = "1.7.1"
 dependencies = [
  "derive_more",
  "hecs",
@@ -536,7 +536,7 @@ dependencies = [
 
 [[package]]
 name = "ivy-postprocessing"
-version = "1.7.0"
+version = "1.7.1"
 dependencies = [
  "anyhow",
  "derive_more",
@@ -559,7 +559,7 @@ dependencies = [
 
 [[package]]
 name = "ivy-rendergraph"
-version = "1.7.0"
+version = "1.7.1"
 dependencies = [
  "anyhow",
  "hecs",
@@ -583,7 +583,7 @@ dependencies = [
 
 [[package]]
 name = "ivy-ui"
-version = "1.7.0"
+version = "1.7.1"
 dependencies = [
  "anyhow",
  "derive_more",
