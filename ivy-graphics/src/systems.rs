@@ -1,8 +1,8 @@
 use hecs::World;
-use ivy_core::{Position, Rotation, Scale};
+use ivy_core::{ModelMatrix, Position, Rotation, Scale};
 use ultraviolet::Mat4;
 
-use crate::{components::ModelMatrix, Camera};
+use crate::Camera;
 
 pub fn update_model_matrices(world: &mut World) {
     let without = world

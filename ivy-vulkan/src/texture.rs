@@ -331,6 +331,7 @@ fn generate_mipmaps(
             commandbuffer.pipeline_barrier(
                 vk::PipelineStageFlags::TRANSFER,
                 vk::PipelineStageFlags::TRANSFER,
+                &[],
                 &[barrier],
             );
 
@@ -390,6 +391,7 @@ fn generate_mipmaps(
             commandbuffer.pipeline_barrier(
                 vk::PipelineStageFlags::TRANSFER,
                 vk::PipelineStageFlags::FRAGMENT_SHADER,
+                &[],
                 &[barrier],
             );
 
@@ -412,6 +414,7 @@ fn generate_mipmaps(
         commandbuffer.pipeline_barrier(
             vk::PipelineStageFlags::TRANSFER,
             vk::PipelineStageFlags::FRAGMENT_SHADER,
+            &[],
             &[barrier],
         );
     })
@@ -464,7 +467,7 @@ fn transition_layout(
     };
 
     commandpool.single_time_command(queue, |commandbuffer| {
-        commandbuffer.pipeline_barrier(src_stage_mask, dst_stage_mask, &[barrier])
+        commandbuffer.pipeline_barrier(src_stage_mask, dst_stage_mask, &[], &[barrier])
     })
 }
 

@@ -9,13 +9,16 @@ readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = "1.0.41"
 derive_more = "0.99"
 fontdue = "0.5.2"
 hecs = "0.5"
 hecs-hierarchy = "0.1"
+ivy-core = { path = "../ivy-core", version = "1.4" }
 ivy-graphics = { path = "../ivy-graphics", version = "*" }
+ivy-rendergraph = { path = "../ivy-rendergraph", version = "*" }
 ivy-image = { path = "../ivy-image", version = "1.4" }
 ivy-resources = { path = "../ivy-resources", version = "1.4.0" }
 ivy-vulkan = { path = "../ivy-vulkan", version = "*" }
 thiserror = "1.0"
-ultraviolet = "0.8"
+ultraviolet = { version = "0.8", features =  [ "int" ] }

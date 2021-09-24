@@ -18,7 +18,7 @@ layout(set = 2, binding = 1) uniform MaterialData {
 } materialData;
 
 void main() {
-  outAlbedo = texture(albedo, fragTexCoord);
+  outAlbedo = vec4(texture(albedo, fragTexCoord).rgb, 1);
   outPosition = vec4(fragPosition, 0);
   outNormal = normalize(fragNormal);
 

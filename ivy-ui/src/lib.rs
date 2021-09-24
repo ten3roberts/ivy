@@ -19,4 +19,5 @@ pub use image_renderer::*;
 pub use systems::*;
 pub use text::*;
 pub use text_renderer::*;
+pub use text_renderer::*;
 pub use vertex::*;

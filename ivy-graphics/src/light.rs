@@ -1,6 +1,4 @@
 use crate::Result;
-use std::{mem::size_of, sync::Arc};
-
 use ash::vk::{DescriptorSet, ShaderStageFlags};
 use hecs::World;
 use ivy_core::Position;
@@ -8,6 +6,7 @@ use ivy_vulkan::{
     descriptors::{DescriptorBuilder, IntoSet},
     Buffer, VulkanContext,
 };
+use std::sync::Arc;
 use ultraviolet::Vec3;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -53,11 +52,11 @@ impl LightManager {
     ) -> Result<Self> {
         let scene_buffers = (0..frames_in_flight)
             .map(|_| -> Result<_> {
-                Buffer::new_uninit(
+                Buffer::new_uninit::<LightSceneData>(
                     context.clone(),
                     ivy_vulkan::BufferUsage::UNIFORM_BUFFER,
                     ivy_vulkan::BufferAccess::Mapped,
-                    size_of::<LightSceneData>() as u64,
+                    1,
                 )
                 .map_err(|e| e.into())
             })
@@ -65,11 +64,11 @@ impl LightManager {
 
         let light_buffers = (0..frames_in_flight)
             .map(|_| -> Result<_> {
-                Buffer::new_uninit(
+                Buffer::new_uninit::<LightData>(
                     context.clone(),
                     ivy_vulkan::BufferUsage::STORAGE_BUFFER,
                     ivy_vulkan::BufferAccess::Mapped,
-                    size_of::<LightData>() as u64 * max_lights,
+                    max_lights,
                 )
                 .map_err(|e| e.into())
             })

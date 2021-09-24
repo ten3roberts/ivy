@@ -12,12 +12,14 @@ mod renderer;
 mod shaderpass;
 
 mod atlas;
+mod base_renderer;
 pub mod components;
 mod light;
 pub mod systems;
 pub mod window;
 
 pub use atlas::*;
+pub use base_renderer::*;
 pub use camera::*;
 pub use document::*;
 pub use error::*;

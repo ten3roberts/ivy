@@ -4,30 +4,56 @@ use ivy_image::Image;
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{Extent, Texture, TextureInfo, VulkanContext};
 use rectangle_pack::{
-    contains_smallest_box, volume_heuristic, GroupedRectsToPlace, RectToInsert, RectanglePackOk,
-    TargetBin,
+    contains_smallest_box, volume_heuristic, GroupedRectsToPlace, PackedLocation, RectToInsert,
+    RectanglePackOk, TargetBin,
 };
 use std::collections::BTreeMap;
 use std::hash::Hash;
 use std::sync::Arc;
 
 pub type BinId = ();
-pub use rectangle_pack::PackedLocation;
 
-pub struct NormalizedLocation {
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
+pub struct Rect {
+    // Offset to the right of the bitmap
+    pub x: u32,
+    // Offset from the top of the bitmap
+    pub y: u32,
+    pub z: u32,
+    pub extent: Extent,
+    // Usually the amount of channels
+    pub depth: u32,
 }
 
-impl NormalizedLocation {
-    pub fn new(x: f32, y: f32, width: f32, height: f32) -> Self {
+impl From<PackedLocation> for Rect {
+    fn from(val: PackedLocation) -> Self {
+        Self {
+            x: val.x(),
+            y: val.y(),
+            z: val.z(),
+            depth: val.depth(),
+            extent: Extent::new(val.width(), val.height()),
+        }
+    }
+}
+
+pub struct NormalizedRect {
+    pub x: f32,
+    pub y: f32,
+    pub z: u32,
+    pub width: f32,
+    pub height: f32,
+    pub depth: u32,
+}
+
+impl NormalizedRect {
+    pub fn new(x: f32, y: f32, z: u32, width: f32, height: f32, depth: u32) -> Self {
         Self {
             x,
             y,
+            z,
             width,
             height,
+            depth,
         }
     }
 
@@ -56,6 +82,7 @@ pub struct TextureAtlas<K: AtlasKey> {
     rects: RectanglePackOk<K, BinId>,
     extent: Extent,
     texture: Handle<Texture>,
+    padding: u32,
 }
 
 pub trait AtlasKey: Hash + std::fmt::Debug + PartialEq + Eq + PartialOrd + Ord + Clone {}
@@ -76,6 +103,7 @@ where
         images: Vec<(K, Image)>,
         padding: u32,
     ) -> Result<Self> {
+        dbg!("Creating atlas");
         let mut packer = GroupedRectsToPlace::<K, BinId>::new();
         let extent = texture_info.extent;
 
@@ -129,7 +157,6 @@ where
             let image_pixels = image.pixels();
 
             (0..img_height).for_each(|row| unsafe {
-                dbg!("Copying row", row);
                 std::ptr::copy_nonoverlapping(
                     &image_pixels[img_width * row * stride] as *const u8,
                     &mut pixels[(extent.width as usize * (row + y) + x) * stride] as *mut u8,
@@ -158,10 +185,13 @@ where
 
         let texture = resources.insert(texture)?;
 
+        dbg!("Created atlas");
+
         Ok(Self {
             rects,
             extent,
             texture,
+            padding,
         })
     }
 
@@ -171,27 +201,34 @@ where
     }
 
     /// Returns the unnormalized location of an image in the atlas.
-    pub fn get(&self, key: &K) -> Result<PackedLocation> {
+    pub fn get(&self, key: &K) -> Result<Rect> {
         self.rects
             .packed_locations()
             .get(key)
-            .map(|val| val.1)
+            .map(|val| {
+                let mut rect: Rect = val.1.into();
+                rect.extent.width -= self.padding;
+                rect.extent.height -= self.padding;
+                rect
+            })
             .ok_or(Error::InvalidAtlasKey)
     }
 
     /// Returns the unnormalized location of an image in the atlas in 0..1
     /// coordinate space.
-    pub fn get_normalized(&self, key: &K) -> Result<NormalizedLocation> {
+    pub fn get_normalized(&self, key: &K) -> Result<NormalizedRect> {
         let extent = self.extent;
         let width = extent.width as f32;
         let height = extent.height as f32;
 
         self.get(key).map(|val| {
-            NormalizedLocation::new(
-                val.x() as f32 / width,
-                val.y() as f32 / height,
-                val.width() as f32 / width,
-                val.height() as f32 / height,
+            NormalizedRect::new(
+                val.x as f32 / width,
+                val.y as f32 / height,
+                val.z,
+                val.extent.width as f32 / width,
+                val.extent.height as f32 / height,
+                val.depth,
             )
         })
     }

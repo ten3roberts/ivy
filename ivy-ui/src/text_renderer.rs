@@ -1,10 +1,13 @@
+use anyhow::Context;
 use hecs::{Query, World};
 use ivy_core::ModelMatrix;
 use ivy_graphics::{BaseRenderer, Mesh, Renderer};
+use ivy_rendergraph::Node;
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
     commands::CommandBuffer,
-    vk::{BufferCopy, IndexType},
+    descriptors::IntoSet,
+    vk::{self, AccessFlags, BufferCopy, BufferMemoryBarrier, IndexType},
     Buffer, BufferAccess, BufferUsage, VulkanContext,
 };
 use std::{mem::size_of, sync::Arc};
@@ -47,6 +50,7 @@ impl TextRenderer {
         frames_in_flight: usize,
     ) -> Result<Self> {
         let mesh = Self::create_mesh(context.clone(), glyph_capacity)?;
+
         let staging_buffers =
             Self::create_staging_buffers(context.clone(), glyph_capacity, frames_in_flight)?;
 
@@ -61,18 +65,14 @@ impl TextRenderer {
     }
 
     // Creates a mesh able to store `capacity` characters
-    pub fn create_mesh(context: Arc<VulkanContext>, capacity: u32) -> Result<Mesh<UIVertex>> {
-        let mut mesh = Mesh::new_uninit(context, capacity as u64 * 4, capacity as u64 * 6)?;
+    pub fn create_mesh(context: Arc<VulkanContext>, glyph_capacity: u32) -> Result<Mesh<UIVertex>> {
+        let mut mesh = Mesh::new_uninit(context, glyph_capacity * 4, glyph_capacity * 6)?;
 
         // Pre fill indices
-        let indices = [0, 1, 2, 2, 3, 0]
-            .iter()
-            .cloned()
-            .cycle()
-            .take(capacity as usize)
-            .collect::<Vec<_>>();
+        let indices = (0..glyph_capacity * 6)
+            .flat_map(|i| [i * 4, i * 4 + 1, i * 4 + 2, i * 4 + 2, i * 4 + 3, i * 4]);
 
-        mesh.index_buffer_mut().fill(0, &indices)?;
+        mesh.index_buffer_mut().write_iter(0, indices)?;
 
         Ok(mesh)
     }
@@ -85,11 +85,11 @@ impl TextRenderer {
     ) -> Result<Vec<Buffer>> {
         (0..frames_in_flight)
             .map(|_| {
-                Buffer::new_uninit(
+                Buffer::new_uninit::<UIVertex>(
                     context.clone(),
                     BufferUsage::TRANSFER_SRC,
                     BufferAccess::Mapped,
-                    glyph_capacity as u64 * 4 * size_of::<UIVertex>() as u64,
+                    glyph_capacity as u64 * 4,
                 )
                 .map_err(|e| e.into())
             })
@@ -120,65 +120,108 @@ impl TextRenderer {
         }
     }
 
-    /// Registers all unregisters entities capable of being rendered for specified pass. Does
+    /// Registers all unregistered entities capable of being rendered for specified pass. Does
     /// nothing if entities are already registered. Call this function after adding new entities to the world.
     /// # Failures
     /// Fails if object buffer cannot be reallocated to accomodate new entities.
-    pub fn register_entities(&mut self, world: &mut World) -> Result<()> {
+    fn register_entities(&mut self, world: &mut World) -> Result<()> {
+        let inserted = world
+            .query::<(&Text, &Handle<Font>)>()
+            .without::<BufferAllocation>()
+            .iter()
+            .map(|(e, (text, _))| (e, self.allocate(text.len() as u32).unwrap()))
+            .collect::<Vec<_>>();
+
+        inserted
+            .into_iter()
+            .try_for_each(|(e, block)| world.insert_one(e, block))?;
+
         self.base_renderer
-            .register_entities::<KeyQuery, _>(world)
-            .map_err(|e| e.into())
+            .register_entities::<ObjectDataQuery, _>(world)?;
+
+        Ok(())
     }
 
     /// Updates the text rendering
-    fn update(
+    pub fn update(&mut self, world: &mut World, current_frame: usize) -> Result<()> {
+        self.register_entities(world)?;
+
+        self.base_renderer
+            .update::<KeyQuery, ObjectDataQuery, _, _>(world, current_frame)?;
+
+        Ok(())
+    }
+
+    fn update_dirty_texts(
         &mut self,
         world: &mut World,
         resources: &Resources,
         cmd: &CommandBuffer,
         current_frame: usize,
     ) -> Result<()> {
-        self.register_entities(world)?;
+        let mut offset = 0;
 
         let fonts = resources.fetch::<Font>()?;
         let staging_buffer = &mut self.staging_buffers[current_frame];
         let sb = staging_buffer.buffer();
         let vb = self.mesh.vertex_buffer().into();
 
-        let mut offset = 0;
-
         let dirty_texts = world
             .query_mut::<(&mut Text, &Handle<Font>, &BufferAllocation)>()
             .into_iter()
             .filter(|(_, (t, _, _))| t.dirty())
-            .map(|(_, (text, font, block))| -> Result<_> {
+            .flat_map(|(_, (text, font, _block))| {
                 text.set_dirty(false);
-                cmd.copy_buffer(
-                    sb,
-                    vb,
-                    &[BufferCopy {
-                        src_offset: offset,
-                        dst_offset: block.offset as _,
-                        size: (text.len() * 4 * size_of::<UIVertex>()) as u64,
-                    }],
-                );
+
+                let size = (text.len() * 4 * size_of::<UIVertex>()) as u64;
+
+                let region = &[BufferCopy {
+                    src_offset: 0,
+                    dst_offset: 0 as _,
+                    size,
+                }];
+
+                cmd.copy_buffer(sb, vb, region);
 
                 offset += text.len() as u64;
 
-                let font = fonts.get(*font)?;
-                Ok((block, text.layout(font)?))
+                let font = fonts.get(*font).unwrap();
+                text.layout(font).unwrap()
             });
 
-        // let mut staging_buffer = Buffer::new_uninit(
-        //     self.context.clone(),
-        //     BufferUsage::TRANSFER_SRC,
-        //     BufferAccess::Mapped,
-        //     dirty_len as u64 * 4,
-        // )?;
+        let barrier = BufferMemoryBarrier {
+            src_access_mask: AccessFlags::SHADER_READ,
+            dst_access_mask: AccessFlags::TRANSFER_WRITE,
+            buffer: vb,
+            size: vk::WHOLE_SIZE,
+            ..Default::default()
+        };
 
-        staging_buffer.write_iter(0, dirty_texts)??;
+        cmd.pipeline_barrier(
+            vk::PipelineStageFlags::VERTEX_SHADER,
+            vk::PipelineStageFlags::TRANSFER,
+            &[barrier],
+            &[],
+        );
 
-        todo!()
+        staging_buffer.write_iter(0, dirty_texts)?;
+
+        let barrier = BufferMemoryBarrier {
+            src_access_mask: AccessFlags::TRANSFER_WRITE,
+            dst_access_mask: AccessFlags::VERTEX_ATTRIBUTE_READ,
+            buffer: vb,
+            size: vk::WHOLE_SIZE,
+            ..Default::default()
+        };
+
+        cmd.pipeline_barrier(
+            vk::PipelineStageFlags::TRANSFER,
+            vk::PipelineStageFlags::VERTEX_INPUT,
+            &[barrier],
+            &[],
+        );
+
+        Ok(())
     }
 }
 
@@ -193,35 +236,83 @@ impl Renderer for TextRenderer {
         // The current swapchain image or backbuffer index
         current_frame: usize,
         // Descriptor sets to bind before renderer specific sets
-        _sets: &[ivy_vulkan::descriptors::DescriptorSet],
+        sets: &[ivy_vulkan::descriptors::DescriptorSet],
         // Dynamic offsets for supplied sets
-        _offsets: &[u32],
+        offsets: &[u32],
         // Graphics resources like textures and materials
         resources: &ivy_resources::Resources,
     ) -> Result<()> {
         cmd.bind_vertexbuffer(0, self.mesh.vertex_buffer());
         cmd.bind_indexbuffer(self.mesh.index_buffer(), IndexType::UINT32, 0);
 
-        self.update(world, resources, cmd, current_frame)?;
+        let passes = resources.fetch::<Pass>()?;
 
-        world
-            .query_mut::<&BufferAllocation>()
-            .into_iter()
-            .for_each(|(_, block)| {
-                let v_offset = block.offset * 4;
-                let i_offset = block.offset * 6;
-                let index_count = block.len * 6;
+        {
+            let pass = self.base_renderer.pass_mut::<Pass>();
+            pass.get_unbatched::<Pass, KeyQuery, _>(world);
+            pass.build_batches::<Pass, KeyQuery, _, _>(world, &passes)?;
+        }
 
-                cmd.draw_indexed(index_count, 1, i_offset, v_offset as i32, 0);
-            });
+        let pass = self.base_renderer.pass::<Pass>();
+        let object_buffer = self.base_renderer.object_buffer(current_frame);
+        let object_data = object_buffer
+            .mapped_slice::<ObjectData>()
+            .expect("Non mappable object data buffer");
 
-        todo!()
+        for batch in pass.batches() {
+            let key = batch.key();
+
+            let font = resources.get(key.font)?;
+            if !sets.is_empty() {
+                cmd.bind_descriptor_sets(batch.layout(), 0, sets, offsets);
+            }
+
+            let frame_set = self.base_renderer.set(current_frame);
+
+            cmd.bind_descriptor_sets(
+                batch.layout(),
+                sets.len() as u32,
+                &[frame_set, font.set(0)],
+                &[],
+            );
+
+            cmd.bind_pipeline(batch.pipeline());
+            cmd.bind_vertexbuffer(0, self.mesh.vertex_buffer());
+            cmd.bind_indexbuffer(self.mesh.index_buffer(), IndexType::UINT32, 0);
+
+            for id in batch.ids() {
+                let data = &object_data[*id as usize];
+
+                cmd.draw_indexed(data.len * 6, 1, 0, data.offset as i32 * 4, *id);
+            }
+        }
+
+        Ok(())
     }
 }
 
 #[repr(C, align(16))]
+#[derive(Debug, Clone, Copy)]
 struct ObjectData {
     mvp: ModelMatrix,
+    offset: u32,
+    len: u32,
+}
+
+#[derive(Query)]
+struct ObjectDataQuery<'a> {
+    mvp: &'a ModelMatrix,
+    block: &'a BufferAllocation,
+}
+
+impl<'a> Into<ObjectData> for ObjectDataQuery<'a> {
+    fn into(self) -> ObjectData {
+        ObjectData {
+            mvp: *self.mvp,
+            offset: self.block.offset,
+            len: self.block.len,
+        }
+    }
 }
 
 #[derive(Query, Hash, PartialEq, Eq)]
@@ -239,5 +330,34 @@ impl<'a> ivy_graphics::KeyQuery for KeyQuery<'a> {
 
     fn into_key(&self) -> Self::K {
         Self::K { font: *self.font }
+    }
+}
+
+pub struct TextUpdateNode {
+    text_renderer: Handle<TextRenderer>,
+}
+
+impl TextUpdateNode {
+    pub fn new(text_renderer: Handle<TextRenderer>) -> Self {
+        Self { text_renderer }
+    }
+}
+
+impl Node for TextUpdateNode {
+    fn node_kind(&self) -> ivy_rendergraph::NodeKind {
+        ivy_rendergraph::NodeKind::Transfer
+    }
+
+    fn execute(
+        &mut self,
+        world: &mut World,
+        cmd: &CommandBuffer,
+        current_frame: usize,
+        resources: &Resources,
+    ) -> anyhow::Result<()> {
+        resources
+            .get_mut(self.text_renderer)?
+            .update_dirty_texts(world, resources, cmd, current_frame)
+            .context("Failed to update text")
     }
 }

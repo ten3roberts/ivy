@@ -1,3 +1,4 @@
+use slotmap::new_key_type;
 pub use slotmap::{Key, KeyData};
 use std::hash::Hash;
 use std::marker::PhantomData;
@@ -23,7 +24,24 @@ impl<T> Handle<T> {
     pub fn is_null(&self) -> bool {
         Key::is_null(self)
     }
+
+    /// Removes the type from a handle, easier storage without using dynamic
+    /// dispatch
+    pub fn into_untyped(&self) -> HandleUntyped {
+        HandleUntyped(self.data())
+    }
+
+    /// Converts an untyped handle into a typed handle.
+    /// Behaviour is undefined if handle is converted back to the wrong type.
+    /// Use with care.
+    pub fn from_untyped(handle: HandleUntyped) -> Handle<T> {
+        Self(handle.data(), PhantomData)
+    }
 }
+
+new_key_type!(
+    pub struct HandleUntyped;
+);
 
 unsafe impl<T> Key for Handle<T> {
     fn data(&self) -> KeyData {

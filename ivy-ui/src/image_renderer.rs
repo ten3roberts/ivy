@@ -1,7 +1,9 @@
+use crate::{image::Image, Error, Result, UIVertex};
 use hecs::{Entity, World};
-use ivy_graphics::{Mesh, Renderer, Result, ShaderPass};
+use ivy_core::ModelMatrix;
+use ivy_graphics::{Mesh, Renderer, ShaderPass};
 use ivy_resources::{Handle, ResourceCache, Resources};
-use ivy_vulkan::vk::IndexType;
+use ivy_vulkan::vk::{IndexType, ShaderStageFlags};
 use ivy_vulkan::{
     commands::CommandBuffer, descriptors::*, vk, Buffer, BufferAccess, BufferUsage, VulkanContext,
 };
@@ -9,9 +11,6 @@ use ultraviolet::{Vec2, Vec3};
 
 use std::ops::Deref;
 use std::{any::TypeId, collections::HashMap, marker::PhantomData, mem::size_of, sync::Arc};
-
-use crate::UIVertex;
-use crate::{image::Image, ModelMatrix};
 
 /// Any entity with these components will be renderered.
 type RenderObject<'a, T> = (
@@ -103,7 +102,6 @@ impl ImageRenderer {
         self.free_indices.clear();
         self.max_object_id = 0;
 
-        println!("Here");
         self.frames.clear();
         self.descriptor_allocator.reset()?;
 
@@ -113,14 +111,11 @@ impl ImageRenderer {
         }
 
         self.capacity = capacity;
-        println!("Here2");
 
         world
             .query_mut::<&mut ObjectBufferMarker>()
             .into_iter()
             .for_each(|(_, marker)| marker.id = self.get_object_id());
-
-        println!("Done");
 
         Ok(())
     }
@@ -182,6 +177,7 @@ impl ImageRenderer {
 }
 
 impl Renderer for ImageRenderer {
+    type Error = Error;
     /// Will draw all entities with a Handle<Material>, Handle<Mesh>, Modelmatrix and Shaderpass `Handle<T>`
     fn draw<Pass: ShaderPass>(
         &mut self,
@@ -479,15 +475,15 @@ struct FrameData {
 
 impl FrameData {
     pub fn new(context: Arc<VulkanContext>, capacity: ObjectId) -> Result<Self> {
-        let object_buffer = Buffer::new_uninit(
+        let object_buffer = Buffer::new_uninit::<ObjectData>(
             context.clone(),
             BufferUsage::STORAGE_BUFFER,
             BufferAccess::Mapped,
-            size_of::<ObjectData>() as u64 * capacity as u64,
+            capacity as u64,
         )?;
 
         let set = DescriptorBuilder::new()
-            .bind_buffer(0, vk::ShaderStageFlags::VERTEX, &object_buffer)?
+            .bind_buffer(0, ShaderStageFlags::VERTEX, &object_buffer)?
             .build(&context)?;
 
         Ok(Self { set, object_buffer })
@@ -505,11 +501,11 @@ struct IndirectObject {
 }
 
 fn create_indirect_buffer(context: Arc<VulkanContext>, capacity: ObjectId) -> Result<Buffer> {
-    Buffer::new_uninit(
+    Buffer::new_uninit::<IndirectObject>(
         context,
         BufferUsage::INDIRECT_BUFFER,
         BufferAccess::Mapped,
-        capacity as u64 * size_of::<IndirectObject>() as u64,
+        capacity as u64,
     )
     .map_err(|e| e.into())
 }

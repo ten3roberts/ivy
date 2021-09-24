@@ -131,7 +131,7 @@ impl Layer for SandboxLayer {
             events.send(AppEvent::Exit)
         }
 
-        sleep(Duration::from_millis(100));
+        // sleep(Duration::from_millis(100));
         Ok(())
     }
 }

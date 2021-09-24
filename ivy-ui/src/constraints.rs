@@ -94,7 +94,8 @@ impl RelativeOffset {
     Sub,
     SubAssign,
 )]
-/// Constrains the size of a widget to a multiple of the parent size.
+/// Constrains the size of a widget to a multiple of the parent size. If paired
+/// with [`Aspect`] width is ignored.
 pub struct RelativeSize(pub Vec2);
 
 impl From<RelativeSize> for Size2D {
@@ -108,6 +109,7 @@ impl RelativeSize {
         Self(Vec2::new(x, y))
     }
 }
+
 #[derive(
     Add,
     AddAssign,

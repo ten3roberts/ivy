@@ -126,7 +126,7 @@ impl WindowRenderer {
             &framebuffer,
             self.swapchain.extent(),
             &[
-                ClearValue::Color(0.0, 0.0, 0.0, 0.0),
+                ClearValue::Color(0.0, 0.0, 0.0, 1.0),
                 ClearValue::DepthStencil(1.0, 0),
             ],
         );

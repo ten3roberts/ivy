@@ -10,6 +10,7 @@ mod swapchain_node;
 pub use camera_node::*;
 pub use error::*;
 pub use fullscreen_node::*;
+pub use multi_node::*;
 pub use node::*;
 pub use rendergraph::*;
 pub use swapchain_node::*;

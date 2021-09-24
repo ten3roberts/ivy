@@ -138,7 +138,7 @@ pub fn create_pbr_pipeline<GeometryPass: ShaderPass, PostProcessingPass: ShaderP
 
     let depth_attachment = DepthAttachment::new(context.clone(), resources, extent)?;
 
-    let camera_node = Box::new(CameraNode::<GeometryPass, IndirectMeshRenderer>::new(
+    let camera_node = Box::new(CameraNode::<GeometryPass, IndirectMeshRenderer, _>::new(
         camera,
         resources.default::<IndirectMeshRenderer>()?,
         pbr_attachments
@@ -162,10 +162,10 @@ pub fn create_pbr_pipeline<GeometryPass: ShaderPass, PostProcessingPass: ShaderP
             resource: *depth_attachment,
         }),
         vec![
-            ClearValue::Color(0.0, 0.0, 0.0, 0.0).into(),
-            ClearValue::Color(0.0, 0.0, 0.0, 0.0).into(),
-            ClearValue::Color(0.0, 0.0, 0.0, 0.0).into(),
-            ClearValue::Color(0.0, 0.0, 0.0, 0.0).into(),
+            ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
+            ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
+            ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
+            ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
             ClearValue::DepthStencil(1.0, 0).into(),
         ],
     ));

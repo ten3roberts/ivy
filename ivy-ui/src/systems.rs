@@ -1,11 +1,12 @@
 use crate::Result;
 use hecs::{Entity, World};
 use hecs_hierarchy::Hierarchy;
+use ivy_core::ModelMatrix;
 use ivy_graphics::Camera;
 use ultraviolet::Mat4;
 
 use crate::Canvas;
-use crate::{constraints::ConstraintQuery, ModelMatrix, Position2D, Size2D, Widget};
+use crate::{constraints::ConstraintQuery, Position2D, Size2D, Widget};
 
 /// Updates all UI trees and applies constraints.
 /// Also updates canvas cameras.
@@ -15,12 +16,23 @@ pub fn update(world: &World) -> Result<()> {
             update_canvas(world, root)?;
         }
 
-        let mut query = world.query_one::<(&Position2D, &Size2D)>(root)?;
-        let (position, size) = query.get().ok_or(hecs::NoSuchEntity)?;
+        update_from(world, root)
+    })
+}
 
-        world
-            .descendants_depth_first::<Widget>(root)
-            .try_for_each(|child| apply_constaints(world, child, position, size))
+pub fn update_from(world: &World, parent: Entity) -> Result<()> {
+    let mut query = world.query_one::<(&Position2D, &Size2D)>(parent)?;
+    let results = query.get().ok_or(hecs::NoSuchEntity)?;
+    let position = *results.0;
+    let size = *results.1;
+
+    drop(results);
+    drop(query);
+
+    world.children::<Widget>(parent).try_for_each(|child| {
+        apply_constaints(world, child, position, size)?;
+        assert!(parent != child);
+        update_from(world, child)
     })
 }
 
@@ -28,28 +40,28 @@ pub fn update(world: &World) -> Result<()> {
 fn apply_constaints(
     world: &World,
     entity: Entity,
-    parent_pos: &Position2D,
-    parent_size: &Size2D,
+    parent_pos: Position2D,
+    parent_size: Size2D,
 ) -> Result<()> {
     let mut constaints_query = world.query_one::<ConstraintQuery>(entity)?;
-    let constaints = constaints_query.get().ok_or(hecs::NoSuchEntity)?;
+    let constraints = constaints_query.get().ok_or(hecs::NoSuchEntity)?;
 
     let mut query = world.query_one::<(&mut Position2D, &mut Size2D)>(entity)?;
 
     let (pos, size) = query.get().ok_or(hecs::NoSuchEntity)?;
 
-    *pos = *parent_pos
+    *pos = parent_pos
         + Position2D(
-            *constaints.abs_offset.map(|v| *v).unwrap_or_default()
-                + *constaints.rel_offset.map(|v| *v).unwrap_or_default() * **parent_size,
+            *constraints.abs_offset.map(|v| *v).unwrap_or_default()
+                + *constraints.rel_offset.map(|v| *v).unwrap_or_default() * *parent_size,
         );
 
     *size = Size2D(
-        *constaints.abs_size.map(|v| *v).unwrap_or_default()
-            + *constaints.rel_size.map(|v| *v).unwrap_or_default() * **parent_size,
+        *constraints.abs_size.map(|v| *v).unwrap_or_default()
+            + *constraints.rel_size.map(|v| *v).unwrap_or_default() * *parent_size,
     );
 
-    if let Some(aspect) = constaints.aspect {
+    if let Some(aspect) = constraints.aspect {
         size.x = size.y * **aspect
     }
 

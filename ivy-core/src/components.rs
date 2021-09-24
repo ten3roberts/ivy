@@ -1,4 +1,5 @@
 use derive_more::*;
+use ultraviolet::Mat4;
 use ultraviolet::{Rotor3, Vec3};
 
 #[derive(
@@ -81,3 +82,22 @@ impl Scale {
         Self(Vec3::new(x, y, z))
     }
 }
+
+#[derive(
+    Add,
+    AddAssign,
+    AsRef,
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Deref,
+    DerefMut,
+    Div,
+    DivAssign,
+    From,
+    Into,
+    Mul,
+    MulAssign,
+)]
+pub struct ModelMatrix(pub Mat4);

@@ -396,6 +396,7 @@ impl CommandBuffer {
 
     #[inline]
     pub fn copy_buffer(&self, src: vk::Buffer, dst: vk::Buffer, regions: &[vk::BufferCopy]) {
+        println!("Copying buffer, {:?} -> {:?}, {:?}", src, dst, regions);
         unsafe {
             self.device
                 .cmd_copy_buffer(self.commandbuffer, src, dst, regions)
@@ -466,6 +467,7 @@ impl CommandBuffer {
         &self,
         src_stage_mask: vk::PipelineStageFlags,
         dst_stage_mask: vk::PipelineStageFlags,
+        buffer_barriers: &[vk::BufferMemoryBarrier],
         image_barriers: &[vk::ImageMemoryBarrier],
     ) {
         unsafe {
@@ -475,7 +477,7 @@ impl CommandBuffer {
                 dst_stage_mask,
                 vk::DependencyFlags::default(),
                 &[],
-                &[],
+                buffer_barriers,
                 image_barriers,
             )
         }

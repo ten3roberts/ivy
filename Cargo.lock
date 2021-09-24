@@ -585,12 +585,15 @@ dependencies = [
 name = "ivy-ui"
 version = "1.6.0"
 dependencies = [
+ "anyhow",
  "derive_more",
  "fontdue",
  "hecs",
  "hecs-hierarchy",
+ "ivy-core",
  "ivy-graphics",
  "ivy-image",
+ "ivy-rendergraph",
  "ivy-resources",
  "ivy-vulkan",
  "thiserror",

@@ -81,7 +81,15 @@ impl Pass {
                 src_stage,
                 image_barriers,
             } => {
-                cmd.pipeline_barrier(*src_stage, vk::PipelineStageFlags::TRANSFER, image_barriers);
+                if !image_barriers.is_empty() {
+                    cmd.pipeline_barrier(
+                        *src_stage,
+                        vk::PipelineStageFlags::TRANSFER,
+                        &[],
+                        image_barriers,
+                    );
+                }
+
                 self.nodes.iter().try_for_each(|node| {
                     nodes[*node].execute(world, cmd, current_frame, resources)
                 })?;

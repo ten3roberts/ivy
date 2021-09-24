@@ -1,11 +1,10 @@
 use crate::Result;
+use ash::vk::{Pipeline, PipelineLayout, ShaderStageFlags};
 use hecs::{Entity, Fetch, Query, World};
 use ivy_resources::{Handle, HandleUntyped, ResourceCache};
-use ivy_vulkan::{descriptors::*, vk, Buffer, BufferAccess, BufferUsage, VulkanContext};
+use ivy_vulkan::{descriptors::*, Buffer, BufferAccess, BufferUsage, VulkanContext};
 
-use std::{
-    any::TypeId, collections::HashMap, marker::PhantomData, mem::size_of, ops::Deref, sync::Arc,
-};
+use std::{any::TypeId, collections::HashMap, marker::PhantomData, ops::Deref, sync::Arc};
 
 use crate::ShaderPass;
 
@@ -41,11 +40,9 @@ pub struct BaseRenderer<K, Obj> {
     unbatched: Vec<Entity>,
 }
 
-impl<'a, Q, F, Obj, K> BaseRenderer<Q, Obj>
+impl<Obj, K> BaseRenderer<K, Obj>
 where
-    Q: KeyQuery + Query<Fetch = F> + ToOwned<Owned = K>,
     K: Key,
-    F: Fetch<'a, Item = Q>,
     Obj: Send + Sync,
 {
     pub fn new(
@@ -88,7 +85,7 @@ where
     }
     /// Resizes the object storage buffer to fit `capacity` objects
 
-    fn resize_object_buffer(&mut self, world: &mut World, capacity: ObjectId) -> Result<()> {
+    fn resize_object_buffer(&mut self, world: &World, capacity: ObjectId) -> Result<()> {
         self.free_indices.clear();
         self.max_object_id = 0;
 
@@ -105,8 +102,8 @@ where
         self.capacity = capacity;
 
         world
-            .query_mut::<&mut ObjectBufferMarker>()
-            .into_iter()
+            .query::<&mut ObjectBufferMarker>()
+            .iter()
             .for_each(|(_, marker)| marker.id = self.get_object_id());
 
         Ok(())
@@ -117,22 +114,30 @@ where
     /// nothing if entities are already registered. Call this function after adding new entities to the world.
     /// # Failures
     /// Fails if object buffer cannot be reallocated to accomodate new entities.
-    pub fn register_entities(&mut self, world: &'a mut World) -> Result<()> {
+    pub fn register_entities<'a, Q, F>(&mut self, world: &'a mut World) -> Result<()>
+    where
+        Q: Query<Fetch = F>,
+        F: Fetch<'a, Item = Q>,
+    {
         let query = world.query_mut::<Q>().without::<ObjectBufferMarker>();
 
-        self.unbatched
-            .extend(query.into_iter().map(|(e, _)| e).collect::<Vec<_>>());
+        self.unbatched.extend(query.into_iter().map(|(e, _)| e));
 
         Ok(())
     }
 
     /// Updates all registered entities gpu side data.
     /// Inserts not yet inserted entities
-    pub fn update<T, G, U>(&mut self, world: &mut World, current_frame: usize) -> Result<()>
+    pub fn update<'a, Q, U, F, G>(
+        &mut self,
+        world: &'a mut World,
+        current_frame: usize,
+    ) -> Result<()>
     where
-        T: Query<Fetch = G>,
-        G: for<'x> Fetch<'x, Item = U>,
-        U: Into<Obj>,
+        Q: Query<Fetch = F> + KeyQuery<K = K> + 'a,
+        U: Into<Obj> + Query<Fetch = G>,
+        F: Fetch<'a, Item = Q>,
+        G: Fetch<'a, Item = U>,
     {
         let max_object_id = &mut self.max_object_id;
         let free_indices = &mut self.free_indices;
@@ -161,7 +166,7 @@ where
             self.resize_object_buffer(world, nearest_power_2(self.object_count as _) as _)?;
         }
 
-        let query = world.query_mut::<(T, &ObjectBufferMarker)>();
+        let query = world.query_mut::<(U, &ObjectBufferMarker)>();
 
         let frame = &mut self.frames[current_frame];
 
@@ -177,12 +182,19 @@ where
     }
 
     /// Returns the pass data for the shaderpass.
-    pub fn pass<Pass: ShaderPass>(&mut self) -> &mut PassData<Q> {
+    pub fn pass_mut<Pass: ShaderPass>(&mut self) -> &mut PassData<K> {
         let frames_in_flight = self.frames.len();
 
         self.passes
             .entry(TypeId::of::<Pass>())
             .or_insert_with(|| PassData::new(frames_in_flight))
+    }
+
+    /// Returns the pass data for the shaderpass.
+    pub fn pass<Pass: ShaderPass>(&self) -> &PassData<K> {
+        self.passes
+            .get(&TypeId::of::<Pass>())
+            .expect("Pass does not exist")
     }
 
     pub fn set(&self, current_frame: usize) -> DescriptorSet {
@@ -200,6 +212,10 @@ where
     pub fn max_object_id(&self) -> ObjectId {
         self.max_object_id
     }
+
+    pub fn object_buffer(&self, current_frame: usize) -> &Buffer {
+        &self.frames[current_frame].object_buffer
+    }
 }
 
 /// Represents a single typed shaderpass. Each object belonging to the pass is
@@ -207,18 +223,13 @@ where
 pub struct PassData<K> {
     batches: Vec<BatchData<K>>,
     // Map from key to index in batches
-    batch_map: HashMap<(HandleUntyped, Q::Owned), usize>,
+    batch_map: HashMap<(HandleUntyped, K), usize>,
     object_count: ObjectId,
     frames_in_flight: usize,
-    unbatched: Vec<(Entity, HandleUntyped, ObjectBufferMarker, Q::Owned)>,
+    unbatched: Vec<(Entity, HandleUntyped, ObjectBufferMarker, K)>,
 }
 
-impl<'a, Q, F, K> PassData<Q>
-where
-    Q: KeyQuery + Query<Fetch = F> + ToOwned<Owned = K>,
-    K: Key,
-    F: Fetch<'a, Item = Q>,
-{
+impl<K: Key> PassData<K> {
     pub fn new(frames_in_flight: usize) -> Self {
         Self {
             batches: Vec::new(),
@@ -232,10 +243,12 @@ where
     /// Builds rendering batches for shaderpass `T` for all objects not yet batched.
     /// Note: [`get_unbatched`] needs to be run before to collect unbatched
     /// entities, this is due to lifetime limitations on world mutations.
-    pub fn build_batches<Pass, U>(&mut self, world: &'a mut World, passes: &U) -> Result<()>
+    pub fn build_batches<'a, Pass, Q, F, U>(&mut self, world: &mut World, passes: &U) -> Result<()>
     where
         U: Deref<Target = ResourceCache<Pass>>,
         Pass: ShaderPass,
+        Q: Query<Fetch = F>,
+        F: Fetch<'a, Item = Q>,
     {
         let frames_in_flight = self.frames_in_flight;
         let object_count = &mut self.object_count;
@@ -245,18 +258,18 @@ where
         // Insert a marker to track this enemy as attached to a batch
         self.unbatched
             .drain(0..)
-            .try_for_each(|(e, pass, marker, k)| -> Result<_> {
+            .try_for_each(|(e, pass, marker, key)| -> Result<_> {
                 let marker = Self::insert_entity(
                     batch_map,
                     batches,
                     object_count,
-                    e,
                     pass,
                     marker,
-                    k,
+                    key,
                     passes,
                     frames_in_flight,
                 )?;
+
                 world.insert_one(e, marker)?;
 
                 Ok(())
@@ -267,33 +280,34 @@ where
 
     /// Collects all entities added to the base renderer that have yet to be
     /// placed into a batch for this shaderpass.
-    pub fn get_unbatched<Pass>(&mut self, world: &'a mut World)
+    pub fn get_unbatched<'a, Pass, Q, F>(&mut self, world: &'a mut World)
     where
         Pass: ShaderPass,
+        Q: Query<Fetch = F> + KeyQuery<K = K>,
+        F: Fetch<'a, Item = Q>,
     {
         let query = world
             .query_mut::<(&Handle<Pass>, &ObjectBufferMarker, Q)>()
             .without::<BatchMarker<Pass>>();
 
         self.unbatched
-            .extend(query.into_iter().map(|(e, (pass, marker, key))| {
-                (e, pass.into_untyped(), marker.to_owned(), key.to_owned())
+            .extend(query.into_iter().map(|(e, (pass, marker, keyq))| {
+                (e, pass.into_untyped(), marker.to_owned(), keyq.into_key())
             }));
     }
 
     /// Inserts a new entity into the correct batch. Note: The entity should not already exist in pass,
     /// behaviour is undefined. Marks the batch as dirty.
     fn insert_entity<Pass: ShaderPass>(
-        batch_map: &mut HashMap<(HandleUntyped, Q::Owned), usize>,
-        batches: &mut Vec<BatchData<Q::Owned>>,
+        batch_map: &mut HashMap<(HandleUntyped, K), usize>,
+        batches: &mut Vec<BatchData<K>>,
         object_count: &mut ObjectId,
-        entity: Entity,
         pass: HandleUntyped,
         marker: ObjectBufferMarker,
-        owned_key: <Q as ToOwned>::Owned,
+        owned_key: K,
         passes: &ResourceCache<Pass>,
         frames_in_flight: usize,
-    ) -> Result<(Entity, BatchMarker<Pass>)> {
+    ) -> Result<BatchMarker<Pass>> {
         let frames_in_flight = frames_in_flight;
 
         let (_, batch) = Self::get_batch_internal(batch_map, batches, passes, pass, owned_key)?;
@@ -302,7 +316,7 @@ where
         batch.dirty = frames_in_flight;
         *object_count += 1;
 
-        Ok((entity, BatchMarker(PhantomData)))
+        Ok(BatchMarker(PhantomData))
     }
 
     /// Returns or creates the appropriate batch for the combined shaderpass and
@@ -328,12 +342,12 @@ where
     }
     ///
     fn get_batch_internal<'b, U, Pass>(
-        batch_map: &mut HashMap<(HandleUntyped, Q::Owned), usize>,
+        batch_map: &mut HashMap<(HandleUntyped, K), usize>,
         batches: &'b mut Vec<BatchData<K>>,
         passes: U,
         pass: HandleUntyped,
         key: K,
-    ) -> Result<(usize, &'b mut BatchData<Q::Owned>)>
+    ) -> Result<(usize, &'b mut BatchData<K>)>
     where
         U: Deref<Target = ResourceCache<Pass>>,
         Pass: ShaderPass,
@@ -360,9 +374,22 @@ where
         Ok((idx, &mut batches[idx]))
     }
 
+    /// Updates the pass by batching unbatched objects.
+    pub fn update<'a, Pass, Q, F, U>(&mut self, _world: &mut World, _passes: &U) -> Result<()>
+    where
+        U: Deref<Target = ResourceCache<Pass>>,
+        Q: Query<Fetch = F> + KeyQuery<K = K>,
+        F: Fetch<'a, Item = Q>,
+        Pass: ShaderPass,
+    {
+        // self.get_unbatched::<Q, F, Pass>(world);
+        // self.build_batches::<Q, F, Pass, U>(world, passes)?;
+        Ok(())
+    }
+
     /// Get a reference to the pass data's batches.
-    pub fn batches(&self) -> &[BatchData<Q::Owned>] {
-        self.batches.as_slice()
+    pub fn batches(&self) -> &[BatchData<K>] {
+        &self.batches
     }
 
     /// Get a reference to the pass data's object count.
@@ -373,8 +400,8 @@ where
 
 /// A batch contains objects of the same shaderpass and material.
 pub struct BatchData<K> {
-    pipeline: vk::Pipeline,
-    layout: vk::PipelineLayout,
+    pipeline: Pipeline,
+    layout: PipelineLayout,
     pass: HandleUntyped,
     owned_key: K,
     /// The number of draw calls in batch
@@ -386,12 +413,7 @@ pub struct BatchData<K> {
 }
 
 impl<O> BatchData<O> {
-    fn new(
-        pipeline: vk::Pipeline,
-        layout: vk::PipelineLayout,
-        pass: HandleUntyped,
-        owned_key: O,
-    ) -> Self {
+    fn new(pipeline: Pipeline, layout: PipelineLayout, pass: HandleUntyped, owned_key: O) -> Self {
         Self {
             pipeline,
             layout,
@@ -402,14 +424,17 @@ impl<O> BatchData<O> {
         }
     }
 
-    pub fn pipeline(&self) -> vk::Pipeline {
+    #[inline]
+    pub fn pipeline(&self) -> Pipeline {
         self.pipeline
     }
 
-    pub fn layout(&self) -> vk::PipelineLayout {
+    #[inline]
+    pub fn layout(&self) -> PipelineLayout {
         self.layout
     }
 
+    #[inline]
     pub fn key(&self) -> &O {
         &self.owned_key
     }
@@ -419,6 +444,7 @@ impl<O> BatchData<O> {
     }
 
     /// Ids into the object buffer associated to this batch
+    #[inline]
     pub fn ids(&self) -> &[ObjectId] {
         &self.ids
     }
@@ -441,15 +467,15 @@ struct FrameData<T> {
 
 impl<T> FrameData<T> {
     pub fn new(context: Arc<VulkanContext>, capacity: ObjectId) -> Result<Self> {
-        let object_buffer = Buffer::new_uninit(
+        let object_buffer = Buffer::new_uninit::<T>(
             context.clone(),
             BufferUsage::STORAGE_BUFFER,
             BufferAccess::Mapped,
-            size_of::<T>() as u64 * capacity as u64,
+            capacity as u64,
         )?;
 
         let set = DescriptorBuilder::new()
-            .bind_buffer(0, vk::ShaderStageFlags::VERTEX, &object_buffer)?
+            .bind_buffer(0, ShaderStageFlags::VERTEX, &object_buffer)?
             .build(&context)?;
 
         Ok(Self {

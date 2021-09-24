@@ -1,20 +1,33 @@
+use anyhow::Context;
 use hecs::World;
+use ivy_graphics::{Renderer, ShaderPass};
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{commands::CommandBuffer, vk::ClearValue, ImageLayout, LoadOp, StoreOp, Texture};
+use std::{any::type_name, error::Error, marker::PhantomData};
 
 /// Represents a node in the renderpass.
 pub trait Node {
     /// Returns the color attachments for this node. Should not be execution heavy function
-    fn color_attachments(&self) -> &[AttachmentInfo];
+    fn color_attachments(&self) -> &[AttachmentInfo] {
+        &[]
+    }
     /// Returns the read attachments for this node. Should not be execution heavy function
-    fn read_attachments(&self) -> &[Handle<Texture>];
+    fn read_attachments(&self) -> &[Handle<Texture>] {
+        &[]
+    }
     /// Partially sampled input attachments. Read from the same pixel coord we write to
-    fn input_attachments(&self) -> &[Handle<Texture>];
+    fn input_attachments(&self) -> &[Handle<Texture>] {
+        &[]
+    }
     /// Returns the optional depth attachment for this node. Should not be execution heavy function
-    fn depth_attachment(&self) -> Option<&AttachmentInfo>;
+    fn depth_attachment(&self) -> Option<&AttachmentInfo> {
+        None
+    }
 
     /// Returns the clear values to initiate this renderpass
-    fn clear_values(&self) -> &[ClearValue];
+    fn clear_values(&self) -> &[ClearValue] {
+        &[]
+    }
 
     fn node_kind(&self) -> NodeKind;
 
@@ -63,5 +76,45 @@ impl Default for AttachmentInfo {
             final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
             resource: Handle::null(),
         }
+    }
+}
+
+/// Simple node for rendering a pass in the rendergraph
+pub struct RenderNode<Pass, T> {
+    renderer: Handle<T>,
+    marker: PhantomData<Pass>,
+}
+
+impl<Pass, T> RenderNode<Pass, T> {
+    pub fn new(renderer: Handle<T>) -> Self {
+        Self {
+            renderer,
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<Pass, T, E> Node for RenderNode<Pass, T>
+where
+    Pass: ShaderPass,
+    T: 'static + Renderer<Error = E> + Send + Sync,
+    E: 'static + Error + Send + Sync,
+{
+    fn node_kind(&self) -> NodeKind {
+        NodeKind::Graphics
+    }
+
+    fn execute(
+        &mut self,
+        world: &mut World,
+        cmd: &CommandBuffer,
+        current_frame: usize,
+        resources: &Resources,
+    ) -> anyhow::Result<()> {
+        resources
+            .get_mut(self.renderer)
+            .with_context(|| format!("Failed to borrow {:?} mutably", type_name::<T>()))?
+            .draw::<Pass>(world, cmd, current_frame, &[], &[], resources)
+            .with_context(|| format!("Failed to draw using {:?}", type_name::<T>()))
     }
 }

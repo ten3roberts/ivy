@@ -10,9 +10,9 @@ use std::marker::PhantomData;
 
 use crate::{AttachmentInfo, Node, NodeKind};
 
-pub struct FullscreenNode<Pass, T> {
+pub struct FullscreenNode<Pass, T, E> {
     renderer: Handle<T>,
-    marker: PhantomData<Pass>,
+    marker: PhantomData<(Pass, E)>,
     color_attachments: Vec<AttachmentInfo>,
     read_attachments: Vec<Handle<Texture>>,
     input_attachments: Vec<Handle<Texture>>,
@@ -22,10 +22,11 @@ pub struct FullscreenNode<Pass, T> {
     set_count: usize,
 }
 
-impl<Pass, T> FullscreenNode<Pass, T>
+impl<Pass, T, E> FullscreenNode<Pass, T, E>
 where
     Pass: ShaderPass + Storage,
-    T: Renderer + Storage,
+    T: Renderer<Error = E> + Storage,
+    E: Into<anyhow::Error>,
 {
     pub fn new(
         renderer: Handle<T>,
@@ -59,10 +60,11 @@ where
     }
 }
 
-impl<Pass, T> Node for FullscreenNode<Pass, T>
+impl<Pass, T, E> Node for FullscreenNode<Pass, T, E>
 where
     Pass: ShaderPass + Storage,
-    T: Renderer + Storage,
+    T: Renderer<Error = E> + Storage,
+    E: 'static + std::error::Error + Sync + Send,
 {
     fn color_attachments(&self) -> &[AttachmentInfo] {
         &self.color_attachments

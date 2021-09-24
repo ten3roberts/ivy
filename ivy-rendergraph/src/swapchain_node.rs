@@ -151,6 +151,7 @@ impl Node for SwapchainNode {
         cmd.pipeline_barrier(
             PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
             PipelineStageFlags::TRANSFER,
+            &[],
             &[dst_barrier],
         );
 
@@ -186,6 +187,7 @@ impl Node for SwapchainNode {
         cmd.pipeline_barrier(
             vk::PipelineStageFlags::TRANSFER,
             vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+            &[],
             &[barrier],
         );
 

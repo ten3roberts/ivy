@@ -1,4 +1,4 @@
-use crate::{Renderer, Result, ShaderPass};
+use crate::{Error, Renderer, Result, ShaderPass};
 use ash::vk::DescriptorSet;
 use ivy_resources::Resources;
 
@@ -6,6 +6,7 @@ use ivy_resources::Resources;
 pub struct FullscreenRenderer;
 
 impl Renderer for FullscreenRenderer {
+    type Error = Error;
     fn draw<Pass: ShaderPass>(
         &mut self,
         // The ecs world

@@ -153,7 +153,7 @@ impl Pipeline {
                         dst_color_blend_factor: BlendFactor::ONE_MINUS_SRC_ALPHA,
                         color_blend_op: BlendOp::ADD,
                         src_alpha_blend_factor: BlendFactor::ONE,
-                        dst_alpha_blend_factor: BlendFactor::ZERO,
+                        dst_alpha_blend_factor: BlendFactor::ONE_MINUS_SRC_ALPHA,
                         alpha_blend_op: BlendOp::ADD,
                         color_write_mask: ColorComponentFlags::R
                             | ColorComponentFlags::G

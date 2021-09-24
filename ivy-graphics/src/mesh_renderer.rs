@@ -1,6 +1,7 @@
-use crate::{Renderer, Result};
+use crate::{Error, Renderer, Result};
 use ash::vk::IndexType;
 use hecs::{Entity, World};
+use ivy_core::ModelMatrix;
 use ivy_resources::{Handle, ResourceCache, Resources};
 use ivy_vulkan::{
     commands::CommandBuffer, descriptors::*, vk, Buffer, BufferAccess, BufferUsage, VulkanContext,
@@ -12,7 +13,7 @@ use std::{
 };
 use ultraviolet::Mat4;
 
-use crate::{components::ModelMatrix, Material, Mesh, ShaderPass};
+use crate::{Material, Mesh, ShaderPass};
 
 /// Any entity with these components will be renderered.
 type RenderObject<'a, T> = (
@@ -158,6 +159,7 @@ impl IndirectMeshRenderer {
 }
 
 impl Renderer for IndirectMeshRenderer {
+    type Error = Error;
     fn draw<Pass: ShaderPass>(
         &mut self,
         // The ecs world
@@ -463,11 +465,11 @@ struct FrameData {
 
 impl FrameData {
     pub fn new(context: Arc<VulkanContext>, capacity: ObjectId) -> Result<Self> {
-        let object_buffer = Buffer::new_uninit(
+        let object_buffer = Buffer::new_uninit::<ObjectData>(
             context.clone(),
             BufferUsage::STORAGE_BUFFER,
             BufferAccess::Mapped,
-            size_of::<ObjectData>() as u64 * capacity as u64,
+            capacity as u64,
         )?;
 
         let set = DescriptorBuilder::new()
@@ -489,11 +491,11 @@ struct IndirectObject {
 }
 
 fn create_indirect_buffer(context: Arc<VulkanContext>, capacity: ObjectId) -> Result<Buffer> {
-    Buffer::new_uninit(
+    Buffer::new_uninit::<IndirectObject>(
         context,
         BufferUsage::INDIRECT_BUFFER,
         BufferAccess::Mapped,
-        capacity as u64 * size_of::<IndirectObject>() as u64,
+        capacity as u64,
     )
     .map_err(|e| e.into())
 }

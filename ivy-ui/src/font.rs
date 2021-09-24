@@ -1,15 +1,20 @@
 use crate::{Error, Result};
 use fontdue::Metrics;
-use ivy_graphics::{PackedLocation, TextureAtlas};
-use ivy_resources::Resources;
-use ivy_vulkan::{Extent, Format, ImageUsage, SampleCountFlags, TextureInfo, VulkanContext};
+use ivy_graphics::{NormalizedRect, Rect, TextureAtlas};
+use ivy_resources::{Handle, Resources};
+use ivy_vulkan::{
+    descriptors::{DescriptorBuilder, DescriptorSet, IntoSet},
+    vk::ShaderStageFlags,
+    Extent, Format, ImageUsage, SampleCountFlags, Sampler, TextureInfo, VulkanContext,
+};
 use std::{collections::BTreeMap, ops::Range, path::Path, sync::Arc};
 
 pub struct FontInfo {
-    // Font size
+    // The most optimal pixel size for the rasterized font.
     pub size: f32,
     pub glyphs: Range<char>,
     pub padding: u32,
+    pub mip_levels: u32,
 }
 
 impl Default for FontInfo {
@@ -17,14 +22,17 @@ impl Default for FontInfo {
         Self {
             size: 36.0,
             glyphs: '!'..'~',
-            padding: 10,
+            padding: 5,
+            mip_levels: 1,
         }
     }
 }
 
 pub struct Font {
     atlas: TextureAtlas<char>,
+    size: f32,
     metrics: BTreeMap<char, Metrics>,
+    set: DescriptorSet,
 }
 
 impl Font {
@@ -33,6 +41,7 @@ impl Font {
         context: Arc<VulkanContext>,
         resources: &Resources,
         path: P,
+        sampler: Handle<Sampler>,
         info: &FontInfo,
     ) -> Result<Self> {
         let path = path.as_ref();
@@ -47,18 +56,17 @@ impl Font {
         let metrics = glyphs.0.iter().cloned().collect::<BTreeMap<_, _>>();
         let images = glyphs.1;
 
-        let dimension = (((info.glyphs.end as usize - info.glyphs.start as usize) as f32)
-            .sqrt()
-            .ceil()
-            * info.size) as u32;
+        let dimension = (((info.glyphs.end as usize - info.glyphs.start as usize) as f32).sqrt()
+            * (info.size + info.padding as f32))
+            .ceil() as u32;
 
         let atlas = TextureAtlas::new(
-            context,
+            context.clone(),
             resources,
             &TextureInfo {
                 extent: Extent::new(dimension, dimension),
-                mip_levels: 1,
-                usage: ImageUsage::SAMPLED,
+                mip_levels: info.mip_levels,
+                usage: ImageUsage::SAMPLED | ImageUsage::TRANSFER_DST,
                 format: Format::R8_SRGB,
                 samples: SampleCountFlags::TYPE_1,
             },
@@ -67,9 +75,21 @@ impl Font {
             info.padding,
         )?;
 
-        dbg!("Metrics", &metrics);
+        let set = DescriptorBuilder::new()
+            .bind_combined_image_sampler(
+                0,
+                ShaderStageFlags::FRAGMENT,
+                resources.get(atlas.texture())?.image_view(),
+                resources.get(sampler)?.sampler(),
+            )
+            .build(&context)?;
 
-        Ok(Self { atlas, metrics })
+        Ok(Self {
+            atlas,
+            size: info.size,
+            metrics,
+            set,
+        })
     }
 
     fn rasterize(
@@ -97,7 +117,7 @@ impl Font {
         &self.atlas
     }
 
-    pub fn get(&self, glyph: char) -> Result<(&Metrics, PackedLocation)> {
+    pub fn get(&self, glyph: char) -> Result<(&Metrics, Rect)> {
         Ok((
             self.metrics()
                 .get(&glyph)
@@ -108,8 +128,33 @@ impl Font {
         ))
     }
 
+    pub fn get_normalized(&self, glyph: char) -> Result<(&Metrics, NormalizedRect)> {
+        Ok((
+            self.metrics()
+                .get(&glyph)
+                .ok_or(Error::MissingGlyph(glyph))?,
+            self.atlas
+                .get_normalized(&glyph)
+                .map_err(|_| Error::MissingGlyph(glyph))?,
+        ))
+    }
     /// Get a reference to the font's metrics.
     pub fn metrics(&self) -> &BTreeMap<char, Metrics> {
         &self.metrics
+    }
+
+    /// Returs the base glyph size.
+    pub fn size(&self) -> f32 {
+        self.size
+    }
+}
+
+impl IntoSet for Font {
+    fn set(&self, _: usize) -> DescriptorSet {
+        self.set
+    }
+
+    fn sets(&self) -> &[DescriptorSet] {
+        std::slice::from_ref(&self.set)
     }
 }

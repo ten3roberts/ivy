@@ -1,7 +1,7 @@
 use crate::Result;
 use ash::vk;
 use gltf::{buffer, Semantic};
-use std::mem;
+use std::mem::size_of;
 use std::sync::Arc;
 use std::{iter::repeat, marker::PhantomData};
 use ultraviolet::{Vec2, Vec3};
@@ -32,7 +32,7 @@ impl vulkan::VertexDesc for Vertex {
     const BINDING_DESCRIPTIONS: &'static [vk::VertexInputBindingDescription] =
         &[vk::VertexInputBindingDescription {
             binding: 0,
-            stride: mem::size_of::<Self>() as u32,
+            stride: size_of::<Self>() as u32,
             input_rate: vk::VertexInputRate::VERTEX,
         }];
 
@@ -65,8 +65,8 @@ impl vulkan::VertexDesc for Vertex {
 pub struct Mesh<V = Vertex> {
     vertex_buffer: Buffer,
     index_buffer: Buffer,
-    vertex_count: u64,
-    index_count: u64,
+    vertex_count: u32,
+    index_count: u32,
     marker: PhantomData<V>,
 }
 
@@ -90,8 +90,8 @@ impl<V: VertexDesc> Mesh<V> {
         Ok(Self {
             vertex_buffer,
             index_buffer,
-            vertex_count: vertices.len() as u64,
-            index_count: indices.len() as u64,
+            vertex_count: vertices.len() as u32,
+            index_count: indices.len() as u32,
             marker: PhantomData,
         })
     }
@@ -99,21 +99,21 @@ impl<V: VertexDesc> Mesh<V> {
     /// Creates a new mesh from provided vertices and indices.
     pub fn new_uninit(
         context: Arc<VulkanContext>,
-        vertex_count: u64,
-        index_count: u64,
+        vertex_count: u32,
+        index_count: u32,
     ) -> Result<Self> {
-        let vertex_buffer = Buffer::new_uninit(
+        let vertex_buffer = Buffer::new_uninit::<V>(
             context.clone(),
             BufferUsage::VERTEX_BUFFER,
             BufferAccess::Staged,
-            vertex_count,
+            vertex_count as u64,
         )?;
 
-        let index_buffer = Buffer::new_uninit(
+        let index_buffer = Buffer::new_uninit::<u32>(
             context,
             BufferUsage::INDEX_BUFFER,
             BufferAccess::Staged,
-            index_count,
+            index_count as u64,
         )?;
 
         Ok(Self {
@@ -135,12 +135,12 @@ impl<V: VertexDesc> Mesh<V> {
     }
 
     // Returns the number of vertices
-    pub fn vertex_count(&self) -> u64 {
+    pub fn vertex_count(&self) -> u32 {
         self.vertex_count
     }
 
     // Returns the number of indices
-    pub fn index_count(&self) -> u64 {
+    pub fn index_count(&self) -> u32 {
         self.index_count
     }
 

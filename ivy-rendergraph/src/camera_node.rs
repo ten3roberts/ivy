@@ -9,10 +9,10 @@ use ivy_vulkan::{descriptors::IntoSet, vk::ClearValue, Texture};
 use crate::{AttachmentInfo, Node, NodeKind};
 
 /// A rendergraph node rendering the scene using the provided camera.
-pub struct CameraNode<Pass, T> {
+pub struct CameraNode<Pass, T: Renderer<Error = E>, E> {
     camera: Entity,
     renderer: Handle<T>,
-    marker: PhantomData<Pass>,
+    marker: PhantomData<(Pass, E)>,
     color_attachments: Vec<AttachmentInfo>,
     read_attachments: Vec<Handle<Texture>>,
     input_attachments: Vec<Handle<Texture>>,
@@ -20,10 +20,11 @@ pub struct CameraNode<Pass, T> {
     clear_values: Vec<ClearValue>,
 }
 
-impl<Pass, T> CameraNode<Pass, T>
+impl<Pass, T, E> CameraNode<Pass, T, E>
 where
     Pass: ShaderPass + Storage,
-    T: Renderer + Storage,
+    T: Renderer<Error = E> + Storage,
+    E: 'static + std::error::Error + Sync + Send,
 {
     pub fn new(
         camera: Entity,
@@ -47,10 +48,11 @@ where
     }
 }
 
-impl<Pass, T> Node for CameraNode<Pass, T>
+impl<Pass, T, E> Node for CameraNode<Pass, T, E>
 where
     Pass: ShaderPass + Storage,
-    T: Renderer + Storage,
+    T: Renderer<Error = E> + Storage,
+    E: 'static + std::error::Error + Sync + Send,
 {
     fn color_attachments(&self) -> &[AttachmentInfo] {
         &self.color_attachments

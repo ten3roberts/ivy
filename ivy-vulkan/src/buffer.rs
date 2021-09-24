@@ -9,7 +9,7 @@ use gpu_allocator::{
 };
 use std::{
     ffi::c_void,
-    mem,
+    mem::{self, size_of},
     ptr::{copy_nonoverlapping, NonNull},
     sync::Arc,
 };
@@ -47,12 +47,14 @@ pub struct Buffer {
 
 impl Buffer {
     /// Creates a new buffer with size and uninitialized contents.
-    pub fn new_uninit(
+    pub fn new_uninit<T: Sized>(
         context: Arc<VulkanContext>,
         usage: BufferUsage,
         access: BufferAccess,
-        size: DeviceSize,
+        len: DeviceSize,
     ) -> Result<Self> {
+        let size = len * size_of::<T>() as u64;
+
         let location = match access {
             BufferAccess::Staged => MemoryLocation::GpuOnly,
             BufferAccess::Mapped => MemoryLocation::CpuToGpu,
@@ -67,7 +69,7 @@ impl Buffer {
 
         // Create the main GPU side buffer
         let buffer_info = vk::BufferCreateInfo::builder()
-            .size(size as _)
+            .size(size)
             .usage(usage)
             .sharing_mode(vk::SharingMode::EXCLUSIVE);
 
@@ -104,14 +106,43 @@ impl Buffer {
         access: BufferAccess,
         data: &[T],
     ) -> Result<Self> {
-        let size = (mem::size_of::<T>() * data.len()) as DeviceSize;
-
-        let mut buffer = Self::new_uninit(context, usage, access, size)?;
+        let mut buffer = Self::new_uninit::<T>(context, usage, access, data.len() as u64)?;
 
         // Fill the buffer with provided data
         buffer.fill(0, data)?;
 
         Ok(buffer)
+    }
+
+    pub fn mapped_ptr<T: Sized>(&self) -> Option<NonNull<T>> {
+        self.allocation
+            .as_ref()
+            .and_then(|val| val.mapped_ptr())
+            .map(|val| val.cast::<T>())
+    }
+
+    pub fn mapped_slice<T: Sized>(&self) -> Option<&[T]> {
+        self.allocation
+            .as_ref()
+            .and_then(|val| val.mapped_ptr())
+            .map(|val| unsafe {
+                std::slice::from_raw_parts(
+                    val.cast::<T>().as_ptr(),
+                    self.size as usize / size_of::<T>(),
+                )
+            })
+    }
+
+    pub fn mapped_slice_mut<T: Sized>(&mut self) -> Option<&mut [T]> {
+        self.allocation
+            .as_ref()
+            .and_then(|val| val.mapped_ptr())
+            .map(|val| unsafe {
+                std::slice::from_raw_parts_mut(
+                    val.cast::<T>().as_ptr(),
+                    self.size as usize / size_of::<T>(),
+                )
+            })
     }
 
     /// Update the buffer data by mapping memory and filling it using the
@@ -133,6 +164,86 @@ impl Buffer {
         self.write(size, offset * mem::size_of::<T>() as u64, |ptr| {
             write_func(unsafe { std::slice::from_raw_parts_mut(ptr.cast().as_ptr(), len as usize) })
         })
+    }
+
+    /// Fallible version of [`write_iter`].
+    pub fn try_write_iter<
+        T: Copy + std::fmt::Debug,
+        E,
+        I: Iterator<Item = std::result::Result<T, E>>,
+    >(
+        &mut self,
+        offset: usize,
+        iter: I,
+    ) -> Result<std::result::Result<(), E>> {
+        match self.mapped_slice_mut::<T>() {
+            Some(slice) => Ok({
+                iter.zip(slice)
+                    .try_for_each(move |(val, mapped)| -> std::result::Result<(), E> {
+                        let val = val?;
+                        dbg!(&val);
+                        *mapped = val;
+
+                        Ok(())
+                    })
+            }),
+            None => {
+                let mut staging = Buffer::new_uninit::<u8>(
+                    self.context.clone(),
+                    BufferUsage::TRANSFER_SRC,
+                    BufferAccess::Mapped,
+                    self.size,
+                )?;
+
+                // Use the write function to write into the mapped memory
+                let r = staging.try_write_iter(0, iter)?;
+
+                copy(
+                    self.context.transfer_pool(),
+                    self.context.graphics_queue(),
+                    staging.buffer(),
+                    self.buffer,
+                    self.size as _,
+                    (offset * size_of::<T>()) as u64,
+                )?;
+
+                Ok(r)
+            }
+        }
+    }
+
+    /// Writes into the buffer starting at offset from the provided iterator.
+    /// Offset is given in terms of elements.
+    pub fn write_iter<T, I: Iterator<Item = T>>(&mut self, offset: usize, iter: I) -> Result<()> {
+        match self.mapped_slice_mut::<T>() {
+            Some(slice) => Ok({
+                iter.zip(slice).for_each(move |(val, mapped)| {
+                    *mapped = val;
+                })
+            }),
+            None => {
+                let mut staging = Buffer::new_uninit::<u8>(
+                    self.context.clone(),
+                    BufferUsage::TRANSFER_SRC,
+                    BufferAccess::Mapped,
+                    self.size,
+                )?;
+
+                // Use the write function to write into the mapped memory
+                let r = staging.write_iter(0, iter)?;
+
+                copy(
+                    self.context.transfer_pool(),
+                    self.context.graphics_queue(),
+                    staging.buffer(),
+                    self.buffer,
+                    self.size as _,
+                    (offset * size_of::<T>()) as u64,
+                )?;
+
+                Ok(r)
+            }
+        }
     }
 
     /// Update the buffer data by mapping memory and filling it using the
@@ -168,7 +279,7 @@ impl Buffer {
         F: FnOnce(NonNull<c_void>) -> R,
         R: std::fmt::Debug,
     {
-        let mut staging = Buffer::new_uninit(
+        let mut staging = Buffer::new_uninit::<u8>(
             self.context.clone(),
             BufferUsage::TRANSFER_SRC,
             BufferAccess::Mapped,

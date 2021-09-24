@@ -168,10 +168,9 @@ void main() {
 	vec3 normal = subpassLoad(normalBuffer).xyz;
 	vec3 pos = subpassLoad(posBuffer).xyz;
 
-	outColor = vec4(depth,depth,depth, 1);
-
 	if (depth == 1) {
-		outColor = vec4(0,0,0,1);
+		outColor = vec4(DirectLightRadiances(1), 1);
+		return;
 	}
 
 	vec3 color = vec3(0);

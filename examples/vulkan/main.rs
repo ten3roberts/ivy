@@ -1,5 +1,4 @@
 use std::{
-    ops::{Add, Mul},
     sync::{mpsc, Arc},
     time::Duration,
 };
@@ -30,7 +29,7 @@ use ivy::{
     vulkan::*,
     *,
 };
-use ultraviolet::{Rotor3, Vec2, Vec3};
+use ultraviolet::{Rotor3, Vec3};
 
 use log::*;
 
@@ -38,34 +37,26 @@ mod route;
 
 const FRAMES_IN_FLIGHT: usize = 2;
 
-struct SineWave<T> {
-    amplitude: T,
-    frequency: f32,
-    base_value: T,
+struct OverTime<T> {
+    func: Box<dyn Fn(Entity, &mut T, f32, f32) + Send + Sync>,
     elapsed: f32,
 }
 
-impl<T> SineWave<T>
+impl<T> OverTime<T>
 where
-    T: 'static + Send + Sync + Copy + Mul<f32, Output = T> + Add<T, Output = T>,
+    T: Component,
 {
-    fn new(amplitude: T, frequency: f32, base_value: T) -> Self {
-        Self {
-            amplitude,
-            frequency,
-            base_value,
-            elapsed: 0.0,
-        }
+    fn new(func: Box<dyn Fn(Entity, &mut T, f32, f32) + Send + Sync>) -> Self {
+        Self { func, elapsed: 0.0 }
     }
 
     fn update(world: &mut World, dt: f32) {
         world
-            .query::<(&mut SineWave<T>, &mut T)>()
+            .query::<(&mut Self, &mut T)>()
             .iter()
-            .for_each(|(_, (wave, val))| {
-                wave.elapsed += dt;
-                let current = (wave.elapsed * wave.frequency * std::f32::consts::TAU).sin();
-                *val = wave.amplitude * current + wave.base_value;
+            .for_each(|(e, (s, val))| {
+                s.elapsed += dt;
+                (s.func)(e, val, s.elapsed, dt);
             });
     }
 }
@@ -248,7 +239,7 @@ impl Layer for LogicLayer {
 
             *camera_pos += Position(camera_rot.into_matrix() * (movement * dt * self.cemra_speed));
 
-            SineWave::<Position>::update(world, dt);
+            OverTime::<RelativeOffset>::update(world, dt);
 
             graphics::systems::update_view_matrices(world);
             physics::systems::integrate_angular_velocity_system(world, dt);
@@ -300,8 +291,10 @@ struct VulkanLayer {
 fn setup_ui(
     world: &mut World,
     image: Handle<Image>,
-    image2: Handle<Image>,
+    atlas: Handle<Image>,
+    font: Handle<Font>,
     ui_pass: Handle<UIPass>,
+    text_pass: Handle<UIPass>,
 ) -> anyhow::Result<()> {
     let canvas = world
         .query::<&Canvas>()
@@ -325,23 +318,14 @@ fn setup_ui(
         canvas,
         (
             Widget,
-            image2,
+            atlas,
             ui_pass,
-            RelativeOffset::new(0.2, -0.1),
-            RelativeSize(Vec2::new(0.5, 0.5)),
-            Aspect::new(1.0),
-        ),
-    )?;
-
-    world.attach_new::<Widget, _>(
-        canvas,
-        (
-            Widget,
-            image,
-            ui_pass,
-            RelativeOffset::new(0.3, 0.0),
-            AbsoluteSize::new(200.0, 100.0),
-            Aspect::new(1.0),
+            OverTime::<RelativeOffset>::new(Box::new(|_, offset, elapsed, _| {
+                offset.x = (elapsed * 0.25).sin() * 0.4;
+            })),
+            RelativeOffset::new(0.0, -0.2),
+            Aspect(1.0),
+            RelativeSize::new(0.2, 0.2),
         ),
     )?;
 
@@ -349,11 +333,42 @@ fn setup_ui(
         widget2,
         (
             Widget,
-            image2,
+            font,
+            Text::new("Hello, World!"),
+            text_pass,
+            RelativeOffset::new(-0.5, 0.5),
+            Aspect(1.0),
+            RelativeSize::new(1.0, 0.3),
+        ),
+    )?;
+
+    let satellite = world.attach_new::<Widget, _>(
+        widget2,
+        (
+            Widget,
+            image,
             ui_pass,
+            OverTime::<RelativeOffset>::new(Box::new(|_, offset, elapsed, _| {
+                *offset = RelativeOffset::new((elapsed).cos() * 2.0, elapsed.sin() * 2.0)
+            })),
+            RelativeOffset::default(),
             RelativeSize::new(0.2, 0.2),
-            AbsoluteOffset::new(10.0, 0.0),
-            RelativeOffset::new(0.0, -1.0),
+            Aspect(1.0),
+        ),
+    )?;
+
+    world.attach_new::<Widget, _>(
+        satellite,
+        (
+            Widget,
+            image,
+            ui_pass,
+            OverTime::<RelativeOffset>::new(Box::new(|_, offset, elapsed, _| {
+                *offset = RelativeOffset::new(-(elapsed * 2.0).cos(), -(elapsed * 2.0).sin())
+            })),
+            RelativeOffset::default(),
+            AbsoluteSize::new(100.0, 100.0),
+            Aspect::new(1.0),
         ),
     )?;
 
@@ -369,7 +384,7 @@ impl VulkanLayer {
     ) -> anyhow::Result<Self> {
         let swapchain_info = ivy_vulkan::SwapchainInfo {
             present_mode: vk::PresentModeKHR::IMMEDIATE,
-            image_count: FRAMES_IN_FLIGHT as _,
+            image_count: FRAMES_IN_FLIGHT as u32 + 1,
             ..Default::default()
         };
 
@@ -445,20 +460,46 @@ impl VulkanLayer {
 
         resources.insert_default(ImageRenderer::new(context.clone(), 16, FRAMES_IN_FLIGHT)?)?;
 
-        let ui_node = rendergraph.add_node(CameraNode::<UIPass, _>::new(
-            canvas,
-            resources.default::<ImageRenderer>()?,
-            vec![AttachmentInfo {
-                store_op: StoreOp::STORE,
-                load_op: LoadOp::LOAD,
-                initial_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                resource: final_lit,
-            }],
-            vec![],
-            vec![],
-            None,
-            vec![ClearValue::Color(0.0, 0.0, 0.0, 0.0).into()],
+        resources.insert_default(TextRenderer::new(
+            context.clone(),
+            16,
+            128,
+            FRAMES_IN_FLIGHT,
+        )?)?;
+
+        rendergraph.add_node(TextUpdateNode::new(resources.default::<TextRenderer>()?));
+
+        let ui_node = rendergraph.add_node(DoubleNode::new(
+            CameraNode::<UIPass, _, _>::new(
+                canvas,
+                resources.default::<ImageRenderer>()?,
+                vec![AttachmentInfo {
+                    store_op: StoreOp::STORE,
+                    load_op: LoadOp::LOAD,
+                    initial_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                    final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                    resource: final_lit,
+                }],
+                vec![],
+                vec![],
+                None,
+                vec![],
+            ),
+            CameraNode::<UIPass, _, _>::new(
+                canvas,
+                resources.default::<TextRenderer>()?,
+                vec![AttachmentInfo {
+                    store_op: StoreOp::STORE,
+                    load_op: LoadOp::LOAD,
+                    initial_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                    final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                    resource: final_lit,
+                }],
+                vec![],
+                vec![],
+                None,
+                vec![],
+            ),
         ));
 
         let geometry_node = pbr_nodes[0];
@@ -495,16 +536,6 @@ impl VulkanLayer {
                 .context("Failed to load uv texture")?,
         )?;
 
-        let font = Font::new(
-            context.clone(),
-            &resources,
-            "./res/fonts/Lora/Lora-VariableFont_wght.ttf",
-            &FontInfo {
-                size: 58.0,
-                ..Default::default()
-            },
-        )?;
-
         // let atlas = resources.insert(TextureAtlas::new(
         //     context.clone(),
         //     &resources,
@@ -529,10 +560,10 @@ impl VulkanLayer {
             SamplerInfo {
                 address_mode: AddressMode::REPEAT,
                 mag_filter: FilterMode::LINEAR,
-                min_filter: FilterMode::LINEAR,
+                min_filter: FilterMode::NEAREST,
                 unnormalized_coordinates: false,
                 anisotropy: 16.0,
-                mip_levels: 4,
+                mip_levels: 1,
             },
         )?)?;
 
@@ -540,11 +571,22 @@ impl VulkanLayer {
             context.clone(),
             SamplerInfo {
                 address_mode: AddressMode::CLAMP_TO_EDGE,
-                mag_filter: FilterMode::NEAREST,
-                min_filter: FilterMode::NEAREST,
+                mag_filter: FilterMode::LINEAR,
+                min_filter: FilterMode::LINEAR,
                 unnormalized_coordinates: false,
                 anisotropy: 16.0,
                 mip_levels: 1,
+            },
+        )?)?;
+
+        let font = resources.insert(Font::new(
+            context.clone(),
+            &resources,
+            "./res/fonts/Lora/Lora-VariableFont_wght.ttf",
+            ui_sampler,
+            &FontInfo {
+                size: 64.0,
+                ..Default::default()
             },
         )?)?;
 
@@ -571,10 +613,10 @@ impl VulkanLayer {
 
         let image = resources.insert(Image::new(&context, &resources, heart, ui_sampler)?)?;
 
-        let image2 = resources.insert(Image::new(
+        let atlas = resources.insert(Image::new(
             &context,
             &resources,
-            font.atlas().texture(),
+            resources.get(font)?.atlas().texture(),
             ui_sampler,
         )?)?;
 
@@ -654,17 +696,18 @@ impl VulkanLayer {
         world.spawn((
             Position(Vec3::new(0.0, 2.0, 5.0)),
             PointLight::new(0.3, Vec3::new(500.0, 0.0, 0.0)),
-            SineWave::<Position>::new(
-                Position(Vec3::unit_y() * 5.0),
-                1.0 / 10.0,
-                Position(Vec3::new(0.0, 2.0, 5.0)),
-            ),
+            // SineWave::<Position>::new(
+            //     Position(Vec3::unit_y() * 5.0),
+            //     1.0 / 10.0,
+            //     Position(Vec3::new(0.0, 2.0, 5.0)),
+            // ),
         ));
 
         // Create a pipeline from the shaders
         let ui_pipeline = Pipeline::new::<UIVertex>(
             context.clone(),
             &PipelineInfo {
+                blending: true,
                 vertexshader: "./res/shaders/ui.vert.spv".into(),
                 fragmentshader: "./res/shaders/ui.frag.spv".into(),
                 samples: SampleCountFlags::TYPE_1,
@@ -676,9 +719,27 @@ impl VulkanLayer {
             },
         )?;
 
-        let ui_pass = resources.insert(UIPass(ui_pipeline))?;
+        // Create a pipeline from the shaders
+        let text_pipeline = Pipeline::new::<UIVertex>(
+            context.clone(),
+            &PipelineInfo {
+                blending: true,
+                vertexshader: "./res/shaders/text.vert.spv".into(),
+                fragmentshader: "./res/shaders/text.frag.spv".into(),
+                samples: SampleCountFlags::TYPE_1,
+                extent: swapchain_extent,
+                polygon_mode: vk::PolygonMode::FILL,
+                cull_mode: vk::CullModeFlags::NONE,
+                front_face: vk::FrontFace::CLOCKWISE,
+                ..rendergraph.pipeline_info(ui_node)?
+            },
+        )?;
 
-        setup_ui(world, image, image2, ui_pass)?;
+        let ui_pass = resources.insert(UIPass(ui_pipeline))?;
+        let text_pass = resources.insert(UIPass(text_pipeline))?;
+        // let text_pass = ui_pass;
+
+        setup_ui(world, image, atlas, font, ui_pass, text_pass)?;
 
         let (tx, window_events) = flume::unbounded();
         events.subscribe(tx);
@@ -718,6 +779,10 @@ impl Layer for VulkanLayer {
 
             self.resources
                 .get_default_mut::<ImageRenderer>()?
+                .update(world, current_frame)?;
+
+            self.resources
+                .get_default_mut::<TextRenderer>()?
                 .update(world, current_frame)?;
         }
 
