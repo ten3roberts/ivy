@@ -321,10 +321,9 @@ fn setup_ui(
             atlas,
             ui_pass,
             OverTime::<RelativeOffset>::new(Box::new(|_, offset, elapsed, _| {
-                offset.x = (elapsed * 0.25).sin() * 0.4;
+                offset.x = (elapsed * 0.25).sin();
             })),
             RelativeOffset::new(0.0, -0.2),
-            Aspect(1.0),
             RelativeSize::new(0.2, 0.2),
         ),
     )?;
@@ -336,9 +335,8 @@ fn setup_ui(
             font,
             Text::new("Hello, World!"),
             text_pass,
-            RelativeOffset::new(-0.5, 0.5),
-            Aspect(1.0),
-            RelativeSize::new(1.0, 0.3),
+            RelativeOffset::new(-1.0, 1.0),
+            RelativeSize::new(0.3, 0.3),
         ),
     )?;
 
@@ -349,11 +347,10 @@ fn setup_ui(
             image,
             ui_pass,
             OverTime::<RelativeOffset>::new(Box::new(|_, offset, elapsed, _| {
-                *offset = RelativeOffset::new((elapsed).cos() * 2.0, elapsed.sin() * 2.0)
+                *offset = RelativeOffset::new((elapsed).cos() * 4.0, elapsed.sin() * 2.0)
             })),
             RelativeOffset::default(),
-            RelativeSize::new(0.2, 0.2),
-            Aspect(1.0),
+            RelativeSize::new(0.4, 0.4),
         ),
     )?;
 
@@ -364,11 +361,10 @@ fn setup_ui(
             image,
             ui_pass,
             OverTime::<RelativeOffset>::new(Box::new(|_, offset, elapsed, _| {
-                *offset = RelativeOffset::new(-(elapsed * 2.0).cos(), -(elapsed * 2.0).sin())
+                *offset = RelativeOffset::new(-(elapsed * 5.0).cos(), -(elapsed * 5.0).sin()) * 2.0
             })),
             RelativeOffset::default(),
-            AbsoluteSize::new(100.0, 100.0),
-            Aspect::new(1.0),
+            AbsoluteSize::new(50.0, 50.0),
         ),
     )?;
 

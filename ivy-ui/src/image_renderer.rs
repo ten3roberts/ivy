@@ -56,15 +56,13 @@ impl ImageRenderer {
 
         let square = {
             let context = context.clone();
-            let hw = 1.0 / 2.0;
-            let hh = 1.0 / 2.0;
 
             // Simple quad
             let vertices = [
-                UIVertex::new(Vec3::new(-hw, -hh, 0.0), Vec2::new(0.0, 1.0)),
-                UIVertex::new(Vec3::new(hw, -hh, 0.0), Vec2::new(1.0, 1.0)),
-                UIVertex::new(Vec3::new(hw, hh, 0.0), Vec2::new(1.0, 0.0)),
-                UIVertex::new(Vec3::new(-hw, hh, 0.0), Vec2::new(0.0, 0.0)),
+                UIVertex::new(Vec3::new(-1.0, -1.0, 0.0), Vec2::new(0.0, 1.0)),
+                UIVertex::new(Vec3::new(1.0, -1.0, 0.0), Vec2::new(1.0, 1.0)),
+                UIVertex::new(Vec3::new(1.0, 1.0, 0.0), Vec2::new(1.0, 0.0)),
+                UIVertex::new(Vec3::new(-1.0, 1.0, 0.0), Vec2::new(0.0, 0.0)),
             ];
 
             let indices: [u32; 6] = [0, 1, 2, 2, 3, 0];

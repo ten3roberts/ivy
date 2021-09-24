@@ -58,7 +58,7 @@ fn apply_constaints(
 
     *size = Size2D(
         *constraints.abs_size.map(|v| *v).unwrap_or_default()
-            + *constraints.rel_size.map(|v| *v).unwrap_or_default() * *parent_size,
+            + *constraints.rel_size.map(|v| *v).unwrap_or_default() * parent_size.y,
     );
 
     if let Some(aspect) = constraints.aspect {
@@ -76,7 +76,7 @@ pub fn update_canvas(world: &World, canvas: Entity) -> Result<()> {
     let (camera, size, position) = camera_query.get().ok_or(hecs::NoSuchEntity)?;
     let position = *position.unwrap_or(&Position2D::default());
 
-    camera.set_orthographic(size.x, size.y, 0.0, 100.0);
+    camera.set_orthographic(size.x * 2.0, size.y * 2.0, 0.0, 100.0);
     camera.set_view(Mat4::from_translation(-position.xyz()));
 
     Ok(())

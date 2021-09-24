@@ -96,6 +96,9 @@ impl RelativeOffset {
 )]
 /// Constrains the size of a widget to a multiple of the parent size. If paired
 /// with [`Aspect`] width is ignored.
+/// The aspect ratio of the parent is not preserved, as only the height will be
+/// considered from the parent. This ensures the window width doesn't stretch UI
+/// widgets.
 pub struct RelativeSize(pub Vec2);
 
 impl From<RelativeSize> for Size2D {
