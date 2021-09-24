@@ -175,17 +175,9 @@ where
             },
         )?;
 
-        println!(
-            "Pixels: {:?}, extent: {:?}",
-            pixels.len(),
-            texture_info.extent
-        );
-
         texture.write(&pixels)?;
 
         let texture = resources.insert(texture)?;
-
-        dbg!("Created atlas");
 
         Ok(Self {
             rects,

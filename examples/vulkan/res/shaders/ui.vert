@@ -20,7 +20,7 @@ layout(std140,set = 1, binding = 0) readonly buffer ObjectBuffer{
 } objectBuffer;
 
 void main() {
-  ObjectData objectData = objectBuffer.objects[gl_BaseInstance];
+  ObjectData objectData = objectBuffer.objects[gl_InstanceIndex];
 
   fragTexCoord = texCoord;
   gl_Position = cameraData.viewproj * objectData.mvp * vec4(inPosition, 1);

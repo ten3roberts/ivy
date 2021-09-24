@@ -396,7 +396,6 @@ impl CommandBuffer {
 
     #[inline]
     pub fn copy_buffer(&self, src: vk::Buffer, dst: vk::Buffer, regions: &[vk::BufferCopy]) {
-        println!("Copying buffer, {:?} -> {:?}, {:?}", src, dst, regions);
         unsafe {
             self.device
                 .cmd_copy_buffer(self.commandbuffer, src, dst, regions)

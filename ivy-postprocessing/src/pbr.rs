@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use derive_more::{AsRef, Deref, From, Into};
 use hecs::{Entity, World};
-use ivy_graphics::{GpuCameraData, IndirectMeshRenderer, LightManager, ShaderPass};
+use ivy_graphics::{GpuCameraData, LightManager, MeshRenderer, ShaderPass};
 use ivy_rendergraph::{AttachmentInfo, CameraNode, Node};
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
@@ -138,9 +138,9 @@ pub fn create_pbr_pipeline<GeometryPass: ShaderPass, PostProcessingPass: ShaderP
 
     let depth_attachment = DepthAttachment::new(context.clone(), resources, extent)?;
 
-    let camera_node = Box::new(CameraNode::<GeometryPass, IndirectMeshRenderer, _>::new(
+    let camera_node = Box::new(CameraNode::<GeometryPass, MeshRenderer, _>::new(
         camera,
-        resources.default::<IndirectMeshRenderer>()?,
+        resources.default::<MeshRenderer>()?,
         pbr_attachments
             .as_slice()
             .iter()

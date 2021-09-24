@@ -22,7 +22,7 @@ use crate::UIVertex;
 /// mesh data. `len` and `block` refers to the number of quads allocated, not
 /// vertices nor indices.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct BufferAllocation {
+struct BufferAllocation {
     len: u32,
     offset: u32,
 }
@@ -100,7 +100,7 @@ impl TextRenderer {
     }
 
     /// Allocates a contiguous block in the mesh
-    pub fn allocate(&mut self, len: u32) -> Option<BufferAllocation> {
+    fn allocate(&mut self, len: u32) -> Option<BufferAllocation> {
         let (index, block) = self
             .free
             .iter_mut()
@@ -139,18 +139,6 @@ impl TextRenderer {
             .into_iter()
             .try_for_each(|(e, block)| world.insert_one(e, block))?;
 
-        self.base_renderer.register_entities::<KeyQuery, _>(world)?;
-
-        Ok(())
-    }
-
-    /// Updates the text rendering
-    pub fn update(&mut self, world: &mut World, current_frame: usize) -> Result<()> {
-        self.register_entities(world)?;
-
-        self.base_renderer
-            .update::<KeyQuery, ObjectDataQuery, _, _>(world, current_frame)?;
-
         Ok(())
     }
 
@@ -161,6 +149,8 @@ impl TextRenderer {
         cmd: &CommandBuffer,
         current_frame: usize,
     ) -> Result<()> {
+        self.register_entities(world)?;
+
         let mut offset = 0;
 
         let fonts = resources.fetch::<Font>()?;
@@ -247,18 +237,20 @@ impl Renderer for TextRenderer {
         cmd.bind_vertexbuffer(0, self.mesh.vertex_buffer());
         cmd.bind_indexbuffer(self.mesh.index_buffer(), IndexType::UINT32, 0);
 
-        let frame_set = self.base_renderer.set(current_frame);
-
         let passes = resources.fetch::<Pass>()?;
 
         {
-            let pass = self.base_renderer.pass_mut::<Pass>();
+            let pass = self.base_renderer.pass_mut::<Pass>()?;
             pass.get_unbatched::<Pass, KeyQuery, _>(world);
             pass.build_batches::<Pass, KeyQuery, _, _>(world, &passes)?;
+            pass.update::<Pass, ObjectDataQuery, _>(world, current_frame)?;
         }
 
         let pass = self.base_renderer.pass::<Pass>();
-        let object_buffer = self.base_renderer.object_buffer(current_frame);
+
+        let frame_set = pass.set(current_frame);
+
+        let object_buffer = pass.object_buffer(current_frame);
         let object_data = object_buffer
             .mapped_slice::<ObjectData>()
             .expect("Non mappable object data buffer");
@@ -267,6 +259,8 @@ impl Renderer for TextRenderer {
             let key = batch.key();
 
             let font = resources.get(key.font)?;
+
+            cmd.bind_pipeline(batch.pipeline());
 
             if !sets.is_empty() {
                 cmd.bind_descriptor_sets(batch.layout(), 0, sets, offsets);
@@ -279,12 +273,10 @@ impl Renderer for TextRenderer {
                 &[],
             );
 
-            cmd.bind_pipeline(batch.pipeline());
-
             for id in batch.ids() {
-                let data = &object_data[*id as usize];
+                let data = &object_data[id as usize];
 
-                cmd.draw_indexed(data.len * 6, 1, 0, 0, *id);
+                cmd.draw_indexed(data.len * 6, 1, 0, 0, id);
             }
         }
 
@@ -317,12 +309,12 @@ impl<'a> Into<ObjectData> for ObjectDataQuery<'a> {
 }
 
 #[derive(Query, PartialEq, Eq)]
-pub struct KeyQuery<'a> {
+struct KeyQuery<'a> {
     font: &'a Handle<Font>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Key {
+struct Key {
     font: Handle<Font>,
 }
 

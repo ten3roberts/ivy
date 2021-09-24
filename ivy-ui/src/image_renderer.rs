@@ -3,14 +3,9 @@ use hecs::{Query, World};
 use ivy_core::ModelMatrix;
 use ivy_graphics::{BaseRenderer, Mesh, Renderer, ShaderPass};
 use ivy_resources::{Handle, Resources};
-use ivy_vulkan::vk::IndexType;
-use ivy_vulkan::{commands::CommandBuffer, descriptors::*, VulkanContext};
-use ultraviolet::{Vec2, Vec3};
-
+use ivy_vulkan::{commands::CommandBuffer, descriptors::*, vk::IndexType, VulkanContext};
 use std::sync::Arc;
-
-/// Same as RenderObject except without ObjectBufferMarker
-type ObjectId = u32;
+use ultraviolet::{Vec2, Vec3};
 
 /// A mesh renderer using vkCmdDrawIndirectIndexed and efficient batching.
 pub struct ImageRenderer {
@@ -21,7 +16,7 @@ pub struct ImageRenderer {
 impl ImageRenderer {
     pub fn new(
         context: Arc<VulkanContext>,
-        capacity: ObjectId,
+        capacity: u32,
         frames_in_flight: usize,
     ) -> Result<Self> {
         let square = {
@@ -47,15 +42,6 @@ impl ImageRenderer {
             base_renderer,
         })
     }
-
-    /// Updates all registered entities gpu side data
-    pub fn update(&mut self, world: &mut World, current_frame: usize) -> Result<()> {
-        self.base_renderer.register_entities::<KeyQuery, _>(world)?;
-        self.base_renderer
-            .update::<KeyQuery, ObjectDataQuery, _, _>(world, current_frame)?;
-
-        Ok(())
-    }
 }
 
 impl Renderer for ImageRenderer {
@@ -80,18 +66,21 @@ impl Renderer for ImageRenderer {
         cmd.bind_indexbuffer(self.square.index_buffer(), IndexType::UINT32, 0);
 
         let passes = resources.fetch::<Pass>()?;
+        let images = resources.fetch::<Image>()?;
 
-        let frame_set = self.base_renderer.set(current_frame);
-
-        let pass = self.base_renderer.pass_mut::<Pass>();
+        let pass = self.base_renderer.pass_mut::<Pass>()?;
+        let frame_set = pass.set(current_frame);
 
         pass.get_unbatched::<Pass, KeyQuery, _>(world);
         pass.build_batches::<Pass, KeyQuery, _, _>(world, &passes)?;
+        pass.update::<Pass, ObjectDataQuery, _>(world, current_frame)?;
 
         for batch in pass.batches() {
             let key = batch.key();
 
-            let image = resources.get(key.image)?;
+            let image = images.get(key.image)?;
+
+            cmd.bind_pipeline(batch.pipeline());
 
             if !sets.is_empty() {
                 cmd.bind_descriptor_sets(batch.layout(), 0, sets, offsets);
@@ -104,47 +93,10 @@ impl Renderer for ImageRenderer {
                 &[],
             );
 
-            cmd.bind_pipeline(batch.pipeline());
-
-            println!("Image rendering");
-            for id in batch.ids() {
-                println!("Drawing: {}", id);
-                cmd.draw_indexed(6, 1, 0, 0, *id);
-            }
+            cmd.draw_indexed(6, batch.instance_count(), 0, 0, batch.first_instance());
         }
 
         Ok(())
-        // let frame = &mut self.frames[current_frame];
-
-        // let frame_set = frame.set;
-
-        // let pass = match self.passes.get_mut(&TypeId::of::<Pass>()) {
-        //     Some(pass) => pass,
-        //     None => {
-        //         self.passes.insert(
-        //             TypeId::of::<Pass>(),
-        //             PassData::new(self.context.clone(), 8, self.frames_in_flight)?,
-        //         );
-        //         self.passes.get_mut(&TypeId::of::<Pass>()).unwrap()
-        //     }
-        // };
-
-        // let passes = resources.fetch()?;
-        // let images = resources.fetch()?;
-
-        // pass.build_batches::<Pass>(world, &passes)?;
-
-        // pass.draw(
-        //     cmd,
-        //     current_frame,
-        //     sets,
-        //     offsets,
-        //     frame_set,
-        //     images.deref(),
-        //     &self.square,
-        // )?;
-
-        // Ok(())
     }
 }
 
@@ -165,12 +117,12 @@ impl<'a> Into<ObjectData> for ObjectDataQuery<'a> {
 }
 
 #[derive(Query, PartialEq, Eq)]
-pub struct KeyQuery<'a> {
+struct KeyQuery<'a> {
     image: &'a Handle<Image>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Key {
+struct Key {
     image: Handle<Image>,
 }
 

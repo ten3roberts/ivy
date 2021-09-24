@@ -394,11 +394,7 @@ impl VulkanLayer {
 
         let mut rendergraph = RenderGraph::new(context.clone(), FRAMES_IN_FLIGHT)?;
 
-        resources.insert_default(IndirectMeshRenderer::new(
-            context.clone(),
-            16,
-            FRAMES_IN_FLIGHT,
-        )?)?;
+        resources.insert_default(MeshRenderer::new(context.clone(), 16, FRAMES_IN_FLIGHT)?)?;
 
         resources.insert_default(FullscreenRenderer)?;
 
@@ -767,20 +763,6 @@ impl Layer for VulkanLayer {
         self.resources
             .get_mut(self.swapchain)?
             .acquire_next_image(self.rendergraph.wait_semaphore(current_frame))?;
-
-        {
-            self.resources
-                .get_default_mut::<IndirectMeshRenderer>()?
-                .update(world, current_frame)?;
-
-            self.resources
-                .get_default_mut::<ImageRenderer>()?
-                .update(world, current_frame)?;
-
-            self.resources
-                .get_default_mut::<TextRenderer>()?
-                .update(world, current_frame)?;
-        }
 
         GpuCameraData::update_all_system(world, current_frame)?;
         LightManager::update_all_system(world, current_frame)?;
