@@ -124,6 +124,7 @@ struct KeyQuery<'a> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct Key {
+    // depth: WidgetDepth,
     image: Handle<Image>,
 }
 

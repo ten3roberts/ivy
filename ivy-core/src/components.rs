@@ -1,8 +1,11 @@
+use derive_for::*;
 use derive_more::*;
 use ultraviolet::Mat4;
 use ultraviolet::{Rotor3, Vec3};
 
-#[derive(
+derive_for!(
+
+    (
     Add,
     AddAssign,
     AsRef,
@@ -20,8 +23,14 @@ use ultraviolet::{Rotor3, Vec3};
     MulAssign,
     Sub,
     SubAssign,
-)]
+    )
+    /// Describes a position in 3D space.
 pub struct Position(pub Vec3);
+    /// Describes a rotation in 3D space.
+pub struct Rotation(pub Rotor3);
+/// Describes a scale in 3D space.
+pub struct Scale(pub Vec3);
+);
 
 impl Position {
     pub fn new(x: f32, y: f32, z: f32) -> Self {
@@ -29,53 +38,11 @@ impl Position {
     }
 }
 
-#[derive(
-    Add,
-    AddAssign,
-    AsRef,
-    Clone,
-    Copy,
-    Debug,
-    Default,
-    Deref,
-    DerefMut,
-    Div,
-    DivAssign,
-    From,
-    Into,
-    Mul,
-    MulAssign,
-    Sub,
-    SubAssign,
-)]
-pub struct Rotation(pub Rotor3);
-
 impl Rotation {
     pub fn new(roll: f32, pitch: f32, yaw: f32) -> Self {
         Self(Rotor3::from_euler_angles(roll, pitch, yaw))
     }
 }
-
-#[derive(
-    Add,
-    AddAssign,
-    AsRef,
-    Clone,
-    Copy,
-    Debug,
-    Default,
-    Deref,
-    DerefMut,
-    Div,
-    DivAssign,
-    From,
-    Into,
-    Mul,
-    MulAssign,
-    Sub,
-    SubAssign,
-)]
-pub struct Scale(pub Vec3);
 
 impl Scale {
     pub fn new(x: f32, y: f32, z: f32) -> Self {
@@ -100,4 +67,6 @@ impl Scale {
     Mul,
     MulAssign,
 )]
+/// Describes a combined translate, rotate, and scale transformation intended
+/// for GPU usage.
 pub struct ModelMatrix(pub Mat4);

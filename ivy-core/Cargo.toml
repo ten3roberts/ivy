@@ -9,6 +9,7 @@ edition = "2018"
 [dependencies]
 anyhow = "1.0.40"
 crossbeam-channel = { version = "0.5", optional = true }
+derive-for = "0.2.1"
 derive_more = "0.99"
 downcast-rs = "1.2"
 flume = "0.10"

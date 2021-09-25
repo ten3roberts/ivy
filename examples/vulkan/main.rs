@@ -481,7 +481,7 @@ impl VulkanLayer {
         let ui_node = rendergraph.add_node(CameraNode::<UIPass, _, _>::new(
             canvas,
             (
-                Handle::<ImageRenderer>::null(),
+                resources.default::<ImageRenderer>()?,
                 resources.default::<TextRenderer>()?,
             ),
             vec![AttachmentInfo {
@@ -580,7 +580,7 @@ impl VulkanLayer {
             "./res/fonts/Lora/Lora-VariableFont_wght.ttf",
             ui_sampler,
             &FontInfo {
-                size: 128.0,
+                size: 256.0,
                 ..Default::default()
             },
         )?)?;
