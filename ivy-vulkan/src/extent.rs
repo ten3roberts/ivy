@@ -7,7 +7,7 @@ use ultraviolet::Vec2;
 use ash::vk;
 
 /// Represents a width and height.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct Extent {
     pub width: u32,
     pub height: u32,

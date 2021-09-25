@@ -23,7 +23,9 @@ use crate::UIVertex;
 /// vertices nor indices.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct BufferAllocation {
+    // Length in number of characters
     len: u32,
+    // Offset in number of characters
     offset: u32,
 }
 
@@ -61,7 +63,7 @@ impl TextRenderer {
 
         Ok(Self {
             mesh,
-            free: vec![BufferAllocation::new(capacity, 0)],
+            free: vec![BufferAllocation::new(glyph_capacity, 0)],
             staging_buffers,
             base_renderer,
         })
@@ -73,7 +75,9 @@ impl TextRenderer {
 
         // Pre fill indices
         let indices = (0..glyph_capacity * 6)
-            .flat_map(|i| [i * 4, i * 4 + 1, i * 4 + 2, i * 4 + 2, i * 4 + 3, i * 4]);
+            .step_by(4)
+            .flat_map(|i| [i, i + 1, i + 2, i + 2, i + 3, i]);
+        // 0 1 2 2 3 0
 
         mesh.index_buffer_mut().write_iter(0, indices)?;
 
@@ -101,6 +105,8 @@ impl TextRenderer {
 
     /// Allocates a contiguous block in the mesh
     fn allocate(&mut self, len: u32) -> Option<BufferAllocation> {
+        dbg!(&self.free);
+
         let (index, block) = self
             .free
             .iter_mut()
@@ -162,20 +168,20 @@ impl TextRenderer {
             .query_mut::<(&mut Text, &Handle<Font>, &BufferAllocation)>()
             .into_iter()
             .filter(|(_, (t, _, _))| t.dirty())
-            .flat_map(|(_, (text, font, _block))| {
+            .flat_map(|(_, (text, font, block))| {
                 text.set_dirty(false);
 
                 let size = (text.len() * 4 * size_of::<UIVertex>()) as u64;
 
                 let region = &[BufferCopy {
-                    src_offset: 0,
-                    dst_offset: 0 as _,
+                    src_offset: offset,
+                    dst_offset: block.offset as u64 * 4 * size_of::<UIVertex>() as u64,
                     size,
                 }];
 
                 cmd.copy_buffer(sb, vb, region);
 
-                offset += text.len() as u64;
+                offset += size;
 
                 let font = fonts.get(*font).unwrap();
                 text.layout(font).unwrap()
@@ -276,7 +282,7 @@ impl Renderer for TextRenderer {
             for id in batch.ids() {
                 let data = &object_data[id as usize];
 
-                cmd.draw_indexed(data.len * 6, 1, 0, 0, id);
+                cmd.draw_indexed(data.len * 6, 1, data.offset * 6, 0, id);
             }
         }
 

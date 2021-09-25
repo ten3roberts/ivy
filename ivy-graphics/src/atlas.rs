@@ -13,6 +13,7 @@ use std::sync::Arc;
 
 pub type BinId = ();
 
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Rect {
     // Offset to the right of the bitmap
     pub x: u32,
@@ -36,6 +37,7 @@ impl From<PackedLocation> for Rect {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct NormalizedRect {
     pub x: f32,
     pub y: f32,

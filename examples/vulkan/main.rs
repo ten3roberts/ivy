@@ -340,6 +340,30 @@ fn setup_ui(
         ),
     )?;
 
+    world.attach_new::<Widget, _>(
+        canvas,
+        (
+            Widget,
+            font,
+            Text::new("Ivy"),
+            text_pass,
+            RelativeOffset::new(-0.3, -0.7),
+            RelativeSize::new(0.3, 0.3),
+        ),
+    )?;
+
+    world.attach_new::<Widget, _>(
+        canvas,
+        (
+            Widget,
+            font,
+            Text::new("Lorem ipsum dolor sit amet."),
+            text_pass,
+            RelativeOffset::new(-0.3, 0.7),
+            RelativeSize::new(0.1, 0.1),
+        ),
+    )?;
+
     let satellite = world.attach_new::<Widget, _>(
         widget2,
         (
@@ -455,7 +479,7 @@ impl VulkanLayer {
         resources.insert_default(TextRenderer::new(
             context.clone(),
             16,
-            128,
+            512,
             FRAMES_IN_FLIGHT,
         )?)?;
 
@@ -577,7 +601,7 @@ impl VulkanLayer {
             "./res/fonts/Lora/Lora-VariableFont_wght.ttf",
             ui_sampler,
             &FontInfo {
-                size: 64.0,
+                size: 128.0,
                 ..Default::default()
             },
         )?)?;

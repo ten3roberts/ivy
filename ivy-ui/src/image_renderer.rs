@@ -69,11 +69,12 @@ impl Renderer for ImageRenderer {
         let images = resources.fetch::<Image>()?;
 
         let pass = self.base_renderer.pass_mut::<Pass>()?;
-        let frame_set = pass.set(current_frame);
 
         pass.get_unbatched::<Pass, KeyQuery, _>(world);
         pass.build_batches::<Pass, KeyQuery, _, _>(world, &passes)?;
         pass.update::<Pass, ObjectDataQuery, _>(world, current_frame)?;
+
+        let frame_set = pass.set(current_frame);
 
         for batch in pass.batches() {
             let key = batch.key();

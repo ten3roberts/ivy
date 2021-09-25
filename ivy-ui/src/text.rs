@@ -1,6 +1,8 @@
 use std::{borrow::Cow, str::Chars};
 
 use crate::Result;
+use fontdue::Metrics;
+use ivy_graphics::NormalizedRect;
 use ultraviolet::{Vec2, Vec3};
 
 use crate::{Font, UIVertex};
@@ -72,8 +74,8 @@ impl<'a, I: Iterator<Item = char>> Iterator for TextLayout<'a, I> {
         let glyph = self.glyphs.next()?;
 
         let (metrics, location) = match self.font.get_normalized(glyph) {
-            Ok(str) => str,
-            Err(_) => return self.next(),
+            Ok((m, l)) => (*m, l),
+            Err(_) => (Metrics::default(), NormalizedRect::default()),
         };
 
         let size = self.font.size();

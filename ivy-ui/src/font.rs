@@ -21,7 +21,7 @@ impl Default for FontInfo {
     fn default() -> Self {
         Self {
             size: 36.0,
-            glyphs: '!'..'~',
+            glyphs: 0 as char..128 as char,
             padding: 5,
             mip_levels: 1,
         }
@@ -53,11 +53,14 @@ impl Font {
 
         let glyphs = Self::rasterize(&font, &info);
 
-        let metrics = glyphs.0.iter().cloned().collect::<BTreeMap<_, _>>();
-        let images = glyphs.1;
+        let metrics = glyphs.1.iter().cloned().collect::<BTreeMap<_, _>>();
+        let images = glyphs.2;
+
+        let avg_width = glyphs.0;
+        dbg!(avg_width);
 
         let dimension = (((info.glyphs.end as usize - info.glyphs.start as usize) as f32).sqrt()
-            * (info.size + info.padding as f32))
+            * (avg_width + info.padding as f32))
             .ceil() as u32;
 
         let atlas = TextureAtlas::new(
@@ -95,11 +98,20 @@ impl Font {
     fn rasterize(
         font: &fontdue::Font,
         info: &FontInfo,
-    ) -> (Vec<(char, Metrics)>, Vec<(char, ivy_image::Image)>) {
-        info.glyphs
+    ) -> (f32, Vec<(char, Metrics)>, Vec<(char, ivy_image::Image)>) {
+        let mut max_width = 0;
+        let mut glyph_count = 0;
+
+        let (a, b) = info
+            .glyphs
             .clone()
-            .map(|c| {
+            .filter_map(|c| {
                 let (metrics, pixels) = font.rasterize(c, info.size);
+
+                max_width = metrics.width.max(max_width);
+
+                glyph_count += 1;
+
                 let image = ivy_image::Image::new(
                     metrics.width as _,
                     metrics.height as _,
@@ -107,9 +119,11 @@ impl Font {
                     pixels.into_boxed_slice(),
                 );
 
-                ((c, metrics), (c, image))
+                Some(((c, metrics), (c, image)))
             })
-            .unzip()
+            .unzip();
+
+        (max_width as f32, a, b)
     }
 
     /// Get a reference to the font's atlas.
