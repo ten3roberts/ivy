@@ -3,12 +3,12 @@ use hecs::World;
 use ivy_resources::{ResourceCache, Resources};
 use ivy_vulkan::{
     commands::CommandBuffer,
-    vk::{self, ImageMemoryBarrier},
+    vk::{self, ClearValue, ImageMemoryBarrier},
     AttachmentDescription, AttachmentReference, Extent, Framebuffer, ImageLayout, LoadOp,
     RenderPass, RenderPassInfo, StoreOp, SubpassDependency, SubpassInfo, Texture, VulkanContext,
 };
 use slotmap::{SecondaryMap, SlotMap};
-use std::{ops::Deref, sync::Arc};
+use std::{iter::repeat, ops::Deref, sync::Arc};
 
 pub struct Pass {
     kind: PassKind,
@@ -139,7 +139,16 @@ impl PassKind {
         // Collect clear values
         let clear_values = pass_nodes
             .iter()
-            .flat_map(|node| nodes[*node].clear_values().into_iter().cloned())
+            .flat_map(|node| {
+                let node = &nodes[*node];
+                node.clear_values()
+                    .iter()
+                    .cloned()
+                    .chain(repeat(ClearValue::default()).take(
+                        node.color_attachments().len() + node.depth_attachment().iter().count()
+                            - node.clear_values().len(),
+                    ))
+            })
             .collect::<Vec<_>>();
 
         // Generate subpass dependencies

@@ -14,31 +14,24 @@ pub use vk::SubpassDependency;
 
 pub const MAX_SUBPASSES: usize = 8;
 
-#[derive(Debug, Clone, Copy)]
-/// Specifies a value to clear each attachment with.
-pub enum ClearValue {
-    Color(f32, f32, f32, f32),
-    DepthStencil(f32, u32),
+pub trait ClearValueExt {
+    fn color(r: f32, g: f32, b: f32, a: f32) -> Self;
+    fn depth_stencil(depth: f32, stencil: u32) -> Self;
 }
 
-impl From<ClearValue> for vk::ClearValue {
-    fn from(val: ClearValue) -> Self {
-        match val {
-            ClearValue::Color(r, g, b, a) => vk::ClearValue {
-                color: vk::ClearColorValue {
-                    float32: [r, g, b, a],
-                },
-            },
-            ClearValue::DepthStencil(depth, stencil) => vk::ClearValue {
-                depth_stencil: vk::ClearDepthStencilValue { depth, stencil },
+impl ClearValueExt for vk::ClearValue {
+    fn color(r: f32, g: f32, b: f32, a: f32) -> vk::ClearValue {
+        vk::ClearValue {
+            color: vk::ClearColorValue {
+                float32: [r, g, b, a],
             },
         }
     }
-}
 
-impl From<&ClearValue> for vk::ClearValue {
-    fn from(val: &ClearValue) -> Self {
-        (*val).into()
+    fn depth_stencil(depth: f32, stencil: u32) -> vk::ClearValue {
+        vk::ClearValue {
+            depth_stencil: vk::ClearDepthStencilValue { depth, stencil },
+        }
     }
 }
 

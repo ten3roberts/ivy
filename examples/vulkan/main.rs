@@ -32,6 +32,7 @@ use ivy::{
 use ultraviolet::{Rotor3, Vec3};
 
 use log::*;
+use vulkan::vk::ClearValue;
 
 mod route;
 
@@ -371,7 +372,7 @@ fn setup_ui(
             image,
             ui_pass,
             OverTime::<RelativeOffset>::new(Box::new(|_, offset, elapsed, _| {
-                *offset = RelativeOffset::new((elapsed).cos() * 4.0, elapsed.sin() * 2.0)
+                *offset = RelativeOffset::new((elapsed).cos() * 4.0, elapsed.sin() * 2.0) * 0.5
             })),
             RelativeOffset::default(),
             RelativeSize::new(0.4, 0.4),
@@ -385,7 +386,7 @@ fn setup_ui(
             image,
             ui_pass,
             OverTime::<RelativeOffset>::new(Box::new(|_, offset, elapsed, _| {
-                *offset = RelativeOffset::new(-(elapsed * 5.0).cos(), -(elapsed * 5.0).sin()) * 2.0
+                *offset = RelativeOffset::new(-(elapsed * 5.0).cos(), -(elapsed * 5.0).sin()) * 0.5
             })),
             RelativeOffset::default(),
             AbsoluteSize::new(50.0, 50.0),
@@ -444,6 +445,17 @@ impl VulkanLayer {
             },
         )?)?;
 
+        let ui_depth_buffer = resources.insert(Texture::new(
+            context.clone(),
+            &TextureInfo {
+                extent: swapchain_extent,
+                mip_levels: 1,
+                format: Format::D32_SFLOAT,
+                usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT | ImageUsage::TRANSIENT_ATTACHMENT,
+                ..Default::default()
+            },
+        )?)?;
+
         let pbr_nodes =
             rendergraph.add_nodes(create_pbr_pipeline::<GeometryPass, PostProcessingPass>(
                 context.clone(),
@@ -479,7 +491,7 @@ impl VulkanLayer {
         resources.insert_default(TextRenderer::new(
             context.clone(),
             16,
-            512,
+            128,
             FRAMES_IN_FLIGHT,
         )?)?;
 
@@ -498,8 +510,17 @@ impl VulkanLayer {
                 }],
                 vec![],
                 vec![],
-                None,
-                vec![],
+                Some(AttachmentInfo {
+                    store_op: StoreOp::DONT_CARE,
+                    load_op: LoadOp::CLEAR,
+                    initial_layout: ImageLayout::UNDEFINED,
+                    final_layout: ImageLayout::DEPTH_ATTACHMENT_OPTIMAL,
+                    resource: ui_depth_buffer,
+                }),
+                vec![
+                    ClearValue::color(0.0, 0.0, 0.0, 1.0).into(),
+                    ClearValue::depth_stencil(1.0, 0),
+                ],
             ),
             CameraNode::<UIPass, _, _>::new(
                 canvas,
@@ -513,8 +534,17 @@ impl VulkanLayer {
                 }],
                 vec![],
                 vec![],
-                None,
-                vec![],
+                Some(AttachmentInfo {
+                    store_op: StoreOp::DONT_CARE,
+                    load_op: LoadOp::CLEAR,
+                    initial_layout: ImageLayout::UNDEFINED,
+                    final_layout: ImageLayout::DEPTH_ATTACHMENT_OPTIMAL,
+                    resource: ui_depth_buffer,
+                }),
+                vec![
+                    ClearValue::color(0.0, 0.0, 0.0, 1.0).into(),
+                    ClearValue::depth_stencil(1.0, 0),
+                ],
             ),
         ));
 

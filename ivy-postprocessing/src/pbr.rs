@@ -7,8 +7,9 @@ use ivy_graphics::{GpuCameraData, LightManager, MeshRenderer, ShaderPass};
 use ivy_rendergraph::{AttachmentInfo, CameraNode, Node};
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
-    descriptors::MultiDescriptorBindable, ClearValue, Extent, Format, ImageLayout, ImageUsage,
-    LoadOp, SampleCountFlags, StoreOp, Texture, TextureInfo, VulkanContext,
+    descriptors::MultiDescriptorBindable, vk::ClearValue, ClearValueExt, Extent, Format,
+    ImageLayout, ImageUsage, LoadOp, SampleCountFlags, StoreOp, Texture, TextureInfo,
+    VulkanContext,
 };
 use ultraviolet::Vec3;
 
@@ -162,11 +163,11 @@ pub fn create_pbr_pipeline<GeometryPass: ShaderPass, PostProcessingPass: ShaderP
             resource: *depth_attachment,
         }),
         vec![
-            ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
-            ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
-            ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
-            ClearValue::Color(0.0, 0.0, 0.0, 1.0).into(),
-            ClearValue::DepthStencil(1.0, 0).into(),
+            ClearValue::color(0.0, 0.0, 0.0, 1.0),
+            ClearValue::color(0.0, 0.0, 0.0, 1.0),
+            ClearValue::color(0.0, 0.0, 0.0, 1.0),
+            ClearValue::color(0.0, 0.0, 0.0, 1.0),
+            ClearValue::depth_stencil(1.0, 0),
         ],
     ));
 
