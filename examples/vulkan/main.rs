@@ -32,7 +32,6 @@ use ivy::{
 use ultraviolet::{Rotor3, Vec3};
 
 use log::*;
-use vulkan::vk::ClearValue;
 
 mod route;
 
@@ -95,14 +94,7 @@ fn main() -> anyhow::Result<()> {
         .push_layer(|_, _| PerformanceLayer::new(1.secs()))
         .build();
 
-    let result = app.run().context("Failed to run application");
-    match result {
-        Ok(()) => Ok(()),
-        Err(err) => {
-            log::error!("Encountered error: {:?}", err);
-            Err(err)
-        }
-    }
+    app.run().context("Failed to run application")
 }
 
 struct LogicLayer {
@@ -445,17 +437,6 @@ impl VulkanLayer {
             },
         )?)?;
 
-        let ui_depth_buffer = resources.insert(Texture::new(
-            context.clone(),
-            &TextureInfo {
-                extent: swapchain_extent,
-                mip_levels: 1,
-                format: Format::D32_SFLOAT,
-                usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT | ImageUsage::TRANSIENT_ATTACHMENT,
-                ..Default::default()
-            },
-        )?)?;
-
         let pbr_nodes =
             rendergraph.add_nodes(create_pbr_pipeline::<GeometryPass, PostProcessingPass>(
                 context.clone(),
@@ -497,55 +478,23 @@ impl VulkanLayer {
 
         rendergraph.add_node(TextUpdateNode::new(resources.default::<TextRenderer>()?));
 
-        let ui_node = rendergraph.add_node(DoubleNode::new(
-            CameraNode::<UIPass, _, _>::new(
-                canvas,
-                resources.default::<ImageRenderer>()?,
-                vec![AttachmentInfo {
-                    store_op: StoreOp::STORE,
-                    load_op: LoadOp::LOAD,
-                    initial_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                    final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                    resource: final_lit,
-                }],
-                vec![],
-                vec![],
-                Some(AttachmentInfo {
-                    store_op: StoreOp::DONT_CARE,
-                    load_op: LoadOp::CLEAR,
-                    initial_layout: ImageLayout::UNDEFINED,
-                    final_layout: ImageLayout::DEPTH_ATTACHMENT_OPTIMAL,
-                    resource: ui_depth_buffer,
-                }),
-                vec![
-                    ClearValue::color(0.0, 0.0, 0.0, 1.0).into(),
-                    ClearValue::depth_stencil(1.0, 0),
-                ],
-            ),
-            CameraNode::<UIPass, _, _>::new(
-                canvas,
+        let ui_node = rendergraph.add_node(CameraNode::<UIPass, _, _>::new(
+            canvas,
+            (
+                Handle::<ImageRenderer>::null(),
                 resources.default::<TextRenderer>()?,
-                vec![AttachmentInfo {
-                    store_op: StoreOp::STORE,
-                    load_op: LoadOp::LOAD,
-                    initial_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                    final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                    resource: final_lit,
-                }],
-                vec![],
-                vec![],
-                Some(AttachmentInfo {
-                    store_op: StoreOp::DONT_CARE,
-                    load_op: LoadOp::CLEAR,
-                    initial_layout: ImageLayout::UNDEFINED,
-                    final_layout: ImageLayout::DEPTH_ATTACHMENT_OPTIMAL,
-                    resource: ui_depth_buffer,
-                }),
-                vec![
-                    ClearValue::color(0.0, 0.0, 0.0, 1.0).into(),
-                    ClearValue::depth_stencil(1.0, 0),
-                ],
             ),
+            vec![AttachmentInfo {
+                store_op: StoreOp::STORE,
+                load_op: LoadOp::LOAD,
+                initial_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                resource: final_lit,
+            }],
+            vec![],
+            vec![],
+            None,
+            vec![],
         ));
 
         let geometry_node = pbr_nodes[0];

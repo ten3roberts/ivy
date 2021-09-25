@@ -3,7 +3,7 @@ use hecs::World;
 use ivy_graphics::{Renderer, ShaderPass};
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{commands::CommandBuffer, vk::ClearValue, ImageLayout, LoadOp, StoreOp, Texture};
-use std::{any::type_name, error::Error, marker::PhantomData};
+use std::{any::type_name, marker::PhantomData};
 
 /// Represents a node in the renderpass.
 pub trait Node {
@@ -98,7 +98,7 @@ impl<Pass, T, E> Node for RenderNode<Pass, T>
 where
     Pass: ShaderPass,
     T: 'static + Renderer<Error = E> + Send + Sync,
-    E: 'static + Error + Send + Sync,
+    E: Into<anyhow::Error>,
 {
     fn node_kind(&self) -> NodeKind {
         NodeKind::Graphics
@@ -115,6 +115,7 @@ where
             .get_mut(self.renderer)
             .with_context(|| format!("Failed to borrow {:?} mutably", type_name::<T>()))?
             .draw::<Pass>(world, cmd, current_frame, &[], &[], resources)
+            .map_err(|e| e.into())
             .with_context(|| format!("Failed to draw using {:?}", type_name::<T>()))
     }
 }

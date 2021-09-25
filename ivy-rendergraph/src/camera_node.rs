@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use std::{any::type_name, marker::PhantomData};
 
 use anyhow::Context;
 use hecs::Entity;
@@ -11,7 +11,7 @@ use crate::{AttachmentInfo, Node, NodeKind};
 /// A rendergraph node rendering the scene using the provided camera.
 pub struct CameraNode<Pass, T: Renderer<Error = E>, E> {
     camera: Entity,
-    renderer: Handle<T>,
+    renderer: T,
     marker: PhantomData<(Pass, E)>,
     color_attachments: Vec<AttachmentInfo>,
     read_attachments: Vec<Handle<Texture>>,
@@ -24,11 +24,11 @@ impl<Pass, T, E> CameraNode<Pass, T, E>
 where
     Pass: ShaderPass + Storage,
     T: Renderer<Error = E> + Storage,
-    E: 'static + std::error::Error + Sync + Send,
+    E: Into<anyhow::Error>,
 {
     pub fn new(
         camera: Entity,
-        renderer: Handle<T>,
+        renderer: T,
         color_attachments: Vec<AttachmentInfo>,
         read_attachments: Vec<Handle<Texture>>,
         input_attachments: Vec<Handle<Texture>>,
@@ -52,7 +52,7 @@ impl<Pass, T, E> Node for CameraNode<Pass, T, E>
 where
     Pass: ShaderPass + Storage,
     T: Renderer<Error = E> + Storage,
-    E: 'static + std::error::Error + Sync + Send,
+    E: Into<anyhow::Error>,
 {
     fn color_attachments(&self) -> &[AttachmentInfo] {
         &self.color_attachments
@@ -94,10 +94,13 @@ where
             .context("Camera does not contain `GpuCameraData`")?
             .set(current_frame);
 
-        resources
-            .get_mut(self.renderer)?
+        self.renderer
             .draw::<Pass>(world, cmd, current_frame, &[camera_set], &[], resources)
-            .context("CameraNode failed to draw using supplied renderer")?;
+            .map_err(|e| e.into())
+            .context(format!(
+                "CameraNode failed to draw using supplied renderer: {:?}",
+                type_name::<T>()
+            ))?;
 
         Ok(())
     }

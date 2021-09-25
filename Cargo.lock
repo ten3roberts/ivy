@@ -489,6 +489,7 @@ dependencies = [
 name = "ivy-graphics"
 version = "1.7.1"
 dependencies = [
+ "anyhow",
  "anymap",
  "ash",
  "derive_more",

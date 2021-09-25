@@ -139,7 +139,7 @@ pub fn create_pbr_pipeline<GeometryPass: ShaderPass, PostProcessingPass: ShaderP
 
     let depth_attachment = DepthAttachment::new(context.clone(), resources, extent)?;
 
-    let camera_node = Box::new(CameraNode::<GeometryPass, MeshRenderer, _>::new(
+    let camera_node = Box::new(CameraNode::<GeometryPass, _, _>::new(
         camera,
         resources.default::<MeshRenderer>()?,
         pbr_attachments
