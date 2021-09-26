@@ -15,29 +15,62 @@ pub trait ShaderPass: 'static + Send + Sync {
 /// Macro to create a strongly typed shaderpass.
 #[macro_export(local_inner_macros)]
 macro_rules! new_shaderpass {
-( $(#[$outer:meta])* $vis:vis struct $name:ident; $($rest:tt)* ) => {
-$(#[$outer])*
-#[repr(transparent)]
-$vis struct $name( pub ivy_vulkan::Pipeline );
+    ( $(#[$outer:meta])* $vis:vis struct $name:ident; $($rest:tt)* ) => {
+        $(#[$outer])*
+        #[repr(transparent)]
+        $vis struct $name(pub ivy_vulkan::Pipeline);
 
-impl $name {
-fn new(pipeline: ivy_vulkan::Pipeline) -> Self {
-Self ( pipeline )
-}
-}
+        impl $name {
+            fn new(pipeline: ivy_vulkan::Pipeline) -> Self {
+                Self ( pipeline )
+            }
+        }
 
-impl $crate::ShaderPass for $name {
-fn pipeline(&self) -> &ivy_vulkan::Pipeline {
-&self.0
-}
+        impl $crate::ShaderPass for $name {
+            fn pipeline(&self) -> &ivy_vulkan::Pipeline {
+                &self.0
+            }
 
-fn pipeline_layout(&self) -> vk::PipelineLayout {
-self.0.layout()
-}
-}
+            fn pipeline_layout(&self) -> vk::PipelineLayout {
+                self.0.layout()
+            }
+        }
 
-$crate::new_shaderpass!($($rest)*);
-};
+        $crate::new_shaderpass!($($rest)*);
+    };
 
-() => {}
+    ( $(#[$outer:meta])* $vis:vis struct $name:ident($($fields:tt)*); $($rest:tt)* ) => {
+        $(#[$outer])*
+        $vis struct $name(pub ivy_vulkan::Pipeline, $($fields)* );
+
+        impl $crate::ShaderPass for $name {
+            fn pipeline(&self) -> &ivy_vulkan::Pipeline {
+                &self.0
+            }
+
+            fn pipeline_layout(&self) -> vk::PipelineLayout {
+                self.0.layout()
+            }
+        }
+
+        $crate::new_shaderpass!($($rest)*);
+    };
+
+    ( $(#[$outer:meta])* $vis:vis struct $name:ident{ $($fiels:tt)* }; $($rest:tt)* ) => {
+        $(#[$outer])*
+        $vis struct $name{ pub pipeline: ivy_vulkan::Pipeline $($fields)* };
+
+        impl $crate::ShaderPass for $name {
+            fn pipeline(&self) -> &ivy_vulkan::Pipeline {
+                &self.pipeline
+            }
+
+            fn pipeline_layout(&self) -> vk::PipelineLayout {
+                self.pipeline.layout()
+            }
+        }
+
+        $crate::new_shaderpass!($($rest)*);
+    };
+    () => {}
 }

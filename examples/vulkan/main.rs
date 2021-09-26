@@ -7,12 +7,13 @@ use anyhow::{anyhow, Context};
 use atomic_refcell::AtomicRefCell;
 use flume::Receiver;
 use glfw::{Action, CursorMode, Glfw, Key, Window, WindowEvent};
+use graphics::window::WindowExt;
 use hecs::*;
 use hecs_hierarchy::Hierarchy;
 use ivy::{
     core::*,
     graphics::{
-        window::{WindowExt, WindowInfo, WindowMode},
+        window::{WindowInfo, WindowMode},
         *,
     },
     input::*,
@@ -266,19 +267,14 @@ new_shaderpass! {
     pub struct PostProcessingPass;
 }
 
-#[allow(dead_code)]
 struct VulkanLayer {
     context: Arc<VulkanContext>,
 
-    window: Arc<AtomicRefCell<Window>>,
     swapchain: Handle<Swapchain>,
 
     rendergraph: RenderGraph,
 
-    clock: Clock,
     resources: Resources,
-
-    window_events: Receiver<WindowEvent>,
 }
 
 fn setup_ui(
@@ -393,7 +389,7 @@ impl VulkanLayer {
         context: Arc<VulkanContext>,
         world: &mut World,
         window: Arc<AtomicRefCell<Window>>,
-        events: &mut Events,
+        _: &mut Events,
     ) -> anyhow::Result<Self> {
         let swapchain_info = ivy_vulkan::SwapchainInfo {
             present_mode: vk::PresentModeKHR::IMMEDIATE,
@@ -580,7 +576,7 @@ impl VulkanLayer {
             "./res/fonts/Lora/Lora-VariableFont_wght.ttf",
             ui_sampler,
             &FontInfo {
-                size: 256.0,
+                size: 128.0,
                 ..Default::default()
             },
         )?)?;
@@ -736,17 +732,11 @@ impl VulkanLayer {
 
         setup_ui(world, image, atlas, font, ui_pass, text_pass)?;
 
-        let (tx, window_events) = flume::unbounded();
-        events.subscribe(tx);
-
         Ok(Self {
             context,
-            window,
             swapchain,
             rendergraph,
-            clock: Clock::new(),
             resources,
-            window_events,
         })
     }
 }
