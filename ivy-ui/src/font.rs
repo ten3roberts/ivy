@@ -59,9 +59,11 @@ impl Font {
         let avg_width = glyphs.0;
         dbg!(avg_width);
 
-        let dimension = (((info.glyphs.end as usize - info.glyphs.start as usize) as f32).sqrt()
-            * (avg_width + info.padding as f32))
-            .ceil() as u32;
+        let dimension = nearest_power_2(
+            (((info.glyphs.end as usize - info.glyphs.start as usize) as f32).sqrt()
+                * (avg_width + info.padding as f32))
+                .ceil() as u32,
+        );
 
         let atlas = TextureAtlas::new(
             context.clone(),
