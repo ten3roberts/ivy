@@ -198,9 +198,9 @@ dependencies = [
 
 [[package]]
 name = "derive-for"
-version = "0.2.1"
+version = "1.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "102270b7aee6a5fa5c100a1dc0fb68ae9ff72d861ae42f4891d5a520d92eaad3"
+checksum = "a9891f7ca4633797965866d68b6c30c822f05f9834c2d77ef0ac1f9cb9a371e6"
 
 [[package]]
 name = "derive_more"

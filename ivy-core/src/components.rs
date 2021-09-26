@@ -23,7 +23,7 @@ derive_for!(
     MulAssign,
     Sub,
     SubAssign,
-    )
+    );
     /// Describes a position in 3D space.
 pub struct Position(pub Vec3);
     /// Describes a rotation in 3D space.

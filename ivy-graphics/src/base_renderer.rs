@@ -79,6 +79,8 @@ type BatchId = usize;
 pub struct PassData<K, Obj> {
     context: Arc<VulkanContext>,
     batches: Vec<BatchData<K>>,
+    /// Ordered access of batches
+    ordered_batches: Vec<BatchId>,
     // Map from key to index in batches
     batch_map: HashMap<(HandleUntyped, K), BatchId>,
     frames_in_flight: usize,
@@ -88,6 +90,10 @@ pub struct PassData<K, Obj> {
     object_buffers: Vec<Buffer>,
     capacity: u32,
     sets: Vec<DescriptorSet>,
+
+    /// Set to true if any batch has been added or removed.
+    /// Is not set if entities withing the batch are modified.
+    dirty: bool,
 
     marker: PhantomData<Obj>,
 }
@@ -107,12 +113,14 @@ impl<K: Key, Obj: 'static> PassData<K, Obj> {
             context,
             capacity,
             batches: Vec::new(),
+            ordered_batches: Vec::new(),
             sets,
             object_count: 0,
             object_buffers,
             batch_map: HashMap::new(),
             frames_in_flight,
             unbatched: Vec::new(),
+            dirty: false,
             marker: PhantomData,
         })
     }
@@ -200,15 +208,19 @@ impl<K: Key, Obj: 'static> PassData<K, Obj> {
         let frames_in_flight = self.frames_in_flight;
         let object_count = &mut self.object_count;
         let batch_map = &mut self.batch_map;
+        let ordered_batches = &mut self.ordered_batches;
         let batches = &mut self.batches;
+        let dirty = &mut self.dirty;
 
         // Insert a marker to track this enemy as attached to a batch
         self.unbatched
             .drain(0..)
             .try_for_each(|(e, pass, key)| -> Result<_> {
                 let marker = Self::insert_entity(
-                    batch_map,
                     batches,
+                    ordered_batches,
+                    batch_map,
+                    dirty,
                     object_count,
                     pass,
                     key,
@@ -269,18 +281,27 @@ impl<K: Key, Obj: 'static> PassData<K, Obj> {
     /// Inserts a new entity into the correct batch. Note: The entity should not already exist in pass,
     /// behaviour is undefined. Marks the batch as dirty.
     fn insert_entity<Pass: ShaderPass>(
-        batch_map: &mut HashMap<(HandleUntyped, K), usize>,
         batches: &mut Vec<BatchData<K>>,
+        ordered_batches: &mut Vec<BatchId>,
+        batch_map: &mut HashMap<(HandleUntyped, K), usize>,
+        dirty: &mut bool,
         object_count: &mut ObjectId,
         pass: HandleUntyped,
-        owned_key: K,
+        key: K,
         passes: &ResourceCache<Pass>,
         frames_in_flight: usize,
     ) -> Result<BatchMarker<Obj, Pass>> {
         let frames_in_flight = frames_in_flight;
 
-        let (batch_id, batch) =
-            Self::get_batch_internal(batch_map, batches, passes, pass, owned_key)?;
+        let (batch_id, batch) = Self::get_batch_internal(
+            batches,
+            ordered_batches,
+            batch_map,
+            dirty,
+            passes,
+            pass,
+            key,
+        )?;
 
         batch.instance_count += 1;
         batch.dirty = frames_in_flight;
@@ -305,8 +326,10 @@ impl<K: Key, Obj: 'static> PassData<K, Obj> {
         Pass: ShaderPass,
     {
         Self::get_batch_internal(
-            &mut self.batch_map,
             &mut self.batches,
+            &mut self.ordered_batches,
+            &mut self.batch_map,
+            &mut self.dirty,
             passes,
             pass.into_untyped(),
             key,
@@ -315,8 +338,10 @@ impl<K: Key, Obj: 'static> PassData<K, Obj> {
     }
     ///
     fn get_batch_internal<'b, U, Pass>(
-        batch_map: &mut HashMap<(HandleUntyped, K), usize>,
         batches: &'b mut Vec<BatchData<K>>,
+        ordered_batches: &mut Vec<BatchId>,
+        batch_map: &mut HashMap<(HandleUntyped, K), usize>,
+        dirty: &mut bool,
         passes: U,
         pass: HandleUntyped,
         key: K,
@@ -339,8 +364,11 @@ impl<K: Key, Obj: 'static> PassData<K, Obj> {
                     pass,
                     key,
                 ));
-                batch_map.insert(combined_key, batches.len() - 1);
-                batches.len() - 1
+                let last = batches.len() - 1;
+                batch_map.insert(combined_key, last);
+                ordered_batches.push(last);
+                *dirty = true;
+                last
             }
         };
 
@@ -365,6 +393,70 @@ impl<K: Key, Obj: 'static> PassData<K, Obj> {
     pub fn object_buffer(&self, current_frame: usize) -> &Buffer {
         &self.object_buffers[current_frame]
     }
+
+    /// Set to true if any batch has been added or removed.
+    /// Is not set if entities withing the batch are modified.
+    pub fn dirty(&self) -> bool {
+        self.dirty
+    }
+
+    pub fn set_dirty(&mut self, dirty: bool) {
+        self.dirty = dirty;
+    }
+}
+
+impl<K, Obj> PassData<K, Obj>
+where
+    K: Ord + Key,
+    Obj: 'static,
+{
+    /// Sorts batches if dirty and clears the dirty flag
+    pub fn sort_batches_if_dirty(&mut self) {
+        if self.dirty() {
+            let batches = &self.batches;
+            self.ordered_batches
+                .sort_unstable_by_key(|val| &batches[*val].key);
+            self.set_dirty(false)
+        }
+    }
+
+    /// Sorts the batches by the key
+    pub fn sort_batches(&mut self) {
+        let batches = &self.batches;
+        self.ordered_batches
+            .sort_unstable_by_key(|val| &batches[*val].key);
+    }
+
+    /// Returns the batches in order from last sort.
+    /// Note: [`sort_batches`] or [`sort_batches_if_dirty`] needs to be called
+    /// to ensure proper order.
+    pub fn ordered_batches(&self) -> OrderedBatchIterator<K> {
+        OrderedBatchIterator {
+            batches: &self.batches,
+            ordered_batches: self.ordered_batches.iter(),
+        }
+    }
+}
+
+pub struct OrderedBatchIterator<'a, K> {
+    batches: &'a Vec<BatchData<K>>,
+    ordered_batches: std::slice::Iter<'a, BatchId>,
+}
+
+impl<'a, K> Iterator for OrderedBatchIterator<'a, K> {
+    type Item = &'a BatchData<K>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.ordered_batches.next().map(|idx| &self.batches[*idx])
+    }
+}
+
+impl<'a, K> DoubleEndedIterator for OrderedBatchIterator<'a, K> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.ordered_batches
+            .next_back()
+            .map(|idx| &self.batches[*idx])
+    }
 }
 
 impl<K, Obj> IntoSet for PassData<K, Obj> {
@@ -382,7 +474,7 @@ pub struct BatchData<K> {
     pipeline: Pipeline,
     layout: PipelineLayout,
     pass: HandleUntyped,
-    owned_key: K,
+    key: K,
     /// Number of entities in batches before
     first_instance: u32,
     /// The number of drawable objects in this batch
@@ -394,7 +486,7 @@ pub struct BatchData<K> {
 }
 
 impl<O> BatchData<O> {
-    fn new(pipeline: Pipeline, layout: PipelineLayout, pass: HandleUntyped, owned_key: O) -> Self {
+    fn new(pipeline: Pipeline, layout: PipelineLayout, pass: HandleUntyped, key: O) -> Self {
         Self {
             pipeline,
             first_instance: 0,
@@ -402,7 +494,7 @@ impl<O> BatchData<O> {
             curr: 0,
             layout,
             pass,
-            owned_key,
+            key,
             dirty: 0,
         }
     }
@@ -419,7 +511,7 @@ impl<O> BatchData<O> {
 
     #[inline]
     pub fn key(&self) -> &O {
-        &self.owned_key
+        &self.key
     }
 
     #[inline]

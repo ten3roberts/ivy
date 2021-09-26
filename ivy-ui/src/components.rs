@@ -21,10 +21,13 @@ derive_for!(
         MulAssign,
         Sub,
         SubAssign,
-    )
+        PartialEq,
+    );
     pub struct Position2D(pub Vec2);
     pub struct Size2D(pub Vec2);
-    pub struct Foo {a: f32};
+    #[derive(Eq, Hash)]
+    /// The depth of the widget from the root.
+    pub struct WidgetDepth(pub u32);
 );
 
 impl Position2D {

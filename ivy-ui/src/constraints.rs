@@ -7,40 +7,23 @@ use ultraviolet::Vec2;
 use crate::{Position2D, Size2D};
 
 derive_for!(
-(
-    Add,
-    AddAssign,
-    AsRef,
-    Clone,
-    Copy,
-    Debug,
-    Default,
-    Deref,
-    DerefMut,
-    Div,
-    DivAssign,
-    From,
-    Into,
-    Mul,
-    MulAssign,
-    Sub,
-    SubAssign,
-)
-
-/// Constrains the position to an offset in pixels from parent origin.
-pub struct AbsoluteOffset(pub Vec2);
-
-pub struct RelativeOffset(pub Vec2);
-/// Constrains the size of a widget to a multiple of the parent size. If paired
-/// with [`Aspect`] width is ignored.
-/// The aspect ratio of the parent is not preserved, as only the height will be
-/// considered from the parent. This ensures the window width doesn't stretch UI
-/// widgets.
-pub struct RelativeSize(pub Vec2);
-/// Constrains the size of a widget to pixels.
-pub struct AbsoluteSize(pub Vec2);
-/// Constrains the widget width to a multiple of height.
-pub struct Aspect(pub f32);
+    (
+        Add, AddAssign, AsRef, Clone, Copy, Debug, Default, Deref, DerefMut, Div, DivAssign, From,
+        Into, Mul, MulAssign, Sub, SubAssign,
+    );
+    /// Constrains the position to an offset in pixels from parent origin.
+    pub struct AbsoluteOffset(pub Vec2);
+    pub struct RelativeOffset(pub Vec2);
+    /// Constrains the size of a widget to a multiple of the parent size. If paired
+    /// with [`Aspect`] width is ignored.
+    /// The aspect ratio of the parent is not preserved, as only the height will be
+    /// considered from the parent. This ensures the window width doesn't stretch UI
+    /// widgets.
+    pub struct RelativeSize(pub Vec2);
+    /// Constrains the size of a widget to pixels.
+    pub struct AbsoluteSize(pub Vec2);
+    /// Constrains the widget width to a multiple of height.
+    pub struct Aspect(pub f32);
 );
 
 impl From<AbsoluteOffset> for Position2D {

@@ -1,4 +1,4 @@
-use crate::{image::Image, Error, Result, UIVertex};
+use crate::*;
 use hecs::{Query, World};
 use ivy_core::ModelMatrix;
 use ivy_graphics::{BaseRenderer, Mesh, Renderer, ShaderPass};
@@ -74,9 +74,11 @@ impl Renderer for ImageRenderer {
         pass.build_batches::<Pass, KeyQuery, _, _>(world, &passes)?;
         pass.update::<Pass, ObjectDataQuery, _>(world, current_frame)?;
 
+        pass.sort_batches_if_dirty();
+
         let frame_set = pass.set(current_frame);
 
-        for batch in pass.batches() {
+        for batch in pass.ordered_batches() {
             let key = batch.key();
 
             let image = images.get(key.image)?;
@@ -117,21 +119,37 @@ impl<'a> Into<ObjectData> for ObjectDataQuery<'a> {
     }
 }
 
-#[derive(Query, PartialEq, Eq)]
+#[derive(Query, PartialEq)]
 struct KeyQuery<'a> {
+    depth: &'a WidgetDepth,
     image: &'a Handle<Image>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct Key {
-    // depth: WidgetDepth,
+    depth: WidgetDepth,
     image: Handle<Image>,
+}
+
+impl PartialOrd for Key {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.depth.partial_cmp(&other.depth)
+    }
+}
+
+impl Ord for Key {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.depth.cmp(&other.depth)
+    }
 }
 
 impl<'a> ivy_graphics::KeyQuery for KeyQuery<'a> {
     type K = Key;
 
     fn into_key(&self) -> Self::K {
-        Self::K { image: *self.image }
+        Self::K {
+            depth: *self.depth,
+            image: *self.image,
+        }
     }
 }

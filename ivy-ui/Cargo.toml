@@ -10,7 +10,7 @@ readme = "README.md"
 
 [dependencies]
 anyhow = "1.0.41"
-derive-for = "0.2.1"
+derive-for = "1.2.2"
 derive_more = "0.99"
 fontdue = "0.5.2"
 hecs = "0.5"

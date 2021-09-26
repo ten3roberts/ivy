@@ -5,8 +5,7 @@ use ivy_core::ModelMatrix;
 use ivy_graphics::Camera;
 use ultraviolet::Mat4;
 
-use crate::Canvas;
-use crate::{constraints::ConstraintQuery, Position2D, Size2D, Widget};
+use crate::{constraints::ConstraintQuery, *};
 
 /// Updates all UI trees and applies constraints.
 /// Also updates canvas cameras.
@@ -16,15 +15,20 @@ pub fn update(world: &World) -> Result<()> {
             update_canvas(world, root)?;
         }
 
-        update_from(world, root)
+        update_from(world, root, 1)
     })
 }
 
-pub fn update_from(world: &World, parent: Entity) -> Result<()> {
-    let mut query = world.query_one::<(&Position2D, &Size2D)>(parent)?;
-    let results = query.get().ok_or(hecs::NoSuchEntity)?;
+pub fn update_from(world: &World, parent: Entity, depth: u32) -> Result<()> {
+    let mut query = world.query_one::<(&Position2D, &Size2D, Option<&mut WidgetDepth>)>(parent)?;
+    let mut results = query.get().ok_or(hecs::NoSuchEntity)?;
     let position = *results.0;
     let size = *results.1;
+
+    match results.2.as_mut() {
+        Some(val) => **val = depth.into(),
+        None => {}
+    };
 
     drop(results);
     drop(query);
@@ -32,7 +36,7 @@ pub fn update_from(world: &World, parent: Entity) -> Result<()> {
     world.children::<Widget>(parent).try_for_each(|child| {
         apply_constaints(world, child, position, size)?;
         assert!(parent != child);
-        update_from(world, child)
+        update_from(world, child, depth + 1)
     })
 }
 
@@ -103,13 +107,14 @@ pub fn statisfy_widgets(world: &mut World) {
         .collect::<Vec<_>>();
 
     entities.into_iter().for_each(|e| {
-        // Ignore errors, we just collected these entities and know they exist.
+        // Ignore errors, we just collected these entities and thus know they exist.
         let _ = world.insert(
             e,
             (
                 ModelMatrix::default(),
                 Position2D::default(),
                 Size2D::default(),
+                WidgetDepth::default(),
             ),
         );
     });
