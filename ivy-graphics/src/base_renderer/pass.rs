@@ -1,78 +1,16 @@
-use crate::Result;
-use ash::vk::{Pipeline, PipelineLayout, ShaderStageFlags};
+use std::{collections::HashMap, marker::PhantomData, ops::Deref, sync::Arc};
+
+use crate::{Key, KeyQuery, ShaderPass};
+
+use super::*;
+
+use ash::vk::{DescriptorSet, ShaderStageFlags};
 use hecs::{Entity, Fetch, Query, World};
 use ivy_resources::{Handle, HandleUntyped, ResourceCache};
-use ivy_vulkan::{descriptors::*, device, Buffer, BufferAccess, BufferUsage, VulkanContext};
-
-use std::{any::TypeId, collections::HashMap, marker::PhantomData, ops::Deref, sync::Arc};
-
-use crate::ShaderPass;
-
-pub trait KeyQuery: Send + Sync + Query {
-    type K: Key;
-    fn into_key(&self) -> Self::K;
-}
-
-pub trait Key: std::hash::Hash + std::cmp::Eq + Copy {}
-
-impl<T> Key for T where T: std::hash::Hash + std::cmp::Eq + Copy {}
-
-type ObjectId = u32;
-
-/// A mesh renderer using vkCmdDrawIndirectIndexed and efficient batching.
-/// A query and key are provided. On register, all entites satisfying the
-/// `KeyQuery` will be placed into the object buffer. Objects will then be
-/// placed into the correct batch according to their shaderpass and key hash.
-/// This means that if the key is made of a Material and Mesh, all objects with
-/// the same pipeline, material, and mesh will be placed in the same batch.
-pub struct BaseRenderer<K, Obj> {
-    context: Arc<VulkanContext>,
-    passes: HashMap<TypeId, PassData<K, Obj>>,
-    frames_in_flight: usize,
-    capacity: u32,
-}
-
-impl<Obj, K: 'static> BaseRenderer<K, Obj>
-where
-    K: Key,
-    Obj: 'static,
-{
-    pub fn new(
-        context: Arc<VulkanContext>,
-        capacity: ObjectId,
-        frames_in_flight: usize,
-    ) -> Result<Self> {
-        let passes = HashMap::new();
-
-        Ok(Self {
-            capacity,
-            context,
-            passes,
-            frames_in_flight,
-        })
-    }
-
-    /// Returns the pass data for the shaderpass.
-    pub fn pass_mut<Pass: ShaderPass>(&mut self) -> Result<&mut PassData<K, Obj>> {
-        match self.passes.entry(TypeId::of::<Pass>()) {
-            std::collections::hash_map::Entry::Occupied(entry) => Ok(entry.into_mut()),
-            std::collections::hash_map::Entry::Vacant(entry) => Ok(entry.insert(PassData::new(
-                self.context.clone(),
-                self.capacity,
-                self.frames_in_flight,
-            )?)),
-        }
-    }
-
-    /// Returns the pass data for the shaderpass.
-    pub fn pass<Pass: ShaderPass>(&self) -> &PassData<K, Obj> {
-        self.passes
-            .get(&TypeId::of::<Pass>())
-            .expect("Pass does not exist")
-    }
-}
-
-type BatchId = usize;
+use ivy_vulkan::{
+    descriptors::{DescriptorBuilder, IntoSet},
+    device, Buffer, BufferAccess, BufferUsage, VulkanContext,
+};
 
 /// Represents a single typed shaderpass. Each object belonging to the pass is
 /// grouped into batches
@@ -304,7 +242,7 @@ impl<K: Key, Obj: 'static> PassData<K, Obj> {
         )?;
 
         batch.instance_count += 1;
-        batch.dirty = frames_in_flight;
+        batch.set_dirty(frames_in_flight);
         *object_count += 1;
 
         Ok(BatchMarker {
@@ -466,124 +404,6 @@ impl<K, Obj> IntoSet for PassData<K, Obj> {
 
     fn sets(&self) -> &[DescriptorSet] {
         &self.sets
-    }
-}
-
-/// A batch contains objects of the same shaderpass and material.
-pub struct BatchData<K> {
-    pipeline: Pipeline,
-    layout: PipelineLayout,
-    pass: HandleUntyped,
-    key: K,
-    /// Number of entities in batches before
-    first_instance: u32,
-    /// The number of drawable objects in this batch
-    instance_count: u32,
-    curr: u32,
-
-    /// Set to frames_in_flight when the batch is dirty.
-    dirty: usize,
-}
-
-impl<O> BatchData<O> {
-    fn new(pipeline: Pipeline, layout: PipelineLayout, pass: HandleUntyped, key: O) -> Self {
-        Self {
-            pipeline,
-            first_instance: 0,
-            instance_count: 0,
-            curr: 0,
-            layout,
-            pass,
-            key,
-            dirty: 0,
-        }
-    }
-
-    #[inline]
-    pub fn pipeline(&self) -> Pipeline {
-        self.pipeline
-    }
-
-    #[inline]
-    pub fn layout(&self) -> PipelineLayout {
-        self.layout
-    }
-
-    #[inline]
-    pub fn key(&self) -> &O {
-        &self.key
-    }
-
-    #[inline]
-    pub fn shaderpass<T>(&self) -> Handle<T> {
-        Handle::from_untyped(self.pass)
-    }
-
-    #[inline]
-    pub fn first_instance(&self) -> u32 {
-        self.first_instance
-    }
-
-    #[inline]
-    pub fn instance_count(&self) -> u32 {
-        self.instance_count
-    }
-
-    /// Returns an iterator over the batch's object buffer ids
-    #[inline]
-    pub fn ids(&self) -> BatchIdIterator<O> {
-        BatchIdIterator::new(self)
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-struct ObjectBufferMarker<K> {
-    /// Index into the object buffer
-    id: ObjectId,
-    marker: PhantomData<K>,
-}
-
-/// Marker is send + sync
-unsafe impl<K> Send for ObjectBufferMarker<K> {}
-unsafe impl<K> Sync for ObjectBufferMarker<K> {}
-
-/// Marks the entity as already being batched for this shaderpasss with the batch index and object buffer index.
-struct BatchMarker<Obj, Pass> {
-    batch_id: BatchId,
-    marker: PhantomData<(Obj, Pass)>,
-}
-
-/// Marker is send + sync
-unsafe impl<Obj, Pass> Sync for BatchMarker<Obj, Pass> {}
-unsafe impl<Obj, Pass> Send for BatchMarker<Obj, Pass> {}
-
-pub struct BatchIdIterator<Obj> {
-    max: u32,
-    curr: u32,
-    marker: PhantomData<Obj>,
-}
-
-impl<Obj> BatchIdIterator<Obj> {
-    pub fn new(batch: &BatchData<Obj>) -> Self {
-        Self {
-            curr: batch.first_instance,
-            max: batch.instance_count + batch.first_instance,
-            marker: PhantomData,
-        }
-    }
-}
-
-impl<Obj> Iterator for BatchIdIterator<Obj> {
-    type Item = u32;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.curr >= self.max {
-            None
-        } else {
-            let ret = self.curr;
-            self.curr += 1;
-            Some(ret)
-        }
     }
 }
 
