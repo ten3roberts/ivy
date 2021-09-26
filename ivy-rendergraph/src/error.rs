@@ -8,13 +8,13 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("Failed executing rendergraph node:\n{0:?}")]
+    #[error("Failed executing rendergraph node")]
     NodeExecution(#[from] anyhow::Error),
 
-    #[error(transparent)]
+    #[error("Rendergraph vulkan error")]
     Vulkan(#[from] ivy_vulkan::Error),
 
-    #[error(transparent)]
+    #[error("Rendergraph graphics error")]
     Graphics(#[from] ivy_graphics::Error),
 
     #[error("Dependency cycle in rendergraph")]
@@ -23,7 +23,7 @@ pub enum Error {
     #[error("Node read attachment is missing corresponding write attachment for {2:?} required by node {0:?}: {1:?}")]
     MissingWrite(NodeIndex, &'static str, Handle<Texture>),
 
-    #[error("Resource acquisition error {0}")]
+    #[error("Resource acquisition error")]
     Resource(#[from] ivy_resources::Error),
 
     #[error("Invalid node index {0:?}")]

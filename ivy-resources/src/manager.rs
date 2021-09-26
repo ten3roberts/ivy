@@ -1,6 +1,6 @@
 use crate::{
     cell::{Cell, CellRef, CellRefMut, Storage},
-    Result,
+    LoadResource, Result,
 };
 use std::{any::TypeId, collections::HashMap};
 
@@ -148,6 +148,17 @@ impl Resources {
                 .entry(TypeId::of::<T>())
                 .or_insert_with(|| Cell::new(ResourceCache::<T>::new()))
         })
+    }
+    /// Attempts to load and insert a resource from the given create info. If
+    /// info from the same info already exists, it will be returned. This means
+    /// the load function has to be injective over `info`.
+    pub fn load<T, I, E, G>(&self, info: G) -> Result<std::result::Result<Handle<T>, E>>
+    where
+        G: Into<I>,
+        T: Storage + LoadResource<Info = I, Error = E>,
+    {
+        let info = info.into();
+        self.fetch_mut::<T>().map(|mut val| val.load(self, info))
     }
 }
 

@@ -10,13 +10,13 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum Error {
     #[error("Failed to load vulkan library")]
     LibLoading,
-    #[error("Vulkan Error {0}")]
+    #[error("Vulkan API error")]
     Vulkan(#[from] vk::Result),
-    #[error("Failed to allocate device memory. {0}")]
+    #[error("Failed to allocate device memory")]
     MemoryAllocation(#[from] AllocationError),
     #[error("GLFW is not capable of creating vulkan surfaces")]
     SurfaceSupport,
-    #[error("Failed to create a vulkan instance. {0}")]
+    #[error("Failed to create a vulkan instance")]
     InstanceCreation(#[from] ash::InstanceError),
     #[error("Missing required extensions: {0:?}")]
     MissingExtensions(Vec<CString>),
@@ -34,7 +34,7 @@ pub enum Error {
         size: vk::DeviceSize,
         max_size: vk::DeviceSize,
     },
-    #[error("Failed to load image file: {0:?}")]
+    #[error("Failed to load image file")]
     ImageLoading(#[from] ivy_image::Error),
 
     #[error("Unsupported layout transition from {0:?} to {1:?}")]
@@ -48,4 +48,7 @@ pub enum Error {
 
     #[error("Unable to determine descriptor type for buffer with usage: {0:?}")]
     DescriptorType(BufferUsageFlags),
+
+    #[error("Vulkan resource error")]
+    ResourceError(#[from] ivy_resources::Error),
 }

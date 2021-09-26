@@ -1,7 +1,7 @@
 use crate::{Error, Mesh, Result};
-use std::{ops::DerefMut, path::Path, path::PathBuf, sync::Arc};
+use std::{borrow::Cow, ops::DerefMut, path::Path, path::PathBuf, sync::Arc};
 
-use ivy_resources::{Handle, ResourceCache};
+use ivy_resources::{Handle, LoadResource, ResourceCache};
 use ivy_vulkan::VulkanContext;
 use ultraviolet::*;
 
@@ -23,7 +23,7 @@ pub struct Document {
 
 impl Document {
     /// Loads a gltf document/asset from path
-    pub fn load<P, O, M>(context: Arc<VulkanContext>, meshes: M, path: P) -> Result<Self>
+    pub fn from_file<P, O, M>(context: Arc<VulkanContext>, meshes: M, path: P) -> Result<Self>
     where
         P: AsRef<Path> + ToOwned<Owned = O>,
         O: Into<PathBuf>,
@@ -88,5 +88,17 @@ impl Document {
     {
         let name = name.as_ref();
         self.nodes.iter().find(|node| node.name == name)
+    }
+}
+
+impl LoadResource for Document {
+    type Info = Cow<'static, str>;
+
+    type Error = Error;
+
+    fn load(resources: &ivy_resources::Resources, path: &Self::Info) -> Result<Self>
+    {
+        let context = resources.get_default::<Arc<VulkanContext>>()?;
+        Self::from_file(context.clone(), resources.fetch_mut()?, path.as_ref())
     }
 }

@@ -399,6 +399,8 @@ impl VulkanLayer {
 
         let resources = Resources::new();
 
+        resources.insert(context.clone())?;
+
         let swapchain = resources.insert_default(Swapchain::new(
             context.clone(),
             &window.borrow(),
@@ -508,108 +510,47 @@ impl VulkanLayer {
 
         assert!(rendergraph.node_renderpass(swapchain_node).is_err());
 
-        let document = ivy_graphics::Document::load(
-            context.clone(),
-            resources.fetch_mut()?,
-            "./res/models/cube.gltf",
-        )
-        .context("Failed to load cube model")?;
+        let document: Handle<Document> = resources
+            .load("./res/models/cube.gltf")
+            .context("Failed to load cube model")??;
 
-        let cube_mesh = document.mesh(0);
+        let cube_mesh = resources.get(document)?.mesh(0);
 
-        let grid = resources.insert(
-            Texture::load(context.clone(), "./res/textures/grid.png")
-                .context("Failed to load grid texture")?,
-        )?;
+        let font: Handle<Font> = resources
+            .load((
+                FontInfo {
+                    size: 128.0,
+                    ..Default::default()
+                },
+                "./res/fonts/Lora/Lora-VariableFont_wght.ttf".into(),
+            ))
+            .context("Failed to load font")??;
 
-        let uv_grid = resources.insert(
-            Texture::load(context.clone(), "./res/textures/uv.png")
-                .context("Failed to load uv texture")?,
-        )?;
+        let material: Handle<Material> = resources.load(MaterialInfo {
+            albedo: "./res/textures/grid.png".into(),
+            roughness: 0.3,
+            metallic: 0.4,
+            ..Default::default()
+        })??;
 
-        // let atlas = resources.insert(TextureAtlas::new(
-        //     context.clone(),
-        //     &resources,
-        //     &TextureInfo {
-        //         extent: Extent::new(128, 128),
-        //         mip_levels: 1,
-        //         usage: ImageUsage::SAMPLED | ImageUsage::TRANSFER_DST,
-        //         format: Format::R8G8B8A8_SRGB,
-        //         samples: SampleCountFlags::TYPE_1,
-        //     },
-        //     4,
-        //     vec![
-        //         ("red", image::Image::load("./res/textures/red.png", 4)?),
-        //         ("green", image::Image::load("./res/textures/green.png", 4)?),
-        //         ("blue", image::Image::load("./res/textures/blue.png", 4)?),
-        //         ("heart", image::Image::load("./res/textures/heart.png", 4)?),
-        //     ],
-        // )?)?;
-
-        let sampler = resources.insert(Sampler::new(
-            context.clone(),
-            SamplerInfo {
-                address_mode: AddressMode::REPEAT,
-                mag_filter: FilterMode::LINEAR,
-                min_filter: FilterMode::NEAREST,
-                unnormalized_coordinates: false,
-                anisotropy: 16.0,
-                mip_levels: 1,
-            },
-        )?)?;
-
-        let ui_sampler = resources.insert(Sampler::new(
-            context.clone(),
-            SamplerInfo {
-                address_mode: AddressMode::CLAMP_TO_EDGE,
-                mag_filter: FilterMode::LINEAR,
-                min_filter: FilterMode::LINEAR,
-                unnormalized_coordinates: false,
-                anisotropy: 16.0,
-                mip_levels: 1,
-            },
-        )?)?;
-
-        let font = resources.insert(Font::new(
-            context.clone(),
-            &resources,
-            "./res/fonts/Lora/Lora-VariableFont_wght.ttf",
-            ui_sampler,
-            &FontInfo {
-                size: 128.0,
-                ..Default::default()
-            },
-        )?)?;
-
-        let material = resources.insert(Material::new(
-            context.clone(),
-            &resources,
-            grid,
-            sampler,
-            0.3,
-            0.4,
-        )?)?;
-
-        let material2 = resources.insert(Material::new(
-            context.clone(),
-            &resources,
-            uv_grid,
-            sampler,
-            0.0,
-            0.9,
-        )?)?;
-
-        let heart =
-            resources.insert(Texture::load(context.clone(), "./res/textures/heart.png")?)?;
-
-        let image = resources.insert(Image::new(&context, &resources, heart, ui_sampler)?)?;
+        let material2: Handle<Material> = resources.load(MaterialInfo {
+            albedo: "./res/textures/uv.png".into(),
+            roughness: 0.0,
+            metallic: 0.9,
+            ..Default::default()
+        })??;
 
         let atlas = resources.insert(Image::new(
             &context,
             &resources,
             resources.get(font)?.atlas().texture(),
-            ui_sampler,
+            resources.default()?,
         )?)?;
+
+        let image = resources.load(ImageInfo {
+            texture: "./res/textures/heart.png".into(),
+            ..Default::default()
+        })??;
 
         let fullscreen_pipeline = Pipeline::new::<()>(
             context.clone(),

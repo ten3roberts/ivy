@@ -6,7 +6,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error(transparent)]
+    #[error("Graphics vulkan error")]
     Vulkan(#[from] ivy_vulkan::Error),
 
     #[error("Gltf import failed{}: {0}", .1.as_ref().map(|path| format!(" for {:?}", path)).unwrap_or_default())]
@@ -18,13 +18,13 @@ pub enum Error {
     #[error("Failed to create window")]
     WindowCreation,
 
-    #[error(transparent)]
+    #[error("Graphics resource error")]
     ResourceError(#[from] ivy_resources::Error),
 
-    #[error(transparent)]
+    #[error("Graphics component fetch error")]
     ComponentError(#[from] hecs::ComponentError),
 
-    #[error(transparent)]
+    #[error("UI entity query error")]
     NoSuchEntity(#[from] hecs::NoSuchEntity),
 
     #[error("Failed to pack rectangles for texture atlas of size: {0:?}")]

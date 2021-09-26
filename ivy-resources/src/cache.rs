@@ -1,4 +1,4 @@
-use crate::Result;
+use crate::{LoadResource, Resources, Result};
 use std::any::type_name;
 
 use slotmap::SlotMap;
@@ -17,10 +17,7 @@ pub struct ResourceCache<T> {
 
 impl<T: 'static + Sized> ResourceCache<T> {
     pub fn new() -> Self {
-        Self {
-            slots: SlotMap::with_key(),
-            default: Handle::null(),
-        }
+        Default::default()
     }
 
     // Inserts a new resource into the cache.
@@ -117,8 +114,25 @@ impl<T: 'static + Sized> ResourceCache<T> {
     }
 }
 
+impl<T, I, E> ResourceCache<T>
+where
+    T: 'static + LoadResource<Info = I, Error = E>,
+{
+    /// Attempts to load and insert a resource from the given create info. If
+    /// info from the same info already exists, it will be returned. This means
+    /// the load function has to be injective over `info`.
+    pub fn load(&mut self, resources: &Resources, info: I) -> std::result::Result<Handle<T>, E> {
+        let resource = T::load(resources, &info)?;
+        Ok(self.insert(resource))
+    }
+}
+
 impl<T: 'static + Sized> Default for ResourceCache<T> {
     fn default() -> Self {
-        Self::new()
+        Self {
+            slots: SlotMap::with_key(),
+            // info_map: HashMap::new(),
+            default: Handle::null(),
+        }
     }
 }

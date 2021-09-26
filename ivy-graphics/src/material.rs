@@ -1,12 +1,20 @@
-use std::{slice, sync::Arc};
+use std::{borrow::Cow, slice, sync::Arc};
 
-use crate::Result;
+use crate::{Error, Result};
 use ash::vk::{DescriptorSet, ShaderStageFlags};
-use ivy_resources::{Handle, Resources};
+use ivy_resources::{Handle, LoadResource, Resources};
 use ivy_vulkan::{
     descriptors::{DescriptorBuilder, IntoSet},
-    Buffer, Sampler, Texture, VulkanContext,
+    Buffer, Sampler, SamplerInfo, Texture, VulkanContext,
 };
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct MaterialInfo {
+    pub albedo: Cow<'static, str>,
+    pub sampler: SamplerInfo,
+    pub roughness: f32,
+    pub metallic: f32,
+}
 
 /// A material contains shader properties such as albedo and other parameters. A material does not
 /// define the graphics pipeline nor shaders as that is per pass dependent.
@@ -59,25 +67,30 @@ impl Material {
         })
     }
 
+    #[inline]
     pub fn albedo(&self) -> Handle<Texture> {
         self.albedo
     }
 
+    #[inline]
     pub fn sampler(&self) -> Handle<Sampler> {
         self.sampler
     }
 
     /// Get the material's roughness.
+    #[inline]
     pub fn roughness(&self) -> f32 {
         self.roughness
     }
 
     /// Get the material's metallic.
+    #[inline]
     pub fn metallic(&self) -> f32 {
         self.metallic
     }
 
     /// Get a reference to the material's buffer.
+    #[inline]
     pub fn buffer(&self) -> &Buffer {
         &self.buffer
     }
@@ -97,4 +110,26 @@ impl IntoSet for Material {
 struct MaterialData {
     roughness: f32,
     metallic: f32,
+}
+
+impl LoadResource for Material {
+    type Info = MaterialInfo;
+
+    type Error = Error;
+
+    fn load(resources: &Resources, info: &Self::Info) -> Result<Self>
+    {
+        let context = resources.get_default::<Arc<VulkanContext>>()?;
+        let sampler: Handle<Sampler> = resources.load(info.sampler)??;
+        let albedo = resources.load(info.albedo.clone())??;
+
+        Self::new(
+            context.clone(),
+            resources,
+            albedo,
+            sampler,
+            info.roughness,
+            info.metallic,
+        )
+    }
 }

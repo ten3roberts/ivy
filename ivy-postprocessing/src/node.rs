@@ -35,7 +35,7 @@ impl<Pass: 'static + ShaderPass> PostProcessingNode<Pass> {
     ) -> Result<Self> {
         let sampler = Sampler::new(
             context.clone(),
-            SamplerInfo {
+            &SamplerInfo {
                 address_mode: vk::SamplerAddressMode::CLAMP_TO_EDGE,
                 mag_filter: vk::Filter::LINEAR,
                 min_filter: vk::Filter::LINEAR,

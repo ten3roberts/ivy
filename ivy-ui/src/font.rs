@@ -1,13 +1,14 @@
 use crate::{Error, Result};
 use fontdue::Metrics;
 use ivy_graphics::{NormalizedRect, Rect, TextureAtlas};
-use ivy_resources::{Handle, Resources};
+use ivy_resources::{Handle, LoadResource, Resources};
 use ivy_vulkan::{
     descriptors::{DescriptorBuilder, DescriptorSet, IntoSet},
     vk::ShaderStageFlags,
-    Extent, Format, ImageUsage, SampleCountFlags, Sampler, TextureInfo, VulkanContext,
+    AddressMode, Extent, FilterMode, Format, ImageUsage, SampleCountFlags, Sampler, SamplerInfo,
+    TextureInfo, VulkanContext,
 };
-use std::{collections::BTreeMap, ops::Range, path::Path, sync::Arc};
+use std::{borrow::Cow, collections::BTreeMap, ops::Range, path::Path, sync::Arc};
 
 pub struct FontInfo {
     // The most optimal pixel size for the rasterized font.
@@ -172,5 +173,40 @@ impl IntoSet for Font {
 
     fn sets(&self) -> &[DescriptorSet] {
         std::slice::from_ref(&self.set)
+    }
+}
+
+fn nearest_power_2(val: u32) -> u32 {
+    let mut result = 1;
+    while result < val {
+        result *= 2;
+    }
+    result
+}
+
+impl LoadResource for Font {
+    type Info = (FontInfo, Cow<'static, str>);
+
+    type Error = Error;
+
+    fn load(resources: &Resources, info: &Self::Info) -> Result<Self> {
+        let context = resources.get_default::<Arc<VulkanContext>>()?;
+
+        let sampler = resources.load(SamplerInfo {
+            address_mode: AddressMode::CLAMP_TO_BORDER,
+            mag_filter: FilterMode::LINEAR,
+            min_filter: FilterMode::LINEAR,
+            unnormalized_coordinates: false,
+            anisotropy: 0.0,
+            mip_levels: 1,
+        })??;
+
+        Self::new(
+            context.clone(),
+            resources,
+            info.1.as_ref(),
+            sampler,
+            &info.0,
+        )
     }
 }

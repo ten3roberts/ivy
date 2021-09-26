@@ -619,6 +619,7 @@ dependencies = [
  "glfw",
  "gpu-allocator",
  "ivy-image",
+ "ivy-resources",
  "log",
  "parking_lot",
  "smallvec",

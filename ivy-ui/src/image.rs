@@ -1,11 +1,11 @@
-use std::slice;
+use std::{borrow::Cow, ops::Deref, slice, sync::Arc};
 
-use crate::Result;
-use ivy_resources::{Handle, Resources};
+use crate::{Error, Result};
+use ivy_resources::{Handle, LoadResource, Resources};
 use ivy_vulkan::{
     descriptors::{DescriptorBuilder, DescriptorSet, IntoSet},
     vk::ShaderStageFlags,
-    Sampler, Texture, VulkanContext,
+    Sampler, SamplerInfo, Texture, VulkanContext,
 };
 
 /// A GUI image component containing a texture and associated sampler. The attached widget
@@ -57,5 +57,25 @@ impl IntoSet for Image {
 
     fn sets(&self) -> &[DescriptorSet] {
         slice::from_ref(&self.set)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ImageInfo {
+    pub texture: Cow<'static, str>,
+    pub sampler: SamplerInfo,
+}
+
+impl LoadResource for Image {
+    type Info = ImageInfo;
+
+    type Error = Error;
+
+    fn load(resources: &Resources, info: &Self::Info) -> Result<Self> {
+        let context = resources.get_default::<Arc<VulkanContext>>()?;
+        let texture = resources.load(info.texture.clone())??;
+        let sampler = resources.load(info.sampler)??;
+
+        Self::new(context.deref(), resources, texture, sampler)
     }
 }

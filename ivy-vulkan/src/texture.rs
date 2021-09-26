@@ -4,6 +4,8 @@ use crate::{Buffer, BufferAccess};
 use ash::vk::{ImageAspectFlags, ImageView, SharingMode};
 use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc};
 use gpu_allocator::MemoryLocation;
+use ivy_resources::LoadResource;
+use std::borrow::Cow;
 use std::ops::Deref;
 use std::{path::Path, sync::Arc};
 
@@ -28,6 +30,19 @@ pub struct TextureInfo {
     /// The pixel format.
     pub format: Format,
     pub samples: SampleCountFlags,
+}
+
+impl TextureInfo {
+    /// Returns a texture info most suitable for a sampled color texture with
+    /// the supplied extent using mipmapping.
+    pub fn color(extent: Extent) -> Self {
+        TextureInfo {
+            extent,
+            usage: ImageUsage::TRANSFER_DST | ImageUsage::TRANSFER_SRC | ImageUsage::SAMPLED,
+            mip_levels: calculate_mip_levels(extent),
+            ..Default::default()
+        }
+    }
 }
 
 impl Default for TextureInfo {
@@ -67,15 +82,7 @@ impl Texture {
 
         let extent = (image.width(), image.height()).into();
 
-        let texture = Self::new(
-            context,
-            &TextureInfo {
-                extent,
-                usage: ImageUsage::TRANSFER_DST | ImageUsage::TRANSFER_SRC | ImageUsage::SAMPLED,
-                mip_levels: calculate_mip_levels(extent),
-                ..Default::default()
-            },
-        )?;
+        let texture = Self::new(context, &TextureInfo::color(extent))?;
 
         let size = image.width() as u64 * image.height() as u64 * 4;
 
@@ -546,5 +553,16 @@ impl DescriptorBindable for CombinedImageSampler {
         builder: &'a mut crate::descriptors::DescriptorBuilder,
     ) -> Result<&'a mut crate::descriptors::DescriptorBuilder> {
         Ok(builder.bind_combined_image_sampler(binding, stage, self.image, self.sampler))
+    }
+}
+
+impl LoadResource for Texture {
+    type Info = Cow<'static, str>;
+
+    type Error = Error;
+
+    fn load(resources: &ivy_resources::Resources, path: &Self::Info) -> Result<Self> {
+        let context = resources.get_default::<Arc<VulkanContext>>()?;
+        Self::load(context.clone(), path.as_ref())
     }
 }

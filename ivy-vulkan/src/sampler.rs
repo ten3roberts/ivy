@@ -1,9 +1,10 @@
 use crate::descriptors::DescriptorBindable;
-use crate::{Result, Texture, VulkanContext};
+use crate::{Error, Result, Texture, VulkanContext};
 use std::sync::Arc;
 
 use ash::vk;
 
+use ivy_resources::LoadResource;
 // Re-export enums
 pub use vk::Filter as FilterMode;
 pub use vk::SamplerAddressMode as AddressMode;
@@ -27,6 +28,19 @@ pub struct SamplerInfo {
     pub mip_levels: u32,
 }
 
+impl Default for SamplerInfo {
+    fn default() -> Self {
+        Self {
+            address_mode: AddressMode::REPEAT,
+            mag_filter: FilterMode::LINEAR,
+            min_filter: FilterMode::NEAREST,
+            unnormalized_coordinates: false,
+            anisotropy: 16.0,
+            mip_levels: 4,
+        }
+    }
+}
+
 pub struct Sampler {
     context: Arc<VulkanContext>,
     sampler: vk::Sampler,
@@ -34,7 +48,7 @@ pub struct Sampler {
 
 impl Sampler {
     // Creates a new sampler from the specified sampling options
-    pub fn new(context: Arc<VulkanContext>, info: SamplerInfo) -> Result<Self> {
+    pub fn new(context: Arc<VulkanContext>, info: &SamplerInfo) -> Result<Self> {
         let max_anisotropy = info.anisotropy.max(context.limits().max_sampler_anisotropy);
         let anisotropy_enable = if max_anisotropy > 1.0 {
             vk::TRUE
@@ -111,5 +125,16 @@ impl DescriptorBindable for (Texture, Sampler) {
         builder: &'a mut crate::descriptors::DescriptorBuilder,
     ) -> Result<&'a mut crate::descriptors::DescriptorBuilder> {
         Ok(builder.bind_combined_image_sampler(binding, stage, &self.0, &self.1))
+    }
+}
+
+impl LoadResource for Sampler {
+    type Info = SamplerInfo;
+
+    type Error = Error;
+
+    fn load(resources: &ivy_resources::Resources, info: &Self::Info) -> Result<Self> {
+        let context = resources.get_default::<Arc<VulkanContext>>()?;
+        Self::new(context.clone(), info)
     }
 }
