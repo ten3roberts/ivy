@@ -16,6 +16,18 @@ pub struct MaterialInfo {
     pub metallic: f32,
 }
 
+// Roughness or metallic should not be inf or nan
+impl Eq for MaterialInfo {}
+
+impl std::hash::Hash for MaterialInfo {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.albedo.hash(state);
+        self.sampler.hash(state);
+        ((self.roughness * 100.0) as usize).hash(state);
+        ((self.metallic * 100.0) as usize).hash(state);
+    }
+}
+
 /// A material contains shader properties such as albedo and other parameters. A material does not
 /// define the graphics pipeline nor shaders as that is per pass dependent.
 pub struct Material {
@@ -117,8 +129,7 @@ impl LoadResource for Material {
 
     type Error = Error;
 
-    fn load(resources: &Resources, info: &Self::Info) -> Result<Self>
-    {
+    fn load(resources: &Resources, info: &Self::Info) -> Result<Self> {
         let context = resources.get_default::<Arc<VulkanContext>>()?;
         let sampler: Handle<Sampler> = resources.load(info.sampler)??;
         let albedo = resources.load(info.albedo.clone())??;

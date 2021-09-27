@@ -10,7 +10,7 @@ pub use vk::Filter as FilterMode;
 pub use vk::SamplerAddressMode as AddressMode;
 
 /// Specification dictating how a sampler is created
-#[derive(Hash, PartialEq, Eq, Debug, Copy, Clone)]
+#[derive(PartialEq, Debug, Copy, Clone)]
 pub struct SamplerInfo {
     pub address_mode: vk::SamplerAddressMode,
     /// Filter mode used for undersampling when there are fewer texels than pixels,
@@ -23,9 +23,23 @@ pub struct SamplerInfo {
     pub unnormalized_coordinates: bool,
     /// From 1.0 to 16.0
     /// Anisotropy is automatically disabled if value is set to 1.0
-    pub anisotropy: i32,
+    pub anisotropy: f32,
     /// Number of mipmapping levels to use
     pub mip_levels: u32,
+}
+
+// Anisotropy should not be inf or nan
+impl Eq for SamplerInfo {}
+
+impl std::hash::Hash for SamplerInfo {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.address_mode.hash(state);
+        self.mag_filter.hash(state);
+        self.min_filter.hash(state);
+        self.unnormalized_coordinates.hash(state);
+        ((self.anisotropy * 100.0) as usize).hash(state);
+        self.mip_levels.hash(state);
+    }
 }
 
 impl Default for SamplerInfo {
@@ -35,7 +49,7 @@ impl Default for SamplerInfo {
             mag_filter: FilterMode::LINEAR,
             min_filter: FilterMode::NEAREST,
             unnormalized_coordinates: false,
-            anisotropy: 16,
+            anisotropy: 16.0,
             mip_levels: 4,
         }
     }

@@ -526,14 +526,14 @@ impl VulkanLayer {
             ))
             .context("Failed to load font")??;
 
-        let material: Handle<Material> = resources.load_uncached(MaterialInfo {
+        let material: Handle<Material> = resources.load(MaterialInfo {
             albedo: "./res/textures/grid.png".into(),
             roughness: 0.3,
             metallic: 0.4,
             ..Default::default()
         })??;
 
-        let material2: Handle<Material> = resources.load_uncached(MaterialInfo {
+        let material2: Handle<Material> = resources.load(MaterialInfo {
             albedo: "./res/textures/uv.png".into(),
             roughness: 0.0,
             metallic: 0.9,
@@ -608,7 +608,7 @@ impl VulkanLayer {
 
         let mut rng = StdRng::seed_from_u64(42);
 
-        world.spawn_batch((0..10000).map(|_| {
+        world.spawn_batch((0..500).map(|_| {
             (
                 Position(Vec3::rand_sphere(&mut rng) * 100.0),
                 Rotation::default(),
