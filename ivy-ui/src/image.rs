@@ -60,7 +60,7 @@ impl IntoSet for Image {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Hash, Debug, Clone, PartialEq, Eq, Default)]
 pub struct ImageInfo {
     pub texture: Cow<'static, str>,
     pub sampler: SamplerInfo,

@@ -10,7 +10,7 @@ pub use vk::Filter as FilterMode;
 pub use vk::SamplerAddressMode as AddressMode;
 
 /// Specification dictating how a sampler is created
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Hash, PartialEq, Eq, Debug, Copy, Clone)]
 pub struct SamplerInfo {
     pub address_mode: vk::SamplerAddressMode,
     /// Filter mode used for undersampling when there are fewer texels than pixels,
@@ -23,7 +23,7 @@ pub struct SamplerInfo {
     pub unnormalized_coordinates: bool,
     /// From 1.0 to 16.0
     /// Anisotropy is automatically disabled if value is set to 1.0
-    pub anisotropy: f32,
+    pub anisotropy: i32,
     /// Number of mipmapping levels to use
     pub mip_levels: u32,
 }
@@ -35,7 +35,7 @@ impl Default for SamplerInfo {
             mag_filter: FilterMode::LINEAR,
             min_filter: FilterMode::NEAREST,
             unnormalized_coordinates: false,
-            anisotropy: 16.0,
+            anisotropy: 16,
             mip_levels: 4,
         }
     }
@@ -49,7 +49,7 @@ pub struct Sampler {
 impl Sampler {
     // Creates a new sampler from the specified sampling options
     pub fn new(context: Arc<VulkanContext>, info: &SamplerInfo) -> Result<Self> {
-        let max_anisotropy = info.anisotropy.max(context.limits().max_sampler_anisotropy);
+        let max_anisotropy = (info.anisotropy as f32).max(context.limits().max_sampler_anisotropy);
         let anisotropy_enable = if max_anisotropy > 1.0 {
             vk::TRUE
         } else {

@@ -1,8 +1,11 @@
 use crate::{
     cell::{Cell, CellRef, CellRefMut, Storage},
-    LoadResource, Result,
+    LoadResource, RefEntry, Result,
 };
-use std::{any::TypeId, collections::HashMap};
+use std::{
+    any::{type_name, TypeId},
+    collections::{hash_map::Entry, HashMap},
+};
 
 use parking_lot::{MappedRwLockWriteGuard, RwLock, RwLockWriteGuard};
 
@@ -81,12 +84,25 @@ impl Resources {
             .try_map(|cache| cache.get_or_default(handle))
     }
 
-    /// Returns the resource by handle, or the default is the handle is invalid.
-    /// Note: The function still may fail to acquire a resource if the default is null
-    #[inline]
-    pub fn get_or_default_mut<T: Storage>(&self, handle: Handle<T>) -> Result<CellRefMut<T>> {
-        self.fetch_mut::<T>()?
-            .try_map(|cache| cache.get_or_default_mut(handle))
+    /// Mimics the entry api of HashMap.
+    pub fn entry<'a, T: Storage>(&'a self, handle: Handle<T>) -> Result<RefEntry<'a, T>> {
+        let cache = self.fetch_mut()?;
+        if let Ok(_) = cache.get(handle) {
+            Ok(RefEntry::Occupied(cache, handle))
+        } else {
+            Ok(RefEntry::Vacant(cache))
+        }
+    }
+
+    /// Entry api for the default key if it may or may not exist.
+    pub fn default_entry<'a, T: Storage>(&'a self) -> Result<RefEntry<'a, T>> {
+        let cache = self.fetch_mut()?;
+        let default = cache.default();
+        if let Ok(_) = cache.get(default) {
+            Ok(RefEntry::Occupied(cache, default))
+        } else {
+            Ok(RefEntry::Vacant(cache))
+        }
     }
 
     /// Returns a mutable reference to the resource pointed to by Handle<T>. Equivalent to using
@@ -149,16 +165,46 @@ impl Resources {
                 .or_insert_with(|| Cell::new(ResourceCache::<T>::new()))
         })
     }
+
     /// Attempts to load and insert a resource from the given create info. If
     /// info from the same info already exists, it will be returned. This means
     /// the load function has to be injective over `info`.
     pub fn load<T, I, E, G>(&self, info: G) -> Result<std::result::Result<Handle<T>, E>>
     where
         G: Into<I>,
+        I: std::hash::Hash + Eq + Storage,
+        T: Storage + LoadResource<Info = I, Error = E>,
+    {
+        let mut info_cache: CellRefMut<InfoCache<I, T>> = self
+            .default_entry()?
+            .or_insert_with(|| InfoCache(HashMap::new()));
+
+        let info = info.into();
+
+        match info_cache.0.entry(info) {
+            Entry::Occupied(entry) => {
+                println!("Deduplicated: {:?}", type_name::<T>());
+                Ok(Ok(*entry.get()))
+            }
+            Entry::Vacant(entry) => {
+                let val = match self.fetch_mut::<T>()?.load(self, entry.key()) {
+                    Ok(val) => val,
+                    Err(e) => return Ok(Err(e)),
+                };
+                Ok(Ok(*entry.insert(val)))
+            }
+        }
+    }
+
+    /// Attempts to load and insert a resource from the given create info.
+    pub fn load_uncached<T, I, E, G>(&self, info: G) -> Result<std::result::Result<Handle<T>, E>>
+    where
+        G: Into<I>,
         T: Storage + LoadResource<Info = I, Error = E>,
     {
         let info = info.into();
-        self.fetch_mut::<T>().map(|mut val| val.load(self, info))
+
+        self.fetch_mut::<T>().map(|mut val| val.load(self, &info))
     }
 }
 
@@ -167,3 +213,5 @@ impl Default for Resources {
         Self::new()
     }
 }
+
+struct InfoCache<I, T>(HashMap<I, Handle<T>>);

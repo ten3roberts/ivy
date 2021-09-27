@@ -40,7 +40,7 @@ impl<Pass: 'static + ShaderPass> PostProcessingNode<Pass> {
                 mag_filter: vk::Filter::LINEAR,
                 min_filter: vk::Filter::LINEAR,
                 unnormalized_coordinates: false,
-                anisotropy: 16.0,
+                anisotropy: 16,
                 mip_levels: 1,
             },
         )?;

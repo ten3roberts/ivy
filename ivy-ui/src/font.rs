@@ -10,9 +10,10 @@ use ivy_vulkan::{
 };
 use std::{borrow::Cow, collections::BTreeMap, ops::Range, path::Path, sync::Arc};
 
+#[derive(Hash, PartialEq, Eq, Debug, Clone)]
 pub struct FontInfo {
     // The most optimal pixel size for the rasterized font.
-    pub size: f32,
+    pub size: u32,
     pub glyphs: Range<char>,
     pub padding: u32,
     pub mip_levels: u32,
@@ -21,7 +22,7 @@ pub struct FontInfo {
 impl Default for FontInfo {
     fn default() -> Self {
         Self {
-            size: 36.0,
+            size: 36,
             glyphs: 0 as char..128 as char,
             padding: 5,
             mip_levels: 1,
@@ -92,7 +93,7 @@ impl Font {
 
         Ok(Self {
             atlas,
-            size: info.size,
+            size: info.size as f32,
             metrics,
             set,
         })
@@ -105,11 +106,13 @@ impl Font {
         let mut max_width = 0;
         let mut glyph_count = 0;
 
+        let size = info.size as f32;
+
         let (a, b) = info
             .glyphs
             .clone()
             .filter_map(|c| {
-                let (metrics, pixels) = font.rasterize(c, info.size);
+                let (metrics, pixels) = font.rasterize(c, size);
 
                 max_width = metrics.width.max(max_width);
 
@@ -197,7 +200,7 @@ impl LoadResource for Font {
             mag_filter: FilterMode::LINEAR,
             min_filter: FilterMode::LINEAR,
             unnormalized_coordinates: false,
-            anisotropy: 0.0,
+            anisotropy: 0,
             mip_levels: 1,
         })??;
 

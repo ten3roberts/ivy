@@ -1,4 +1,4 @@
-use crate::{LoadResource, Resources, Result};
+use crate::{entry::Entry, LoadResource, Resources, Result};
 use std::any::type_name;
 
 use slotmap::SlotMap;
@@ -32,6 +32,21 @@ impl<T: 'static + Sized> ResourceCache<T> {
         }
 
         handle
+    }
+
+    // Inserts a new resource into the cache.
+    // If the cache is empty, the default is set to the first inserted value.
+    // Returns a reference to the new value.
+    #[inline]
+    pub fn insert_get(&mut self, value: T) -> &mut T {
+        let handle = self.slots.insert(value);
+
+        // Set the default to the first inserted value
+        if self.slots.len() == 1 {
+            self.default = handle;
+        }
+
+        &mut self.slots[handle]
     }
 
     // Inserts a new resource into the cache and marks it as the default
@@ -70,14 +85,18 @@ impl<T: 'static + Sized> ResourceCache<T> {
         self.get(handle).or_else(|_| self.get_default())
     }
 
-    /// Returns the resource by handle, or the default is the handle is invalid.
-    /// Note: The function still may fail to acquire a resource if the default is null
-    pub fn get_or_default_mut(&mut self, handle: Handle<T>) -> Result<&mut T> {
-        if self.slots.contains_key(handle) {
-            Ok(self.slots.get_mut(handle).unwrap())
+    /// Mimics the entry api of HashMap.
+    pub fn entry<'a>(&'a mut self, handle: Handle<T>) -> Entry<'a, T> {
+        if let Some(_) = self.slots.get(handle) {
+            Entry::Occupied(self, handle)
         } else {
-            self.get_default_mut()
+            Entry::Vacant(self)
         }
+    }
+
+    /// Entry api for the default key if it may or may not exist.
+    pub fn default_entry<'a>(&'a mut self) -> Entry<'a, T> {
+        self.entry(self.default)
     }
 
     // Returns the handle to the default resource stored in this cache.
@@ -121,8 +140,8 @@ where
     /// Attempts to load and insert a resource from the given create info. If
     /// info from the same info already exists, it will be returned. This means
     /// the load function has to be injective over `info`.
-    pub fn load(&mut self, resources: &Resources, info: I) -> std::result::Result<Handle<T>, E> {
-        let resource = T::load(resources, &info)?;
+    pub fn load(&mut self, resources: &Resources, info: &I) -> std::result::Result<Handle<T>, E> {
+        let resource = T::load(resources, info)?;
         Ok(self.insert(resource))
     }
 }
