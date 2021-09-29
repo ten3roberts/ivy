@@ -21,7 +21,7 @@ pub enum Error {
     ResourceError(#[from] ivy_resources::Error),
 
     #[error("Specified glyph {0:?} does not exists in the rasterized font")]
-    MissingGlyph(char),
+    MissingGlyph(u16),
 
     #[error("UI component fetch error: {0}")]
     ComponentError(#[from] hecs::ComponentError),

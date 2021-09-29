@@ -1,5 +1,4 @@
 use crate::{Error, Result};
-use fontdue::Metrics;
 use ivy_graphics::{NormalizedRect, Rect, TextureAtlas};
 use ivy_resources::{Handle, LoadResource, Resources};
 use ivy_vulkan::{
@@ -8,22 +7,33 @@ use ivy_vulkan::{
     AddressMode, Extent, FilterMode, Format, ImageUsage, SampleCountFlags, Sampler, SamplerInfo,
     TextureInfo, VulkanContext,
 };
-use std::{borrow::Cow, collections::BTreeMap, ops::Range, path::Path, sync::Arc};
+use std::{borrow::Cow, ops::Range, path::Path, sync::Arc};
 
-#[derive(Hash, PartialEq, Eq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct FontInfo {
     // The most optimal pixel size for the rasterized font.
-    pub size: u32,
+    pub size: f32,
     pub glyphs: Range<char>,
     pub padding: u32,
     pub mip_levels: u32,
 }
 
+impl Eq for FontInfo {}
+
+impl std::hash::Hash for FontInfo {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        ((self.size * 100.0) as u32).hash(state);
+        self.glyphs.hash(state);
+        self.padding.hash(state);
+        self.mip_levels.hash(state);
+    }
+}
+
 impl Default for FontInfo {
     fn default() -> Self {
         Self {
-            size: 36,
-            glyphs: 0 as char..128 as char,
+            size: 36.0,
+            glyphs: 32 as char..128 as char,
             padding: 5,
             mip_levels: 1,
         }
@@ -31,9 +41,9 @@ impl Default for FontInfo {
 }
 
 pub struct Font {
-    atlas: TextureAtlas<char>,
+    atlas: TextureAtlas<u16>,
     size: f32,
-    metrics: BTreeMap<char, Metrics>,
+    font: fontdue::Font,
     set: DescriptorSet,
 }
 
@@ -53,18 +63,17 @@ impl Font {
         let font = fontdue::Font::from_bytes(&bytes[..], fontdue::FontSettings::default())
             .map_err(|e| Error::FontParsing(e))?;
 
-        let glyphs = Self::rasterize(&font, &info);
+        let images = Self::rasterize(&font, &info);
 
-        let metrics = glyphs.1.iter().cloned().collect::<BTreeMap<_, _>>();
-        let images = glyphs.2;
+        let glyph_count = info.glyphs.end as usize - info.glyphs.start as usize;
 
-        let avg_width = glyphs.0;
-        dbg!(avg_width);
+        let height = font
+            .vertical_line_metrics(info.size)
+            .map(|val| val.new_line_size)
+            .unwrap_or(info.size);
 
         let dimension = nearest_power_2(
-            (((info.glyphs.end as usize - info.glyphs.start as usize) as f32).sqrt()
-                * (avg_width + info.padding as f32))
-                .ceil() as u32,
+            ((glyph_count as f32).sqrt() * (height + info.padding as f32)).ceil() as u32,
         );
 
         let atlas = TextureAtlas::new(
@@ -93,30 +102,19 @@ impl Font {
 
         Ok(Self {
             atlas,
+            font,
             size: info.size as f32,
-            metrics,
             set,
         })
     }
 
-    fn rasterize(
-        font: &fontdue::Font,
-        info: &FontInfo,
-    ) -> (f32, Vec<(char, Metrics)>, Vec<(char, ivy_image::Image)>) {
-        let mut max_width = 0;
-        let mut glyph_count = 0;
-
+    fn rasterize(font: &fontdue::Font, info: &FontInfo) -> Vec<(u16, ivy_image::Image)> {
         let size = info.size as f32;
 
-        let (a, b) = info
-            .glyphs
+        info.glyphs
             .clone()
             .filter_map(|c| {
                 let (metrics, pixels) = font.rasterize(c, size);
-
-                max_width = metrics.width.max(max_width);
-
-                glyph_count += 1;
 
                 let image = ivy_image::Image::new(
                     metrics.width as _,
@@ -125,47 +123,38 @@ impl Font {
                     pixels.into_boxed_slice(),
                 );
 
-                Some(((c, metrics), (c, image)))
-            })
-            .unzip();
+                let idx = font.lookup_glyph_index(c) as u16;
 
-        (max_width as f32, a, b)
+                Some((idx, image))
+            })
+            .collect()
     }
 
     /// Get a reference to the font's atlas.
-    pub fn atlas(&self) -> &TextureAtlas<char> {
+    pub fn atlas(&self) -> &TextureAtlas<u16> {
         &self.atlas
     }
 
-    pub fn get(&self, glyph: char) -> Result<(&Metrics, Rect)> {
-        Ok((
-            self.metrics()
-                .get(&glyph)
-                .ok_or(Error::MissingGlyph(glyph))?,
-            self.atlas
-                .get(&glyph)
-                .map_err(|_| Error::MissingGlyph(glyph))?,
-        ))
+    pub fn get(&self, glyph: u16) -> Result<Rect> {
+        self.atlas
+            .get(&glyph)
+            .map_err(|_| Error::MissingGlyph(glyph))
     }
 
-    pub fn get_normalized(&self, glyph: char) -> Result<(&Metrics, NormalizedRect)> {
-        Ok((
-            self.metrics()
-                .get(&glyph)
-                .ok_or(Error::MissingGlyph(glyph))?,
-            self.atlas
-                .get_normalized(&glyph)
-                .map_err(|_| Error::MissingGlyph(glyph))?,
-        ))
-    }
-    /// Get a reference to the font's metrics.
-    pub fn metrics(&self) -> &BTreeMap<char, Metrics> {
-        &self.metrics
+    pub fn get_normalized(&self, glyph: u16) -> Result<NormalizedRect> {
+        self.atlas
+            .get_normalized(&glyph)
+            .map_err(|_| Error::MissingGlyph(glyph))
     }
 
     /// Returs the base glyph size.
     pub fn size(&self) -> f32 {
         self.size
+    }
+
+    /// Get a reference to the font's font.
+    pub fn font(&self) -> &fontdue::Font {
+        &self.font
     }
 }
 

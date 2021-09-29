@@ -336,7 +336,7 @@ fn setup_ui(
             font,
             Text::new("Ivy"),
             text_pass,
-            RelativeOffset::new(-0.3, -0.7),
+            RelativeOffset::new(-0.5, -0.5),
             RelativeSize::new(0.3, 0.3),
         ),
     )?;
@@ -519,7 +519,7 @@ impl VulkanLayer {
         let font: Handle<Font> = resources
             .load((
                 FontInfo {
-                    size: 128,
+                    size: 128.0,
                     ..Default::default()
                 },
                 "./res/fonts/Lora/Lora-VariableFont_wght.ttf".into(),
