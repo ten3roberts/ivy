@@ -1,5 +1,6 @@
 use derive_for::*;
 use derive_more::*;
+pub use fontdue::layout::{HorizontalAlign, VerticalAlign};
 use ultraviolet::Vec2;
 
 derive_for!(
@@ -44,3 +45,25 @@ impl Size2D {
 
 /// Marker type for UI and the UI hierarchy.
 pub struct Widget;
+
+#[derive(Clone, Copy, PartialEq)]
+pub struct TextAlignment {
+    pub horizontal: HorizontalAlign,
+    pub vertical: VerticalAlign,
+}
+
+impl Default for TextAlignment {
+    fn default() -> Self {
+        TextAlignment {
+            horizontal: HorizontalAlign::Left,
+            vertical: VerticalAlign::Top,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum WrapStyle {
+    Overflow,
+    Word,
+    Letter,
+}

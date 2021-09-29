@@ -320,10 +320,10 @@ fn setup_ui(
         (
             Widget,
             font,
-            Text::new("Hello, World!"),
+            Text::new(WrapStyle::Overflow, "Hello, World!"),
             text_pass,
             RelativeOffset::new(-1.0, 1.0),
-            RelativeSize::new(0.3, 0.3),
+            RelativeSize::new(1.0, 1.0),
         ),
     )?;
 
@@ -332,10 +332,10 @@ fn setup_ui(
         (
             Widget,
             font,
-            Text::new("Ivy"),
+            Text::new(WrapStyle::Word, "Ivy"),
             text_pass,
             RelativeOffset::new(-0.5, -0.5),
-            RelativeSize::new(0.3, 0.3),
+            RelativeSize::new(1.0, 1.0),
         ),
     )?;
 
@@ -344,10 +344,10 @@ fn setup_ui(
         (
             Widget,
             font,
-            Text::new("Lorem ipsum dolor sit amet."),
+            Text::new(WrapStyle::Word, "Lorem ipsum dolor sit amet."),
             text_pass,
             RelativeOffset::new(-0.3, 0.7),
-            RelativeSize::new(0.1, 0.1),
+            RelativeSize::new(1.0, 1.0),
         ),
     )?;
 

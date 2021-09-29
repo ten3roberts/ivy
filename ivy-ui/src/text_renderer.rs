@@ -12,11 +12,11 @@ use ivy_vulkan::{
 use std::{mem::size_of, sync::Arc};
 use ultraviolet::Mat4;
 
-use crate::Font;
 use crate::Result;
 use crate::Text;
 use crate::UIVertex;
-use crate::{components::Position2D, Error};
+use crate::{components::Position2D, Error, Size2D};
+use crate::{Font, TextAlignment};
 
 /// Attached to each text that has a part of the buffer reserved for its text
 /// mesh data. `len` and `block` refers to the number of quads allocated, not
@@ -165,26 +165,33 @@ impl TextRenderer {
         let vb = self.mesh.vertex_buffer().into();
 
         let dirty_texts = world
-            .query_mut::<(&mut Text, &Handle<Font>, &BufferAllocation)>()
+            .query_mut::<(
+                &mut Text,
+                &Handle<Font>,
+                &BufferAllocation,
+                &Size2D,
+                Option<&TextAlignment>,
+            )>()
             .into_iter()
-            .filter(|(_, (t, _, _))| t.dirty())
-            .flat_map(|(_, (text, font, block))| {
+            .filter(|(_, (t, _, _, s, _))| t.dirty() || t.old_bounds() != **s)
+            .flat_map(|(_, (text, font, block, size, align))| {
                 text.set_dirty(false);
 
-                let size = (text.len() * 4 * size_of::<UIVertex>()) as u64;
+                let bsize = (text.len() * 4 * size_of::<UIVertex>()) as u64;
 
                 let region = &[BufferCopy {
                     src_offset: offset,
                     dst_offset: block.offset as u64 * 4 * size_of::<UIVertex>() as u64,
-                    size,
+                    size: bsize,
                 }];
 
                 cmd.copy_buffer(sb, vb, region);
 
-                offset += size;
+                offset += bsize;
 
                 let font = fonts.get(*font).unwrap();
-                text.layout(font).unwrap()
+                text.layout(font, *size, align.cloned().unwrap_or_default())
+                    .unwrap()
             });
 
         let barrier = BufferMemoryBarrier {

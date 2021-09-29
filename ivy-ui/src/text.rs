@@ -1,7 +1,10 @@
 use std::borrow::Cow;
 
 use crate::Result;
-use fontdue::layout::{GlyphPosition, Layout, TextStyle};
+use crate::Size2D;
+use crate::TextAlignment;
+use crate::WrapStyle;
+use fontdue::layout::{self, GlyphPosition, Layout, TextStyle};
 use ivy_graphics::NormalizedRect;
 use ultraviolet::{Vec2, Vec3};
 
@@ -11,16 +14,20 @@ pub struct Text {
     str: Cow<'static, str>,
     layout: Layout,
     dirty: bool,
+    wrap: WrapStyle,
+    old_bounds: Size2D,
 }
 
 impl Text {
-    pub fn new<S: Into<Cow<'static, str>>>(str: S) -> Self {
+    pub fn new<S: Into<Cow<'static, str>>>(wrap: WrapStyle, str: S) -> Self {
         let layout = Layout::new(fontdue::layout::CoordinateSystem::PositiveYUp);
 
         Self {
             str: str.into(),
             layout,
             dirty: true,
+            wrap,
+            old_bounds: Size2D(Vec2::zero()),
         }
     }
 
@@ -54,19 +61,37 @@ impl Text {
         self.dirty = dirty;
     }
 
+    /// Gets the last laid out bounds.
+    pub fn old_bounds(&self) -> Size2D {
+        self.old_bounds
+    }
+
     /// Returns an iterator for layout out the text in quads
     pub fn layout<'a>(
         &mut self,
         font: &'a Font,
+        bounds: Size2D,
+        alignment: TextAlignment,
     ) -> Result<TextLayout<'a, std::slice::Iter<GlyphPosition>>> {
+        dbg!(bounds);
+        self.old_bounds = bounds;
+
         self.layout.reset(&fontdue::layout::LayoutSettings {
             x: 0.0,
             y: 0.0,
-            max_width: None,
+            max_width: if self.wrap == WrapStyle::Overflow {
+                None
+            } else {
+                Some(bounds.x)
+            },
             max_height: None,
-            horizontal_align: fontdue::layout::HorizontalAlign::Left,
-            vertical_align: fontdue::layout::VerticalAlign::Top,
-            wrap_style: fontdue::layout::WrapStyle::Word,
+            horizontal_align: alignment.horizontal,
+            vertical_align: alignment.vertical,
+            wrap_style: match self.wrap {
+                WrapStyle::Word => layout::WrapStyle::Word,
+                WrapStyle::Letter => layout::WrapStyle::Letter,
+                _ => layout::WrapStyle::Letter,
+            },
             wrap_hard_breaks: true,
         });
 
