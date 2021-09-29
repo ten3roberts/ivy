@@ -13,8 +13,8 @@ anyhow = "1.0.41"
 derive-for = "1.2.2"
 derive_more = "0.99"
 fontdue = "0.5.2"
-hecs = "0.5"
-hecs-hierarchy = "0.1"
+hecs = "0.6"
+hecs-hierarchy = "0.2"
 ivy-core = { path = "../ivy-core", version = "1.4" }
 ivy-graphics = { path = "../ivy-graphics", version = "1.7" }
 ivy-image = { path = "../ivy-image", version = "1.4" }

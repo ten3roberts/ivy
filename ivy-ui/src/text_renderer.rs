@@ -1,6 +1,5 @@
 use anyhow::Context;
 use hecs::{Query, World};
-use ivy_core::ModelMatrix;
 use ivy_graphics::{BaseRenderer, Mesh, Renderer};
 use ivy_rendergraph::Node;
 use ivy_resources::{Handle, Resources};
@@ -11,12 +10,13 @@ use ivy_vulkan::{
     Buffer, BufferAccess, BufferUsage, VulkanContext,
 };
 use std::{mem::size_of, sync::Arc};
+use ultraviolet::Mat4;
 
-use crate::Error;
 use crate::Font;
 use crate::Result;
 use crate::Text;
 use crate::UIVertex;
+use crate::{components::Position2D, Error};
 
 /// Attached to each text that has a part of the buffer reserved for its text
 /// mesh data. `len` and `block` refers to the number of quads allocated, not
@@ -293,21 +293,21 @@ impl Renderer for TextRenderer {
 #[repr(C, align(16))]
 #[derive(Debug, Clone, Copy)]
 struct ObjectData {
-    mvp: ModelMatrix,
+    mvp: Mat4,
     offset: u32,
     len: u32,
 }
 
 #[derive(Query)]
 struct ObjectDataQuery<'a> {
-    mvp: &'a ModelMatrix,
+    position: &'a Position2D,
     block: &'a BufferAllocation,
 }
 
 impl<'a> Into<ObjectData> for ObjectDataQuery<'a> {
     fn into(self) -> ObjectData {
         ObjectData {
-            mvp: *self.mvp,
+            mvp: Mat4::from_translation(self.position.xyz()),
             offset: self.block.offset,
             len: self.block.len,
         }

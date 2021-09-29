@@ -1,11 +1,10 @@
 use crate::*;
 use hecs::{Query, World};
-use ivy_core::ModelMatrix;
 use ivy_graphics::{BaseRenderer, Mesh, Renderer, ShaderPass};
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{commands::CommandBuffer, descriptors::*, vk::IndexType, VulkanContext};
 use std::sync::Arc;
-use ultraviolet::{Vec2, Vec3};
+use ultraviolet::{Mat4, Vec2, Vec3};
 
 /// A mesh renderer using vkCmdDrawIndirectIndexed and efficient batching.
 pub struct ImageRenderer {
@@ -105,17 +104,21 @@ impl Renderer for ImageRenderer {
 
 #[repr(C, align(16))]
 struct ObjectData {
-    mvp: ModelMatrix,
+    mvp: Mat4,
 }
 
 #[derive(Query)]
 struct ObjectDataQuery<'a> {
-    mvp: &'a ModelMatrix,
+    position: &'a Position2D,
+    size: &'a Size2D,
 }
 
 impl<'a> Into<ObjectData> for ObjectDataQuery<'a> {
     fn into(self) -> ObjectData {
-        ObjectData { mvp: *self.mvp }
+        ObjectData {
+            mvp: Mat4::from_translation(self.position.xyz())
+                * Mat4::from_nonuniform_scale(self.size.into_homogeneous_point()),
+        }
     }
 }
 

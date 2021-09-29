@@ -9,7 +9,7 @@ edition = "2018"
 [dependencies]
 anyhow = "1.0.40"
 flume = "0.10"
-hecs = "0.5"
+hecs = "0.6"
 ivy-core = { path = "../../ivy-core", version = "0.1.0" }
 log = "0.4"
 rand = "0.8"

@@ -1,59 +1,8 @@
 use hecs::World;
-use ivy_core::{ModelMatrix, Position, Rotation, Scale};
+use ivy_core::{Position, Rotation, Scale};
 use ultraviolet::Mat4;
 
 use crate::Camera;
-
-pub fn update_model_matrices(world: &mut World) {
-    let without = world
-        .query_mut::<(&Position,)>()
-        .without::<ModelMatrix>()
-        .into_iter()
-        .map(|(e, _)| e)
-        .collect::<Vec<_>>();
-
-    without
-        .iter()
-        .for_each(|e| world.insert_one(*e, ModelMatrix(Mat4::identity())).unwrap());
-
-    world
-        .query_mut::<(&mut ModelMatrix, &Position, &Rotation, &Scale)>()
-        .into_iter()
-        .for_each(|(_, (model, pos, rot, scale))| {
-            *model = ModelMatrix(
-                Mat4::from_translation(**pos)
-                    * Mat4::from_nonuniform_scale(**scale)
-                    * rot.into_matrix().into_homogeneous(),
-            );
-        });
-
-    world
-        .query_mut::<(&mut ModelMatrix, &Position)>()
-        .without::<Scale>()
-        .without::<Rotation>()
-        .into_iter()
-        .for_each(|(_, (model, pos))| {
-            *model = ModelMatrix(Mat4::from_translation(**pos));
-        });
-
-    world
-        .query_mut::<(&mut ModelMatrix, &Position, &Rotation)>()
-        .without::<Scale>()
-        .into_iter()
-        .for_each(|(_, (model, pos, rot))| {
-            *model =
-                ModelMatrix(Mat4::from_translation(**pos)) * rot.into_matrix().into_homogeneous();
-        });
-
-    world
-        .query_mut::<(&mut ModelMatrix, &Position, &Scale)>()
-        .without::<Rotation>()
-        .into_iter()
-        .for_each(|(_, (model, pos, scale))| {
-            *model =
-                ModelMatrix(Mat4::from_translation(**pos)) * Mat4::from_nonuniform_scale(**scale)
-        });
-}
 
 /// Updates the view matrix from camera [ `Position` ] and optional [ `Rotation` ]
 pub fn update_view_matrices(world: &World) {
@@ -71,4 +20,28 @@ pub fn update_view_matrices(world: &World) {
 
             camera.set_view(view);
         })
+}
+
+struct Satisfied;
+
+pub fn satisfy_objects(world: &mut World) {
+    let entities = 
+    world
+        .query_mut::<(Option<&Position>, Option<&Rotation>, Option<&Scale>)>()
+        .without::<Satisfied>()
+        .into_iter()
+        .map(|(e, (p, r, s))| (e, p.cloned(), r.cloned(), s.cloned()))
+        .collect::<Vec<_>>();
+
+    entities.into_iter().for_each(|(e, p, r, s)| {
+        let _ = world.insert(
+            e,
+            (
+                p.unwrap_or_default(),
+                r.unwrap_or_default(),
+                s.unwrap_or_default(),
+                Satisfied,
+            ),
+        );
+    })
 }

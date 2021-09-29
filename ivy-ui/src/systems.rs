@@ -1,7 +1,6 @@
 use crate::Result;
 use hecs::{Entity, World};
 use hecs_hierarchy::Hierarchy;
-use ivy_core::ModelMatrix;
 use ivy_graphics::Camera;
 use ultraviolet::Mat4;
 
@@ -86,18 +85,6 @@ pub fn update_canvas(world: &World, canvas: Entity) -> Result<()> {
     Ok(())
 }
 
-/// Updates model matrices for UI widgets
-pub fn update_model_matrices(world: &World) {
-    world
-        .query::<(&mut ModelMatrix, &Position2D, &Size2D)>()
-        .into_iter()
-        .for_each(|(_, (model, pos, size))| {
-            *model = ModelMatrix(
-                Mat4::from_translation(pos.xyz()) * Mat4::from_nonuniform_scale(size.xyz()),
-            );
-        })
-}
-
 /// Satisfies all widget by adding missing ModelMatrices, Position2D and Size2D
 pub fn statisfy_widgets(world: &mut World) {
     let entities = world
@@ -111,7 +98,6 @@ pub fn statisfy_widgets(world: &mut World) {
         let _ = world.insert(
             e,
             (
-                ModelMatrix::default(),
                 Position2D::default(),
                 Size2D::default(),
                 WidgetDepth::default(),

@@ -8,7 +8,7 @@ edition = "2018"
 [dependencies]
 derive-for = "1.2.2"
 derive_more = "0.99"
-hecs = "0.5"
+hecs = "0.6"
 ivy-core = { path = "../ivy-core", version = "1.7" }
 thiserror = "1.0"
 ultraviolet = "0.8"

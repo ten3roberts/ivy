@@ -1,10 +1,11 @@
 use crate::{BaseRenderer, Error, Material, Mesh, Renderer, Result, ShaderPass};
 use ash::vk::{DescriptorSet, IndexType};
 use hecs::{Query, World};
-use ivy_core::ModelMatrix;
+use ivy_core::{Position, Rotation, Scale};
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{commands::CommandBuffer, descriptors::IntoSet, VulkanContext};
 use std::sync::Arc;
+use ultraviolet::Mat4;
 
 /// A mesh renderer using vkCmdDrawIndirectIndexed and efficient batching.
 pub struct MeshRenderer {
@@ -90,17 +91,23 @@ impl Renderer for MeshRenderer {
 
 #[repr(C, align(16))]
 struct ObjectData {
-    mvp: ModelMatrix,
+    mvp: Mat4,
 }
 
 #[derive(Query)]
 struct ObjectDataQuery<'a> {
-    mvp: &'a ModelMatrix,
+    position: &'a Position,
+    rotation: &'a Rotation,
+    scale: &'a Scale,
 }
 
 impl<'a> Into<ObjectData> for ObjectDataQuery<'a> {
     fn into(self) -> ObjectData {
-        ObjectData { mvp: *self.mvp }
+        ObjectData {
+            mvp: Mat4::from_translation(**self.position)
+                * self.rotation.into_matrix().into_homogeneous()
+                * Mat4::from_nonuniform_scale(**self.scale),
+        }
     }
 }
 

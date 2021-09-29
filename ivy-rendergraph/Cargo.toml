@@ -7,7 +7,7 @@ edition = "2018"
 
 [dependencies]
 anyhow = "1.0.40"
-hecs = "0.5"
+hecs = "0.6"
 itertools = "0.10"
 ivy-graphics = { path = "../ivy-graphics", version = "1.7" }
 ivy-resources = { path = "../ivy-resources", version = "1.4.0" }

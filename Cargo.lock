@@ -376,9 +376,9 @@ dependencies = [
 
 [[package]]
 name = "hecs"
-version = "0.5.2"
+version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ddd0e227c3f78ad06fcc590966b327a2f8fef03ef51812dad4fbff5b0a6424bd"
+checksum = "6e1ac53b75ff2c09dc427da621dd99609981f97142e82b4cb1fb25b60a2f6d41"
 dependencies = [
  "hashbrown 0.11.2",
  "hecs-macros",
@@ -387,18 +387,18 @@ dependencies = [
 
 [[package]]
 name = "hecs-hierarchy"
-version = "0.1.9"
+version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "861d8a1555faa0bfba483a3ad35af8827840a4a180919a836321c533efa0673b"
+checksum = "bb7cd37f9fbb1bac69145a7291222f9f088269f2b0e906f22d8b7561201f95d4"
 dependencies = [
  "hecs",
 ]
 
 [[package]]
 name = "hecs-macros"
-version = "0.6.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f300b05a713e29fd084473c475365c3941f78e9a5aeecd414dfb7f26e47fe7ba"
+checksum = "eb47f151d4d106da3bb17615b47ff7bf150aa49d28465444594b052a3a1000b0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -654,9 +654,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.102"
+version = "0.2.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a2a5ac8f984bfcf3a823267e5fde638acc3325f6496633a5da6bb6eb2171e103"
+checksum = "dd8f7255a17a627354f321ef0055d63b898c6fb27eff628af4d1b66b7331edf6"
 
 [[package]]
 name = "libloading"
@@ -1056,9 +1056,9 @@ dependencies = [
 
 [[package]]
 name = "smallvec"
-version = "1.6.1"
+version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe0f37c9e8f3c5a4a66ad655a93c74daac4ad00c441533bf5c6e7990bb42604e"
+checksum = "1ecab6c735a6bb4139c0caafd0cc3635748bbb3acf4550e8138122099251f309"
 
 [[package]]
 name = "spin"

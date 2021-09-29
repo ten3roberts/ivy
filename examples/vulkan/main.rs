@@ -235,11 +235,10 @@ impl Layer for LogicLayer {
 
             OverTime::<RelativeOffset>::update(world, dt);
 
+            graphics::systems::satisfy_objects(world);
             graphics::systems::update_view_matrices(world);
             physics::systems::integrate_angular_velocity_system(world, dt);
             physics::systems::integrate_velocity_system(world, dt);
-
-            ivy_graphics::systems::update_model_matrices(world);
 
             let canvas = world
                 .query::<(&Canvas, &Camera)>()
@@ -251,7 +250,6 @@ impl Layer for LogicLayer {
             ui::systems::statisfy_widgets(world);
             ui::systems::update_canvas(world, canvas)?;
             ui::systems::update(world)?;
-            ui::systems::update_model_matrices(world);
 
             self.acc -= self.timestep.secs();
         }

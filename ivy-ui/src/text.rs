@@ -98,15 +98,15 @@ impl<'a, I: Iterator<Item = &'a GlyphPosition>> Iterator for TextLayout<'a, I> {
             Err(_) => (NormalizedRect::default()),
         };
 
-        let size = self.font.size();
+        // let size = self.font.size();
 
-        let width = (glyph.width as i32) as f32 / size;
+        let width = (glyph.width as i32) as f32;
 
-        let x = glyph.x as f32 / size;
+        let x = glyph.x as f32;
 
-        let y = glyph.y as f32 / size;
+        let y = glyph.y as f32;
 
-        let height = glyph.height as f32 / size;
+        let height = glyph.height as f32;
 
         let uv_base = Vec2::new(location.x as f32, location.y as f32);
 
