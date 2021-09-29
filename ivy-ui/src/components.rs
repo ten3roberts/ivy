@@ -52,6 +52,15 @@ pub struct TextAlignment {
     pub vertical: VerticalAlign,
 }
 
+impl TextAlignment {
+    pub fn new(horizontal: HorizontalAlign, vertical: VerticalAlign) -> Self {
+        TextAlignment {
+            horizontal,
+            vertical,
+        }
+    }
+}
+
 impl Default for TextAlignment {
     fn default() -> Self {
         TextAlignment {
@@ -63,7 +72,16 @@ impl Default for TextAlignment {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum WrapStyle {
+    /// Text flows outside bounds.
     Overflow,
+    /// Text breaks at unicode word.
     Word,
+    /// Text breaks at the overflowing character.
     Letter,
+}
+
+impl Default for WrapStyle {
+    fn default() -> Self {
+        Self::Word
+    }
 }

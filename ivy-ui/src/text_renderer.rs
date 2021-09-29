@@ -15,8 +15,19 @@ use ultraviolet::Mat4;
 use crate::Result;
 use crate::Text;
 use crate::UIVertex;
+use crate::WrapStyle;
 use crate::{components::Position2D, Error, Size2D};
 use crate::{Font, TextAlignment};
+
+#[derive(Query)]
+struct TextQuery<'a> {
+    text: &'a mut Text,
+    font: &'a Handle<Font>,
+    block: &'a BufferAllocation,
+    bounds: &'a Size2D,
+    alignment: Option<&'a TextAlignment>,
+    wrap: Option<&'a WrapStyle>,
+}
 
 /// Attached to each text that has a part of the buffer reserved for its text
 /// mesh data. `len` and `block` refers to the number of quads allocated, not
@@ -165,32 +176,37 @@ impl TextRenderer {
         let vb = self.mesh.vertex_buffer().into();
 
         let dirty_texts = world
-            .query_mut::<(
-                &mut Text,
-                &Handle<Font>,
-                &BufferAllocation,
-                &Size2D,
-                Option<&TextAlignment>,
-            )>()
+            .query_mut::<TextQuery>()
             .into_iter()
-            .filter(|(_, (t, _, _, s, _))| t.dirty() || t.old_bounds() != **s)
-            .flat_map(|(_, (text, font, block, size, align))| {
-                text.set_dirty(false);
+            .filter(|(_, query)| {
+                query.text.dirty()
+                    || query.text.old_bounds() != *query.bounds
+                    || Some(&query.text.old_wrap()) != query.wrap
+            })
+            .flat_map(|(_, query)| {
+                query.text.set_dirty(false);
 
-                let bsize = (text.len() * 4 * size_of::<UIVertex>()) as u64;
+                let size = (query.text.len() * 4 * size_of::<UIVertex>()) as u64;
 
                 let region = &[BufferCopy {
                     src_offset: offset,
-                    dst_offset: block.offset as u64 * 4 * size_of::<UIVertex>() as u64,
-                    size: bsize,
+                    dst_offset: query.block.offset as u64 * 4 * size_of::<UIVertex>() as u64,
+                    size,
                 }];
 
                 cmd.copy_buffer(sb, vb, region);
 
-                offset += bsize;
+                offset += size;
 
-                let font = fonts.get(*font).unwrap();
-                text.layout(font, *size, align.cloned().unwrap_or_default())
+                let font = fonts.get(*query.font).unwrap();
+                query
+                    .text
+                    .layout(
+                        font,
+                        *query.bounds,
+                        query.wrap.cloned().unwrap_or_default(),
+                        query.alignment.cloned().unwrap_or_default(),
+                    )
                     .unwrap()
             });
 

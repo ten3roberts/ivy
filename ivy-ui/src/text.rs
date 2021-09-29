@@ -14,20 +14,20 @@ pub struct Text {
     str: Cow<'static, str>,
     layout: Layout,
     dirty: bool,
-    wrap: WrapStyle,
     old_bounds: Size2D,
+    old_wrap: WrapStyle,
 }
 
 impl Text {
-    pub fn new<S: Into<Cow<'static, str>>>(wrap: WrapStyle, str: S) -> Self {
+    pub fn new<S: Into<Cow<'static, str>>>(str: S) -> Self {
         let layout = Layout::new(fontdue::layout::CoordinateSystem::PositiveYUp);
 
         Self {
             str: str.into(),
             layout,
             dirty: true,
-            wrap,
             old_bounds: Size2D(Vec2::zero()),
+            old_wrap: WrapStyle::Word,
         }
     }
 
@@ -66,28 +66,35 @@ impl Text {
         self.old_bounds
     }
 
+    /// Gets the last laid out bounds.
+    pub fn old_wrap(&self) -> WrapStyle {
+        self.old_wrap
+    }
+
     /// Returns an iterator for layout out the text in quads
     pub fn layout<'a>(
         &mut self,
         font: &'a Font,
         bounds: Size2D,
+        wrap: WrapStyle,
         alignment: TextAlignment,
     ) -> Result<TextLayout<'a, std::slice::Iter<GlyphPosition>>> {
         dbg!(bounds);
         self.old_bounds = bounds;
+        self.old_wrap = wrap;
 
         self.layout.reset(&fontdue::layout::LayoutSettings {
-            x: 0.0,
-            y: 0.0,
-            max_width: if self.wrap == WrapStyle::Overflow {
+            x: -bounds.x,
+            y: bounds.y,
+            max_width: if wrap == WrapStyle::Overflow {
                 None
             } else {
-                Some(bounds.x)
+                Some(bounds.x * 2.0)
             },
-            max_height: None,
+            max_height: Some(bounds.y * 2.0),
             horizontal_align: alignment.horizontal,
             vertical_align: alignment.vertical,
-            wrap_style: match self.wrap {
+            wrap_style: match wrap {
                 WrapStyle::Word => layout::WrapStyle::Word,
                 WrapStyle::Letter => layout::WrapStyle::Letter,
                 _ => layout::WrapStyle::Letter,
@@ -127,9 +134,9 @@ impl<'a, I: Iterator<Item = &'a GlyphPosition>> Iterator for TextLayout<'a, I> {
 
         let width = (glyph.width as i32) as f32;
 
-        let x = glyph.x as f32;
+        let x = glyph.x as f32; //+ self.bounds.x / 2.0;
 
-        let y = glyph.y as f32;
+        let y = glyph.y as f32; //- self.bounds.y / 2.0;
 
         let height = glyph.height as f32;
 

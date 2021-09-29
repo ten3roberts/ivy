@@ -545,13 +545,8 @@ mod tests {
             }],
         );
 
-        let (ordered, depths) =
+        let (ordered, _depths) =
             topological_sort(&nodes, &edges).expect("Failed to build rendergraph");
-
-        let ordered_nodes = ordered
-            .iter()
-            .map(|node_idx| (nodes[*node_idx], depths[*node_idx]))
-            .collect::<Vec<_>>();
 
         assert_eq!(&ordered, &[d, b, a, c, e,]);
     }

@@ -320,9 +320,14 @@ fn setup_ui(
         (
             Widget,
             font,
-            Text::new(WrapStyle::Overflow, "Hello, World!"),
+            Text::new("Hello, World!"),
+            TextAlignment {
+                horizontal: HorizontalAlign::Center,
+                vertical: VerticalAlign::Middle,
+            },
+            WrapStyle::Word,
             text_pass,
-            RelativeOffset::new(-1.0, 1.0),
+            RelativeOffset::new(0.0, 0.0),
             RelativeSize::new(1.0, 1.0),
         ),
     )?;
@@ -332,9 +337,10 @@ fn setup_ui(
         (
             Widget,
             font,
-            Text::new(WrapStyle::Word, "Ivy"),
+            Text::new("Ivy"),
+            TextAlignment::new(HorizontalAlign::Center, VerticalAlign::Bottom),
             text_pass,
-            RelativeOffset::new(-0.5, -0.5),
+            RelativeOffset::new(0.0, 0.0),
             RelativeSize::new(1.0, 1.0),
         ),
     )?;
@@ -344,9 +350,10 @@ fn setup_ui(
         (
             Widget,
             font,
-            Text::new(WrapStyle::Word, "Lorem ipsum dolor sit amet."),
             text_pass,
-            RelativeOffset::new(-0.3, 0.7),
+            Text::new("Lorem ipsum dolor sit amet."),
+            TextAlignment::new(HorizontalAlign::Center, VerticalAlign::Top),
+            RelativeOffset::new(0.0, 0.0),
             RelativeSize::new(1.0, 1.0),
         ),
     )?;
