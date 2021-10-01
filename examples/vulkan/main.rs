@@ -62,6 +62,39 @@ where
     }
 }
 
+struct Periodic<T> {
+    func: Box<dyn Fn(Entity, &mut T, usize) + Send + Sync>,
+    clock: Clock,
+    period: Duration,
+    count: usize,
+}
+
+impl<T> Periodic<T>
+where
+    T: Component,
+{
+    fn new(period: Duration, func: Box<dyn Fn(Entity, &mut T, usize) + Send + Sync>) -> Self {
+        Self {
+            func,
+            period,
+            clock: Clock::new(),
+            count: 0,
+        }
+    }
+
+    fn update(world: &mut World) {
+        world
+            .query::<(&mut Self, &mut T)>()
+            .iter()
+            .for_each(|(e, (s, val))| {
+                if s.clock.elapsed() >= s.period {
+                    s.clock.reset();
+                    (s.func)(e, val, s.count);
+                    s.count += 1;
+                }
+            });
+    }
+}
 fn main() -> anyhow::Result<()> {
     Logger {
         show_location: true,
@@ -234,6 +267,7 @@ impl Layer for LogicLayer {
             *camera_pos += Position(camera_rot.into_matrix() * (movement * dt * self.cemra_speed));
 
             OverTime::<RelativeOffset>::update(world, dt);
+            Periodic::<Text>::update(world);
 
             graphics::systems::satisfy_objects(world);
             graphics::systems::update_view_matrices(world);
@@ -329,6 +363,12 @@ fn setup_ui(
             text_pass,
             RelativeOffset::new(0.0, 0.0),
             RelativeSize::new(1.0, 1.0),
+            Periodic::<Text>::new(
+                100.ms(),
+                Box::new(|_, text, count| {
+                    text.set(format!("Hello World:\n{:#b}", count));
+                }),
+            ),
         ),
     )?;
 
@@ -368,7 +408,7 @@ fn setup_ui(
                 *offset = RelativeOffset::new((elapsed).cos() * 4.0, elapsed.sin() * 2.0) * 0.5
             })),
             RelativeOffset::default(),
-            RelativeSize::new(0.4, 0.4),
+            RelativeSize::new(0.2, 0.2),
         ),
     )?;
 
@@ -475,7 +515,7 @@ impl VulkanLayer {
         resources.insert_default(TextRenderer::new(
             context.clone(),
             16,
-            128,
+            512,
             FRAMES_IN_FLIGHT,
         )?)?;
 

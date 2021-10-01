@@ -23,7 +23,7 @@ use crate::{Font, TextAlignment};
 struct TextQuery<'a> {
     text: &'a mut Text,
     font: &'a Handle<Font>,
-    block: &'a BufferAllocation,
+    block: &'a mut BufferAllocation,
     bounds: &'a Size2D,
     alignment: Option<&'a TextAlignment>,
     wrap: Option<&'a WrapStyle>,
@@ -116,8 +116,6 @@ impl TextRenderer {
 
     /// Allocates a contiguous block in the mesh
     fn allocate(&mut self, len: u32) -> Option<BufferAllocation> {
-        dbg!(&self.free);
-
         let (index, block) = self
             .free
             .iter_mut()
@@ -137,6 +135,39 @@ impl TextRenderer {
 
             block.len = len;
             Some(block)
+        }
+    }
+
+    fn free(&mut self, block: BufferAllocation) {
+        let index = self
+            .free
+            .iter()
+            .enumerate()
+            .find(|val| val.1.offset > block.offset)
+            .map(|val| val.0)
+            .unwrap_or(self.free.len());
+
+        if index != 0 && index != self.free.len() {
+            match &mut self.free[index - 1..=index] {
+                [a, b] => {
+                    if a.offset + a.len + block.len == b.offset {
+                        eprintln!("Merging both");
+                        a.len += block.len + b.len;
+                        self.free.remove(index);
+                    } else if a.offset + a.len == block.offset {
+                        eprintln!("Merging left");
+                        a.len += block.len;
+                    } else if block.offset + block.len == b.offset {
+                        eprintln!("Merging right");
+                        b.len += block.len;
+                        b.offset = block.len;
+                    } else {
+                        eprintln!("Inserting");
+                        self.free.insert(index, block);
+                    }
+                }
+                _ => unreachable!(),
+            }
         }
     }
 
@@ -169,6 +200,18 @@ impl TextRenderer {
         self.register_entities(world)?;
 
         let mut offset = 0;
+
+        world
+            .query_mut::<(&Text, &mut BufferAllocation)>()
+            .into_iter()
+            .for_each(|(_, (text, block))| {
+                // Reallocate to fit longer text
+                if text.len() as u32 > block.len {
+                    self.free(*block);
+                    *block = self.allocate(nearest_power_2(text.len() as u32)).unwrap();
+                    dbg!(block);
+                }
+            });
 
         let fonts = resources.fetch::<Font>()?;
         let staging_buffer = &mut self.staging_buffers[current_frame];
@@ -382,4 +425,12 @@ impl Node for TextUpdateNode {
             .update_dirty_texts(world, resources, cmd, current_frame)
             .context("Failed to update text")
     }
+}
+
+fn nearest_power_2(val: u32) -> u32 {
+    let mut result = 1;
+    while result < val {
+        result *= 2;
+    }
+    result
 }

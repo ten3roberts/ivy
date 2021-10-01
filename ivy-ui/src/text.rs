@@ -31,8 +31,12 @@ impl Text {
         }
     }
 
-    pub fn str(&self) -> &str {
+    pub fn val(&self) -> &str {
         self.str.as_ref()
+    }
+
+    pub fn val_mut(&mut self) -> &mut Cow<'static, str> {
+        &mut self.str
     }
 
     /// Sets the texts value. If str is differerent the dirty flag will be set.
@@ -79,7 +83,6 @@ impl Text {
         wrap: WrapStyle,
         alignment: TextAlignment,
     ) -> Result<TextLayout<'a, std::slice::Iter<GlyphPosition>>> {
-        dbg!(bounds);
         self.old_bounds = bounds;
         self.old_wrap = wrap;
 
