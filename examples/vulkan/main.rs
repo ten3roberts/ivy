@@ -95,12 +95,16 @@ where
             });
     }
 }
+
 fn main() -> anyhow::Result<()> {
     Logger {
         show_location: true,
         max_level: LevelFilter::Debug,
     }
     .install();
+
+    // Go up three levels
+    ivy_core::normalize_dir(3)?;
 
     let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS)?;
 
@@ -364,7 +368,7 @@ fn setup_ui(
             RelativeOffset::new(0.0, 0.0),
             RelativeSize::new(1.0, 1.0),
             Periodic::<Text>::new(
-                100.ms(),
+                10.ms(),
                 Box::new(|_, text, count| {
                     text.set(format!("Hello World:\n{:#b}", count));
                 }),

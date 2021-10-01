@@ -234,7 +234,6 @@ impl TextRenderer {
                 .into_iter()
                 .try_for_each(|(e, block)| world.insert_one(e, block))?;
         } else {
-            eprintln!("Resizing in insert");
             self.resize(world, nearest_power_2(self.glyph_count))?;
 
             return self.register_entities(world);

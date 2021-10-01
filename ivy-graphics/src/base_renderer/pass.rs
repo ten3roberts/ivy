@@ -104,8 +104,6 @@ impl<K: Key, Obj: 'static> PassData<K, Obj> {
 
         self.capacity = capacity;
 
-        println!("Resizing to: {}", capacity);
-
         self.object_buffers =
             Self::create_object_buffers(self.context.clone(), capacity, self.frames_in_flight)?;
 
