@@ -3,6 +3,7 @@ use hecs::{Query, World};
 use ivy_graphics::{BaseRenderer, Mesh, Renderer};
 use ivy_rendergraph::Node;
 use ivy_resources::{Handle, Resources};
+use ivy_vulkan::device;
 use ivy_vulkan::{
     commands::CommandBuffer,
     descriptors::IntoSet,
@@ -50,12 +51,17 @@ impl BufferAllocation {
 /// entity. TextUpdateNode needs to be added to rendergraph before as the text
 /// vertex data needs to be updated with a transfer.
 pub struct TextRenderer {
+    context: Arc<VulkanContext>,
     mesh: Mesh<UIVertex>,
     // Free contiguos blocks in mesh
     free: Vec<BufferAllocation>,
     /// The number of registered text objects
     staging_buffers: Vec<Buffer>,
     base_renderer: BaseRenderer<Key, ObjectData>,
+    glyph_capacity: u32,
+    /// The total number of glyphs
+    glyph_count: u32,
+    frames_in_flight: usize,
 }
 
 impl TextRenderer {
@@ -73,10 +79,14 @@ impl TextRenderer {
         let base_renderer = BaseRenderer::new(context.clone(), capacity, frames_in_flight)?;
 
         Ok(Self {
+            context,
             mesh,
             free: vec![BufferAllocation::new(glyph_capacity, 0)],
             staging_buffers,
             base_renderer,
+            glyph_capacity,
+            glyph_count: 0,
+            frames_in_flight,
         })
     }
 
@@ -171,21 +181,64 @@ impl TextRenderer {
         }
     }
 
+    fn resize(&mut self, world: &mut World, glyph_capacity: u32) -> Result<()> {
+        device::wait_idle(self.context.device())?;
+
+        // eprintln!(
+        //     "Resizing glyph_capacity from {} to {}",
+        //     self.glyph_capacity, glyph_capacity
+        // );
+
+        self.glyph_capacity = glyph_capacity;
+
+        self.mesh = Self::create_mesh(self.context.clone(), glyph_capacity)?;
+
+        self.staging_buffers = Self::create_staging_buffers(
+            self.context.clone(),
+            glyph_capacity,
+            self.frames_in_flight,
+        )?;
+
+        self.free = vec![BufferAllocation::new(glyph_capacity, 0)];
+
+        // Refit all blocks
+        world
+            .query_mut::<(&Text, &mut BufferAllocation)>()
+            .into_iter()
+            .for_each(|(_, (text, block))| {
+                *block = self
+                    .allocate(text.len() as u32)
+                    .expect("Cannot allocate after resize");
+            });
+
+        Ok(())
+    }
+
     /// Registers all unregistered entities capable of being rendered for specified pass. Does
     /// nothing if entities are already registered. Call this function after adding new entities to the world.
     /// # Failures
     /// Fails if object buffer cannot be reallocated to accomodate new entities.
     fn register_entities(&mut self, world: &mut World) -> Result<()> {
         let inserted = world
-            .query::<(&Text, &Handle<Font>)>()
+            .query::<&Text>()
             .without::<BufferAllocation>()
             .iter()
-            .map(|(e, (text, _))| (e, self.allocate(text.len() as u32).unwrap()))
-            .collect::<Vec<_>>();
+            .map(|(e, text)| {
+                self.glyph_count += text.len() as u32;
+                self.allocate(text.len() as u32).map(|block| (e, block))
+            })
+            .collect::<Option<Vec<_>>>();
 
-        inserted
-            .into_iter()
-            .try_for_each(|(e, block)| world.insert_one(e, block))?;
+        if let Some(inserted) = inserted {
+            inserted
+                .into_iter()
+                .try_for_each(|(e, block)| world.insert_one(e, block))?;
+        } else {
+            eprintln!("Resizing in insert");
+            self.resize(world, nearest_power_2(self.glyph_count))?;
+
+            return self.register_entities(world);
+        }
 
         Ok(())
     }
@@ -199,19 +252,40 @@ impl TextRenderer {
     ) -> Result<()> {
         self.register_entities(world)?;
 
-        let mut offset = 0;
+        self.glyph_count = 0;
 
-        world
+        // Reallocate as needed
+        let success = world
             .query_mut::<(&Text, &mut BufferAllocation)>()
             .into_iter()
-            .for_each(|(_, (text, block))| {
+            .map(|(_, (text, block))| {
+                self.glyph_count += text.len() as u32;
+
                 // Reallocate to fit longer text
                 if text.len() as u32 > block.len {
+                    let len = nearest_power_2(text.len() as u32);
+
                     self.free(*block);
-                    *block = self.allocate(nearest_power_2(text.len() as u32)).unwrap();
-                    dbg!(block);
+
+                    if let Some(new_block) = self.allocate(len) {
+                        *block = new_block;
+                        true
+                    } else {
+                        false
+                    }
+                } else {
+                    true
                 }
-            });
+            })
+            .fold(true, |acc, val| acc && val);
+
+        // Resize to fit
+        if !success {
+            self.resize(world, nearest_power_2(self.glyph_count))?;
+            return self.update_dirty_texts(world, resources, cmd, current_frame);
+        }
+
+        let mut offset = 0;
 
         let fonts = resources.fetch::<Font>()?;
         let staging_buffer = &mut self.staging_buffers[current_frame];

@@ -381,7 +381,7 @@ fn setup_ui(
             TextAlignment::new(HorizontalAlign::Center, VerticalAlign::Bottom),
             text_pass,
             RelativeOffset::new(0.0, 0.0),
-            RelativeSize::new(1.0, 1.0),
+            RelativeSize::new(0.7, 0.7),
         ),
     )?;
 
@@ -512,12 +512,7 @@ impl VulkanLayer {
 
         resources.insert_default(ImageRenderer::new(context.clone(), 16, FRAMES_IN_FLIGHT)?)?;
 
-        resources.insert_default(TextRenderer::new(
-            context.clone(),
-            16,
-            512,
-            FRAMES_IN_FLIGHT,
-        )?)?;
+        resources.insert_default(TextRenderer::new(context.clone(), 16, 8, FRAMES_IN_FLIGHT)?)?;
 
         rendergraph.add_node(TextUpdateNode::new(resources.default::<TextRenderer>()?));
 
