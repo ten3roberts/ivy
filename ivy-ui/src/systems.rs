@@ -59,10 +59,17 @@ fn apply_constaints(
                 + *constraints.rel_offset.map(|v| *v).unwrap_or_default() * *parent_size,
         );
 
-    *size = Size2D(
-        *constraints.abs_size.map(|v| *v).unwrap_or_default()
-            + *constraints.rel_size.map(|v| *v).unwrap_or_default() * parent_size.y,
-    );
+    *size = Size2D(*constraints.abs_size.map(|v| *v).unwrap_or_default())
+        + Size2D(
+            constraints
+                .rel_size
+                .map(|v| parent_size.y * **v)
+                .unwrap_or_default(),
+        )
+        + constraints
+            .offset_size
+            .map(|v| parent_size + Size2D(**v))
+            .unwrap_or_default();
 
     if let Some(aspect) = constraints.aspect {
         size.x = size.y * **aspect

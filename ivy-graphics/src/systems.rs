@@ -25,8 +25,7 @@ pub fn update_view_matrices(world: &World) {
 struct Satisfied;
 
 pub fn satisfy_objects(world: &mut World) {
-    let entities = 
-    world
+    let entities = world
         .query_mut::<(Option<&Position>, Option<&Rotation>, Option<&Scale>)>()
         .without::<Satisfied>()
         .into_iter()
@@ -39,7 +38,7 @@ pub fn satisfy_objects(world: &mut World) {
             (
                 p.unwrap_or_default(),
                 r.unwrap_or_default(),
-                s.unwrap_or_default(),
+                s.unwrap_or_else(|| Scale::new(1.0, 1.0, 1.0)),
                 Satisfied,
             ),
         );

@@ -22,6 +22,9 @@ derive_for!(
     pub struct RelativeSize(pub Vec2);
     /// Constrains the size of a widget to pixels.
     pub struct AbsoluteSize(pub Vec2);
+
+    /// Constrains the size to be offset from the parent size;
+    pub struct OffsetSize(pub Vec2);
     /// Constrains the widget width to a multiple of height.
     pub struct Aspect(pub f32);
 );
@@ -74,6 +77,12 @@ impl AbsoluteSize {
     }
 }
 
+impl OffsetSize {
+    pub fn new(x: f32, y: f32) -> Self {
+        Self(Vec2::new(x, y))
+    }
+}
+
 impl Aspect {
     pub fn new(aspect: f32) -> Self {
         Self(aspect)
@@ -86,6 +95,7 @@ pub struct ConstraintQuery<'a> {
     pub abs_offset: Option<&'a AbsoluteOffset>,
     pub rel_size: Option<&'a RelativeSize>,
     pub abs_size: Option<&'a AbsoluteSize>,
+    pub offset_size: Option<&'a OffsetSize>,
     pub aspect: Option<&'a Aspect>,
 }
 

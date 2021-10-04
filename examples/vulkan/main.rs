@@ -355,6 +355,11 @@ fn setup_ui(
 
     world.attach_new::<Widget, _>(
         widget2,
+        (Widget, ui_pass, OffsetSize::new(-10.0, -10.0), image),
+    )?;
+
+    world.attach_new::<Widget, _>(
+        widget2,
         (
             Widget,
             font,
@@ -365,12 +370,12 @@ fn setup_ui(
             },
             WrapStyle::Word,
             text_pass,
-            RelativeOffset::new(0.0, 0.0),
-            RelativeSize::new(1.0, 1.0),
+            AbsoluteOffset::new(100.0, 0.0),
+            OffsetSize::new(100.0, 0.0),
             Periodic::<Text>::new(
-                10.ms(),
+                1.ms(),
                 Box::new(|_, text, count| {
-                    text.set(format!("Hello World:\n{:#b}", count));
+                    text.set(format!("Hello World:\n{:#o}", count));
                 }),
             ),
         ),
@@ -385,7 +390,7 @@ fn setup_ui(
             TextAlignment::new(HorizontalAlign::Center, VerticalAlign::Bottom),
             text_pass,
             RelativeOffset::new(0.0, 0.0),
-            RelativeSize::new(0.7, 0.7),
+            OffsetSize::new(0.7, 0.7),
         ),
     )?;
 

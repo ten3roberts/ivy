@@ -21,12 +21,11 @@ derive_for!(
     MulAssign,
     Sub,
     SubAssign,
+    Default,
     );
     /// Describes a position in 3D space.
-    #[derive( Default )]
 pub struct Position(pub Vec3);
     /// Describes a rotation in 3D space.
-    #[derive( Default )]
 pub struct Rotation(pub Rotor3);
 /// Describes a scale in 3D space.
 pub struct Scale(pub Vec3);
@@ -47,11 +46,5 @@ impl Rotation {
 impl Scale {
     pub fn new(x: f32, y: f32, z: f32) -> Self {
         Self(Vec3::new(x, y, z))
-    }
-}
-
-impl Default for Scale {
-    fn default() -> Self {
-        Self(Vec3::one())
     }
 }
