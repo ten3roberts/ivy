@@ -97,9 +97,9 @@ where
     fn execute(
         &mut self,
         world: &mut hecs::World,
+        resources: &ivy_resources::Resources,
         cmd: &ivy_vulkan::commands::CommandBuffer,
         current_frame: usize,
-        resources: &ivy_resources::Resources,
     ) -> anyhow::Result<()> {
         let offset = self.set_count * current_frame;
         resources

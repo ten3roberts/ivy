@@ -180,6 +180,7 @@ impl LogicLayer {
         let (tx, rx) = flume::unbounded();
         events.subscribe(tx);
 
+        log::debug!("Created logic layer");
         Self {
             window,
             input,
@@ -308,6 +309,7 @@ new_shaderpass! {
 struct DisplayDebugReport;
 
 struct VulkanLayer {
+    context: Arc<VulkanContext>,
     swapchain: Handle<Swapchain>,
 }
 
@@ -730,8 +732,12 @@ impl VulkanLayer {
         setup_ui(world, image, atlas, font, font_mono, ui_pass, text_pass)?;
 
         resources.insert(rendergraph)?;
+        log::debug!("Created vulkan layer");
 
-        Ok(Self { swapchain })
+        Ok(Self {
+            context: context.clone(),
+            swapchain,
+        })
     }
 }
 
@@ -768,6 +774,12 @@ impl Layer for VulkanLayer {
         )?;
 
         Ok(())
+    }
+}
+
+impl Drop for VulkanLayer {
+    fn drop(&mut self) {
+        device::wait_idle(self.context.device()).expect("Failed to wait on device");
     }
 }
 
@@ -884,6 +896,7 @@ impl DebugLayer {
         _events: &mut Events,
         frequency: Duration,
     ) -> anyhow::Result<Self> {
+        log::debug!("Created debug layer");
         Ok(Self {
             elapsed: Clock::new(),
             last_status: Clock::new(),

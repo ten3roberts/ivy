@@ -19,8 +19,8 @@ pub struct App {
 
     layers: LayerStack,
 
-    world: World,
     resources: Resources,
+    world: World,
     events: Events,
 
     rx: Receiver<AppEvent>,
@@ -52,6 +52,7 @@ impl App {
 
     /// Enters the main application event loop and runs the layers.
     pub fn run(&mut self) -> anyhow::Result<()> {
+        eprintln!("Running app");
         self.running = true;
 
         let mut frame_clock = Clock::new();

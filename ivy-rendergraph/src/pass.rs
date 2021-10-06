@@ -8,7 +8,12 @@ use ivy_vulkan::{
     RenderPass, RenderPassInfo, StoreOp, SubpassDependency, SubpassInfo, Texture, VulkanContext,
 };
 use slotmap::{SecondaryMap, SlotMap};
-use std::{iter::repeat, ops::Deref, sync::Arc};
+use std::{
+    iter::repeat,
+    ops::Deref,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 pub struct Pass {
     kind: PassKind,
@@ -56,6 +61,7 @@ impl Pass {
         current_frame: usize,
         resources: &Resources,
         extent: Extent,
+        execution_times: &mut SecondaryMap<NodeIndex, (&'static str, Duration)>,
     ) -> Result<()> {
         match &self.kind {
             PassKind::Graphics {
@@ -65,14 +71,32 @@ impl Pass {
             } => {
                 cmd.begin_renderpass(&renderpass, &framebuffer, extent, clear_values);
 
-                self.nodes().first().iter().try_for_each(|node| {
-                    nodes[**node].execute(world, cmd, current_frame, resources)
-                })?;
+                self.nodes()
+                    .first()
+                    .iter()
+                    .try_for_each(|idx| -> Result<_> {
+                        execute_and_time(
+                            world,
+                            resources,
+                            cmd,
+                            current_frame,
+                            **idx,
+                            &mut nodes[**idx],
+                            execution_times,
+                        )
+                    })?;
 
-                self.nodes[1..].iter().try_for_each(|node| -> Result<_> {
+                self.nodes[1..].iter().try_for_each(|idx| -> Result<_> {
                     cmd.next_subpass(vk::SubpassContents::INLINE);
-                    nodes[*node].execute(world, cmd, current_frame, resources)?;
-                    Ok(())
+                    execute_and_time(
+                        world,
+                        resources,
+                        cmd,
+                        current_frame,
+                        *idx,
+                        &mut nodes[*idx],
+                        execution_times,
+                    )
                 })?;
 
                 cmd.end_renderpass();
@@ -90,8 +114,16 @@ impl Pass {
                     );
                 }
 
-                self.nodes.iter().try_for_each(|node| {
-                    nodes[*node].execute(world, cmd, current_frame, resources)
+                self.nodes.iter().try_for_each(|idx| -> Result<_> {
+                    execute_and_time(
+                        world,
+                        resources,
+                        cmd,
+                        current_frame,
+                        *idx,
+                        &mut nodes[*idx],
+                        execution_times,
+                    )
                 })?;
             }
         }
@@ -123,6 +155,9 @@ pub enum PassKind {
         image_barriers: Vec<ImageMemoryBarrier>,
     },
 }
+
+unsafe impl Send for PassKind {}
+unsafe impl Sync for PassKind {}
 
 impl PassKind {
     fn graphics<T>(
@@ -359,4 +394,27 @@ impl PassKind {
             image_barriers,
         })
     }
+}
+
+fn execute_and_time(
+    world: &mut World,
+    resources: &Resources,
+    cmd: &CommandBuffer,
+    current_frame: usize,
+    idx: NodeIndex,
+    node: &mut Box<dyn Node>,
+    execution_times: &mut SecondaryMap<NodeIndex, (&'static str, Duration)>,
+) -> Result<()> {
+    let now = Instant::now();
+
+    node.execute(world, resources, cmd, current_frame)?;
+
+    let elapsed = Instant::now() - now;
+
+    execution_times.entry(idx).map(|val| {
+        val.and_modify(|val| val.1 = elapsed)
+            .or_insert_with(|| (node.debug_name(), elapsed))
+    });
+
+    Ok(())
 }
