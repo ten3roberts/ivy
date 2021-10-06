@@ -6,7 +6,7 @@ use ivy_vulkan::{commands::CommandBuffer, vk::ClearValue, ImageLayout, LoadOp, S
 use std::{any::type_name, marker::PhantomData};
 
 /// Represents a node in the renderpass.
-pub trait Node {
+pub trait Node: 'static + Send + Sync {
     /// Returns the color attachments for this node. Should not be execution heavy function
     fn color_attachments(&self) -> &[AttachmentInfo] {
         &[]
@@ -32,17 +32,15 @@ pub trait Node {
     fn node_kind(&self) -> NodeKind;
 
     // Optional name, can be empty string
-    fn debug_name(&self) -> &'static str {
-        "Unnamed node"
-    }
+    fn debug_name(&self) -> &'static str;
 
     /// Execute this node inside a compatible renderpass
     fn execute(
         &mut self,
         world: &mut World,
+        resources: &Resources,
         cmd: &CommandBuffer,
         current_frame: usize,
-        resources: &Resources,
     ) -> anyhow::Result<()>;
 }
 
@@ -107,9 +105,9 @@ where
     fn execute(
         &mut self,
         world: &mut World,
+        resources: &Resources,
         cmd: &CommandBuffer,
         current_frame: usize,
-        resources: &Resources,
     ) -> anyhow::Result<()> {
         resources
             .get_mut(self.renderer)
@@ -117,5 +115,9 @@ where
             .draw::<Pass>(world, cmd, current_frame, &[], &[], resources)
             .map_err(|e| e.into())
             .with_context(|| format!("Failed to draw using {:?}", type_name::<T>()))
+    }
+
+    fn debug_name(&self) -> &'static str {
+        std::any::type_name::<RenderNode<Pass, T>>()
     }
 }

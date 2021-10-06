@@ -207,6 +207,7 @@ impl VulkanContext {
 
 impl Drop for VulkanContext {
     fn drop(&mut self) {
+        device::wait_idle(&self.device).unwrap();
         self.descriptor_allocator.clear();
         self.descriptor_layout_cache.clear();
 

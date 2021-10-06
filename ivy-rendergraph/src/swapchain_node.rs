@@ -21,6 +21,9 @@ pub struct SwapchainNode {
     output_barrier: vk::ImageMemoryBarrier,
 }
 
+unsafe impl Send for SwapchainNode {}
+unsafe impl Sync for SwapchainNode {}
+
 impl SwapchainNode {
     pub fn new(
         context: Arc<VulkanContext>,
@@ -127,9 +130,9 @@ impl Node for SwapchainNode {
     fn execute(
         &mut self,
         _world: &mut hecs::World,
+        resources: &ivy_resources::Resources,
         cmd: &ivy_vulkan::commands::CommandBuffer,
         _current_frame: usize,
-        resources: &ivy_resources::Resources,
     ) -> anyhow::Result<()> {
         let swapchain = resources.get(self.swapchain)?;
         let extent = swapchain.extent();

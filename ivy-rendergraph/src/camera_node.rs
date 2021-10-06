@@ -52,7 +52,7 @@ impl<Pass, T, E> Node for CameraNode<Pass, T, E>
 where
     Pass: ShaderPass + Storage,
     T: Renderer<Error = E> + Storage,
-    E: Into<anyhow::Error>,
+    E: 'static + Into<anyhow::Error> + Send + Sync,
 {
     fn color_attachments(&self) -> &[AttachmentInfo] {
         &self.color_attachments
@@ -85,9 +85,9 @@ where
     fn execute(
         &mut self,
         world: &mut hecs::World,
+        resources: &ivy_resources::Resources,
         cmd: &ivy_vulkan::commands::CommandBuffer,
         current_frame: usize,
-        resources: &ivy_resources::Resources,
     ) -> anyhow::Result<()> {
         let camera_set = world
             .get::<GpuCameraData>(self.camera)

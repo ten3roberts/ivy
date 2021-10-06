@@ -33,6 +33,7 @@ pub fn satisfy_objects(world: &mut World) {
         .collect::<Vec<_>>();
 
     entities.into_iter().for_each(|(e, p, r, s)| {
+        eprintln!("Satisfying {:?}", e);
         let _ = world.insert(
             e,
             (

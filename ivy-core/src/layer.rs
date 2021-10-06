@@ -1,7 +1,7 @@
-use hecs::World;
-use std::time::Duration;
-
 use crate::Events;
+use hecs::World;
+use ivy_resources::Resources;
+use std::time::Duration;
 
 /// A layer represents an ordered abstraction of execution logic. Layers are ordered and run in
 /// order.
@@ -12,6 +12,7 @@ pub trait Layer {
     fn on_update(
         &mut self,
         world: &mut World,
+        resources: &mut Resources,
         events: &mut Events,
         frame_time: Duration,
     ) -> anyhow::Result<()>;

@@ -119,9 +119,9 @@ impl<Pass: ShaderPass> Node for PostProcessingNode<Pass> {
     fn execute(
         &mut self,
         _: &mut hecs::World,
+        resources: &Resources,
         cmd: &ivy_vulkan::commands::CommandBuffer,
         current_frame: usize,
-        resources: &Resources,
     ) -> anyhow::Result<()> {
         let pass = resources.get_default::<Pass>()?;
 
@@ -132,5 +132,9 @@ impl<Pass: ShaderPass> Node for PostProcessingNode<Pass> {
         cmd.draw(3, 1, 0, 0);
 
         Ok(())
+    }
+
+    fn debug_name(&self) -> &'static str {
+        "post processing"
     }
 }

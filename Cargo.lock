@@ -473,6 +473,7 @@ dependencies = [
  "ivy-ui",
  "ivy-vulkan",
  "log",
+ "slotmap",
  "ultraviolet",
 ]
 
@@ -487,6 +488,7 @@ dependencies = [
  "downcast-rs",
  "flume",
  "hecs",
+ "ivy-resources",
  "log",
  "thiserror",
  "ultraviolet",

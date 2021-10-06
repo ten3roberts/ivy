@@ -38,6 +38,7 @@ anyhow = "1.0.42"
 atomic_refcell = "0.1.7"
 
 flume = "0.10.8"
+slotmap = "1.0"
 hecs = "0.6.0"
 glfw = { version = "0.41.0", features = [ "vulkan" ] }
 hecs-hierarchy = "0.2"

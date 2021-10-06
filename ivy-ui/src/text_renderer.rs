@@ -295,9 +295,10 @@ impl TextRenderer {
             .query_mut::<TextQuery>()
             .into_iter()
             .filter(|(_, query)| {
-                query.text.dirty()
-                    || query.text.old_bounds() != *query.bounds
-                    || Some(&query.text.old_wrap()) != query.wrap
+                query.text.len() > 0
+                    && (query.text.dirty()
+                        || query.text.old_bounds() != *query.bounds
+                        || Some(&query.text.old_wrap()) != query.wrap)
             })
             .flat_map(|(_, query)| {
                 query.text.set_dirty(false);
@@ -440,6 +441,7 @@ struct ObjectData {
 #[derive(Query)]
 struct ObjectDataQuery<'a> {
     position: &'a Position2D,
+    text: &'a Text,
     block: &'a BufferAllocation,
 }
 
@@ -448,7 +450,7 @@ impl<'a> Into<ObjectData> for ObjectDataQuery<'a> {
         ObjectData {
             mvp: Mat4::from_translation(self.position.xyz()),
             offset: self.block.offset,
-            len: self.block.len,
+            len: self.text.len() as u32,
         }
     }
 }
@@ -489,14 +491,18 @@ impl Node for TextUpdateNode {
     fn execute(
         &mut self,
         world: &mut World,
+        resources: &Resources,
         cmd: &CommandBuffer,
         current_frame: usize,
-        resources: &Resources,
     ) -> anyhow::Result<()> {
         resources
             .get_mut(self.text_renderer)?
             .update_dirty_texts(world, resources, cmd, current_frame)
             .context("Failed to update text")
+    }
+
+    fn debug_name(&self) -> &'static str {
+        "text update"
     }
 }
 

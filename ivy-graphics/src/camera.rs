@@ -196,7 +196,7 @@ impl GpuCameraData {
 
     // Creates gpu side data for all camera which do not already have any.
     pub fn create_gpu_cameras(
-        context: Arc<VulkanContext>,
+        context: &Arc<VulkanContext>,
         world: &mut World,
         frames_in_flight: usize,
     ) -> Result<()> {
@@ -223,3 +223,6 @@ impl IntoSet for GpuCameraData {
         &self.sets
     }
 }
+
+/// Narke
+pub struct MainCamera;

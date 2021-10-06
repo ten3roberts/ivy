@@ -1,4 +1,5 @@
 use std::{
+    fmt::Display,
     sync::{mpsc, Arc},
     time::Duration,
 };
@@ -30,6 +31,9 @@ use ivy::{
     vulkan::*,
     *,
 };
+use ivy_resources::Resources;
+use slotmap::SecondaryMap;
+use std::fmt::Write;
 use ultraviolet::{Rotor3, Vec3};
 
 use log::*;
@@ -121,15 +125,11 @@ fn main() -> anyhow::Result<()> {
 
     let window = Arc::new(AtomicRefCell::new(window));
 
-    let context = Arc::new(VulkanContext::new_with_window(&glfw, &window.borrow())?);
-
     let mut app = App::builder()
-        .push_layer(|_, _| WindowLayer::new(glfw, window.clone(), window_events))
-        .push_layer(|w, e| LogicLayer::new(w, e, window.clone()))
-        .try_push_layer(|world, events| {
-            VulkanLayer::new(context.clone(), world, window.clone(), events)
-        })?
-        .push_layer(|_, _| PerformanceLayer::new(1.secs()))
+        .try_push_layer(|_, r, _| WindowLayer::new(glfw, r, window.clone(), window_events))?
+        .push_layer(|w, _, e| LogicLayer::new(w, e, window.clone()))
+        .try_push_layer(|w, r, e| VulkanLayer::new(w, r, e, window.clone()))?
+        .try_push_layer(|w, r, e| DebugLayer::new(w, r, e, 100.ms()))?
         .build();
 
     app.run().context("Failed to run application")
@@ -165,6 +165,7 @@ impl LogicLayer {
 
         world.spawn((
             Camera::perspective(1.0, extent.aspect(), 0.1, 100.0),
+            MainCamera,
             Position(Vec3::new(0.0, 0.0, 5.0)),
             Rotation(Rotor3::identity()),
         ));
@@ -226,6 +227,7 @@ impl Layer for LogicLayer {
     fn on_update(
         &mut self,
         world: &mut World,
+        _: &mut Resources,
         _: &mut Events,
         frame_time: Duration,
     ) -> anyhow::Result<()> {
@@ -303,14 +305,10 @@ new_shaderpass! {
     pub struct PostProcessingPass;
 }
 
+struct DisplayDebugReport;
+
 struct VulkanLayer {
-    context: Arc<VulkanContext>,
-
     swapchain: Handle<Swapchain>,
-
-    rendergraph: RenderGraph,
-
-    resources: Resources,
 }
 
 fn setup_ui(
@@ -318,6 +316,7 @@ fn setup_ui(
     image: Handle<Image>,
     atlas: Handle<Image>,
     font: Handle<Font>,
+    font_mono: Handle<Font>,
     ui_pass: Handle<UIPass>,
     text_pass: Handle<UIPass>,
 ) -> anyhow::Result<()> {
@@ -371,7 +370,7 @@ fn setup_ui(
             WrapStyle::Word,
             text_pass,
             AbsoluteOffset::new(100.0, 0.0),
-            OffsetSize::new(100.0, 0.0),
+            OffsetSize::new(500.0, 0.0),
             Periodic::<Text>::new(
                 1.ms(),
                 Box::new(|_, text, count| {
@@ -398,12 +397,13 @@ fn setup_ui(
         canvas,
         (
             Widget,
-            font,
+            font_mono,
             text_pass,
-            Text::new("Lorem ipsum dolor sit amet."),
-            TextAlignment::new(HorizontalAlign::Center, VerticalAlign::Top),
+            DisplayDebugReport,
+            Text::new(""),
+            TextAlignment::new(HorizontalAlign::Left, VerticalAlign::Top),
             RelativeOffset::new(0.0, 0.0),
-            RelativeSize::new(1.0, 1.0),
+            OffsetSize::new(-10.0, 0.0),
         ),
     )?;
 
@@ -440,10 +440,10 @@ fn setup_ui(
 
 impl VulkanLayer {
     pub fn new(
-        context: Arc<VulkanContext>,
         world: &mut World,
-        window: Arc<AtomicRefCell<Window>>,
+        resources: &Resources,
         _: &mut Events,
+        window: Arc<AtomicRefCell<Window>>,
     ) -> anyhow::Result<Self> {
         let swapchain_info = ivy_vulkan::SwapchainInfo {
             present_mode: vk::PresentModeKHR::IMMEDIATE,
@@ -451,9 +451,7 @@ impl VulkanLayer {
             ..Default::default()
         };
 
-        let resources = Resources::new();
-
-        resources.insert(context.clone())?;
+        let context = resources.get_default::<Arc<VulkanContext>>()?;
 
         let swapchain = resources.insert_default(Swapchain::new(
             context.clone(),
@@ -572,6 +570,16 @@ impl VulkanLayer {
                     ..Default::default()
                 },
                 "./res/fonts/Lora/Lora-VariableFont_wght.ttf".into(),
+            ))
+            .context("Failed to load font")??;
+
+        let font_mono: Handle<Font> = resources
+            .load((
+                FontInfo {
+                    size: 64.0,
+                    ..Default::default()
+                },
+                "./res/fonts/Roboto_Mono/RobotoMono-VariableFont_wght.ttf".into(),
             ))
             .context("Failed to load font")??;
 
@@ -718,16 +726,12 @@ impl VulkanLayer {
 
         let ui_pass = resources.insert(UIPass(ui_pipeline))?;
         let text_pass = resources.insert(UIPass(text_pipeline))?;
-        // let text_pass = ui_pass;
 
-        setup_ui(world, image, atlas, font, ui_pass, text_pass)?;
+        setup_ui(world, image, atlas, font, font_mono, ui_pass, text_pass)?;
 
-        Ok(Self {
-            context,
-            swapchain,
-            rendergraph,
-            resources,
-        })
+        resources.insert(rendergraph)?;
+
+        Ok(Self { swapchain })
     }
 }
 
@@ -735,39 +739,35 @@ impl Layer for VulkanLayer {
     fn on_update(
         &mut self,
         world: &mut World,
+        resources: &mut Resources,
         _events: &mut Events,
         _frame_time: Duration,
     ) -> anyhow::Result<()> {
+        let context = resources.get_default::<Arc<VulkanContext>>()?;
         // Ensure gpu side data for cameras
-        GpuCameraData::create_gpu_cameras(self.context.clone(), world, FRAMES_IN_FLIGHT)?;
+        GpuCameraData::create_gpu_cameras(&context, world, FRAMES_IN_FLIGHT)?;
 
-        let current_frame = self.rendergraph.begin()?;
+        let mut rendergraph = resources.get_default_mut::<RenderGraph>()?;
 
-        self.resources
+        let current_frame = rendergraph.begin()?;
+
+        resources
             .get_mut(self.swapchain)?
-            .acquire_next_image(self.rendergraph.wait_semaphore(current_frame))?;
+            .acquire_next_image(rendergraph.wait_semaphore(current_frame))?;
 
         GpuCameraData::update_all_system(world, current_frame)?;
         LightManager::update_all_system(world, current_frame)?;
 
-        self.rendergraph.execute(world, &self.resources)?;
-        self.rendergraph.end()?;
+        rendergraph.execute(world, resources)?;
+        rendergraph.end()?;
 
         // // Present results
-        self.resources.get(self.swapchain)?.present(
-            self.context.present_queue(),
-            &[self.rendergraph.signal_semaphore(current_frame)],
+        resources.get(self.swapchain)?.present(
+            context.present_queue(),
+            &[rendergraph.signal_semaphore(current_frame)],
         )?;
 
         Ok(())
-    }
-}
-
-impl Drop for VulkanLayer {
-    fn drop(&mut self) {
-        let device = self.context.device();
-        // Wait for everything to be done before cleaning up
-        device::wait_idle(device).unwrap();
     }
 }
 
@@ -780,14 +780,19 @@ struct WindowLayer {
 impl WindowLayer {
     pub fn new(
         glfw: Glfw,
+        resources: &Resources,
         window: Arc<AtomicRefCell<Window>>,
         events: mpsc::Receiver<(f64, WindowEvent)>,
-    ) -> Self {
-        Self {
+    ) -> anyhow::Result<Self> {
+        let context = Arc::new(VulkanContext::new_with_window(&glfw, &window.borrow())?);
+
+        resources.insert(context)?;
+
+        Ok(Self {
             glfw,
             _window: window,
             events,
-        }
+        })
     }
 }
 
@@ -795,6 +800,7 @@ impl Layer for WindowLayer {
     fn on_update(
         &mut self,
         _world: &mut World,
+        _: &mut Resources,
         events: &mut Events,
         _frame_time: Duration,
     ) -> anyhow::Result<()> {
@@ -812,64 +818,141 @@ impl Layer for WindowLayer {
     }
 }
 
-struct PerformanceLayer {
+#[derive(Debug, Clone)]
+struct DebugReport<'a> {
+    framerate: f32,
+    min_frametime: Duration,
+    avg_frametime: Duration,
+    max_frametime: Duration,
+    elapsed: Duration,
+    position: Position,
+    execution_times: Option<&'a SecondaryMap<NodeIndex, (&'static str, Duration)>>,
+}
+
+impl<'a> Default for DebugReport<'a> {
+    fn default() -> Self {
+        Self {
+            framerate: 0.0,
+            min_frametime: Duration::from_secs(u64::MAX),
+            avg_frametime: Duration::from_secs(0),
+            max_frametime: Duration::from_secs(u64::MIN),
+            elapsed: Duration::from_secs(0),
+            position: Default::default(),
+            execution_times: None,
+        }
+    }
+}
+
+impl<'a> Display for DebugReport<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{:.2?}, {:.2?}, {:.2?}; {:.0?} fps\n{:.2?}\n{:#.2?}\n",
+            self.min_frametime,
+            self.avg_frametime,
+            self.max_frametime,
+            self.framerate,
+            self.elapsed,
+            self.position,
+        )?;
+        self.execution_times
+            .map(|val| {
+                val.iter()
+                    .try_for_each(|(_, val)| write!(f, "{:?}: {}us\n", val.0, val.1.us()))
+            })
+            .transpose()?;
+
+        Ok(())
+    }
+}
+
+struct DebugLayer {
     elapsed: Clock,
     last_status: Clock,
     frequency: Duration,
 
     min: Duration,
     max: Duration,
-    acc: Duration,
 
     framecount: usize,
 }
 
-impl PerformanceLayer {
-    fn new(frequency: Duration) -> Self {
-        Self {
+impl DebugLayer {
+    fn new(
+        _world: &mut World,
+        _resources: &Resources,
+        _events: &mut Events,
+        frequency: Duration,
+    ) -> anyhow::Result<Self> {
+        Ok(Self {
             elapsed: Clock::new(),
             last_status: Clock::new(),
             frequency,
-            min: std::u64::MAX.secs(),
-            max: 0.secs(),
-            acc: 0.secs(),
+            min: Duration::from_secs(u64::MAX),
+            max: Duration::from_secs(u64::MIN),
             framecount: 0,
-        }
+        })
     }
 }
 
-impl Layer for PerformanceLayer {
+impl Layer for DebugLayer {
     fn on_update(
         &mut self,
-        _: &mut World,
+        world: &mut World,
+        resources: &mut Resources,
         _: &mut Events,
-        frame_time: Duration,
+        frametime: Duration,
     ) -> anyhow::Result<()> {
-        self.acc += frame_time;
-
-        self.min = frame_time.min(self.min);
-        self.max = frame_time.max(self.max);
+        self.min = frametime.min(self.min);
+        self.max = frametime.max(self.max);
 
         self.framecount += 1;
 
-        if self.last_status.elapsed() > self.frequency {
+        let elapsed = self.last_status.elapsed();
+
+        if elapsed > self.frequency {
             self.last_status.reset();
 
-            let avg = self.acc / self.framecount as u32;
+            let avg = Duration::div_f32(elapsed, self.framecount as f32);
 
-            info!(
-                "Elapsed: {:?},\t Deltatime: {:?} {:?} {:?},\t Framerate: {}",
-                self.elapsed.elapsed(),
-                self.min,
-                avg,
-                self.max,
-                1.0 / avg.secs()
-            );
+            self.last_status.reset();
 
-            self.min = std::u64::MAX.secs();
-            self.max = 0.secs();
-            self.acc = 0.secs();
+            let rendergraph = resources.get_default::<RenderGraph>()?;
+
+            let report = DebugReport {
+                framerate: 1.0 / avg.secs(),
+                min_frametime: self.min,
+                avg_frametime: avg,
+                max_frametime: self.max,
+                elapsed: self.elapsed.elapsed(),
+                position: world
+                    .query_mut::<(&Position, &MainCamera)>()
+                    .into_iter()
+                    .next()
+                    .map(|(_, (p, _))| *p)
+                    .unwrap_or_default(),
+
+                execution_times: Some(rendergraph.execution_times()),
+            };
+
+            world
+                .query_mut::<(&mut Text, &DisplayDebugReport)>()
+                .into_iter()
+                .for_each(|(_, (text, _))| {
+                    let val = text.val_mut();
+                    let val = val.to_mut();
+
+                    val.clear();
+
+                    write!(val, "{}", &report).expect("Failed to write into string");
+                });
+
+            log::debug!("{:?}", report.framerate);
+
+            // Reset
             self.framecount = 0;
+            self.min = Duration::from_secs(u64::MAX);
+            self.max = Duration::from_secs(u64::MIN);
         }
 
         Ok(())

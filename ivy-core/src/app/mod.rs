@@ -12,12 +12,15 @@ use crate::{
     Clock, Events,
 };
 
+use ivy_resources::Resources;
+
 pub struct App {
     name: String,
 
     layers: LayerStack,
 
     world: World,
+    resources: Resources,
     events: Events,
 
     rx: Receiver<AppEvent>,
@@ -36,6 +39,7 @@ impl App {
             name: "Ivy".into(),
             layers: LayerStack::new(),
             world: World::new(),
+            resources: Resources::new(),
             events,
             rx,
             running: false,
@@ -56,10 +60,11 @@ impl App {
         while self.running {
             let frame_time = frame_clock.reset();
             let world = &mut self.world;
+            let resources = &mut self.resources;
             let events = &mut self.events;
 
             for layer in self.layers.iter_mut() {
-                layer.on_update(world, events, frame_time)?;
+                layer.on_update(world, resources, events, frame_time)?;
             }
 
             // Read all events sent by application
@@ -85,10 +90,10 @@ impl App {
     /// closure to construct the layer takes in the world and events.
     pub fn push_layer<F, T>(&mut self, func: F)
     where
-        F: FnOnce(&mut World, &mut Events) -> T,
+        F: FnOnce(&mut World, &mut Resources, &mut Events) -> T,
         T: 'static + Layer,
     {
-        let layer = func(&mut self.world, &mut self.events);
+        let layer = func(&mut self.world, &mut self.resources, &mut self.events);
         self.layers.push(layer);
     }
 
@@ -97,10 +102,10 @@ impl App {
     /// is propagated to the callee.
     pub fn try_push_layer<F, T, E>(&mut self, func: F) -> Result<(), E>
     where
-        F: FnOnce(&mut World, &mut Events) -> Result<T, E>,
+        F: FnOnce(&mut World, &mut Resources, &mut Events) -> Result<T, E>,
         T: 'static + Layer,
     {
-        let layer = func(&mut self.world, &mut self.events)?;
+        let layer = func(&mut self.world, &mut self.resources, &mut self.events)?;
         self.layers.push(layer);
         Ok(())
     }

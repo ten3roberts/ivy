@@ -13,7 +13,7 @@ use ivy_vulkan::{
     Extent, Fence, ImageLayout, PipelineInfo, RenderPass, Texture, VulkanContext,
 };
 use slotmap::{new_key_type, SecondaryMap, SlotMap};
-use std::{hash, ops::Deref, sync::Arc};
+use std::{hash, ops::Deref, sync::Arc, time::Duration};
 
 new_key_type! {
     pub struct NodeIndex;
@@ -36,6 +36,8 @@ pub struct RenderGraph {
     extent: Extent,
     frames_in_flight: usize,
     current_frame: usize,
+
+    execution_times: SecondaryMap<NodeIndex, (&'static str, Duration)>,
 }
 
 impl RenderGraph {
@@ -56,6 +58,7 @@ impl RenderGraph {
             extent: Extent::new(0, 0),
             frames_in_flight,
             current_frame: 0,
+            execution_times: SecondaryMap::new(),
         })
     }
 
@@ -269,6 +272,7 @@ impl RenderGraph {
         let frame = &mut self.frames[self.current_frame];
 
         let nodes = &mut self.nodes;
+        let execution_times = &mut self.execution_times;
         let passes = &self.passes;
         let extent = self.extent;
         let current_frame = self.current_frame;
@@ -279,7 +283,15 @@ impl RenderGraph {
         passes
             .iter()
             .try_for_each(|(_pass_index, pass)| -> Result<()> {
-                pass.execute(world, &cmd, nodes, current_frame, resources, extent)
+                pass.execute(
+                    world,
+                    &cmd,
+                    nodes,
+                    current_frame,
+                    resources,
+                    extent,
+                    execution_times,
+                )
             })?;
 
         Ok(())
@@ -305,6 +317,10 @@ impl RenderGraph {
         self.current_frame = (self.current_frame + 1) % self.frames_in_flight;
 
         Ok(())
+    }
+
+    pub fn execution_times(&self) -> &SecondaryMap<NodeIndex, (&'static str, Duration)> {
+        &self.execution_times
     }
 
     /// Get a reference to the current signal semaphore for the specified frame

@@ -36,6 +36,7 @@ impl Text {
     }
 
     pub fn val_mut(&mut self) -> &mut Cow<'static, str> {
+        self.dirty = true;
         &mut self.str
     }
 
