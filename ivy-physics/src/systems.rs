@@ -1,10 +1,10 @@
 use hecs::World;
-use ivy_core::{Color, Position, Rotation};
+use ivy_core::{Color, Position, Rotation, Scale};
 use ultraviolet::Rotor3;
 
 use crate::collision::Collider;
-use crate::components::{AngularVelocity, Velocity};
-use crate::gjk::{self};
+use crate::components::{AngularVelocity, TransformMatrix, Velocity};
+use crate::gjk;
 
 pub fn integrate_velocity_system(world: &World, dt: f32) {
     world
@@ -40,18 +40,20 @@ pub fn wrap_around_system(world: &World) {
 
 pub fn collision_system(world: &World) {
     world
-        .query::<(&Position, &Collider, &mut Color)>()
+        .query::<(&Position, &Rotation, &Scale, &Collider, &mut Color)>()
         .iter()
-        .for_each(|(e1, (a_pos, a, color))| {
+        .for_each(|(e1, (pos, rot, scale, a, color))| {
+            let a_transform = TransformMatrix::new(*pos, *rot, *scale);
             world
-                .query::<(&Position, &Collider)>()
+                .query::<(&Position, &Rotation, &Scale, &Collider)>()
                 .iter()
-                .for_each(|(e2, (b_pos, b))| {
+                .for_each(|(e2, (pos, rot, scale, b))| {
+                    let b_transform = TransformMatrix::new(*pos, *rot, *scale);
                     if e1 == e2 {
                         return;
                     }
 
-                    let (intersect, simplex) = gjk::intersection(*a_pos, *b_pos, a, b);
+                    let (intersect, simplex) = gjk::intersection(a_transform, b_transform, a, b);
                     // assert!(matches!(simplex, Simplex::Tetrahedron(a, b, c, d)));
 
                     if intersect {

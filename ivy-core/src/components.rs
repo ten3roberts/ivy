@@ -25,13 +25,17 @@ derive_for!(
     PartialEq,
     );
     /// Describes a position in 3D space.
-pub struct Position(pub Vec3);
+    #[repr(transparent)]
+    pub struct Position(pub Vec3);
     /// Describes a rotation in 3D space.
-pub struct Rotation(pub Rotor3);
-/// Describes a scale in 3D space.
-pub struct Scale(pub Vec3);
-/// Color/tint of object
-pub struct Color(pub Vec4);
+    #[repr(transparent)]
+    pub struct Rotation(pub Rotor3);
+    /// Describes a scale in 3D space.
+    #[repr(transparent)]
+    pub struct Scale(pub Vec3);
+    /// Color/tint of object
+    #[repr(transparent)]
+    pub struct Color(pub Vec4);
 );
 
 impl Position {

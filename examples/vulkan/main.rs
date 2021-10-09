@@ -58,23 +58,35 @@ where
 }
 
 struct Movable {
-    vector: InputVector,
+    translate: InputVector,
+    rotate: InputVector,
     speed: f32,
+}
+
+impl Movable {
+    fn new(translate: InputVector, rotate: InputVector, speed: f32) -> Self {
+        Self {
+            translate,
+            rotate,
+            speed,
+        }
+    }
 }
 
 fn move_system(world: &mut World, input: &Input, dt: f32) {
     world
-        .query::<(&Movable, &mut Position)>()
+        .query::<(&Movable, &mut Position, &mut Rotation)>()
         .iter()
-        .for_each(|(_, (m, p))| {
-            *p += Position(m.vector.get(input)) * m.speed * dt;
-        })
-}
+        .for_each(|(_, (m, p, r))| {
+            *p += Position(m.translate.get(input)) * m.speed * dt;
+            let Vec3 {
+                x: pitch,
+                y: yaw,
+                z: roll,
+            } = m.rotate.get(input) * dt * 0.1;
 
-impl Movable {
-    fn new(vector: InputVector, speed: f32) -> Self {
-        Self { vector, speed }
-    }
+            *r = Rotation(**r * (Rotor3::from_euler_angles(roll, pitch, yaw)));
+        })
 }
 
 struct Periodic<T> {
@@ -378,12 +390,23 @@ fn setup_objects(
                     neg: Key::O,
                 },
             ),
+            InputVector::new(
+                InputAxis::Keyboard {
+                    pos: Key::Up,
+                    neg: Key::Down,
+                },
+                InputAxis::Keyboard {
+                    pos: Key::Left,
+                    neg: Key::Right,
+                },
+                InputAxis::None,
+            ),
             0.5,
         ),
         Scale::uniform(0.5),
         Color::new(1.0, 1.0, 1.0, 1.0),
         Position::new(0.3, 0.3, 0.0),
-        Collider::new(Cube::new(0.5)),
+        Collider::new(Cube::new(1.0)),
     ));
 
     Ok(())

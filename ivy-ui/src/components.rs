@@ -24,10 +24,13 @@ derive_for!(
         SubAssign,
         PartialEq,
     );
+    #[repr(transparent)]
     pub struct Position2D(pub Vec2);
+    #[repr(transparent)]
     pub struct Size2D(pub Vec2);
     #[derive(Eq, Hash)]
     /// The depth of the widget from the root.
+    #[repr(transparent)]
     pub struct WidgetDepth(pub u32);
 );
 

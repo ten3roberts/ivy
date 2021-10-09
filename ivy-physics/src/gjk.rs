@@ -1,7 +1,6 @@
-use ivy_core::Position;
-use ultraviolet::Vec3;
+use ultraviolet::{Mat4, Vec3};
 
-use crate::collision::CollisionPrimitive;
+use crate::{collision::CollisionPrimitive, components::TransformMatrix};
 
 /// Gets the normal of a direction vector with a reference point. Normal will
 /// face the same direciton as reference
@@ -24,7 +23,6 @@ impl Simplex {
         match *self {
             Self::Point(a) => Some(-a),
             Self::Line(a, b) => {
-                eprintln!("Line");
                 let ab = b - a;
                 let a0 = -a;
 
@@ -36,7 +34,6 @@ impl Simplex {
                 }
             }
             Simplex::Triangle(a, b, c) => {
-                eprintln!("Triangle");
                 let ab = b - a;
                 let ac = c - a;
                 let a0 = -a;
@@ -66,7 +63,6 @@ impl Simplex {
                 }
             }
             Simplex::Tetrahedron(a, b, c, d) => {
-                eprintln!("Tetrahedron");
                 let ab = b - a;
                 let ac = c - a;
                 let ad = d - a;
@@ -108,20 +104,42 @@ impl Simplex {
 /// Performs a gjk intersection test.
 /// Returns true if the shapes intersect.
 pub fn intersection<A: CollisionPrimitive, B: CollisionPrimitive>(
-    a_pos: Position,
-    b_pos: Position,
+    a_transform: TransformMatrix,
+    b_transform: TransformMatrix,
     a_coll: &A,
     b_coll: &B,
 ) -> (bool, Simplex) {
+    let a_pos = a_transform.extract_translation();
+    let b_pos = b_transform.extract_translation();
+
+    let a_transform_inv = a_transform.inversed();
+    let b_transform_inv = b_transform.inversed();
+
     // Get first support function in direction of separation
     let dir = (a_pos - b_pos).normalized();
-    let a = minkowski_diff(a_pos, b_pos, a_coll, b_coll, dir);
+    let a = minkowski_diff(
+        &a_transform,
+        &b_transform,
+        &a_transform_inv,
+        &b_transform_inv,
+        a_coll,
+        b_coll,
+        dir,
+    );
 
     let mut simplex = Simplex::Point(a);
 
     while let Some(dir) = simplex.next() {
         // Get the next simplex
-        let p = minkowski_diff(a_pos, b_pos, a_coll, b_coll, dir);
+        let p = minkowski_diff(
+            &a_transform,
+            &b_transform,
+            &a_transform_inv,
+            &b_transform_inv,
+            a_coll,
+            b_coll,
+            dir,
+        );
 
         // New point was not past the origin
         // No collision
@@ -135,69 +153,22 @@ pub fn intersection<A: CollisionPrimitive, B: CollisionPrimitive>(
     // Collision found
     return (true, simplex);
 }
-
-// /// Expands the simplex into a better fit to enclose the origin.
-// fn next_simplex(simplex: &mut Simplex) -> Option<Vec3> {
-//     match simplex {
-//         // Get the triangle that better encloses the origin
-//         Simplex::Line(a, b) => {
-//             dbg!("Line case");
-//             // From the most recent point to the origin
-//             let a0 = -*a;
-//             let ab = *b - *a;
-//             // Vec triple dot product
-//             // dbg!(simplex);
-//             let normal = triple_prod(ab, a0, ab);
-//             // dbg!(normal);
-
-//             Some(normal)
-//         }
-//         Simplex::Triangle(a, b, c) => {
-//             dbg!("Triangle case");
-//             // let a0 = -*a;
-//             let ac = *c - *a;
-//             let ab = *b - *a;
-//             // let cb = *b - *c;
-
-//             // Origin does not lie flat on the triangle. Remove oldest point
-//             if let Some((normal, idx)) = simplex.to_origin() {
-//                 simplex.remove(idx);
-
-//                 eprintln!("Triangle does not contain origin");
-//                 Some(normal)
-//             }
-//             // Simplex contains origin in the flat plane of the triangle. Expand
-//             // in the next dimension
-//             else {
-//                 Some(ab.cross(ac))
-//             }
-//         }
-//         Simplex::Tetrahedron(_, _, _, _) => {
-//             dbg!("Tetrahedron case");
-//             // Origin is outside simplex
-//             if let Some((normal, idx)) = simplex.to_origin() {
-//                 simplex.remove(idx);
-//                 Some(normal)
-//             }
-//             // Origin is inside tetrahedron, collision
-//             else {
-//                 None
-//             }
-//         }
-//     }
-// }
-
 /// Returns a point on the minkowski difference given from two colliders, their
 /// transform, and a direction.
 fn minkowski_diff<A: CollisionPrimitive, B: CollisionPrimitive>(
-    a_pos: Position,
-    b_pos: Position,
+    a_transform: &Mat4,
+    b_transform: &Mat4,
+    a_transform_inv: &Mat4,
+    b_transform_inv: &Mat4,
     a_coll: &A,
     b_coll: &B,
     dir: Vec3,
 ) -> Vec3 {
-    let a = a_coll.support(dir) + *a_pos;
-    let b = b_coll.support(-dir) + *b_pos;
+    let a = a_coll.support(a_transform_inv.transform_vec3(dir).normalized());
+    let b = b_coll.support(b_transform_inv.transform_vec3(-dir).normalized());
+
+    let a = a_transform.transform_point3(a);
+    let b = b_transform.transform_point3(b);
 
     a - b
 }
