@@ -110,6 +110,30 @@ impl App {
         self.layers.push(layer);
         Ok(())
     }
+
+    /// Inserts a layer from the provided init closure to to the top of the layer stack. The provided
+    /// closure to construct the layer takes in the world and events.
+    pub fn insert_layer<F, T>(&mut self, index: usize, func: F)
+    where
+        F: FnOnce(&mut World, &mut Resources, &mut Events) -> T,
+        T: 'static + Layer,
+    {
+        let layer = func(&mut self.world, &mut self.resources, &mut self.events);
+        self.layers.insert(index, layer);
+    }
+
+    /// Pushes a layer from the provided init closure to to the top of the layer stack. The provided
+    /// closure to construct the layer takes in the world and events, and may return an error which
+    /// is propagated to the callee.
+    pub fn try_insert_layer<F, T, E>(&mut self, index: usize, func: F) -> Result<(), E>
+    where
+        F: FnOnce(&mut World, &mut Resources, &mut Events) -> Result<T, E>,
+        T: 'static + Layer,
+    {
+        let layer = func(&mut self.world, &mut self.resources, &mut self.events)?;
+        self.layers.insert(index, layer);
+        Ok(())
+    }
 }
 
 impl Default for App {

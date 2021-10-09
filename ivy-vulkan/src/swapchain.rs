@@ -1,3 +1,4 @@
+use crate::surface::Backend;
 use crate::ImageUsage;
 use crate::{Error, Extent, Result, VulkanContext};
 use ash::extensions::khr::Surface;
@@ -96,23 +97,23 @@ fn pick_present_mode(
     vk::PresentModeKHR::FIFO
 }
 
-fn pick_extent(window: &glfw::Window, capabilities: &vk::SurfaceCapabilitiesKHR) -> Extent {
+fn pick_extent<T: Backend>(window: &T, capabilities: &vk::SurfaceCapabilitiesKHR) -> Extent {
     // The extent of the surface needs to match exactly
     if capabilities.current_extent.width != std::u32::MAX {
         return capabilities.current_extent.into();
     }
 
     // Freely choose extent based on window and min-max capabilities
-    let (width, height) = window.get_framebuffer_size();
+    let extent = window.framebuffer_size();
 
     let width = cmp::max(
         capabilities.min_image_extent.width,
-        cmp::min(capabilities.max_image_extent.width, width as u32),
+        cmp::min(capabilities.max_image_extent.width, extent.width as u32),
     );
 
     let height = cmp::max(
         capabilities.min_image_extent.height,
-        cmp::min(capabilities.max_image_extent.height, height as u32),
+        cmp::min(capabilities.max_image_extent.height, extent.height as u32),
     );
 
     (width, height).into()
@@ -131,9 +132,9 @@ pub struct Swapchain {
 }
 
 impl Swapchain {
-    pub fn new(
+    pub fn new<T: Backend>(
         context: Arc<VulkanContext>,
-        window: &glfw::Window,
+        window: &T,
         info: SwapchainInfo,
     ) -> Result<Self> {
         let support = query_support(

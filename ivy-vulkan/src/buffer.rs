@@ -181,7 +181,6 @@ impl Buffer {
                 iter.zip(slice)
                     .try_for_each(move |(val, mapped)| -> std::result::Result<(), E> {
                         let val = val?;
-                        dbg!(&val);
                         *mapped = val;
 
                         Ok(())

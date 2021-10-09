@@ -6,7 +6,7 @@ use ivy_vulkan::{commands::CommandBuffer, vk::ClearValue, ImageLayout, LoadOp, S
 use std::{any::type_name, marker::PhantomData};
 
 /// Represents a node in the renderpass.
-pub trait Node: 'static + Send + Sync {
+pub trait Node: 'static + Send {
     /// Returns the color attachments for this node. Should not be execution heavy function
     fn color_attachments(&self) -> &[AttachmentInfo] {
         &[]

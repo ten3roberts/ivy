@@ -1,4 +1,4 @@
-use std::{borrow::Cow, ops::Deref, slice, sync::Arc};
+use std::{borrow::Cow, slice, sync::Arc};
 
 use crate::{Error, Result};
 use ivy_resources::{Handle, LoadResource, Resources};
@@ -18,11 +18,12 @@ pub struct Image {
 
 impl Image {
     pub fn new(
-        context: &VulkanContext,
         resources: &Resources,
         texture: Handle<Texture>,
         sampler: Handle<Sampler>,
     ) -> Result<Self> {
+        let context = resources.get_default::<Arc<VulkanContext>>()?;
+
         let set = DescriptorBuilder::new()
             .bind_combined_image_sampler(
                 0,
@@ -72,10 +73,9 @@ impl LoadResource for Image {
     type Error = Error;
 
     fn load(resources: &Resources, info: &Self::Info) -> Result<Self> {
-        let context = resources.get_default::<Arc<VulkanContext>>()?;
         let texture = resources.load(info.texture.clone())??;
         let sampler = resources.load(info.sampler)??;
 
-        Self::new(context.deref(), resources, texture, sampler)
+        Self::new(resources, texture, sampler)
     }
 }

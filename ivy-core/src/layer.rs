@@ -40,6 +40,11 @@ impl LayerStack {
         let layer = Box::new(layer);
         self.layers.push(layer);
     }
+
+    pub fn insert<T: 'static + Layer>(&mut self, index: usize, layer: T) {
+        let layer = Box::new(layer);
+        self.layers.insert(index, layer);
+    }
 }
 
 impl Default for LayerStack {

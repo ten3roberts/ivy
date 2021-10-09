@@ -18,7 +18,7 @@ pub struct Cell {
 
 // Since Storage implements Send + Sync, this is safe.
 unsafe impl Send for Cell {}
-unsafe impl Sync for Cell {}
+// unsafe impl Sync for Cell {}
 
 impl Cell {
     // A raw pointer to the internally boxed AtomicRefCell is stored. The pointer is
@@ -179,7 +179,7 @@ impl<'a, T> DerefMut for CellRefMut<'a, T> {
     }
 }
 
-pub trait Storage: 'static + Send + Sync {
+pub trait Storage: 'static + Send {
     fn as_any(&self) -> &dyn std::any::Any;
 
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
@@ -187,7 +187,7 @@ pub trait Storage: 'static + Send + Sync {
 
 impl<T> Storage for T
 where
-    T: 'static + Sized + Send + Sync,
+    T: 'static + Sized + Send,
 {
     #[inline]
     fn as_any(&self) -> &dyn std::any::Any {

@@ -105,7 +105,6 @@ where
         images: Vec<(K, Image)>,
         padding: u32,
     ) -> Result<Self> {
-        dbg!("Creating atlas");
         let mut packer = GroupedRectsToPlace::<K, BinId>::new();
         let extent = texture_info.extent;
 

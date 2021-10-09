@@ -1,6 +1,5 @@
 use crate::{Error, Result};
 use ash::{vk, Entry, Instance};
-use glfw::Glfw;
 use std::ffi::{CStr, CString};
 
 pub const VALIDATION_LAYERS: &[&str] = &["VK_LAYER_KHRONOS_validation"];
@@ -23,7 +22,7 @@ pub fn get_layers() -> &'static [&'static str] {
 /// Creates a vulkan instance with the appropriate extensions and layers
 pub fn create(
     entry: &Entry,
-    glfw: Option<&Glfw>,
+    extensions: &[String],
     name: &str,
     engine_name: &str,
 ) -> Result<Instance> {
@@ -34,11 +33,9 @@ pub fn create(
         .application_name(&name)
         .engine_name(&engine_name);
 
-    let extensions = glfw
-        .map(Glfw::get_required_instance_extensions)
-        .unwrap_or_default()
-        .ok_or(Error::SurfaceSupport)?
-        .into_iter()
+    let extensions = extensions
+        .iter()
+        .cloned()
         .map(CString::new)
         .chain(INSTANCE_EXTENSIONS.iter().map(|s| CString::new(*s)))
         .collect::<std::result::Result<Vec<_>, _>>()

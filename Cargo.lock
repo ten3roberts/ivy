@@ -473,6 +473,7 @@ dependencies = [
  "ivy-ui",
  "ivy-vulkan",
  "log",
+ "parking_lot",
  "slotmap",
  "ultraviolet",
 ]
@@ -509,6 +510,7 @@ dependencies = [
  "ivy-image",
  "ivy-resources",
  "ivy-vulkan",
+ "parking_lot",
  "rectangle-pack",
  "thiserror",
  "ultraviolet",

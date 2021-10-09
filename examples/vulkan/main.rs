@@ -1,44 +1,35 @@
 use std::{
     fmt::Display,
+    ops::Deref,
     sync::{mpsc, Arc},
     time::Duration,
 };
 
 use anyhow::{anyhow, Context};
-use atomic_refcell::AtomicRefCell;
 use flume::Receiver;
-use glfw::{Action, CursorMode, Glfw, Key, Window, WindowEvent};
-use graphics::window::WindowExt;
+use glfw::{Action, CursorMode, Glfw, Key, WindowEvent};
 use hecs::*;
 use hecs_hierarchy::Hierarchy;
 use ivy::{
     core::*,
-    graphics::{
-        window::{WindowInfo, WindowMode},
-        *,
-    },
+    graphics::*,
     input::*,
-    physics::components::{AngularVelocity, Velocity},
-    postprocessing::pbr::{create_pbr_pipeline, PBRInfo},
-    random::{
-        rand::{prelude::StdRng, SeedableRng},
-        Random,
-    },
     rendergraph::*,
     resources::*,
     ui::{constraints::*, *},
-    vulkan::vk::CullModeFlags,
     vulkan::*,
     *,
 };
 use ivy_resources::Resources;
+use parking_lot::RwLock;
+use physics::collision::{Collider, Cube};
+use postprocessing::pbr::{create_pbr_pipeline, PBRInfo};
 use slotmap::SecondaryMap;
 use std::fmt::Write;
 use ultraviolet::{Rotor3, Vec3};
+use vulkan::vk::CullModeFlags;
 
 use log::*;
-
-mod route;
 
 const FRAMES_IN_FLIGHT: usize = 2;
 
@@ -66,6 +57,26 @@ where
     }
 }
 
+struct Movable {
+    vector: InputVector,
+    speed: f32,
+}
+
+fn move_system(world: &mut World, input: &Input, dt: f32) {
+    world
+        .query::<(&Movable, &mut Position)>()
+        .iter()
+        .for_each(|(_, (m, p))| {
+            *p += Position(m.vector.get(input)) * m.speed * dt;
+        })
+}
+
+impl Movable {
+    fn new(vector: InputVector, speed: f32) -> Self {
+        Self { vector, speed }
+    }
+}
+
 struct Periodic<T> {
     func: Box<dyn Fn(Entity, &mut T, usize) + Send + Sync>,
     clock: Clock,
@@ -77,7 +88,7 @@ impl<T> Periodic<T>
 where
     T: Component,
 {
-    fn new(period: Duration, func: Box<dyn Fn(Entity, &mut T, usize) + Send + Sync>) -> Self {
+    fn _new(period: Duration, func: Box<dyn Fn(Entity, &mut T, usize) + Send + Sync>) -> Self {
         Self {
             func,
             period,
@@ -110,37 +121,279 @@ fn main() -> anyhow::Result<()> {
     // Go up three levels
     ivy_core::normalize_dir(3)?;
 
-    let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS)?;
-
-    let (window, window_events) = ivy_graphics::window::create(
-        &mut glfw,
-        "ivy example-vulkan",
-        WindowInfo {
-            extent: None,
-
-            resizable: false,
-            mode: WindowMode::Windowed,
-        },
-    )?;
-
-    let window = Arc::new(AtomicRefCell::new(window));
+    let glfw = Arc::new(RwLock::new(glfw::init(glfw::FAIL_ON_ERRORS)?));
 
     let mut app = App::builder()
-        .try_push_layer(|_, r, _| WindowLayer::new(glfw, r, window.clone(), window_events))?
-        .push_layer(|w, _, e| LogicLayer::new(w, e, window.clone()))
-        .try_push_layer(|w, r, e| VulkanLayer::new(w, r, e, window.clone()))?
+        .try_push_layer(|_, r, _| {
+            WindowLayer::new(
+                glfw,
+                r,
+                WindowInfo {
+                    extent: None,
+                    resizable: false,
+                    mode: WindowMode::Windowed,
+                    ..Default::default()
+                },
+            )
+        })?
+        .try_push_layer(LogicLayer::new)?
+        .try_push_layer(|w, r, e| VulkanLayer::new(w, r, e))?
         .try_push_layer(|w, r, e| DebugLayer::new(w, r, e, 100.ms()))?
         .build();
 
     app.run().context("Failed to run application")
 }
 
+fn setup_graphics(
+    world: &mut World,
+    resources: &Resources,
+    camera: Entity,
+    canvas: Entity,
+) -> anyhow::Result<()> {
+    let window = resources.get_default::<Window>()?;
+
+    let swapchain_info = ivy_vulkan::SwapchainInfo {
+        present_mode: vk::PresentModeKHR::MAILBOX,
+        image_count: FRAMES_IN_FLIGHT as u32 + 1,
+        ..Default::default()
+    };
+
+    let context = resources.get_default::<Arc<VulkanContext>>()?;
+
+    let swapchain = resources.insert_default(Swapchain::new(
+        context.clone(),
+        window.deref(),
+        swapchain_info,
+    )?)?;
+
+    let swapchain_extent = resources.get(swapchain)?.extent();
+
+    let final_lit = resources.insert(Texture::new(
+        context.clone(),
+        &TextureInfo {
+            extent: swapchain_extent,
+            mip_levels: 1,
+            usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED | ImageUsage::TRANSFER_SRC,
+            ..Default::default()
+        },
+    )?)?;
+
+    let mut rendergraph = RenderGraph::new(context.clone(), FRAMES_IN_FLIGHT)?;
+
+    let _fullscreen_renderer = resources.insert(FullscreenRenderer)?;
+
+    let _mesh_renderer =
+        resources.insert(MeshRenderer::new(context.clone(), 16, FRAMES_IN_FLIGHT)?)?;
+
+    let image_renderer =
+        resources.insert(ImageRenderer::new(context.clone(), 16, FRAMES_IN_FLIGHT)?)?;
+
+    let text_renderer = resources.insert(TextRenderer::new(
+        context.clone(),
+        16,
+        128,
+        FRAMES_IN_FLIGHT,
+    )?)?;
+
+    let pbr_nodes = rendergraph.add_nodes(create_pbr_pipeline::<GeometryPass, PostProcessingPass>(
+        context.clone(),
+        world,
+        &resources,
+        camera,
+        swapchain_extent,
+        FRAMES_IN_FLIGHT,
+        &[],
+        &[AttachmentInfo {
+            store_op: StoreOp::STORE,
+            load_op: LoadOp::DONT_CARE,
+            initial_layout: ImageLayout::UNDEFINED,
+            final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+            resource: final_lit,
+        }],
+        &[],
+        PBRInfo {
+            ambient_radience: Vec3::one() * 0.05,
+            max_lights: 10,
+        },
+    )?);
+
+    let ui_node = rendergraph.add_node(CameraNode::<UIPass, _, _>::new(
+        canvas,
+        (image_renderer, text_renderer),
+        vec![AttachmentInfo {
+            store_op: StoreOp::STORE,
+            load_op: LoadOp::LOAD,
+            initial_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+            final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+            resource: final_lit,
+        }],
+        vec![],
+        vec![],
+        None,
+        vec![],
+    ));
+
+    rendergraph.add_node(TextUpdateNode::new(text_renderer));
+
+    rendergraph.add_node(SwapchainNode::new(
+        context.clone(),
+        swapchain,
+        final_lit,
+        vec![],
+        &resources,
+    )?);
+
+    // Build renderpasses
+    rendergraph.build(resources.fetch()?, swapchain_extent)?;
+
+    // Create pipelines
+    let geometry_node = pbr_nodes[0];
+    let post_processing_node = pbr_nodes[1];
+
+    let fullscreen_pipeline = Pipeline::new::<()>(
+        context.clone(),
+        &PipelineInfo {
+            vertexshader: "./res/shaders/fullscreen.vert.spv".into(),
+            fragmentshader: "./res/shaders/post_processing.frag.spv".into(),
+            samples: SampleCountFlags::TYPE_1,
+            extent: swapchain_extent,
+            cull_mode: CullModeFlags::NONE,
+            ..rendergraph.pipeline_info(post_processing_node)?
+        },
+    )?;
+
+    // Create a pipeline from the shaders
+    let pipeline = Pipeline::new::<Vertex>(
+        context.clone(),
+        &PipelineInfo {
+            vertexshader: "./res/shaders/default.vert.spv".into(),
+            fragmentshader: "./res/shaders/default.frag.spv".into(),
+            samples: SampleCountFlags::TYPE_1,
+            extent: swapchain_extent,
+            ..rendergraph.pipeline_info(geometry_node)?
+        },
+    )?;
+
+    let default_shaderpass = resources.insert(GeometryPass(pipeline))?;
+
+    // Insert one default post processing pass
+    resources.insert_default(PostProcessingPass(fullscreen_pipeline))?;
+
+    let context = resources.get_default::<Arc<VulkanContext>>()?;
+
+    // Create a pipeline from the shaders
+    let ui_pipeline = Pipeline::new::<UIVertex>(
+        context.clone(),
+        &PipelineInfo {
+            blending: true,
+            vertexshader: "./res/shaders/ui.vert.spv".into(),
+            fragmentshader: "./res/shaders/ui.frag.spv".into(),
+            samples: SampleCountFlags::TYPE_1,
+            extent: swapchain_extent,
+            polygon_mode: vk::PolygonMode::FILL,
+            cull_mode: vk::CullModeFlags::NONE,
+            front_face: vk::FrontFace::CLOCKWISE,
+            ..rendergraph.pipeline_info(ui_node)?
+        },
+    )?;
+
+    // Create a pipeline from the shaders
+    let text_pipeline = Pipeline::new::<UIVertex>(
+        context.clone(),
+        &PipelineInfo {
+            blending: true,
+            vertexshader: "./res/shaders/text.vert.spv".into(),
+            fragmentshader: "./res/shaders/text.frag.spv".into(),
+            samples: SampleCountFlags::TYPE_1,
+            extent: swapchain_extent,
+            polygon_mode: vk::PolygonMode::FILL,
+            cull_mode: vk::CullModeFlags::NONE,
+            front_face: vk::FrontFace::CLOCKWISE,
+            ..rendergraph.pipeline_info(ui_node)?
+        },
+    )?;
+
+    let ui_pass = resources.insert(UIPass(ui_pipeline))?;
+    let text_pass = resources.insert(UIPass(text_pipeline))?;
+
+    _setup_ui(world, resources, ui_pass, text_pass)?;
+    resources.insert_default(rendergraph)?;
+
+    setup_objects(world, resources, default_shaderpass)
+}
+
+fn setup_objects(
+    world: &mut World,
+    resources: &Resources,
+    shaderpass: Handle<GeometryPass>,
+) -> anyhow::Result<()> {
+    let document: Handle<Document> = resources
+        .load("./res/models/cube.gltf")
+        .context("Failed to load cube model")??;
+
+    let cube_mesh = resources.get(document)?.mesh(0);
+
+    let material: Handle<Material> = resources.load(MaterialInfo {
+        albedo: "./res/textures/metal.png".into(),
+        roughness: 0.3,
+        metallic: 0.4,
+        ..Default::default()
+    })??;
+
+    world.spawn((
+        Position(Vec3::new(0.0, 10.0, 10.0)),
+        PointLight::new(1.0, Vec3::new(1.0, 1.0, 0.7) * 4000.0),
+    ));
+
+    world.spawn((
+        Position(Vec3::new(7.0, 0.0, 0.0)),
+        PointLight::new(1.0, Vec3::new(0.0, 0.0, 500.0)),
+    ));
+
+    world.spawn((
+        material,
+        cube_mesh,
+        shaderpass,
+        Position::new(-1.5, 0.0, 0.0),
+        Color::new(1.0, 1.0, 1.0, 1.0),
+        Collider::new(Cube::new(1.0)),
+    ));
+
+    world.spawn((
+        material,
+        cube_mesh,
+        shaderpass,
+        Movable::new(
+            InputVector::new(
+                InputAxis::Keyboard {
+                    pos: Key::L,
+                    neg: Key::H,
+                },
+                InputAxis::Keyboard {
+                    pos: Key::K,
+                    neg: Key::J,
+                },
+                InputAxis::Keyboard {
+                    pos: Key::I,
+                    neg: Key::O,
+                },
+            ),
+            0.5,
+        ),
+        Scale::uniform(0.5),
+        Color::new(1.0, 1.0, 1.0, 1.0),
+        Position::new(0.3, 0.3, 0.0),
+        Collider::new(Cube::new(0.5)),
+    ));
+
+    Ok(())
+}
+
 struct LogicLayer {
-    window: Arc<AtomicRefCell<Window>>,
     input: Input,
     input_vec: InputVector,
 
-    cemra_speed: f32,
+    camera_speed: f32,
     camera_euler: Vec3,
 
     cursor_mode: CursorMode,
@@ -152,8 +405,14 @@ struct LogicLayer {
 }
 
 impl LogicLayer {
-    pub fn new(world: &mut World, events: &mut Events, window: Arc<AtomicRefCell<Window>>) -> Self {
-        let input = Input::new(&window.borrow(), events);
+    pub fn new(
+        world: &mut World,
+        resources: &mut Resources,
+        events: &mut Events,
+    ) -> anyhow::Result<Self> {
+        let window = resources.get_default::<Window>()?;
+
+        let input = Input::new(window.cursor_pos(), events);
 
         let input_vec = InputVector::new(
             InputAxis::keyboard(Key::D, Key::A),
@@ -161,40 +420,42 @@ impl LogicLayer {
             InputAxis::keyboard(Key::S, Key::W),
         );
 
-        let extent = window.borrow().extent();
+        let extent = window.extent();
 
-        world.spawn((
+        let camera = world.spawn((
             Camera::perspective(1.0, extent.aspect(), 0.1, 100.0),
             MainCamera,
             Position(Vec3::new(0.0, 0.0, 5.0)),
             Rotation(Rotor3::identity()),
         ));
 
-        world.spawn((
+        let canvas = world.spawn((
             Canvas,
             Size2D(extent.as_vec()),
             Position2D::new(0.0, 0.0),
             Camera::default(),
         ));
 
+        setup_graphics(world, resources, camera, canvas).context("Failed to setup graphics")?;
+
         let (tx, rx) = flume::unbounded();
         events.subscribe(tx);
 
-        log::debug!("Created logic layer");
-        Self {
-            window,
+        Ok(Self {
             input,
-            cemra_speed: 5.0,
+            camera_speed: 5.0,
             camera_euler: Vec3::zero(),
             input_vec,
             timestep: 20.ms(),
             acc: 0.0,
             window_events: rx,
             cursor_mode: CursorMode::Normal,
-        }
+        })
     }
 
-    pub fn handle_events(&mut self) {
+    pub fn handle_events(&mut self, resources: &Resources) -> anyhow::Result<()> {
+        let window = resources.get_default_mut::<Window>()?;
+
         for event in self.window_events.try_iter() {
             match event {
                 WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
@@ -204,23 +465,24 @@ impl LogicLayer {
                         self.cursor_mode = CursorMode::Normal;
                     }
 
-                    self.window.borrow_mut().set_cursor_mode(self.cursor_mode);
+                    window.set_cursor_mode(self.cursor_mode);
                 }
                 WindowEvent::Focus(false) => {
                     self.cursor_mode = CursorMode::Normal;
-                    self.window.borrow_mut().set_cursor_mode(self.cursor_mode)
+                    window.set_cursor_mode(self.cursor_mode)
                 }
                 WindowEvent::Focus(true) => {
                     self.cursor_mode = CursorMode::Disabled;
-                    self.window.borrow_mut().set_cursor_mode(self.cursor_mode)
+                    window.set_cursor_mode(self.cursor_mode)
                 }
                 WindowEvent::Scroll(_, scroll) => {
-                    self.cemra_speed += scroll as f32;
-                    self.cemra_speed = self.cemra_speed.clamp(0.0, 20.0);
+                    self.camera_speed += scroll as f32;
+                    self.camera_speed = self.camera_speed.clamp(0.1, 20.0);
                 }
                 _ => {}
             }
         }
+        Ok(())
     }
 }
 
@@ -228,11 +490,12 @@ impl Layer for LogicLayer {
     fn on_update(
         &mut self,
         world: &mut World,
-        _: &mut Resources,
+        resources: &mut Resources,
         _: &mut Events,
         frame_time: Duration,
     ) -> anyhow::Result<()> {
-        self.handle_events();
+        self.handle_events(resources)
+            .context("Failed to handle events")?;
 
         self.input.on_update();
 
@@ -248,8 +511,9 @@ impl Layer for LogicLayer {
                 .next()
                 .unwrap();
 
-            let mouse_movement =
-                self.input.rel_mouse_pos() / self.window.borrow().extent().as_vec();
+            let window = resources.get_default::<Window>()?;
+
+            let mouse_movement = self.input.rel_mouse_pos() / window.extent().as_vec();
 
             self.camera_euler += mouse_movement.xyz();
 
@@ -271,15 +535,21 @@ impl Layer for LogicLayer {
 
             let movement = self.input_vec.get(&self.input);
 
-            *camera_pos += Position(camera_rot.into_matrix() * (movement * dt * self.cemra_speed));
+            *camera_pos += Position(camera_rot.into_matrix() * (movement * dt * self.camera_speed));
 
             OverTime::<RelativeOffset>::update(world, dt);
             Periodic::<Text>::update(world);
 
+            move_system(world, &self.input, dt);
+
             graphics::systems::satisfy_objects(world);
             graphics::systems::update_view_matrices(world);
+
             physics::systems::integrate_angular_velocity_system(world, dt);
             physics::systems::integrate_velocity_system(world, dt);
+            physics::systems::gravity_system(world, dt);
+            physics::systems::wrap_around_system(world);
+            physics::systems::collision_system(world);
 
             let canvas = world
                 .query::<(&Canvas, &Camera)>()
@@ -310,15 +580,11 @@ struct DisplayDebugReport;
 
 struct VulkanLayer {
     context: Arc<VulkanContext>,
-    swapchain: Handle<Swapchain>,
 }
 
-fn setup_ui(
+fn _setup_ui(
     world: &mut World,
-    image: Handle<Image>,
-    atlas: Handle<Image>,
-    font: Handle<Font>,
-    font_mono: Handle<Font>,
+    resources: &Resources,
     ui_pass: Handle<UIPass>,
     text_pass: Handle<UIPass>,
 ) -> anyhow::Result<()> {
@@ -328,6 +594,27 @@ fn setup_ui(
         .next()
         .ok_or(anyhow!("Missing canvas"))?
         .0;
+
+    let image: Handle<Image> = resources.load(ImageInfo {
+        texture: "./res/textures/heart.png".into(),
+        sampler: SamplerInfo::default(),
+    })??;
+
+    let font: Handle<Font> = resources.load((
+        FontInfo {
+            size: 64.0,
+            ..Default::default()
+        },
+        "./res/fonts/Lora/Lora-VariableFont_wght.ttf".into(),
+    ))??;
+
+    let monospace: Handle<Font> = resources.load((
+        FontInfo {
+            size: 32.0,
+            ..Default::default()
+        },
+        "./res/fonts/Roboto_Mono/RobotoMono-VariableFont_wght.ttf".into(),
+    ))??;
 
     world.attach_new::<Widget, _>(
         canvas,
@@ -344,7 +631,7 @@ fn setup_ui(
         canvas,
         (
             Widget,
-            atlas,
+            image,
             ui_pass,
             OverTime::<RelativeOffset>::new(Box::new(|_, offset, elapsed, _| {
                 offset.x = (elapsed * 0.25).sin();
@@ -370,15 +657,9 @@ fn setup_ui(
                 vertical: VerticalAlign::Middle,
             },
             WrapStyle::Word,
+            RelativeSize::new(1.0, 1.0),
             text_pass,
-            AbsoluteOffset::new(100.0, 0.0),
-            OffsetSize::new(500.0, 0.0),
-            Periodic::<Text>::new(
-                1.ms(),
-                Box::new(|_, text, count| {
-                    text.set(format!("Hello World:\n{:#o}", count));
-                }),
-            ),
+            AbsoluteOffset::new(0.0, 0.0),
         ),
     )?;
 
@@ -399,7 +680,7 @@ fn setup_ui(
         canvas,
         (
             Widget,
-            font_mono,
+            monospace,
             text_pass,
             DisplayDebugReport,
             Text::new(""),
@@ -419,7 +700,7 @@ fn setup_ui(
                 *offset = RelativeOffset::new((elapsed).cos() * 4.0, elapsed.sin() * 2.0) * 0.5
             })),
             RelativeOffset::default(),
-            RelativeSize::new(0.2, 0.2),
+            RelativeSize::new(0.4, 0.4),
         ),
     )?;
 
@@ -441,303 +722,10 @@ fn setup_ui(
 }
 
 impl VulkanLayer {
-    pub fn new(
-        world: &mut World,
-        resources: &Resources,
-        _: &mut Events,
-        window: Arc<AtomicRefCell<Window>>,
-    ) -> anyhow::Result<Self> {
-        let swapchain_info = ivy_vulkan::SwapchainInfo {
-            present_mode: vk::PresentModeKHR::IMMEDIATE,
-            image_count: FRAMES_IN_FLIGHT as u32 + 1,
-            ..Default::default()
-        };
+    pub fn new(_: &mut World, resources: &Resources, _: &mut Events) -> anyhow::Result<Self> {
+        let context = resources.get_default::<Arc<VulkanContext>>()?.clone();
 
-        let context = resources.get_default::<Arc<VulkanContext>>()?;
-
-        let swapchain = resources.insert_default(Swapchain::new(
-            context.clone(),
-            &window.borrow(),
-            swapchain_info,
-        )?)?;
-
-        let mut rendergraph = RenderGraph::new(context.clone(), FRAMES_IN_FLIGHT)?;
-
-        resources.insert_default(MeshRenderer::new(context.clone(), 16, FRAMES_IN_FLIGHT)?)?;
-
-        resources.insert_default(FullscreenRenderer)?;
-
-        let camera = world
-            .query::<&Camera>()
-            .without::<Canvas>()
-            .iter()
-            .next()
-            .unwrap()
-            .0;
-
-        let swapchain_extent = resources.get(swapchain)?.extent();
-
-        let final_lit = resources.insert(Texture::new(
-            context.clone(),
-            &TextureInfo {
-                extent: swapchain_extent,
-                mip_levels: 1,
-                usage: ImageUsage::COLOR_ATTACHMENT
-                    | ImageUsage::SAMPLED
-                    | ImageUsage::TRANSFER_SRC,
-                ..Default::default()
-            },
-        )?)?;
-
-        let pbr_nodes =
-            rendergraph.add_nodes(create_pbr_pipeline::<GeometryPass, PostProcessingPass>(
-                context.clone(),
-                world,
-                &resources,
-                camera,
-                swapchain_extent,
-                FRAMES_IN_FLIGHT,
-                &[],
-                &[AttachmentInfo {
-                    store_op: StoreOp::STORE,
-                    load_op: LoadOp::DONT_CARE,
-                    initial_layout: ImageLayout::UNDEFINED,
-                    final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                    resource: final_lit,
-                }],
-                &[],
-                PBRInfo {
-                    ambient_radience: Vec3::one() * 0.05,
-                    max_lights: 10,
-                },
-            )?);
-
-        let canvas = world
-            .query::<(&Canvas, &Camera)>()
-            .iter()
-            .next()
-            .context("No canvas found")?
-            .0;
-
-        resources.insert_default(ImageRenderer::new(context.clone(), 16, FRAMES_IN_FLIGHT)?)?;
-
-        resources.insert_default(TextRenderer::new(context.clone(), 16, 8, FRAMES_IN_FLIGHT)?)?;
-
-        rendergraph.add_node(TextUpdateNode::new(resources.default::<TextRenderer>()?));
-
-        let ui_node = rendergraph.add_node(CameraNode::<UIPass, _, _>::new(
-            canvas,
-            (
-                resources.default::<ImageRenderer>()?,
-                resources.default::<TextRenderer>()?,
-            ),
-            vec![AttachmentInfo {
-                store_op: StoreOp::STORE,
-                load_op: LoadOp::LOAD,
-                initial_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                resource: final_lit,
-            }],
-            vec![],
-            vec![],
-            None,
-            vec![],
-        ));
-
-        let geometry_node = pbr_nodes[0];
-        let post_processing_node = pbr_nodes[1];
-
-        let swapchain_node = rendergraph.add_node(SwapchainNode::new(
-            context.clone(),
-            swapchain,
-            final_lit,
-            vec![],
-            &resources,
-        )?);
-
-        rendergraph.build(resources.fetch()?, swapchain_extent)?;
-
-        assert!(rendergraph.node_renderpass(swapchain_node).is_err());
-
-        let document: Handle<Document> = resources
-            .load("./res/models/cube.gltf")
-            .context("Failed to load cube model")??;
-
-        let cube_mesh = resources.get(document)?.mesh(0);
-
-        let font: Handle<Font> = resources
-            .load((
-                FontInfo {
-                    size: 128.0,
-                    ..Default::default()
-                },
-                "./res/fonts/Lora/Lora-VariableFont_wght.ttf".into(),
-            ))
-            .context("Failed to load font")??;
-
-        let font_mono: Handle<Font> = resources
-            .load((
-                FontInfo {
-                    size: 64.0,
-                    ..Default::default()
-                },
-                "./res/fonts/Roboto_Mono/RobotoMono-VariableFont_wght.ttf".into(),
-            ))
-            .context("Failed to load font")??;
-
-        let material: Handle<Material> = resources.load(MaterialInfo {
-            albedo: "./res/textures/grid.png".into(),
-            roughness: 0.3,
-            metallic: 0.4,
-            ..Default::default()
-        })??;
-
-        let material2: Handle<Material> = resources.load(MaterialInfo {
-            albedo: "./res/textures/uv.png".into(),
-            roughness: 0.0,
-            metallic: 0.9,
-            ..Default::default()
-        })??;
-
-        let atlas = resources.insert(Image::new(
-            &context,
-            &resources,
-            resources.get(font)?.atlas().texture(),
-            resources.default()?,
-        )?)?;
-
-        let image = resources.load(ImageInfo {
-            texture: "./res/textures/heart.png".into(),
-            ..Default::default()
-        })??;
-
-        let fullscreen_pipeline = Pipeline::new::<()>(
-            context.clone(),
-            &PipelineInfo {
-                vertexshader: "./res/shaders/fullscreen.vert.spv".into(),
-                fragmentshader: "./res/shaders/post_processing.frag.spv".into(),
-                samples: SampleCountFlags::TYPE_1,
-                extent: swapchain_extent,
-                cull_mode: CullModeFlags::NONE,
-                ..rendergraph.pipeline_info(post_processing_node)?
-            },
-        )?;
-
-        // Create a pipeline from the shaders
-        let pipeline = Pipeline::new::<Vertex>(
-            context.clone(),
-            &PipelineInfo {
-                vertexshader: "./res/shaders/default.vert.spv".into(),
-                fragmentshader: "./res/shaders/default.frag.spv".into(),
-                samples: SampleCountFlags::TYPE_1,
-                extent: swapchain_extent,
-                ..rendergraph.pipeline_info(geometry_node)?
-            },
-        )?;
-
-        let default_shaderpass = resources.insert(GeometryPass(pipeline))?;
-
-        // Insert one default post processing pass
-        resources.insert_default(PostProcessingPass(fullscreen_pipeline))?;
-
-        world.spawn_batch(
-            [
-                (
-                    Position(Vec3::new(0.0, 0.0, 0.0)),
-                    cube_mesh,
-                    material,
-                    default_shaderpass,
-                ),
-                (
-                    Position(Vec3::new(4.0, 0.0, 0.0)),
-                    cube_mesh,
-                    material,
-                    default_shaderpass,
-                ),
-                (
-                    Position(Vec3::new(0.0, 0.0, -3.0)),
-                    cube_mesh,
-                    material2,
-                    default_shaderpass,
-                ),
-            ]
-            .iter()
-            .cloned(),
-        );
-
-        let mut rng = StdRng::seed_from_u64(42);
-
-        world.spawn_batch((0..500).map(|_| {
-            (
-                Position(Vec3::rand_sphere(&mut rng) * 100.0),
-                Rotation::default(),
-                AngularVelocity(Vec3::rand_uniform(&mut rng)),
-                Velocity(Vec3::rand_constrained_sphere(&mut rng, 0.5, 5.0)),
-                cube_mesh,
-                material,
-                default_shaderpass,
-            )
-        }));
-
-        world.spawn((
-            Position(Vec3::new(7.0, 0.0, 0.0)),
-            PointLight::new(1.0, Vec3::new(0.0, 0.0, 500.0)),
-        ));
-
-        world.spawn((
-            Position(Vec3::new(0.0, 2.0, 5.0)),
-            PointLight::new(0.3, Vec3::new(500.0, 0.0, 0.0)),
-            // SineWave::<Position>::new(
-            //     Position(Vec3::unit_y() * 5.0),
-            //     1.0 / 10.0,
-            //     Position(Vec3::new(0.0, 2.0, 5.0)),
-            // ),
-        ));
-
-        // Create a pipeline from the shaders
-        let ui_pipeline = Pipeline::new::<UIVertex>(
-            context.clone(),
-            &PipelineInfo {
-                blending: true,
-                vertexshader: "./res/shaders/ui.vert.spv".into(),
-                fragmentshader: "./res/shaders/ui.frag.spv".into(),
-                samples: SampleCountFlags::TYPE_1,
-                extent: swapchain_extent,
-                polygon_mode: vk::PolygonMode::FILL,
-                cull_mode: vk::CullModeFlags::NONE,
-                front_face: vk::FrontFace::CLOCKWISE,
-                ..rendergraph.pipeline_info(ui_node)?
-            },
-        )?;
-
-        // Create a pipeline from the shaders
-        let text_pipeline = Pipeline::new::<UIVertex>(
-            context.clone(),
-            &PipelineInfo {
-                blending: true,
-                vertexshader: "./res/shaders/text.vert.spv".into(),
-                fragmentshader: "./res/shaders/text.frag.spv".into(),
-                samples: SampleCountFlags::TYPE_1,
-                extent: swapchain_extent,
-                polygon_mode: vk::PolygonMode::FILL,
-                cull_mode: vk::CullModeFlags::NONE,
-                front_face: vk::FrontFace::CLOCKWISE,
-                ..rendergraph.pipeline_info(ui_node)?
-            },
-        )?;
-
-        let ui_pass = resources.insert(UIPass(ui_pipeline))?;
-        let text_pass = resources.insert(UIPass(text_pipeline))?;
-
-        setup_ui(world, image, atlas, font, font_mono, ui_pass, text_pass)?;
-
-        resources.insert(rendergraph)?;
-        log::debug!("Created vulkan layer");
-
-        Ok(Self {
-            context: context.clone(),
-            swapchain,
-        })
+        Ok(Self { context })
     }
 }
 
@@ -758,7 +746,7 @@ impl Layer for VulkanLayer {
         let current_frame = rendergraph.begin()?;
 
         resources
-            .get_mut(self.swapchain)?
+            .get_default_mut::<Swapchain>()?
             .acquire_next_image(rendergraph.wait_semaphore(current_frame))?;
 
         GpuCameraData::update_all_system(world, current_frame)?;
@@ -768,7 +756,7 @@ impl Layer for VulkanLayer {
         rendergraph.end()?;
 
         // // Present results
-        resources.get(self.swapchain)?.present(
+        resources.get_default::<Swapchain>()?.present(
             context.present_queue(),
             &[rendergraph.signal_semaphore(current_frame)],
         )?;
@@ -784,27 +772,23 @@ impl Drop for VulkanLayer {
 }
 
 struct WindowLayer {
-    glfw: Glfw,
-    _window: Arc<AtomicRefCell<Window>>,
+    glfw: Arc<RwLock<Glfw>>,
     events: mpsc::Receiver<(f64, WindowEvent)>,
 }
 
 impl WindowLayer {
     pub fn new(
-        glfw: Glfw,
+        glfw: Arc<RwLock<Glfw>>,
         resources: &Resources,
-        window: Arc<AtomicRefCell<Window>>,
-        events: mpsc::Receiver<(f64, WindowEvent)>,
+        info: WindowInfo,
     ) -> anyhow::Result<Self> {
-        let context = Arc::new(VulkanContext::new_with_window(&glfw, &window.borrow())?);
+        let (window, events) = Window::new(glfw.clone(), info)?;
+        let context = Arc::new(VulkanContext::new(&window)?);
 
         resources.insert(context)?;
+        resources.insert(window)?;
 
-        Ok(Self {
-            glfw,
-            _window: window,
-            events,
-        })
+        Ok(Self { glfw, events })
     }
 }
 
@@ -816,7 +800,7 @@ impl Layer for WindowLayer {
         events: &mut Events,
         _frame_time: Duration,
     ) -> anyhow::Result<()> {
-        self.glfw.poll_events();
+        self.glfw.write().poll_events();
 
         for (_, event) in glfw::flush_messages(&self.events) {
             if let WindowEvent::Close = event {
@@ -870,7 +854,7 @@ impl<'a> Display for DebugReport<'a> {
         self.execution_times
             .map(|val| {
                 val.iter()
-                    .try_for_each(|(_, val)| write!(f, "{:?}: {}us\n", val.0, val.1.us()))
+                    .try_for_each(|(_, val)| write!(f, "{:?}: {}ms\n", val.0, val.1.ms()))
             })
             .transpose()?;
 

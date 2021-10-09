@@ -1,30 +1,14 @@
-use crate::Result;
-use ash::{
-    extensions::khr::Surface,
-    vk::{self, Handle, SurfaceKHR},
-    Entry, Instance,
-};
-
-use glfw::Window;
+use crate::{Extent, Result};
+use ash::{extensions::khr::Surface, vk::SurfaceKHR, Entry, Instance};
 
 pub fn create_loader(entry: &Entry, instance: &Instance) -> Surface {
     Surface::new(entry, instance)
 }
 
-/// Creates a vulkan surface from window
-pub fn create(instance: &Instance, window: &Window) -> Result<SurfaceKHR> {
-    let mut surface: u64 = 0_u64;
-    let result = window.create_window_surface(
-        instance.handle().as_raw() as _,
-        std::ptr::null(),
-        &mut surface,
-    );
-
-    if result != vk::Result::SUCCESS.as_raw() as u32 {
-        return Err(vk::Result::from_raw(result as i32).into());
-    }
-
-    Ok(SurfaceKHR::from_raw(surface))
+pub trait Backend {
+    fn create_surface(&self, instance: &Instance) -> Result<SurfaceKHR>;
+    fn framebuffer_size(&self) -> Extent;
+    fn extensions(&self) -> Vec<String>;
 }
 
 pub fn destroy(surface_loader: &Surface, surface: SurfaceKHR) {

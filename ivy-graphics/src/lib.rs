@@ -16,7 +16,7 @@ mod base_renderer;
 pub mod components;
 mod light;
 pub mod systems;
-pub mod window;
+mod window;
 
 pub use atlas::*;
 pub use base_renderer::*;
@@ -30,3 +30,4 @@ pub use mesh::*;
 pub use mesh_renderer::*;
 pub use renderer::*;
 pub use shaderpass::*;
+pub use window::*;

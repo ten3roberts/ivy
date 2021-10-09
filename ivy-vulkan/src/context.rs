@@ -1,10 +1,10 @@
 use crate::descriptors::{DescriptorAllocator, DescriptorLayoutCache};
+use crate::surface::Backend;
 use crate::{commands::CommandPool, device::QueueFamilies, Result, *};
 use ash::extensions::ext::DebugUtils;
 use ash::extensions::khr::Surface;
 use ash::vk;
 
-use glfw::Glfw;
 use gpu_allocator::vulkan::{Allocator, AllocatorCreateDesc};
 use parking_lot::RwLock;
 use std::sync::Arc;
@@ -37,19 +37,14 @@ pub struct VulkanContext {
 }
 
 impl VulkanContext {
-    pub fn new_offscreen() -> Result<Self> {
-        Self::new(None)
-    }
-
-    pub fn new_with_window(glfw: &Glfw, window: &glfw::Window) -> Result<Self> {
-        Self::new(Some((glfw, window)))
-    }
-
-    pub fn new(window: Option<(&Glfw, &glfw::Window)>) -> Result<Self> {
+    pub fn new<T>(backend: &T) -> Result<Self>
+    where
+        T: Backend,
+    {
         let entry = entry::create()?;
         let instance = instance::create(
             &entry,
-            window.map(|(glfw, _)| glfw),
+            &backend.extensions(),
             "Vulkan Application",
             "Custom",
         )?;
@@ -64,14 +59,11 @@ impl VulkanContext {
         // debug_utils::create(&entry, &instance)?;
         let surface_loader = surface::create_loader(&entry, &instance);
 
-        let surface = match window {
-            Some((_, window)) => Some(surface::create(&instance, window)?),
-            None => None,
-        };
+        let surface = backend.create_surface(&instance)?;
 
         let (device, pdevice_info) = device::create(
             &instance,
-            surface.map(|surface| (&surface_loader, surface)),
+            Some((&surface_loader, surface)),
             instance::get_layers(),
         )?;
 
@@ -119,7 +111,7 @@ impl VulkanContext {
             descriptor_layout_cache,
             descriptor_allocator,
             surface_loader,
-            surface,
+            surface: Some(surface),
             swapchain_loader,
             graphics_queue,
             present_queue,
