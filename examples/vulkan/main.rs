@@ -8,6 +8,7 @@ use std::{
 use anyhow::{anyhow, Context};
 use flume::Receiver;
 use glfw::{Action, CursorMode, Glfw, Key, WindowEvent};
+use graphics::gizmos::{Gizmo, GizmoKind, GizmoRenderer, Gizmos};
 use hecs::*;
 use hecs_hierarchy::Hierarchy;
 use ivy::{
@@ -26,7 +27,7 @@ use physics::collision::{Collider, Cube};
 use postprocessing::pbr::{create_pbr_pipeline, PBRInfo};
 use slotmap::SecondaryMap;
 use std::fmt::Write;
-use ultraviolet::{Rotor3, Vec3};
+use ultraviolet::{Rotor3, Vec3, Vec4};
 use vulkan::vk::CullModeFlags;
 
 use log::*;
@@ -83,7 +84,7 @@ fn move_system(world: &mut World, input: &Input, dt: f32) {
                 x: pitch,
                 y: yaw,
                 z: roll,
-            } = m.rotate.get(input) * dt * 0.1;
+            } = m.rotate.get(input) * dt * 0.5;
 
             *r = Rotation(**r * (Rotor3::from_euler_angles(roll, pitch, yaw)));
         })
@@ -192,7 +193,8 @@ fn setup_graphics(
 
     let mut rendergraph = RenderGraph::new(context.clone(), FRAMES_IN_FLIGHT)?;
 
-    let _fullscreen_renderer = resources.insert(FullscreenRenderer)?;
+    resources.insert(FullscreenRenderer)?;
+    resources.insert(GizmoRenderer::new(context.clone())?)?;
 
     let _mesh_renderer =
         resources.insert(MeshRenderer::new(context.clone(), 16, FRAMES_IN_FLIGHT)?)?;
@@ -245,6 +247,22 @@ fn setup_graphics(
         vec![],
     ));
 
+    let gizmo_node = rendergraph.add_node(CameraNode::<GizmoPass, _, _>::new(
+        camera,
+        resources.default::<GizmoRenderer>()?,
+        vec![AttachmentInfo {
+            store_op: StoreOp::STORE,
+            load_op: LoadOp::LOAD,
+            initial_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+            final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+            resource: final_lit,
+        }],
+        vec![],
+        vec![],
+        None,
+        vec![],
+    ));
+
     rendergraph.add_node(TextUpdateNode::new(text_renderer));
 
     rendergraph.add_node(SwapchainNode::new(
@@ -274,6 +292,19 @@ fn setup_graphics(
         },
     )?;
 
+    let gizmo_pipeline = Pipeline::new::<Vertex>(
+        context.clone(),
+        &PipelineInfo {
+            vertexshader: "./res/shaders/gizmos.vert.spv".into(),
+            blending: true,
+            fragmentshader: "./res/shaders/gizmos.frag.spv".into(),
+            samples: SampleCountFlags::TYPE_1,
+            extent: swapchain_extent,
+            cull_mode: CullModeFlags::NONE,
+            ..rendergraph.pipeline_info(gizmo_node)?
+        },
+    )?;
+
     // Create a pipeline from the shaders
     let pipeline = Pipeline::new::<Vertex>(
         context.clone(),
@@ -290,6 +321,7 @@ fn setup_graphics(
 
     // Insert one default post processing pass
     resources.insert_default(PostProcessingPass(fullscreen_pipeline))?;
+    resources.insert_default(GizmoPass(gizmo_pipeline))?;
 
     let context = resources.get_default::<Arc<VulkanContext>>()?;
 
@@ -339,6 +371,15 @@ fn setup_objects(
     resources: &Resources,
     shaderpass: Handle<GeometryPass>,
 ) -> anyhow::Result<()> {
+    let mut gizmos = Gizmos::new();
+    gizmos.push(Gizmo::new(
+        Vec3::new(0.0, 0.0, 0.0),
+        Vec4::new(1.0, 0.0, 0.0, 0.5),
+        GizmoKind::Sphere(0.25),
+    ));
+
+    resources.insert(gizmos)?;
+
     let document: Handle<Document> = resources
         .load("./res/models/cube.gltf")
         .context("Failed to load cube model")??;
@@ -392,8 +433,8 @@ fn setup_objects(
             ),
             InputVector::new(
                 InputAxis::Keyboard {
-                    pos: Key::Up,
-                    neg: Key::Down,
+                    pos: Key::Down,
+                    neg: Key::Up,
                 },
                 InputAxis::Keyboard {
                     pos: Key::Left,
@@ -549,6 +590,9 @@ impl Layer for LogicLayer {
         }
 
         while self.acc > 0.0 {
+            // Clear gizmos from last frame
+            resources.get_default_mut::<Gizmos>()?.clear();
+
             let (_e, (camera_pos, camera_rot)) = world
                 .query_mut::<(&mut Position, &Rotation)>()
                 .with::<Camera>()
@@ -572,7 +616,7 @@ impl Layer for LogicLayer {
             physics::systems::integrate_velocity_system(world, dt);
             physics::systems::gravity_system(world, dt);
             physics::systems::wrap_around_system(world);
-            physics::systems::collision_system(world);
+            physics::systems::collision_system(world, resources)?;
 
             let canvas = world
                 .query::<(&Canvas, &Camera)>()
@@ -596,6 +640,7 @@ new_shaderpass! {
     pub struct GeometryPass;
     pub struct WireframePass;
     pub struct UIPass;
+    pub struct GizmoPass;
     pub struct PostProcessingPass;
 }
 

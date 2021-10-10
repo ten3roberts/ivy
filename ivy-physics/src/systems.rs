@@ -1,6 +1,8 @@
 use hecs::World;
 use ivy_core::{Color, Position, Rotation, Scale};
-use ultraviolet::Rotor3;
+use ivy_graphics::gizmos::{Gizmo, GizmoKind, Gizmos};
+use ivy_resources::Resources;
+use ultraviolet::{Rotor3, Vec3, Vec4};
 
 use crate::collision::Collider;
 use crate::components::{AngularVelocity, TransformMatrix, Velocity};
@@ -38,30 +40,47 @@ pub fn wrap_around_system(world: &World) {
     });
 }
 
-pub fn collision_system(world: &World) {
+pub fn collision_system(world: &World, resources: &Resources) -> ivy_resources::Result<()> {
     world
         .query::<(&Position, &Rotation, &Scale, &Collider, &mut Color)>()
         .iter()
-        .for_each(|(e1, (pos, rot, scale, a, color))| {
+        .try_for_each(|(e1, (pos, rot, scale, a, color))| -> Result<_, _> {
             let a_transform = TransformMatrix::new(*pos, *rot, *scale);
             world
                 .query::<(&Position, &Rotation, &Scale, &Collider)>()
                 .iter()
-                .for_each(|(e2, (pos, rot, scale, b))| {
+                .try_for_each(|(e2, (pos, rot, scale, b))| -> Result<_, _> {
                     let b_transform = TransformMatrix::new(*pos, *rot, *scale);
                     if e1 == e2 {
-                        return;
+                        return Ok(());
                     }
 
                     let (intersect, simplex) = gjk::intersection(a_transform, b_transform, a, b);
                     // assert!(matches!(simplex, Simplex::Tetrahedron(a, b, c, d)));
 
+                    let mut gizmos = resources.get_default_mut::<Gizmos>()?;
+
+                    gizmos.push(Gizmo::new(
+                        Vec3::zero(),
+                        Vec4::new(0.0, 0.0, 1.0, 1.0),
+                        GizmoKind::Sphere(0.1),
+                    ));
+
+                    for point in simplex.points() {
+                        gizmos.push(Gizmo::new(
+                            *point,
+                            Vec4::new(1.0, 0.0, 0.0, 1.0),
+                            GizmoKind::Sphere(0.1),
+                        ));
+                    }
+
                     if intersect {
-                        eprintln!("{}: {:?}", intersect, simplex);
                         *color = Color::new(1.0, 0.0, 0.0, 1.0);
                     } else {
                         *color = Color::new(1.0, 1.0, 1.0, 1.0);
                     }
+
+                    Ok(())
                 })
         })
 }

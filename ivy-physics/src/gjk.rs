@@ -10,10 +10,10 @@ fn triple_prod(a: Vec3, b: Vec3, c: Vec3) -> Vec3 {
 
 #[derive(Debug)]
 pub enum Simplex {
-    Point(Vec3),
-    Line(Vec3, Vec3),
-    Triangle(Vec3, Vec3, Vec3),
-    Tetrahedron(Vec3, Vec3, Vec3, Vec3),
+    Point([Vec3; 1]),
+    Line([Vec3; 2]),
+    Triangle([Vec3; 3]),
+    Tetrahedron([Vec3; 4]),
 }
 
 impl Simplex {
@@ -21,19 +21,19 @@ impl Simplex {
     // Returns None if the origin is enclosed in the tetrahedron.
     pub fn next(&mut self) -> Option<Vec3> {
         match *self {
-            Self::Point(a) => Some(-a),
-            Self::Line(a, b) => {
+            Self::Point([a]) => Some(-a),
+            Self::Line([a, b]) => {
                 let ab = b - a;
                 let a0 = -a;
 
                 if ab.dot(a0) > 0.0 {
                     Some(triple_prod(ab, a0, ab))
                 } else {
-                    *self = Self::Point(a);
+                    *self = Self::Point([a]);
                     Some(a0)
                 }
             }
-            Simplex::Triangle(a, b, c) => {
+            Simplex::Triangle([a, b, c]) => {
                 let ab = b - a;
                 let ac = c - a;
                 let a0 = -a;
@@ -44,25 +44,25 @@ impl Simplex {
                 if abc.cross(ac).dot(a0) > 0.0 {
                     // Outside but along ac
                     if ac.dot(a0) > 0.0 {
-                        *self = Self::Line(a, c);
+                        *self = Self::Line([a, c]);
                         Some(ac.cross(a0).cross(ac))
                     }
                     // Behind a
                     else {
-                        *self = Self::Line(a, b);
+                        *self = Self::Line([a, b]);
                         self.next()
                     }
                 } else if ab.cross(abc).dot(a0) > 0.0 {
-                    *self = Self::Line(a, b);
+                    *self = Self::Line([a, b]);
                     self.next()
                 } else if abc.dot(a0) > 0.0 {
                     Some(abc)
                 } else {
-                    *self = Self::Triangle(a, c, b);
+                    *self = Self::Triangle([a, c, b]);
                     Some(-abc)
                 }
             }
-            Simplex::Tetrahedron(a, b, c, d) => {
+            Simplex::Tetrahedron([a, b, c, d]) => {
                 let ab = b - a;
                 let ac = c - a;
                 let ad = d - a;
@@ -73,13 +73,13 @@ impl Simplex {
                 let adb = ad.cross(ab);
 
                 if abc.dot(a0) > 0.0 {
-                    *self = Self::Triangle(a, b, c);
+                    *self = Self::Triangle([a, b, c]);
                     self.next()
                 } else if acd.dot(a0) > 0.0 {
-                    *self = Self::Triangle(a, c, d);
+                    *self = Self::Triangle([a, c, d]);
                     self.next()
                 } else if adb.dot(a0) > 0.0 {
-                    *self = Self::Triangle(a, d, b);
+                    *self = Self::Triangle([a, d, b]);
                     self.next()
                 } else {
                     // Collision occurred
@@ -93,10 +93,19 @@ impl Simplex {
     /// Note: Resulting simplex can not contain more than 4 points
     pub fn push(&mut self, p: Vec3) {
         match self {
-            Simplex::Point(a) => *self = Simplex::Line(p, *a),
-            Simplex::Line(a, b) => *self = Simplex::Triangle(p, *a, *b),
-            Simplex::Triangle(a, b, c) => *self = Simplex::Tetrahedron(p, *a, *b, *c),
-            Simplex::Tetrahedron(_, _, _, _) => unreachable!(),
+            Simplex::Point([a]) => *self = Simplex::Line([p, *a]),
+            Simplex::Line([a, b]) => *self = Simplex::Triangle([p, *a, *b]),
+            Simplex::Triangle([a, b, c]) => *self = Simplex::Tetrahedron([p, *a, *b, *c]),
+            Simplex::Tetrahedron(_) => unreachable!(),
+        }
+    }
+
+    pub fn points(&self) -> &[Vec3] {
+        match self {
+            Simplex::Point(val) => val,
+            Simplex::Line(val) => val,
+            Simplex::Triangle(val) => val,
+            Simplex::Tetrahedron(val) => val,
         }
     }
 }
@@ -127,7 +136,7 @@ pub fn intersection<A: CollisionPrimitive, B: CollisionPrimitive>(
         dir,
     );
 
-    let mut simplex = Simplex::Point(a);
+    let mut simplex = Simplex::Point([a]);
 
     while let Some(dir) = simplex.next() {
         // Get the next simplex
@@ -143,7 +152,7 @@ pub fn intersection<A: CollisionPrimitive, B: CollisionPrimitive>(
 
         // New point was not past the origin
         // No collision
-        if p.dot(dir) < 0.0 {
+        if p.dot(dir) <= 0.0 {
             return (false, simplex);
         }
 

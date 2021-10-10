@@ -91,7 +91,7 @@ impl Renderer for MeshRenderer {
 
 #[repr(C, align(16))]
 struct ObjectData {
-    mvp: Mat4,
+    model: Mat4,
     color: Vec4,
 }
 
@@ -106,7 +106,7 @@ struct ObjectDataQuery<'a> {
 impl<'a> Into<ObjectData> for ObjectDataQuery<'a> {
     fn into(self) -> ObjectData {
         ObjectData {
-            mvp: Mat4::from_translation(**self.position)
+            model: Mat4::from_translation(**self.position)
                 * self.rotation.into_matrix().into_homogeneous()
                 * Mat4::from_nonuniform_scale(**self.scale),
             color: *self

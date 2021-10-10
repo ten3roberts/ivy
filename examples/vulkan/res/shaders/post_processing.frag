@@ -160,18 +160,20 @@ vec3 PBR(vec3 albedo, vec3 pos, vec3 normal, float roughness, float metallic) {
 void main() {
 	vec3 albedo = subpassLoad(albedoBuffer).xyz;
 
-	vec2 roughnessMetallic = subpassLoad(roughnessMetallicBuffer).xy;
-	float roughness = roughnessMetallic.x;
-	float metallic = roughnessMetallic.y;
 	float depth = subpassLoad(depthInput).x;
-
-	vec3 normal = subpassLoad(normalBuffer).xyz;
-	vec3 pos = subpassLoad(posBuffer).xyz;
 
 	if (depth == 1) {
 		outColor = vec4(DirectLightRadiances(1), 1);
 		return;
 	}
+
+	vec2 roughnessMetallic = subpassLoad(roughnessMetallicBuffer).xy;
+	float roughness = roughnessMetallic.x;
+	float metallic = roughnessMetallic.y;
+
+	vec3 normal = subpassLoad(normalBuffer).xyz;
+	vec3 pos = subpassLoad(posBuffer).xyz;
+
 
 	vec3 color = vec3(0);
 

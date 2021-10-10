@@ -543,6 +543,8 @@ dependencies = [
  "derive_more",
  "hecs",
  "ivy-core",
+ "ivy-graphics",
+ "ivy-resources",
  "thiserror",
  "ultraviolet",
 ]
