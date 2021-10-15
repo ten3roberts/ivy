@@ -453,7 +453,7 @@ fn setup_objects(
         ),
         Scale::uniform(0.5),
         Color::new(1.0, 1.0, 1.0, 1.0),
-        Position::new(0.3, 0.3, 0.0),
+        Position::new(-3.3, 0.3, 0.0),
         Collider::new(Cube::new(1.0)),
     ));
 

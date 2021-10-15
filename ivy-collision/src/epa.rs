@@ -22,6 +22,7 @@ struct Face {
 }
 
 impl Face {
+    /// Returns None if the normal cannot be calculated
     pub fn new(points: &[SupportPoint], indices: &[u16]) -> Self {
         let [a, b, c] = [
             points[indices[0] as usize],
@@ -50,9 +51,9 @@ type Edge = (u16, u16);
 
 #[derive(Debug)]
 struct Polytype {
-    points: SmallVec<[SupportPoint; 8]>,
+    points: SmallVec<[SupportPoint; 32]>,
     // Normals and distances combined
-    faces: SmallVec<[Face; 16]>,
+    faces: SmallVec<[Face; 32]>,
 }
 
 impl Polytype {
@@ -76,14 +77,17 @@ impl Polytype {
             .map(|(a, b)| (a as u16, *b))
     }
 
+    // Adds a point to the polytype
+    // If the polytype collapses and add failed, false is returned
     pub fn add(&mut self, p: SupportPoint) {
         // remove faces that can see the point
         let mut edges = SmallVec::<[Edge; 16]>::new();
         let mut i = 0;
+
         while i < self.faces.len() {
-            let dot = self.faces[i]
-                .normal
-                .dot(p.pos - self.points[self.faces[i].indices[0] as usize].pos);
+            let rel = p.pos - self.points[self.faces[i].indices[0] as usize].pos;
+            let dot = self.faces[i].normal.dot(rel.normalized());
+
             if dot > 0.0 {
                 let face = self.faces.swap_remove(i);
                 remove_or_add_edge(&mut edges, (face.indices[0], face.indices[1]));
@@ -93,8 +97,6 @@ impl Polytype {
                 i += 1;
             }
         }
-
-        assert_ne!(self.faces.len(), 0);
 
         // add vertex
         let n = self.points.len();
@@ -143,21 +145,14 @@ pub fn epa<A: CollisionPrimitive, B: CollisionPrimitive>(
     b_coll: &B,
     simplex: Simplex,
 ) -> Intersection {
-    // simplex.force_tetrahedron(
-    //     a_transform,
-    //     b_transform,
-    //     a_transform_inv,
-    //     b_transform_inv,
-    //     a_coll,
-    //     b_coll,
-    // );
-
-    eprintln!("Simplex: {:?}", simplex.points());
+    eprintln!("Simplex: {:#?}", simplex.points());
 
     let mut polytype = Polytype::new(simplex.points(), &[0, 1, 2, 0, 3, 1, 0, 2, 3, 1, 3, 2]);
+    eprintln!("Polytype faces: {:#?}", polytype.faces);
 
     let mut iterations = 0;
     loop {
+        dbg!(iterations);
         let (_, min) = polytype.find_closest_face().unwrap();
 
         // assert_eq!(min.normal.mag(), 1.0);
@@ -174,16 +169,17 @@ pub fn epa<A: CollisionPrimitive, B: CollisionPrimitive>(
 
         let support_dist = min.normal.dot(p.pos);
 
-        if (support_dist - min.distance) <= TOLERANCE || iterations > 10 {
+        if iterations < 10 && (support_dist - min.distance).abs() > TOLERANCE {
+            polytype.add(p);
+        }
+        // Support is further than the current closest normal
+        else {
+            eprintln!("Done!");
             return Intersection {
                 point: polytype.contact_point(min),
                 depth: min.distance,
                 normal: min.normal,
             };
-        }
-        // Support is further than the current closest normal
-        else {
-            polytype.add(p)
         }
 
         iterations += 1;
