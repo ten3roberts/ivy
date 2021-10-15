@@ -10,7 +10,7 @@ use crate::{
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Intersection {
     /// The closest points on the two colliders, respectively
-    pub point: Vec3,
+    pub points: [Vec3; 2],
     pub depth: f32,
     pub normal: Vec3,
 }
@@ -112,7 +112,7 @@ impl Polytype {
         self.faces.extend(new_faces);
     }
 
-    fn contact_point(&self, face: Face) -> Vec3 {
+    fn contact_points(&self, face: Face) -> [Vec3; 2] {
         let (u, v, w) = barycentric_vector(
             face.normal * face.distance,
             self.points[face.indices[0] as usize].pos,
@@ -120,9 +120,15 @@ impl Polytype {
             self.points[face.indices[2] as usize].pos,
         );
 
-        self.points[face.indices[0] as usize].a * u
+        let a = self.points[face.indices[0] as usize].a * u
             + self.points[face.indices[1] as usize].a * v
-            + self.points[face.indices[2] as usize].a * w
+            + self.points[face.indices[2] as usize].a * w;
+
+        let b = self.points[face.indices[0] as usize].b * u
+            + self.points[face.indices[1] as usize].b * v
+            + self.points[face.indices[2] as usize].b * w;
+
+        [a, b]
     }
 }
 
@@ -173,7 +179,7 @@ pub fn epa<A: CollisionPrimitive, B: CollisionPrimitive>(
         else {
             dbg!(min.normal);
             return Intersection {
-                point: polytype.contact_point(min),
+                points: polytype.contact_points(min),
                 depth: min.distance,
                 normal: min.normal,
             };

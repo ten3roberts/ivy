@@ -141,6 +141,7 @@ pub fn gjk<A: CollisionPrimitive, B: CollisionPrimitive>(
 
     while let Some(dir) = simplex.next() {
         let dir = dir.normalized();
+
         assert!((dir.mag() - 1.0 < 0.0001));
         // Get the next simplex
         let p = minkowski_diff(

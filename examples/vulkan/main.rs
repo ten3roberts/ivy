@@ -26,7 +26,7 @@ use ivy_resources::Resources;
 use parking_lot::RwLock;
 use physics::{
     collision::Collision,
-    components::{Mass, Resitution, Velocity},
+    components::{AngularMass, AngularVelocity, Mass, Resitution, Velocity},
 };
 use postprocessing::pbr::{create_pbr_pipeline, PBRInfo};
 use slotmap::SecondaryMap;
@@ -414,29 +414,35 @@ fn setup_objects(
     ));
 
     world.spawn((
-        material,
-        sphere_mesh,
-        shaderpass,
-        Position::new(-5.0, 0.0, 0.0),
+        AngularMass(1.0),
+        // AngularVelocity::axis_angle(0.01, Vec3::unit_y()),
+        AngularVelocity(Vec3::unit_y() * 1.0),
+        Collider::new(Cube::new(1.0)),
         Color::new(1.0, 1.0, 1.0, 1.0),
-        Velocity::new(5.0, 0.0, 0.0),
-        Scale::uniform(0.5),
-        Mass(2.0),
-        Resitution(1.0),
-        Collider::new(Sphere::new(1.0)),
+        Mass(5.0),
+        Position::new(0.0, 0.0, 0.0),
+        Resitution(0.1),
+        Scale::new(2.0, 0.5, 0.2),
+        Rotation::euler_angles(0.0, 0.0, 0.0),
+        Velocity::default(),
+        cube_mesh,
+        material,
+        shaderpass,
     ));
 
     world.spawn((
-        material,
-        cube_mesh,
-        shaderpass,
+        AngularMass(1.0),
+        // AngularVelocity::default(),
+        Collider::new(Sphere::new(1.0)),
         Color::new(1.0, 1.0, 1.0, 1.0),
-        Position::new(0.0, 0.0, 0.0),
-        Rotation::new(1.0, 0.0, 0.0),
-        Velocity::default(),
-        Mass(10.0),
-        Resitution(0.1),
-        Collider::new(Cube::new(1.0)),
+        Mass(2.0),
+        Position::new(-3.0, 0.0, 0.0),
+        Resitution(1.0),
+        Scale::uniform(0.5),
+        Velocity::new(0.5, 0.0, 0.0),
+        material,
+        shaderpass,
+        sphere_mesh,
     ));
 
     Ok(())

@@ -6,7 +6,9 @@ use crate::Result;
 use hecs::World;
 use ivy_collision::Collider;
 use ivy_core::{Events, Position, Rotation, Scale};
+use ultraviolet::Bivec3;
 use ultraviolet::Rotor3;
+use ultraviolet::Vec3;
 
 use crate::{
     collision::Collision,
@@ -24,9 +26,10 @@ pub fn integrate_angular_velocity_system(world: &World, dt: f32) {
     world
         .query::<(&mut Rotation, &AngularVelocity)>()
         .into_iter()
-        .for_each(|(_, (rot, ang))| {
-            let (x, y, z) = (ang.x, ang.y, ang.z);
-            *rot = Rotation(**rot * Rotor3::from_euler_angles(x * dt, y * dt, z * dt));
+        .for_each(|(_, (rot, w))| {
+            let mag = w.mag();
+            let w = Rotor3::from_angle_plane(mag * dt, Bivec3::from_normalized_axis(w.0 / mag));
+            *rot = Rotation(w * rot.0);
         });
 }
 
@@ -100,14 +103,15 @@ pub fn resolve_collisions_system<I: Iterator<Item = Collision>>(
             let b = b_query.get().unwrap();
 
             let impulse = resolve_collision(collision.intersection, a, b);
+            {
+                let mut effector = world.get_mut::<Effector>(collision.a)?;
+                effector.apply_impulse(impulse);
 
-            world
-                .get_mut::<Effector>(collision.a)?
-                .apply_impulse(impulse);
+                drop(effector);
 
-            world
-                .get_mut::<Effector>(collision.b)?
-                .apply_impulse(-impulse);
+                let mut effector = world.get_mut::<Effector>(collision.b)?;
+                effector.apply_impulse(-impulse);
+            }
 
             Ok(())
         })
@@ -117,10 +121,22 @@ pub fn resolve_collisions_system<I: Iterator<Item = Collision>>(
 /// Applies effectors to their respective entities and clears the effects.
 pub fn apply_effectors_system(world: &World, dt: f32) {
     world
-        .query::<(&mut Velocity, &Mass, &mut Effector)>()
+        .query::<(
+            &mut Velocity,
+            Option<&mut AngularVelocity>,
+            &Mass,
+            Option<&mut AngularMass>,
+            &mut Effector,
+        )>()
         .iter()
-        .for_each(|(_, (vel, mass, effector))| {
-            *vel += effector.net_effect(*mass, dt);
+        .for_each(|(_, (vel, w, mass, angular_mass, effector))| {
+            *vel += effector.net_velocity_change(*mass, dt);
+            match (w, angular_mass) {
+                (Some(w), Some(angular_mass)) => {
+                    *w += effector.net_angular_velocity_change(*angular_mass, dt)
+                }
+                _ => {}
+            }
             effector.clear()
         })
 }

@@ -1,6 +1,6 @@
 use derive_for::*;
 use derive_more::*;
-use ultraviolet::{Rotor3, Vec3, Vec4};
+use ultraviolet::{Bivec3, Rotor3, Vec3, Vec4};
 
 derive_for!(
 
@@ -45,8 +45,13 @@ impl Position {
 }
 
 impl Rotation {
-    pub fn new(roll: f32, pitch: f32, yaw: f32) -> Self {
+    pub fn euler_angles(roll: f32, pitch: f32, yaw: f32) -> Self {
         Self(Rotor3::from_euler_angles(roll, pitch, yaw))
+    }
+    /// Creates an angular velocity from an axis angle rotation. Note: Axis is
+    /// assumed to be normalized.
+    pub fn axis_angle(angle: f32, axis: Vec3) -> Self {
+        Self(Rotor3::new(angle, Bivec3::from_normalized_axis(axis)))
     }
 }
 
