@@ -37,3 +37,25 @@ impl CollisionPrimitive for Sphere {
         self.radius * dir
     }
 }
+
+pub struct Capsule {
+    pub half_height: f32,
+    pub radius: f32,
+}
+
+impl Capsule {
+    pub fn new(half_height: f32, radius: f32) -> Self {
+        Self {
+            half_height,
+            radius,
+        }
+    }
+}
+
+impl CollisionPrimitive for Capsule {
+    fn support(&self, dir: Vec3) -> Vec3 {
+        let mut result = Vec3::zero();
+        result.y = dir.y.signum() * self.half_height;
+        result + dir * self.radius
+    }
+}
