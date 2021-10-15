@@ -9,9 +9,10 @@ edition = "2018"
 derive-for = "1.2.2"
 derive_more = "0.99"
 hecs = "0.6"
+ivy-collision = { path = "../ivy-collision", version = "0.1.0" }
 ivy-core = { path = "../ivy-core", version = "1.7" }
 ivy-graphics = { path = "../ivy-graphics", version = "*" }
-ivy-collision = { path = "../ivy-collision", version = "0.1.0" }
 ivy-resources = { path = "../ivy-resources", version = "1.4.0" }
 smallvec = "1.6.1"
+thiserror = "1.0"
 ultraviolet = "0.8"

@@ -112,13 +112,13 @@ impl Layer for SandboxLayer {
 
         integrate(world);
 
-        let status = world
-            .query::<(&Position, Option<&Velocity>)>()
-            .iter()
-            .map(|(id, val)| format!("  {:?}:\t {:?}\n", id, val))
-            .collect::<String>();
+        // let status = world
+        //     .query::<(&Position, Option<&Velocity>)>()
+        //     .iter()
+        //     .map(|(id, val)| format!("  {:?}:\t {:?}\n", id, val))
+        //     .collect::<String>();
 
-        info!("Entities:\n{}", status);
+        // info!("Entities:\n{}", status);
 
         // Receive events
         for event in self.rx.try_iter() {
@@ -135,12 +135,12 @@ impl Layer for SandboxLayer {
     }
 }
 
-fn integrate(world: &mut World) {
-    world
-        .query_mut::<(&mut Position, &Velocity)>()
-        .into_iter()
-        .for_each(|(_id, (pos, vel))| {
-            pos.x += vel.x;
-            pos.y += vel.y
-        });
-}
+// fn integrate(world: &mut World) {
+//     world
+//         .query_mut::<(&mut Position, &Velocity)>()
+//         .into_iter()
+//         .for_each(|(_id, (pos, vel))| {
+//             pos.x += vel.x;
+//             pos.y += vel.y
+//         });
+// }

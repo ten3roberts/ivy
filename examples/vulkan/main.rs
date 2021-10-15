@@ -6,7 +6,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Context};
-use collision::{Collider, Cube, Sphere};
+use collision::*;
 use flume::Receiver;
 use glfw::{Action, CursorMode, Glfw, Key, WindowEvent};
 use graphics::gizmos::{Gizmo, GizmoKind, GizmoRenderer, Gizmos};
@@ -24,6 +24,10 @@ use ivy::{
 };
 use ivy_resources::Resources;
 use parking_lot::RwLock;
+use physics::{
+    collision::Collision,
+    components::{Mass, Resitution, Velocity},
+};
 use postprocessing::pbr::{create_pbr_pipeline, PBRInfo};
 use slotmap::SecondaryMap;
 use std::fmt::Write;
@@ -413,9 +417,12 @@ fn setup_objects(
         material,
         sphere_mesh,
         shaderpass,
-        Position::new(-1.5, 0.0, 0.0),
+        Position::new(-5.0, 0.0, 0.0),
         Color::new(1.0, 1.0, 1.0, 1.0),
-        Scale::new(1.0, 2.0, 1.0),
+        Velocity::new(5.0, 0.0, 0.0),
+        Scale::uniform(0.5),
+        Mass(2.0),
+        Resitution(1.0),
         Collider::new(Sphere::new(1.0)),
     ));
 
@@ -423,37 +430,12 @@ fn setup_objects(
         material,
         cube_mesh,
         shaderpass,
-        Movable::new(
-            InputVector::new(
-                InputAxis::Keyboard {
-                    pos: Key::L,
-                    neg: Key::H,
-                },
-                InputAxis::Keyboard {
-                    pos: Key::K,
-                    neg: Key::J,
-                },
-                InputAxis::Keyboard {
-                    pos: Key::I,
-                    neg: Key::O,
-                },
-            ),
-            InputVector::new(
-                InputAxis::Keyboard {
-                    pos: Key::Down,
-                    neg: Key::Up,
-                },
-                InputAxis::Keyboard {
-                    pos: Key::Left,
-                    neg: Key::Right,
-                },
-                InputAxis::None,
-            ),
-            0.5,
-        ),
-        Scale::uniform(0.5),
         Color::new(1.0, 1.0, 1.0, 1.0),
-        Position::new(-3.3, 0.3, 0.0),
+        Position::new(0.0, 0.0, 0.0),
+        Rotation::new(1.0, 0.0, 0.0),
+        Velocity::default(),
+        Mass(10.0),
+        Resitution(0.1),
         Collider::new(Cube::new(1.0)),
     ));
 
@@ -473,6 +455,7 @@ struct LogicLayer {
     timestep: Duration,
 
     window_events: Receiver<WindowEvent>,
+    collision_events: Receiver<Collision>,
 }
 
 impl LogicLayer {
@@ -509,7 +492,10 @@ impl LogicLayer {
 
         setup_graphics(world, resources, camera, canvas).context("Failed to setup graphics")?;
 
-        let (tx, rx) = flume::unbounded();
+        let (tx, window_events) = flume::unbounded();
+        events.subscribe(tx);
+
+        let (tx, collision_events) = flume::unbounded();
         events.subscribe(tx);
 
         Ok(Self {
@@ -519,7 +505,8 @@ impl LogicLayer {
             input_vec,
             timestep: 20.ms(),
             acc: 0.0,
-            window_events: rx,
+            window_events,
+            collision_events,
             cursor_mode: CursorMode::Normal,
         })
     }
@@ -562,7 +549,7 @@ impl Layer for LogicLayer {
         &mut self,
         world: &mut World,
         resources: &mut Resources,
-        _: &mut Events,
+        events: &mut Events,
         frame_time: Duration,
     ) -> anyhow::Result<()> {
         self.handle_events(resources)
@@ -621,9 +608,12 @@ impl Layer for LogicLayer {
 
             physics::systems::integrate_angular_velocity_system(world, dt);
             physics::systems::integrate_velocity_system(world, dt);
-            physics::systems::gravity_system(world, dt);
+            // physics::systems::gravity_system(world, dt);
+            physics::systems::satisfy_objects(world);
             physics::systems::wrap_around_system(world);
-            physics::systems::collision_system(world, resources)?;
+            physics::systems::collision_system(world, events)?;
+            physics::systems::resolve_collisions_system(world, self.collision_events.try_iter())?;
+            physics::systems::apply_effectors_system(world, dt);
 
             let canvas = world
                 .query::<(&Canvas, &Camera)>()

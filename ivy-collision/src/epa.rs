@@ -7,6 +7,7 @@ use crate::{
     {util::minkowski_diff, util::SupportPoint, util::TOLERANCE, CollisionPrimitive},
 };
 
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Intersection {
     /// The closest points on the two colliders, respectively
     pub point: Vec3,
@@ -86,7 +87,7 @@ impl Polytype {
 
         while i < self.faces.len() {
             let rel = p.pos - self.points[self.faces[i].indices[0] as usize].pos;
-            let dot = self.faces[i].normal.dot(rel.normalized());
+            let dot = self.faces[i].normal.dot(rel);
 
             if dot > 0.0 {
                 let face = self.faces.swap_remove(i);
@@ -145,14 +146,10 @@ pub fn epa<A: CollisionPrimitive, B: CollisionPrimitive>(
     b_coll: &B,
     simplex: Simplex,
 ) -> Intersection {
-    eprintln!("Simplex: {:#?}", simplex.points());
-
     let mut polytype = Polytype::new(simplex.points(), &[0, 1, 2, 0, 3, 1, 0, 2, 3, 1, 3, 2]);
-    eprintln!("Polytype faces: {:#?}", polytype.faces);
 
     let mut iterations = 0;
     loop {
-        dbg!(iterations);
         let (_, min) = polytype.find_closest_face().unwrap();
 
         // assert_eq!(min.normal.mag(), 1.0);
@@ -174,7 +171,7 @@ pub fn epa<A: CollisionPrimitive, B: CollisionPrimitive>(
         }
         // Support is further than the current closest normal
         else {
-            eprintln!("Done!");
+            dbg!(min.normal);
             return Intersection {
                 point: polytype.contact_point(min),
                 depth: min.distance,

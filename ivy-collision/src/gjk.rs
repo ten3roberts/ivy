@@ -24,7 +24,6 @@ impl Simplex {
         match *self {
             Self::Point([a]) => Some(-a.pos),
             Self::Line([a, b]) => {
-                eprintln!("Line case");
                 let ab = b.pos - a.pos;
                 let a0 = -a.pos;
 
@@ -36,7 +35,6 @@ impl Simplex {
                 }
             }
             Simplex::Triangle([a, b, c]) => {
-                eprintln!("Triangle case");
                 let ab = b.pos - a.pos;
                 let ac = c.pos - a.pos;
                 let a0 = -a.pos;
@@ -47,31 +45,25 @@ impl Simplex {
                 if abc.cross(ac).dot(a0) > 0.0 {
                     // Outside but along ac
                     if ac.dot(a0) > 0.0 {
-                        eprintln!("along ac");
                         *self = Self::Line([a, c]);
                         Some(ac.cross(a0).cross(ac))
                     }
                     // Behind a
                     else {
-                        eprintln!("Behind a");
                         *self = Self::Line([a, b]);
                         self.next()
                     }
                 } else if ab.cross(abc).dot(a0) > 0.0 {
-                    eprintln!("Line");
                     *self = Self::Line([a, b]);
                     self.next()
                 } else if abc.dot(a0) > 0.0 {
-                    eprint!("Good");
                     Some(abc)
                 } else {
-                    eprintln!("Opposite");
                     *self = Self::Triangle([a, c, b]);
                     Some(-abc)
                 }
             }
             Simplex::Tetrahedron([a, b, c, d]) => {
-                eprintln!("Tetrahedron case");
                 let ab = b.pos - a.pos;
                 let ac = c.pos - a.pos;
                 let ad = d.pos - a.pos;
@@ -82,15 +74,12 @@ impl Simplex {
                 let adb = ad.cross(ab);
 
                 if abc.dot(a0) > 0.0 {
-                    eprintln!("abc");
                     *self = Self::Triangle([a, b, c]);
                     self.next()
                 } else if acd.dot(a0) > 0.0 {
-                    eprintln!("acd");
                     *self = Self::Triangle([a, c, d]);
                     self.next()
                 } else if adb.dot(a0) > 0.0 {
-                    eprintln!("adb");
                     *self = Self::Triangle([a, d, b]);
                     self.next()
                 } else {
@@ -167,7 +156,6 @@ pub fn gjk<A: CollisionPrimitive, B: CollisionPrimitive>(
         // New point was not past the origin
         // No collision
         if p.dot(dir) < 0.0 {
-            eprintln!("Collision failed with: {}", p.dot(dir));
             return (false, simplex);
         }
 
