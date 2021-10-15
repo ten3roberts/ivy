@@ -12,5 +12,5 @@ hecs = "0.6"
 ivy-core = { path = "../ivy-core", version = "1.7" }
 ivy-graphics = { path = "../ivy-graphics", version = "*" }
 ivy-resources = { path = "../ivy-resources", version = "1.4.0" }
-thiserror = "1.0"
+smallvec = "1.6.1"
 ultraviolet = "0.8"

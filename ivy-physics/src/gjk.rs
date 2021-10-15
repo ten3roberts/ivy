@@ -1,6 +1,6 @@
-use ultraviolet::{Mat4, Vec3};
+use ultraviolet::{Bivec3, Mat3, Mat4, Vec3};
 
-use crate::{collision::CollisionPrimitive, components::TransformMatrix};
+use crate::collision::{minkowski_diff, CollisionPrimitive, TOLERANCE};
 
 /// Gets the normal of a direction vector with a reference point. Normal will
 /// face the same direciton as reference
@@ -19,14 +19,16 @@ pub enum Simplex {
 impl Simplex {
     // Returns the next simplex that better encloses the origin.
     // Returns None if the origin is enclosed in the tetrahedron.
+    #[inline]
     pub fn next(&mut self) -> Option<Vec3> {
         match *self {
             Self::Point([a]) => Some(-a),
             Self::Line([a, b]) => {
+                eprintln!("Line case");
                 let ab = b - a;
                 let a0 = -a;
 
-                if ab.dot(a0) > 0.0 {
+                if ab.dot(a0) > TOLERANCE {
                     Some(triple_prod(ab, a0, ab))
                 } else {
                     *self = Self::Point([a]);
@@ -34,6 +36,7 @@ impl Simplex {
                 }
             }
             Simplex::Triangle([a, b, c]) => {
+                eprintln!("Triangle case");
                 let ab = b - a;
                 let ac = c - a;
                 let a0 = -a;
@@ -63,6 +66,7 @@ impl Simplex {
                 }
             }
             Simplex::Tetrahedron([a, b, c, d]) => {
+                eprintln!("Tetrahedron case");
                 let ab = b - a;
                 let ac = c - a;
                 let ad = d - a;
@@ -73,12 +77,15 @@ impl Simplex {
                 let adb = ad.cross(ab);
 
                 if abc.dot(a0) > 0.0 {
+                    eprintln!("abc");
                     *self = Self::Triangle([a, b, c]);
                     self.next()
                 } else if acd.dot(a0) > 0.0 {
+                    eprintln!("acd");
                     *self = Self::Triangle([a, c, d]);
                     self.next()
                 } else if adb.dot(a0) > 0.0 {
+                    eprintln!("adb");
                     *self = Self::Triangle([a, d, b]);
                     self.next()
                 } else {
@@ -87,10 +94,186 @@ impl Simplex {
                 }
             }
         }
+        .map(|val| val.normalized())
     }
+
+    //     const AXES: [Vec3; 3] = [
+    //         Vec3 {
+    //             x: 1.0,
+    //             y: 0.0,
+    //             z: 0.0,
+    //         },
+    //         Vec3 {
+    //             x: 0.0,
+    //             y: 1.0,
+    //             z: 0.0,
+    //         },
+    //         Vec3 {
+    //             x: 0.0,
+    //             y: 0.0,
+    //             z: 1.0,
+    //         },
+    //     ];
+
+    //     const CARDINALS: [Vec3; 6] = [
+    //         Vec3 {
+    //             x: 1.0,
+    //             y: 0.0,
+    //             z: 0.0,
+    //         },
+    //         Vec3 {
+    //             x: -1.0,
+    //             y: 0.0,
+    //             z: 0.0,
+    //         },
+    //         Vec3 {
+    //             x: 0.0,
+    //             y: 1.0,
+    //             z: 0.0,
+    //         },
+    //         Vec3 {
+    //             x: 0.0,
+    //             y: -1.0,
+    //             z: 0.0,
+    //         },
+    //         Vec3 {
+    //             x: 0.0,
+    //             y: 0.0,
+    //             z: 1.0,
+    //         },
+    //         Vec3 {
+    //             x: 0.0,
+    //             y: 0.0,
+    //             z: -1.0,
+    //         },
+    //     ];
+
+    //     /// Forces the simplex into a tetrahedron by expansion
+    //     pub fn force_tetrahedron<A: CollisionPrimitive, B: CollisionPrimitive>(
+    //         &mut self,
+    //         a_transform: &Mat4,
+    //         b_transform: &Mat4,
+    //         a_transform_inv: &Mat4,
+    //         b_transform_inv: &Mat4,
+    //         a_coll: &A,
+    //         b_coll: &B,
+    //     ) {
+    //         match self {
+    //             Simplex::Point([a]) => {
+    //                 for dir in Self::CARDINALS {
+    //                     let p = minkowski_diff(
+    //                         a_transform,
+    //                         b_transform,
+    //                         a_transform_inv,
+    //                         b_transform_inv,
+    //                         a_coll,
+    //                         b_coll,
+    //                         dir,
+    //                     );
+
+    //                     if (*a - p).mag_sq() > TOLERANCE {
+    //                         self.push(p);
+    //                         return self.force_tetrahedron(
+    //                             a_transform,
+    //                             b_transform,
+    //                             a_transform_inv,
+    //                             b_transform_inv,
+    //                             a_coll,
+    //                             b_coll,
+    //                         );
+    //                     }
+    //                 }
+    //             }
+    //             Simplex::Line([a, b]) => {
+    //                 let line = *b - *a;
+    //                 let min_component = if line.x < line.y {
+    //                     if line.x < line.z {
+    //                         0
+    //                     } else {
+    //                         2
+    //                     }
+    //                 } else if line.y < line.z {
+    //                     1
+    //                 } else {
+    //                     2
+    //                 };
+
+    //                 eprintln!("Min: {}; {:?}", min_component, line);
+
+    //                 let mut dir = line.cross(Self::AXES[min_component]).normalized();
+
+    //                 let rot = Mat3::from_angle_plane(
+    //                     -std::f32::consts::PI / 3.0,
+    //                     Bivec3::from_normalized_axis(line),
+    //                 );
+
+    //                 for _ in 0..6 {
+    //                     let p = minkowski_diff(
+    //                         a_transform,
+    //                         b_transform,
+    //                         a_transform_inv,
+    //                         b_transform_inv,
+    //                         a_coll,
+    //                         b_coll,
+    //                         dir,
+    //                     );
+
+    //                     if p.mag_sq() > TOLERANCE {
+    //                         self.push(p);
+    //                         return self.force_tetrahedron(
+    //                             a_transform,
+    //                             b_transform,
+    //                             a_transform_inv,
+    //                             b_transform_inv,
+    //                             a_coll,
+    //                             b_coll,
+    //                         );
+    //                     }
+
+    //                     dir = (rot * dir).normalized();
+    //                 }
+    //                 unreachable!()
+    //             }
+    //             Simplex::Triangle([a, b, c]) => {
+    //                 let ab = *b - *a;
+    //                 let ac = *c - *a;
+
+    //                 let dir = ac.cross(ab).normalized();
+
+    //                 let p = minkowski_diff(
+    //                     a_transform,
+    //                     b_transform,
+    //                     a_transform_inv,
+    //                     b_transform_inv,
+    //                     a_coll,
+    //                     b_coll,
+    //                     dir,
+    //                 );
+
+    //                 // Try again in the opposite direction
+    //                 if p.mag_sq() < TOLERANCE {
+    //                     let dir = -dir;
+    //                     let p = minkowski_diff(
+    //                         a_transform,
+    //                         b_transform,
+    //                         a_transform_inv,
+    //                         b_transform_inv,
+    //                         a_coll,
+    //                         b_coll,
+    //                         dir,
+    //                     );
+    //                     self.push(p)
+    //                 } else {
+    //                     self.push(p);
+    //                 }
+    //             }
+    //             Simplex::Tetrahedron(_) => {}
+    //         }
+    //     }
 
     /// Add a point to the simplex.
     /// Note: Resulting simplex can not contain more than 4 points
+    #[inline]
     pub fn push(&mut self, p: Vec3) {
         match self {
             Simplex::Point([a]) => *self = Simplex::Line([p, *a]),
@@ -112,17 +295,16 @@ impl Simplex {
 
 /// Performs a gjk intersection test.
 /// Returns true if the shapes intersect.
-pub fn intersection<A: CollisionPrimitive, B: CollisionPrimitive>(
-    a_transform: TransformMatrix,
-    b_transform: TransformMatrix,
+pub fn check_intersect<A: CollisionPrimitive, B: CollisionPrimitive>(
+    a_transform: &Mat4,
+    b_transform: &Mat4,
+    a_transform_inv: &Mat4,
+    b_transform_inv: &Mat4,
     a_coll: &A,
     b_coll: &B,
 ) -> (bool, Simplex) {
     let a_pos = a_transform.extract_translation();
     let b_pos = b_transform.extract_translation();
-
-    let a_transform_inv = a_transform.inversed();
-    let b_transform_inv = b_transform.inversed();
 
     // Get first support function in direction of separation
     let dir = (a_pos - b_pos).normalized();
@@ -139,6 +321,7 @@ pub fn intersection<A: CollisionPrimitive, B: CollisionPrimitive>(
     let mut simplex = Simplex::Point([a]);
 
     while let Some(dir) = simplex.next() {
+        assert!((dir.mag() - 1.0).abs() < 0.1);
         // Get the next simplex
         let p = minkowski_diff(
             &a_transform,
@@ -152,7 +335,8 @@ pub fn intersection<A: CollisionPrimitive, B: CollisionPrimitive>(
 
         // New point was not past the origin
         // No collision
-        if p.dot(dir) <= 0.0 {
+        if p.dot(dir) < 0.0 {
+            eprintln!("Collision failed with: {}", p.dot(dir));
             return (false, simplex);
         }
 
@@ -161,23 +345,4 @@ pub fn intersection<A: CollisionPrimitive, B: CollisionPrimitive>(
 
     // Collision found
     return (true, simplex);
-}
-/// Returns a point on the minkowski difference given from two colliders, their
-/// transform, and a direction.
-fn minkowski_diff<A: CollisionPrimitive, B: CollisionPrimitive>(
-    a_transform: &Mat4,
-    b_transform: &Mat4,
-    a_transform_inv: &Mat4,
-    b_transform_inv: &Mat4,
-    a_coll: &A,
-    b_coll: &B,
-    dir: Vec3,
-) -> Vec3 {
-    let a = a_coll.support(a_transform_inv.transform_vec3(dir).normalized());
-    let b = b_coll.support(b_transform_inv.transform_vec3(-dir).normalized());
-
-    let a = a_transform.transform_point3(a);
-    let b = b_transform.transform_point3(b);
-
-    a - b
 }

@@ -1,4 +1,6 @@
-use ultraviolet::Vec3;
+use ultraviolet::{Mat4, Vec3};
+
+pub const TOLERANCE: f32 = 0.01;
 
 pub trait CollisionPrimitive {
     /// Returns the furtherst vertex in `dir`.
@@ -60,4 +62,25 @@ impl CollisionPrimitive for Collider {
     fn support(&self, dir: Vec3) -> Vec3 {
         self.primitive.support(dir)
     }
+}
+
+/// Returns a point on the minkowski difference given from two colliders, their
+/// transform, and a direction.
+pub fn minkowski_diff<A: CollisionPrimitive, B: CollisionPrimitive>(
+    a_transform: &Mat4,
+    b_transform: &Mat4,
+    a_transform_inv: &Mat4,
+    b_transform_inv: &Mat4,
+    a_coll: &A,
+    b_coll: &B,
+    dir: Vec3,
+) -> Vec3 {
+    assert!((dir.mag() - 1.0).abs() < 0.1);
+    let a = a_coll.support(a_transform_inv.transform_vec3(dir).normalized());
+    let b = b_coll.support(b_transform_inv.transform_vec3(-dir).normalized());
+
+    let a = a_transform.transform_point3(a);
+    let b = b_transform.transform_point3(b);
+
+    a - b
 }

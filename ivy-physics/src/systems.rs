@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use hecs::World;
 use ivy_core::{Color, Position, Rotation, Scale};
 use ivy_graphics::gizmos::{Gizmo, GizmoKind, Gizmos};
@@ -6,6 +8,7 @@ use ultraviolet::{Rotor3, Vec3, Vec4};
 
 use crate::collision::Collider;
 use crate::components::{AngularVelocity, TransformMatrix, Velocity};
+use crate::epa::epa;
 use crate::gjk;
 
 pub fn integrate_velocity_system(world: &World, dt: f32) {
@@ -55,7 +58,17 @@ pub fn collision_system(world: &World, resources: &Resources) -> ivy_resources::
                         return Ok(());
                     }
 
-                    let (intersect, simplex) = gjk::intersection(a_transform, b_transform, a, b);
+                    let a_transform_inv = a_transform.inversed();
+                    let b_transform_inv = b_transform.inversed();
+
+                    let (intersecting, simplex) = gjk::check_intersect(
+                        a_transform.deref(),
+                        b_transform.deref(),
+                        &a_transform_inv,
+                        &b_transform_inv,
+                        a,
+                        b,
+                    );
                     // assert!(matches!(simplex, Simplex::Tetrahedron(a, b, c, d)));
 
                     let mut gizmos = resources.get_default_mut::<Gizmos>()?;
@@ -74,10 +87,28 @@ pub fn collision_system(world: &World, resources: &Resources) -> ivy_resources::
                         ));
                     }
 
-                    if intersect {
+                    if intersecting {
                         *color = Color::new(1.0, 0.0, 0.0, 1.0);
                     } else {
                         *color = Color::new(1.0, 1.0, 1.0, 1.0);
+                    }
+
+                    if intersecting {
+                        let intersect = epa(
+                            a_transform.deref(),
+                            b_transform.deref(),
+                            &a_transform_inv,
+                            &b_transform_inv,
+                            a,
+                            b,
+                            simplex,
+                        );
+
+                        gizmos.push(Gizmo::new(
+                            intersect.normal * intersect.depth,
+                            Vec4::new(1.0, 1.0, 0.0, 1.0),
+                            GizmoKind::Sphere(0.05),
+                        ));
                     }
 
                     Ok(())

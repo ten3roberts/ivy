@@ -23,7 +23,7 @@ use ivy::{
 };
 use ivy_resources::Resources;
 use parking_lot::RwLock;
-use physics::collision::{Collider, Cube};
+use physics::collision::{Collider, Cube, Sphere};
 use postprocessing::pbr::{create_pbr_pipeline, PBRInfo};
 use slotmap::SecondaryMap;
 use std::fmt::Write;
@@ -386,6 +386,12 @@ fn setup_objects(
 
     let cube_mesh = resources.get(document)?.mesh(0);
 
+    let document: Handle<Document> = resources
+        .load("./res/models/sphere.gltf")
+        .context("Failed to load sphere model")??;
+
+    let sphere_mesh = resources.get(document)?.mesh(0);
+
     let material: Handle<Material> = resources.load(MaterialInfo {
         albedo: "./res/textures/metal.png".into(),
         roughness: 0.3,
@@ -405,11 +411,12 @@ fn setup_objects(
 
     world.spawn((
         material,
-        cube_mesh,
+        sphere_mesh,
         shaderpass,
         Position::new(-1.5, 0.0, 0.0),
         Color::new(1.0, 1.0, 1.0, 1.0),
-        Collider::new(Cube::new(1.0)),
+        Scale::new(1.0, 2.0, 1.0),
+        Collider::new(Sphere::new(1.0)),
     ));
 
     world.spawn((

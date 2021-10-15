@@ -545,7 +545,7 @@ dependencies = [
  "ivy-core",
  "ivy-graphics",
  "ivy-resources",
- "thiserror",
+ "smallvec",
  "ultraviolet",
 ]
 
