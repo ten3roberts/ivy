@@ -1,40 +1,38 @@
 use smallvec::{Array, SmallVec};
-use ultraviolet::{Mat4, Vec3, Vec4};
+use ultraviolet::{Mat4, Vec3};
 
 use crate::{
-    collision::{minkowski_diff, CollisionPrimitive, TOLERANCE},
+    collision::{minkowski_diff, CollisionPrimitive, SupportPoint, TOLERANCE},
     gjk::Simplex,
+    util::barycentric_vector,
 };
 
 pub struct Intersection {
+    /// The closest points on the two colliders, respectively
+    pub point: Vec3,
     pub depth: f32,
     pub normal: Vec3,
 }
 
 #[derive(Clone, Copy, Debug)]
-struct SignedNormal {
+struct Face {
+    indices: [u16; 3],
     normal: Vec3,
     distance: f32,
 }
 
-#[derive(Clone, Copy, Debug)]
-struct Face {
-    indices: [u16; 3],
-    normal: Vec4,
-}
-
 impl Face {
-    pub fn new(points: &[Vec3], indices: &[u16]) -> Self {
+    pub fn new(points: &[SupportPoint], indices: &[u16]) -> Self {
         let [a, b, c] = [
             points[indices[0] as usize],
             points[indices[1] as usize],
             points[indices[2] as usize],
         ];
 
-        let normal = (b - a).cross(c - a).normalized();
+        let normal = (b.pos - a.pos).cross(c.pos - a.pos).normalized();
 
         // Distance to the origin
-        let distance = normal.dot(a);
+        let distance = normal.dot(a.pos);
 
         // Take care of handedness
         let normal = normal * distance.signum();
@@ -42,7 +40,8 @@ impl Face {
 
         Face {
             indices: [indices[0], indices[1], indices[2]],
-            normal: Vec4::new(normal.x, normal.y, normal.z, distance),
+            normal,
+            distance,
         }
     }
 }
@@ -51,13 +50,13 @@ type Edge = (u16, u16);
 
 #[derive(Debug)]
 struct Polytype {
-    points: SmallVec<[Vec3; 8]>,
+    points: SmallVec<[SupportPoint; 8]>,
     // Normals and distances combined
     faces: SmallVec<[Face; 16]>,
 }
 
 impl Polytype {
-    pub fn new(points: &[Vec3], faces: &[u16]) -> Self {
+    pub fn new(points: &[SupportPoint], faces: &[u16]) -> Self {
         let faces = faces
             .chunks_exact(3)
             .map(|val| Face::new(points, val))
@@ -73,19 +72,18 @@ impl Polytype {
         self.faces
             .iter()
             .enumerate()
-            .min_by(|a, b| a.1.normal.w.partial_cmp(&b.1.normal.w).unwrap())
+            .min_by(|a, b| a.1.distance.partial_cmp(&b.1.distance).unwrap())
             .map(|(a, b)| (a as u16, *b))
     }
 
-    pub fn add(&mut self, p: Vec3) {
+    pub fn add(&mut self, p: SupportPoint) {
         // remove faces that can see the point
         let mut edges = SmallVec::<[Edge; 16]>::new();
         let mut i = 0;
         while i < self.faces.len() {
             let dot = self.faces[i]
                 .normal
-                .xyz()
-                .dot(p - self.points[self.faces[i].indices[0] as usize]);
+                .dot(p.pos - self.points[self.faces[i].indices[0] as usize].pos);
             if dot > 0.0 {
                 let face = self.faces.swap_remove(i);
                 remove_or_add_edge(&mut edges, (face.indices[0], face.indices[1]));
@@ -109,6 +107,19 @@ impl Polytype {
             .map(|(a, b)| Face::new(points, &[n as _, a, b]));
 
         self.faces.extend(new_faces);
+    }
+
+    fn contact_point(&self, face: Face) -> Vec3 {
+        let (u, v, w) = barycentric_vector(
+            face.normal * face.distance,
+            self.points[face.indices[0] as usize].pos,
+            self.points[face.indices[1] as usize].pos,
+            self.points[face.indices[2] as usize].pos,
+        );
+
+        self.points[face.indices[0] as usize].a * u
+            + self.points[face.indices[1] as usize].a * v
+            + self.points[face.indices[2] as usize].a * w
     }
 }
 
@@ -151,27 +162,28 @@ pub fn epa<A: CollisionPrimitive, B: CollisionPrimitive>(
 
         // assert_eq!(min.normal.mag(), 1.0);
 
-        let support = minkowski_diff(
+        let p = minkowski_diff(
             a_transform,
             b_transform,
             a_transform_inv,
             b_transform_inv,
             a_coll,
             b_coll,
-            min.normal.xyz(),
+            min.normal,
         );
 
-        let support_dist = min.normal.xyz().dot(support);
+        let support_dist = min.normal.dot(p.pos);
 
-        if (support_dist - min.normal.w) <= TOLERANCE || iterations > 10 {
+        if (support_dist - min.distance) <= TOLERANCE || iterations > 10 {
             return Intersection {
-                depth: min.normal.w,
-                normal: min.normal.xyz(),
+                point: polytype.contact_point(min),
+                depth: min.distance,
+                normal: min.normal,
             };
         }
         // Support is further than the current closest normal
         else {
-            polytype.add(support)
+            polytype.add(p)
         }
 
         iterations += 1;

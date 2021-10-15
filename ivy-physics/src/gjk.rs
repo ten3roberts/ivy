@@ -1,6 +1,6 @@
-use ultraviolet::{Bivec3, Mat3, Mat4, Vec3};
+use ultraviolet::{Mat4, Vec3};
 
-use crate::collision::{minkowski_diff, CollisionPrimitive, TOLERANCE};
+use crate::collision::{minkowski_diff, CollisionPrimitive, SupportPoint, TOLERANCE};
 
 /// Gets the normal of a direction vector with a reference point. Normal will
 /// face the same direciton as reference
@@ -10,10 +10,10 @@ fn triple_prod(a: Vec3, b: Vec3, c: Vec3) -> Vec3 {
 
 #[derive(Debug)]
 pub enum Simplex {
-    Point([Vec3; 1]),
-    Line([Vec3; 2]),
-    Triangle([Vec3; 3]),
-    Tetrahedron([Vec3; 4]),
+    Point([SupportPoint; 1]),
+    Line([SupportPoint; 2]),
+    Triangle([SupportPoint; 3]),
+    Tetrahedron([SupportPoint; 4]),
 }
 
 impl Simplex {
@@ -22,11 +22,11 @@ impl Simplex {
     #[inline]
     pub fn next(&mut self) -> Option<Vec3> {
         match *self {
-            Self::Point([a]) => Some(-a),
+            Self::Point([a]) => Some(-a.pos),
             Self::Line([a, b]) => {
                 eprintln!("Line case");
-                let ab = b - a;
-                let a0 = -a;
+                let ab = b.pos - a.pos;
+                let a0 = -a.pos;
 
                 if ab.dot(a0) > TOLERANCE {
                     Some(triple_prod(ab, a0, ab))
@@ -37,9 +37,9 @@ impl Simplex {
             }
             Simplex::Triangle([a, b, c]) => {
                 eprintln!("Triangle case");
-                let ab = b - a;
-                let ac = c - a;
-                let a0 = -a;
+                let ab = b.pos - a.pos;
+                let ac = c.pos - a.pos;
+                let a0 = -a.pos;
 
                 let abc = ab.cross(ac);
 
@@ -67,10 +67,10 @@ impl Simplex {
             }
             Simplex::Tetrahedron([a, b, c, d]) => {
                 eprintln!("Tetrahedron case");
-                let ab = b - a;
-                let ac = c - a;
-                let ad = d - a;
-                let a0 = -a;
+                let ab = b.pos - a.pos;
+                let ac = c.pos - a.pos;
+                let ad = d.pos - a.pos;
+                let a0 = -a.pos;
 
                 let abc = ab.cross(ac);
                 let acd = ac.cross(ad);
@@ -274,7 +274,7 @@ impl Simplex {
     /// Add a point to the simplex.
     /// Note: Resulting simplex can not contain more than 4 points
     #[inline]
-    pub fn push(&mut self, p: Vec3) {
+    pub fn push(&mut self, p: SupportPoint) {
         match self {
             Simplex::Point([a]) => *self = Simplex::Line([p, *a]),
             Simplex::Line([a, b]) => *self = Simplex::Triangle([p, *a, *b]),
@@ -283,7 +283,7 @@ impl Simplex {
         }
     }
 
-    pub fn points(&self) -> &[Vec3] {
+    pub fn points(&self) -> &[SupportPoint] {
         match self {
             Simplex::Point(val) => val,
             Simplex::Line(val) => val,

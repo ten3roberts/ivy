@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use ultraviolet::{Mat4, Vec3};
 
 pub const TOLERANCE: f32 = 0.01;
@@ -64,8 +66,26 @@ impl CollisionPrimitive for Collider {
     }
 }
 
+// Represents a point on the minkowski difference boundary which carries the
+// individual support points
+#[derive(Debug, Clone, Copy)]
+pub struct SupportPoint {
+    pub pos: Vec3,
+    pub a: Vec3,
+    pub b: Vec3,
+}
+
+impl Deref for SupportPoint {
+    type Target = Vec3;
+
+    fn deref(&self) -> &Self::Target {
+        &self.pos
+    }
+}
+
 /// Returns a point on the minkowski difference given from two colliders, their
 /// transform, and a direction.
+#[inline]
 pub fn minkowski_diff<A: CollisionPrimitive, B: CollisionPrimitive>(
     a_transform: &Mat4,
     b_transform: &Mat4,
@@ -74,13 +94,19 @@ pub fn minkowski_diff<A: CollisionPrimitive, B: CollisionPrimitive>(
     a_coll: &A,
     b_coll: &B,
     dir: Vec3,
+) -> SupportPoint {
+    let a = support(a_transform, a_transform_inv, a_coll, dir);
+    let b = support(b_transform, b_transform_inv, b_coll, -dir);
+
+    SupportPoint { pos: a - b, a, b }
+}
+
+#[inline]
+pub fn support<T: CollisionPrimitive>(
+    transform: &Mat4,
+    transform_inv: &Mat4,
+    coll: &T,
+    dir: Vec3,
 ) -> Vec3 {
-    assert!((dir.mag() - 1.0).abs() < 0.1);
-    let a = a_coll.support(a_transform_inv.transform_vec3(dir).normalized());
-    let b = b_coll.support(b_transform_inv.transform_vec3(-dir).normalized());
-
-    let a = a_transform.transform_point3(a);
-    let b = b_transform.transform_point3(b);
-
-    a - b
+    transform.transform_point3(coll.support(transform_inv.transform_vec3(dir).normalized()))
 }

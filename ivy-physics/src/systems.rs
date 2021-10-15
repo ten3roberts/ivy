@@ -81,7 +81,7 @@ pub fn collision_system(world: &World, resources: &Resources) -> ivy_resources::
 
                     for point in simplex.points() {
                         gizmos.push(Gizmo::new(
-                            *point,
+                            point.pos,
                             Vec4::new(1.0, 0.0, 0.0, 1.0),
                             GizmoKind::Sphere(0.1),
                         ));
@@ -107,6 +107,12 @@ pub fn collision_system(world: &World, resources: &Resources) -> ivy_resources::
                         gizmos.push(Gizmo::new(
                             intersect.normal * intersect.depth,
                             Vec4::new(1.0, 1.0, 0.0, 1.0),
+                            GizmoKind::Sphere(0.05),
+                        ));
+
+                        gizmos.push(Gizmo::new(
+                            intersect.point,
+                            Vec4::new(1.0, 0.0, 1.0, 1.0),
                             GizmoKind::Sphere(0.05),
                         ));
                     }
