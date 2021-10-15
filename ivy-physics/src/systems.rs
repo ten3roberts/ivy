@@ -1,15 +1,13 @@
 use std::ops::Deref;
 
 use hecs::World;
+use ivy_collision::Collider;
 use ivy_core::{Color, Position, Rotation, Scale};
 use ivy_graphics::gizmos::{Gizmo, GizmoKind, Gizmos};
 use ivy_resources::Resources;
 use ultraviolet::{Rotor3, Vec3, Vec4};
 
-use crate::collision::Collider;
 use crate::components::{AngularVelocity, TransformMatrix, Velocity};
-use crate::epa::epa;
-use crate::gjk;
 
 pub fn integrate_velocity_system(world: &World, dt: f32) {
     world
@@ -61,7 +59,7 @@ pub fn collision_system(world: &World, resources: &Resources) -> ivy_resources::
                     let a_transform_inv = a_transform.inversed();
                     let b_transform_inv = b_transform.inversed();
 
-                    let (intersecting, simplex) = gjk::check_intersect(
+                    let (intersecting, simplex) = ivy_collision::gjk(
                         a_transform.deref(),
                         b_transform.deref(),
                         &a_transform_inv,
@@ -94,7 +92,7 @@ pub fn collision_system(world: &World, resources: &Resources) -> ivy_resources::
                     }
 
                     if intersecting {
-                        let intersect = epa(
+                        let intersect = ivy_collision::epa(
                             a_transform.deref(),
                             b_transform.deref(),
                             &a_transform_inv,

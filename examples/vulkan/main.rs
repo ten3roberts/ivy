@@ -6,6 +6,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Context};
+use collision::{Collider, Cube, Sphere};
 use flume::Receiver;
 use glfw::{Action, CursorMode, Glfw, Key, WindowEvent};
 use graphics::gizmos::{Gizmo, GizmoKind, GizmoRenderer, Gizmos};
@@ -23,7 +24,6 @@ use ivy::{
 };
 use ivy_resources::Resources;
 use parking_lot::RwLock;
-use physics::collision::{Collider, Cube, Sphere};
 use postprocessing::pbr::{create_pbr_pipeline, PBRInfo};
 use slotmap::SecondaryMap;
 use std::fmt::Write;

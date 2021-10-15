@@ -17,19 +17,21 @@ members = [
   "ivy-vulkan",
   "ivy-postprocessing",
   "ivy-physics",
+  "ivy-collision",
   "ivy-random",
 ]
 
 [dependencies]
+ivy-collision = { path = "./ivy-collision" }
 ivy-core = { path = "./ivy-core" }
 ivy-graphics = { path = "./ivy-graphics" }
+ivy-image = { path = "./ivy-image" }
 ivy-input = { path = "./ivy-input" }
 ivy-physics = { path = "./ivy-physics" }
 ivy-postprocessing = { path = "./ivy-postprocessing" }
 ivy-random = { path = "./ivy-random" }
 ivy-rendergraph = { path = "./ivy-rendergraph" }
 ivy-resources = { path = "./ivy-resources" }
-ivy-image = { path = "./ivy-image" }
 ivy-ui = { path = "./ivy-ui" }
 ivy-vulkan = { path = "./ivy-vulkan" }
 

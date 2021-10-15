@@ -461,6 +461,7 @@ dependencies = [
  "glfw",
  "hecs",
  "hecs-hierarchy",
+ "ivy-collision",
  "ivy-core",
  "ivy-graphics",
  "ivy-image",
@@ -475,6 +476,19 @@ dependencies = [
  "log",
  "parking_lot",
  "slotmap",
+ "ultraviolet",
+]
+
+[[package]]
+name = "ivy-collision"
+version = "0.1.0"
+dependencies = [
+ "derive-for",
+ "derive_more",
+ "hecs",
+ "ivy-core",
+ "ivy-resources",
+ "smallvec",
  "ultraviolet",
 ]
 
@@ -542,6 +556,7 @@ dependencies = [
  "derive-for",
  "derive_more",
  "hecs",
+ "ivy-collision",
  "ivy-core",
  "ivy-graphics",
  "ivy-resources",

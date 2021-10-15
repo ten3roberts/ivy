@@ -2,9 +2,9 @@ use smallvec::{Array, SmallVec};
 use ultraviolet::{Mat4, Vec3};
 
 use crate::{
-    collision::{minkowski_diff, CollisionPrimitive, SupportPoint, TOLERANCE},
     gjk::Simplex,
     util::barycentric_vector,
+    {util::minkowski_diff, util::SupportPoint, util::TOLERANCE, CollisionPrimitive},
 };
 
 pub struct Intersection {

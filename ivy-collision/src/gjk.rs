@@ -1,6 +1,6 @@
 use ultraviolet::{Mat4, Vec3};
 
-use crate::collision::{minkowski_diff, CollisionPrimitive, SupportPoint, TOLERANCE};
+use crate::{util::minkowski_diff, util::SupportPoint, util::TOLERANCE, CollisionPrimitive};
 
 /// Gets the normal of a direction vector with a reference point. Normal will
 /// face the same direciton as reference
@@ -295,7 +295,7 @@ impl Simplex {
 
 /// Performs a gjk intersection test.
 /// Returns true if the shapes intersect.
-pub fn check_intersect<A: CollisionPrimitive, B: CollisionPrimitive>(
+pub fn gjk<A: CollisionPrimitive, B: CollisionPrimitive>(
     a_transform: &Mat4,
     b_transform: &Mat4,
     a_transform_inv: &Mat4,

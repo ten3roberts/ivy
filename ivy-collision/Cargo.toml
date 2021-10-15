@@ -1,7 +1,8 @@
 [package]
-name = "ivy-physics"
-version = "1.7.1"
+name = "ivy-collision"
+version = "0.1.0"
 edition = "2018"
+description = "3D collision crate for Ivy"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -10,8 +11,6 @@ derive-for = "1.2.2"
 derive_more = "0.99"
 hecs = "0.6"
 ivy-core = { path = "../ivy-core", version = "1.7" }
-ivy-graphics = { path = "../ivy-graphics", version = "*" }
-ivy-collision = { path = "../ivy-collision", version = "0.1.0" }
 ivy-resources = { path = "../ivy-resources", version = "1.4.0" }
 smallvec = "1.6.1"
 ultraviolet = "0.8"
