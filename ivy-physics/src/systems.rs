@@ -8,7 +8,6 @@ use ivy_collision::Collider;
 use ivy_core::{Events, Position, Rotation, Scale};
 use ultraviolet::Bivec3;
 use ultraviolet::Rotor3;
-use ultraviolet::Vec3;
 
 use crate::{
     collision::Collision,
@@ -28,8 +27,10 @@ pub fn integrate_angular_velocity_system(world: &World, dt: f32) {
         .into_iter()
         .for_each(|(_, (rot, w))| {
             let mag = w.mag();
-            let w = Rotor3::from_angle_plane(mag * dt, Bivec3::from_normalized_axis(w.0 / mag));
-            *rot = Rotation(w * rot.0);
+            if mag > 0.0 {
+                let w = Rotor3::from_angle_plane(mag * dt, Bivec3::from_normalized_axis(w.0 / mag));
+                *rot = Rotation(w * rot.0);
+            }
         });
 }
 
@@ -102,15 +103,15 @@ pub fn resolve_collisions_system<I: Iterator<Item = Collision>>(
 
             let b = b_query.get().unwrap();
 
-            let impulse = resolve_collision(collision.intersection, a, b);
+            let impulse = resolve_collision(collision.intersection, &a, &b);
             {
                 let mut effector = world.get_mut::<Effector>(collision.a)?;
-                effector.apply_impulse(impulse);
+                effector.apply_impulse_at(impulse, collision.intersection.points[0] - **a.pos);
 
                 drop(effector);
 
                 let mut effector = world.get_mut::<Effector>(collision.b)?;
-                effector.apply_impulse(-impulse);
+                effector.apply_impulse_at(-impulse, collision.intersection.points[1] - **b.pos);
             }
 
             Ok(())

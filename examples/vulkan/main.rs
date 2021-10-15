@@ -398,14 +398,14 @@ fn setup_objects(
 
     let material: Handle<Material> = resources.load(MaterialInfo {
         albedo: "./res/textures/metal.png".into(),
-        roughness: 0.3,
-        metallic: 0.4,
+        roughness: 0.05,
+        metallic: 0.9,
         ..Default::default()
     })??;
 
     world.spawn((
-        Position(Vec3::new(0.0, 10.0, 10.0)),
-        PointLight::new(1.0, Vec3::new(1.0, 1.0, 0.7) * 4000.0),
+        Position(Vec3::new(0.0, 5.0, 5.0)),
+        PointLight::new(1.0, Vec3::new(1.0, 1.0, 0.7) * 5000.0),
     ));
 
     world.spawn((
@@ -414,13 +414,12 @@ fn setup_objects(
     ));
 
     world.spawn((
-        AngularMass(1.0),
-        // AngularVelocity::axis_angle(0.01, Vec3::unit_y()),
+        AngularMass(2.0),
         AngularVelocity(Vec3::unit_y() * 1.0),
         Collider::new(Cube::new(1.0)),
         Color::new(1.0, 1.0, 1.0, 1.0),
         Mass(5.0),
-        Position::new(0.0, 0.0, 0.0),
+        Position::new(0.0, 0.5, 0.0),
         Resitution(0.1),
         Scale::new(2.0, 0.5, 0.2),
         Rotation::euler_angles(0.0, 0.0, 0.0),
@@ -432,8 +431,8 @@ fn setup_objects(
 
     world.spawn((
         AngularMass(1.0),
-        // AngularVelocity::default(),
-        Collider::new(Sphere::new(1.0)),
+        AngularVelocity::default(),
+        Collider::new(Cube::new(1.0)),
         Color::new(1.0, 1.0, 1.0, 1.0),
         Mass(2.0),
         Position::new(-3.0, 0.0, 0.0),
@@ -442,7 +441,7 @@ fn setup_objects(
         Velocity::new(0.5, 0.0, 0.0),
         material,
         shaderpass,
-        sphere_mesh,
+        cube_mesh,
     ));
 
     Ok(())
@@ -693,7 +692,7 @@ fn _setup_ui(
             Widget,
             image,
             ui_pass,
-            RelativeOffset::new(-0.25, -0.25),
+            RelativeOffset::new(-0.25, -0.5),
             AbsoluteSize::new(100.0, 100.0),
         ),
     )?;
@@ -707,7 +706,7 @@ fn _setup_ui(
             OverTime::<RelativeOffset>::new(Box::new(|_, offset, elapsed, _| {
                 offset.x = (elapsed * 0.25).sin();
             })),
-            RelativeOffset::new(0.0, -0.2),
+            RelativeOffset::new(0.0, -0.5),
             RelativeSize::new(0.2, 0.2),
         ),
     )?;

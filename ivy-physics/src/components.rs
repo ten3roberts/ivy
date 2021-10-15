@@ -85,6 +85,7 @@ pub struct RbQuery<'a> {
     pub vel: &'a Velocity,
     pub ang_vel: Option<&'a AngularVelocity>,
     pub mass: &'a Mass,
+    pub ang_mass: Option<&'a AngularMass>,
 }
 
 /// Manages the forces applied to an entity
@@ -131,6 +132,12 @@ impl Effector {
 
     pub fn apply_velocity_change(&mut self, dv: Vec3) {
         self.net_dv += dv;
+    }
+
+    /// Applies an impulse at the specified position from center of mass
+    pub fn apply_impulse_at(&mut self, impulse: Vec3, at: Vec3) {
+        self.net_impulse += impulse;
+        self.net_angular_impulse += at.cross(impulse);
     }
 
     /// Returns the total net effect of forces, impulses, and velocity changes
