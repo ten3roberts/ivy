@@ -10,7 +10,7 @@ use ivy_vulkan::{
 };
 
 pub struct PostProcessingNode<Pass> {
-    sets: Vec<DescriptorSet>,
+    sets: Option<Vec<DescriptorSet>>,
     read_attachments: Vec<Handle<Texture>>,
     input_attachments: Vec<Handle<Texture>>,
     color_attachments: Vec<AttachmentInfo>,
@@ -72,8 +72,15 @@ impl<Pass: 'static + ShaderPass> PostProcessingNode<Pass> {
             .map(|val| (val, ShaderStageFlags::FRAGMENT))
             .collect::<Vec<_>>();
 
-        let sets =
-            DescriptorBuilder::from_mutliple_resources(&context, &bindables, frames_in_flight)?;
+        let sets = if !bindables.is_empty() {
+            Some(DescriptorBuilder::from_mutliple_resources(
+                &context,
+                &bindables,
+                frames_in_flight,
+            )?)
+        } else {
+            None
+        };
 
         Ok(Self {
             sets,
@@ -127,7 +134,9 @@ impl<Pass: ShaderPass> Node for PostProcessingNode<Pass> {
 
         cmd.bind_pipeline(pass.pipeline());
 
-        cmd.bind_descriptor_sets(pass.pipeline_layout(), 0, &[self.sets[current_frame]], &[]);
+        if let Some(sets) = &self.sets {
+            cmd.bind_descriptor_sets(pass.pipeline_layout(), 0, &[sets[current_frame]], &[]);
+        }
 
         cmd.draw(3, 1, 0, 0);
 

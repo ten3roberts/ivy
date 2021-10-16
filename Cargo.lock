@@ -528,6 +528,7 @@ dependencies = [
  "ivy-vulkan",
  "parking_lot",
  "rectangle-pack",
+ "smallvec",
  "thiserror",
  "ultraviolet",
 ]

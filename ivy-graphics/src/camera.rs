@@ -2,13 +2,13 @@ use crate::Result;
 use ash::vk::{DescriptorSet, ShaderStageFlags};
 use derive_more::{AsRef, Deref, From, Into};
 use hecs::World;
-use ivy_resources::Handle;
+use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
     descriptors::{DescriptorBuilder, IntoSet},
-    Buffer, Texture, VulkanContext,
+    Buffer, Extent, Format, ImageUsage, SampleCountFlags, Texture, TextureInfo, VulkanContext,
 };
 use std::sync::Arc;
-use ultraviolet::{Mat4, Vec3, Vec4};
+use ultraviolet::{Mat4, Vec4};
 
 /// A camera holds a view and projection matrix.
 /// Use a system to update view matrix according to position and rotation.
@@ -113,12 +113,27 @@ impl ColorAttachment {
     }
 }
 
-#[derive(AsRef, Deref, Into, From)]
 /// The depth attachment of a camera.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deref, AsRef, Into, From)]
 pub struct DepthAttachment(pub Handle<Texture>);
 
 impl DepthAttachment {
-    pub fn new(texture: Handle<Texture>) -> DepthAttachment {
+    pub fn new(context: Arc<VulkanContext>, resources: &Resources, extent: Extent) -> Result<Self> {
+        Ok(Self(resources.insert(Texture::new(
+            context.clone(),
+            &TextureInfo {
+                extent,
+                mip_levels: 1,
+                usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT
+                    | ImageUsage::SAMPLED
+                    | ImageUsage::INPUT_ATTACHMENT,
+                format: Format::D32_SFLOAT,
+                samples: SampleCountFlags::TYPE_1,
+            },
+        )?)?))
+    }
+
+    pub fn from_handle(texture: Handle<Texture>) -> DepthAttachment {
         Self(texture)
     }
 }

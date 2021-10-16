@@ -1,10 +1,16 @@
-use std::{any::type_name, marker::PhantomData};
+use crate::Result;
+use std::{any::type_name, marker::PhantomData, ops::Deref, sync::Arc};
 
 use anyhow::Context;
 use hecs::Entity;
+use itertools::Itertools;
 use ivy_graphics::{GpuCameraData, Renderer, ShaderPass};
-use ivy_resources::{Handle, Storage};
-use ivy_vulkan::{descriptors::IntoSet, vk::ClearValue, Texture};
+use ivy_resources::{Handle, Resources, Storage};
+use ivy_vulkan::{
+    descriptors::{DescriptorBuilder, DescriptorSet, IntoSet, MultiDescriptorBindable},
+    vk::{ClearValue, ShaderStageFlags},
+    CombinedImageSampler, InputAttachment, Sampler, Texture, VulkanContext,
+};
 
 use crate::{AttachmentInfo, Node, NodeKind};
 
@@ -18,6 +24,7 @@ pub struct CameraNode<Pass, T: Renderer<Error = E>, E> {
     input_attachments: Vec<Handle<Texture>>,
     depth_attachment: Option<AttachmentInfo>,
     clear_values: Vec<ClearValue>,
+    sets: Option<Vec<DescriptorSet>>,
 }
 
 impl<Pass, T, E> CameraNode<Pass, T, E>
@@ -27,24 +34,66 @@ where
     E: Into<anyhow::Error>,
 {
     pub fn new(
+        context: Arc<VulkanContext>,
+        resources: &Resources,
         camera: Entity,
         renderer: T,
-        color_attachments: Vec<AttachmentInfo>,
-        read_attachments: Vec<Handle<Texture>>,
-        input_attachments: Vec<Handle<Texture>>,
+        color_attachments: &[AttachmentInfo],
+        read_attachments: &[(Handle<Texture>, Handle<Sampler>)],
+        input_attachments: &[Handle<Texture>],
         depth_attachment: Option<AttachmentInfo>,
-        clear_values: Vec<ClearValue>,
-    ) -> Self {
-        Self {
+        bindables: &[&dyn MultiDescriptorBindable],
+        clear_values: &[ClearValue],
+        frames_in_flight: usize,
+    ) -> Result<Self> {
+        let combined_image_samplers = read_attachments
+            .iter()
+            .map(|val| -> Result<_> {
+                Ok(CombinedImageSampler::new(
+                    resources.get(val.0)?.deref(),
+                    resources.get(val.1)?.deref(),
+                ))
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        let input_bindabled = input_attachments
+            .iter()
+            .map(|val| -> Result<_> { Ok(InputAttachment::new(resources.get(*val)?.deref())) })
+            .collect::<Result<Vec<_>>>()?;
+
+        let bindables = combined_image_samplers
+            .iter()
+            .map(|val| val as &dyn MultiDescriptorBindable)
+            .chain(
+                input_bindabled
+                    .iter()
+                    .map(|val| val as &dyn MultiDescriptorBindable),
+            )
+            .chain(bindables.into_iter().cloned())
+            .map(|val| (val, ShaderStageFlags::FRAGMENT))
+            .collect::<Vec<_>>();
+
+        let sets = if !bindables.is_empty() {
+            Some(DescriptorBuilder::from_mutliple_resources(
+                &context,
+                &bindables,
+                frames_in_flight,
+            )?)
+        } else {
+            None
+        };
+
+        Ok(Self {
             camera,
+            sets,
             renderer,
             marker: PhantomData,
-            color_attachments,
-            read_attachments,
-            input_attachments,
+            color_attachments: color_attachments.to_owned(),
+            read_attachments: read_attachments.iter().map(|(a, _)| *a).collect_vec(),
+            input_attachments: input_attachments.to_owned(),
             depth_attachment,
-            clear_values,
-        }
+            clear_values: clear_values.to_owned(),
+        })
     }
 }
 
@@ -93,14 +142,30 @@ where
             .get::<GpuCameraData>(self.camera)
             .context("Camera does not contain `GpuCameraData`")?
             .set(current_frame);
-
-        self.renderer
-            .draw::<Pass>(world, cmd, current_frame, &[camera_set], &[], resources)
-            .map_err(|e| e.into())
-            .context(format!(
-                "CameraNode failed to draw using supplied renderer: {:?}",
-                type_name::<T>()
-            ))?;
+        if let Some(sets) = &self.sets {
+            self.renderer
+                .draw::<Pass>(
+                    world,
+                    cmd,
+                    current_frame,
+                    &[camera_set, sets[current_frame]],
+                    &[],
+                    resources,
+                )
+                .map_err(|e| e.into())
+                .context(format!(
+                    "CameraNode failed to draw using supplied renderer: {:?}",
+                    type_name::<T>()
+                ))?;
+        } else {
+            self.renderer
+                .draw::<Pass>(world, cmd, current_frame, &[camera_set], &[], resources)
+                .map_err(|e| e.into())
+                .context(format!(
+                    "CameraNode failed to draw using supplied renderer: {:?}",
+                    type_name::<T>()
+                ))?;
+        }
 
         Ok(())
     }

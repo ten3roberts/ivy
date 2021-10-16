@@ -1,9 +1,8 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use derive_more::{AsRef, Deref, From, Into};
 use hecs::{Entity, World};
-use ivy_graphics::{GpuCameraData, LightManager, MeshRenderer, ShaderPass};
+use ivy_graphics::{DepthAttachment, GpuCameraData, LightManager, MeshRenderer, ShaderPass};
 use ivy_rendergraph::{AttachmentInfo, CameraNode, Node};
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
@@ -14,26 +13,6 @@ use ivy_vulkan::{
 use ultraviolet::Vec3;
 
 use crate::node::PostProcessingNode;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deref, AsRef, Into, From)]
-pub struct DepthAttachment(pub Handle<Texture>);
-
-impl DepthAttachment {
-    pub fn new(context: Arc<VulkanContext>, resources: &Resources, extent: Extent) -> Result<Self> {
-        Ok(Self(resources.insert(Texture::new(
-            context.clone(),
-            &TextureInfo {
-                extent,
-                mip_levels: 1,
-                usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT
-                    | ImageUsage::SAMPLED
-                    | ImageUsage::INPUT_ATTACHMENT,
-                format: Format::D32_SFLOAT,
-                samples: SampleCountFlags::TYPE_1,
-            },
-        )?)?))
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PBRAttachments {
@@ -140,9 +119,11 @@ pub fn create_pbr_pipeline<GeometryPass: ShaderPass, PostProcessingPass: ShaderP
     let depth_attachment = DepthAttachment::new(context.clone(), resources, extent)?;
 
     let camera_node = Box::new(CameraNode::<GeometryPass, _, _>::new(
+        context.clone(),
+        resources,
         camera,
         resources.default::<MeshRenderer>()?,
-        pbr_attachments
+        &pbr_attachments
             .as_slice()
             .iter()
             .map(|resource| AttachmentInfo {
@@ -153,8 +134,8 @@ pub fn create_pbr_pipeline<GeometryPass: ShaderPass, PostProcessingPass: ShaderP
                 resource: *resource,
             })
             .collect::<Vec<_>>(),
-        vec![],
-        vec![],
+        &[],
+        &[],
         Some(AttachmentInfo {
             store_op: StoreOp::STORE,
             load_op: LoadOp::CLEAR,
@@ -162,14 +143,16 @@ pub fn create_pbr_pipeline<GeometryPass: ShaderPass, PostProcessingPass: ShaderP
             final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
             resource: *depth_attachment,
         }),
-        vec![
+        &[],
+        &[
             ClearValue::color(0.0, 0.0, 0.0, 1.0),
             ClearValue::color(0.0, 0.0, 0.0, 1.0),
             ClearValue::color(0.0, 0.0, 0.0, 1.0),
             ClearValue::color(0.0, 0.0, 0.0, 1.0),
             ClearValue::depth_stencil(1.0, 0),
         ],
-    ));
+        frames_in_flight,
+    )?);
 
     let light_manager = LightManager::new(
         context.clone(),

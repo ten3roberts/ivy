@@ -21,5 +21,6 @@ ivy-resources = { path = "../ivy-resources", version = "1.4.0" }
 ivy-vulkan = { path = "../ivy-vulkan", version = "1.7" }
 parking_lot = "0.11"
 rectangle-pack = "0.4"
+smallvec = "1.6.1"
 thiserror = "1.0"
 ultraviolet = "0.8"

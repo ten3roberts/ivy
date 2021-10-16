@@ -6,7 +6,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Context};
-use collision::{Collider, CollisionPrimitive, CollisionTree, Cube, Object, Sphere};
+use collision::{Collider, CollisionPrimitive, CollisionTree, Cube, Sphere};
 use flume::Receiver;
 use glfw::{Action, CursorMode, Glfw, Key, WindowEvent};
 use graphics::gizmos::GizmoRenderer;
@@ -31,7 +31,7 @@ use physics::{
 use postprocessing::pbr::{create_pbr_pipeline, PBRInfo};
 use slotmap::SecondaryMap;
 use std::fmt::Write;
-use ultraviolet::{Rotor3, Vec3, Vec4};
+use ultraviolet::{Rotor3, Vec3};
 use vulkan::vk::CullModeFlags;
 
 use log::*;
@@ -224,36 +224,50 @@ fn setup_graphics(
     )?);
 
     let ui_node = rendergraph.add_node(CameraNode::<UIPass, _, _>::new(
+        context.clone(),
+        resources,
         canvas,
         (image_renderer, text_renderer),
-        vec![AttachmentInfo {
+        &[AttachmentInfo {
             store_op: StoreOp::STORE,
             load_op: LoadOp::LOAD,
             initial_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
             final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
             resource: final_lit,
         }],
-        vec![],
-        vec![],
+        &[],
+        &[],
         None,
-        vec![],
-    ));
+        &[],
+        &[],
+        FRAMES_IN_FLIGHT,
+    )?);
 
     let gizmo_node = rendergraph.add_node(CameraNode::<GizmoPass, _, _>::new(
+        context.clone(),
+        resources,
         camera,
         resources.default::<GizmoRenderer>()?,
-        vec![AttachmentInfo {
+        &[AttachmentInfo {
             store_op: StoreOp::STORE,
             load_op: LoadOp::LOAD,
             initial_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
             final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
             resource: final_lit,
         }],
-        vec![],
-        vec![],
-        None,
-        vec![],
-    ));
+        &[],
+        &[],
+        Some(AttachmentInfo {
+            store_op: StoreOp::STORE,
+            load_op: LoadOp::LOAD,
+            initial_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            final_layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            resource: world.get::<DepthAttachment>(camera)?.0,
+        }),
+        &[],
+        &[],
+        FRAMES_IN_FLIGHT,
+    )?);
 
     rendergraph.add_node(TextUpdateNode::new(text_renderer));
 
