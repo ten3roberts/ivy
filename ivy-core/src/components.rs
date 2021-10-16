@@ -1,6 +1,6 @@
 use derive_for::*;
 use derive_more::*;
-use ultraviolet::{Bivec3, Rotor3, Vec3, Vec4};
+use ultraviolet::{Bivec3, Rotor3, Vec3};
 
 derive_for!(
 
@@ -33,9 +33,6 @@ derive_for!(
     /// Describes a scale in 3D space.
     #[repr(transparent)]
     pub struct Scale(pub Vec3);
-    /// Color/tint of object
-    #[repr(transparent)]
-    pub struct Color(pub Vec4);
 );
 
 impl Position {
@@ -62,11 +59,5 @@ impl Scale {
 
     pub fn uniform(val: f32) -> Self {
         Self(Vec3::new(val, val, val))
-    }
-}
-
-impl Color {
-    pub fn new(r: f32, g: f32, b: f32, a: f32) -> Self {
-        Self(Vec4::new(r, g, b, a))
     }
 }

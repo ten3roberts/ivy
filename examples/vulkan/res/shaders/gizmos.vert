@@ -52,10 +52,15 @@ void main() {
     vec3 viewDir = normalize(pos.xyz -
       cameraData.position.xyz);
 
-    mat3 billboard = axisBillboard(objectData.billboard_axis.xyz, viewDir);
-    vec3 newPos = billboard * inPosition;
+    vec3 scale = vec3(objectData.model[0][0], objectData.model[1][1],
+      objectData.model[2][2]);
 
-    gl_Position = proj * view * objectData.model * vec4(newPos, 1);
+    vec3 position = objectData.model[3].xyz;
+
+    mat3 billboard = axisBillboard(objectData.billboard_axis.xyz, viewDir);
+    vec3 newPos = billboard * (inPosition * scale);
+
+    gl_Position = proj * view * vec4(newPos + position, 1);
   } else {
     mat4 modelView = cameraData.view * objectData.model;
 

@@ -1,14 +1,14 @@
 use arrayvec::{Array, ArrayVec};
 use hecs::{Entity, World};
-use ivy_core::{Gizmo, GizmoKind, Gizmos, Position, Scale};
+use ivy_core::{Color, Gizmo, Gizmos, Position, Scale};
 use slotmap::{new_key_type, SlotMap};
-use ultraviolet::{Vec3, Vec4};
+use ultraviolet::Vec3;
 
 use crate::{Collider, CollisionPrimitive, Sphere};
 
 /// Marker for where the object is in the tree
 struct TreeMarker {
-    index: NodeIndex,
+    _index: NodeIndex,
 }
 
 new_key_type!(
@@ -60,7 +60,9 @@ impl<C: Array<Item = Object>> CollisionTree<C> {
         insterted.into_iter().for_each(|object| {
             let entity = object.entity;
             let index = self.insert(object);
-            world.insert_one(entity, TreeMarker { index }).unwrap();
+            world
+                .insert_one(entity, TreeMarker { _index: index })
+                .unwrap();
         })
     }
 
@@ -162,117 +164,25 @@ impl<C: Array<Item = Object>> Node<C> {
     pub fn draw_gizmos(current: NodeIndex, nodes: &Nodes<C>, depth: usize, gizmos: &mut Gizmos) {
         let node = &nodes[current];
 
-        gizmos.push(Gizmo::new(
-            node.origin,
-            Vec3::zero(),
-            0.2,
-            Vec4::new(1.0, 0.0, 1.0, 1.0) * (1.0 / depth as f32),
-            GizmoKind::Sphere,
-        ));
+        gizmos.push(Gizmo::Sphere {
+            origin: node.origin,
+            color: Color::red(),
+            radius: 0.2,
+        });
 
-        gizmos.push(Gizmo::new(
-            node.origin - node.half_extents,
-            Vec3::unit_x() * node.half_extents * 2.0,
-            0.1,
-            Vec4::new(1.0, 0.0, 1.0, 1.0),
-            GizmoKind::Line,
-        ));
+        gizmos.push(Gizmo::Line {
+            origin: node.origin,
+            color: Color::blue(),
+            dir: Vec3::new(5.0, 5.0, 0.0),
+            radius: 0.2,
+        });
 
-        gizmos.push(Gizmo::new(
-            node.origin - node.half_extents,
-            Vec3::unit_z() * node.half_extents * 2.0,
-            0.1,
-            Vec4::new(1.0, 0.0, 1.0, 1.0),
-            GizmoKind::Line,
-        ));
-
-        gizmos.push(Gizmo::new(
-            node.origin - node.half_extents,
-            Vec3::unit_y() * node.half_extents * 2.0,
-            0.1,
-            Vec4::new(1.0, 0.0, 1.0, 1.0),
-            GizmoKind::Line,
-        ));
-
-        gizmos.push(Gizmo::new(
-            node.origin + node.half_extents,
-            -Vec3::unit_x() * node.half_extents * 2.0,
-            0.1,
-            Vec4::new(1.0, 0.0, 1.0, 1.0),
-            GizmoKind::Line,
-        ));
-
-        gizmos.push(Gizmo::new(
-            node.origin + node.half_extents,
-            -Vec3::unit_z() * node.half_extents * 2.0,
-            0.1,
-            Vec4::new(1.0, 0.0, 1.0, 1.0),
-            GizmoKind::Line,
-        ));
-
-        gizmos.push(Gizmo::new(
-            node.origin + node.half_extents,
-            -Vec3::unit_y() * node.half_extents * 2.0,
-            0.1,
-            Vec4::new(1.0, 0.0, 1.0, 1.0),
-            GizmoKind::Line,
-        ));
-
-        gizmos.push(Gizmo::new(
-            node.origin - node.half_extents * Vec3::new(1.0, -1.0, 1.0),
-            Vec3::unit_x() * node.half_extents * 2.0,
-            0.1,
-            Vec4::new(1.0, 0.0, 1.0, 1.0),
-            GizmoKind::Line,
-        ));
-
-        gizmos.push(Gizmo::new(
-            node.origin + node.half_extents * Vec3::new(-1.0, -1.0, 1.0),
-            Vec3::unit_y() * node.half_extents * 2.0,
-            0.1,
-            Vec4::new(1.0, 1.0, 1.0, 1.0),
-            GizmoKind::Line,
-        ));
-
-        gizmos.push(Gizmo::new(
-            node.origin + node.half_extents * Vec3::new(-1.0, -1.0, 1.0),
-            Vec3::unit_x() * node.half_extents * 2.0,
-            0.1,
-            Vec4::new(1.0, 1.0, 1.0, 1.0),
-            GizmoKind::Line,
-        ));
-
-        gizmos.push(Gizmo::new(
-            node.origin + node.half_extents * Vec3::new(-1.0, -1.0, 1.0),
-            Vec3::unit_x() * node.half_extents * 2.0,
-            0.1,
-            Vec4::new(1.0, 1.0, 1.0, 1.0),
-            GizmoKind::Line,
-        ));
-
-        gizmos.push(Gizmo::new(
-            node.origin + node.half_extents * Vec3::new(1.0, -1.0, -1.0),
-            Vec3::unit_z() * node.half_extents * 2.0,
-            0.1,
-            Vec4::new(1.0, 1.0, 1.0, 1.0),
-            GizmoKind::Line,
-        ));
-
-        gizmos.push(Gizmo::new(
-            node.origin + node.half_extents * Vec3::new(-1.0, 1.0, -1.0),
-            Vec3::unit_z() * node.half_extents * 2.0,
-            0.1,
-            Vec4::new(1.0, 1.0, 1.0, 1.0),
-            GizmoKind::Line,
-        ));
-
-        gizmos.push(Gizmo::new(
-            node.origin + node.half_extents * Vec3::new(1.0, -1.0, -1.0),
-            Vec3::unit_y() * node.half_extents * 2.0,
-            0.1,
-            Vec4::new(1.0, 1.0, 1.0, 1.0),
-            GizmoKind::Line,
-        ));
+        // gizmos.push(Gizmo::Cube {
+        //     origin: node.origin,
+        //     color: Color::red(),
+        //     half_extents: node.half_extents,
+        //     radius: 0.2,
+        // });
 
         node.children
             .iter()

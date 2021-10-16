@@ -1,4 +1,5 @@
 mod app;
+mod color;
 mod components;
 mod dir;
 mod events;
@@ -8,6 +9,7 @@ mod logger;
 mod time;
 
 pub use app::{App, AppBuilder, AppEvent};
+pub use color::*;
 pub use components::*;
 pub use dir::*;
 pub use events::{EventSender, Events};

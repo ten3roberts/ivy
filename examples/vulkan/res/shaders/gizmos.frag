@@ -16,8 +16,8 @@ void main() {
   if (currentDepth > depth)
   opacity = 0.2;
 
-  if (length(fragModelPosition) > 1)
-  discard;
+  /* if (length(fragModelPosition) > 1) */
+  /* discard; */
 
   outColor = fragColor * vec4(1,1,1,opacity);
 }

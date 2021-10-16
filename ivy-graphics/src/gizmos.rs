@@ -3,7 +3,7 @@ use std::sync::Arc;
 use ash::vk::{DescriptorSet, IndexType, ShaderStageFlags};
 use ivy_core::Gizmos;
 use ivy_vulkan::VulkanContext;
-use ultraviolet::{Mat4, Vec4};
+use ultraviolet::{Mat4, Vec3, Vec4};
 
 use crate::{Mesh, Renderer, Result};
 
@@ -52,16 +52,59 @@ impl Renderer for GizmoRenderer {
         }
 
         for gizmo in gizmos.iter() {
-            let data = PushConstantData {
-                model: Mat4::from_translation(gizmo.midpoint())
-                    * Mat4::from_nonuniform_scale(gizmo.size()),
-                color: gizmo.color(),
-                billboard_axis: gizmo.billboard_axis().into_homogeneous_vector(),
-            };
+            match gizmo {
+                ivy_core::Gizmo::Sphere {
+                    origin,
+                    color,
+                    radius,
+                } => {
+                    cmd.push_constants(
+                        layout,
+                        ShaderStageFlags::VERTEX,
+                        0,
+                        &PushConstantData {
+                            model: Mat4::from_translation(*origin) * Mat4::from_scale(*radius),
+                            color: **color,
+                            billboard_axis: Vec4::zero(),
+                        },
+                    );
 
-            cmd.push_constants(layout, ShaderStageFlags::VERTEX, 0, &data);
+                    cmd.draw_indexed(6, 1, 0, 0, 0);
+                }
+                ivy_core::Gizmo::Line {
+                    origin,
+                    color,
+                    dir,
+                    radius,
+                } => {
+                    // let a = dir.cross(Vec3::new(-dir.y, dir.x, dir.z)).normalized() * *radius;
+                    // let b = a.cross(*dir).normalized() * *radius;
 
-            cmd.draw_indexed(6, 1, 0, 0, 0);
+                    cmd.push_constants(
+                        layout,
+                        ShaderStageFlags::VERTEX,
+                        0,
+                        &PushConstantData {
+                            model: Mat4::from_translation(*origin + *dir * 0.5)
+                                * Mat4::from_nonuniform_scale(Vec3::new(
+                                    *radius,
+                                    dir.mag() * 0.5,
+                                    *radius,
+                                )),
+                            color: **color,
+                            billboard_axis: dir.normalized().into_homogeneous_vector(),
+                        },
+                    );
+
+                    cmd.draw_indexed(6, 1, 0, 0, 0);
+                }
+                ivy_core::Gizmo::Cube {
+                    origin,
+                    color,
+                    half_extents,
+                    radius,
+                } => todo!(),
+            }
         }
 
         Ok(())
