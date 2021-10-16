@@ -20,4 +20,8 @@ impl CollisionPrimitive for Collider {
     fn support(&self, dir: Vec3) -> Vec3 {
         self.primitive.support(dir)
     }
+
+    fn max_radius(&self) -> f32 {
+        self.primitive.max_radius()
+    }
 }

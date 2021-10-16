@@ -8,7 +8,7 @@ use ivy_vulkan::{
     Buffer, Texture, VulkanContext,
 };
 use std::sync::Arc;
-use ultraviolet::{Mat4, Vec4};
+use ultraviolet::{Mat4, Vec3, Vec4};
 
 /// A camera holds a view and projection matrix.
 /// Use a system to update view matrix according to position and rotation.
@@ -171,6 +171,8 @@ impl GpuCameraData {
     pub fn update(&mut self, camera: &Camera, current_frame: usize) -> Result<()> {
         let view = camera.view();
         let position = view.inversed()[3].xyz().into_homogeneous_point();
+
+        // dbg!(view.transform_vec3(Vec3::unit_y()));
 
         self.uniformbuffers[current_frame]
             .fill(

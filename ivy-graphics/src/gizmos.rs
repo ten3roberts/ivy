@@ -1,44 +1,11 @@
-use crate::{Mesh, Renderer, Result};
-use ash::vk::{DescriptorSet, IndexType, ShaderStageFlags};
-use derive_more::*;
-use ivy_vulkan::VulkanContext;
 use std::sync::Arc;
-use ultraviolet::{Mat4, Vec3, Vec4};
 
-#[derive(Copy, Clone, PartialEq)]
-pub struct Gizmo {
-    pos: Vec3,
-    color: Vec4,
-    kind: GizmoKind,
-}
+use ash::vk::{DescriptorSet, IndexType, ShaderStageFlags};
+use ivy_core::Gizmos;
+use ivy_vulkan::VulkanContext;
+use ultraviolet::{Mat4, Vec4};
 
-impl Gizmo {
-    pub fn new(pos: Vec3, color: Vec4, kind: GizmoKind) -> Self {
-        Self { pos, color, kind }
-    }
-}
-
-#[derive(Copy, Clone, PartialEq, PartialOrd)]
-pub enum GizmoKind {
-    Sphere(f32),
-}
-
-impl GizmoKind {
-    pub fn scale(&self) -> Vec3 {
-        match *self {
-            Self::Sphere(r) => Vec3::new(r, r, r),
-        }
-    }
-}
-
-#[derive(Default, Deref, DerefMut)]
-pub struct Gizmos(Vec<Gizmo>);
-
-impl Gizmos {
-    pub fn new() -> Self {
-        Self(Vec::new())
-    }
-}
+use crate::{Mesh, Renderer, Result};
 
 pub struct GizmoRenderer {
     mesh: crate::Mesh,
@@ -86,9 +53,10 @@ impl Renderer for GizmoRenderer {
 
         for gizmo in gizmos.iter() {
             let data = PushConstantData {
-                model: Mat4::from_translation(gizmo.pos)
-                    * Mat4::from_nonuniform_scale(gizmo.kind.scale()),
-                color: gizmo.color,
+                model: Mat4::from_translation(gizmo.midpoint())
+                    * Mat4::from_nonuniform_scale(gizmo.size()),
+                color: gizmo.color(),
+                billboard_axis: gizmo.billboard_axis().into_homogeneous_vector(),
             };
 
             cmd.push_constants(layout, ShaderStageFlags::VERTEX, 0, &data);
@@ -106,4 +74,5 @@ impl Renderer for GizmoRenderer {
 struct PushConstantData {
     model: Mat4,
     color: Vec4,
+    billboard_axis: Vec4,
 }

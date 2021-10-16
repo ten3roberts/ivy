@@ -20,6 +20,10 @@ impl CollisionPrimitive for Cube {
 
         Vec3::new(x, y, z)
     }
+
+    fn max_radius(&self) -> f32 {
+        self.size
+    }
 }
 
 pub struct Sphere {
@@ -30,11 +34,21 @@ impl Sphere {
     pub fn new(radius: f32) -> Self {
         Self { radius }
     }
+
+    /// Returns true if two uniform spheres overlap.
+    pub fn overlaps(&self, origin: Vec3, other: Self, other_origin: Vec3) -> bool {
+        (origin - other_origin).mag_sq()
+            < (self.radius * self.radius) + (other.radius * other.radius)
+    }
 }
 
 impl CollisionPrimitive for Sphere {
     fn support(&self, dir: Vec3) -> Vec3 {
         self.radius * dir
+    }
+
+    fn max_radius(&self) -> f32 {
+        self.radius
     }
 }
 
@@ -57,5 +71,9 @@ impl CollisionPrimitive for Capsule {
         let mut result = Vec3::zero();
         result.y = dir.y.signum() * self.half_height;
         result + dir * self.radius
+    }
+
+    fn max_radius(&self) -> f32 {
+        self.half_height + self.radius
     }
 }

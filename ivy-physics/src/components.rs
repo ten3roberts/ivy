@@ -82,9 +82,9 @@ impl TransformMatrix {
 pub struct RbQuery<'a> {
     pub pos: &'a Position,
     pub resitution: &'a Resitution,
-    pub vel: &'a Velocity,
+    pub vel: Option<&'a Velocity>,
     pub ang_vel: Option<&'a AngularVelocity>,
-    pub mass: &'a Mass,
+    pub mass: Option<&'a Mass>,
     pub ang_mass: Option<&'a AngularMass>,
 }
 
@@ -134,10 +134,22 @@ impl Effector {
         self.net_dv += dv;
     }
 
+    /// Applies a force at the specified position from center of mass
+    pub fn apply_force_at(&mut self, f: Vec3, at: Vec3) {
+        self.net_force += f;
+        self.net_torque += at.cross(f);
+    }
+
     /// Applies an impulse at the specified position from center of mass
     pub fn apply_impulse_at(&mut self, impulse: Vec3, at: Vec3) {
         self.net_impulse += impulse;
         self.net_angular_impulse += at.cross(impulse);
+    }
+
+    /// Applies a velocity change at the specified position from center of mass
+    pub fn apply_velocity_change_at(&mut self, dv: Vec3, at: Vec3) {
+        self.net_dv += dv;
+        self.net_dw += at.cross(dv);
     }
 
     /// Returns the total net effect of forces, impulses, and velocity changes

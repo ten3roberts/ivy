@@ -483,11 +483,13 @@ dependencies = [
 name = "ivy-collision"
 version = "0.1.0"
 dependencies = [
+ "arrayvec",
  "derive-for",
  "derive_more",
  "hecs",
  "ivy-core",
  "ivy-resources",
+ "slotmap",
  "smallvec",
  "ultraviolet",
 ]

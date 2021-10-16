@@ -1,5 +1,5 @@
 use hecs::Entity;
-use ivy_collision::{intersect, Intersection};
+use ivy_collision::Intersection;
 use ultraviolet::Vec3;
 
 use crate::components::*;
@@ -28,8 +28,8 @@ pub fn resolve_collision(intersection: Intersection, a: &RbQuery, b: &RbQuery) -
     let bw = b.ang_vel.cloned().unwrap_or_default();
     let n = intersection.normal;
 
-    let a_vel = **a.vel + point_vel(ra, aw);
-    let b_vel = **b.vel + point_vel(rb, bw);
+    let a_vel = *a.vel.cloned().unwrap_or_default() + point_vel(ra, aw);
+    let b_vel = *b.vel.cloned().unwrap_or_default() + point_vel(rb, bw);
     let contact_rel = (a_vel - b_vel).dot(n);
 
     eprintln!(
@@ -49,14 +49,20 @@ pub fn resolve_collision(intersection: Intersection, a: &RbQuery, b: &RbQuery) -
         return Vec3::zero();
     }
 
-    let a_ang_mass = a.ang_mass.cloned().unwrap_or_default();
-    let b_ang_mass = b.ang_mass.cloned().unwrap_or_default();
+    let max_mass = Mass(std::f32::MAX);
+    let max_ang_mass = AngularMass(std::f32::MAX);
+
+    let a_ang_mass = **a.ang_mass.unwrap_or(&max_ang_mass);
+    let b_ang_mass = **b.ang_mass.unwrap_or(&max_ang_mass);
+
+    let a_mass = **a.mass.unwrap_or(&max_mass);
+    let b_mass = **b.mass.unwrap_or(&max_mass);
 
     let j = -(1.0 + resitution) * contact_rel
-        / (1.0 / a.mass.0
-            + 1.0 / b.mass.0
-            + ra.cross(n).mag_sq() / *a_ang_mass
-            + rb.cross(n).mag_sq() / *b_ang_mass);
+        / (1.0 / a_mass
+            + 1.0 / b_mass
+            + ra.cross(n).mag_sq() / a_ang_mass
+            + rb.cross(n).mag_sq() / b_ang_mass);
 
     // eprintln!("Mass: {:?}", intersection.normal);
     let impulse = j * intersection.normal;

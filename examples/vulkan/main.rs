@@ -1,15 +1,15 @@
 use std::{
     fmt::Display,
-    ops::Deref,
+    ops::{Deref, DerefMut},
     sync::{mpsc, Arc},
     time::Duration,
 };
 
 use anyhow::{anyhow, Context};
-use collision::*;
+use collision::{Collider, CollisionPrimitive, CollisionTree, Cube, Object, Sphere};
 use flume::Receiver;
 use glfw::{Action, CursorMode, Glfw, Key, WindowEvent};
-use graphics::gizmos::{Gizmo, GizmoKind, GizmoRenderer, Gizmos};
+use graphics::gizmos::GizmoRenderer;
 use hecs::*;
 use hecs_hierarchy::Hierarchy;
 use ivy::{
@@ -64,33 +64,21 @@ where
 
 struct Movable {
     translate: InputVector,
-    rotate: InputVector,
     speed: f32,
 }
 
 impl Movable {
-    fn new(translate: InputVector, rotate: InputVector, speed: f32) -> Self {
-        Self {
-            translate,
-            rotate,
-            speed,
-        }
+    fn new(translate: InputVector, speed: f32) -> Self {
+        Self { translate, speed }
     }
 }
 
 fn move_system(world: &mut World, input: &Input, dt: f32) {
     world
-        .query::<(&Movable, &mut Position, &mut Rotation)>()
+        .query::<(&Movable, &mut Position)>()
         .iter()
-        .for_each(|(_, (m, p, r))| {
+        .for_each(|(_, (m, p))| {
             *p += Position(m.translate.get(input)) * m.speed * dt;
-            let Vec3 {
-                x: pitch,
-                y: yaw,
-                z: roll,
-            } = m.rotate.get(input) * dt * 0.5;
-
-            *r = Rotation(**r * (Rotor3::from_euler_angles(roll, pitch, yaw)));
         })
 }
 
@@ -375,14 +363,7 @@ fn setup_objects(
     resources: &Resources,
     shaderpass: Handle<GeometryPass>,
 ) -> anyhow::Result<()> {
-    let mut gizmos = Gizmos::new();
-    gizmos.push(Gizmo::new(
-        Vec3::new(0.0, 0.0, 0.0),
-        Vec4::new(1.0, 0.0, 0.0, 0.5),
-        GizmoKind::Sphere(0.25),
-    ));
-
-    resources.insert(gizmos)?;
+    resources.insert(Gizmos::default())?;
 
     let document: Handle<Document> = resources
         .load("./res/models/cube.gltf")
@@ -414,20 +395,51 @@ fn setup_objects(
     ));
 
     world.spawn((
-        AngularMass(2.0),
-        AngularVelocity(Vec3::unit_y() * 1.0),
-        Collider::new(Cube::new(1.0)),
+        Collider::new(Sphere::new(1.0)),
         Color::new(1.0, 1.0, 1.0, 1.0),
-        Mass(5.0),
-        Position::new(0.0, 0.5, 0.0),
-        Resitution(0.1),
-        Scale::new(2.0, 0.5, 0.2),
-        Rotation::euler_angles(0.0, 0.0, 0.0),
-        Velocity::default(),
-        cube_mesh,
+        Mass(10.0),
+        Position::new(-2.0, -0.5, 0.0),
+        Resitution(1.0),
+        sphere_mesh,
         material,
         shaderpass,
     ));
+
+    world.spawn((
+        Collider::new(Sphere::new(1.0)),
+        Color::new(1.0, 1.0, 1.0, 1.0),
+        Mass(10.0),
+        Position::new(0.0, 0.5, 0.0),
+        Resitution(1.0),
+        Rotation::euler_angles(0.0, 0.0, 0.0),
+        Movable {
+            translate: InputVector {
+                x: InputAxis::keyboard(Key::L, Key::H),
+                y: InputAxis::keyboard(Key::K, Key::J),
+                z: InputAxis::keyboard(Key::O, Key::I),
+            },
+            speed: 1.0,
+        },
+        sphere_mesh,
+        material,
+        shaderpass,
+    ));
+
+    // world.spawn((
+    //     AngularMass(2.0),
+    //     AngularVelocity(Vec3::unit_y() * 1.0),
+    //     Collider::new(Cube::new(1.0)),
+    //     Color::new(1.0, 1.0, 1.0, 1.0),
+    //     Mass(5.0),
+    //     Position::new(0.0, 0.5, 0.0),
+    //     Resitution(0.1),
+    //     Scale::new(2.0, 0.5, 0.2),
+    //     Rotation::euler_angles(0.0, 0.0, 0.0),
+    //     Velocity::default(),
+    //     cube_mesh,
+    //     material,
+    //     shaderpass,
+    // ));
 
     world.spawn((
         AngularMass(1.0),
@@ -461,6 +473,8 @@ struct LogicLayer {
 
     window_events: Receiver<WindowEvent>,
     collision_events: Receiver<Collision>,
+
+    tree: CollisionTree<[collision::Object; 6]>,
 }
 
 impl LogicLayer {
@@ -513,6 +527,7 @@ impl LogicLayer {
             window_events,
             collision_events,
             cursor_mode: CursorMode::Normal,
+            tree: CollisionTree::new(Vec3::one() * 5.0),
         })
     }
 
@@ -554,7 +569,7 @@ impl Layer for LogicLayer {
         &mut self,
         world: &mut World,
         resources: &mut Resources,
-        events: &mut Events,
+        _events: &mut Events,
         frame_time: Duration,
     ) -> anyhow::Result<()> {
         self.handle_events(resources)
@@ -616,7 +631,7 @@ impl Layer for LogicLayer {
             // physics::systems::gravity_system(world, dt);
             physics::systems::satisfy_objects(world);
             physics::systems::wrap_around_system(world);
-            physics::systems::collision_system(world, events)?;
+            // physics::systems::collision_system(world, events)?;
             physics::systems::resolve_collisions_system(world, self.collision_events.try_iter())?;
             physics::systems::apply_effectors_system(world, dt);
 
@@ -632,6 +647,27 @@ impl Layer for LogicLayer {
             ui::systems::update(world)?;
 
             self.acc -= self.timestep.secs();
+
+            let mut gizmos = resources.get_default_mut::<Gizmos>()?;
+            self.tree.draw_gizmos(gizmos.deref_mut());
+            self.tree.register(world);
+
+            world
+                .query::<(&mut Color, &Position, &Scale, &Collider)>()
+                .iter()
+                .for_each(|(e, (color, pos, scale, collider))| {
+                    let o = collision::Object::new(
+                        e,
+                        Sphere::new(collider.max_radius() * scale.component_max()),
+                        **pos,
+                    );
+
+                    if self.tree.contains(&o) {
+                        *color = Color::new(0.0, 1.0, 0.0, 1.0);
+                    } else {
+                        *color = Color::new(1.0, 0.0, 0.0, 1.0);
+                    }
+                });
         }
 
         Ok(())
