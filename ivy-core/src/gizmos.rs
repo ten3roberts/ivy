@@ -9,18 +9,27 @@ pub enum Gizmo {
         origin: Vec3,
         color: Color,
         radius: f32,
+        // The radius of the corner, 0 is a straight corner, and 1 is a half
+        // circle cap.
+        corner_radius: f32,
     },
     Line {
         origin: Vec3,
         color: Color,
         dir: Vec3,
         radius: f32,
+        // The radius of the corner, 0 is a straight corner, and 1 is a half
+        // circle cap.
+        corner_radius: f32,
     },
     Cube {
         origin: Vec3,
         color: Color,
         half_extents: Vec3,
         radius: f32,
+        // The radius of the corner, 0 is a straight corner, and 1 is a half
+        // circle cap.
+        corner_radius: f32,
     },
     // /// The position of the gizmo
     // pos: Vec3,

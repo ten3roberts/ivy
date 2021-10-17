@@ -6,7 +6,10 @@ layout(location = 1) in vec3 normal;
 layout(location = 2) in vec2 texCoord;
 
 layout(location = 0) out vec3 fragModelPosition;
-layout(location = 1) out vec4 fragColor;
+layout(location = 1) out vec2 fragTexCoord;
+layout(location = 2) out vec4 fragColor;
+layout(location = 3) out vec3 fragScale;
+layout(location = 4) out float cornerRadius;
 
 layout(binding = 0) uniform CameraData {
   mat4 viewproj;
@@ -18,18 +21,11 @@ layout(binding = 0) uniform CameraData {
 layout ( push_constant ) uniform ObjectData {
   mat4 model; 
   vec4 color;
-  vec4 billboard_axis;
+  vec3 billboard_axis;
+  float cornerRadius;
 } objectData;
 
 mat3 axisBillboard(vec3 up, vec3 viewDir) {
-  // Looking from the up axis
-  if (abs(dot(up, viewDir)) > 0.999) {
-    mat3 result;
-    result[0][0] = 1;
-    result[1][1] = 1;
-    result[2][2] = 1;
-  }
-
   vec3 right = normalize(cross(up, viewDir));
   vec3 forward = cross(right, up);
 
@@ -46,14 +42,18 @@ void main() {
   mat4 view = cameraData.view;
   mat4 proj = cameraData.projection;
 
+  vec3 scale = vec3(objectData.model[0][0], objectData.model[1][1],
+    objectData.model[2][2]);
+
+  fragScale = scale;
+
+  cornerRadius = objectData.cornerRadius;
+
   if (length(objectData.billboard_axis) > 0.0) {
     vec4 pos = objectData.model * vec4(0, 0, 0, 1);
 
     vec3 viewDir = normalize(pos.xyz -
       cameraData.position.xyz);
-
-    vec3 scale = vec3(objectData.model[0][0], objectData.model[1][1],
-      objectData.model[2][2]);
 
     vec3 position = objectData.model[3].xyz;
 

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::{
     fmt::Display,
     ops::{Deref, DerefMut},
@@ -482,7 +483,7 @@ struct LogicLayer {
     window_events: Receiver<WindowEvent>,
     collision_events: Receiver<Collision>,
 
-    tree: CollisionTree<[collision::Object; 6]>,
+    tree: CollisionTree<[collision::Object; 2]>,
 }
 
 impl LogicLayer {

@@ -57,6 +57,7 @@ impl Renderer for GizmoRenderer {
                     origin,
                     color,
                     radius,
+                    corner_radius,
                 } => {
                     cmd.push_constants(
                         layout,
@@ -65,7 +66,8 @@ impl Renderer for GizmoRenderer {
                         &PushConstantData {
                             model: Mat4::from_translation(*origin) * Mat4::from_scale(*radius),
                             color: **color,
-                            billboard_axis: Vec4::zero(),
+                            billboard_axis: Vec3::zero(),
+                            corner_radius: *corner_radius,
                         },
                     );
 
@@ -76,10 +78,8 @@ impl Renderer for GizmoRenderer {
                     color,
                     dir,
                     radius,
+                    corner_radius,
                 } => {
-                    // let a = dir.cross(Vec3::new(-dir.y, dir.x, dir.z)).normalized() * *radius;
-                    // let b = a.cross(*dir).normalized() * *radius;
-
                     cmd.push_constants(
                         layout,
                         ShaderStageFlags::VERTEX,
@@ -92,7 +92,8 @@ impl Renderer for GizmoRenderer {
                                     *radius,
                                 )),
                             color: **color,
-                            billboard_axis: dir.normalized().into_homogeneous_vector(),
+                            billboard_axis: dir.normalized(),
+                            corner_radius: *corner_radius,
                         },
                     );
 
@@ -103,7 +104,37 @@ impl Renderer for GizmoRenderer {
                     color,
                     half_extents,
                     radius,
-                } => todo!(),
+                    corner_radius,
+                } => {
+                    for (v, dir) in [
+                        (Vec3::unit_x(), Vec3::unit_z()),
+                        (Vec3::unit_y(), Vec3::unit_x()),
+                        (Vec3::unit_z(), Vec3::unit_y()),
+                    ] {
+                        for (a, b) in [(1.0, 1.0), (-1.0, -1.0), (-1.0, 1.0), (1.0, -1.0)] {
+                            cmd.push_constants(
+                                layout,
+                                ShaderStageFlags::VERTEX,
+                                0,
+                                &PushConstantData {
+                                    model: Mat4::from_translation(
+                                        *origin
+                                            + b * (Vec3::one() - (dir + v) + a * v) * *half_extents,
+                                    ) * Mat4::from_nonuniform_scale(Vec3::new(
+                                        *radius,
+                                        (dir * (*half_extents)).mag() + radius * 1.0,
+                                        *radius,
+                                    )),
+                                    color: **color,
+                                    billboard_axis: dir.normalized(),
+                                    corner_radius: *corner_radius,
+                                },
+                            );
+
+                            cmd.draw_indexed(6, 1, 0, 0, 0);
+                        }
+                    }
+                }
             }
         }
 
@@ -117,5 +148,6 @@ impl Renderer for GizmoRenderer {
 struct PushConstantData {
     model: Mat4,
     color: Vec4,
-    billboard_axis: Vec4,
+    billboard_axis: Vec3,
+    corner_radius: f32,
 }

@@ -96,8 +96,7 @@ impl LoadResource for Document {
 
     type Error = Error;
 
-    fn load(resources: &ivy_resources::Resources, path: &Self::Info) -> Result<Self>
-    {
+    fn load(resources: &ivy_resources::Resources, path: &Self::Info) -> Result<Self> {
         let context = resources.get_default::<Arc<VulkanContext>>()?;
         Self::from_file(context.clone(), resources.fetch_mut()?, path.as_ref())
     }

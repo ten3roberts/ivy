@@ -168,21 +168,32 @@ impl<C: Array<Item = Object>> Node<C> {
             origin: node.origin,
             color: Color::red(),
             radius: 0.2,
+            corner_radius: 1.0,
         });
 
         gizmos.push(Gizmo::Line {
-            origin: node.origin,
+            origin: Vec3::one(),
             color: Color::blue(),
-            dir: Vec3::new(5.0, 5.0, 0.0),
+            dir: Vec3::new(1.0, 1.0, 0.0) * 10.0,
             radius: 0.2,
+            corner_radius: 1.5,
         });
 
-        // gizmos.push(Gizmo::Cube {
-        //     origin: node.origin,
-        //     color: Color::red(),
-        //     half_extents: node.half_extents,
-        //     radius: 0.2,
-        // });
+        gizmos.push(Gizmo::Line {
+            origin: Vec3::zero(),
+            color: Color::blue(),
+            dir: Vec3::unit_x() * 5.0,
+            radius: 0.2,
+            corner_radius: 0.5,
+        });
+
+        gizmos.push(Gizmo::Cube {
+            origin: node.origin,
+            color: Color::red(),
+            half_extents: node.half_extents,
+            radius: 0.1 / depth as f32,
+            corner_radius: 1.0,
+        });
 
         node.children
             .iter()
