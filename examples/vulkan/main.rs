@@ -30,6 +30,8 @@ use physics::{
     components::{AngularMass, AngularVelocity, Mass, Resitution, Velocity},
 };
 use postprocessing::pbr::{create_pbr_pipeline, PBRInfo};
+use random::rand::SeedableRng;
+use random::{rand::rngs::StdRng, Random};
 use slotmap::SecondaryMap;
 use std::fmt::Write;
 use ultraviolet::{Rotor3, Vec3};
@@ -403,16 +405,23 @@ fn setup_objects(
         PointLight::new(1.0, Vec3::new(0.0, 0.0, 500.0)),
     ));
 
-    world.spawn((
-        Collider::new(Sphere::new(1.0)),
-        Color::new(1.0, 1.0, 1.0, 1.0),
-        Mass(10.0),
-        Position::new(-2.0, -0.5, 0.0),
-        Resitution(1.0),
-        sphere_mesh,
-        material,
-        shaderpass,
-    ));
+    let mut rng = StdRng::seed_from_u64(42);
+
+    world
+        .spawn_batch((0..30).map(|_| {
+            (
+                Collider::new(Sphere::new(1.0)),
+                Color::new(1.0, 1.0, 1.0, 1.0),
+                Mass(10.0),
+                Position(Vec3::rand_uniform(&mut rng) * 7.0),
+                Resitution(1.0),
+                Scale::uniform(0.2),
+                sphere_mesh,
+                material,
+                shaderpass,
+            )
+        }))
+        .for_each(|_| {});
 
     world.spawn((
         Collider::new(Sphere::new(1.0)),
@@ -420,6 +429,7 @@ fn setup_objects(
         Mass(10.0),
         Position::new(0.0, 0.5, 0.0),
         Resitution(1.0),
+        Scale::uniform(0.2),
         Rotation::euler_angles(0.0, 0.0, 0.0),
         Movable {
             translate: InputVector {
@@ -427,7 +437,7 @@ fn setup_objects(
                 y: InputAxis::keyboard(Key::K, Key::J),
                 z: InputAxis::keyboard(Key::O, Key::I),
             },
-            speed: 1.0,
+            speed: 3.0,
         },
         sphere_mesh,
         material,
@@ -483,7 +493,7 @@ struct LogicLayer {
     window_events: Receiver<WindowEvent>,
     collision_events: Receiver<Collision>,
 
-    tree: CollisionTree<[collision::Object; 2]>,
+    tree: CollisionTree<[collision::Object; 4]>,
 }
 
 impl LogicLayer {
@@ -536,7 +546,7 @@ impl LogicLayer {
             window_events,
             collision_events,
             cursor_mode: CursorMode::Normal,
-            tree: CollisionTree::new(Vec3::one() * 5.0),
+            tree: CollisionTree::new(Vec3::zero(), Vec3::one() * 10.0),
         })
     }
 

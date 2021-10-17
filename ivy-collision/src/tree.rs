@@ -23,9 +23,9 @@ pub struct CollisionTree<C: Array<Item = Object>> {
 }
 
 impl<C: Array<Item = Object>> CollisionTree<C> {
-    pub fn new(half_extents: Vec3) -> Self {
+    pub fn new(origin: Vec3, half_extents: Vec3) -> Self {
         let mut nodes = SlotMap::with_key();
-        let root = nodes.insert(Node::new(Vec3::zero(), half_extents));
+        let root = nodes.insert(Node::new(origin, half_extents));
         Self { nodes, root }
     }
 
@@ -98,31 +98,39 @@ impl<C: Array<Item = Object>> Node<C> {
     /// in node.
     pub fn insert(current: NodeIndex, nodes: &mut Nodes<C>, object: Object) -> NodeIndex {
         // Check if any child can contain it
-        if let Some(child) = nodes[current]
-            .children
-            .iter()
-            .flatten()
-            .find(|child| nodes[**child].contains(&object))
-        {
-            Self::insert(*child, nodes, object)
-        } else {
-            let node = &mut nodes[current];
-            if let Err(err) = node.objects.try_push(object) {
-                Self::split(current, nodes);
-                Self::insert(current, nodes, err.element())
+        let node = &nodes[current];
+        if let Some(child) = node.children.iter().flatten().find(|child| {
+            if nodes[**child].contains(&object) {
+                eprintln!("Object was contained");
+                true
             } else {
-                current
+                eprintln!("Not contained");
+                false
             }
+        }) {
+            eprintln!("Inserting into child");
+            Self::insert(*child, nodes, object)
+        } else if node.objects.len() < C::CAPACITY {
+            nodes[current].objects.push(object);
+            current
+        } else {
+            // let node = &mut nodes[current];
+            Self::split(current, nodes);
+            Self::insert(current, nodes, object)
         }
     }
 
     /// Splits the node in half
     pub fn split(current: NodeIndex, nodes: &mut Nodes<C>) {
+        // eprintln!("Splitting");
         let mut center = Vec3::zero();
         let mut max = Vec3::zero();
         let mut min = Vec3::zero();
 
         let node = &mut nodes[current];
+        eprintln!("children: {:?}", node.children);
+        assert!(node.children.is_none());
+
         node.objects.iter().for_each(|val| {
             center += val.origin;
             max = max.max_by_component(val.origin);
@@ -135,7 +143,6 @@ impl<C: Array<Item = Object>> Node<C> {
         let width = (max - min).abs();
 
         let max = max_axis(width);
-        dbg!(max);
 
         let off = node.half_extents * max * 0.5;
 
@@ -143,10 +150,29 @@ impl<C: Array<Item = Object>> Node<C> {
         let a_origin = node.origin - off;
         let b_origin = node.origin + off;
 
-        let _rel_center = center - node.origin;
+        let rel_center = (center - node.origin) * max;
 
-        let a = nodes.insert(Node::new(a_origin, extents));
-        let b = nodes.insert(Node::new(b_origin, extents));
+        let mut a = Node::new(a_origin + rel_center, extents + rel_center);
+        let mut b = Node::new(b_origin + rel_center, extents - rel_center);
+
+        // Repartition nodes
+        let old = std::mem::replace(&mut node.objects, ArrayVec::new());
+
+        for obj in old {
+            if a.contains(&obj) {
+                eprintln!("Contained in left");
+                a.objects.push(obj)
+            } else if b.contains(&obj) {
+                eprintln!("Contained in right");
+                b.objects.push(obj)
+            } else {
+                eprintln!("Neither");
+                node.objects.push(obj)
+            }
+        }
+
+        let a = nodes.insert(a);
+        let b = nodes.insert(b);
 
         nodes[current].children = Some([a, b]);
     }
@@ -169,22 +195,6 @@ impl<C: Array<Item = Object>> Node<C> {
             color: Color::red(),
             radius: 0.2,
             corner_radius: 1.0,
-        });
-
-        gizmos.push(Gizmo::Line {
-            origin: Vec3::one(),
-            color: Color::blue(),
-            dir: Vec3::new(1.0, 1.0, 0.0) * 10.0,
-            radius: 0.2,
-            corner_radius: 1.5,
-        });
-
-        gizmos.push(Gizmo::Line {
-            origin: Vec3::zero(),
-            color: Color::blue(),
-            dir: Vec3::unit_x() * 5.0,
-            radius: 0.2,
-            corner_radius: 0.5,
         });
 
         gizmos.push(Gizmo::Cube {
