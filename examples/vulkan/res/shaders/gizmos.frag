@@ -32,12 +32,8 @@ void main() {
   vec3 cap = (modelPosition * scale) - vec3((1-cornerRadius) * w * sign(modelPosition.x), midSegment *
     sign(modelPosition.y), 0); 
 
-  if (abs((modelPosition * scale).y) < midSegment) {
-    alpha = 1;
-  } else if (cap.x * sign(modelPosition.x) < 0) {
-    alpha = 1;
-  } else {
-    alpha = length(cap) > radius ? 0 : 1;
+  if (abs((modelPosition * scale).y) > midSegment && (cap.x * sign(modelPosition.x) > 0)) {
+    alpha *= length(cap) > radius ? 0 : 1;
   }
 
   outColor = color * vec4(1,1,1,alpha);
