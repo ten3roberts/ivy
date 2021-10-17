@@ -73,7 +73,7 @@ impl<C: Array<Item = Object>> CollisionTree<C> {
     }
 
     pub fn draw_gizmos(&self, gizmos: &mut Gizmos) {
-        Node::draw_gizmos(self.root, &self.nodes, 1, gizmos);
+        Node::draw_gizmos(self.root, &self.nodes, 0, gizmos);
     }
 }
 
@@ -138,7 +138,7 @@ impl<C: Array<Item = Object>> Node<C> {
         });
 
         let len = node.objects.len();
-        let center = center * (1.0 / len as f32);
+        // let center = center * (1.0 / len as f32);
 
         let width = (max - min).abs();
 
@@ -150,7 +150,8 @@ impl<C: Array<Item = Object>> Node<C> {
         let a_origin = node.origin - off;
         let b_origin = node.origin + off;
 
-        let rel_center = (center - node.origin) * max;
+        // let rel_center = (center - node.origin) * max;
+        let rel_center = Vec3::zero();
 
         let mut a = Node::new(a_origin + rel_center, extents + rel_center);
         let mut b = Node::new(b_origin + rel_center, extents - rel_center);
@@ -190,18 +191,13 @@ impl<C: Array<Item = Object>> Node<C> {
     pub fn draw_gizmos(current: NodeIndex, nodes: &Nodes<C>, depth: usize, gizmos: &mut Gizmos) {
         let node = &nodes[current];
 
-        gizmos.push(Gizmo::Sphere {
-            origin: node.origin,
-            color: Color::red(),
-            radius: 0.2,
-            corner_radius: 1.0,
-        });
+        let color = Color::hsl(depth as f32 * 60.0, 1.0, 0.5);
 
         gizmos.push(Gizmo::Cube {
             origin: node.origin,
-            color: Color::red(),
+            color,
             half_extents: node.half_extents,
-            radius: 0.1 / depth as f32,
+            radius: 0.05,
             corner_radius: 1.0,
         });
 

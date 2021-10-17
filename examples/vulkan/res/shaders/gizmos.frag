@@ -15,9 +15,10 @@ void main() {
   float depth = subpassLoad(depthInput).x;
   float currentDepth = gl_FragCoord.z;
   float alpha = 1.0;
+  bool obscured = false;
 
   if (currentDepth > depth) {
-    alpha = 0.2;
+    obscured = true;
   }
 
   float h = scale.y;
@@ -32,9 +33,9 @@ void main() {
   vec3 cap = (modelPosition * scale) - vec3((1-cornerRadius) * w * sign(modelPosition.x), midSegment *
     sign(modelPosition.y), 0); 
 
-  if (abs((modelPosition * scale).y) > midSegment && (cap.x * sign(modelPosition.x) > 0)) {
-    alpha *= length(cap) > radius ? 0 : 1;
+  if (abs((modelPosition * scale).y) > midSegment && (cap.x * sign(modelPosition.x) > 0) && length(cap) > radius) {
+    alpha = 0;
   }
 
-  outColor = color * vec4(1,1,1,alpha);
+  outColor = color * vec4(1,1,1,alpha) * (obscured ? vec4(0.2) : vec4(1));
 }

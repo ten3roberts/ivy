@@ -1,10 +1,9 @@
 use derive_more::*;
-use ultraviolet::Vec4;
+use palette::{FromColor, Hsla, Hsva, Srgba};
+use ultraviolet::{Vec3, Vec4};
 
 /// Color/tint of object
 #[derive(
-    Add,
-    AddAssign,
     AsRef,
     Clone,
     Copy,
@@ -17,36 +16,114 @@ use ultraviolet::Vec4;
     Into,
     Mul,
     MulAssign,
-    Sub,
-    SubAssign,
-    Default,
     PartialEq,
 )]
 #[repr(transparent)]
-pub struct Color(pub Vec4);
+pub struct Color(pub Srgba);
 
 impl Color {
-    pub fn new(r: f32, g: f32, b: f32, a: f32) -> Self {
-        Self(Vec4::new(r, g, b, a))
+    pub fn rgba(r: f32, g: f32, b: f32, a: f32) -> Self {
+        Self(Srgba::new(r, g, b, a))
+    }
+
+    pub fn rgb(r: f32, g: f32, b: f32) -> Self {
+        Self(Srgba::new(r, g, b, 1.0))
+    }
+
+    pub fn hsla(h: f32, s: f32, l: f32, a: f32) -> Self {
+        Self(Srgba::from_color(Hsla::new(h, s, l, a)))
+    }
+
+    pub fn hsl(h: f32, s: f32, l: f32) -> Self {
+        Self(Srgba::from_color(Hsla::new(h, s, l, 1.0)))
+    }
+
+    pub fn hsva(h: f32, s: f32, v: f32, a: f32) -> Self {
+        Self(Srgba::from_color(Hsva::new(h, s, v, a)))
+    }
+
+    pub fn hsv(h: f32, s: f32, v: f32) -> Self {
+        Self(Srgba::from_color(Hsva::new(h, s, v, 1.0)))
+    }
+    pub fn white() -> Self {
+        Self::rgba(1.0, 1.0, 1.0, 1.0)
+    }
+
+    pub fn black() -> Self {
+        Self::rgba(0.0, 0.0, 0.0, 1.0)
     }
 
     pub fn red() -> Self {
-        Self(Vec4::new(1.0, 0.0, 0.0, 1.0))
+        Self::rgba(1.0, 0.0, 0.0, 1.0)
     }
 
     pub fn green() -> Self {
-        Self(Vec4::new(0.0, 1.0, 0.0, 1.0))
+        Self::rgba(0.0, 1.0, 0.0, 1.0)
     }
 
     pub fn blue() -> Self {
-        Self(Vec4::new(0.0, 0.0, 1.0, 1.0))
+        Self::rgba(0.0, 0.0, 1.0, 1.0)
     }
 
     pub fn cyan() -> Self {
-        Self(Vec4::new(0.0, 1.0, 1.0, 1.0))
+        Self::rgba(0.0, 1.0, 1.0, 1.0)
     }
 
     pub fn magenta() -> Self {
-        Self(Vec4::new(1.0, 0.0, 1.0, 1.0))
+        Self::rgba(1.0, 0.0, 1.0, 1.0)
+    }
+}
+
+impl From<Vec3> for Color {
+    fn from(v: Vec3) -> Self {
+        Self(Srgba::new(v.x, v.y, v.z, 1.0))
+    }
+}
+
+impl From<Color> for Vec4 {
+    fn from(c: Color) -> Self {
+        Vec4::new(c.red, c.blue, c.green, c.alpha)
+    }
+}
+
+impl From<Color> for Vec3 {
+    fn from(c: Color) -> Self {
+        Vec3::new(c.red, c.blue, c.green)
+    }
+}
+
+impl From<Vec4> for Color {
+    fn from(v: Vec4) -> Self {
+        Self(Srgba::new(v.x, v.y, v.z, v.w))
+    }
+}
+
+impl From<&Vec3> for Color {
+    fn from(v: &Vec3) -> Self {
+        Self(Srgba::new(v.x, v.y, v.z, 1.0))
+    }
+}
+
+impl From<&Color> for Vec4 {
+    fn from(c: &Color) -> Self {
+        Vec4::new(c.red, c.blue, c.green, c.alpha)
+    }
+}
+
+impl From<&Color> for Vec3 {
+    fn from(c: &Color) -> Self {
+        Vec3::new(c.red, c.blue, c.green)
+    }
+}
+
+impl From<&Vec4> for Color {
+    fn from(v: &Vec4) -> Self {
+        Self(Srgba::new(v.x, v.y, v.z, v.w))
+    }
+}
+
+impl Default for Color {
+    fn default() -> Self {
+        Self::white()
     }
 }

@@ -109,10 +109,7 @@ impl<'a> Into<ObjectData> for ObjectDataQuery<'a> {
             model: Mat4::from_translation(**self.position)
                 * self.rotation.into_matrix().into_homogeneous()
                 * Mat4::from_nonuniform_scale(**self.scale),
-            color: *self
-                .color
-                .cloned()
-                .unwrap_or(Color::new(1.0, 1.0, 1.0, 1.0)),
+            color: self.color.cloned().unwrap_or(Color::white()).into(),
         }
     }
 }

@@ -226,26 +226,6 @@ fn setup_graphics(
         },
     )?);
 
-    let ui_node = rendergraph.add_node(CameraNode::<UIPass, _, _>::new(
-        context.clone(),
-        resources,
-        canvas,
-        (image_renderer, text_renderer),
-        &[AttachmentInfo {
-            store_op: StoreOp::STORE,
-            load_op: LoadOp::LOAD,
-            initial_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-            final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-            resource: final_lit,
-        }],
-        &[],
-        &[],
-        None,
-        &[],
-        &[],
-        FRAMES_IN_FLIGHT,
-    )?);
-
     let gizmo_node = rendergraph.add_node(CameraNode::<GizmoPass, _, _>::new(
         context.clone(),
         resources,
@@ -260,6 +240,26 @@ fn setup_graphics(
         }],
         &[],
         &[world.get::<DepthAttachment>(camera)?.0],
+        None,
+        &[],
+        &[],
+        FRAMES_IN_FLIGHT,
+    )?);
+
+    let ui_node = rendergraph.add_node(CameraNode::<UIPass, _, _>::new(
+        context.clone(),
+        resources,
+        canvas,
+        (image_renderer, text_renderer),
+        &[AttachmentInfo {
+            store_op: StoreOp::STORE,
+            load_op: LoadOp::LOAD,
+            initial_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+            final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+            resource: final_lit,
+        }],
+        &[],
+        &[],
         None,
         &[],
         &[],
@@ -402,16 +402,16 @@ fn setup_objects(
 
     world.spawn((
         Position(Vec3::new(7.0, 0.0, 0.0)),
-        PointLight::new(1.0, Vec3::new(0.0, 0.0, 500.0)),
+        PointLight::new(0.4, Vec3::new(0.0, 0.0, 500.0)),
     ));
 
     let mut rng = StdRng::seed_from_u64(42);
 
     world
-        .spawn_batch((0..30).map(|_| {
+        .spawn_batch((0..128).map(|_| {
             (
                 Collider::new(Sphere::new(1.0)),
-                Color::new(1.0, 1.0, 1.0, 1.0),
+                Color::rgb(1.0, 1.0, 1.0),
                 Mass(10.0),
                 Position(Vec3::rand_uniform(&mut rng) * 7.0),
                 Resitution(1.0),
@@ -425,7 +425,7 @@ fn setup_objects(
 
     world.spawn((
         Collider::new(Sphere::new(1.0)),
-        Color::new(1.0, 1.0, 1.0, 1.0),
+        Color::rgb(1.0, 1.0, 1.0),
         Mass(10.0),
         Position::new(0.0, 0.5, 0.0),
         Resitution(1.0),
@@ -464,7 +464,7 @@ fn setup_objects(
         AngularMass(1.0),
         AngularVelocity::default(),
         Collider::new(Cube::new(1.0)),
-        Color::new(1.0, 1.0, 1.0, 1.0),
+        Color::white(),
         Mass(2.0),
         Position::new(-3.0, 0.0, 0.0),
         Resitution(1.0),
@@ -493,7 +493,7 @@ struct LogicLayer {
     window_events: Receiver<WindowEvent>,
     collision_events: Receiver<Collision>,
 
-    tree: CollisionTree<[collision::Object; 4]>,
+    tree: CollisionTree<[collision::Object; 8]>,
 }
 
 impl LogicLayer {
@@ -682,9 +682,9 @@ impl Layer for LogicLayer {
                     );
 
                     if self.tree.contains(&o) {
-                        *color = Color::new(0.0, 1.0, 0.0, 1.0);
+                        *color = Color::white();
                     } else {
-                        *color = Color::new(1.0, 0.0, 0.0, 1.0);
+                        *color = Color::red();
                     }
                 });
         }

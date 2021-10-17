@@ -31,10 +31,10 @@ void main() {
 
   fragTexCoord = texCoord;
 	fragColor = objectData.color;
+
   vec4 pos = objectData.model * vec4(inPosition, 1);
   fragPosition = pos.xyz;
   fragNormal = normalize((objectData.model * vec4(normal, 0.0)).xyz);
 
   gl_Position = cameraData.viewproj * pos;
-
 }
