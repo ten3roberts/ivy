@@ -6,7 +6,6 @@ use crate::Result;
 use hecs::World;
 use ivy_collision::Collider;
 use ivy_collision::Collision;
-use ivy_core::Color;
 use ivy_core::TransformMatrix;
 use ivy_core::{Events, Position, Rotation, Scale};
 use ultraviolet::Bivec3;
@@ -14,14 +13,14 @@ use ultraviolet::Rotor3;
 
 use crate::components::{AngularVelocity, Velocity};
 
-pub fn integrate_velocity_system(world: &World, dt: f32) {
+pub fn integrate_velocity(world: &World, dt: f32) {
     world
         .query::<(&mut Position, &Velocity)>()
         .iter()
         .for_each(|(_, (pos, vel))| *pos += Position(vel.0 * dt));
 }
 
-pub fn integrate_angular_velocity_system(world: &World, dt: f32) {
+pub fn integrate_angular_velocity(world: &World, dt: f32) {
     world
         .query::<(&mut Rotation, &AngularVelocity)>()
         .into_iter()
@@ -85,7 +84,7 @@ pub fn collision_system(world: &World, events: &mut Events) -> Result<()> {
         })
 }
 
-pub fn resolve_collisions_system<I: Iterator<Item = Collision>>(
+pub fn resolve_collisions<I: Iterator<Item = Collision>>(
     world: &mut World,
     mut collisions: I,
 ) -> Result<()> {
@@ -124,6 +123,7 @@ pub fn resolve_collisions_system<I: Iterator<Item = Collision>>(
                 *pos += Position(dir * (a_mass / total_mass));
                 drop(pos);
             }
+
             let mut effector = world.get_mut::<Effector>(collision.a)?;
             effector.apply_impulse_at(impulse, collision.intersection.points[0] - *a_pos);
             drop(effector);
@@ -137,7 +137,7 @@ pub fn resolve_collisions_system<I: Iterator<Item = Collision>>(
 }
 
 /// Applies effectors to their respective entities and clears the effects.
-pub fn apply_effectors_system(world: &World, dt: f32) {
+pub fn apply_effectors(world: &World, dt: f32) {
     world
         .query::<(
             &mut Velocity,

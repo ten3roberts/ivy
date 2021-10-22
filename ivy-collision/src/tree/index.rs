@@ -5,10 +5,6 @@ use ivy_core::Color;
 use ivy_core::Events;
 use ivy_core::Gizmo;
 use ivy_core::Gizmos;
-use ivy_core::Position;
-use ivy_core::Rotation;
-use ivy_core::Scale;
-use ivy_core::TransformMatrix;
 use slotmap::new_key_type;
 use smallvec::Array;
 use smallvec::SmallVec;
@@ -18,7 +14,6 @@ use ultraviolet::Vec3;
 use crate::intersect;
 use crate::Collider;
 use crate::Collision;
-use crate::Sphere;
 
 use super::node::Node;
 use super::Nodes;
@@ -162,7 +157,6 @@ impl NodeIndex {
         self,
         world: &World,
         events: &mut Events,
-        gizmos: &mut Gizmos,
         nodes: &'a Nodes<C>,
         top_objects: &mut SmallVec<T>,
     ) -> Result<(), hecs::ComponentError>
@@ -176,12 +170,6 @@ impl NodeIndex {
         // Check collision with objects above
         for i in 0..objects.len() {
             let a = objects[i];
-            gizmos.push(Gizmo::Sphere {
-                origin: a.origin,
-                color: Color::white(),
-                radius: a.bound.radius,
-                corner_radius: 1.0,
-            });
             for b in objects[i + 1..].iter().chain(top_objects.iter().cloned()) {
                 assert_ne!(a.entity, b.entity);
 
@@ -190,8 +178,8 @@ impl NodeIndex {
                     let a_coll = world.get::<Collider>(a.entity)?;
                     let b_coll = world.get::<Collider>(b.entity)?;
                     // eprintln!("Possible intersection");
-                    *world.get_mut::<Color>(a.entity).unwrap() = Color::green();
-                    *world.get_mut::<Color>(b.entity).unwrap() = Color::green();
+                    // *world.get_mut::<Color>(a.entity).unwrap() = Color::green();
+                    // *world.get_mut::<Color>(b.entity).unwrap() = Color::green();
                     // Do full collision check
 
                     if let Some(intersection) =
@@ -216,7 +204,7 @@ impl NodeIndex {
         node.children
             .iter()
             .flatten()
-            .try_for_each(|val| val.check_collisions(world, events, gizmos, nodes, top_objects))?;
+            .try_for_each(|val| val.check_collisions(world, events, nodes, top_objects))?;
 
         // Pop the stack
         unsafe { top_objects.set_len(old_len) };

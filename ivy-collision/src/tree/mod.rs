@@ -120,36 +120,35 @@ impl<const CAP: usize> CollisionTree<CAP> {
 
         // Mmve entities between nodes when they no longer fit or fit into a
         // deeper child.
-        world
-            .query::<&mut TreeMarker>()
-            .iter()
-            .for_each(|(_, marker)| {
-                let index = marker.index;
-                let node = &nodes[index];
+        // world
+        //     .query::<&mut TreeMarker>()
+        //     .iter()
+        //     .for_each(|(e, marker)| {
+        //         let index = marker.index;
+        //         let node = &nodes[index];
 
-                let object = &marker.object;
-                if !node.contains(object) {
-                    eprintln!("No longer fits");
-                    index.remove(nodes, object.entity);
-                    let new_marker = root.insert(nodes, *object, popped); //index.pop_up(nodes, &object).insert(nodes, *object, popped);
-                    dbg!(popped.len());
+        //         let object = &marker.object;
+        //         if !node.contains(object) {
+        //             // eprintln!("No longer fits");
+        //             index.remove(nodes, object.entity);
+        //             let new_marker = root.insert(nodes, *object, popped); //index.pop_up(nodes, &object).insert(nodes, *object, popped);
 
-                    dbg!(&marker, &new_marker);
-                    assert_ne!(*marker, new_marker);
+        //             assert_ne!(*marker, new_marker);
 
-                    // Update marker
-                    *marker = new_marker
-                } else if let Some(child) = node.fits_child(nodes, &object) {
-                    eprintln!("Fits in child");
-                    index.remove(nodes, object.entity);
-                    let new_marker = child.insert(nodes, *object, popped);
+        //             // Update marker
+        //             *marker = new_marker
+        //         }
+        //         // else if let Some(child) = node.fits_child(nodes, &object) {
+        //         //     eprintln!("Fits in child");
+        //         //     index.remove(nodes, object.entity);
+        //         //     let new_marker = child.insert(nodes, *object, popped);
 
-                    assert_ne!(*marker, new_marker);
+        //         //     assert_ne!(*marker, new_marker);
 
-                    // Update marker
-                    *marker = new_marker
-                }
-            });
+        //         //     // Update marker
+        //         //     *marker = new_marker
+        //         // }
+        //     });
 
         self.handle_popped(world)?;
 
@@ -194,12 +193,11 @@ impl<const CAP: usize> CollisionTree<CAP> {
         &'a self,
         world: &mut World,
         events: &mut Events,
-        gizmos: &mut Gizmos,
     ) -> Result<(), hecs::ComponentError> {
         let mut stack = SmallVec::<T>::new();
 
         self.root
-            .check_collisions(world, events, gizmos, &self.nodes, &mut stack)
+            .check_collisions(world, events, &self.nodes, &mut stack)
     }
 
     pub fn draw_gizmos(&self, world: &mut World, gizmos: &mut Gizmos) {

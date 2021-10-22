@@ -1,22 +1,4 @@
-use crate::Events;
-use hecs::World;
-use ivy_resources::Resources;
-use std::time::Duration;
-
-/// A layer represents an ordered abstraction of execution logic. Layers are ordered and run in
-/// order.
-pub trait Layer {
-    /// Called for each iteration of the application event loop.
-    /// The layer can return an error.
-    /// frame_time: The duration between this and the last application frame.
-    fn on_update(
-        &mut self,
-        world: &mut World,
-        resources: &mut Resources,
-        events: &mut Events,
-        frame_time: Duration,
-    ) -> anyhow::Result<()>;
-}
+use crate::Layer;
 
 /// Abstracts the stack of layered execution logic
 pub struct LayerStack {

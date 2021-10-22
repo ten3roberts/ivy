@@ -1,3 +1,4 @@
+#![allow(non_snake_case)]
 use crate::ShaderPass;
 use anyhow::Context;
 use ash::vk::DescriptorSet;

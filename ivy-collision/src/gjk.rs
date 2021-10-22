@@ -122,14 +122,6 @@ pub fn gjk<A: CollisionPrimitive, B: CollisionPrimitive>(
     a_coll: &A,
     b_coll: &B,
 ) -> (bool, Simplex) {
-    let a_pos = a_transform.extract_translation();
-    let b_pos = b_transform.extract_translation();
-
-    // if (a_pos - b_pos).mag_sq() < TOLERANCE * TOLERANCE {
-    //     // return (true, Simplex::Tetrahedron([SupportPoint{}, a_pos, a_pos, a_pos]));
-    //     return (false, Simplex::Point([SupportPoint::default()]));
-    // }
-
     // Get first support function in direction of separation
     // let dir = (a_pos - b_pos).normalized();
     let dir = Vec3::unit_x();
