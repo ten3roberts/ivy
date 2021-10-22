@@ -5,14 +5,14 @@ use crate::components::*;
 use crate::Result;
 use hecs::World;
 use ivy_collision::Collider;
+use ivy_collision::Collision;
+use ivy_core::Color;
+use ivy_core::TransformMatrix;
 use ivy_core::{Events, Position, Rotation, Scale};
 use ultraviolet::Bivec3;
 use ultraviolet::Rotor3;
 
-use crate::{
-    collision::Collision,
-    components::{AngularVelocity, TransformMatrix, Velocity},
-};
+use crate::components::{AngularVelocity, Velocity};
 
 pub fn integrate_velocity_system(world: &World, dt: f32) {
     world
@@ -102,17 +102,36 @@ pub fn resolve_collisions_system<I: Iterator<Item = Collision>>(
             let mut b_query = world.query_one::<RbQuery>(collision.b)?;
 
             let b = b_query.get().unwrap();
+            let a_pos = *a.pos;
+            let b_pos = *b.pos;
+            let a_mass = **a.mass;
+            let b_mass = **b.mass;
+
+            let total_mass = a_mass + b_mass;
 
             let impulse = resolve_collision(collision.intersection, &a, &b);
-            {
-                let mut effector = world.get_mut::<Effector>(collision.a)?;
-                effector.apply_impulse_at(impulse, collision.intersection.points[0] - **a.pos);
 
-                drop(effector);
+            // drop((a_query, b_query));
 
-                let mut effector = world.get_mut::<Effector>(collision.b)?;
-                effector.apply_impulse_at(-impulse, collision.intersection.points[1] - **b.pos);
-            }
+            // let dir = collision.intersection.normal * collision.intersection.depth;
+
+            *world.get_mut::<Color>(collision.a)? = Color::blue();
+            *world.get_mut::<Color>(collision.b)? = Color::blue();
+
+            // let mut pos = world.get_mut::<Position>(collision.a)?;
+            // *pos -= Position(dir * (b_mass / total_mass));
+            // drop(pos);
+
+            // let mut pos = world.get_mut::<Position>(collision.b)?;
+            // *pos += Position(dir * (a_mass / total_mass));
+            // drop(pos);
+
+            let mut effector = world.get_mut::<Effector>(collision.a)?;
+            effector.apply_impulse_at(impulse, collision.intersection.points[0] - *a_pos);
+            drop(effector);
+
+            let mut effector = world.get_mut::<Effector>(collision.b)?;
+            effector.apply_impulse_at(-impulse, collision.intersection.points[1] - *b_pos);
 
             Ok(())
         })
@@ -146,13 +165,30 @@ struct Satisfied;
 
 pub fn satisfy_objects(world: &mut World) {
     let entities = world
-        .query_mut::<Option<&Effector>>()
+        .query_mut::<(
+            Option<&Effector>,
+            Option<&Velocity>,
+            Option<&AngularVelocity>,
+            Option<&AngularMass>,
+            Option<&Mass>,
+        )>()
         .without::<Satisfied>()
         .into_iter()
-        .map(|(e, effector)| (e, effector.cloned()))
+        .map(|(e, (effector, vel, w, wm, m))| {
+            (
+                e,
+                (
+                    effector.cloned().unwrap_or_default(),
+                    vel.cloned().unwrap_or_default(),
+                    w.cloned().unwrap_or_default(),
+                    wm.cloned().unwrap_or_default(),
+                    m.cloned().unwrap_or_default(),
+                ),
+            )
+        })
         .collect::<Vec<_>>();
 
-    entities.into_iter().for_each(|(e, effector)| {
-        let _ = world.insert(e, (effector.unwrap_or_default(), Satisfied));
+    entities.into_iter().for_each(|(e, val)| {
+        let _ = world.insert(e, val);
     })
 }

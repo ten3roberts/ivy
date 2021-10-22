@@ -1,6 +1,6 @@
 use derive_for::*;
 use derive_more::*;
-use ultraviolet::{Bivec3, Rotor3, Vec3};
+use ultraviolet::{Bivec3, Mat4, Rotor3, Vec3};
 
 derive_for!(
 
@@ -59,5 +59,24 @@ impl Scale {
 
     pub fn uniform(val: f32) -> Self {
         Self(Vec3::new(val, val, val))
+    }
+}
+
+#[derive(
+    AsRef, PartialEq, Clone, Copy, Debug, Default, Deref, DerefMut, From, Into, Mul, MulAssign,
+)]
+#[repr(transparent)]
+/// A matrix transforming a point from local space to world space. This can
+/// be used to transform a direction relative to the entity to be relative to
+/// the world.
+pub struct TransformMatrix(pub Mat4);
+
+impl TransformMatrix {
+    pub fn new(pos: Position, rot: Rotation, scale: Scale) -> Self {
+        Self(
+            Mat4::from_translation(*pos)
+                * rot.into_matrix().into_homogeneous()
+                * Mat4::from_nonuniform_scale(*scale),
+        )
     }
 }

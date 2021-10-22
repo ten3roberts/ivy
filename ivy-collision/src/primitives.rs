@@ -1,7 +1,9 @@
+use ivy_core::Scale;
 use ultraviolet::Vec3;
 
 use crate::CollisionPrimitive;
 
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Cube {
     pub size: f32,
 }
@@ -14,6 +16,7 @@ impl Cube {
 
 impl CollisionPrimitive for Cube {
     fn support(&self, dir: Vec3) -> Vec3 {
+        dbg!(dir);
         let x = if dir.x > 0.0 { self.size } else { -self.size };
         let y = if dir.y > 0.0 { self.size } else { -self.size };
         let z = if dir.z > 0.0 { self.size } else { -self.size };
@@ -22,10 +25,12 @@ impl CollisionPrimitive for Cube {
     }
 
     fn max_radius(&self) -> f32 {
-        self.size
+        let sq = self.size * self.size;
+        (3.0 * sq).sqrt()
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Sphere {
     pub radius: f32,
 }
@@ -36,9 +41,19 @@ impl Sphere {
     }
 
     /// Returns true if two uniform spheres overlap.
+    #[inline]
     pub fn overlaps(&self, origin: Vec3, other: Self, other_origin: Vec3) -> bool {
-        (origin - other_origin).mag_sq()
-            < (self.radius * self.radius) + (other.radius * other.radius)
+        let total_radii = self.radius + other.radius;
+
+        (origin - other_origin).mag_sq() < total_radii * total_radii
+    }
+
+    /// Creates a bounding sphere fully enclosign a primitive
+    #[inline]
+    pub fn enclose<T: CollisionPrimitive>(collider: &T, scale: Scale) -> Self {
+        Self {
+            radius: collider.max_radius() * scale.component_max(),
+        }
     }
 }
 
@@ -52,6 +67,7 @@ impl CollisionPrimitive for Sphere {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Capsule {
     pub half_height: f32,
     pub radius: f32,

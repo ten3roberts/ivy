@@ -176,3 +176,26 @@ impl IntoDuration for f64 {
         Duration::from_secs_f64(*self / 1_000_000_000.0)
     }
 }
+
+/// Times the execution time of a scope and executes the provided function with
+/// the results
+pub struct TimedScope<F: FnOnce(Duration)> {
+    func: Option<F>,
+    clock: Clock,
+}
+
+impl<F: FnOnce(Duration)> TimedScope<F> {
+    pub fn new(func: F) -> Self {
+        TimedScope {
+            func: Some(func),
+            clock: Clock::new(),
+        }
+    }
+}
+
+impl<F: FnOnce(Duration)> Drop for TimedScope<F> {
+    fn drop(&mut self) {
+        let elapsed = self.clock.elapsed();
+        self.func.take().map(|f| f(elapsed));
+    }
+}

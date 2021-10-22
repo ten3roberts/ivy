@@ -248,7 +248,7 @@ impl CommandBuffer {
         first_binding: u32,
         vertexbuffers: &[B],
     ) {
-        let buffers: ArrayVec<[vk::Buffer; MAX_VB_BINDING]> =
+        let buffers: ArrayVec<vk::Buffer, MAX_VB_BINDING> =
             vertexbuffers.iter().map(|vb| *vb.as_ref()).collect();
 
         unsafe {

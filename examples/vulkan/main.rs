@@ -1,13 +1,13 @@
 #![allow(dead_code)]
 use std::{
     fmt::Display,
-    ops::{Deref, DerefMut},
+    ops::Deref,
     sync::{mpsc, Arc},
     time::Duration,
 };
 
 use anyhow::{anyhow, Context};
-use collision::{Collider, CollisionPrimitive, CollisionTree, Cube, Sphere};
+use collision::{Collider, Collision, CollisionTree, Cube, Object, Sphere};
 use flume::Receiver;
 use glfw::{Action, CursorMode, Glfw, Key, WindowEvent};
 use graphics::gizmos::GizmoRenderer;
@@ -25,10 +25,7 @@ use ivy::{
 };
 use ivy_resources::Resources;
 use parking_lot::RwLock;
-use physics::{
-    collision::Collision,
-    components::{AngularMass, AngularVelocity, Mass, Resitution, Velocity},
-};
+use physics::components::{AngularMass, AngularVelocity, Mass, Resitution, Velocity};
 use postprocessing::pbr::{create_pbr_pipeline, PBRInfo};
 use random::rand::SeedableRng;
 use random::{rand::rngs::StdRng, Random};
@@ -67,12 +64,17 @@ where
 
 struct Movable {
     translate: InputVector,
+    camera: Entity,
     speed: f32,
 }
 
 impl Movable {
-    fn new(translate: InputVector, speed: f32) -> Self {
-        Self { translate, speed }
+    fn new(translate: InputVector, camera: Entity, speed: f32) -> Self {
+        Self {
+            translate,
+            camera,
+            speed,
+        }
     }
 }
 
@@ -137,7 +139,7 @@ fn main() -> anyhow::Result<()> {
                 glfw,
                 r,
                 WindowInfo {
-                    extent: None,
+                    extent: Some(Extent::new(800, 600)),
                     resizable: false,
                     mode: WindowMode::Windowed,
                     ..Default::default()
@@ -366,13 +368,14 @@ fn setup_graphics(
     _setup_ui(world, resources, ui_pass, text_pass)?;
     resources.insert_default(rendergraph)?;
 
-    setup_objects(world, resources, default_shaderpass)
+    setup_objects(world, resources, default_shaderpass, camera)
 }
 
 fn setup_objects(
     world: &mut World,
     resources: &Resources,
     shaderpass: Handle<GeometryPass>,
+    camera: Entity,
 ) -> anyhow::Result<()> {
     resources.insert(Gizmos::default())?;
 
@@ -405,20 +408,23 @@ fn setup_objects(
         PointLight::new(0.4, Vec3::new(0.0, 0.0, 500.0)),
     ));
 
-    let mut rng = StdRng::seed_from_u64(42);
+    let mut rng = StdRng::seed_from_u64(43);
 
+    const COUNT: usize = 1024;
     world
-        .spawn_batch((0..128).map(|_| {
+        .spawn_batch((0..COUNT).map(|_| {
             (
+                AngularMass(1.0),
                 Collider::new(Sphere::new(1.0)),
                 Color::rgb(1.0, 1.0, 1.0),
                 Mass(10.0),
                 Position(Vec3::rand_uniform(&mut rng) * 7.0),
+                Velocity(Vec3::rand_sphere(&mut rng)),
                 Resitution(1.0),
-                Scale::uniform(0.2),
-                sphere_mesh,
+                Scale::uniform(0.1),
                 material,
                 shaderpass,
+                sphere_mesh,
             )
         }))
         .for_each(|_| {});
@@ -427,9 +433,10 @@ fn setup_objects(
         Collider::new(Sphere::new(1.0)),
         Color::rgb(1.0, 1.0, 1.0),
         Mass(10.0),
+        Velocity::default(),
         Position::new(0.0, 0.5, 0.0),
         Resitution(1.0),
-        Scale::uniform(0.2),
+        Scale::uniform(0.5),
         Rotation::euler_angles(0.0, 0.0, 0.0),
         Movable {
             translate: InputVector {
@@ -437,28 +444,13 @@ fn setup_objects(
                 y: InputAxis::keyboard(Key::K, Key::J),
                 z: InputAxis::keyboard(Key::O, Key::I),
             },
+            camera,
             speed: 3.0,
         },
         sphere_mesh,
         material,
         shaderpass,
     ));
-
-    // world.spawn((
-    //     AngularMass(2.0),
-    //     AngularVelocity(Vec3::unit_y() * 1.0),
-    //     Collider::new(Cube::new(1.0)),
-    //     Color::new(1.0, 1.0, 1.0, 1.0),
-    //     Mass(5.0),
-    //     Position::new(0.0, 0.5, 0.0),
-    //     Resitution(0.1),
-    //     Scale::new(2.0, 0.5, 0.2),
-    //     Rotation::euler_angles(0.0, 0.0, 0.0),
-    //     Velocity::default(),
-    //     cube_mesh,
-    //     material,
-    //     shaderpass,
-    // ));
 
     world.spawn((
         AngularMass(1.0),
@@ -468,7 +460,7 @@ fn setup_objects(
         Mass(2.0),
         Position::new(-3.0, 0.0, 0.0),
         Resitution(1.0),
-        Scale::uniform(0.5),
+        Scale::uniform(0.4),
         Velocity::new(0.5, 0.0, 0.0),
         material,
         shaderpass,
@@ -493,7 +485,7 @@ struct LogicLayer {
     window_events: Receiver<WindowEvent>,
     collision_events: Receiver<Collision>,
 
-    tree: CollisionTree<[collision::Object; 8]>,
+    tree: CollisionTree<128>,
 }
 
 impl LogicLayer {
@@ -546,7 +538,7 @@ impl LogicLayer {
             window_events,
             collision_events,
             cursor_mode: CursorMode::Normal,
-            tree: CollisionTree::new(Vec3::zero(), Vec3::one() * 10.0),
+            tree: CollisionTree::new(Vec3::zero(), Vec3::one() * 100.0),
         })
     }
 
@@ -573,7 +565,7 @@ impl LogicLayer {
                     window.set_cursor_mode(self.cursor_mode)
                 }
                 WindowEvent::Scroll(_, scroll) => {
-                    self.camera_speed += scroll as f32;
+                    self.camera_speed += scroll as f32 * 0.2;
                     self.camera_speed = self.camera_speed.clamp(0.1, 20.0);
                 }
                 _ => {}
@@ -588,9 +580,11 @@ impl Layer for LogicLayer {
         &mut self,
         world: &mut World,
         resources: &mut Resources,
-        _events: &mut Events,
+        events: &mut Events,
         frame_time: Duration,
     ) -> anyhow::Result<()> {
+        let _scope = TimedScope::new(|elapsed| log::trace!("Logic layer took {:.3?}", elapsed));
+
         self.handle_events(resources)
             .context("Failed to handle events")?;
 
@@ -642,51 +636,69 @@ impl Layer for LogicLayer {
 
             move_system(world, &self.input, dt);
 
-            graphics::systems::satisfy_objects(world);
-            graphics::systems::update_view_matrices(world);
+            {
+                let _scope = TimedScope::new(|elapsed| {
+                    log::trace!("--Graphics updating took {:.3?}", elapsed)
+                });
+                graphics::systems::satisfy_objects(world);
+                graphics::systems::update_view_matrices(world);
+            }
 
-            physics::systems::integrate_angular_velocity_system(world, dt);
-            physics::systems::integrate_velocity_system(world, dt);
-            // physics::systems::gravity_system(world, dt);
-            physics::systems::satisfy_objects(world);
-            physics::systems::wrap_around_system(world);
-            // physics::systems::collision_system(world, events)?;
-            physics::systems::resolve_collisions_system(world, self.collision_events.try_iter())?;
-            physics::systems::apply_effectors_system(world, dt);
+            {
+                let _scope =
+                    TimedScope::new(|elapsed| log::trace!("--Physics took {:.3?}", elapsed));
 
-            let canvas = world
-                .query::<(&Canvas, &Camera)>()
-                .iter()
-                .next()
-                .ok_or(anyhow!("Missing canvas"))?
-                .0;
-
-            ui::systems::statisfy_widgets(world);
-            ui::systems::update_canvas(world, canvas)?;
-            ui::systems::update(world)?;
-
-            self.acc -= self.timestep.secs();
+                physics::systems::integrate_angular_velocity_system(world, dt);
+                physics::systems::integrate_velocity_system(world, dt);
+                // physics::systems::gravity_system(world, dt);
+                physics::systems::satisfy_objects(world);
+                physics::systems::wrap_around_system(world);
+            }
 
             let mut gizmos = resources.get_default_mut::<Gizmos>()?;
-            self.tree.draw_gizmos(gizmos.deref_mut());
-            self.tree.register(world);
+            self.tree.draw_gizmos(world, &mut *gizmos);
+            {
+                let _scope =
+                    TimedScope::new(|elapsed| log::trace!("--Tree updating took {:.3?}", elapsed));
+                self.tree.update(world)?;
+                // self.tree.register(world);
+                // self.tree.handle_popped(world)?;
+                // self.tree.update(world);
+                // self.tree.handle_popped(world)?;
+                self.tree
+                    .check_collisions::<[&Object; 128]>(world, events, &mut *gizmos)?;
+            }
 
-            world
-                .query::<(&mut Color, &Position, &Scale, &Collider)>()
-                .iter()
-                .for_each(|(e, (color, pos, scale, collider))| {
-                    let o = collision::Object::new(
-                        e,
-                        Sphere::new(collider.max_radius() * scale.component_max()),
-                        **pos,
-                    );
+            // physics::systems::collision_system(world, events)?;
 
-                    if self.tree.contains(&o) {
-                        *color = Color::white();
-                    } else {
-                        *color = Color::red();
-                    }
+            // physics::systems::collision_system(world, events)?;
+            {
+                let _scope = TimedScope::new(|elapsed| {
+                    log::trace!("--Collision resolvetook {:.3?}", elapsed)
                 });
+
+                physics::systems::resolve_collisions_system(
+                    world,
+                    self.collision_events.try_iter(),
+                )?;
+                physics::systems::apply_effectors_system(world, dt);
+            }
+            {
+                let _scope = TimedScope::new(|elapsed| log::trace!("--UI took {:.3?}", elapsed));
+
+                let canvas = world
+                    .query::<(&Canvas, &Camera)>()
+                    .iter()
+                    .next()
+                    .ok_or(anyhow!("Missing canvas"))?
+                    .0;
+
+                ui::systems::statisfy_widgets(world);
+                ui::systems::update_canvas(world, canvas)?;
+                ui::systems::update(world)?;
+            }
+
+            self.acc -= self.timestep.secs();
         }
 
         Ok(())
@@ -862,6 +874,7 @@ impl Layer for VulkanLayer {
         _events: &mut Events,
         _frame_time: Duration,
     ) -> anyhow::Result<()> {
+        TimedScope::new(|elapsed| log::trace!("Vulkan layer took {:.3?}", elapsed));
         let context = resources.get_default::<Arc<VulkanContext>>()?;
         // Ensure gpu side data for cameras
         GpuCameraData::create_gpu_cameras(&context, world, FRAMES_IN_FLIGHT)?;
@@ -925,6 +938,7 @@ impl Layer for WindowLayer {
         events: &mut Events,
         _frame_time: Duration,
     ) -> anyhow::Result<()> {
+        let _scope = TimedScope::new(|elapsed| log::trace!("Window layer took {:.3?}", elapsed));
         self.glfw.write().poll_events();
 
         for (_, event) in glfw::flush_messages(&self.events) {
@@ -1025,6 +1039,7 @@ impl Layer for DebugLayer {
         _: &mut Events,
         frametime: Duration,
     ) -> anyhow::Result<()> {
+        let _scope = TimedScope::new(|elapsed| log::trace!("Debug layer took {:.3?}", elapsed));
         self.min = frametime.min(self.min);
         self.max = frametime.max(self.max);
 

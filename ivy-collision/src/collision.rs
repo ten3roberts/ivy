@@ -1,6 +1,15 @@
+use hecs::Entity;
 use ultraviolet::Mat4;
 
 use crate::{epa, gjk, CollisionPrimitive, Intersection};
+
+/// Represents a collision between two entities.
+#[derive(Debug, Clone, Copy)]
+pub struct Collision {
+    pub a: Entity,
+    pub b: Entity,
+    pub intersection: Intersection,
+}
 
 pub fn intersect<T: CollisionPrimitive>(
     a_transform: &Mat4,

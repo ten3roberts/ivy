@@ -56,7 +56,10 @@ impl Input {
                 WindowEvent::CursorPos(x, y) => self.mouse_pos = Vec2::new(x as f32, y as f32),
                 WindowEvent::Scroll(x, y) => self.scroll += Vec2::new(x as f32, y as f32),
                 WindowEvent::Key(key, _, action, _) => {
-                    self.keys[key as usize] = action == Action::Press || action == Action::Repeat
+                    if (key as usize) < MAX_KEYS {
+                        self.keys[key as usize] =
+                            action == Action::Press || action == Action::Repeat
+                    }
                 }
                 WindowEvent::Focus(false) => {
                     if self.release_unfocus {

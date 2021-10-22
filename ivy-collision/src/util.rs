@@ -8,7 +8,7 @@ pub const TOLERANCE: f32 = 0.01;
 
 // Represents a point on the minkowski difference boundary which carries the
 // individual support points
-#[derive(Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy)]
 pub struct SupportPoint {
     pub pos: Vec3,
     pub a: Vec3,

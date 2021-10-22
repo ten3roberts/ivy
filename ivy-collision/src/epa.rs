@@ -3,7 +3,7 @@ use ultraviolet::{Mat4, Vec3};
 
 use crate::{
     gjk::Simplex,
-    util::barycentric_vector,
+    util::{barycentric_vector, support},
     {util::minkowski_diff, util::SupportPoint, util::TOLERANCE, CollisionPrimitive},
 };
 
@@ -74,6 +74,7 @@ impl Polytype {
         self.faces
             .iter()
             .enumerate()
+            .filter(|(_, val)| val.distance.is_finite())
             .min_by(|a, b| a.1.distance.partial_cmp(&b.1.distance).unwrap())
             .map(|(a, b)| (a as u16, *b))
     }
@@ -156,7 +157,21 @@ pub fn epa<A: CollisionPrimitive, B: CollisionPrimitive>(
 
     let mut iterations = 0;
     loop {
-        let (_, min) = polytype.find_closest_face().unwrap();
+        let (_, min) = match polytype.find_closest_face() {
+            Some(val) => val,
+            None => {
+                eprintln!("The two shapes are the same");
+                let p = support(a_transform, a_transform_inv, a_coll, Vec3::unit_x());
+                return Intersection {
+                    points: [
+                        a_transform.extract_translation(),
+                        b_transform.extract_translation(),
+                    ],
+                    depth: p.mag(),
+                    normal: p.normalized(),
+                };
+            }
+        };
 
         // assert_eq!(min.normal.mag(), 1.0);
 
@@ -177,7 +192,6 @@ pub fn epa<A: CollisionPrimitive, B: CollisionPrimitive>(
         }
         // Support is further than the current closest normal
         else {
-            dbg!(min.normal);
             return Intersection {
                 points: polytype.contact_points(min),
                 depth: min.distance,

@@ -16,4 +16,4 @@ pub use events::{EventSender, Events};
 pub use gizmos::*;
 pub use layer::Layer;
 pub use logger::Logger;
-pub use time::{Clock, FromDuration, IntoDuration};
+pub use time::{Clock, FromDuration, IntoDuration, TimedScope};

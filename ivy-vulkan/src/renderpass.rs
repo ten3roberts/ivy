@@ -88,7 +88,7 @@ impl RenderPass {
             .subpasses
             .iter()
             .map(|subpass| subpass.into())
-            .collect::<ArrayVec<[vk::SubpassDescription; MAX_SUBPASSES]>>();
+            .collect::<ArrayVec<vk::SubpassDescription, MAX_SUBPASSES>>();
 
         let create_info = vk::RenderPassCreateInfo::builder()
             .attachments(&info.attachments)

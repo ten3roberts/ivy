@@ -7,12 +7,12 @@ description = "post processing helpers for ivy"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0"
-derive_more = "0.99"
-hecs = { version = "0.6", features = [ "macros" ] }
-itertools = "0.10"
+anyhow = "1.0.44"
+derive_more = "0.99.16"
+hecs = { version = "0.6.5", features = [ "macros" ] }
+itertools = "0.10.1"
 ivy-graphics = { path = "../ivy-graphics", version = "1.7" }
 ivy-rendergraph = { path = "../ivy-rendergraph", version = "1.7" }
 ivy-resources = { path = "../ivy-resources", version = "1.4.0" }
 ivy-vulkan = { path = "../ivy-vulkan", version = "1.7" }
-ultraviolet = "0.8"
+ultraviolet = "0.8.1"

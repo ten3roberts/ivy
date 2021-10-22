@@ -68,7 +68,7 @@ pub fn reflect<S: AsRef<spirv_reflect::ShaderModule>>(
 ) -> Result<vk::PipelineLayout> {
     let mut sets: [DescriptorLayoutInfo; MAX_SETS] = Default::default();
 
-    let mut push_constant_ranges: ArrayVec<[vk::PushConstantRange; MAX_PUSH_CONSTANTS]> =
+    let mut push_constant_ranges: ArrayVec<vk::PushConstantRange, MAX_PUSH_CONSTANTS> =
         ArrayVec::new();
 
     for module in modules {
