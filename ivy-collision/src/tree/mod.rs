@@ -1,7 +1,7 @@
 use std::mem;
 
 use hecs::World;
-use ivy_core::{Color, Events, Gizmos, Position, Rotation, Scale, TransformMatrix};
+use ivy_core::{Color, Events, Gizmo, Gizmos, Position, Rotation, Scale, TransformMatrix};
 use ivy_resources::Key;
 use slotmap::SlotMap;
 use smallvec::{Array, SmallVec};
@@ -83,6 +83,10 @@ impl<const CAP: usize> CollisionTree<CAP> {
     }
 
     pub fn update(&mut self, world: &mut World) -> Result<(), hecs::ComponentError> {
+        self.register(world);
+
+        self.handle_popped(world)?;
+
         self.iteration += 1;
 
         let nodes = &mut self.nodes;
@@ -118,41 +122,45 @@ impl<const CAP: usize> CollisionTree<CAP> {
         let popped = &mut self.popped.0;
         let root = self.root;
 
-        // Mmve entities between nodes when they no longer fit or fit into a
+        // Move entities between nodes when they no longer fit or fit into a
         // deeper child.
-        // world
-        //     .query::<&mut TreeMarker>()
-        //     .iter()
-        //     .for_each(|(e, marker)| {
-        //         let index = marker.index;
-        //         let node = &nodes[index];
+        world
+            .query::<&mut TreeMarker>()
+            .iter()
+            .for_each(|(_, marker)| {
+                let index = marker.index;
+                let node = &nodes[index];
 
-        //         let object = &marker.object;
-        //         if !node.contains(object) {
-        //             // eprintln!("No longer fits");
-        //             index.remove(nodes, object.entity);
-        //             let new_marker = root.insert(nodes, *object, popped); //index.pop_up(nodes, &object).insert(nodes, *object, popped);
+                let object = &marker.object;
+                if !node.contains(object) {
+                    // eprintln!("No longer fits");
+                    if let Some(object) = index.remove(nodes, object.entity) {
+                        let new_marker = root.insert(nodes, object, popped); //index.pop_up(nodes, &object).insert(nodes, *object, popped);
 
-        //             assert_ne!(*marker, new_marker);
+                        assert_ne!(*marker, new_marker);
 
-        //             // Update marker
-        //             *marker = new_marker
-        //         }
-        //         // else if let Some(child) = node.fits_child(nodes, &object) {
-        //         //     eprintln!("Fits in child");
-        //         //     index.remove(nodes, object.entity);
-        //         //     let new_marker = child.insert(nodes, *object, popped);
+                        // Update marker
+                        *marker = new_marker
+                    } else {
+                        eprintln!("Popped");
+                        marker.index = Default::default();
+                    }
+                } else if let Some(child) = node.fits_child(nodes, &object) {
+                    eprintln!("Fits in child");
+                    if let Some(object) = index.remove(nodes, object.entity) {
+                        let new_marker = child.insert(nodes, object, popped);
 
-        //         //     assert_ne!(*marker, new_marker);
+                        assert_ne!(*marker, new_marker);
 
-        //         //     // Update marker
-        //         //     *marker = new_marker
-        //         // }
-        //     });
-
-        self.handle_popped(world)?;
-
-        self.register(world);
+                        // Update marker
+                        *marker = new_marker
+                    } else {
+                        eprintln!("Popped");
+                        // Entity was popped from the node, marker is outdated
+                        marker.index = Default::default();
+                    }
+                }
+            });
 
         self.handle_popped(world)?;
 
@@ -201,6 +209,7 @@ impl<const CAP: usize> CollisionTree<CAP> {
     }
 
     pub fn draw_gizmos(&self, world: &mut World, gizmos: &mut Gizmos) {
+        gizmos.begin_section("CollisionTree");
         self.root.draw_gizmos(world, &self.nodes, 0, gizmos);
     }
 }

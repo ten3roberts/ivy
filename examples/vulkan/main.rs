@@ -149,7 +149,7 @@ fn main() -> anyhow::Result<()> {
             Ok(FixedTimeStep::new(
                 20.ms(),
                 (
-                    PhysicsLayer::new(w, r, e, Vec3::one() * 100.0)?,
+                    PhysicsLayer::<32>::new(w, r, e, Vec3::one() * 100.0)?,
                     LogicLayer::new(w, r, e)?,
                 ),
             ))
@@ -418,27 +418,6 @@ fn setup_objects(
         PointLight::new(0.4, Vec3::new(0.0, 0.0, 500.0)),
     ));
 
-    let mut rng = StdRng::seed_from_u64(43);
-
-    const COUNT: usize = 16;
-    world
-        .spawn_batch((0..COUNT).map(|_| {
-            (
-                AngularMass(1.0),
-                Collider::new(Sphere::new(1.0)),
-                Color::rgb(1.0, 1.0, 1.0),
-                Mass(10.0),
-                Position(Vec3::rand_uniform(&mut rng) * 20.0),
-                Velocity(Vec3::rand_sphere(&mut rng)),
-                Resitution(1.0),
-                Scale::uniform(1.0),
-                material,
-                assets.geometry_pass,
-                sphere_mesh,
-            )
-        }))
-        .for_each(|_| {});
-
     world.spawn((
         Collider::new(Sphere::new(1.0)),
         Color::rgb(1.0, 1.0, 1.0),
@@ -475,6 +454,27 @@ fn setup_objects(
         assets.geometry_pass,
         cube_mesh,
     ));
+
+    let mut rng = StdRng::seed_from_u64(43);
+
+    const COUNT: usize = 256;
+    world
+        .spawn_batch((0..COUNT).map(|_| {
+            (
+                AngularMass(1.0),
+                Collider::new(Sphere::new(1.0)),
+                Color::rgb(1.0, 1.0, 1.0),
+                Mass(10.0),
+                Position(Vec3::rand_uniform(&mut rng) * 20.0),
+                Velocity(Vec3::rand_sphere(&mut rng)),
+                Resitution(1.0),
+                Scale::uniform(0.5),
+                material,
+                assets.geometry_pass,
+                sphere_mesh,
+            )
+        }))
+        .for_each(|_| {});
 
     Ok(Entities { camera })
 }
@@ -630,8 +630,6 @@ impl Layer for LogicLayer {
         .into();
 
         // Clear gizmos from last frame
-        resources.get_default_mut::<Gizmos>()?.clear();
-
         OverTime::<RelativeOffset>::update(world, dt);
         Periodic::<Text>::update(world);
 

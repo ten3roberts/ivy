@@ -6,11 +6,11 @@ use ivy_core::{Events, Layer};
 use ivy_resources::Resources;
 use ultraviolet::Vec3;
 
-pub struct PhysicsLayer {
+pub struct PhysicsLayer<const NODE_SIZE: usize> {
     rx: flume::Receiver<Collision>,
 }
 
-impl PhysicsLayer {
+impl<const NODE_SIZE: usize> PhysicsLayer<NODE_SIZE> {
     pub fn new(
         _world: &mut World,
         resources: &mut Resources,
@@ -21,14 +21,14 @@ impl PhysicsLayer {
         events.subscribe(tx);
 
         resources
-            .default_entry::<CollisionTree<128>>()?
+            .default_entry::<CollisionTree<NODE_SIZE>>()?
             .or_insert_with(|| CollisionTree::new(Vec3::zero(), bounds));
 
         Ok(Self { rx })
     }
 }
 
-impl Layer for PhysicsLayer {
+impl<const NODE_SIZE: usize> Layer for PhysicsLayer<NODE_SIZE> {
     fn on_update(
         &mut self,
         world: &mut World,
@@ -43,10 +43,15 @@ impl Layer for PhysicsLayer {
         systems::satisfy_objects(world);
 
         let mut tree = resources
-            .get_default_mut::<CollisionTree<128>>()
+            .get_default_mut::<CollisionTree<NODE_SIZE>>()
             .context("Failed to get default collision tree")?;
 
         tree.update(world)?;
+
+        let mut gizmos = resources.get_default_mut()?;
+
+        tree.draw_gizmos(world, &mut *gizmos);
+
         tree.check_collisions::<[&Object; 128]>(world, events)?;
 
         systems::resolve_collisions(world, self.rx.try_iter())?;

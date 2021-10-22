@@ -51,7 +51,7 @@ impl Renderer for GizmoRenderer {
             cmd.bind_descriptor_sets(layout, 0, sets, offsets);
         }
 
-        for gizmo in gizmos.iter() {
+        for gizmo in gizmos.sections().iter().flat_map(|val| val.1) {
             match gizmo {
                 ivy_core::Gizmo::Sphere {
                     origin,

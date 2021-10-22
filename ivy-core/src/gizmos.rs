@@ -1,9 +1,11 @@
-use derive_more::*;
+use std::collections::HashMap;
+
 use ultraviolet::Vec3;
 
 use crate::Color;
 
 #[derive(Copy, Clone, PartialEq)]
+/// Represents a 3D world overlay for debugging purposes.
 pub enum Gizmo {
     Sphere {
         origin: Vec3,
@@ -43,69 +45,55 @@ pub enum Gizmo {
     // kind: GizmoKind,
 }
 
-// impl Gizmo {
-//     pub fn new(pos: Vec3, dir: Vec3, radius: f32, color: Color, kind: GizmoKind) -> Self {
-//         Self {
-//             pos,
-//             dir,
-//             radius,
-//             color,
-//             kind,
-//         }
-//     }
+pub type Section = &'static str;
 
-//     /// Get a reference to the gizmo's pos.
-//     #[inline]
-//     pub fn pos(&self) -> Vec3 {
-//         self.pos
-//     }
-
-//     /// Get a reference to the gizmo's color.
-//     #[inline]
-//     pub fn color(&self) -> Color {
-//         self.color
-//     }
-
-//     /// Get a reference to the gizmo's kind.
-//     #[inline]
-//     pub fn kind(&self) -> &GizmoKind {
-//         &self.kind
-//     }
-
-//     pub fn billboard_axis(&self) -> Vec3 {
-//         match self.kind {
-//             GizmoKind::Sphere => Vec3::zero(),
-//             _ => self.dir.normalized(),
-//         }
-//     }
-
-//     pub fn midpoint(&self) -> Vec3 {
-//         match self.kind {
-//             GizmoKind::Line => self.pos + self.dir * 0.5,
-//             _ => self.pos,
-//         }
-//     }
-
-//     pub fn size(&self) -> Vec3 {
-//         match self.kind {
-//             GizmoKind::Line => self.dir * 0.5 + (Vec3::one() - self.dir.normalized()) * self.radius,
-//             _ => Vec3::new(self.radius, self.radius, self.radius),
-//         }
-//     }
-// }
-
-// #[derive(Copy, Clone, PartialEq)]
-// pub enum GizmoKind {
-//     Sphere,
-//     Line,
-//     Cube,
-// }
-
-#[derive(Default, Deref, DerefMut)]
-pub struct Gizmos(Vec<Gizmo>);
+/// Holds the gizmos to draw.
+/// Before drawing gizmos, a section needs to be initiated. This will clear all
+/// gizmos the section from previous calls and start adding subsequent gizmos to
+/// the seciton. This is to separate clearing of gizmos drawn from layers and
+/// systems of different intervals.
+#[derive(Default)]
+pub struct Gizmos {
+    current: Option<Section>,
+    sections: HashMap<Section, Vec<Gizmo>>,
+}
 
 impl Gizmos {
     pub fn new() -> Self {
-        Self(Vec::new())
+        Self {
+            current: None,
+            sections: HashMap::new(),
+        }
+    }
+
+    pub fn begin_section(&mut self, section: Section) {
+        self.current = Some(section);
+        self.sections.get_mut(section).map(Vec::clear);
+    }
+
+    pub fn push(&mut self, gizmo: Gizmo) {
+        let section = self.get_section();
+
+        section.push(gizmo);
+    }
+
+    pub fn extend<I: Iterator<Item = Gizmo>>(&mut self, iter: I) {
+        let section = self.get_section();
+
+        section.extend(iter);
+    }
+
+    fn get_section(&mut self) -> &mut Vec<Gizmo> {
+        self.sections
+            .entry(
+                self.current
+                    .expect("Can not draw gizmos before initiating a section."),
+            )
+            .or_insert_with(Vec::new)
+    }
+
+    /// Get a reference to the gizmos's sections.
+    pub fn sections(&self) -> &HashMap<Section, Vec<Gizmo>> {
+        &self.sections
     }
 }

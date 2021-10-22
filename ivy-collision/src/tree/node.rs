@@ -79,16 +79,16 @@ impl<const CAP: usize> Node<CAP> {
 
     /// Removes an entity
     #[inline]
-    pub fn remove(&mut self, entity: Entity) {
+    pub fn remove(&mut self, entity: Entity) -> Option<Object> {
         if let Some((index, _)) = self
             .objects
             .iter()
             .enumerate()
             .find(|(_, val)| val.entity == entity)
         {
-            self.objects.swap_remove(index);
+            Some(self.objects.swap_remove(index))
         } else {
-            panic!("Can not remove entity not in node");
+            None
         }
     }
 

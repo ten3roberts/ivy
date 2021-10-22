@@ -5,6 +5,7 @@ use ivy_core::Color;
 use ivy_core::Events;
 use ivy_core::Gizmo;
 use ivy_core::Gizmos;
+use ivy_core::Scale;
 use slotmap::new_key_type;
 use smallvec::Array;
 use smallvec::SmallVec;
@@ -14,6 +15,7 @@ use ultraviolet::Vec3;
 use crate::intersect;
 use crate::Collider;
 use crate::Collision;
+use crate::Sphere;
 
 use super::node::Node;
 use super::Nodes;
@@ -48,7 +50,14 @@ impl NodeIndex {
         }
     }
 
-    pub fn remove<const CAP: usize>(self, nodes: &mut Nodes<CAP>, entity: Entity) {
+    /// Removes an entity from the node.
+    /// Returns None if the entity didn't exists.
+    /// This may happen if the entity was poepped from the node..
+    pub fn remove<const CAP: usize>(
+        self,
+        nodes: &mut Nodes<CAP>,
+        entity: Entity,
+    ) -> Option<Object> {
         nodes[self].remove(entity)
     }
 
@@ -178,14 +187,14 @@ impl NodeIndex {
                     let a_coll = world.get::<Collider>(a.entity)?;
                     let b_coll = world.get::<Collider>(b.entity)?;
                     // eprintln!("Possible intersection");
-                    // *world.get_mut::<Color>(a.entity).unwrap() = Color::green();
-                    // *world.get_mut::<Color>(b.entity).unwrap() = Color::green();
+                    *world.get_mut::<Color>(a.entity).unwrap() = Color::green();
+                    *world.get_mut::<Color>(b.entity).unwrap() = Color::green();
                     // Do full collision check
 
                     if let Some(intersection) =
                         intersect(&a.transform, &b.transform, &*a_coll, &*b_coll)
                     {
-                        // eprintln!("Collision between {:?} and {:?}", a.entity, b.entity);
+                        eprintln!("Collision between {:?} and {:?}", a.entity, b.entity);
                         let collision = Collision {
                             a: a.entity,
                             b: b.entity,
@@ -231,16 +240,16 @@ impl NodeIndex {
             corner_radius: 1.0,
         });
 
-        // for obj in &node.objects {
-        //     let coll = world.get::<Collider>(obj.entity).unwrap();
-        //     let scale = world.get::<Scale>(obj.entity).unwrap();
-        //     gizmos.push(Gizmo::Sphere {
-        //         origin: obj.transform.extract_translation(),
-        //         color: Color::magenta(),
-        //         radius: Sphere::enclose(&*coll, *scale).radius,
-        //         corner_radius: 1.0,
-        //     });
-        // }
+        for obj in &node.objects {
+            let coll = world.get::<Collider>(obj.entity).unwrap();
+            let scale = world.get::<Scale>(obj.entity).unwrap();
+            gizmos.push(Gizmo::Sphere {
+                origin: obj.transform.extract_translation(),
+                color: Color::magenta(),
+                radius: Sphere::enclose(&*coll, *scale).radius,
+                corner_radius: 1.0,
+            });
+        }
 
         node.children
             .into_iter()
