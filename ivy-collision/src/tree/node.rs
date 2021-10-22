@@ -84,7 +84,7 @@ impl<const CAP: usize> Node<CAP> {
             .objects
             .iter()
             .enumerate()
-            .find(|(_, val)| val.entity != entity)
+            .find(|(_, val)| val.entity == entity)
         {
             self.objects.swap_remove(index);
         } else {

@@ -205,8 +205,6 @@ impl NodeIndex {
                         };
 
                         events.send(collision);
-                    } else {
-                        eprintln!("Collision failed between {:?} and {:?}", a.entity, b.entity);
                     }
                 }
             }

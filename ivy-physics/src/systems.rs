@@ -111,21 +111,19 @@ pub fn resolve_collisions_system<I: Iterator<Item = Collision>>(
 
             let impulse = resolve_collision(collision.intersection, &a, &b);
 
-            // drop((a_query, b_query));
+            drop((a_query, b_query));
 
-            // let dir = collision.intersection.normal * collision.intersection.depth;
+            {
+                let dir = collision.intersection.normal * collision.intersection.depth;
 
-            *world.get_mut::<Color>(collision.a)? = Color::blue();
-            *world.get_mut::<Color>(collision.b)? = Color::blue();
+                let mut pos = world.get_mut::<Position>(collision.a)?;
+                *pos -= Position(dir * (b_mass / total_mass));
+                drop(pos);
 
-            // let mut pos = world.get_mut::<Position>(collision.a)?;
-            // *pos -= Position(dir * (b_mass / total_mass));
-            // drop(pos);
-
-            // let mut pos = world.get_mut::<Position>(collision.b)?;
-            // *pos += Position(dir * (a_mass / total_mass));
-            // drop(pos);
-
+                let mut pos = world.get_mut::<Position>(collision.b)?;
+                *pos += Position(dir * (a_mass / total_mass));
+                drop(pos);
+            }
             let mut effector = world.get_mut::<Effector>(collision.a)?;
             effector.apply_impulse_at(impulse, collision.intersection.points[0] - *a_pos);
             drop(effector);

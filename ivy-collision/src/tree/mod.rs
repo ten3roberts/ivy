@@ -116,37 +116,40 @@ impl<const CAP: usize> CollisionTree<CAP> {
             });
 
         let popped = &mut self.popped.0;
+        let root = self.root;
 
         // Mmve entities between nodes when they no longer fit or fit into a
         // deeper child.
-        // world
-        //     .query::<&mut TreeMarker>()
-        //     .iter()
-        //     .for_each(|(_, marker)| {
-        //         let index = marker.index;
-        //         let node = &nodes[index];
+        world
+            .query::<&mut TreeMarker>()
+            .iter()
+            .for_each(|(_, marker)| {
+                let index = marker.index;
+                let node = &nodes[index];
 
-        //         let object = &marker.object;
-        //         if !node.contains(object) {
-        //             eprintln!("No longer fits");
-        //             index.remove(nodes, object.entity);
-        //             let new_marker = index.pop_up(nodes, &object).insert(nodes, *object, popped);
+                let object = &marker.object;
+                if !node.contains(object) {
+                    eprintln!("No longer fits");
+                    index.remove(nodes, object.entity);
+                    let new_marker = root.insert(nodes, *object, popped); //index.pop_up(nodes, &object).insert(nodes, *object, popped);
+                    dbg!(popped.len());
 
-        //             assert_ne!(*marker, new_marker);
+                    dbg!(&marker, &new_marker);
+                    assert_ne!(*marker, new_marker);
 
-        //             // Update marker
-        //             *marker = new_marker
-        //         } else if let Some(child) = node.fits_child(nodes, &object) {
-        //             eprintln!("Fits in child");
-        //             index.remove(nodes, object.entity);
-        //             let new_marker = child.insert(nodes, *object, popped);
+                    // Update marker
+                    *marker = new_marker
+                } else if let Some(child) = node.fits_child(nodes, &object) {
+                    eprintln!("Fits in child");
+                    index.remove(nodes, object.entity);
+                    let new_marker = child.insert(nodes, *object, popped);
 
-        //             assert_ne!(*marker, new_marker);
+                    assert_ne!(*marker, new_marker);
 
-        //             // Update marker
-        //             *marker = new_marker
-        //         }
-        //     });
+                    // Update marker
+                    *marker = new_marker
+                }
+            });
 
         self.handle_popped(world)?;
 

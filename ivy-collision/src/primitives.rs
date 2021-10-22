@@ -16,7 +16,6 @@ impl Cube {
 
 impl CollisionPrimitive for Cube {
     fn support(&self, dir: Vec3) -> Vec3 {
-        dbg!(dir);
         let x = if dir.x > 0.0 { self.size } else { -self.size };
         let y = if dir.y > 0.0 { self.size } else { -self.size };
         let z = if dir.z > 0.0 { self.size } else { -self.size };

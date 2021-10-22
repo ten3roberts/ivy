@@ -410,7 +410,7 @@ fn setup_objects(
 
     let mut rng = StdRng::seed_from_u64(43);
 
-    const COUNT: usize = 1024;
+    const COUNT: usize = 128;
     world
         .spawn_batch((0..COUNT).map(|_| {
             (
@@ -485,7 +485,7 @@ struct LogicLayer {
     window_events: Receiver<WindowEvent>,
     collision_events: Receiver<Collision>,
 
-    tree: CollisionTree<128>,
+    tree: CollisionTree<64>,
 }
 
 impl LogicLayer {
