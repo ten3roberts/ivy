@@ -44,14 +44,14 @@ impl Events {
     /// Sends an event of type `T` to all subscribed listeners.
     /// If no dispatcher exists for event `T`, a new one will be created.
     pub fn send<T: Event>(&mut self, event: T) {
-        if let Some(dispatcher) = self
+        let dispatcher = self
             .dispatchers
             .entry(TypeId::of::<T>())
             .or_insert_with(new_event_dispatcher::<T>)
             .downcast_mut::<EventDispatcher<T>>()
-        {
-            dispatcher.send(event)
-        }
+            .expect("Failed to downcast");
+
+        dispatcher.send(event)
     }
 
     pub fn subscribe<S, T: Event>(&mut self, sender: S)

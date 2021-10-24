@@ -1,21 +1,18 @@
-use arrayvec::ArrayVec;
 use hecs::Entity;
 use hecs::World;
 use ivy_core::Color;
 use ivy_core::Events;
 use ivy_core::Gizmo;
 use ivy_core::Gizmos;
-use ivy_core::Scale;
 use slotmap::new_key_type;
 use smallvec::Array;
 use smallvec::SmallVec;
-use std::mem;
+use std::fmt::Debug;
 use ultraviolet::Vec3;
 
 use crate::intersect;
 use crate::Collider;
 use crate::Collision;
-use crate::Sphere;
 
 use super::node::Node;
 use super::Nodes;
@@ -29,7 +26,11 @@ new_key_type!(
 impl NodeIndex {
     /// Returns the closest parent node that fully contains object. If object
     /// doesn't fit, the root node is returned.
-    pub fn pop_up<const CAP: usize>(self, nodes: &mut Nodes<CAP>, object: &Object) -> NodeIndex {
+    pub fn pop_up<T: Array<Item = Object>>(
+        self,
+        nodes: &mut Nodes<T>,
+        object: &Object,
+    ) -> NodeIndex {
         let node = &nodes[self];
         let parent = node.parent;
         if node.contains(object) {
@@ -40,7 +41,7 @@ impl NodeIndex {
     }
 
     /// Returns the deepest node that fully contains object.
-    pub fn push_down<const CAP: usize>(self, nodes: &Nodes<CAP>, object: &Object) -> Self {
+    pub fn push_down<T: Array<Item = Object>>(self, nodes: &Nodes<T>, object: &Object) -> Self {
         let node = &nodes[self];
 
         if let Some(child) = node.fits_child(nodes, &object) {
@@ -53,18 +54,18 @@ impl NodeIndex {
     /// Removes an entity from the node.
     /// Returns None if the entity didn't exists.
     /// This may happen if the entity was poepped from the node..
-    pub fn remove<const CAP: usize>(
+    pub fn remove<T: Array<Item = Object>>(
         self,
-        nodes: &mut Nodes<CAP>,
+        nodes: &mut Nodes<T>,
         entity: Entity,
     ) -> Option<Object> {
         nodes[self].remove(entity)
     }
 
     /// Returns the child that fully contains object, if any.
-    pub fn fits_child<const CAP: usize>(
+    pub fn fits_child<T: Array<Item = Object>>(
         self,
-        nodes: &Nodes<CAP>,
+        nodes: &Nodes<T>,
         object: &Object,
     ) -> Option<NodeIndex> {
         nodes[self]
@@ -77,33 +78,61 @@ impl NodeIndex {
 
     /// Inserts into node. Does not check if it is fully contained or if already
     /// in node.
-    pub fn insert<const CAP: usize>(
+    pub fn insert<T: Array<Item = Object>>(
         self,
-        nodes: &mut Nodes<CAP>,
+        nodes: &mut Nodes<T>,
         object: Object,
         popped: &mut Vec<Object>,
     ) -> TreeMarker {
         let index = self.push_down(nodes, &object);
         let node = &mut nodes[index];
 
-        if node.remaining_capacity() > 0 {
-            node.push(object);
-            TreeMarker { index, object }
-        } else {
-            eprintln!("Splitting");
+        if node.full() && node.children.is_none() {
             index.split(nodes, popped);
             index.insert(nodes, object, popped)
+        } else {
+            node.push(object);
+            TreeMarker { index, object }
         }
+
+        // match node.remaining_capacity() {
+        //     Some(0) => {
+        //         index.split(nodes, popped);
+        //         index.insert(nodes, object, popped)
+        //     }
+        //     None => unreachable!(),
+        //     // Remaining capacoty and node is already split
+        //     Some(_) | None => {
+        //         node.push(object);
+        //         TreeMarker { index, object }
+        //     }
+        // }
+        // if let node.remaining_capacity().map(|val && node.children.is_none() {
+        // } else {
+        //     node.push(object);
+        //     TreeMarker { index, object }
+        // }
+
+        // NOde is full and not split
+        // if node.remaining_capacity() > 0 || node.children.is_some() {
+        //     node.push(object);
+        //     TreeMarker { index, object }
+        // } else {
+        //     eprintln!("Splitting");
+        //     index.split(nodes, popped);
+        //     index.insert(nodes, object, popped)
+        // }
     }
 
     /// Splits the node in half
-    pub fn split<const CAP: usize>(self, nodes: &mut Nodes<CAP>, popped: &mut Vec<Object>) {
+    pub fn split<T: Array<Item = Object>>(self, nodes: &mut Nodes<T>, popped: &mut Vec<Object>) {
         // eprintln!("Splitting");
         let mut center = Vec3::zero();
         let mut max = Vec3::zero();
         let mut min = Vec3::zero();
 
         let node = &mut nodes[self];
+
         eprintln!("Children: {:?}", node.children);
         assert!(node.children.is_none());
 
@@ -112,9 +141,6 @@ impl NodeIndex {
             max = max.max_by_component(val.origin);
             min = min.min_by_component(val.origin);
         });
-
-        // let len = node.objects.len();
-        // let center = center * (1.0 / len as f32);
 
         let width = (max - min).abs();
 
@@ -127,34 +153,13 @@ impl NodeIndex {
         let a_origin = origin - off;
         let b_origin = origin + off;
 
-        // let rel_center = (center - node.origin) * max;
-        let rel_center = Vec3::zero();
-
-        let a = Node::new(
-            self,
-            node.depth + 1,
-            a_origin + rel_center,
-            extents + rel_center,
-        );
-        let b = Node::new(
-            self,
-            node.depth + 1,
-            b_origin + rel_center,
-            extents - rel_center,
-        );
+        let a = Node::new(self, node.depth + 1, a_origin, extents);
+        let b = Node::new(self, node.depth + 1, b_origin, extents);
 
         // Repartition nodes. Retain those that do not fit in any new leaf, and
         // push those that do to the popped list.
-        let old = mem::replace(node.objects_mut(), ArrayVec::new());
 
-        for obj in old {
-            if a.contains(&obj) || b.contains(&obj) {
-                popped.push(obj);
-            } else {
-                eprintln!("Pushing");
-                node.push(obj)
-            }
-        }
+        node.clear().for_each(|val| popped.push(val));
 
         let a = nodes.insert(a);
         let b = nodes.insert(b);
@@ -162,17 +167,19 @@ impl NodeIndex {
         nodes[self].set_children([a, b]);
     }
 
-    pub fn check_collisions<'a, T, const C: usize>(
+    pub fn check_collisions<'a, T, G>(
         self,
         world: &World,
         events: &mut Events,
-        nodes: &'a Nodes<C>,
-        top_objects: &mut SmallVec<T>,
+        nodes: &'a Nodes<T>,
+        top_objects: &mut SmallVec<G>,
     ) -> Result<(), hecs::ComponentError>
     where
-        T: Array<Item = &'a Object>,
+        T: Array<Item = Object>,
+        G: Array<Item = &'a Object>,
     {
         let old_len = top_objects.len();
+        // dbg!(old_len);
         let node = &nodes[self];
         let objects = &node.objects;
 
@@ -180,21 +187,18 @@ impl NodeIndex {
         for i in 0..objects.len() {
             let a = objects[i];
             for b in objects[i + 1..].iter().chain(top_objects.iter().cloned()) {
+                // for b in objects[i + 1..].iter() {
                 assert_ne!(a.entity, b.entity);
 
                 // if true {
                 if a.bound.overlaps(a.origin, b.bound, b.origin) {
                     let a_coll = world.get::<Collider>(a.entity)?;
                     let b_coll = world.get::<Collider>(b.entity)?;
-                    // eprintln!("Possible intersection");
-                    *world.get_mut::<Color>(a.entity).unwrap() = Color::green();
-                    *world.get_mut::<Color>(b.entity).unwrap() = Color::green();
                     // Do full collision check
 
                     if let Some(intersection) =
                         intersect(&a.transform, &b.transform, &*a_coll, &*b_coll)
                     {
-                        eprintln!("Collision between {:?} and {:?}", a.entity, b.entity);
                         let collision = Collision {
                             a: a.entity,
                             b: b.entity,
@@ -221,40 +225,76 @@ impl NodeIndex {
         Ok(())
     }
 
-    pub fn draw_gizmos<const CAP: usize>(
+    pub fn draw_gizmos<T: Array<Item = Object>>(
         self,
         world: &World,
-        nodes: &Nodes<CAP>,
+        nodes: &Nodes<T>,
         depth: usize,
         gizmos: &mut Gizmos,
     ) {
         let node = &nodes[self];
 
-        let color = Color::hsl(node.depth as f32 * 60.0, 1.0, 0.5);
+        let color = Color::hsl(
+            node.depth as f32 * 60.0,
+            1.0,
+            if node.children.is_some() { 0.1 } else { 0.5 },
+        );
 
-        gizmos.push(Gizmo::Cube {
-            origin: node.origin,
-            color,
-            half_extents: node.half_extents,
-            radius: 0.02 + 0.001 * depth as f32,
-            corner_radius: 1.0,
-        });
-
-        for obj in &node.objects {
-            let coll = world.get::<Collider>(obj.entity).unwrap();
-            let scale = world.get::<Scale>(obj.entity).unwrap();
-            gizmos.push(Gizmo::Sphere {
-                origin: obj.transform.extract_translation(),
-                color: Color::magenta(),
-                radius: Sphere::enclose(&*coll, *scale).radius,
+        if node.object_count != 0 {
+            gizmos.push(Gizmo::Cube {
+                origin: node.origin,
+                color,
+                half_extents: node.half_extents,
+                radius: 0.02 + 0.001 * depth as f32,
                 corner_radius: 1.0,
             });
         }
+
+        // for obj in &node.objects {
+        //     let coll = world.get::<Collider>(obj.entity).unwrap();
+        //     let scale = world.get::<Scale>(obj.entity).unwrap();
+        //     gizmos.push(Gizmo::Sphere {
+        //         origin: obj.transform.extract_translation(),
+        //         color: Color::magenta(),
+        //         radius: Sphere::enclose(&*coll, *scale).radius,
+        //         corner_radius: 1.0,
+        //     });
+        // }
 
         node.children
             .into_iter()
             .flatten()
             .for_each(|val| val.draw_gizmos(world, nodes, depth + 1, gizmos))
+    }
+}
+
+pub(crate) struct DebugNode<'a, T: Array<Item = Object>> {
+    index: NodeIndex,
+    nodes: &'a Nodes<T>,
+}
+
+impl<'a, T: Array<Item = Object>> DebugNode<'a, T> {
+    pub(crate) fn new(index: NodeIndex, nodes: &'a Nodes<T>) -> Self {
+        Self { index, nodes }
+    }
+}
+
+impl<'a, T: Array<Item = Object>> Debug for DebugNode<'a, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let node = &self.nodes[self.index];
+        let mut dbg = f.debug_struct("Node");
+        dbg.field("object_count", &node.object_count);
+        // dbg.field("objects", &node.objects.len());
+        if let Some([a, b]) = node.children {
+            let a = DebugNode::new(a, self.nodes);
+
+            let b = DebugNode::new(b, self.nodes);
+
+            dbg.field("left", &a);
+            dbg.field("right", &b);
+        }
+
+        dbg.finish()
     }
 }
 

@@ -1,7 +1,7 @@
 use std::mem;
 
 use hecs::World;
-use ivy_core::{Color, Events, Gizmo, Gizmos, Position, Rotation, Scale, TransformMatrix};
+use ivy_core::{Color, Events, Gizmos, Position, Rotation, Scale, TimedScope, TransformMatrix};
 use ivy_resources::Key;
 use slotmap::SlotMap;
 use smallvec::{Array, SmallVec};
@@ -22,10 +22,10 @@ pub struct TreeMarker {
     object: Object,
 }
 
-type Nodes<const C: usize> = SlotMap<NodeIndex, Node<C>>;
+type Nodes<T> = SlotMap<NodeIndex, Node<T>>;
 
-pub struct CollisionTree<const CAP: usize> {
-    nodes: SlotMap<NodeIndex, Node<CAP>>,
+pub struct CollisionTree<T: Array<Item = Object>> {
+    nodes: SlotMap<NodeIndex, Node<T>>,
     /// Objects removed from the tree due to splits. Bound to be replaced.
     /// Double buffer as insertions may cause new pops.
     popped: (Vec<Object>, Vec<Object>),
@@ -33,7 +33,7 @@ pub struct CollisionTree<const CAP: usize> {
     root: NodeIndex,
 }
 
-impl<const CAP: usize> CollisionTree<CAP> {
+impl<T: Array<Item = Object>> CollisionTree<T> {
     pub fn new(origin: Vec3, half_extents: Vec3) -> Self {
         let mut nodes = SlotMap::with_key();
         let root = nodes.insert(Node::new(NodeIndex::null(), 0, origin, half_extents));
@@ -50,12 +50,12 @@ impl<const CAP: usize> CollisionTree<CAP> {
     }
 
     /// Get a reference to the collision tree's nodes.
-    pub fn nodes(&self) -> &SlotMap<NodeIndex, Node<CAP>> {
+    pub fn nodes(&self) -> &SlotMap<NodeIndex, Node<T>> {
         &self.nodes
     }
 
     /// Get a mutable reference to the collision tree's nodes.
-    pub fn nodes_mut(&mut self) -> &mut SlotMap<NodeIndex, Node<CAP>> {
+    pub fn nodes_mut(&mut self) -> &mut SlotMap<NodeIndex, Node<T>> {
         &mut self.nodes
     }
 
@@ -83,6 +83,8 @@ impl<const CAP: usize> CollisionTree<CAP> {
     }
 
     pub fn update(&mut self, world: &mut World) -> Result<(), hecs::ComponentError> {
+        let _scope = TimedScope::new(|elapsed| eprintln!("Tree updating took {:.3?}", elapsed));
+
         self.register(world);
 
         self.handle_popped(world)?;
@@ -106,7 +108,13 @@ impl<const CAP: usize> CollisionTree<CAP> {
                 let index = marker.index;
                 let node = &nodes[index];
 
-                *color = Color::hsl(node.depth as f32 * 60.0, 1.0, 0.5);
+                let node_color = Color::hsl(
+                    node.depth as f32 * 60.0,
+                    1.0,
+                    if node.children.is_some() { 0.1 } else { 0.5 },
+                );
+
+                *color = node_color;
 
                 // Bounds have changed
                 if marker.object.max_scale != scale.component_max() {
@@ -120,7 +128,6 @@ impl<const CAP: usize> CollisionTree<CAP> {
             });
 
         let popped = &mut self.popped.0;
-        let root = self.root;
 
         // Move entities between nodes when they no longer fit or fit into a
         // deeper child.
@@ -132,33 +139,9 @@ impl<const CAP: usize> CollisionTree<CAP> {
                 let node = &nodes[index];
 
                 let object = &marker.object;
-                if !node.contains(object) {
-                    // eprintln!("No longer fits");
-                    if let Some(object) = index.remove(nodes, object.entity) {
-                        let new_marker = root.insert(nodes, object, popped); //index.pop_up(nodes, &object).insert(nodes, *object, popped);
-
-                        assert_ne!(*marker, new_marker);
-
-                        // Update marker
-                        *marker = new_marker
-                    } else {
-                        eprintln!("Popped");
-                        marker.index = Default::default();
-                    }
-                } else if let Some(child) = node.fits_child(nodes, &object) {
-                    eprintln!("Fits in child");
-                    if let Some(object) = index.remove(nodes, object.entity) {
-                        let new_marker = child.insert(nodes, object, popped);
-
-                        assert_ne!(*marker, new_marker);
-
-                        // Update marker
-                        *marker = new_marker
-                    } else {
-                        eprintln!("Popped");
-                        // Entity was popped from the node, marker is outdated
-                        marker.index = Default::default();
-                    }
+                if !node.contains(object) || node.fits_child(nodes, object).is_some() {
+                    nodes[index].remove(object.entity);
+                    popped.push(marker.object)
                 }
             });
 
@@ -182,7 +165,7 @@ impl<const CAP: usize> CollisionTree<CAP> {
 
                     let new_marker = root.insert(nodes, obj, back);
 
-                    assert_ne!(marker.index, new_marker.index);
+                    // assert_ne!(marker.index, new_marker.index);
 
                     *marker = new_marker;
 
@@ -197,12 +180,14 @@ impl<const CAP: usize> CollisionTree<CAP> {
     }
 
     #[inline]
-    pub fn check_collisions<'a, T: Array<Item = &'a Object>>(
+    pub fn check_collisions<'a, G: Array<Item = &'a Object>>(
         &'a self,
         world: &mut World,
         events: &mut Events,
     ) -> Result<(), hecs::ComponentError> {
-        let mut stack = SmallVec::<T>::new();
+        let _scope =
+            TimedScope::new(|elapsed| eprintln!("Tree collision checking took {:.3?}", elapsed));
+        let mut stack = SmallVec::<G>::new();
 
         self.root
             .check_collisions(world, events, &self.nodes, &mut stack)
@@ -211,5 +196,13 @@ impl<const CAP: usize> CollisionTree<CAP> {
     pub fn draw_gizmos(&self, world: &mut World, gizmos: &mut Gizmos) {
         gizmos.begin_section("CollisionTree");
         self.root.draw_gizmos(world, &self.nodes, 0, gizmos);
+    }
+}
+
+impl<T: Array<Item = Object>> std::fmt::Debug for CollisionTree<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CollisionTree")
+            .field("root", &DebugNode::new(self.root, &self.nodes))
+            .finish()
     }
 }

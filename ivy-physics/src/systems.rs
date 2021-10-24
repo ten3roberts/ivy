@@ -88,52 +88,47 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
     world: &mut World,
     mut collisions: I,
 ) -> Result<()> {
-    collisions
-        .next()
-        .map(|collision| -> Result<()> {
-            if collision.a == collision.b {
-                return Ok(());
-            };
+    collisions.try_for_each(|coll| -> Result<()> {
+        assert_ne!(coll.a, coll.b);
 
-            let mut a_query = world.query_one::<RbQuery>(collision.a)?;
-            let a = a_query.get().unwrap();
+        let mut a_query = world.query_one::<RbQuery>(coll.a)?;
+        let a = a_query.get().unwrap();
 
-            let mut b_query = world.query_one::<RbQuery>(collision.b)?;
+        let mut b_query = world.query_one::<RbQuery>(coll.b)?;
 
-            let b = b_query.get().unwrap();
-            let a_pos = *a.pos;
-            let b_pos = *b.pos;
-            let a_mass = **a.mass;
-            let b_mass = **b.mass;
+        let b = b_query.get().unwrap();
+        let a_pos = *a.pos;
+        let b_pos = *b.pos;
+        let a_mass = **a.mass;
+        let b_mass = **b.mass;
 
-            let total_mass = a_mass + b_mass;
+        let total_mass = a_mass + b_mass;
 
-            let impulse = resolve_collision(collision.intersection, &a, &b);
+        let impulse = resolve_collision(coll.intersection, &a, &b);
 
-            drop((a_query, b_query));
+        drop((a_query, b_query));
 
-            {
-                let dir = collision.intersection.normal * collision.intersection.depth;
+        {
+            let dir = coll.intersection.normal * coll.intersection.depth;
 
-                let mut pos = world.get_mut::<Position>(collision.a)?;
-                *pos -= Position(dir * (b_mass / total_mass));
-                drop(pos);
+            let mut pos = world.get_mut::<Position>(coll.a)?;
+            *pos -= Position(dir * (b_mass / total_mass));
+            drop(pos);
 
-                let mut pos = world.get_mut::<Position>(collision.b)?;
-                *pos += Position(dir * (a_mass / total_mass));
-                drop(pos);
-            }
+            let mut pos = world.get_mut::<Position>(coll.b)?;
+            *pos += Position(dir * (a_mass / total_mass));
+            drop(pos);
+        }
 
-            let mut effector = world.get_mut::<Effector>(collision.a)?;
-            effector.apply_impulse_at(impulse, collision.intersection.points[0] - *a_pos);
-            drop(effector);
+        let mut effector = world.get_mut::<Effector>(coll.a)?;
+        effector.apply_impulse_at(impulse, coll.intersection.points[0] - *a_pos);
+        drop(effector);
 
-            let mut effector = world.get_mut::<Effector>(collision.b)?;
-            effector.apply_impulse_at(-impulse, collision.intersection.points[1] - *b_pos);
+        let mut effector = world.get_mut::<Effector>(coll.b)?;
+        effector.apply_impulse_at(-impulse, coll.intersection.points[1] - *b_pos);
 
-            Ok(())
-        })
-        .unwrap_or(Ok(()))
+        Ok(())
+    })
 }
 
 /// Applies effectors to their respective entities and clears the effects.
@@ -181,6 +176,7 @@ pub fn satisfy_objects(world: &mut World) {
                     w.cloned().unwrap_or_default(),
                     wm.cloned().unwrap_or_default(),
                     m.cloned().unwrap_or_default(),
+                    Satisfied,
                 ),
             )
         })

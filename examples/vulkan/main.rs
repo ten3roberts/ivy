@@ -7,7 +7,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Context};
-use collision::{Collider, CollisionTree, Cube, Sphere};
+use collision::{Collider, Cube, Object, Sphere};
 use flume::Receiver;
 use glfw::{Action, CursorMode, Glfw, Key, WindowEvent};
 use graphics::gizmos::GizmoRenderer;
@@ -137,8 +137,8 @@ fn main() -> anyhow::Result<()> {
                 glfw,
                 r,
                 WindowInfo {
-                    // extent: Some(Extent::new(800, 600)),
-                    extent: None,
+                    extent: Some(Extent::new(800, 600)),
+                    // extent: None,
                     resizable: false,
                     mode: WindowMode::Windowed,
                     ..Default::default()
@@ -149,7 +149,7 @@ fn main() -> anyhow::Result<()> {
             Ok(FixedTimeStep::new(
                 20.ms(),
                 (
-                    PhysicsLayer::<32>::new(w, r, e, Vec3::one() * 100.0)?,
+                    PhysicsLayer::<[Object; 8]>::new(w, r, e, Vec3::one() * 100.0)?,
                     LogicLayer::new(w, r, e)?,
                 ),
             ))
@@ -457,7 +457,8 @@ fn setup_objects(
 
     let mut rng = StdRng::seed_from_u64(43);
 
-    const COUNT: usize = 256;
+    const COUNT: usize = 1024;
+
     world
         .spawn_batch((0..COUNT).map(|_| {
             (
@@ -499,8 +500,6 @@ struct LogicLayer {
     window_events: Receiver<WindowEvent>,
     assets: Assets,
     entities: Entities,
-
-    tree: CollisionTree<256>,
 }
 
 impl LogicLayer {
@@ -551,7 +550,6 @@ impl LogicLayer {
             assets,
             window_events,
             cursor_mode: CursorMode::Normal,
-            tree: CollisionTree::new(Vec3::zero(), Vec3::one() * 1000.0),
         })
     }
 

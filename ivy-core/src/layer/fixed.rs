@@ -27,7 +27,8 @@ impl<T: Layer> Layer for FixedTimeStep<T> {
         events: &mut crate::Events,
         frame_time: Duration,
     ) -> anyhow::Result<()> {
-        self.acc += frame_time.as_secs_f64();
+        let ft_s = frame_time.as_secs_f64();
+        self.acc = (self.acc + ft_s).min(ft_s * 10.0);
 
         let dt = self.timestep.as_secs_f64();
         while self.acc > 0.0 {

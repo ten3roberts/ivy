@@ -1,4 +1,3 @@
-use arrayvec::ArrayVec;
 use hecs::Entity;
 use ivy_core::TransformMatrix;
 use ultraviolet::Vec3;
@@ -9,9 +8,10 @@ use crate::Sphere;
 #[derive(Debug)]
 /// The node in collision tree.
 /// Implements basic functionality. Tree behaviours are contained in [`NodeIndex`].
-pub struct Node<const CAP: usize> {
+pub struct Node<T: Array<Item = Object>> {
     // Data for the iteration
-    pub(crate) objects: ArrayVec<Object, CAP>,
+    pub(crate) objects: SmallVec<T>,
+    pub(crate) object_count: usize,
     pub(crate) depth: usize,
     pub(crate) iteration: usize,
     pub(crate) origin: Vec3,
@@ -20,7 +20,7 @@ pub struct Node<const CAP: usize> {
     pub(crate) parent: NodeIndex,
 }
 
-impl<const CAP: usize> std::ops::Deref for Node<CAP> {
+impl<T: Array<Item = Object>> std::ops::Deref for Node<T> {
     type Target = Vec3;
 
     fn deref(&self) -> &Self::Target {
@@ -28,10 +28,11 @@ impl<const CAP: usize> std::ops::Deref for Node<CAP> {
     }
 }
 
-impl<const CAP: usize> Node<CAP> {
+impl<T: Array<Item = Object>> Node<T> {
     pub fn new(parent: NodeIndex, depth: usize, origin: Vec3, half_extents: Vec3) -> Self {
         Self {
-            objects: ArrayVec::default(),
+            objects: Default::default(),
+            object_count: 0,
             depth,
             iteration: 0,
             origin,
@@ -42,7 +43,7 @@ impl<const CAP: usize> Node<CAP> {
     }
 
     /// Returns the child that fully contains object, if any.
-    pub fn fits_child(&self, nodes: &Nodes<CAP>, object: &Object) -> Option<NodeIndex> {
+    pub fn fits_child(&self, nodes: &Nodes<T>, object: &Object) -> Option<NodeIndex> {
         self.children
             .iter()
             .flatten()
@@ -50,7 +51,17 @@ impl<const CAP: usize> Node<CAP> {
             .map(|val| *val)
     }
 
-    /// Returns true if the object bounded by a sphere fits in the node.
+    /// Returns true if the point is inside the node
+    pub fn contains_point(&self, point: Vec3) -> bool {
+        point.x < self.origin.x + self.half_extents.x
+            && point.x > self.origin.x - self.half_extents.x
+            && point.y < self.origin.y + self.half_extents.y
+            && point.y > self.origin.y - self.half_extents.y
+            && point.z < self.origin.z + self.half_extents.z
+            && point.z > self.origin.z - self.half_extents.z
+    }
+
+    /// Returns true if the object bounded by a sphere completely fits in the node.
     pub fn contains(&self, object: &Object) -> bool {
         object.origin.x + object.bound.radius < self.origin.x + self.half_extents.x
             && object.origin.x - object.bound.radius > self.origin.x - self.half_extents.x
@@ -65,16 +76,21 @@ impl<const CAP: usize> Node<CAP> {
     pub fn set(&mut self, object: Object, iteration: usize) {
         if iteration != self.iteration {
             self.iteration = iteration;
-            self.objects.clear();
+            // Use set_len since object doesn't implement drop
+            unsafe { self.objects.set_len(0) }
         }
         self.objects.push(object);
+        assert!(self.objects.len() <= self.object_count);
     }
 
     /// Adds an entity
-    /// Panics if the node can not fit any more entities
     #[inline]
     pub fn push(&mut self, object: Object) {
-        self.objects.push(object)
+        self.objects.push(object);
+        if self.objects.spilled() {
+            eprintln!("Spilled, {:?}", self.children);
+        }
+        self.object_count += 1;
     }
 
     /// Removes an entity
@@ -86,7 +102,10 @@ impl<const CAP: usize> Node<CAP> {
             .enumerate()
             .find(|(_, val)| val.entity == entity)
         {
-            Some(self.objects.swap_remove(index))
+            let obj = Some(self.objects.swap_remove(index));
+            // self.objects.shrink_to_fit();
+            self.object_count += 1;
+            obj
         } else {
             None
         }
@@ -98,12 +117,36 @@ impl<const CAP: usize> Node<CAP> {
         self.children = Some(children);
     }
 
-    pub fn remaining_capacity(&self) -> usize {
-        self.objects.remaining_capacity()
+    /// Returns the remaining inline capacity. Returns None if data has been
+    /// spilled.
+    pub fn remaining_capacity(&self) -> Option<usize> {
+        let inline_size = self.objects.inline_size();
+        let len = self.objects.len();
+
+        if inline_size >= len {
+            Some(inline_size - len)
+        } else {
+            None
+        }
+    }
+
+    /// Returns true if the node is filled to capacity
+    pub fn full(&self) -> bool {
+        let inline_size = self.objects.inline_size();
+
+        let len = self.objects.len();
+
+        len >= inline_size
+    }
+
+    /// Clears the node objects and returns an iterator over the cleared items.
+    pub fn clear(&mut self) -> smallvec::Drain<T> {
+        self.object_count = 0;
+        self.objects.drain(..)
     }
 
     /// Get a mutable reference to the node's entities.
-    pub fn objects_mut(&mut self) -> &mut ArrayVec<Object, CAP> {
+    pub fn objects_mut(&mut self) -> &mut SmallVec<T> {
         &mut self.objects
     }
 }
