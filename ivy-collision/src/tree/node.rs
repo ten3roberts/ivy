@@ -87,9 +87,6 @@ impl<T: Array<Item = Object>> Node<T> {
     #[inline]
     pub fn push(&mut self, object: Object) {
         self.objects.push(object);
-        if self.objects.spilled() {
-            eprintln!("Spilled, {:?}", self.children);
-        }
         self.object_count += 1;
     }
 

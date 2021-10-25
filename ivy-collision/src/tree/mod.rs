@@ -156,8 +156,6 @@ impl<T: Array<Item = Object>> CollisionTree<T> {
         while !self.popped.0.is_empty() {
             let (front, back) = &mut self.popped;
 
-            eprintln!("Handling popped: {:?}", front.len());
-
             front
                 .drain(..)
                 .try_for_each(|obj| -> Result<_, hecs::ComponentError> {

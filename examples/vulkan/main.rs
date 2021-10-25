@@ -137,8 +137,9 @@ fn main() -> anyhow::Result<()> {
                 glfw,
                 r,
                 WindowInfo {
-                    extent: Some(Extent::new(800, 600)),
-                    // extent: None,
+                    // extent: Some(Extent::new(800, 600)),
+                    extent: None,
+
                     resizable: false,
                     mode: WindowMode::Windowed,
                     ..Default::default()
@@ -149,7 +150,7 @@ fn main() -> anyhow::Result<()> {
             Ok(FixedTimeStep::new(
                 20.ms(),
                 (
-                    PhysicsLayer::<[Object; 8]>::new(w, r, e, Vec3::one() * 100.0)?,
+                    PhysicsLayer::<[Object; 32]>::new(w, r, e, Vec3::one() * 100.0)?,
                     LogicLayer::new(w, r, e)?,
                 ),
             ))
@@ -466,8 +467,8 @@ fn setup_objects(
                 Collider::new(Sphere::new(1.0)),
                 Color::rgb(1.0, 1.0, 1.0),
                 Mass(10.0),
-                Position(Vec3::rand_uniform(&mut rng) * 20.0),
-                Velocity(Vec3::rand_sphere(&mut rng)),
+                Position(Vec3::rand_uniform(&mut rng) * 10.0),
+                Velocity(Vec3::rand_sphere(&mut rng) * 2.0),
                 Resitution(1.0),
                 Scale::uniform(0.5),
                 material,

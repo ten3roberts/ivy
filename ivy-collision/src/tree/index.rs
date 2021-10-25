@@ -194,8 +194,8 @@ impl NodeIndex {
                 if a.bound.overlaps(a.origin, b.bound, b.origin) {
                     let a_coll = world.get::<Collider>(a.entity)?;
                     let b_coll = world.get::<Collider>(b.entity)?;
-                    // Do full collision check
 
+                    // Do full collision check
                     if let Some(intersection) =
                         intersect(&a.transform, &b.transform, &*a_coll, &*b_coll)
                     {
