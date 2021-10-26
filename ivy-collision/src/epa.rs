@@ -3,7 +3,7 @@ use ultraviolet::{Mat4, Vec3};
 
 use crate::{
     gjk::Simplex,
-    util::{barycentric_vector, support},
+    util::{barycentric_vector, support, MAX_ITERATIONS},
     {util::minkowski_diff, util::SupportPoint, util::TOLERANCE, CollisionPrimitive},
 };
 
@@ -187,7 +187,7 @@ pub fn epa<A: CollisionPrimitive, B: CollisionPrimitive>(
 
         let support_dist = min.normal.dot(p.pos);
 
-        if iterations < 10 && (support_dist - min.distance).abs() > TOLERANCE {
+        if iterations < MAX_ITERATIONS && (support_dist - min.distance).abs() > TOLERANCE {
             polytype.add(p);
         }
         // Support is further than the current closest normal

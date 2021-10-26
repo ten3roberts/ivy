@@ -1,0 +1,109 @@
+use hecs::{Entity, World};
+use ivy_core::{Position, TransformMatrix};
+use ultraviolet::{Mat4, Vec3};
+
+use crate::{
+    epa2d,
+    util::{support, SupportPoint},
+    Collider, CollisionPrimitive, Intersection, Simplex,
+};
+
+pub struct Ray {
+    origin: Vec3,
+    dir: Vec3,
+}
+
+impl Ray {
+    pub fn new(origin: Vec3, dir: Vec3) -> Self {
+        Self {
+            origin,
+            dir: dir.normalized(),
+        }
+    }
+
+    pub fn support<T: CollisionPrimitive>(
+        &self,
+        collider: &T,
+        transform: &Mat4,
+        transform_inv: &Mat4,
+        dir: Vec3,
+    ) -> SupportPoint {
+        let a = support(&transform, &transform_inv, collider, dir);
+        eprintln!("Support in {:?}: {:?}", dir, a);
+        SupportPoint {
+            pos: a - self.origin,
+            a,
+            b: self.origin,
+        }
+    }
+
+    /// Returns true if a shape intersects the ray
+    pub fn intersects<T: CollisionPrimitive>(
+        &self,
+        collider: &T,
+        transform: Mat4,
+    ) -> Option<Intersection> {
+        let transform_inv = transform.inversed();
+        // Get first support function in direction of separation
+        // let dir = (a_pos - b_pos).normalized();
+        let dir = Vec3::unit_x();
+
+        let a = self.support(collider, &transform, &transform_inv, dir);
+
+        let mut simplex = Simplex::Point([a]);
+
+        while let Some(dir) = simplex.next_flat(self.dir) {
+            let dir = dir.normalized();
+            dbg!(dir.dot(self.dir));
+
+            assert!((dir.mag() - 1.0 < 0.0001));
+            // Get the next simplex
+            let p = self.support(collider, &transform, &transform_inv, dir);
+            dbg!(p, p.dot(dir));
+
+            // New point was not past the origin
+            // No collision
+            if p.dot(dir) < 0.0 {
+                return None;
+            }
+
+            // p.pos += p.normalized() * 1.0;
+
+            simplex.push(p);
+        }
+
+        // Collision found
+        Some(epa2d::epa_ray(
+            &transform,
+            &transform_inv,
+            collider,
+            simplex,
+            self,
+        ))
+    }
+
+    pub fn cast(&self, world: &World) -> Option<(Entity, Intersection)> {
+        world
+            .query::<(&Position, &ivy_core::Rotation, &ivy_core::Scale, &Collider)>()
+            .iter()
+            .find_map(|(e, (pos, rot, scale, collider))| {
+                let transform = TransformMatrix::new(*pos, *rot, *scale);
+
+                if let Some(val) = self.intersects(collider, *transform) {
+                    Some((e, val))
+                } else {
+                    None
+                }
+            })
+    }
+
+    /// Get a reference to the ray's origin.
+    pub fn origin(&self) -> Vec3 {
+        self.origin
+    }
+
+    /// Get a reference to the ray's dir.
+    pub fn dir(&self) -> Vec3 {
+        self.dir
+    }
+}

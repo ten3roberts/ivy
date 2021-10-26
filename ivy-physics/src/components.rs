@@ -60,6 +60,12 @@ impl Velocity {
     }
 }
 
+impl AngularVelocity {
+    pub fn new(x: f32, y: f32, z: f32) -> Self {
+        Self(Vec3::new(x, y, z))
+    }
+}
+
 #[derive(Query)]
 pub struct RbQuery<'a> {
     pub pos: &'a Position,

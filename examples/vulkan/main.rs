@@ -7,7 +7,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Context};
-use collision::{Collider, Cube, Object, Sphere};
+use collision::{Collider, Cube, Object, Ray, Sphere};
 use flume::Receiver;
 use glfw::{Action, CursorMode, Glfw, Key, WindowEvent};
 use graphics::gizmos::GizmoRenderer;
@@ -372,7 +372,7 @@ fn setup_graphics(
     let ui_pass = resources.insert(UIPass(ui_pipeline))?;
     let text_pass = resources.insert(UIPass(text_pipeline))?;
 
-    _setup_ui(world, resources, ui_pass, text_pass)?;
+    setup_ui(world, resources, ui_pass, text_pass)?;
     resources.insert_default(rendergraph)?;
 
     Ok(Assets {
@@ -420,60 +420,63 @@ fn setup_objects(
     ));
 
     world.spawn((
-        Collider::new(Sphere::new(1.0)),
+        Collider::new(Cube::new(1.0)),
         Color::rgb(1.0, 1.0, 1.0),
-        Mass(10.0),
+        Mass(20.0),
         Velocity::default(),
-        Position::new(0.0, 0.5, 0.0),
-        Resitution(1.0),
+        Position::new(0.0, 1.0, 2.0),
+        // AngularVelocity::new(0.0, 1.0, 0.5),
         Scale::uniform(0.5),
         Rotation::euler_angles(0.0, 0.0, 0.0),
         Mover {
             translate: InputVector {
                 x: InputAxis::keyboard(Key::L, Key::H),
                 y: InputAxis::keyboard(Key::K, Key::J),
-                z: InputAxis::keyboard(Key::O, Key::I),
+                z: InputAxis::keyboard(Key::I, Key::O),
             },
-            speed: 3.0,
+            speed: 1.0,
         },
-        sphere_mesh,
+        cube_mesh,
         material,
         assets.geometry_pass,
     ));
 
-    world.spawn((
-        AngularMass(1.0),
-        AngularVelocity::default(),
-        Collider::new(Cube::new(1.0)),
-        Color::white(),
-        Mass(2.0),
-        Position::new(-3.0, 0.0, 0.0),
-        Resitution(1.0),
-        Scale::uniform(0.4),
-        Velocity::new(0.5, 0.0, 0.0),
-        material,
-        assets.geometry_pass,
-        cube_mesh,
-    ));
+    // world.spawn((
+    //     AngularMass(1.0),
+    //     AngularVelocity::default(),
+    //     Collider::new(Cube::new(1.0)),
+    //     Color::white(),
+    //     Mass(2.0),
+    //     Position::new(-3.0, 0.0, 0.0),
+    //     Resitution(1.0),
+    //     Scale::uniform(0.4),
+    //     Velocity::new(0.5, 0.0, 0.0),
+    //     material,
+    //     assets.geometry_pass,
+    //     cube_mesh,
+    // ));
 
     let mut rng = StdRng::seed_from_u64(43);
 
-    const COUNT: usize = 1024;
+    const COUNT: usize = 64;
 
     world
         .spawn_batch((0..COUNT).map(|_| {
+            let pos = Position(Vec3::rand_uniform(&mut rng) * 30.0);
+            let vel = Velocity::from(-pos.normalized());
+
             (
-                AngularMass(1.0),
-                Collider::new(Sphere::new(1.0)),
+                AngularMass(5.0),
+                Collider::new(Cube::new(1.0)),
                 Color::rgb(1.0, 1.0, 1.0),
                 Mass(10.0),
-                Position(Vec3::rand_uniform(&mut rng) * 10.0),
-                Velocity(Vec3::rand_sphere(&mut rng) * 2.0),
-                Resitution(1.0),
+                pos,
+                vel,
+                Resitution(0.5),
                 Scale::uniform(0.5),
                 material,
                 assets.geometry_pass,
-                sphere_mesh,
+                cube_mesh,
             )
         }))
         .for_each(|_| {});
@@ -608,8 +611,8 @@ impl Layer for LogicLayer {
 
         let dt = frame_time.secs();
 
-        let (_e, camera_rot) = world
-            .query_mut::<&mut Rotation>()
+        let (_e, (camera_pos, camera_rot)) = world
+            .query_mut::<(&Position, &mut Rotation)>()
             .with::<Camera>()
             .into_iter()
             .next()
@@ -627,6 +630,36 @@ impl Layer for LogicLayer {
             -self.camera_euler.x,
         )
         .into();
+
+        world
+            .query::<&mut Color>()
+            .iter()
+            .for_each(|(_, val)| *val = Color::white());
+
+        let ray = Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(0.0, 0.0, -1.0));
+        let mut gizmos = resources.get_default_mut::<Gizmos>()?;
+
+        gizmos.push(Gizmo::Line {
+            origin: ray.origin(),
+            color: Color::red(),
+            dir: ray.dir() * 100.0,
+            radius: 0.01,
+            corner_radius: 1.0,
+        });
+
+        if let Some((e, intersection)) = ray.cast(world)
+        // Ray::new(**camera_pos, camera_rot.into_matrix() * -Vec3::unit_z()).cast(world)
+        {
+            gizmos.push(Gizmo::Line {
+                origin: Vec3::zero(),
+                color: Color::yellow(),
+                dir: intersection.normal * 10.0,
+                radius: 0.1,
+                corner_radius: 1.0,
+            });
+
+            let _ = world.get_mut::<Color>(e).map(|mut val| *val = Color::red());
+        }
 
         // Clear gizmos from last frame
         OverTime::<RelativeOffset>::update(world, dt);
@@ -674,7 +707,7 @@ struct VulkanLayer {
     context: Arc<VulkanContext>,
 }
 
-fn _setup_ui(
+fn setup_ui(
     world: &mut World,
     resources: &Resources,
     ui_pass: Handle<UIPass>,

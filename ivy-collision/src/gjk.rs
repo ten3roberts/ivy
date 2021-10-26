@@ -1,12 +1,10 @@
 use ultraviolet::{Mat4, Vec3};
 
-use crate::{util::minkowski_diff, util::SupportPoint, CollisionPrimitive};
-
-/// Gets the normal of a direction vector with a reference point. Normal will
-/// face the same direciton as reference
-fn triple_prod(a: Vec3, b: Vec3, c: Vec3) -> Vec3 {
-    a.cross(b).cross(c).normalized()
-}
+use crate::{
+    util::{minkowski_diff, MAX_ITERATIONS},
+    util::{project_plane, triple_prod, SupportPoint},
+    CollisionPrimitive,
+};
 
 #[derive(Debug)]
 pub enum Simplex {
@@ -90,6 +88,60 @@ impl Simplex {
         }
     }
 
+    #[inline]
+    pub fn next_flat(&mut self, normal: Vec3) -> Option<Vec3> {
+        match *self {
+            Self::Point([a]) => Some(project_plane(-a.pos, normal)),
+            Self::Line([a, b]) => {
+                eprintln!("Line");
+                let ab = b.pos - a.pos;
+                let a0 = -a.pos;
+
+                // let perp = ab.cross(normal).normalized();
+                let perp = ab.cross(normal);
+
+                let perp = perp * perp.dot(a0).signum();
+
+                eprintln!("Perpendicular: {:?}", perp);
+
+                // // Project onto the plane of the vector
+                // let perp = (perp - normal * perp.dot(normal)).normalized();
+                // dbg!(a.pos, b.pos, perp, normal, perp.dot(normal));
+                Some(perp)
+            }
+            Self::Triangle([a, b, c]) => {
+                eprintln!("Triangle");
+                // panic!("");
+                let ab = b.pos - a.pos;
+                let ac = c.pos - a.pos;
+                let a0 = -a.pos;
+
+                let ab = project_plane(ab, normal);
+                let ac = project_plane(ac, normal);
+                let a0 = project_plane(a0, normal);
+
+                let perp = triple_prod(ac, ab, ab);
+                dbg!(perp.dot(normal));
+
+                if perp.dot(a0) > 0.0 {
+                    *self = Simplex::Line([a, b]);
+                    return Some(perp);
+                }
+
+                let perp = triple_prod(ab, ac, ac);
+
+                dbg!(perp.dot(normal));
+                if perp.dot(a0) > 0.0 {
+                    *self = Simplex::Line([a, c]);
+                    return Some(perp.normalized());
+                }
+
+                None
+            }
+            Simplex::Tetrahedron(_) => unreachable!(),
+        }
+    }
+
     /// Add a point to the simplex.
     /// Note: Resulting simplex can not contain more than 4 points
     #[inline]
@@ -137,6 +189,7 @@ pub fn gjk<A: CollisionPrimitive, B: CollisionPrimitive>(
 
     let mut simplex = Simplex::Point([a]);
 
+    let mut iterations = 0;
     while let Some(dir) = simplex.next() {
         let dir = dir.normalized();
 
@@ -154,13 +207,14 @@ pub fn gjk<A: CollisionPrimitive, B: CollisionPrimitive>(
 
         // New point was not past the origin
         // No collision
-        if p.dot(dir) < 0.0 {
+        if iterations > MAX_ITERATIONS || p.dot(dir) < 0.0 {
             return (false, simplex);
         }
 
         // p.pos += p.normalized() * 1.0;
 
         simplex.push(p);
+        iterations += 1;
     }
 
     // Collision found

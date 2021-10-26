@@ -164,10 +164,11 @@ pub fn satisfy_objects(world: &mut World) {
             Option<&AngularVelocity>,
             Option<&AngularMass>,
             Option<&Mass>,
+            Option<&Resitution>,
         )>()
         .without::<Satisfied>()
         .into_iter()
-        .map(|(e, (effector, vel, w, wm, m))| {
+        .map(|(e, (effector, vel, w, wm, m, res))| {
             (
                 e,
                 (
@@ -176,6 +177,7 @@ pub fn satisfy_objects(world: &mut World) {
                     w.cloned().unwrap_or_default(),
                     wm.cloned().unwrap_or_default(),
                     m.cloned().unwrap_or_default(),
+                    res.cloned().unwrap_or_default(),
                     Satisfied,
                 ),
             )

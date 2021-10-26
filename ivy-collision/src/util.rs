@@ -5,6 +5,7 @@ use ultraviolet::{Mat4, Vec3};
 use crate::CollisionPrimitive;
 
 pub const TOLERANCE: f32 = 0.01;
+pub const MAX_ITERATIONS: usize = 10;
 
 // Represents a point on the minkowski difference boundary which carries the
 // individual support points
@@ -66,4 +67,14 @@ pub fn barycentric_vector(p: Vec3, a: Vec3, b: Vec3, c: Vec3) -> (f32, f32, f32)
     let w = (d00 * d21 - d01 * d20) * inv_denom;
     let u = 1.0 - v - w;
     (u, v, w)
+}
+
+/// Gets the normal of a direction vector with a reference point. Normal will
+/// face the same direciton as reference
+pub fn triple_prod(a: Vec3, b: Vec3, c: Vec3) -> Vec3 {
+    a.cross(b).cross(c).normalized()
+}
+
+pub fn project_plane(a: Vec3, normal: Vec3) -> Vec3 {
+    a - normal * a.dot(normal)
 }

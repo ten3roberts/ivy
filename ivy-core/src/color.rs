@@ -72,6 +72,10 @@ impl Color {
     pub fn magenta() -> Self {
         Self::rgba(1.0, 0.0, 1.0, 1.0)
     }
+
+    pub fn yellow() -> Self {
+        Self::rgba(1.0, 1.0, 0.0, 1.0)
+    }
 }
 
 impl From<Vec3> for Color {

@@ -1,7 +1,7 @@
 use std::mem;
 
 use hecs::World;
-use ivy_core::{Color, Events, Gizmos, Position, Rotation, Scale, TimedScope, TransformMatrix};
+use ivy_core::{Events, Gizmos, Position, Rotation, Scale, TimedScope, TransformMatrix};
 use ivy_resources::Key;
 use slotmap::SlotMap;
 use smallvec::{Array, SmallVec};
@@ -95,26 +95,10 @@ impl<T: Array<Item = Object>> CollisionTree<T> {
         let iteration = self.iteration;
 
         world
-            .query::<(
-                &Scale,
-                &Position,
-                &Rotation,
-                &Collider,
-                &mut TreeMarker,
-                &mut Color,
-            )>()
+            .query::<(&Scale, &Position, &Rotation, &Collider, &mut TreeMarker)>()
             .iter()
-            .for_each(|(_, (scale, pos, rot, collider, marker, color))| {
+            .for_each(|(_, (scale, pos, rot, collider, marker))| {
                 let index = marker.index;
-                let node = &nodes[index];
-
-                let node_color = Color::hsl(
-                    node.depth as f32 * 60.0,
-                    1.0,
-                    if node.children.is_some() { 0.1 } else { 0.5 },
-                );
-
-                *color = node_color;
 
                 // Bounds have changed
                 if marker.object.max_scale != scale.component_max() {
