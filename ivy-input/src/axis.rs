@@ -2,11 +2,13 @@ use glfw::{Key, MouseButton};
 
 use crate::Input;
 
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum InputDirection {
     Horizontal,
     Vertical,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum InputAxis {
     Keyboard {
         pos: Key,
@@ -22,6 +24,12 @@ pub enum InputAxis {
     },
     /// Represents a dummy, always 0 input axis
     None,
+}
+
+impl Default for InputAxis {
+    fn default() -> Self {
+        Self::None
+    }
 }
 
 impl InputAxis {

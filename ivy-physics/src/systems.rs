@@ -75,7 +75,7 @@ pub fn collision_system(world: &World, events: &mut Events) -> Result<()> {
                         events.send(Collision {
                             a: e1,
                             b: e2,
-                            intersection,
+                            contact: intersection,
                         })
                     }
 
@@ -104,12 +104,12 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
 
         let total_mass = a_mass + b_mass;
 
-        let impulse = resolve_collision(coll.intersection, &a, &b);
+        let impulse = resolve_collision(&coll.contact, &a, &b);
 
         drop((a_query, b_query));
 
         {
-            let dir = coll.intersection.normal * coll.intersection.depth;
+            let dir = coll.contact.normal * coll.contact.depth;
 
             let mut pos = world.get_mut::<Position>(coll.a)?;
             *pos -= Position(dir * (b_mass / total_mass));
@@ -121,11 +121,11 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
         }
 
         let mut effector = world.get_mut::<Effector>(coll.a)?;
-        effector.apply_impulse_at(impulse, coll.intersection.points[0] - *a_pos);
+        effector.apply_impulse_at(impulse, coll.contact.points[0] - *a_pos);
         drop(effector);
 
         let mut effector = world.get_mut::<Effector>(coll.b)?;
-        effector.apply_impulse_at(-impulse, coll.intersection.points[1] - *b_pos);
+        effector.apply_impulse_at(-impulse, coll.contact.points[1] - *b_pos);
 
         Ok(())
     })

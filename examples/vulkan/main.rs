@@ -7,7 +7,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Context};
-use collision::{Collider, Cube, Object, Ray, Sphere};
+use collision::{Collider, Cube, Object, Ray};
 use flume::Receiver;
 use glfw::{Action, CursorMode, Glfw, Key, WindowEvent};
 use graphics::gizmos::GizmoRenderer;
@@ -67,12 +67,19 @@ where
 
 struct Mover {
     translate: InputVector,
+    rotate: InputVector,
+    local: bool,
     speed: f32,
 }
 
 impl Mover {
-    fn new(translate: InputVector, speed: f32) -> Self {
-        Self { translate, speed }
+    fn new(translate: InputVector, rotate: InputVector, speed: f32, local: bool) -> Self {
+        Self {
+            local,
+            translate,
+            rotate,
+            speed,
+        }
     }
 }
 
@@ -81,7 +88,14 @@ fn move_system(world: &mut World, input: &Input, dt: f32) {
         .query::<(&Mover, &mut Position, &mut Rotation)>()
         .iter()
         .for_each(|(_, (m, p, r))| {
-            *p += Position(r.into_matrix() * m.translate.get(input)) * m.speed * dt;
+            if m.local {
+                *p += Position(r.into_matrix() * m.translate.get(input)) * m.speed * dt;
+            } else {
+                *p += Position(m.translate.get(input)) * m.speed * dt;
+            }
+
+            let rot = m.rotate.get(input) * dt;
+            *r = Rotation(**r * Rotor3::from_euler_angles(rot.x, rot.y, rot.z));
         })
 }
 
@@ -400,7 +414,7 @@ fn setup_objects(
         .load("./res/models/sphere.gltf")
         .context("Failed to load sphere model")??;
 
-    let sphere_mesh = resources.get(document)?.mesh(0);
+    let _sphere_mesh = resources.get(document)?.mesh(0);
 
     let material: Handle<Material> = resources.load(MaterialInfo {
         albedo: "./res/textures/metal.png".into(),
@@ -424,41 +438,31 @@ fn setup_objects(
         Color::rgb(1.0, 1.0, 1.0),
         Mass(20.0),
         Velocity::default(),
-        Position::new(0.0, 1.0, 2.0),
-        // AngularVelocity::new(0.0, 1.0, 0.5),
+        Position::new(0.0, 0.6, -1.2),
         Scale::uniform(0.5),
-        Rotation::euler_angles(0.0, 0.0, 0.0),
-        Mover {
-            translate: InputVector {
+        // Rotation::euler_angles(0.0, 1.0, 1.0),
+        Mover::new(
+            InputVector {
                 x: InputAxis::keyboard(Key::L, Key::H),
                 y: InputAxis::keyboard(Key::K, Key::J),
                 z: InputAxis::keyboard(Key::I, Key::O),
             },
-            speed: 1.0,
-        },
+            InputVector {
+                x: InputAxis::none(),
+                y: InputAxis::keyboard(Key::Down, Key::Up),
+                z: InputAxis::keyboard(Key::Left, Key::Right),
+            },
+            1.0,
+            false,
+        ),
         cube_mesh,
         material,
         assets.geometry_pass,
     ));
 
-    // world.spawn((
-    //     AngularMass(1.0),
-    //     AngularVelocity::default(),
-    //     Collider::new(Cube::new(1.0)),
-    //     Color::white(),
-    //     Mass(2.0),
-    //     Position::new(-3.0, 0.0, 0.0),
-    //     Resitution(1.0),
-    //     Scale::uniform(0.4),
-    //     Velocity::new(0.5, 0.0, 0.0),
-    //     material,
-    //     assets.geometry_pass,
-    //     cube_mesh,
-    // ));
-
     let mut rng = StdRng::seed_from_u64(43);
 
-    const COUNT: usize = 64;
+    const COUNT: usize = 0;
 
     world
         .spawn_batch((0..COUNT).map(|_| {
@@ -526,7 +530,7 @@ impl LogicLayer {
 
         let camera = world.spawn((
             Camera::perspective(1.0, extent.aspect(), 0.1, 100.0),
-            Mover::new(input_vec, 5.0),
+            Mover::new(input_vec, Default::default(), 5.0, true),
             MainCamera,
             Position(Vec3::new(0.0, 0.0, 5.0)),
             Rotation(Rotor3::identity()),
@@ -611,7 +615,7 @@ impl Layer for LogicLayer {
 
         let dt = frame_time.secs();
 
-        let (_e, (camera_pos, camera_rot)) = world
+        let (_e, (_, camera_rot)) = world
             .query_mut::<(&Position, &mut Rotation)>()
             .with::<Camera>()
             .into_iter()
@@ -636,7 +640,7 @@ impl Layer for LogicLayer {
             .iter()
             .for_each(|(_, val)| *val = Color::white());
 
-        let ray = Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(0.0, 0.0, -1.0));
+        let ray = Ray::new(Vec3::new(1.0, 0.0, 0.0), Vec3::new(0.0, 1.0, -1.0));
         let mut gizmos = resources.get_default_mut::<Gizmos>()?;
 
         gizmos.push(Gizmo::Line {
@@ -647,18 +651,25 @@ impl Layer for LogicLayer {
             corner_radius: 1.0,
         });
 
-        if let Some((e, intersection)) = ray.cast(world)
+        if let Some((_, contact)) = ray.cast(world)
         // Ray::new(**camera_pos, camera_rot.into_matrix() * -Vec3::unit_z()).cast(world)
         {
             gizmos.push(Gizmo::Line {
-                origin: Vec3::zero(),
-                color: Color::yellow(),
-                dir: intersection.normal * 10.0,
-                radius: 0.1,
+                origin: contact.points[0],
+                color: Color::blue(),
+                dir: contact.normal,
+                radius: 0.02,
                 corner_radius: 1.0,
             });
 
-            let _ = world.get_mut::<Color>(e).map(|mut val| *val = Color::red());
+            for (i, p) in contact.points.iter().enumerate() {
+                gizmos.push(Gizmo::Sphere {
+                    origin: *p,
+                    color: Color::hsl(i as f32 * 60.0, 1.0, 0.5),
+                    radius: 0.1,
+                    corner_radius: 1.0,
+                })
+            }
         }
 
         // Clear gizmos from last frame

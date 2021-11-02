@@ -1,4 +1,4 @@
-use ivy_collision::Intersection;
+use ivy_collision::Contact;
 use ultraviolet::Vec3;
 
 use crate::components::*;
@@ -12,7 +12,7 @@ pub fn point_vel(p: Vec3, w: AngularVelocity) -> Vec3 {
 }
 
 /// Generates an impulse for solving a collision.
-pub fn resolve_collision(intersection: Intersection, a: &RbQuery, b: &RbQuery) -> Vec3 {
+pub fn resolve_collision(intersection: &Contact, a: &RbQuery, b: &RbQuery) -> Vec3 {
     let ra = intersection.points[0] - **a.pos;
     let rb = intersection.points[1] - **b.pos;
     let aw = *a.ang_vel;

@@ -2,10 +2,10 @@ use std::ops::Deref;
 
 use ultraviolet::{Mat4, Vec3};
 
-use crate::CollisionPrimitive;
+use crate::{CollisionPrimitive, Ray};
 
-pub const TOLERANCE: f32 = 0.01;
-pub const MAX_ITERATIONS: usize = 10;
+pub const TOLERANCE: f32 = 0.001;
+pub const MAX_ITERATIONS: usize = 1;
 
 // Represents a point on the minkowski difference boundary which carries the
 // individual support points
@@ -51,6 +51,7 @@ pub fn support<T: CollisionPrimitive>(
 ) -> Vec3 {
     transform.transform_point3(coll.support(transform_inv.transform_vec3(dir).normalized()))
 }
+
 /// Compute barycentric coordinates of p in relation to the triangle defined by (a, b, c).
 pub fn barycentric_vector(p: Vec3, a: Vec3, b: Vec3, c: Vec3) -> (f32, f32, f32) {
     let v0 = b - a;
@@ -77,4 +78,72 @@ pub fn triple_prod(a: Vec3, b: Vec3, c: Vec3) -> Vec3 {
 
 pub fn project_plane(a: Vec3, normal: Vec3) -> Vec3 {
     a - normal * a.dot(normal)
+}
+
+pub fn max_axis(val: Vec3) -> Vec3 {
+    if val.x > val.y {
+        if val.x > val.z {
+            Vec3::new(1.0, 0.0, 0.0)
+        } else {
+            Vec3::new(0.0, 0.0, 1.0)
+        }
+    } else if val.y > val.z {
+        Vec3::new(0.0, 1.0, 0.0)
+    } else {
+        Vec3::new(0.0, 0.0, 1.0)
+    }
+}
+
+pub fn max_axis_abs(val: Vec3) -> Vec3 {
+    if val.x.abs() > val.y.abs() {
+        if val.x > val.z {
+            Vec3::new(1.0, 0.0, 0.0)
+        } else {
+            Vec3::new(0.0, 0.0, 1.0)
+        }
+    } else if val.y.abs() > val.z.abs() {
+        Vec3::new(0.0, 1.0, 0.0)
+    } else {
+        Vec3::new(0.0, 0.0, 1.0)
+    }
+}
+
+pub fn plane_ray(p: Vec3, normal: Vec3, ray: &Ray) -> Vec3 {
+    let rel = ray.origin() - p;
+    let along = -rel.dot(normal);
+    let t = ray.dir().dot(normal);
+
+    // Prevent division by 0
+    if t.abs() < TOLERANCE {
+        return p;
+    }
+
+    ray.origin() + along * (ray.dir() / t)
+}
+
+/// Returns an optional intersection between a triangle and a ray
+pub fn triangle_ray<T: Deref<Target = Vec3>>(points: &[T], ray: &Ray) -> Option<Vec3> {
+    let [a, b, c] = [*points[0], *points[1], *points[2]];
+
+    let ab = b - a;
+    let ac = c - a;
+    let a0 = -a;
+
+    let ab = project_plane(ab, ray.dir());
+    let ac = project_plane(ac, ray.dir());
+    let a0 = project_plane(a0, ray.dir());
+
+    let perp = triple_prod(ac, ab, ab);
+
+    if perp.dot(a0) > 0.0 {
+        return None;
+    }
+    let perp = triple_prod(ab, ac, ac);
+
+    if perp.dot(a0) > 0.0 {
+        return None;
+    }
+
+    let normal = (b - a).cross(c - a).normalized();
+    Some(plane_ray(a, normal, ray))
 }

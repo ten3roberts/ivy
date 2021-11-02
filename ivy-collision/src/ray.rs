@@ -3,9 +3,9 @@ use ivy_core::{Position, TransformMatrix};
 use ultraviolet::{Mat4, Vec3};
 
 use crate::{
-    epa2d,
+    epa,
     util::{support, SupportPoint},
-    Collider, CollisionPrimitive, Intersection, Simplex,
+    Collider, CollisionPrimitive, Contact, Simplex,
 };
 
 pub struct Ray {
@@ -29,7 +29,7 @@ impl Ray {
         dir: Vec3,
     ) -> SupportPoint {
         let a = support(&transform, &transform_inv, collider, dir);
-        eprintln!("Support in {:?}: {:?}", dir, a);
+
         SupportPoint {
             pos: a - self.origin,
             a,
@@ -42,7 +42,7 @@ impl Ray {
         &self,
         collider: &T,
         transform: Mat4,
-    ) -> Option<Intersection> {
+    ) -> Option<Contact> {
         let transform_inv = transform.inversed();
         // Get first support function in direction of separation
         // let dir = (a_pos - b_pos).normalized();
@@ -54,12 +54,10 @@ impl Ray {
 
         while let Some(dir) = simplex.next_flat(self.dir) {
             let dir = dir.normalized();
-            dbg!(dir.dot(self.dir));
 
             assert!((dir.mag() - 1.0 < 0.0001));
             // Get the next simplex
             let p = self.support(collider, &transform, &transform_inv, dir);
-            dbg!(p, p.dot(dir));
 
             // New point was not past the origin
             // No collision
@@ -72,17 +70,21 @@ impl Ray {
             simplex.push(p);
         }
 
+        // simplex.inflate(
+        //     |dir| self.support(collider, &transform, &transform_inv, dir),
+        //     self,
+        // );
+
         // Collision found
-        Some(epa2d::epa_ray(
-            &transform,
-            &transform_inv,
-            collider,
+        // Perform epa to find contact points
+        Some(epa::epa_ray(
+            |dir| self.support(collider, &transform, &transform_inv, dir),
             simplex,
             self,
         ))
     }
 
-    pub fn cast(&self, world: &World) -> Option<(Entity, Intersection)> {
+    pub fn cast(&self, world: &World) -> Option<(Entity, Contact)> {
         world
             .query::<(&Position, &ivy_core::Rotation, &ivy_core::Scale, &Collider)>()
             .iter()

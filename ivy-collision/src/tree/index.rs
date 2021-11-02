@@ -11,6 +11,7 @@ use std::fmt::Debug;
 use ultraviolet::Vec3;
 
 use crate::intersect;
+use crate::util::max_axis;
 use crate::Collider;
 use crate::Collision;
 
@@ -202,7 +203,7 @@ impl NodeIndex {
                         let collision = Collision {
                             a: a.entity,
                             b: b.entity,
-                            intersection,
+                            contact: intersection,
                         };
 
                         events.send(collision);
@@ -295,19 +296,5 @@ impl<'a, T: Array<Item = Object>> Debug for DebugNode<'a, T> {
         }
 
         dbg.finish()
-    }
-}
-
-fn max_axis(val: Vec3) -> Vec3 {
-    if val.x > val.y {
-        if val.x > val.z {
-            Vec3::new(1.0, 0.0, 0.0)
-        } else {
-            Vec3::new(0.0, 0.0, 1.0)
-        }
-    } else if val.y > val.z {
-        Vec3::new(0.0, 1.0, 0.0)
-    } else {
-        Vec3::new(0.0, 0.0, 1.0)
     }
 }
