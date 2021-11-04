@@ -5,7 +5,7 @@ use ultraviolet::{Mat4, Vec3};
 use crate::{CollisionPrimitive, Ray};
 
 pub const TOLERANCE: f32 = 0.001;
-pub const MAX_ITERATIONS: usize = 1;
+pub const MAX_ITERATIONS: usize = 5;
 
 // Represents a point on the minkowski difference boundary which carries the
 // individual support points
@@ -109,21 +109,32 @@ pub fn max_axis_abs(val: Vec3) -> Vec3 {
 }
 
 pub fn plane_ray(p: Vec3, normal: Vec3, ray: &Ray) -> Vec3 {
-    let rel = ray.origin() - p;
+    plane_intersect(ray.origin() - p, normal, ray.dir())
+}
+
+pub fn plane_intersect(p: Vec3, normal: Vec3, dir: Vec3) -> Vec3 {
+    let rel = -p;
     let along = -rel.dot(normal);
-    let t = ray.dir().dot(normal);
+    let t = dir.dot(normal);
 
     // Prevent division by 0
     if t.abs() < TOLERANCE {
         return p;
     }
 
-    ray.origin() + along * (ray.dir() / t)
+    along * (dir / t)
+}
+
+pub fn edge_intersect(p: Vec3, tangent: Vec3, ray: &Ray) -> Vec3 {
+    // Path of the edge point in in tangent plane
+    let projected = project_plane(p, tangent);
+
+    ray.dir() * (p.mag() / (projected.dot(ray.dir())))
 }
 
 /// Returns an optional intersection between a triangle and a ray
-pub fn triangle_ray<T: Deref<Target = Vec3>>(points: &[T], ray: &Ray) -> Option<Vec3> {
-    let [a, b, c] = [*points[0], *points[1], *points[2]];
+pub fn triangle_ray(points: &[Vec3], ray: &Ray) -> Option<Vec3> {
+    let [a, b, c] = [points[0], points[1], points[2]];
 
     let ab = b - a;
     let ac = c - a;
@@ -146,4 +157,60 @@ pub fn triangle_ray<T: Deref<Target = Vec3>>(points: &[T], ray: &Ray) -> Option<
 
     let normal = (b - a).cross(c - a).normalized();
     Some(plane_ray(a, normal, ray))
+}
+
+/// Returns an optional intersection between a triangle and a ray
+/// Assumes the points are relative to the ray origin
+pub fn triangle_intersect(points: &[Vec3], dir: Vec3) -> Option<Vec3> {
+    let [a, b, c] = [points[0], points[1], points[2]];
+
+    let ab = b - a;
+    let ac = c - a;
+    let a0 = -a;
+
+    let ab = project_plane(ab, dir);
+    let ac = project_plane(ac, dir);
+    let a0 = project_plane(a0, dir);
+
+    let perp = triple_prod(ac, ab, ab);
+
+    if perp.dot(a0) > 0.0 {
+        return None;
+    }
+    let perp = triple_prod(ab, ac, ac);
+
+    if perp.dot(a0) > 0.0 {
+        return None;
+    }
+
+    let normal = (b - a).cross(c - a).normalized();
+    Some(plane_intersect(a, normal, dir))
+}
+
+/// Returns an optional intersection between a triangle and a ray
+/// Assumes the points are relative to the ray origin
+pub fn check_triangle_intersect(points: &[Vec3], dir: Vec3) -> bool {
+    let [a, b, c] = [points[0], points[1], points[2]];
+
+    let ab = b - a;
+    let ac = c - a;
+    let a0 = -a;
+
+    let ab = project_plane(ab, dir);
+    let ac = project_plane(ac, dir);
+    let a0 = project_plane(a0, dir);
+
+    let perp = triple_prod(ac, ab, ab);
+
+    if perp.dot(a0) > 0.0 {
+        return false;
+    }
+    let perp = triple_prod(ab, ac, ac);
+
+    if perp.dot(a0) > 0.0 {
+        return false;
+    }
+
+    let normal = (b - a).cross(c - a).normalized();
+    true
 }

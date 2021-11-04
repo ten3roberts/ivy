@@ -1,5 +1,5 @@
 use hecs::{Entity, World};
-use ivy_core::{Position, TransformMatrix};
+use ivy_core::{Gizmos, Position, TransformMatrix};
 use ultraviolet::{Mat4, Vec3};
 
 use crate::{
@@ -42,6 +42,7 @@ impl Ray {
         &self,
         collider: &T,
         transform: Mat4,
+        gizmos: &mut Gizmos,
     ) -> Option<Contact> {
         let transform_inv = transform.inversed();
         // Get first support function in direction of separation
@@ -81,17 +82,18 @@ impl Ray {
             |dir| self.support(collider, &transform, &transform_inv, dir),
             simplex,
             self,
+            gizmos,
         ))
     }
 
-    pub fn cast(&self, world: &World) -> Option<(Entity, Contact)> {
+    pub fn cast(&self, world: &World, gizmos: &mut Gizmos) -> Option<(Entity, Contact)> {
         world
             .query::<(&Position, &ivy_core::Rotation, &ivy_core::Scale, &Collider)>()
             .iter()
             .find_map(|(e, (pos, rot, scale, collider))| {
                 let transform = TransformMatrix::new(*pos, *rot, *scale);
 
-                if let Some(val) = self.intersects(collider, *transform) {
+                if let Some(val) = self.intersects(collider, *transform, gizmos) {
                     Some((e, val))
                 } else {
                     None

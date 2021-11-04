@@ -16,6 +16,7 @@ fn ray_distance(p: Vec3, normal: Vec3, ray: &Ray) -> f32 {
     // if normal.dot(ray.dir()) > 0.0 {
     //     f32::MIN
     // } else {
-    plane_ray(p, normal, ray).dot(ray.dir()) // * normal.dot(ray.dir()).signum()
-                                             // }
+    -plane_ray(p, normal, ray).dot(ray.dir()) * normal.dot(ray.dir()).signum()
+
+    // }
 }

@@ -53,6 +53,10 @@ impl Color {
         Self::rgba(0.0, 0.0, 0.0, 1.0)
     }
 
+    pub fn gray() -> Self {
+        Self::rgba(0.5, 0.5, 0.5, 1.0)
+    }
+
     pub fn red() -> Self {
         Self::rgba(1.0, 0.0, 0.0, 1.0)
     }

@@ -26,7 +26,7 @@ use ivy::{
 use ivy_resources::Resources;
 use parking_lot::RwLock;
 use physics::{
-    components::{AngularMass, AngularVelocity, Mass, Resitution, Velocity},
+    components::{AngularMass, Mass, Resitution, Velocity},
     PhysicsLayer,
 };
 use postprocessing::pbr::{create_pbr_pipeline, PBRInfo};
@@ -651,7 +651,7 @@ impl Layer for LogicLayer {
             corner_radius: 1.0,
         });
 
-        if let Some((_, contact)) = ray.cast(world)
+        if let Some((_, contact)) = ray.cast(world, &mut *gizmos)
         // Ray::new(**camera_pos, camera_rot.into_matrix() * -Vec3::unit_z()).cast(world)
         {
             gizmos.push(Gizmo::Line {
@@ -665,12 +665,19 @@ impl Layer for LogicLayer {
             for (i, p) in contact.points.iter().enumerate() {
                 gizmos.push(Gizmo::Sphere {
                     origin: *p,
-                    color: Color::hsl(i as f32 * 60.0, 1.0, 0.5),
-                    radius: 0.1,
+                    color: Color::hsl(i as f32 * 30.0, 1.0, 0.5),
+                    radius: 0.05 / (i + 1) as f32,
                     corner_radius: 1.0,
                 })
             }
         }
+
+        gizmos.push(Gizmo::Sphere {
+            origin: Vec3::zero(),
+            color: Color::magenta(),
+            radius: 0.05,
+            corner_radius: 1.0,
+        });
 
         // Clear gizmos from last frame
         OverTime::<RelativeOffset>::update(world, dt);
