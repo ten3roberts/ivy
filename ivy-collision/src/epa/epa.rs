@@ -23,9 +23,9 @@ pub fn epa<F: Fn(Vec3) -> SupportPoint>(support_func: F, simplex: Simplex) -> Co
                 // eprintln!("The two shapes are the same");
                 let p = support_func(Vec3::unit_x());
                 return Contact {
-                    points: ContactPoints::new(&[p.a, p.b]),
-                    depth: p.mag(),
-                    normal: p.normalized(),
+                    points: ContactPoints::double(p.a, p.b),
+                    depth: p.support.mag(),
+                    normal: p.support.normalized(),
                 };
                 // let p = support(a_transform, a_transform_inv, a_coll, Vec3::unit_x());
                 // return Intersection {
@@ -43,7 +43,7 @@ pub fn epa<F: Fn(Vec3) -> SupportPoint>(support_func: F, simplex: Simplex) -> Co
 
         let p = support_func(min.normal);
 
-        let support_dist = min.normal.dot(p.pos);
+        let support_dist = min.normal.dot(p.support);
 
         if iterations < MAX_ITERATIONS && (support_dist - min.distance).abs() > TOLERANCE {
             polytype.add(p, Face::new);

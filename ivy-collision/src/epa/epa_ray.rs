@@ -1,6 +1,5 @@
 use crate::{
-    epa::ray_distance,
-    util::{SupportPoint, MAX_ITERATIONS, TOLERANCE},
+    util::{plane_ray, ray_distance, SupportPoint, MAX_ITERATIONS, TOLERANCE},
     Contact, ContactPoints, Face, Polytype, Ray, Simplex,
 };
 
@@ -22,16 +21,16 @@ pub fn epa_ray<F: Fn(Vec3) -> SupportPoint>(
     loop {
         dbg!(iterations);
         // Find the face closest to the ray
-        let (index, min_face) = match polytype.find_closest_face() {
+        let (_index, max_face) = match polytype.find_furthest_face() {
             Some(val) => val,
             None => {
-                panic!("No intersecting faces");
+                unreachable!("No intersecting faces");
             }
         };
 
         // Search in the normal of the face pointing against the ray
 
-        let dir = min_face.normal * -min_face.normal.dot(ray.dir()).signum();
+        let dir = max_face.normal * -max_face.normal.dot(ray.dir()).signum();
 
         // let mid = project_plane(
         //     (polytype[face.indices[0]].pos
@@ -44,36 +43,44 @@ pub fn epa_ray<F: Fn(Vec3) -> SupportPoint>(
         // let (closest_edge, edge_dist) = face.closest_edge(&polytype.points, ray);
 
         // let search_dir = (dir + mid.normalized()).normalized();
-        let search_dir = dir;
 
-        let p = support_func(search_dir);
-        let distance = ray_distance(p.a, dir, ray);
+        let p = support_func(dir);
+        let support_distance = ray_distance(p, max_face.normal, ray);
         eprintln!("Searching in {:?}", dir);
 
         // let distance = ray_distance(p.a, dir, ray);
-        eprintln!("{}, found {}", min_face.distance, distance);
+        eprintln!("{}, found {}", max_face.distance, support_distance);
 
-        if iterations >= MAX_ITERATIONS || (distance - min_face.distance).abs() < TOLERANCE {
-            // let face_points = ContactPoints::from_iter(polytype.points.iter().map(|val| val.a));
-            let face_points = ContactPoints::new(&[
-                polytype[min_face.indices[0]].pos,
-                polytype[min_face.indices[1]].pos,
-                polytype[min_face.indices[2]].pos,
-            ]);
-
+        if iterations >= MAX_ITERATIONS
+            || (support_distance.abs() - max_face.distance.abs()).abs() < TOLERANCE
+        {
             gizmos.push(Gizmo::Sphere {
-                origin: -min_face.distance * ray.dir(),
+                origin: max_face.distance * ray.dir(),
                 color: Color::blue(),
                 radius: 0.05,
-                corner_radius: 1.0,
             });
 
-            for (i, face) in polytype.faces.iter().enumerate() {
+            gizmos.push(Gizmo::Triangle {
+                color: Color::red(),
+                points: max_face.a_points(&polytype.points),
+                radius: 0.01,
+            });
+
+            gizmos.push(Gizmo::Triangle {
+                color: Color::red(),
+                points: max_face.support_points(&polytype.points),
+                radius: 0.01,
+            });
+
+            eprintln!("Max dot: {:?}", max_face.normal.dot(ray.dir()).signum());
+
+            for face in polytype.faces.iter() {
                 // let color = Color::hsl(i as f32 * 30.0, distance / face.distance, 0.5);
-                let (color, radius) = if face.normal.dot(ray.dir()) > 0.0 {
-                    (Color::gray(), 0.005)
+                let radius = 0.005;
+                let color = if face.normal.dot(ray.dir()) > 0.0 {
+                    Color::gray()
                 } else {
-                    (Color::yellow(), 0.01)
+                    Color::yellow()
                 };
 
                 let mid = face.middle(&polytype.points);
@@ -85,49 +92,47 @@ pub fn epa_ray<F: Fn(Vec3) -> SupportPoint>(
                     corner_radius: 1.0,
                 });
 
-                let p = -ray_distance(polytype[face.indices[0]].a, face.normal, ray) * ray.dir();
+                let p = ray_distance(polytype[face.indices[0]], face.normal, ray) * ray.dir();
 
-                //                 gizmos.push(Gizmo::Sphere {
-                //                     origin: p,
-                //                     color,
-                //                     radius: 0.01,
-                //                     corner_radius: 1.0,
-                //                 });
+                gizmos.push(Gizmo::Sphere {
+                    origin: p,
+                    color,
+                    radius: 0.01,
+                });
 
-                for edge in face.edges() {
-                    let [p1, p2] = [&polytype[edge.0], &polytype[edge.1]];
-                    gizmos.push(ivy_core::Gizmo::Line {
-                        origin: p1.pos,
-                        color,
-                        dir: (p2.pos - p1.pos),
-                        radius,
-                        corner_radius: 1.0,
-                    })
-                    // gizmos.push(ivy_core::Gizmo::Sphere {
-                    //     origin: p.pos,
-                    //     color: Color::white(),
-                    //     radius: 0.1,
-                    //     corner_radius: 1.0,
-                    // })
-                }
+                gizmos.push(Gizmo::Triangle {
+                    color,
+                    points: face.support_points(&polytype.points),
+                    radius: 0.01,
+                });
             }
 
             return Contact {
-                points: ContactPoints::new(&[
-                    p.pos,
-                    face_points[0],
-                    face_points[1],
-                    face_points[2],
-                ]),
-                // points: ContactPoints::from_iter(polytype.points.iter().map(|val| val.pos)),
+                // points: ContactPoints::new(&[polytype[min_face.indices[0]].a]),
+                points: ContactPoints::single(plane_ray(
+                    polytype[max_face.indices[0]].a,
+                    max_face.normal,
+                    ray,
+                )),
                 // points: ContactPoints::new(&[
-                //     polytype[face.indices[0]].a,
-                //     polytype[face.indices[1]].a,
-                //     polytype[face.indices[2]].a,
+                //     p.pos,
+                //     face_points[0],
+                //     face_points[1],
+                //     face_points[2],
                 // ]),
-                depth: min_face.distance,
+                // // points: ContactPoints::from_iter(polytype.points.iter().map(|val| val.pos)),
+                // // points: ContactPoints::new(&[
+                // //     polytype[face.indices[0]].a,
+                // //     polytype[face.indices[1]].a,
+                // //     polytype[face.indices[2]].a,
+                // // ]),
+                depth: max_face.distance,
                 normal: dir,
             };
+            // },
+            //     color: todo!(),
+            //     points: todo!(),
+            //     radius: todo!(), ;
 
             // let p1 = polytype[min.indices[0]];
 
@@ -142,19 +147,9 @@ pub fn epa_ray<F: Fn(Vec3) -> SupportPoint>(
         }
         // Support is further than the current closest face
         else {
-            // eprintln!("old: {:?}, new: {:?}", face.normal, -dir);
-            let face = &mut polytype.faces[index as usize];
-            // Invert the face normal to point back
-
-            // If the polytype is a triangle, force the only face to be removed
-            // and expanded from
-            // if polytype.points.len() == 3 {
-            // face.normal = dir;
-            // }
-
             // Add the new point
             // polytype.add_decimate(p, dir, |a, b| Face::new_ray(a, b, ray));
-            polytype.add_decimate(min_face, p, ray);
+            polytype.add_decimate(max_face, p, ray);
         }
 
         iterations += 1;

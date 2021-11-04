@@ -1,28 +1,30 @@
-use std::{
-    iter::FromIterator,
-    ops::{Deref, Index},
-};
+use std::ops::Index;
 
 use hecs::Entity;
-use smallvec::SmallVec;
 use ultraviolet::{Mat4, Vec3};
 
 use crate::{epa, gjk, util::minkowski_diff, CollisionPrimitive};
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct ContactPoints(SmallVec<[Vec3; 4]>);
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum ContactPoints {
+    Single([Vec3; 1]),
+    Double([Vec3; 2]),
+}
 
 impl ContactPoints {
-    pub fn new(points: &[Vec3]) -> Self {
-        Self(SmallVec::from_slice(points))
+    pub fn single(p: Vec3) -> Self {
+        Self::Single([p])
     }
 
-    pub fn from_iter<I: Iterator<Item = Vec3>>(iter: I) -> Self {
-        Self(SmallVec::from_iter(iter))
+    pub fn double(a: Vec3, b: Vec3) -> Self {
+        Self::Double([a, b])
     }
 
     pub fn points(&self) -> &[Vec3] {
-        &self.0
+        match self {
+            ContactPoints::Single(val) => val,
+            ContactPoints::Double(val) => val,
+        }
     }
 
     pub fn iter<'a>(&'a self) -> std::slice::Iter<'a, Vec3> {
@@ -30,15 +32,21 @@ impl ContactPoints {
     }
 }
 
-impl From<Vec<Vec3>> for ContactPoints {
-    fn from(val: Vec<Vec3>) -> Self {
-        Self(SmallVec::from_vec(val))
+impl From<Vec3> for ContactPoints {
+    fn from(val: Vec3) -> Self {
+        Self::Single([val])
     }
 }
 
-impl<T: Deref<Target = Vec3>> From<&[T]> for ContactPoints {
-    fn from(val: &[T]) -> Self {
-        Self(SmallVec::from_iter(val.into_iter().map(|val| **val)))
+impl From<[Vec3; 1]> for ContactPoints {
+    fn from(val: [Vec3; 1]) -> Self {
+        Self::Single(val)
+    }
+}
+
+impl From<[Vec3; 2]> for ContactPoints {
+    fn from(val: [Vec3; 2]) -> Self {
+        Self::Double(val)
     }
 }
 
@@ -48,7 +56,10 @@ impl<'a> IntoIterator for &'a ContactPoints {
     type IntoIter = std::slice::Iter<'a, Vec3>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.0.iter()
+        match self {
+            ContactPoints::Single(val) => val.iter(),
+            ContactPoints::Double(val) => val.iter(),
+        }
     }
 }
 

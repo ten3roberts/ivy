@@ -1,13 +1,11 @@
 use smallvec::{Array, SmallVec};
-use std::ops::Index;
+use std::{ops::Index, time::Duration};
 use ultraviolet::Vec3;
 
 use crate::{
-    util::{barycentric_vector, project_plane, triangle_intersect, SupportPoint},
+    util::{barycentric_vector, ray_distance, SupportPoint},
     ContactPoints, Ray, Simplex,
 };
-
-use super::ray_distance;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Face {
@@ -25,10 +23,12 @@ impl Face {
             points[indices[2] as usize],
         ];
 
-        let normal = (p2.pos - p1.pos).cross(p3.pos - p1.pos).normalized();
+        let normal = (p2.support - p1.support)
+            .cross(p3.support - p1.support)
+            .normalized();
 
         // Distance to the origin of the minkowski difference
-        let distance = normal.dot(p1.pos);
+        let distance = normal.dot(p1.support);
 
         // Take care of handedness
         let normal = normal * distance.signum();
@@ -56,9 +56,11 @@ impl Face {
             points[indices[2] as usize],
         ];
 
-        let total_radial: Vec3 = [p1, p2, p3].iter().map(|p| p.pos - reference_point).sum();
+        let total_radial: Vec3 = [p1, p2].iter().map(|p| p.support - reference_point).sum();
 
-        let normal = (p2.pos - p1.pos).cross(p3.pos - p1.pos).normalized();
+        let normal = (p2.support - p1.support)
+            .cross(p3.support - p1.support)
+            .normalized();
 
         dbg!(normal.dot(total_radial));
 
@@ -92,12 +94,17 @@ impl Face {
         // };
 
         if normal.x.is_nan() || normal.y.is_nan() || normal.z.is_nan() {
-            dbg!(indices, normal, p2.pos - p1.pos, p3.pos - p1.pos);
-            std::thread::sleep(std::time::Duration::from_secs(100000));
+            dbg!(
+                indices,
+                normal,
+                p2.support - p1.support,
+                p3.support - p1.support
+            );
+            std::thread::sleep(Duration::from_secs(100));
             panic!("");
         }
 
-        let distance = ray_distance(p1.a, normal, ray);
+        let distance = ray_distance(p1, normal, ray);
 
         Face {
             indices: [indices[0], indices[1], indices[2]],
@@ -106,34 +113,19 @@ impl Face {
         }
     }
 
-    pub fn points(&self, points: &[SupportPoint]) -> [SupportPoint; 3] {
+    pub fn a_points(&self, points: &[SupportPoint]) -> [Vec3; 3] {
         [
-            points[self.indices[0] as usize],
-            points[self.indices[1] as usize],
-            points[self.indices[2] as usize],
+            points[self.indices[0] as usize].a,
+            points[self.indices[1] as usize].a,
+            points[self.indices[2] as usize].a,
         ]
     }
 
     pub fn middle(&self, points: &[SupportPoint]) -> Vec3 {
-        (points[self.indices[0] as usize].pos
-            + points[self.indices[1] as usize].pos
-            + points[self.indices[2] as usize].pos)
+        (points[self.indices[0] as usize].support
+            + points[self.indices[1] as usize].support
+            + points[self.indices[2] as usize].support)
             / 3.0
-    }
-
-    /// Returns the radial distance to the closest edge of the face
-    pub fn closest_edge(&self, points: &[SupportPoint], ray: &Ray) -> (Vec3, f32) {
-        let edges = self.edges();
-        edges
-            .iter()
-            .map(|edge| {
-                let [p1, p2] = [points[edge.0 as usize], points[edge.1 as usize]];
-                let radial = project_plane(-p1.pos, (p1.pos - p2.pos).normalized());
-                let radial = project_plane(radial, ray.dir());
-                (radial, radial.mag())
-            })
-            .min_by(|(_, a), (_, b)| a.partial_cmp(&b).expect("Unexpected NaN"))
-            .expect("Face always contains 3 edges")
     }
 
     pub fn edges(&self) -> [Edge; 3] {
@@ -141,6 +133,14 @@ impl Face {
             (self.indices[0], self.indices[1]),
             (self.indices[0], self.indices[2]),
             (self.indices[1], self.indices[2]),
+        ]
+    }
+
+    pub(crate) fn support_points(&self, points: &SmallVec<[SupportPoint; 32]>) -> [Vec3; 3] {
+        [
+            points[self.indices[0] as usize].support,
+            points[self.indices[1] as usize].support,
+            points[self.indices[2] as usize].support,
         ]
     }
 }
@@ -171,11 +171,14 @@ impl Polytype {
         }
     }
 
-    pub fn middle(&self) -> Vec3 {
-        self.points
+    pub fn find_furthest_face(&self) -> Option<(u16, Face)> {
+        self.faces
             .iter()
-            .fold(Vec3::zero(), |acc, val| acc + val.pos)
-            / self.points.len() as f32
+            .inspect(|val| eprintln!("comparing: {:?}", val.distance))
+            .enumerate()
+            .filter(|(_, val)| val.distance.is_finite())
+            .max_by(|a, b| a.1.distance.partial_cmp(&b.1.distance).unwrap())
+            .map(|(a, b)| (a as u16, *b))
     }
 
     pub fn find_closest_face(&self) -> Option<(u16, Face)> {
@@ -186,78 +189,6 @@ impl Polytype {
             .filter(|(_, val)| val.distance.is_finite())
             .min_by(|a, b| a.1.distance.partial_cmp(&b.1.distance).unwrap())
             .map(|(a, b)| (a as u16, *b))
-    }
-
-    pub fn find_intersecting_face(&self, ray: &Ray) -> Option<(u16, &Face)> {
-        self.faces
-            .iter()
-            .inspect(|val| eprintln!("comparing: {:?}", val.distance))
-            .enumerate()
-            .find(|(_, val)| {
-                triangle_intersect(
-                    &[
-                        self[val.indices[0]].a,
-                        self[val.indices[1]].a,
-                        self[val.indices[2]].a,
-                    ],
-                    ray.dir(),
-                )
-                .is_some()
-            })
-            .map(|(a, b)| (a as u16, b))
-    }
-
-    // Expands the simplex without removing any faces but flips them instead
-    pub fn expand<F: Fn(&[SupportPoint], &[u16]) -> Face>(
-        &mut self,
-        p: SupportPoint,
-        face_func: F,
-    ) {
-        eprintln!("Expanding");
-        // remove faces that can see the point
-        let mut edges = SmallVec::<[Edge; 16]>::new();
-
-        let faces = &mut self.faces;
-        let points = &mut self.points;
-        for face in faces.iter_mut() {
-            // Vector from a point on the face to the new point
-            let to = p.pos - points[face.indices[0] as usize].pos;
-
-            // Dot product between current face normal and direction from face
-            // to new point
-            let dot = face.normal.dot(to);
-            eprintln!("rel: {:?}, normal: {:?}", to, face.normal);
-
-            // Current face points into the new point
-            if dot > 0.0 {
-                eprintln!("Exapnding into");
-                // Only remove the face if the polytype is three dimensional
-                remove_or_add_edge(&mut edges, (face.indices[0], face.indices[1]));
-                remove_or_add_edge(&mut edges, (face.indices[1], face.indices[2]));
-                remove_or_add_edge(&mut edges, (face.indices[2], face.indices[0]));
-
-                // Flip face
-                eprintln!("Flipping face");
-                face.normal *= -1.0;
-                // face.normal = face.normal * face.normal.dot(ray.dir()).signum();
-            }
-        }
-        // add vertex
-        let n = self.points.len();
-        self.points.push(p);
-        let points = &self.points;
-
-        eprintln!("Edges: {}", edges.len());
-
-        // add new faces
-        let new_faces = edges
-            .into_iter()
-            .map(|(a, b)| face_func(points, &[n as _, a, b]));
-
-        eprintln!("New faces: {}, old: {}", new_faces.len(), self.faces.len());
-
-        self.faces.extend(new_faces);
-        // assert_ne!(self.faces.len(), 0);
     }
 
     // Adds a point to the polytype
@@ -281,7 +212,7 @@ impl Polytype {
         while i < self.faces.len() {
             let face = self.faces[i];
             // Vector from a point on the face to the new point
-            let to = p.pos - self[face.indices[0]].pos;
+            let to = p.support - self[face.indices[0]].support;
 
             // Dot product between current face normal and direction from face
             // to new point
@@ -330,7 +261,7 @@ impl Polytype {
                 points,
                 [face.indices[val.0], face.indices[val.1], n],
                 ray,
-                points[face.indices[val.2] as usize].pos,
+                points[face.indices[val.2] as usize].support,
             )
         });
 
@@ -346,13 +277,18 @@ impl Polytype {
             self[face.indices[2]],
         ];
 
-        let (u, v, w) = barycentric_vector(face.normal * face.distance, p1.pos, p2.pos, p3.pos);
+        let (u, v, w) = barycentric_vector(
+            face.normal * face.distance,
+            p1.support,
+            p2.support,
+            p3.support,
+        );
 
         let a = p1.a * u + p2.a * v + p3.a * w;
 
         let b = p1.b * u + p2.b * v + p3.b * w;
 
-        ContactPoints::new(&[a, b])
+        ContactPoints::double(a, b)
     }
 
     /// Constructs a polytype from a simplex.

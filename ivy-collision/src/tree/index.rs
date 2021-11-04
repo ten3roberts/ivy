@@ -247,7 +247,6 @@ impl NodeIndex {
                 color,
                 half_extents: node.half_extents,
                 radius: 0.02 + 0.001 * depth as f32,
-                corner_radius: 1.0,
             });
         }
 

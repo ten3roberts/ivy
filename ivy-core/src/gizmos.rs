@@ -11,9 +11,6 @@ pub enum Gizmo {
         origin: Vec3,
         color: Color,
         radius: f32,
-        // The radius of the corner, 0 is a straight corner, and 1 is a half
-        // circle cap.
-        corner_radius: f32,
     },
     Line {
         origin: Vec3,
@@ -29,20 +26,21 @@ pub enum Gizmo {
         color: Color,
         half_extents: Vec3,
         radius: f32,
-        // The radius of the corner, 0 is a straight corner, and 1 is a half
-        // circle cap.
-        corner_radius: f32,
     },
-    // /// The position of the gizmo
-    // pos: Vec3,
-    // /// The direction the gizmo is facing
-    // dir: Vec3,
-    // /// The half width of the gizmo
-    // radius: f32,
-    // /// THe gizmo color with transparency
-    // color: Color,
-    // /// The type of gizmos, controls how it is rendered.
-    // kind: GizmoKind,
+    Triangle {
+        color: Color,
+        points: [Vec3; 3],
+        radius: f32,
+    }, // /// The position of the gizmo
+       // pos: Vec3,
+       // /// The direction the gizmo is facing
+       // dir: Vec3,
+       // /// The half width of the gizmo
+       // radius: f32,
+       // /// THe gizmo color with transparency
+       // color: Color,
+       // /// The type of gizmos, controls how it is rendered.
+       // kind: GizmoKind
 }
 
 pub type Section = &'static str;

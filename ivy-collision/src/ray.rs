@@ -31,7 +31,7 @@ impl Ray {
         let a = support(&transform, &transform_inv, collider, dir);
 
         SupportPoint {
-            pos: a - self.origin,
+            support: a - self.origin,
             a,
             b: self.origin,
         }
@@ -44,7 +44,14 @@ impl Ray {
         transform: Mat4,
         gizmos: &mut Gizmos,
     ) -> Option<Contact> {
+        // Check if any point is behind ray
+
         let transform_inv = transform.inversed();
+        let p = self.support(collider, &transform, &transform_inv, -self.dir);
+        if p.support.dot(self.dir) < 0.0 {
+            return None;
+        }
+
         // Get first support function in direction of separation
         // let dir = (a_pos - b_pos).normalized();
         let dir = Vec3::unit_x();
@@ -62,7 +69,7 @@ impl Ray {
 
             // New point was not past the origin
             // No collision
-            if p.dot(dir) < 0.0 {
+            if p.support.dot(dir) < 0.0 {
                 return None;
             }
 

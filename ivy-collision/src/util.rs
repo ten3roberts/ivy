@@ -1,27 +1,17 @@
-use std::ops::Deref;
-
 use ultraviolet::{Mat4, Vec3};
 
 use crate::{CollisionPrimitive, Ray};
 
 pub const TOLERANCE: f32 = 0.001;
-pub const MAX_ITERATIONS: usize = 5;
+pub const MAX_ITERATIONS: usize = 10;
 
 // Represents a point on the minkowski difference boundary which carries the
 // individual support points
 #[derive(Default, Debug, Clone, Copy)]
 pub struct SupportPoint {
-    pub pos: Vec3,
+    pub support: Vec3,
     pub a: Vec3,
     pub b: Vec3,
-}
-
-impl Deref for SupportPoint {
-    type Target = Vec3;
-
-    fn deref(&self) -> &Self::Target {
-        &self.pos
-    }
 }
 
 /// Returns a point on the minkowski difference given from two colliders, their
@@ -39,7 +29,11 @@ pub fn minkowski_diff<A: CollisionPrimitive, B: CollisionPrimitive>(
     let a = support(a_transform, a_transform_inv, a_coll, dir);
     let b = support(b_transform, b_transform_inv, b_coll, -dir);
 
-    SupportPoint { pos: a - b, a, b }
+    SupportPoint {
+        support: a - b,
+        a,
+        b,
+    }
 }
 
 #[inline]
@@ -109,18 +103,13 @@ pub fn max_axis_abs(val: Vec3) -> Vec3 {
 }
 
 pub fn plane_ray(p: Vec3, normal: Vec3, ray: &Ray) -> Vec3 {
-    plane_intersect(ray.origin() - p, normal, ray.dir())
+    plane_intersect(p - ray.origin(), normal, ray.dir()) + ray.origin()
 }
 
 pub fn plane_intersect(p: Vec3, normal: Vec3, dir: Vec3) -> Vec3 {
-    let rel = -p;
+    let rel = p;
     let along = -rel.dot(normal);
-    let t = dir.dot(normal);
-
-    // Prevent division by 0
-    if t.abs() < TOLERANCE {
-        return p;
-    }
+    let t = -dir.dot(normal);
 
     along * (dir / t)
 }
@@ -211,6 +200,10 @@ pub fn check_triangle_intersect(points: &[Vec3], dir: Vec3) -> bool {
         return false;
     }
 
-    let normal = (b - a).cross(c - a).normalized();
     true
+}
+
+// Calculates the heuristic distance of a face to a ray
+pub fn ray_distance(p: SupportPoint, normal: Vec3, ray: &Ray) -> f32 {
+    plane_intersect(p.support, normal, ray.dir()).dot(ray.dir()) * -normal.dot(ray.dir()).signum()
 }

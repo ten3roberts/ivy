@@ -7,7 +7,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Context};
-use collision::{Collider, Cube, Object, Ray};
+use collision::{Collider, Cube, Object, Ray, Sphere};
 use flume::Receiver;
 use glfw::{Action, CursorMode, Glfw, Key, WindowEvent};
 use graphics::gizmos::GizmoRenderer;
@@ -414,7 +414,7 @@ fn setup_objects(
         .load("./res/models/sphere.gltf")
         .context("Failed to load sphere model")??;
 
-    let _sphere_mesh = resources.get(document)?.mesh(0);
+    let sphere_mesh = resources.get(document)?.mesh(0);
 
     let material: Handle<Material> = resources.load(MaterialInfo {
         albedo: "./res/textures/metal.png".into(),
@@ -434,7 +434,7 @@ fn setup_objects(
     ));
 
     world.spawn((
-        Collider::new(Cube::new(1.0)),
+        Collider::new(Sphere::new(1.0)),
         Color::rgb(1.0, 1.0, 1.0),
         Mass(20.0),
         Velocity::default(),
@@ -455,7 +455,7 @@ fn setup_objects(
             1.0,
             false,
         ),
-        cube_mesh,
+        sphere_mesh,
         material,
         assets.geometry_pass,
     ));
@@ -640,7 +640,7 @@ impl Layer for LogicLayer {
             .iter()
             .for_each(|(_, val)| *val = Color::white());
 
-        let ray = Ray::new(Vec3::new(1.0, 0.0, 0.0), Vec3::new(0.0, 1.0, -1.0));
+        let ray = Ray::new(Vec3::new(1.0, 0.0, 0.0), Vec3::new(0.5, 1.0, -1.0));
         let mut gizmos = resources.get_default_mut::<Gizmos>()?;
 
         gizmos.push(Gizmo::Line {
@@ -667,7 +667,6 @@ impl Layer for LogicLayer {
                     origin: *p,
                     color: Color::hsl(i as f32 * 30.0, 1.0, 0.5),
                     radius: 0.05 / (i + 1) as f32,
-                    corner_radius: 1.0,
                 })
             }
         }
@@ -676,7 +675,6 @@ impl Layer for LogicLayer {
             origin: Vec3::zero(),
             color: Color::magenta(),
             radius: 0.05,
-            corner_radius: 1.0,
         });
 
         // Clear gizmos from last frame

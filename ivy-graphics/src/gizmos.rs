@@ -57,7 +57,6 @@ impl Renderer for GizmoRenderer {
                     origin,
                     color,
                     radius,
-                    corner_radius,
                 } => {
                     cmd.push_constants(
                         layout,
@@ -67,7 +66,7 @@ impl Renderer for GizmoRenderer {
                             model: Mat4::from_translation(*origin) * Mat4::from_scale(*radius),
                             color: color.into(),
                             billboard_axis: Vec3::zero(),
-                            corner_radius: *corner_radius,
+                            corner_radius: 1.0,
                         },
                     );
 
@@ -104,7 +103,6 @@ impl Renderer for GizmoRenderer {
                     color,
                     half_extents,
                     radius,
-                    corner_radius,
                 } => {
                     for (v, dir) in [
                         (Vec3::unit_x(), Vec3::unit_z()),
@@ -127,12 +125,40 @@ impl Renderer for GizmoRenderer {
                                     )),
                                     color: color.into(),
                                     billboard_axis: dir.normalized(),
-                                    corner_radius: *corner_radius,
+                                    corner_radius: 1.0,
                                 },
                             );
 
                             cmd.draw_indexed(6, 1, 0, 0, 0);
                         }
+                    }
+                }
+                ivy_core::Gizmo::Triangle {
+                    color,
+                    points,
+                    radius,
+                } => {
+                    for i in [(0, 1), (0, 2), (1, 2)] {
+                        let (p1, p2) = (points[i.0], points[i.1]);
+                        let dir = p2 - p1;
+                        cmd.push_constants(
+                            layout,
+                            ShaderStageFlags::VERTEX,
+                            0,
+                            &PushConstantData {
+                                model: Mat4::from_translation(p1 + dir * 0.5)
+                                    * Mat4::from_nonuniform_scale(Vec3::new(
+                                        *radius,
+                                        dir.mag() * 0.5,
+                                        *radius,
+                                    )),
+                                color: color.into(),
+                                billboard_axis: dir.normalized(),
+                                corner_radius: 1.0,
+                            },
+                        );
+
+                        cmd.draw_indexed(6, 1, 0, 0, 0);
                     }
                 }
             }

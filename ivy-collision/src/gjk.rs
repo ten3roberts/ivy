@@ -48,7 +48,7 @@ pub fn gjk<A: CollisionPrimitive, B: CollisionPrimitive>(
 
         // New point was not past the origin
         // No collision
-        if iterations > MAX_ITERATIONS || p.dot(dir) < 0.0 {
+        if iterations > MAX_ITERATIONS || p.support.dot(dir) < 0.0 {
             return (false, simplex);
         }
 
