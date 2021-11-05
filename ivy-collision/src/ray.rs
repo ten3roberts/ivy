@@ -1,5 +1,5 @@
 use hecs::{Entity, World};
-use ivy_core::{Gizmos, Position, TransformMatrix};
+use ivy_core::{Position, TransformMatrix};
 use ultraviolet::{Mat4, Vec3};
 
 use crate::{
@@ -41,8 +41,7 @@ impl Ray {
     pub fn intersects<T: CollisionPrimitive>(
         &self,
         collider: &T,
-        transform: Mat4,
-        gizmos: &mut Gizmos,
+        transform: &TransformMatrix,
     ) -> Option<Contact> {
         // Check if any point is behind ray
 
@@ -89,18 +88,17 @@ impl Ray {
             |dir| self.support(collider, &transform, &transform_inv, dir),
             simplex,
             self,
-            gizmos,
         ))
     }
 
-    pub fn cast(&self, world: &World, gizmos: &mut Gizmos) -> Option<(Entity, Contact)> {
+    pub fn cast(&self, world: &World) -> Option<(Entity, Contact)> {
         world
             .query::<(&Position, &ivy_core::Rotation, &ivy_core::Scale, &Collider)>()
             .iter()
             .find_map(|(e, (pos, rot, scale, collider))| {
                 let transform = TransformMatrix::new(*pos, *rot, *scale);
 
-                if let Some(val) = self.intersects(collider, *transform, gizmos) {
+                if let Some(val) = self.intersects(collider, &transform) {
                     Some((e, val))
                 } else {
                     None

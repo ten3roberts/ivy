@@ -7,7 +7,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Context};
-use collision::{Collider, Cube, Object, Ray, Sphere};
+use collision::{Collider, Cube, Object, Ray, RayIntersect, Sphere};
 use flume::Receiver;
 use glfw::{Action, CursorMode, Glfw, Key, WindowEvent};
 use graphics::gizmos::GizmoRenderer;
@@ -414,7 +414,7 @@ fn setup_objects(
         .load("./res/models/sphere.gltf")
         .context("Failed to load sphere model")??;
 
-    let sphere_mesh = resources.get(document)?.mesh(0);
+    let _sphere_mesh = resources.get(document)?.mesh(0);
 
     let material: Handle<Material> = resources.load(MaterialInfo {
         albedo: "./res/textures/metal.png".into(),
@@ -434,7 +434,7 @@ fn setup_objects(
     ));
 
     world.spawn((
-        Collider::new(Sphere::new(1.0)),
+        Collider::new(Cube::new_uniform(1.0)),
         Color::rgb(1.0, 1.0, 1.0),
         Mass(20.0),
         Velocity::default(),
@@ -455,7 +455,8 @@ fn setup_objects(
             1.0,
             false,
         ),
-        sphere_mesh,
+        Sphere::new(1.0),
+        _sphere_mesh,
         material,
         assets.geometry_pass,
     ));
@@ -471,7 +472,7 @@ fn setup_objects(
 
             (
                 AngularMass(5.0),
-                Collider::new(Cube::new(1.0)),
+                Collider::new(Cube::new_uniform(1.0)),
                 Color::rgb(1.0, 1.0, 1.0),
                 Mass(10.0),
                 pos,
@@ -651,7 +652,31 @@ impl Layer for LogicLayer {
             corner_radius: 1.0,
         });
 
-        if let Some((_, contact)) = ray.cast(world, &mut *gizmos)
+        world
+            .query::<(&Cube, &Position, &Rotation, &Scale, &mut Color)>()
+            .iter()
+            .for_each(|(_, (cube, pos, rot, scale, color))| {
+                let transform = TransformMatrix::new(*pos, *rot, *scale);
+                if cube.check_intersect(&transform, &ray) {
+                    *color = Color::red()
+                } else {
+                    *color = Color::white()
+                }
+            });
+
+        world
+            .query::<(&Sphere, &Position, &Rotation, &Scale, &mut Color)>()
+            .iter()
+            .for_each(|(_, (sphere, pos, rot, scale, color))| {
+                let transform = TransformMatrix::new(*pos, *rot, *scale);
+                if sphere.check_intersect(&transform, &ray) {
+                    *color = Color::red()
+                } else {
+                    *color = Color::white()
+                }
+            });
+
+        if let Some((_, contact)) = ray.cast(world)
         // Ray::new(**camera_pos, camera_rot.into_matrix() * -Vec3::unit_z()).cast(world)
         {
             gizmos.push(Gizmo::Line {
