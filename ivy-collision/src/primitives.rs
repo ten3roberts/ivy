@@ -1,6 +1,6 @@
 use std::ops::Deref;
 
-use ivy_core::{Position, Scale, TransformMatrix};
+use ivy_base::{Position, Scale, TransformMatrix};
 use ultraviolet::Vec3;
 
 use crate::{CollisionPrimitive, Ray, RayIntersect};

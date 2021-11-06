@@ -7,7 +7,7 @@ description = "Application and game framework for Rust"
 
 [workspace]
 members = [
-  "ivy-core",
+  "ivy-base",
   "ivy-graphics",
   "ivy-input",
   "ivy-resources",
@@ -23,7 +23,7 @@ members = [
 
 [dependencies]
 ivy-collision = { path = "./ivy-collision" }
-ivy-core = { path = "./ivy-core" }
+ivy-base = { path = "./ivy-base" }
 ivy-graphics = { path = "./ivy-graphics" }
 ivy-image = { path = "./ivy-image" }
 ivy-input = { path = "./ivy-input" }

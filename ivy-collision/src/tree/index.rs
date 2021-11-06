@@ -1,9 +1,9 @@
 use hecs::Entity;
 use hecs::World;
-use ivy_core::Color;
-use ivy_core::Events;
-use ivy_core::Gizmo;
-use ivy_core::Gizmos;
+use ivy_base::Color;
+use ivy_base::Events;
+use ivy_base::Gizmo;
+use ivy_base::Gizmos;
 use slotmap::new_key_type;
 use smallvec::Array;
 use smallvec::SmallVec;

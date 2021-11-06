@@ -3,7 +3,7 @@ use rand::prelude::*;
 use std::{thread::sleep, time::Duration};
 
 use hecs::World;
-use ivy_core::*;
+use ivy_base::*;
 use log::*;
 use rand::{prelude::StdRng, SeedableRng};
 

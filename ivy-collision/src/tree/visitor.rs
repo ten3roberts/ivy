@@ -1,4 +1,4 @@
-use ivy_core::Position;
+use ivy_base::Position;
 use smallvec::Array;
 
 use crate::{Cube, Node, Object};

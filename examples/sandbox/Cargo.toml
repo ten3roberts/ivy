@@ -10,6 +10,6 @@ edition = "2018"
 anyhow = "1.0.40"
 flume = "0.10"
 hecs = "0.6"
-ivy-core = { path = "../../ivy-core", version = "0.1.0" }
+ivy-base = { path = "../../ivy-base", version = "0.1.0" }
 log = "0.4"
 rand = "0.8"

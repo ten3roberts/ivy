@@ -1,7 +1,7 @@
 use std::ops::Deref;
 
 use hecs::World;
-use ivy_core::{Position, TransformMatrix};
+use ivy_base::{Position, TransformMatrix};
 use smallvec::Array;
 use ultraviolet::{Mat4, Vec3};
 

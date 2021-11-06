@@ -1,5 +1,5 @@
 [package]
-name = "ivy-core"
+name = "ivy-base"
 version = "1.8.0"
 authors = ["Tim Roberts <ten3roberts@gmail.com>"]
 edition = "2018"

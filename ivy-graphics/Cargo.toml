@@ -15,7 +15,7 @@ derive_more = "0.99.16"
 glfw = "0.42.0"
 gltf = "0.16.0"
 hecs = "0.6.5"
-ivy-core = { path = "../ivy-core", version = "1.7" }
+ivy-base = { path = "../ivy-base", version = "1.7" }
 ivy-image = { path = "../ivy-image", version = "1.1" }
 ivy-resources = { path = "../ivy-resources", version = "1.4.0" }
 ivy-vulkan = { path = "../ivy-vulkan", version = "1.7" }

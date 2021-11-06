@@ -463,8 +463,8 @@ dependencies = [
  "glfw",
  "hecs",
  "hecs-hierarchy",
+ "ivy-base",
  "ivy-collision",
- "ivy-core",
  "ivy-graphics",
  "ivy-image",
  "ivy-input",
@@ -482,23 +482,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ivy-collision"
-version = "1.8.0"
-dependencies = [
- "arrayvec",
- "derive-for",
- "derive_more",
- "hecs",
- "ivy-core",
- "ivy-resources",
- "palette",
- "slotmap",
- "smallvec",
- "ultraviolet",
-]
-
-[[package]]
-name = "ivy-core"
+name = "ivy-base"
 version = "1.8.0"
 dependencies = [
  "anyhow",
@@ -516,6 +500,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "ivy-collision"
+version = "1.8.0"
+dependencies = [
+ "arrayvec",
+ "derive-for",
+ "derive_more",
+ "hecs",
+ "ivy-base",
+ "ivy-resources",
+ "palette",
+ "slotmap",
+ "smallvec",
+ "ultraviolet",
+]
+
+[[package]]
 name = "ivy-graphics"
 version = "1.8.0"
 dependencies = [
@@ -526,7 +526,7 @@ dependencies = [
  "glfw",
  "gltf",
  "hecs",
- "ivy-core",
+ "ivy-base",
  "ivy-image",
  "ivy-resources",
  "ivy-vulkan",
@@ -552,7 +552,7 @@ version = "1.8.0"
 dependencies = [
  "flume",
  "glfw",
- "ivy-core",
+ "ivy-base",
  "ultraviolet",
 ]
 
@@ -565,8 +565,8 @@ dependencies = [
  "derive_more",
  "flume",
  "hecs",
+ "ivy-base",
  "ivy-collision",
- "ivy-core",
  "ivy-graphics",
  "ivy-resources",
  "smallvec",
@@ -631,7 +631,7 @@ dependencies = [
  "fontdue",
  "hecs",
  "hecs-hierarchy",
- "ivy-core",
+ "ivy-base",
  "ivy-graphics",
  "ivy-image",
  "ivy-rendergraph",

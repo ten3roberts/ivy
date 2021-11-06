@@ -1,6 +1,6 @@
 use flume::Receiver;
 use glfw::{Action, Key, MouseButton, WindowEvent};
-use ivy_core::Events;
+use ivy_base::Events;
 use ultraviolet::Vec2;
 
 pub const MAX_KEYS: usize = glfw::Key::Menu as usize;

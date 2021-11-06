@@ -3,7 +3,7 @@ use core::f32;
 use derive_for::derive_for;
 use derive_more::*;
 use hecs::*;
-use ivy_core::Position;
+use ivy_base::Position;
 use ultraviolet::Vec3;
 
 derive_for!(

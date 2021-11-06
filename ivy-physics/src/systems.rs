@@ -3,7 +3,7 @@ use crate::components::*;
 use crate::Result;
 use hecs::World;
 use ivy_collision::Collision;
-use ivy_core::{Position, Rotation};
+use ivy_base::{Position, Rotation};
 use ultraviolet::Bivec3;
 use ultraviolet::Rotor3;
 

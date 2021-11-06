@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use ash::vk::{DescriptorSet, IndexType, ShaderStageFlags};
-use ivy_core::Gizmos;
+use ivy_base::Gizmos;
 use ivy_vulkan::VulkanContext;
 use ultraviolet::{Mat4, Vec3, Vec4};
 
@@ -53,7 +53,7 @@ impl Renderer for GizmoRenderer {
 
         for gizmo in gizmos.sections().iter().flat_map(|val| val.1) {
             match gizmo {
-                ivy_core::Gizmo::Sphere {
+                ivy_base::Gizmo::Sphere {
                     origin,
                     color,
                     radius,
@@ -72,7 +72,7 @@ impl Renderer for GizmoRenderer {
 
                     cmd.draw_indexed(6, 1, 0, 0, 0);
                 }
-                ivy_core::Gizmo::Line {
+                ivy_base::Gizmo::Line {
                     origin,
                     color,
                     dir,
@@ -98,7 +98,7 @@ impl Renderer for GizmoRenderer {
 
                     cmd.draw_indexed(6, 1, 0, 0, 0);
                 }
-                ivy_core::Gizmo::Cube {
+                ivy_base::Gizmo::Cube {
                     origin,
                     color,
                     half_extents,
@@ -133,7 +133,7 @@ impl Renderer for GizmoRenderer {
                         }
                     }
                 }
-                ivy_core::Gizmo::Triangle {
+                ivy_base::Gizmo::Triangle {
                     color,
                     points,
                     radius,

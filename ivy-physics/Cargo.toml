@@ -12,7 +12,7 @@ derive_more = "0.99.16"
 flume = "0.10.9"
 hecs = "0.6.5"
 ivy-collision = { path = "../ivy-collision", version = "1.8.0" }
-ivy-core = { path = "../ivy-core", version = "1.7" }
+ivy-base = { path = "../ivy-base", version = "1.7" }
 ivy-graphics = { path = "../ivy-graphics", version = "*" }
 ivy-resources = { path = "../ivy-resources", version = "1.4.0" }
 smallvec = "1.7.0"

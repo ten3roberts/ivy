@@ -1,5 +1,5 @@
 use hecs::{Entity, World};
-use ivy_core::{Position, Scale};
+use ivy_base::{Position, Scale};
 use ultraviolet::Vec3;
 
 use super::Ray;

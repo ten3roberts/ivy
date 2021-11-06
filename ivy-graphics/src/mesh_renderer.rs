@@ -1,7 +1,7 @@
 use crate::{BaseRenderer, Error, Material, Mesh, Renderer, Result, ShaderPass};
 use ash::vk::{DescriptorSet, IndexType};
 use hecs::{Query, World};
-use ivy_core::{Color, Position, Rotation, Scale};
+use ivy_base::{Color, Position, Rotation, Scale};
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{commands::CommandBuffer, descriptors::IntoSet, VulkanContext};
 use std::sync::Arc;

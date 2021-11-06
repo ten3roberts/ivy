@@ -4,7 +4,7 @@ use crate::systems;
 use anyhow::Context;
 use hecs::World;
 use ivy_collision::{Collision, CollisionTree, Cube, Object};
-use ivy_core::{Events, Layer, Position, TimedScope};
+use ivy_base::{Events, Layer, Position, TimedScope};
 use ivy_resources::{Resources, Storage};
 use smallvec::Array;
 

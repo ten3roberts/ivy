@@ -141,7 +141,7 @@ fn main() -> anyhow::Result<()> {
     .install();
 
     // Go up three levels
-    ivy_core::normalize_dir(3)?;
+    ivy_base::normalize_dir(3)?;
 
     let glfw = Arc::new(RwLock::new(glfw::init(glfw::FAIL_ON_ERRORS)?));
 

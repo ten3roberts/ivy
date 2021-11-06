@@ -36,7 +36,7 @@
 
 /// Rexports
 pub use ivy_collision as collision;
-pub use ivy_core as core;
+pub use ivy_base as core;
 pub use ivy_graphics as graphics;
 pub use ivy_image as image;
 pub use ivy_input as input;

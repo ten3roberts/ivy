@@ -1,5 +1,5 @@
 use hecs::World;
-use ivy_core::{Position, Rotation, Scale};
+use ivy_base::{Position, Rotation, Scale};
 use ultraviolet::Mat4;
 
 use crate::Camera;

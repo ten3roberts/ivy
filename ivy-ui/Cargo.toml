@@ -15,7 +15,7 @@ derive_more = "0.99.16"
 fontdue = "0.6.2"
 hecs = "0.6.5"
 hecs-hierarchy = "0.4.0"
-ivy-core = { path = "../ivy-core", version = "1.4" }
+ivy-base = { path = "../ivy-base", version = "1.4" }
 ivy-graphics = { path = "../ivy-graphics", version = "1.7" }
 ivy-image = { path = "../ivy-image", version = "1.4" }
 ivy-rendergraph = { path = "../ivy-rendergraph", version = "1.7" }

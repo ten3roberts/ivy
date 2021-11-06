@@ -1,7 +1,7 @@
 use std::mem;
 
 use hecs::World;
-use ivy_core::{Events, Gizmos, Position, Rotation, Scale, TimedScope, TransformMatrix};
+use ivy_base::{Events, Gizmos, Position, Rotation, Scale, TimedScope, TransformMatrix};
 use ivy_resources::Key;
 use slotmap::SlotMap;
 use smallvec::{Array, SmallVec};

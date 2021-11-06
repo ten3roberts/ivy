@@ -1,7 +1,7 @@
 use crate::Result;
 use ash::vk::{DescriptorSet, ShaderStageFlags};
 use hecs::World;
-use ivy_core::Position;
+use ivy_base::Position;
 use ivy_vulkan::{
     descriptors::{DescriptorBuilder, IntoSet},
     Buffer, VulkanContext,

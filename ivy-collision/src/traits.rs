@@ -1,4 +1,4 @@
-use ivy_core::TransformMatrix;
+use ivy_base::TransformMatrix;
 use ultraviolet::Vec3;
 
 use crate::{Contact, Ray};

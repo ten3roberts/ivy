@@ -10,7 +10,7 @@ use downcast_rs::{impl_downcast, Downcast};
 ///
 /// # Example
 /// ```
-/// use ivy_core::Events;
+/// use ivy_base::Events;
 /// use std::sync::mpsc;
 /// let mut events = Events::new();
 ///
