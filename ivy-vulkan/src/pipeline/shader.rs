@@ -109,7 +109,7 @@ pub fn reflect<S: AsRef<spirv_reflect::ShaderModule>>(
         }
     }
 
-    let pipeline_layout = Pipeline::create_layout(&context, &sets, &push_constant_ranges)?;
+    let pipeline_layout = Pipeline::create_layout(context, &sets, &push_constant_ranges)?;
 
     Ok(pipeline_layout)
 }

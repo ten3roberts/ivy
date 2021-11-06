@@ -215,11 +215,12 @@ impl Buffer {
     /// Offset is given in terms of elements.
     pub fn write_iter<T, I: Iterator<Item = T>>(&mut self, offset: usize, iter: I) -> Result<()> {
         match self.mapped_slice_mut::<T>() {
-            Some(slice) => Ok({
+            Some(slice) => {
                 iter.zip(slice).for_each(move |(val, mapped)| {
                     *mapped = val;
-                })
-            }),
+                });
+                Ok(())
+            }
             None => {
                 let mut staging = Buffer::new_uninit::<u8>(
                     self.context.clone(),

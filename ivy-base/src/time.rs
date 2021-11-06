@@ -196,6 +196,8 @@ impl<F: FnOnce(Duration)> TimedScope<F> {
 impl<F: FnOnce(Duration)> Drop for TimedScope<F> {
     fn drop(&mut self) {
         let elapsed = self.clock.elapsed();
-        self.func.take().map(|f| f(elapsed));
+        if let Some(f) = self.func.take() {
+            f(elapsed)
+        }
     }
 }

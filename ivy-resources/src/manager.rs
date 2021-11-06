@@ -39,9 +39,8 @@ impl Resources {
     pub fn fetch<T: Storage>(&self) -> Result<ResourceView<T>> {
         // A raw pointer to the internally boxed AtomicRefCell is acquired. The pointer is
         // valid as long as self because caches can never be individually removed
-        match self.caches.read().get(&TypeId::of::<T>()) {
-            Some(val) => return val.borrow(),
-            None => {}
+        if let Some(val) = self.caches.read().get(&TypeId::of::<T>()) {
+            return val.borrow();
         }
 
         // Insert new cache
@@ -57,9 +56,8 @@ impl Resources {
     pub fn fetch_mut<T: Storage>(&self) -> Result<ResourceViewMut<T>> {
         // A raw pointer to the internally boxed AtomicRefCell is acquired. The pointer is
         // valid as long as self because caches can never be individually removed
-        match self.caches.read().get(&TypeId::of::<T>()) {
-            Some(val) => return val.borrow_mut(),
-            None => {}
+        if let Some(val) = self.caches.read().get(&TypeId::of::<T>()) {
+            return val.borrow_mut();
         }
 
         // Insert new cache
@@ -85,9 +83,9 @@ impl Resources {
     }
 
     /// Mimics the entry api of HashMap.
-    pub fn entry<'a, T: Storage>(&'a self, handle: Handle<T>) -> Result<RefEntry<'a, T>> {
+    pub fn entry<T: Storage>(&self, handle: Handle<T>) -> Result<RefEntry<T>> {
         let cache = self.fetch_mut()?;
-        if let Ok(_) = cache.get(handle) {
+        if cache.get(handle).is_ok() {
             Ok(RefEntry::Occupied(cache, handle))
         } else {
             Ok(RefEntry::Vacant(cache))
@@ -95,10 +93,10 @@ impl Resources {
     }
 
     /// Entry api for the default key if it may or may not exist.
-    pub fn default_entry<'a, T: Storage>(&'a self) -> Result<RefEntry<'a, T>> {
+    pub fn default_entry<T: Storage>(&self) -> Result<RefEntry<T>> {
         let cache = self.fetch_mut()?;
         let default = cache.default();
-        if let Ok(_) = cache.get(default) {
+        if cache.get(default).is_ok() {
             Ok(RefEntry::Occupied(cache, default))
         } else {
             Ok(RefEntry::Vacant(cache))

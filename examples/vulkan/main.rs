@@ -467,7 +467,7 @@ fn setup_objects(
     world
         .spawn_batch((0..COUNT).map(|_| {
             let pos = Position(Vec3::rand_uniform(&mut rng) * 30.0);
-            let vel = Velocity::from(-pos.normalized());
+            let vel = Velocity::from(-pos.normalized()) * 5.0;
 
             (
                 AngularMass(5.0),
@@ -651,16 +651,18 @@ impl Layer for LogicLayer {
                 let mut query =
                     world.query_one::<(&mut Effector, &Velocity, &Position)>(hit.entity)?;
 
+                let point = hit.contact.points[0];
+
                 let (effector, vel, pos) = query.get().context("Failed to query hit entity")?;
 
                 // effector.apply_force(hit.contact.normal * -10.0);
                 let sideways_movement = project_plane(**vel, ray.dir());
-                let sideways_offset = project_plane(hit.contact.points[0] - **pos, ray.dir());
+                let sideways_offset = project_plane(point - **pos, ray.dir());
                 let centering = sideways_offset * 500.0;
 
                 let dampening = sideways_movement * -50.0;
                 let target = *ray.origin() + camera_forward * 5.0;
-                let towards = target - hit.contact.points[0];
+                let towards = target - point;
                 let towards_vel = (ray.dir() * ray.dir().dot(**vel)).dot(towards.normalized());
                 let max_vel = (5.0 * towards.mag_sq()).max(0.1);
 
@@ -669,7 +671,7 @@ impl Layer for LogicLayer {
                 effector.apply_force(dampening + towards + centering);
 
                 gizmos.push(Gizmo::Line {
-                    origin: hit.contact.points[0],
+                    origin: point,
                     color: Color::blue(),
                     dir: hit.contact.normal,
                     radius: 0.02,

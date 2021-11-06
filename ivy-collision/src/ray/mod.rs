@@ -35,7 +35,7 @@ impl Ray {
         transform_inv: &Mat4,
         dir: Vec3,
     ) -> SupportPoint {
-        let a = support(&transform, &transform_inv, collider, dir);
+        let a = support(transform, transform_inv, collider, dir);
 
         SupportPoint {
             support: a - *self.origin,
@@ -53,7 +53,7 @@ impl Ray {
         // Check if any point is behind ray
 
         let transform_inv = transform.inversed();
-        let p = self.support(collider, &transform, &transform_inv, -self.dir);
+        let p = self.support(collider, transform, &transform_inv, -self.dir);
         if p.support.dot(self.dir) < 0.0 {
             return None;
         }
@@ -62,7 +62,7 @@ impl Ray {
         // let dir = (a_pos - b_pos).normalized();
         let dir = Vec3::unit_x();
 
-        let a = self.support(collider, &transform, &transform_inv, dir);
+        let a = self.support(collider, transform, &transform_inv, dir);
 
         let mut simplex = Simplex::Point([a]);
 
@@ -71,7 +71,7 @@ impl Ray {
 
             assert!((dir.mag() - 1.0 < 0.0001));
             // Get the next simplex
-            let p = self.support(collider, &transform, &transform_inv, dir);
+            let p = self.support(collider, transform, &transform_inv, dir);
 
             // New point was not past the origin
             // No collision
@@ -92,7 +92,7 @@ impl Ray {
         // Collision found
         // Perform epa to find contact points
         Some(epa::epa_ray(
-            |dir| self.support(collider, &transform, &transform_inv, dir),
+            |dir| self.support(collider, transform, &transform_inv, dir),
             simplex,
             self,
         ))

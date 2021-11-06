@@ -91,7 +91,7 @@ impl RenderPass {
             .collect::<ArrayVec<vk::SubpassDescription, MAX_SUBPASSES>>();
 
         let create_info = vk::RenderPassCreateInfo::builder()
-            .attachments(&info.attachments)
+            .attachments(info.attachments)
             .dependencies(info.dependencies)
             .subpasses(&vk_subpasses);
 

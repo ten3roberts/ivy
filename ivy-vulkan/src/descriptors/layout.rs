@@ -154,7 +154,7 @@ impl DescriptorLayoutCache {
     /// created.
     pub fn get(&self, info: &DescriptorLayoutInfo) -> Result<DescriptorSetLayout> {
         let guard = self.layouts.read();
-        if let Some(layout) = guard.get(&info) {
+        if let Some(layout) = guard.get(info) {
             Ok(*layout)
         } else {
             drop(guard);
@@ -188,7 +188,7 @@ pub fn create(device: &Device, info: &DescriptorLayoutInfo) -> Result<Descriptor
         ..Default::default()
     };
 
-    let layout = unsafe { device.create_descriptor_set_layout(&&create_info, None)? };
+    let layout = unsafe { device.create_descriptor_set_layout(&create_info, None)? };
     Ok(layout)
 }
 

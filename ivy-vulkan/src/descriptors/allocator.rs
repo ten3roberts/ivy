@@ -141,7 +141,7 @@ impl DescriptorSubAllocator {
         layout_info: &DescriptorLayoutInfo,
         set_count: u32,
     ) -> Self {
-        assert!(layout_info.bindings().len() > 0);
+        assert!(!layout_info.bindings().is_empty());
 
         let sizes = layout_info
             .bindings()
@@ -206,7 +206,7 @@ impl DescriptorSubAllocator {
     /// Resets all allocated pools and descriptor sets.
     pub fn reset(&mut self) -> Result<()> {
         // Move all full pools into pools
-        self.pools.extend(self.full_pools.drain(..));
+        self.pools.append(&mut self.full_pools);
 
         for pool in self.pools.iter_mut().filter(|pool| pool.allocated != 0) {
             pool.allocated = 0;

@@ -106,12 +106,9 @@ fn get_missing_extensions(entry: &Entry, extensions: &[CString]) -> Result<Vec<C
     Ok(extensions
         .iter()
         .filter(|ext| {
-            available
-                .iter()
-                .find(|avail| unsafe {
-                    CStr::from_ptr(avail.extension_name.as_ptr()) == ext.as_c_str()
-                })
-                .is_none()
+            available.iter().all(|avail| unsafe {
+                CStr::from_ptr(avail.extension_name.as_ptr()) == ext.as_c_str()
+            })
         })
         .cloned()
         .collect())
@@ -126,10 +123,7 @@ fn get_missing_layers(entry: &Entry, layers: &[CString]) -> Result<Vec<CString>>
         .filter(|ext| {
             available
                 .iter()
-                .find(|avail| unsafe {
-                    CStr::from_ptr(avail.layer_name.as_ptr()) == ext.as_c_str()
-                })
-                .is_none()
+                .all(|avail| unsafe { CStr::from_ptr(avail.layer_name.as_ptr()) == ext.as_c_str() })
         })
         .cloned()
         .collect())

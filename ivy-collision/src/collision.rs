@@ -27,7 +27,7 @@ impl ContactPoints {
         }
     }
 
-    pub fn iter<'a>(&'a self) -> std::slice::Iter<'a, Vec3> {
+    pub fn iter(&self) -> std::slice::Iter<Vec3> {
         self.into_iter()
     }
 }
@@ -109,8 +109,8 @@ pub fn intersect<A: CollisionPrimitive, B: CollisionPrimitive>(
         Some(epa(
             |dir| {
                 minkowski_diff(
-                    &a_transform,
-                    &b_transform,
+                    a_transform,
+                    b_transform,
                     &a_transform_inv,
                     &b_transform_inv,
                     a,

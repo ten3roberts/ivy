@@ -88,15 +88,16 @@ fn main() -> Result<()> {
         })
         .collect::<Result<Vec<_>>>()?;
 
-    processes.into_iter().filter_map(|val| val).try_for_each(
-        |(resource, mut process)| -> Result<()> {
+    processes
+        .into_iter()
+        .flatten()
+        .try_for_each(|(resource, mut process)| -> Result<()> {
             if !process.wait()?.success() {
                 Err(CompilationFailure(resource).into())
             } else {
                 Ok(())
             }
-        },
-    )?;
+        })?;
 
     Ok(())
 }

@@ -38,13 +38,13 @@ impl DescriptorBuilder {
         Default::default()
     }
 
-    pub fn from_resources<'a>(
-        resources: &[(&'a dyn DescriptorBindable, ShaderStageFlags)],
+    pub fn from_resources(
+        resources: &[(&dyn DescriptorBindable, ShaderStageFlags)],
     ) -> Result<Self> {
         let mut builder = Self::new();
 
         resources
-            .into_iter()
+            .iter()
             .enumerate()
             .try_fold(&mut builder, |builder, (i, (resource, stage))| {
                 resource.bind_resource(i as u32, *stage, builder)
@@ -62,7 +62,7 @@ impl DescriptorBuilder {
         (0..count)
             .map(|current_frame| {
                 let mut builder = Self::new();
-                resources.into_iter().enumerate().try_fold(
+                resources.iter().enumerate().try_fold(
                     &mut builder,
                     |builder, (i, (resource, stage))| {
                         resource.bind_resource_for(i as u32, *stage, builder, current_frame)
@@ -346,7 +346,7 @@ impl DescriptorBuilder {
         // Allocate the descriptor sets
         let set = context
             .descriptor_allocator()
-            .allocate(layout, &layout_info, 1)?[0];
+            .allocate(layout, layout_info, 1)?[0];
 
         self.writes.iter_mut().for_each(|write| write.dst_set = set);
 

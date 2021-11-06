@@ -86,8 +86,8 @@ impl<T: 'static + Sized> ResourceCache<T> {
     }
 
     /// Mimics the entry api of HashMap.
-    pub fn entry<'a>(&'a mut self, handle: Handle<T>) -> Entry<'a, T> {
-        if let Some(_) = self.slots.get(handle) {
+    pub fn entry(&mut self, handle: Handle<T>) -> Entry<T> {
+        if self.slots.get(handle).is_some() {
             Entry::Occupied(self, handle)
         } else {
             Entry::Vacant(self)
@@ -95,7 +95,7 @@ impl<T: 'static + Sized> ResourceCache<T> {
     }
 
     /// Entry api for the default key if it may or may not exist.
-    pub fn default_entry<'a>(&'a mut self) -> Entry<'a, T> {
+    pub fn default_entry(&mut self) -> Entry<T> {
         self.entry(self.default)
     }
 

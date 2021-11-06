@@ -16,7 +16,7 @@ impl Simplex {
     // Returns the next simplex that better encloses the origin.
     // Returns None if the origin is enclosed in the tetrahedron.
     #[inline]
-    pub fn next(&mut self) -> Option<Vec3> {
+    pub fn next_dir(&mut self) -> Option<Vec3> {
         match *self {
             Self::Point([a]) => Some(-a.support),
             Self::Line([a, b]) => {
@@ -47,11 +47,11 @@ impl Simplex {
                     // Behind a
                     else {
                         *self = Self::Line([a, b]);
-                        self.next()
+                        self.next_dir()
                     }
                 } else if ab.cross(abc).dot(a0) > 0.0 {
                     *self = Self::Line([a, b]);
-                    self.next()
+                    self.next_dir()
                 } else if abc.dot(a0) > 0.0 {
                     Some(abc)
                 } else {
@@ -71,13 +71,13 @@ impl Simplex {
 
                 if abc.dot(a0) > 0.0 {
                     *self = Self::Triangle([a, b, c]);
-                    self.next()
+                    self.next_dir()
                 } else if acd.dot(a0) > 0.0 {
                     *self = Self::Triangle([a, c, d]);
-                    self.next()
+                    self.next_dir()
                 } else if adb.dot(a0) > 0.0 {
                     *self = Self::Triangle([a, d, b]);
-                    self.next()
+                    self.next_dir()
                 } else {
                     // Collision occurred
                     None
@@ -151,7 +151,7 @@ impl Simplex {
         }
     }
 
-    pub fn iter<'a>(&'a self) -> std::slice::Iter<'a, SupportPoint> {
+    pub fn iter(&self) -> std::slice::Iter<SupportPoint> {
         self.into_iter()
     }
 
@@ -184,10 +184,10 @@ impl<'a> IntoIterator for &'a Simplex {
 
     fn into_iter(self) -> Self::IntoIter {
         match self {
-            Simplex::Point(val) => val.into_iter(),
-            Simplex::Line(val) => val.into_iter(),
-            Simplex::Triangle(val) => val.into_iter(),
-            Simplex::Tetrahedron(val) => val.into_iter(),
+            Simplex::Point(val) => val.iter(),
+            Simplex::Line(val) => val.iter(),
+            Simplex::Triangle(val) => val.iter(),
+            Simplex::Tetrahedron(val) => val.iter(),
         }
     }
 }

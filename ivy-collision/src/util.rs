@@ -47,10 +47,10 @@ pub fn support<T: CollisionPrimitive>(
 }
 
 /// Compute barycentric coordinates of p in relation to the triangle defined by (a, b, c).
-pub fn barycentric_vector(p: Vec3, a: Vec3, b: Vec3, c: Vec3) -> (f32, f32, f32) {
-    let v0 = b - a;
-    let v1 = c - a;
-    let v2 = p - a;
+pub fn barycentric_vector(point: Vec3, p1: Vec3, p2: Vec3, p3: Vec3) -> (f32, f32, f32) {
+    let v0 = p2 - p1;
+    let v1 = p3 - p1;
+    let v2 = point - p1;
     let d00 = v0.dot(v0);
     let d01 = v0.dot(v1);
     let d11 = v1.dot(v1);

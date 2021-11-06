@@ -197,11 +197,11 @@ impl Polytype {
             p3.support,
         );
 
-        let a = p1.a * u + p2.a * v + p3.a * w;
+        let contact_a = p1.a * u + p2.a * v + p3.a * w;
 
-        let b = p1.b * u + p2.b * v + p3.b * w;
+        let contact_b = p1.b * u + p2.b * v + p3.b * w;
 
-        ContactPoints::double(a, b)
+        ContactPoints::double(contact_a, contact_b)
     }
 
     /// Constructs a polytype from a simplex.

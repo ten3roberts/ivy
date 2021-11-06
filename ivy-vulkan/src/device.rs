@@ -180,12 +180,9 @@ fn get_missing_extensions(
     Ok(extensions
         .iter()
         .filter(|ext| {
-            available
-                .iter()
-                .find(|avail| unsafe {
-                    CStr::from_ptr(avail.extension_name.as_ptr()) == ext.as_c_str()
-                })
-                .is_none()
+            available.iter().all(|avail| unsafe {
+                CStr::from_ptr(avail.extension_name.as_ptr()) == ext.as_c_str()
+            })
         })
         .cloned()
         .collect())
@@ -201,7 +198,7 @@ fn pick_physical_device(
 
     devices
         .into_iter()
-        .filter_map(|d| rate_physical_device(instance, d, surface, &extensions))
+        .filter_map(|d| rate_physical_device(instance, d, surface, extensions))
         .max_by_key(|v| v.score)
         .ok_or(Error::UnsuitableDevice)
 }

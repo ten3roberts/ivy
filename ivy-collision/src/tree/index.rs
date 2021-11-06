@@ -47,7 +47,7 @@ impl NodeIndex {
     pub fn push_down<T: Array<Item = Object>>(self, nodes: &Nodes<T>, object: &Object) -> Self {
         let node = &nodes[self];
 
-        if let Some(child) = node.fits_child(nodes, &object) {
+        if let Some(child) = node.fits_child(nodes, object) {
             child.push_down(nodes, object)
         } else {
             self
@@ -167,7 +167,7 @@ impl NodeIndex {
         nodes[self].set_children([a, b]);
     }
 
-    pub fn query<'a, T, V>(self, nodes: &'a Nodes<T>, visitor: V) -> TreeQuery<'a, T, V>
+    pub fn query<T, V>(self, nodes: &Nodes<T>, visitor: V) -> TreeQuery<T, V>
     where
         T: Array<Item = Object>,
     {

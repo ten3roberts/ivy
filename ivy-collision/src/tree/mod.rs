@@ -6,7 +6,7 @@ use ivy_resources::Key;
 use slotmap::SlotMap;
 use smallvec::{Array, SmallVec};
 
-use crate::{Collider, Cube, Sphere};
+use crate::{util::TOLERANCE, Collider, Cube, Sphere};
 
 mod index;
 mod node;
@@ -105,7 +105,7 @@ impl<T: Array<Item = Object>> CollisionTree<T> {
                 let index = marker.index;
 
                 // Bounds have changed
-                if marker.object.max_scale != scale.component_max() {
+                if (marker.object.max_scale - scale.component_max()).abs() < TOLERANCE {
                     marker.object.bound = Sphere::enclose(collider, *scale)
                 }
 
@@ -188,7 +188,7 @@ impl<T: Array<Item = Object>> CollisionTree<T> {
     /// visitor accepts and returns an iterator for each node containing the
     /// output of the visited node. Oftentimes, the output of the visitor is an
     /// iterator, which means that a nested iterator can be returned.
-    pub fn query<'a, V>(&'a self, visitor: V) -> TreeQuery<'a, T, V> {
+    pub fn query<V>(&self, visitor: V) -> TreeQuery<T, V> {
         TreeQuery::new(visitor, &self.nodes, self.root)
     }
 }

@@ -19,10 +19,10 @@ pub fn gjk<A: CollisionPrimitive, B: CollisionPrimitive>(
     // let dir = (a_pos - b_pos).normalized();
     let dir = Vec3::unit_x();
     let a = minkowski_diff(
-        &a_transform,
-        &b_transform,
-        &a_transform_inv,
-        &b_transform_inv,
+        a_transform,
+        b_transform,
+        a_transform_inv,
+        b_transform_inv,
         a_coll,
         b_coll,
         dir,
@@ -31,16 +31,16 @@ pub fn gjk<A: CollisionPrimitive, B: CollisionPrimitive>(
     let mut simplex = Simplex::Point([a]);
 
     let mut iterations = 0;
-    while let Some(dir) = simplex.next() {
+    while let Some(dir) = simplex.next_dir() {
         let dir = dir.normalized();
 
         assert!((dir.mag() - 1.0 < 0.0001));
         // Get the next simplex
         let p = minkowski_diff(
-            &a_transform,
-            &b_transform,
-            &a_transform_inv,
-            &b_transform_inv,
+            a_transform,
+            b_transform,
+            a_transform_inv,
+            b_transform_inv,
             a_coll,
             b_coll,
             dir,
@@ -59,5 +59,5 @@ pub fn gjk<A: CollisionPrimitive, B: CollisionPrimitive>(
     }
 
     // Collision found
-    return (true, simplex);
+    (true, simplex)
 }

@@ -138,7 +138,7 @@ impl Sphere {
             return false;
         }
 
-        return (-b - (dis).sqrt() / (2.0 * a)) > -1.0;
+        (-b - (dis).sqrt() / (2.0 * a)) > -1.0
     }
 }
 
@@ -172,7 +172,7 @@ impl RayIntersect for Sphere {
             return false;
         }
 
-        return (-b - (dis).sqrt() / (2.0 * a)) > -1.0;
+        (-b - (dis).sqrt() / (2.0 * a)) > -1.0
     }
 }
 

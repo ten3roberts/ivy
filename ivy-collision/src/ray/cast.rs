@@ -16,6 +16,11 @@ impl RayIntersection {
     pub fn new(entity: Entity, contact: Contact) -> Self {
         Self { entity, contact }
     }
+
+    /// Returns the single ray contact point
+    pub fn point(&self) -> Vec3 {
+        self.contact.points[0]
+    }
 }
 
 /// Visitor for casting a ray into the collision pruning tree

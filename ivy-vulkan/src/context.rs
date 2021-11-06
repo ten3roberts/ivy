@@ -168,8 +168,7 @@ impl VulkanContext {
     /// Returns a commandpool that can be used to allocate for transfer
     /// operations
     pub fn transfer_pool(&self) -> &CommandPool {
-        &self
-            .transfer_pool
+        self.transfer_pool
             .as_ref()
             .expect("Transfer pool is only None when dropped")
     }
@@ -216,8 +215,9 @@ impl Drop for VulkanContext {
             debug_utils::destroy(&debug_utils, debug_messenger)
         }
 
-        self.surface
-            .map(|surface| surface::destroy(&self.surface_loader, surface));
+        if let Some(surface) = self.surface {
+            surface::destroy(&self.surface_loader, surface);
+        }
 
         instance::destroy(&self.instance);
     }

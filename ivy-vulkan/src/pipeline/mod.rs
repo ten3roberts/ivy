@@ -222,8 +222,8 @@ impl Pipeline {
         }[0];
 
         // Destroy shader modules
-        vertexshader.destroy(&device);
-        fragmentshader.destroy(&device);
+        vertexshader.destroy(device);
+        fragmentshader.destroy(device);
 
         Ok(Pipeline {
             context,
