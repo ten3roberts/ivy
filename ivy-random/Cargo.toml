@@ -1,6 +1,6 @@
 [package]
 name = "ivy-random"
-version = "1.4.0"
+version = "1.8.0"
 edition = "2018"
 description = "Provides random utility functions to the ivy framework"
 

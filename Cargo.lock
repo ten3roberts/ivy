@@ -455,7 +455,7 @@ checksum = "b71991ff56294aa922b450139ee08b3bfc70982c6b2c7562771375cf73542dd4"
 
 [[package]]
 name = "ivy"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "anyhow",
  "atomic_refcell",
@@ -483,7 +483,7 @@ dependencies = [
 
 [[package]]
 name = "ivy-collision"
-version = "0.1.0"
+version = "1.8.0"
 dependencies = [
  "arrayvec",
  "derive-for",
@@ -499,7 +499,7 @@ dependencies = [
 
 [[package]]
 name = "ivy-core"
-version = "1.7.0"
+version = "1.8.0"
 dependencies = [
  "anyhow",
  "crossbeam-channel",
@@ -517,7 +517,7 @@ dependencies = [
 
 [[package]]
 name = "ivy-graphics"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "anyhow",
  "anymap",
@@ -539,7 +539,7 @@ dependencies = [
 
 [[package]]
 name = "ivy-image"
-version = "1.4.0"
+version = "1.8.0"
 dependencies = [
  "cc",
  "libc",
@@ -548,7 +548,7 @@ dependencies = [
 
 [[package]]
 name = "ivy-input"
-version = "1.4.0"
+version = "1.8.0"
 dependencies = [
  "flume",
  "glfw",
@@ -558,7 +558,7 @@ dependencies = [
 
 [[package]]
 name = "ivy-physics"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "anyhow",
  "derive-for",
@@ -576,7 +576,7 @@ dependencies = [
 
 [[package]]
 name = "ivy-postprocessing"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "anyhow",
  "derive_more",
@@ -591,7 +591,7 @@ dependencies = [
 
 [[package]]
 name = "ivy-random"
-version = "1.4.0"
+version = "1.8.0"
 dependencies = [
  "rand",
  "ultraviolet",
@@ -599,7 +599,7 @@ dependencies = [
 
 [[package]]
 name = "ivy-rendergraph"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "anyhow",
  "hecs",
@@ -613,7 +613,7 @@ dependencies = [
 
 [[package]]
 name = "ivy-resources"
-version = "1.7.0"
+version = "1.8.0"
 dependencies = [
  "atomic_refcell",
  "parking_lot",
@@ -623,7 +623,7 @@ dependencies = [
 
 [[package]]
 name = "ivy-ui"
-version = "1.7.1"
+version = "1.8.0"
 dependencies = [
  "anyhow",
  "derive-for",
@@ -643,7 +643,7 @@ dependencies = [
 
 [[package]]
 name = "ivy-vulkan"
-version = "1.7.0"
+version = "1.8.0"
 dependencies = [
  "arrayvec",
  "ash",

@@ -1,6 +1,6 @@
 [package]
 name = "ivy"
-version = "1.7.1"
+version = "1.8.0"
 authors = ["Tim Roberts <ten3roberts@gmail.com>"]
 edition = "2018"
 description = "Application and game framework for Rust"
