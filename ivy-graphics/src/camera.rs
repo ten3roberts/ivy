@@ -187,8 +187,6 @@ impl GpuCameraData {
         let view = camera.view();
         let position = view.inversed()[3].xyz().into_homogeneous_point();
 
-        // dbg!(view.transform_vec3(Vec3::unit_y()));
-
         self.uniformbuffers[current_frame]
             .fill(
                 0,

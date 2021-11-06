@@ -214,7 +214,6 @@
 //             }
 //         };
 
-//         dbg!(iterations);
 //         let p = ray.support(collider, transform, transform_inv, min.normal);
 
 //         let support_dist = min.normal.dot(p.pos);

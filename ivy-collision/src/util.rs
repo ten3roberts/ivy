@@ -103,7 +103,7 @@ pub fn max_axis_abs(val: Vec3) -> Vec3 {
 }
 
 pub fn plane_ray(p: Vec3, normal: Vec3, ray: &Ray) -> Vec3 {
-    plane_intersect(p - ray.origin(), normal, ray.dir()) + ray.origin()
+    plane_intersect(p - *ray.origin(), normal, ray.dir()) + *ray.origin()
 }
 
 pub fn plane_intersect(p: Vec3, normal: Vec3, dir: Vec3) -> Vec3 {

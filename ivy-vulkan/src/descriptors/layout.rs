@@ -215,7 +215,7 @@ mod tests {
 
         layout.insert(bindings[0]);
 
-        dbg!(&layout);
+        eprintln!("Layout: {:?}", layout);
 
         bindings[2] = DescriptorSetBinding {
             binding: 2,
@@ -226,7 +226,7 @@ mod tests {
 
         layout.insert(bindings[2]);
 
-        dbg!(&layout);
+        eprintln!("Layout: {:?}", layout);
 
         bindings[1] = DescriptorSetBinding {
             binding: 1,
@@ -237,7 +237,7 @@ mod tests {
 
         layout.insert(bindings[1]);
 
-        dbg!(&layout);
+        eprintln!("Layout: {:?}", layout);
 
         bindings[3] = DescriptorSetBinding {
             binding: 3,
@@ -248,7 +248,7 @@ mod tests {
 
         layout.insert(bindings[3]);
 
-        dbg!(&layout);
+        eprintln!("Layout: {:?}", layout);
 
         bindings[5] = DescriptorSetBinding {
             binding: 5,
@@ -259,7 +259,7 @@ mod tests {
 
         layout.insert(bindings[5]);
 
-        dbg!(&layout);
+        eprintln!("Layout: {:?}", layout);
 
         bindings[4] = DescriptorSetBinding {
             binding: 4,
@@ -277,7 +277,7 @@ mod tests {
             ..Default::default()
         });
 
-        dbg!(&layout);
+        eprintln!("Layout: {:?}", layout);
 
         assert!(layout
             .bindings()

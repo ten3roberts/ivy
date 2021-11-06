@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use ivy_core::{Position, Scale, TransformMatrix};
 use ultraviolet::Vec3;
 
@@ -5,30 +7,30 @@ use crate::{CollisionPrimitive, Ray, RayIntersect};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Cube {
-    pub extents: Vec3,
+    pub half_extents: Vec3,
 }
 
 impl Cube {
-    pub fn new(extents: Vec3) -> Self {
-        Self { extents }
+    pub fn new(half_extents: Vec3) -> Self {
+        Self { half_extents }
     }
 
-    pub fn new_uniform(extent: f32) -> Self {
+    pub fn new_uniform(half_extent: f32) -> Self {
         Self {
-            extents: Vec3::new(extent, extent, extent),
+            half_extents: Vec3::new(half_extent, half_extent, half_extent),
         }
     }
 
     /// Performs ray intersection testing by assuming the cube is axis aligned
     /// and has a scale of 1.0
-    pub fn check_aabb_intersect(&self, position: &Position, scale: &Scale, ray: &Ray) -> bool {
+    pub fn check_aabb_intersect(&self, position: Position, scale: Scale, ray: &Ray) -> bool {
         let dir = ray.dir();
         let inv_dir = Vec3::new(1.0 / dir.x, 1.0 / dir.y, 1.0 / dir.z);
 
-        let origin = ray.origin() - **position;
+        let origin = ray.origin() - position;
 
-        let t1 = (-self.extents * **scale - origin) * inv_dir;
-        let t2 = (self.extents * **scale - origin) * inv_dir;
+        let t1 = (-self.half_extents * *scale - *origin) * inv_dir;
+        let t2 = (self.half_extents * *scale - *origin) * inv_dir;
         let tmin = t1.min_by_component(t2);
         let tmax = t1.max_by_component(t2);
 
@@ -36,29 +38,37 @@ impl Cube {
     }
 }
 
+impl Deref for Cube {
+    type Target = Vec3;
+
+    fn deref(&self) -> &Self::Target {
+        &self.half_extents
+    }
+}
+
 impl CollisionPrimitive for Cube {
     fn support(&self, dir: Vec3) -> Vec3 {
         let x = if dir.x > 0.0 {
-            self.extents.x
+            self.half_extents.x
         } else {
-            -self.extents.x
+            -self.half_extents.x
         };
         let y = if dir.y > 0.0 {
-            self.extents.y
+            self.half_extents.y
         } else {
-            -self.extents.y
+            -self.half_extents.y
         };
         let z = if dir.z > 0.0 {
-            self.extents.z
+            self.half_extents.z
         } else {
-            -self.extents.z
+            -self.half_extents.z
         };
 
         Vec3::new(x, y, z)
     }
 
     fn max_radius(&self) -> f32 {
-        self.extents.mag()
+        self.half_extents.mag()
     }
 }
 
@@ -69,12 +79,16 @@ impl RayIntersect for Cube {
         let dir = inv.transform_vec3(ray.dir());
         let inv_dir = Vec3::new(1.0 / dir.x, 1.0 / dir.y, 1.0 / dir.z);
 
-        let origin = inv.transform_point3(ray.origin());
+        let origin = inv.transform_point3(*ray.origin());
 
-        let t1 = (-self.extents - origin) * inv_dir;
-        let t2 = (self.extents - origin) * inv_dir;
+        let t1 = (-self.half_extents - origin) * inv_dir;
+        let t2 = (self.half_extents - origin) * inv_dir;
         let tmin = t1.min_by_component(t2);
         let tmax = t1.max_by_component(t2);
+
+        if tmax.component_min() < 0.0 {
+            return false;
+        }
 
         tmin.component_max() <= tmax.component_min()
     }
@@ -105,6 +119,27 @@ impl Sphere {
             radius: collider.max_radius() * scale.component_max(),
         }
     }
+
+    /// Checks an axis aligned perfect sphere ray intersection
+    pub fn check_aa_intersect(&self, pos: Position, ray: &Ray) -> bool {
+        let dir = ray.dir();
+        let origin = *ray.origin() - *pos;
+
+        let a = dir.dot(dir);
+
+        let b = 2.0 * dir.dot(origin);
+        let c = origin.dot(origin) - (self.radius * self.radius);
+
+        let b2 = b * b;
+
+        let dis = b2 - 4.0 * a * c;
+
+        if dis < 0.0 {
+            return false;
+        }
+
+        return (-b - (dis).sqrt() / (2.0 * a)) > -1.0;
+    }
 }
 
 impl CollisionPrimitive for Sphere {
@@ -122,7 +157,7 @@ impl RayIntersect for Sphere {
     fn check_intersect(&self, transform: &TransformMatrix, ray: &Ray) -> bool {
         let inv = transform.inversed();
         let dir = inv.transform_vec3(ray.dir());
-        let origin = inv.transform_point3(ray.origin());
+        let origin = inv.transform_point3(*ray.origin());
 
         let a = dir.dot(dir);
 
@@ -137,9 +172,7 @@ impl RayIntersect for Sphere {
             return false;
         }
 
-        return true;
-
-        // return -b - (dis).sqrt() / (2.0 * a)
+        return (-b - (dis).sqrt() / (2.0 * a)) > -1.0;
     }
 }
 

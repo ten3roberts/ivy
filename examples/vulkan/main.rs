@@ -7,7 +7,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Context};
-use collision::{Collider, Cube, Object, Ray, RayIntersect, Sphere};
+use collision::{util::project_plane, Collider, CollisionTree, Cube, Object, Ray, Sphere};
 use flume::Receiver;
 use glfw::{Action, CursorMode, Glfw, Key, WindowEvent};
 use graphics::gizmos::GizmoRenderer;
@@ -26,7 +26,7 @@ use ivy::{
 use ivy_resources::Resources;
 use parking_lot::RwLock;
 use physics::{
-    components::{AngularMass, Mass, Resitution, Velocity},
+    components::{AngularMass, Effector, Mass, Resitution, Velocity},
     PhysicsLayer,
 };
 use postprocessing::pbr::{create_pbr_pipeline, PBRInfo};
@@ -41,12 +41,12 @@ use log::*;
 
 const FRAMES_IN_FLIGHT: usize = 2;
 
-struct OverTime<T> {
+struct WithTime<T> {
     func: Box<dyn Fn(Entity, &mut T, f32, f32) + Send + Sync>,
     elapsed: f32,
 }
 
-impl<T> OverTime<T>
+impl<T> WithTime<T>
 where
     T: Component,
 {
@@ -164,7 +164,7 @@ fn main() -> anyhow::Result<()> {
             Ok(FixedTimeStep::new(
                 20.ms(),
                 (
-                    PhysicsLayer::<[Object; 32]>::new(w, r, e, Vec3::one() * 100.0)?,
+                    PhysicsLayer::<[Object; 32]>::new(w, r, e, Cube::new_uniform(100.0))?,
                     LogicLayer::new(w, r, e)?,
                 ),
             ))
@@ -434,12 +434,12 @@ fn setup_objects(
     ));
 
     world.spawn((
-        Collider::new(Cube::new_uniform(1.0)),
+        Collider::new(Sphere::new(1.0)),
         Color::rgb(1.0, 1.0, 1.0),
         Mass(20.0),
         Velocity::default(),
         Position::new(0.0, 0.6, -1.2),
-        Scale::uniform(0.5),
+        Scale::new(0.5, 1.0, 0.5),
         // Rotation::euler_angles(0.0, 1.0, 1.0),
         Mover::new(
             InputVector {
@@ -455,7 +455,6 @@ fn setup_objects(
             1.0,
             false,
         ),
-        Sphere::new(1.0),
         _sphere_mesh,
         material,
         assets.geometry_pass,
@@ -463,7 +462,7 @@ fn setup_objects(
 
     let mut rng = StdRng::seed_from_u64(43);
 
-    const COUNT: usize = 0;
+    const COUNT: usize = 128;
 
     world
         .spawn_batch((0..COUNT).map(|_| {
@@ -616,7 +615,7 @@ impl Layer for LogicLayer {
 
         let dt = frame_time.secs();
 
-        let (_e, (_, camera_rot)) = world
+        let (_e, (camera_pos, camera_rot)) = world
             .query_mut::<(&Position, &mut Rotation)>()
             .with::<Camera>()
             .into_iter()
@@ -636,81 +635,67 @@ impl Layer for LogicLayer {
         )
         .into();
 
-        world
-            .query::<&mut Color>()
-            .iter()
-            .for_each(|(_, val)| *val = Color::white());
+        let camera_forward = camera_rot.into_matrix() * -Vec3::unit_z();
 
-        let ray = Ray::new(Vec3::new(1.0, 0.0, 0.0), Vec3::new(0.5, 1.0, -1.0));
+        let ray = Ray::new(*camera_pos, camera_forward);
         let mut gizmos = resources.get_default_mut::<Gizmos>()?;
 
-        gizmos.push(Gizmo::Line {
-            origin: ray.origin(),
-            color: Color::red(),
-            dir: ray.dir() * 100.0,
-            radius: 0.01,
-            corner_radius: 1.0,
-        });
+        let tree = resources.get_default::<CollisionTree<[Object; 32]>>()?;
 
-        world
-            .query::<(&Cube, &Position, &Rotation, &Scale, &mut Color)>()
-            .iter()
-            .for_each(|(_, (cube, pos, rot, scale, color))| {
-                let transform = TransformMatrix::new(*pos, *rot, *scale);
-                if cube.check_intersect(&transform, &ray) {
-                    *color = Color::red()
-                } else {
-                    *color = Color::white()
-                }
-            });
-
-        world
-            .query::<(&Sphere, &Position, &Rotation, &Scale, &mut Color)>()
-            .iter()
-            .for_each(|(_, (sphere, pos, rot, scale, color))| {
-                let transform = TransformMatrix::new(*pos, *rot, *scale);
-                if sphere.check_intersect(&transform, &ray) {
-                    *color = Color::red()
-                } else {
-                    *color = Color::white()
-                }
-            });
-
-        if let Some((_, contact)) = ray.cast(world)
-        // Ray::new(**camera_pos, camera_rot.into_matrix() * -Vec3::unit_z()).cast(world)
         {
-            gizmos.push(Gizmo::Line {
-                origin: contact.points[0],
-                color: Color::blue(),
-                dir: contact.normal,
-                radius: 0.02,
-                corner_radius: 1.0,
-            });
+            let _scope = TimedScope::new(|elapsed| eprintln!("Ray casting took {:.3?}", elapsed));
+            gizmos.begin_section("ray casting");
 
-            for (i, p) in contact.points.iter().enumerate() {
-                gizmos.push(Gizmo::Sphere {
-                    origin: *p,
-                    color: Color::hsl(i as f32 * 30.0, 1.0, 0.5),
-                    radius: 0.05 / (i + 1) as f32,
-                })
+            // Perform a ray cast with tractor beam example
+            for hit in ray.cast(world, &tree).flatten() {
+                let mut query =
+                    world.query_one::<(&mut Effector, &Velocity, &Position)>(hit.entity)?;
+
+                let (effector, vel, pos) = query.get().context("Failed to query hit entity")?;
+
+                // effector.apply_force(hit.contact.normal * -10.0);
+                let sideways_movement = project_plane(**vel, ray.dir());
+                let sideways_offset = project_plane(hit.contact.points[0] - **pos, ray.dir());
+                let centering = sideways_offset * 500.0;
+
+                let dampening = sideways_movement * -50.0;
+                let target = *ray.origin() + camera_forward * 5.0;
+                let towards = target - hit.contact.points[0];
+                let towards_vel = (ray.dir() * ray.dir().dot(**vel)).dot(towards.normalized());
+                let max_vel = (5.0 * towards.mag_sq()).max(0.1);
+
+                let towards = towards.normalized() * 50.0 * (max_vel - towards_vel) / max_vel;
+
+                effector.apply_force(dampening + towards + centering);
+
+                gizmos.push(Gizmo::Line {
+                    origin: hit.contact.points[0],
+                    color: Color::blue(),
+                    dir: hit.contact.normal,
+                    radius: 0.02,
+                    corner_radius: 1.0,
+                });
+
+                for (i, p) in hit.contact.points.iter().enumerate() {
+                    gizmos.push(Gizmo::Sphere {
+                        origin: *p,
+                        color: Color::hsl(i as f32 * 30.0, 1.0, 0.5),
+                        radius: 0.05 / (i + 1) as f32,
+                    })
+                }
             }
         }
 
-        gizmos.push(Gizmo::Sphere {
-            origin: Vec3::zero(),
-            color: Color::magenta(),
-            radius: 0.05,
-        });
-
-        // Clear gizmos from last frame
-        OverTime::<RelativeOffset>::update(world, dt);
+        WithTime::<RelativeOffset>::update(world, dt);
         Periodic::<Text>::update(world);
 
         move_system(world, &self.input, dt);
 
         {
+            // TODO timed_scope!
             let _scope =
                 TimedScope::new(|elapsed| log::trace!("--Graphics updating took {:.3?}", elapsed));
+
             graphics::systems::satisfy_objects(world);
             graphics::systems::update_view_matrices(world);
         }
@@ -799,7 +784,7 @@ fn setup_ui(
             Widget,
             image,
             ui_pass,
-            OverTime::<RelativeOffset>::new(Box::new(|_, offset, elapsed, _| {
+            WithTime::<RelativeOffset>::new(Box::new(|_, offset, elapsed, _| {
                 offset.x = (elapsed * 0.25).sin();
             })),
             RelativeOffset::new(0.0, -0.5),
@@ -862,7 +847,7 @@ fn setup_ui(
             Widget,
             image,
             ui_pass,
-            OverTime::<RelativeOffset>::new(Box::new(|_, offset, elapsed, _| {
+            WithTime::<RelativeOffset>::new(Box::new(|_, offset, elapsed, _| {
                 *offset = RelativeOffset::new((elapsed).cos() * 4.0, elapsed.sin() * 2.0) * 0.5
             })),
             RelativeOffset::default(),
@@ -876,7 +861,7 @@ fn setup_ui(
             Widget,
             image,
             ui_pass,
-            OverTime::<RelativeOffset>::new(Box::new(|_, offset, elapsed, _| {
+            WithTime::<RelativeOffset>::new(Box::new(|_, offset, elapsed, _| {
                 *offset = RelativeOffset::new(-(elapsed * 5.0).cos(), -(elapsed * 5.0).sin()) * 0.5
             })),
             RelativeOffset::default(),

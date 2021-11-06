@@ -1,9 +1,14 @@
+use std::{
+    iter::{Cloned, Flatten},
+    option::Iter,
+};
+
 use hecs::Entity;
 use ivy_core::TransformMatrix;
 use ultraviolet::Vec3;
 
 use super::*;
-use crate::Sphere;
+use crate::{Cube, Sphere};
 
 #[derive(Debug)]
 /// The node in collision tree.
@@ -14,8 +19,8 @@ pub struct Node<T: Array<Item = Object>> {
     pub(crate) object_count: usize,
     pub(crate) depth: usize,
     pub(crate) iteration: usize,
-    pub(crate) origin: Vec3,
-    pub(crate) half_extents: Vec3,
+    pub(crate) origin: Position,
+    pub(crate) bounds: Cube,
     pub(crate) children: Option<[NodeIndex; 2]>,
     pub(crate) parent: NodeIndex,
 }
@@ -29,14 +34,14 @@ impl<T: Array<Item = Object>> std::ops::Deref for Node<T> {
 }
 
 impl<T: Array<Item = Object>> Node<T> {
-    pub fn new(parent: NodeIndex, depth: usize, origin: Vec3, half_extents: Vec3) -> Self {
+    pub fn new(parent: NodeIndex, depth: usize, origin: Position, bounds: Cube) -> Self {
         Self {
             objects: Default::default(),
             object_count: 0,
             depth,
             iteration: 0,
             origin,
-            half_extents,
+            bounds,
             children: None,
             parent,
         }
@@ -44,31 +49,28 @@ impl<T: Array<Item = Object>> Node<T> {
 
     /// Returns the child that fully contains object, if any.
     pub fn fits_child(&self, nodes: &Nodes<T>, object: &Object) -> Option<NodeIndex> {
-        self.children
-            .iter()
-            .flatten()
-            .find(|val| nodes[**val].contains(object))
-            .map(|val| *val)
+        self.children_iter()
+            .find(|val| nodes[*val].contains(object))
     }
 
     /// Returns true if the point is inside the node
     pub fn contains_point(&self, point: Vec3) -> bool {
-        point.x < self.origin.x + self.half_extents.x
-            && point.x > self.origin.x - self.half_extents.x
-            && point.y < self.origin.y + self.half_extents.y
-            && point.y > self.origin.y - self.half_extents.y
-            && point.z < self.origin.z + self.half_extents.z
-            && point.z > self.origin.z - self.half_extents.z
+        point.x < self.origin.x + self.bounds.x
+            && point.x > self.origin.x - self.bounds.x
+            && point.y < self.origin.y + self.bounds.y
+            && point.y > self.origin.y - self.bounds.y
+            && point.z < self.origin.z + self.bounds.z
+            && point.z > self.origin.z - self.bounds.z
     }
 
     /// Returns true if the object bounded by a sphere completely fits in the node.
     pub fn contains(&self, object: &Object) -> bool {
-        object.origin.x + object.bound.radius < self.origin.x + self.half_extents.x
-            && object.origin.x - object.bound.radius > self.origin.x - self.half_extents.x
-            && object.origin.y + object.bound.radius < self.origin.y + self.half_extents.y
-            && object.origin.y - object.bound.radius > self.origin.y - self.half_extents.y
-            && object.origin.z + object.bound.radius < self.origin.z + self.half_extents.z
-            && object.origin.z - object.bound.radius > self.origin.z - self.half_extents.z
+        object.origin.x + object.bound.radius < self.origin.x + self.bounds.x
+            && object.origin.x - object.bound.radius > self.origin.x - self.bounds.x
+            && object.origin.y + object.bound.radius < self.origin.y + self.bounds.y
+            && object.origin.y - object.bound.radius > self.origin.y - self.bounds.y
+            && object.origin.z + object.bound.radius < self.origin.z + self.bounds.z
+            && object.origin.z - object.bound.radius > self.origin.z - self.bounds.z
     }
 
     /// Sets the value of an object for this iteration
@@ -145,6 +147,45 @@ impl<T: Array<Item = Object>> Node<T> {
     /// Get a mutable reference to the node's entities.
     pub fn objects_mut(&mut self) -> &mut SmallVec<T> {
         &mut self.objects
+    }
+
+    /// Get a reference to the node's objects.
+    pub fn objects(&self) -> &SmallVec<T> {
+        &self.objects
+    }
+
+    /// Get a reference to the node's origin.
+    pub fn origin(&self) -> Position {
+        self.origin
+    }
+
+    /// Get a reference to the node's bounds.
+    pub fn bounds(&self) -> &Cube {
+        &self.bounds
+    }
+
+    /// Returns the node's children. If the node is a leaf node, and empty slice
+    /// is returned
+    pub fn children(&self) -> &[NodeIndex] {
+        match &self.children {
+            Some(val) => val,
+            None => &[],
+        }
+    }
+
+    /// Returns the node's children. If the node is a leaf node, and empty slice
+    /// is returned
+    pub fn children_iter(&self) -> Cloned<Flatten<Iter<[NodeIndex; 2]>>> {
+        self.children.iter().flatten().cloned()
+    }
+
+    pub fn is_leaf(&self) -> bool {
+        self.children.is_none()
+    }
+
+    /// Get a reference to the node's parent.
+    pub fn parent(&self) -> NodeIndex {
+        self.parent
     }
 }
 

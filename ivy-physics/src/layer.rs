@@ -3,11 +3,10 @@ use std::marker::PhantomData;
 use crate::systems;
 use anyhow::Context;
 use hecs::World;
-use ivy_collision::{Collision, CollisionTree, Object};
-use ivy_core::{Events, Layer, TimedScope};
+use ivy_collision::{Collision, CollisionTree, Cube, Object};
+use ivy_core::{Events, Layer, Position, TimedScope};
 use ivy_resources::{Resources, Storage};
 use smallvec::Array;
-use ultraviolet::Vec3;
 
 pub struct PhysicsLayer<T: Array<Item = Object>> {
     rx: flume::Receiver<Collision>,
@@ -19,14 +18,14 @@ impl<T: Array<Item = Object> + Storage> PhysicsLayer<T> {
         _world: &mut World,
         resources: &mut Resources,
         events: &mut Events,
-        bounds: Vec3,
+        bounds: Cube,
     ) -> anyhow::Result<Self> {
         let (tx, rx) = flume::unbounded();
         events.subscribe(tx);
 
         resources
             .default_entry::<CollisionTree<T>>()?
-            .or_insert_with(|| CollisionTree::new(Vec3::zero(), bounds));
+            .or_insert_with(|| CollisionTree::new(Position::default(), bounds));
 
         Ok(Self {
             rx,

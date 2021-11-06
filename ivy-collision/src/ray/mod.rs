@@ -1,20 +1,27 @@
-use hecs::{Entity, World};
+use std::ops::Deref;
+
+use hecs::World;
 use ivy_core::{Position, TransformMatrix};
+use smallvec::Array;
 use ultraviolet::{Mat4, Vec3};
+
+mod cast;
+pub use cast::*;
 
 use crate::{
     epa,
+    query::TreeQuery,
     util::{support, SupportPoint},
-    Collider, CollisionPrimitive, Contact, Simplex,
+    CollisionPrimitive, CollisionTree, Contact, Object, Simplex,
 };
 
 pub struct Ray {
-    origin: Vec3,
+    origin: Position,
     dir: Vec3,
 }
 
 impl Ray {
-    pub fn new(origin: Vec3, dir: Vec3) -> Self {
+    pub fn new(origin: Position, dir: Vec3) -> Self {
         Self {
             origin,
             dir: dir.normalized(),
@@ -31,9 +38,9 @@ impl Ray {
         let a = support(&transform, &transform_inv, collider, dir);
 
         SupportPoint {
-            support: a - self.origin,
+            support: a - *self.origin,
             a,
-            b: self.origin,
+            b: *self.origin,
         }
     }
 
@@ -91,23 +98,16 @@ impl Ray {
         ))
     }
 
-    pub fn cast(&self, world: &World) -> Option<(Entity, Contact)> {
-        world
-            .query::<(&Position, &ivy_core::Rotation, &ivy_core::Scale, &Collider)>()
-            .iter()
-            .find_map(|(e, (pos, rot, scale, collider))| {
-                let transform = TransformMatrix::new(*pos, *rot, *scale);
-
-                if let Some(val) = self.intersects(collider, &transform) {
-                    Some((e, val))
-                } else {
-                    None
-                }
-            })
+    pub fn cast<'r, 'w, 't, T: Deref<Target = CollisionTree<A>>, A: Array<Item = Object>>(
+        &'r self,
+        world: &'w World,
+        tree: &'t T,
+    ) -> TreeQuery<'t, A, RayCaster<'r, 'w>> {
+        tree.query(RayCaster::new(self, world))
     }
 
     /// Get a reference to the ray's origin.
-    pub fn origin(&self) -> Vec3 {
+    pub fn origin(&self) -> Position {
         self.origin
     }
 

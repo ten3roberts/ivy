@@ -5,15 +5,19 @@ use ivy_core::{Events, Gizmos, Position, Rotation, Scale, TimedScope, TransformM
 use ivy_resources::Key;
 use slotmap::SlotMap;
 use smallvec::{Array, SmallVec};
-use ultraviolet::Vec3;
 
-use crate::{Collider, Sphere};
+use crate::{Collider, Cube, Sphere};
 
 mod index;
 mod node;
+pub mod query;
+mod visitor;
 
 pub use index::*;
 pub use node::*;
+pub use visitor::*;
+
+use self::query::TreeQuery;
 
 /// Marker for where the object is in the tree
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -22,7 +26,7 @@ pub struct TreeMarker {
     object: Object,
 }
 
-type Nodes<T> = SlotMap<NodeIndex, Node<T>>;
+pub(crate) type Nodes<T> = SlotMap<NodeIndex, Node<T>>;
 
 pub struct CollisionTree<T: Array<Item = Object>> {
     nodes: SlotMap<NodeIndex, Node<T>>,
@@ -34,9 +38,9 @@ pub struct CollisionTree<T: Array<Item = Object>> {
 }
 
 impl<T: Array<Item = Object>> CollisionTree<T> {
-    pub fn new(origin: Vec3, half_extents: Vec3) -> Self {
+    pub fn new(origin: Position, bounds: Cube) -> Self {
         let mut nodes = SlotMap::with_key();
-        let root = nodes.insert(Node::new(NodeIndex::null(), 0, origin, half_extents));
+        let root = nodes.insert(Node::new(NodeIndex::null(), 0, origin, bounds));
         Self {
             nodes,
             popped: (Vec::new(), Vec::new()),
@@ -178,6 +182,14 @@ impl<T: Array<Item = Object>> CollisionTree<T> {
     pub fn draw_gizmos(&self, world: &mut World, gizmos: &mut Gizmos) {
         gizmos.begin_section("CollisionTree");
         self.root.draw_gizmos(world, &self.nodes, 0, gizmos);
+    }
+
+    /// Queries the tree with a given visitor. Traverses only the nodes that the
+    /// visitor accepts and returns an iterator for each node containing the
+    /// output of the visited node. Oftentimes, the output of the visitor is an
+    /// iterator, which means that a nested iterator can be returned.
+    pub fn query<'a, V>(&'a self, visitor: V) -> TreeQuery<'a, T, V> {
+        TreeQuery::new(visitor, &self.nodes, self.root)
     }
 }
 

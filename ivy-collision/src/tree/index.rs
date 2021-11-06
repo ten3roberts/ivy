@@ -11,9 +11,11 @@ use std::fmt::Debug;
 use ultraviolet::Vec3;
 
 use crate::intersect;
+use crate::query::TreeQuery;
 use crate::util::max_axis;
 use crate::Collider;
 use crate::Collision;
+use crate::Cube;
 
 use super::node::Node;
 use super::Nodes;
@@ -70,11 +72,8 @@ impl NodeIndex {
         object: &Object,
     ) -> Option<NodeIndex> {
         nodes[self]
-            .children
-            .into_iter()
-            .flatten()
+            .children_iter()
             .find(|val| nodes[*val].contains(object))
-            .map(|val| val)
     }
 
     /// Inserts into node. Does not check if it is fully contained or if already
@@ -147,15 +146,15 @@ impl NodeIndex {
 
         let max = max_axis(width);
 
-        let off = node.half_extents * max * 0.5;
+        let off = *node.bounds * max * 0.5;
         let origin = node.origin;
 
-        let extents = node.half_extents - off;
-        let a_origin = origin - off;
-        let b_origin = origin + off;
+        let extents = *node.bounds - off;
+        let a_origin = *origin - off;
+        let b_origin = *origin + off;
 
-        let a = Node::new(self, node.depth + 1, a_origin, extents);
-        let b = Node::new(self, node.depth + 1, b_origin, extents);
+        let a = Node::new(self, node.depth + 1, a_origin.into(), Cube::new(extents));
+        let b = Node::new(self, node.depth + 1, b_origin.into(), Cube::new(extents));
 
         // Repartition nodes. Retain those that do not fit in any new leaf, and
         // push those that do to the popped list.
@@ -166,6 +165,13 @@ impl NodeIndex {
         let b = nodes.insert(b);
 
         nodes[self].set_children([a, b]);
+    }
+
+    pub fn query<'a, T, V>(self, nodes: &'a Nodes<T>, visitor: V) -> TreeQuery<'a, T, V>
+    where
+        T: Array<Item = Object>,
+    {
+        TreeQuery::new(visitor, nodes, self)
     }
 
     pub fn check_collisions<'a, T, G>(
@@ -180,7 +186,6 @@ impl NodeIndex {
         G: Array<Item = &'a Object>,
     {
         let old_len = top_objects.len();
-        // dbg!(old_len);
         let node = &nodes[self];
         let objects = &node.objects;
 
@@ -215,9 +220,7 @@ impl NodeIndex {
         top_objects.extend(node.objects.iter());
 
         // Go deeper in tree
-        node.children
-            .iter()
-            .flatten()
+        node.children_iter()
             .try_for_each(|val| val.check_collisions(world, events, nodes, top_objects))?;
 
         // Pop the stack
@@ -243,9 +246,9 @@ impl NodeIndex {
 
         if node.object_count != 0 {
             gizmos.push(Gizmo::Cube {
-                origin: node.origin,
+                origin: *node.origin,
                 color,
-                half_extents: node.half_extents,
+                half_extents: node.bounds.half_extents,
                 radius: 0.02 + 0.001 * depth as f32,
             });
         }
@@ -261,9 +264,7 @@ impl NodeIndex {
         //     });
         // }
 
-        node.children
-            .into_iter()
-            .flatten()
+        node.children_iter()
             .for_each(|val| val.draw_gizmos(world, nodes, depth + 1, gizmos))
     }
 }

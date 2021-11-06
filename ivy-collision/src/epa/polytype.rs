@@ -76,8 +76,8 @@ impl Face {
     pub fn edges(&self) -> [Edge; 3] {
         [
             (self.indices[0], self.indices[1]),
-            (self.indices[0], self.indices[2]),
             (self.indices[1], self.indices[2]),
+            (self.indices[2], self.indices[0]),
         ]
     }
 }
@@ -131,28 +131,22 @@ impl Polytype {
     pub fn add<F: Fn(&[SupportPoint], [u16; 3]) -> Face>(&mut self, p: SupportPoint, face_func: F) {
         // remove faces that can see the point
         let mut edges = SmallVec::<[Edge; 16]>::new();
-        let mut i = 0;
+        let points = &self.points;
 
-        while i < self.faces.len() {
-            let face = self.faces[i];
-            // Vector from a point on the face to the new point
-            let to = p.support - self[face.indices[0]].support;
-
-            // Dot product between current face normal and direction from face
-            // to new point
+        self.faces.retain(|face| {
+            let to = p.support - points[face.indices[0] as usize].support;
             let dot = face.normal.dot(to);
 
-            // Current face points into the new point
             if dot > 0.0 {
-                // Only remove the face if the polytype is three dimensional
-                let face = self.faces.swap_remove(i);
-                for edge in face.edges() {
-                    remove_or_add_edge(&mut edges, edge);
-                }
+                face.edges()
+                    .iter()
+                    .for_each(|edge| remove_or_add_edge(&mut edges, *edge));
+                false
             } else {
-                i += 1;
+                true
             }
-        }
+        });
+
         // add vertex
         let n = self.points.len();
         self.points.push(p);

@@ -99,9 +99,6 @@ impl Simplex {
 
                 let perp = perp * perp.dot(a0).signum();
 
-                // // Project onto the plane of the vector
-                // let perp = (perp - normal * perp.dot(normal)).normalized();
-                // dbg!(a.pos, b.pos, perp, normal, perp.dot(normal));
                 Some(perp)
             }
             Self::Triangle([a, b, c]) => {
