@@ -50,6 +50,9 @@ pub type Section = &'static str;
 /// gizmos the section from previous calls and start adding subsequent gizmos to
 /// the seciton. This is to separate clearing of gizmos drawn from layers and
 /// systems of different intervals.
+///
+/// The API works much like an immediate mode GUI, except different sections are
+/// transient at different durations.
 #[derive(Default)]
 pub struct Gizmos {
     current: Option<Section>,

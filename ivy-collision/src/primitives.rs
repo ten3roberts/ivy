@@ -15,7 +15,7 @@ impl Cube {
         Self { half_extents }
     }
 
-    pub fn new_uniform(half_extent: f32) -> Self {
+    pub fn uniform(half_extent: f32) -> Self {
         Self {
             half_extents: Vec3::new(half_extent, half_extent, half_extent),
         }

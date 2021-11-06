@@ -1,13 +1,9 @@
-use std::collections::HashSet;
-
 use crate::collision::resolve_collision;
 use crate::components::*;
 use crate::Result;
 use hecs::World;
-use ivy_collision::Collider;
 use ivy_collision::Collision;
-use ivy_core::TransformMatrix;
-use ivy_core::{Events, Position, Rotation, Scale};
+use ivy_core::{Position, Rotation};
 use ultraviolet::Bivec3;
 use ultraviolet::Rotor3;
 
@@ -46,42 +42,6 @@ pub fn wrap_around_system(world: &World) {
             pos.y = 100.0
         }
     });
-}
-
-pub fn collision_system(world: &World, events: &mut Events) -> Result<()> {
-    let mut checked = HashSet::new();
-
-    world
-        .query::<(&Position, &Rotation, &Scale, &Collider)>()
-        .iter()
-        .try_for_each(|(e1, (pos, rot, scale, a))| -> Result<_> {
-            let a_transform = TransformMatrix::new(*pos, *rot, *scale);
-            world
-                .query::<(&Position, &Rotation, &Scale, &Collider)>()
-                .iter()
-                .try_for_each(|(e2, (pos, rot, scale, b))| -> Result<_> {
-                    if checked.get(&(e2, e1)).is_some() {
-                        return Ok(());
-                    }
-                    let b_transform = TransformMatrix::new(*pos, *rot, *scale);
-                    if e1 == e2 {
-                        return Ok(());
-                    }
-
-                    let intersection = ivy_collision::intersect(&*a_transform, &*b_transform, a, b);
-
-                    if let Some(intersection) = intersection {
-                        checked.insert((e1, e2));
-                        events.send(Collision {
-                            a: e1,
-                            b: e2,
-                            contact: intersection,
-                        })
-                    }
-
-                    Ok(())
-                })
-        })
 }
 
 pub fn resolve_collisions<I: Iterator<Item = Collision>>(

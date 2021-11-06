@@ -9,7 +9,7 @@ use std::{
 use anyhow::{anyhow, Context};
 use collision::{util::project_plane, Collider, CollisionTree, Cube, Object, Ray, Sphere};
 use flume::Receiver;
-use glfw::{Action, CursorMode, Glfw, Key, WindowEvent};
+use glfw::{Action, CursorMode, Glfw, Key, MouseButton, WindowEvent};
 use graphics::gizmos::GizmoRenderer;
 use hecs::*;
 use hecs_hierarchy::Hierarchy;
@@ -164,7 +164,7 @@ fn main() -> anyhow::Result<()> {
             Ok(FixedTimeStep::new(
                 20.ms(),
                 (
-                    PhysicsLayer::<[Object; 32]>::new(w, r, e, Cube::new_uniform(100.0))?,
+                    PhysicsLayer::<[Object; 32]>::new(w, r, e, Cube::uniform(100.0))?,
                     LogicLayer::new(w, r, e)?,
                 ),
             ))
@@ -439,7 +439,7 @@ fn setup_objects(
         Mass(20.0),
         Velocity::default(),
         Position::new(0.0, 0.6, -1.2),
-        Scale::new(0.5, 1.0, 0.5),
+        Scale::uniform(1.0),
         // Rotation::euler_angles(0.0, 1.0, 1.0),
         Mover::new(
             InputVector {
@@ -471,7 +471,7 @@ fn setup_objects(
 
             (
                 AngularMass(5.0),
-                Collider::new(Cube::new_uniform(1.0)),
+                Collider::new(Cube::uniform(1.0)),
                 Color::rgb(1.0, 1.0, 1.0),
                 Mass(10.0),
                 pos,
@@ -642,9 +642,9 @@ impl Layer for LogicLayer {
 
         let tree = resources.get_default::<CollisionTree<[Object; 32]>>()?;
 
-        {
+        gizmos.begin_section("ray casting");
+        if self.input.mouse_button(MouseButton::Button1) {
             let _scope = TimedScope::new(|elapsed| eprintln!("Ray casting took {:.3?}", elapsed));
-            gizmos.begin_section("ray casting");
 
             // Perform a ray cast with tractor beam example
             for hit in ray.cast(world, &tree).flatten() {
