@@ -5,23 +5,22 @@ use crate::components::*;
 use crate::Result;
 use hecs::World;
 use ivy_collision::Collider;
+use ivy_collision::Collision;
+use ivy_core::TransformMatrix;
 use ivy_core::{Events, Position, Rotation, Scale};
 use ultraviolet::Bivec3;
 use ultraviolet::Rotor3;
 
-use crate::{
-    collision::Collision,
-    components::{AngularVelocity, TransformMatrix, Velocity},
-};
+use crate::components::{AngularVelocity, Velocity};
 
-pub fn integrate_velocity_system(world: &World, dt: f32) {
+pub fn integrate_velocity(world: &World, dt: f32) {
     world
         .query::<(&mut Position, &Velocity)>()
         .iter()
         .for_each(|(_, (pos, vel))| *pos += Position(vel.0 * dt));
 }
 
-pub fn integrate_angular_velocity_system(world: &World, dt: f32) {
+pub fn integrate_angular_velocity(world: &World, dt: f32) {
     world
         .query::<(&mut Rotation, &AngularVelocity)>()
         .into_iter()
@@ -76,7 +75,7 @@ pub fn collision_system(world: &World, events: &mut Events) -> Result<()> {
                         events.send(Collision {
                             a: e1,
                             b: e2,
-                            intersection,
+                            contact: intersection,
                         })
                     }
 
@@ -85,42 +84,55 @@ pub fn collision_system(world: &World, events: &mut Events) -> Result<()> {
         })
 }
 
-pub fn resolve_collisions_system<I: Iterator<Item = Collision>>(
+pub fn resolve_collisions<I: Iterator<Item = Collision>>(
     world: &mut World,
     mut collisions: I,
 ) -> Result<()> {
-    collisions
-        .next()
-        .map(|collision| -> Result<()> {
-            if collision.a == collision.b {
-                return Ok(());
-            };
+    collisions.try_for_each(|coll| -> Result<()> {
+        assert_ne!(coll.a, coll.b);
 
-            let mut a_query = world.query_one::<RbQuery>(collision.a)?;
-            let a = a_query.get().unwrap();
+        let mut a_query = world.query_one::<RbQuery>(coll.a)?;
+        let a = a_query.get().unwrap();
 
-            let mut b_query = world.query_one::<RbQuery>(collision.b)?;
+        let mut b_query = world.query_one::<RbQuery>(coll.b)?;
 
-            let b = b_query.get().unwrap();
+        let b = b_query.get().unwrap();
+        let a_pos = *a.pos;
+        let b_pos = *b.pos;
+        let a_mass = **a.mass;
+        let b_mass = **b.mass;
 
-            let impulse = resolve_collision(collision.intersection, &a, &b);
-            {
-                let mut effector = world.get_mut::<Effector>(collision.a)?;
-                effector.apply_impulse_at(impulse, collision.intersection.points[0] - **a.pos);
+        let total_mass = a_mass + b_mass;
 
-                drop(effector);
+        let impulse = resolve_collision(&coll.contact, &a, &b);
 
-                let mut effector = world.get_mut::<Effector>(collision.b)?;
-                effector.apply_impulse_at(-impulse, collision.intersection.points[1] - **b.pos);
-            }
+        drop((a_query, b_query));
 
-            Ok(())
-        })
-        .unwrap_or(Ok(()))
+        {
+            let dir = coll.contact.normal * coll.contact.depth;
+
+            let mut pos = world.get_mut::<Position>(coll.a)?;
+            *pos -= Position(dir * (b_mass / total_mass));
+            drop(pos);
+
+            let mut pos = world.get_mut::<Position>(coll.b)?;
+            *pos += Position(dir * (a_mass / total_mass));
+            drop(pos);
+        }
+
+        let mut effector = world.get_mut::<Effector>(coll.a)?;
+        effector.apply_impulse_at(impulse, coll.contact.points[0] - *a_pos);
+        drop(effector);
+
+        let mut effector = world.get_mut::<Effector>(coll.b)?;
+        effector.apply_impulse_at(-impulse, coll.contact.points[1] - *b_pos);
+
+        Ok(())
+    })
 }
 
 /// Applies effectors to their respective entities and clears the effects.
-pub fn apply_effectors_system(world: &World, dt: f32) {
+pub fn apply_effectors(world: &World, dt: f32) {
     world
         .query::<(
             &mut Velocity,
@@ -146,13 +158,33 @@ struct Satisfied;
 
 pub fn satisfy_objects(world: &mut World) {
     let entities = world
-        .query_mut::<Option<&Effector>>()
+        .query_mut::<(
+            Option<&Effector>,
+            Option<&Velocity>,
+            Option<&AngularVelocity>,
+            Option<&AngularMass>,
+            Option<&Mass>,
+            Option<&Resitution>,
+        )>()
         .without::<Satisfied>()
         .into_iter()
-        .map(|(e, effector)| (e, effector.cloned()))
+        .map(|(e, (effector, vel, w, wm, m, res))| {
+            (
+                e,
+                (
+                    effector.cloned().unwrap_or_default(),
+                    vel.cloned().unwrap_or_default(),
+                    w.cloned().unwrap_or_default(),
+                    wm.cloned().unwrap_or_default(),
+                    m.cloned().unwrap_or_default(),
+                    res.cloned().unwrap_or_default(),
+                    Satisfied,
+                ),
+            )
+        })
         .collect::<Vec<_>>();
 
-    entities.into_iter().for_each(|(e, effector)| {
-        let _ = world.insert(e, (effector.unwrap_or_default(), Satisfied));
+    entities.into_iter().for_each(|(e, val)| {
+        let _ = world.insert(e, val);
     })
 }

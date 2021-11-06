@@ -53,6 +53,10 @@ impl Color {
         Self::rgba(0.0, 0.0, 0.0, 1.0)
     }
 
+    pub fn gray() -> Self {
+        Self::rgba(0.5, 0.5, 0.5, 1.0)
+    }
+
     pub fn red() -> Self {
         Self::rgba(1.0, 0.0, 0.0, 1.0)
     }
@@ -71,6 +75,10 @@ impl Color {
 
     pub fn magenta() -> Self {
         Self::rgba(1.0, 0.0, 1.0, 1.0)
+    }
+
+    pub fn yellow() -> Self {
+        Self::rgba(1.0, 1.0, 0.0, 1.0)
     }
 }
 
@@ -106,13 +114,13 @@ impl From<&Vec3> for Color {
 
 impl From<&Color> for Vec4 {
     fn from(c: &Color) -> Self {
-        Vec4::new(c.red, c.blue, c.green, c.alpha)
+        Vec4::new(c.red, c.green, c.blue, c.alpha)
     }
 }
 
 impl From<&Color> for Vec3 {
     fn from(c: &Color) -> Self {
-        Vec3::new(c.red, c.blue, c.green)
+        Vec3::new(c.red, c.green, c.blue)
     }
 }
 

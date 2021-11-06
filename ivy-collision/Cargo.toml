@@ -7,13 +7,13 @@ description = "3D collision crate for Ivy"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-arrayvec = "0.5"
+arrayvec = "0.7.1"
 derive-for = "1.2.2"
-derive_more = "0.99"
-hecs = "0.6"
+derive_more = "0.99.16"
+hecs = "0.6.5"
 ivy-core = { path = "../ivy-core", version = "1.7" }
 ivy-resources = { path = "../ivy-resources", version = "1.4.0" }
-palette = "0.6"
-slotmap = "1.0"
-smallvec = "1.6.1"
-ultraviolet = "0.8"
+palette = "0.6.0"
+slotmap = "1.0.6"
+smallvec = "1.7.0"
+ultraviolet = "0.8.1"

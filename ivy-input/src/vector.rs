@@ -1,8 +1,10 @@
+use glfw::Key;
 use ultraviolet::Vec3;
 
 use crate::{Input, InputAxis};
 
 /// An input vector is a collection of `InputAxis` for each cardinal direction
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct InputVector {
     pub x: InputAxis,
     pub y: InputAxis,
@@ -12,6 +14,14 @@ pub struct InputVector {
 impl InputVector {
     pub fn new(x: InputAxis, y: InputAxis, z: InputAxis) -> Self {
         Self { x, y, z }
+    }
+
+    pub fn wasd() -> Self {
+        Self {
+            x: InputAxis::keyboard(Key::D, Key::A),
+            y: InputAxis::none(),
+            z: InputAxis::keyboard(Key::S, Key::W),
+        }
     }
 
     pub fn get(&self, input: &Input) -> Vec3 {

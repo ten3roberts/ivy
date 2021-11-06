@@ -7,5 +7,5 @@ description = "Provides random utility functions to the ivy framework"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-rand = "0.8"
-ultraviolet = "0.8"
+rand = "0.8.4"
+ultraviolet = "0.8.1"

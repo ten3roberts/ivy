@@ -7,7 +7,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-flume = "0.10"
-glfw = { version = "0.41.0", features = [ "vulkan" ] }
+flume = "0.10.9"
+glfw = { version = "0.42.0", features = [ "vulkan" ] }
 ivy-core = { path = "../ivy-core", version = "1.4.0" }
-ultraviolet = "0.8"
+ultraviolet = "0.8.1"

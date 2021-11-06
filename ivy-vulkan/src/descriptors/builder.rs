@@ -10,8 +10,8 @@ use vk::{DescriptorType, ShaderStageFlags};
 
 pub struct DescriptorBuilder {
     // `bindings` and `writes` are of the same size.
-    bindings: ArrayVec<[DescriptorSetBinding; MAX_BINDINGS]>,
-    writes: ArrayVec<[WriteDescriptorSet; MAX_BINDINGS]>,
+    bindings: ArrayVec<DescriptorSetBinding, MAX_BINDINGS>,
+    writes: ArrayVec<WriteDescriptorSet, MAX_BINDINGS>,
     buffer_infos: [vk::DescriptorBufferInfo; MAX_BINDINGS],
     image_infos: [vk::DescriptorImageInfo; MAX_BINDINGS],
     // Holds a map to where in the writes array each binding is, or MAX_BINDINGS

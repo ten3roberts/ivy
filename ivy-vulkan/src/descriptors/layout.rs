@@ -15,7 +15,7 @@ pub use vk::DescriptorSetLayout;
 #[derive(Clone, Debug)]
 pub struct DescriptorLayoutInfo {
     // The bindings for the layout
-    bindings: ArrayVec<[DescriptorSetBinding; MAX_BINDINGS]>,
+    bindings: ArrayVec<DescriptorSetBinding, MAX_BINDINGS>,
 }
 
 // Impl send and sync because of the immutable sampler in bindings not implementing it

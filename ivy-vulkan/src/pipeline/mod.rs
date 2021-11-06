@@ -244,7 +244,7 @@ impl Pipeline {
             .iter()
             .take_while(|set| !set.bindings().is_empty())
             .map(|set| layout_cache.get(set))
-            .collect::<std::result::Result<ArrayVec<[_; MAX_SETS]>, _>>()?;
+            .collect::<std::result::Result<ArrayVec<_, MAX_SETS>, _>>()?;
 
         let create_info = vk::PipelineLayoutCreateInfo {
             set_layout_count: set_layouts.len() as u32,

@@ -1,13 +1,13 @@
 #![allow(dead_code)]
 use std::{
     fmt::Display,
-    ops::{Deref, DerefMut},
+    ops::Deref,
     sync::{mpsc, Arc},
     time::Duration,
 };
 
 use anyhow::{anyhow, Context};
-use collision::{Collider, CollisionPrimitive, CollisionTree, Cube, Sphere};
+use collision::{Collider, Cube, Object, Ray, RayIntersect, Sphere};
 use flume::Receiver;
 use glfw::{Action, CursorMode, Glfw, Key, WindowEvent};
 use graphics::gizmos::GizmoRenderer;
@@ -26,8 +26,8 @@ use ivy::{
 use ivy_resources::Resources;
 use parking_lot::RwLock;
 use physics::{
-    collision::Collision,
-    components::{AngularMass, AngularVelocity, Mass, Resitution, Velocity},
+    components::{AngularMass, Mass, Resitution, Velocity},
+    PhysicsLayer,
 };
 use postprocessing::pbr::{create_pbr_pipeline, PBRInfo};
 use random::rand::SeedableRng;
@@ -65,23 +65,37 @@ where
     }
 }
 
-struct Movable {
+struct Mover {
     translate: InputVector,
+    rotate: InputVector,
+    local: bool,
     speed: f32,
 }
 
-impl Movable {
-    fn new(translate: InputVector, speed: f32) -> Self {
-        Self { translate, speed }
+impl Mover {
+    fn new(translate: InputVector, rotate: InputVector, speed: f32, local: bool) -> Self {
+        Self {
+            local,
+            translate,
+            rotate,
+            speed,
+        }
     }
 }
 
 fn move_system(world: &mut World, input: &Input, dt: f32) {
     world
-        .query::<(&Movable, &mut Position)>()
+        .query::<(&Mover, &mut Position, &mut Rotation)>()
         .iter()
-        .for_each(|(_, (m, p))| {
-            *p += Position(m.translate.get(input)) * m.speed * dt;
+        .for_each(|(_, (m, p, r))| {
+            if m.local {
+                *p += Position(r.into_matrix() * m.translate.get(input)) * m.speed * dt;
+            } else {
+                *p += Position(m.translate.get(input)) * m.speed * dt;
+            }
+
+            let rot = m.rotate.get(input) * dt;
+            *r = Rotation(**r * Rotor3::from_euler_angles(rot.x, rot.y, rot.z));
         })
 }
 
@@ -137,14 +151,24 @@ fn main() -> anyhow::Result<()> {
                 glfw,
                 r,
                 WindowInfo {
+                    // extent: Some(Extent::new(800, 600)),
                     extent: None,
+
                     resizable: false,
                     mode: WindowMode::Windowed,
                     ..Default::default()
                 },
             )
         })?
-        .try_push_layer(LogicLayer::new)?
+        .try_push_layer(|w, r, e| -> anyhow::Result<_> {
+            Ok(FixedTimeStep::new(
+                20.ms(),
+                (
+                    PhysicsLayer::<[Object; 32]>::new(w, r, e, Vec3::one() * 100.0)?,
+                    LogicLayer::new(w, r, e)?,
+                ),
+            ))
+        })?
         .try_push_layer(|w, r, e| VulkanLayer::new(w, r, e))?
         .try_push_layer(|w, r, e| DebugLayer::new(w, r, e, 100.ms()))?
         .build();
@@ -157,7 +181,7 @@ fn setup_graphics(
     resources: &Resources,
     camera: Entity,
     canvas: Entity,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Assets> {
     let window = resources.get_default::<Window>()?;
 
     let swapchain_info = ivy_vulkan::SwapchainInfo {
@@ -191,8 +215,7 @@ fn setup_graphics(
     resources.insert(FullscreenRenderer)?;
     resources.insert(GizmoRenderer::new(context.clone())?)?;
 
-    let _mesh_renderer =
-        resources.insert(MeshRenderer::new(context.clone(), 16, FRAMES_IN_FLIGHT)?)?;
+    resources.insert(MeshRenderer::new(context.clone(), 16, FRAMES_IN_FLIGHT)?)?;
 
     let image_renderer =
         resources.insert(ImageRenderer::new(context.clone(), 16, FRAMES_IN_FLIGHT)?)?;
@@ -320,7 +343,7 @@ fn setup_graphics(
         },
     )?;
 
-    let default_shaderpass = resources.insert(GeometryPass(pipeline))?;
+    let geometry_pass = resources.insert(GeometryPass(pipeline))?;
 
     // Insert one default post processing pass
     resources.insert_default(PostProcessingPass(fullscreen_pipeline))?;
@@ -363,17 +386,22 @@ fn setup_graphics(
     let ui_pass = resources.insert(UIPass(ui_pipeline))?;
     let text_pass = resources.insert(UIPass(text_pipeline))?;
 
-    _setup_ui(world, resources, ui_pass, text_pass)?;
+    setup_ui(world, resources, ui_pass, text_pass)?;
     resources.insert_default(rendergraph)?;
 
-    setup_objects(world, resources, default_shaderpass)
+    Ok(Assets {
+        geometry_pass,
+        text_pass,
+        ui_pass,
+    })
 }
 
 fn setup_objects(
     world: &mut World,
     resources: &Resources,
-    shaderpass: Handle<GeometryPass>,
-) -> anyhow::Result<()> {
+    assets: &Assets,
+    camera: Entity,
+) -> anyhow::Result<Entities> {
     resources.insert(Gizmos::default())?;
 
     let document: Handle<Document> = resources
@@ -386,7 +414,7 @@ fn setup_objects(
         .load("./res/models/sphere.gltf")
         .context("Failed to load sphere model")??;
 
-    let sphere_mesh = resources.get(document)?.mesh(0);
+    let _sphere_mesh = resources.get(document)?.mesh(0);
 
     let material: Handle<Material> = resources.load(MaterialInfo {
         albedo: "./res/textures/metal.png".into(),
@@ -405,95 +433,82 @@ fn setup_objects(
         PointLight::new(0.4, Vec3::new(0.0, 0.0, 500.0)),
     ));
 
-    let mut rng = StdRng::seed_from_u64(42);
+    world.spawn((
+        Collider::new(Cube::new_uniform(1.0)),
+        Color::rgb(1.0, 1.0, 1.0),
+        Mass(20.0),
+        Velocity::default(),
+        Position::new(0.0, 0.6, -1.2),
+        Scale::uniform(0.5),
+        // Rotation::euler_angles(0.0, 1.0, 1.0),
+        Mover::new(
+            InputVector {
+                x: InputAxis::keyboard(Key::L, Key::H),
+                y: InputAxis::keyboard(Key::K, Key::J),
+                z: InputAxis::keyboard(Key::I, Key::O),
+            },
+            InputVector {
+                x: InputAxis::none(),
+                y: InputAxis::keyboard(Key::Down, Key::Up),
+                z: InputAxis::keyboard(Key::Left, Key::Right),
+            },
+            1.0,
+            false,
+        ),
+        Sphere::new(1.0),
+        _sphere_mesh,
+        material,
+        assets.geometry_pass,
+    ));
+
+    let mut rng = StdRng::seed_from_u64(43);
+
+    const COUNT: usize = 0;
 
     world
-        .spawn_batch((0..128).map(|_| {
+        .spawn_batch((0..COUNT).map(|_| {
+            let pos = Position(Vec3::rand_uniform(&mut rng) * 30.0);
+            let vel = Velocity::from(-pos.normalized());
+
             (
-                Collider::new(Sphere::new(1.0)),
+                AngularMass(5.0),
+                Collider::new(Cube::new_uniform(1.0)),
                 Color::rgb(1.0, 1.0, 1.0),
                 Mass(10.0),
-                Position(Vec3::rand_uniform(&mut rng) * 7.0),
-                Resitution(1.0),
-                Scale::uniform(0.2),
-                sphere_mesh,
+                pos,
+                vel,
+                Resitution(0.5),
+                Scale::uniform(0.5),
                 material,
-                shaderpass,
+                assets.geometry_pass,
+                cube_mesh,
             )
         }))
         .for_each(|_| {});
 
-    world.spawn((
-        Collider::new(Sphere::new(1.0)),
-        Color::rgb(1.0, 1.0, 1.0),
-        Mass(10.0),
-        Position::new(0.0, 0.5, 0.0),
-        Resitution(1.0),
-        Scale::uniform(0.2),
-        Rotation::euler_angles(0.0, 0.0, 0.0),
-        Movable {
-            translate: InputVector {
-                x: InputAxis::keyboard(Key::L, Key::H),
-                y: InputAxis::keyboard(Key::K, Key::J),
-                z: InputAxis::keyboard(Key::O, Key::I),
-            },
-            speed: 3.0,
-        },
-        sphere_mesh,
-        material,
-        shaderpass,
-    ));
+    Ok(Entities { camera })
+}
 
-    // world.spawn((
-    //     AngularMass(2.0),
-    //     AngularVelocity(Vec3::unit_y() * 1.0),
-    //     Collider::new(Cube::new(1.0)),
-    //     Color::new(1.0, 1.0, 1.0, 1.0),
-    //     Mass(5.0),
-    //     Position::new(0.0, 0.5, 0.0),
-    //     Resitution(0.1),
-    //     Scale::new(2.0, 0.5, 0.2),
-    //     Rotation::euler_angles(0.0, 0.0, 0.0),
-    //     Velocity::default(),
-    //     cube_mesh,
-    //     material,
-    //     shaderpass,
-    // ));
+struct Assets {
+    geometry_pass: Handle<GeometryPass>,
+    text_pass: Handle<UIPass>,
+    ui_pass: Handle<UIPass>,
+}
 
-    world.spawn((
-        AngularMass(1.0),
-        AngularVelocity::default(),
-        Collider::new(Cube::new(1.0)),
-        Color::white(),
-        Mass(2.0),
-        Position::new(-3.0, 0.0, 0.0),
-        Resitution(1.0),
-        Scale::uniform(0.5),
-        Velocity::new(0.5, 0.0, 0.0),
-        material,
-        shaderpass,
-        cube_mesh,
-    ));
-
-    Ok(())
+struct Entities {
+    camera: Entity,
 }
 
 struct LogicLayer {
     input: Input,
-    input_vec: InputVector,
 
-    camera_speed: f32,
     camera_euler: Vec3,
 
     cursor_mode: CursorMode,
 
-    acc: f32,
-    timestep: Duration,
-
     window_events: Receiver<WindowEvent>,
-    collision_events: Receiver<Collision>,
-
-    tree: CollisionTree<[collision::Object; 8]>,
+    assets: Assets,
+    entities: Entities,
 }
 
 impl LogicLayer {
@@ -516,6 +531,7 @@ impl LogicLayer {
 
         let camera = world.spawn((
             Camera::perspective(1.0, extent.aspect(), 0.1, 100.0),
+            Mover::new(input_vec, Default::default(), 5.0, true),
             MainCamera,
             Position(Vec3::new(0.0, 0.0, 5.0)),
             Rotation(Rotor3::identity()),
@@ -528,29 +544,29 @@ impl LogicLayer {
             Camera::default(),
         ));
 
-        setup_graphics(world, resources, camera, canvas).context("Failed to setup graphics")?;
+        let assets =
+            setup_graphics(world, resources, camera, canvas).context("Failed to setup graphics")?;
+
+        let entities = setup_objects(world, resources, &assets, camera)?;
 
         let (tx, window_events) = flume::unbounded();
         events.subscribe(tx);
 
-        let (tx, collision_events) = flume::unbounded();
-        events.subscribe(tx);
-
         Ok(Self {
             input,
-            camera_speed: 5.0,
             camera_euler: Vec3::zero(),
-            input_vec,
-            timestep: 20.ms(),
-            acc: 0.0,
+            entities,
+            assets,
             window_events,
-            collision_events,
             cursor_mode: CursorMode::Normal,
-            tree: CollisionTree::new(Vec3::zero(), Vec3::one() * 10.0),
         })
     }
 
-    pub fn handle_events(&mut self, resources: &Resources) -> anyhow::Result<()> {
+    pub fn handle_events(
+        &mut self,
+        world: &mut World,
+        resources: &Resources,
+    ) -> anyhow::Result<()> {
         let window = resources.get_default_mut::<Window>()?;
 
         for event in self.window_events.try_iter() {
@@ -573,8 +589,8 @@ impl LogicLayer {
                     window.set_cursor_mode(self.cursor_mode)
                 }
                 WindowEvent::Scroll(_, scroll) => {
-                    self.camera_speed += scroll as f32;
-                    self.camera_speed = self.camera_speed.clamp(0.1, 20.0);
+                    let mut mover = world.get_mut::<Mover>(self.entities.camera)?;
+                    mover.speed = (mover.speed + scroll as f32 * 0.2).clamp(0.1, 20.0);
                 }
                 _ => {}
             }
@@ -591,68 +607,116 @@ impl Layer for LogicLayer {
         _events: &mut Events,
         frame_time: Duration,
     ) -> anyhow::Result<()> {
-        self.handle_events(resources)
+        let _scope = TimedScope::new(|elapsed| log::trace!("Logic layer took {:.3?}", elapsed));
+
+        self.handle_events(world, resources)
             .context("Failed to handle events")?;
 
         self.input.on_update();
 
-        self.acc += frame_time.secs();
+        let dt = frame_time.secs();
 
-        let dt = self.timestep.secs();
+        let (_e, (_, camera_rot)) = world
+            .query_mut::<(&Position, &mut Rotation)>()
+            .with::<Camera>()
+            .into_iter()
+            .next()
+            .unwrap();
 
+        let window = resources.get_default::<Window>()?;
+
+        let mouse_movement = self.input.rel_mouse_pos() / window.extent().as_vec();
+
+        self.camera_euler += mouse_movement.xyz();
+
+        *camera_rot = Rotor3::from_euler_angles(
+            self.camera_euler.z,
+            self.camera_euler.y,
+            -self.camera_euler.x,
+        )
+        .into();
+
+        world
+            .query::<&mut Color>()
+            .iter()
+            .for_each(|(_, val)| *val = Color::white());
+
+        let ray = Ray::new(Vec3::new(1.0, 0.0, 0.0), Vec3::new(0.5, 1.0, -1.0));
+        let mut gizmos = resources.get_default_mut::<Gizmos>()?;
+
+        gizmos.push(Gizmo::Line {
+            origin: ray.origin(),
+            color: Color::red(),
+            dir: ray.dir() * 100.0,
+            radius: 0.01,
+            corner_radius: 1.0,
+        });
+
+        world
+            .query::<(&Cube, &Position, &Rotation, &Scale, &mut Color)>()
+            .iter()
+            .for_each(|(_, (cube, pos, rot, scale, color))| {
+                let transform = TransformMatrix::new(*pos, *rot, *scale);
+                if cube.check_intersect(&transform, &ray) {
+                    *color = Color::red()
+                } else {
+                    *color = Color::white()
+                }
+            });
+
+        world
+            .query::<(&Sphere, &Position, &Rotation, &Scale, &mut Color)>()
+            .iter()
+            .for_each(|(_, (sphere, pos, rot, scale, color))| {
+                let transform = TransformMatrix::new(*pos, *rot, *scale);
+                if sphere.check_intersect(&transform, &ray) {
+                    *color = Color::red()
+                } else {
+                    *color = Color::white()
+                }
+            });
+
+        if let Some((_, contact)) = ray.cast(world)
+        // Ray::new(**camera_pos, camera_rot.into_matrix() * -Vec3::unit_z()).cast(world)
         {
-            let (_e, camera_rot) = world
-                .query_mut::<&mut Rotation>()
-                .with::<Camera>()
-                .into_iter()
-                .next()
-                .unwrap();
+            gizmos.push(Gizmo::Line {
+                origin: contact.points[0],
+                color: Color::blue(),
+                dir: contact.normal,
+                radius: 0.02,
+                corner_radius: 1.0,
+            });
 
-            let window = resources.get_default::<Window>()?;
-
-            let mouse_movement = self.input.rel_mouse_pos() / window.extent().as_vec();
-
-            self.camera_euler += mouse_movement.xyz();
-
-            *camera_rot = Rotor3::from_euler_angles(
-                self.camera_euler.z,
-                self.camera_euler.y,
-                -self.camera_euler.x,
-            )
-            .into();
+            for (i, p) in contact.points.iter().enumerate() {
+                gizmos.push(Gizmo::Sphere {
+                    origin: *p,
+                    color: Color::hsl(i as f32 * 30.0, 1.0, 0.5),
+                    radius: 0.05 / (i + 1) as f32,
+                })
+            }
         }
 
-        while self.acc > 0.0 {
-            // Clear gizmos from last frame
-            resources.get_default_mut::<Gizmos>()?.clear();
+        gizmos.push(Gizmo::Sphere {
+            origin: Vec3::zero(),
+            color: Color::magenta(),
+            radius: 0.05,
+        });
 
-            let (_e, (camera_pos, camera_rot)) = world
-                .query_mut::<(&mut Position, &Rotation)>()
-                .with::<Camera>()
-                .into_iter()
-                .next()
-                .unwrap();
+        // Clear gizmos from last frame
+        OverTime::<RelativeOffset>::update(world, dt);
+        Periodic::<Text>::update(world);
 
-            let movement = self.input_vec.get(&self.input);
+        move_system(world, &self.input, dt);
 
-            *camera_pos += Position(camera_rot.into_matrix() * (movement * dt * self.camera_speed));
-
-            OverTime::<RelativeOffset>::update(world, dt);
-            Periodic::<Text>::update(world);
-
-            move_system(world, &self.input, dt);
-
+        {
+            let _scope =
+                TimedScope::new(|elapsed| log::trace!("--Graphics updating took {:.3?}", elapsed));
             graphics::systems::satisfy_objects(world);
             graphics::systems::update_view_matrices(world);
+        }
 
-            physics::systems::integrate_angular_velocity_system(world, dt);
-            physics::systems::integrate_velocity_system(world, dt);
-            // physics::systems::gravity_system(world, dt);
-            physics::systems::satisfy_objects(world);
-            physics::systems::wrap_around_system(world);
-            // physics::systems::collision_system(world, events)?;
-            physics::systems::resolve_collisions_system(world, self.collision_events.try_iter())?;
-            physics::systems::apply_effectors_system(world, dt);
+        {
+            let _scope = TimedScope::new(|elapsed| log::trace!("--UI took {:.3?}", elapsed));
 
             let canvas = world
                 .query::<(&Canvas, &Camera)>()
@@ -664,29 +728,6 @@ impl Layer for LogicLayer {
             ui::systems::statisfy_widgets(world);
             ui::systems::update_canvas(world, canvas)?;
             ui::systems::update(world)?;
-
-            self.acc -= self.timestep.secs();
-
-            let mut gizmos = resources.get_default_mut::<Gizmos>()?;
-            self.tree.draw_gizmos(gizmos.deref_mut());
-            self.tree.register(world);
-
-            world
-                .query::<(&mut Color, &Position, &Scale, &Collider)>()
-                .iter()
-                .for_each(|(e, (color, pos, scale, collider))| {
-                    let o = collision::Object::new(
-                        e,
-                        Sphere::new(collider.max_radius() * scale.component_max()),
-                        **pos,
-                    );
-
-                    if self.tree.contains(&o) {
-                        *color = Color::white();
-                    } else {
-                        *color = Color::red();
-                    }
-                });
         }
 
         Ok(())
@@ -707,7 +748,7 @@ struct VulkanLayer {
     context: Arc<VulkanContext>,
 }
 
-fn _setup_ui(
+fn setup_ui(
     world: &mut World,
     resources: &Resources,
     ui_pass: Handle<UIPass>,
@@ -862,6 +903,7 @@ impl Layer for VulkanLayer {
         _events: &mut Events,
         _frame_time: Duration,
     ) -> anyhow::Result<()> {
+        TimedScope::new(|elapsed| log::trace!("Vulkan layer took {:.3?}", elapsed));
         let context = resources.get_default::<Arc<VulkanContext>>()?;
         // Ensure gpu side data for cameras
         GpuCameraData::create_gpu_cameras(&context, world, FRAMES_IN_FLIGHT)?;
@@ -925,6 +967,7 @@ impl Layer for WindowLayer {
         events: &mut Events,
         _frame_time: Duration,
     ) -> anyhow::Result<()> {
+        let _scope = TimedScope::new(|elapsed| log::trace!("Window layer took {:.3?}", elapsed));
         self.glfw.write().poll_events();
 
         for (_, event) in glfw::flush_messages(&self.events) {
@@ -1025,6 +1068,7 @@ impl Layer for DebugLayer {
         _: &mut Events,
         frametime: Duration,
     ) -> anyhow::Result<()> {
+        let _scope = TimedScope::new(|elapsed| log::trace!("Debug layer took {:.3?}", elapsed));
         self.min = frametime.min(self.min);
         self.max = frametime.max(self.max);
 

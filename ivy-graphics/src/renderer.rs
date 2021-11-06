@@ -1,3 +1,4 @@
+#![allow(non_snake_case)]
 use crate::ShaderPass;
 use anyhow::Context;
 use ash::vk::DescriptorSet;
@@ -140,7 +141,6 @@ macro_rules! tuple_impl {
 }
 
 // Implement renderer on tuple of renderers and tuple of render handles
-#[allow(non_snake_case)]
 tuple_impl! { A }
 tuple_impl! { A, B }
 tuple_impl! { A, B, C }
