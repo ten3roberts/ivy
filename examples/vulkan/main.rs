@@ -7,7 +7,9 @@ use std::{
 };
 
 use anyhow::{anyhow, Context};
-use collision::{util::project_plane, Collider, CollisionTree, Cube, Object, Ray, Sphere};
+use collision::{
+    util::project_plane, BinaryNode, Collider, CollisionTree, Cube, Object, Ray, Sphere,
+};
 use flume::Receiver;
 use glfw::{Action, CursorMode, Glfw, Key, MouseButton, WindowEvent};
 use graphics::gizmos::GizmoRenderer;
@@ -40,6 +42,8 @@ use vulkan::vk::CullModeFlags;
 use log::*;
 
 const FRAMES_IN_FLIGHT: usize = 2;
+
+type CollisionNode = BinaryNode<[Object; 16]>;
 
 struct WithTime<T> {
     func: Box<dyn Fn(Entity, &mut T, f32, f32) + Send + Sync>,
@@ -164,7 +168,12 @@ fn main() -> anyhow::Result<()> {
             Ok(FixedTimeStep::new(
                 20.ms(),
                 (
-                    PhysicsLayer::<[Object; 32]>::new(w, r, e, Cube::uniform(100.0))?,
+                    PhysicsLayer::new(
+                        w,
+                        r,
+                        e,
+                        CollisionNode::new(0, Position::default(), Cube::uniform(100.0)),
+                    )?,
                     LogicLayer::new(w, r, e)?,
                 ),
             ))
@@ -640,7 +649,7 @@ impl Layer for LogicLayer {
         let ray = Ray::new(*camera_pos, camera_forward);
         let mut gizmos = resources.get_default_mut::<Gizmos>()?;
 
-        let tree = resources.get_default::<CollisionTree<[Object; 32]>>()?;
+        let tree = resources.get_default::<CollisionTree<CollisionNode>>()?;
 
         gizmos.begin_section("ray casting");
         if self.input.mouse_button(MouseButton::Button1) {

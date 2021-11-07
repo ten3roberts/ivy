@@ -3,29 +3,28 @@ use std::marker::PhantomData;
 use crate::systems;
 use anyhow::Context;
 use hecs::World;
-use ivy_collision::{Collision, CollisionTree, Cube, Object};
-use ivy_base::{Events, Layer, Position, TimedScope};
+use ivy_base::{Events, Layer, TimedScope};
+use ivy_collision::{Collision, CollisionTree, Node, Object};
 use ivy_resources::{Resources, Storage};
-use smallvec::Array;
 
-pub struct PhysicsLayer<T: Array<Item = Object>> {
+pub struct PhysicsLayer<N> {
     rx: flume::Receiver<Collision>,
-    marker: PhantomData<T>,
+    marker: PhantomData<N>,
 }
 
-impl<T: Array<Item = Object> + Storage> PhysicsLayer<T> {
+impl<N: Node + Storage> PhysicsLayer<N> {
     pub fn new(
         _world: &mut World,
         resources: &mut Resources,
         events: &mut Events,
-        bounds: Cube,
+        tree_root: N,
     ) -> anyhow::Result<Self> {
         let (tx, rx) = flume::unbounded();
         events.subscribe(tx);
 
         resources
-            .default_entry::<CollisionTree<T>>()?
-            .or_insert_with(|| CollisionTree::new(Position::default(), bounds));
+            .default_entry::<CollisionTree<N>>()?
+            .or_insert_with(|| CollisionTree::new(tree_root));
 
         Ok(Self {
             rx,
@@ -34,7 +33,7 @@ impl<T: Array<Item = Object> + Storage> PhysicsLayer<T> {
     }
 }
 
-impl<T: Array<Item = Object> + Storage> Layer for PhysicsLayer<T> {
+impl<N: Node + Storage> Layer for PhysicsLayer<N> {
     fn on_update(
         &mut self,
         world: &mut World,
@@ -49,7 +48,7 @@ impl<T: Array<Item = Object> + Storage> Layer for PhysicsLayer<T> {
         systems::satisfy_objects(world);
 
         let mut tree = resources
-            .get_default_mut::<CollisionTree<T>>()
+            .get_default_mut::<CollisionTree<N>>()
             .context("Failed to get default collision tree")?;
 
         tree.update(world)?;

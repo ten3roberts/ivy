@@ -2,7 +2,6 @@ use std::ops::Deref;
 
 use hecs::World;
 use ivy_base::{Position, TransformMatrix};
-use smallvec::Array;
 use ultraviolet::{Mat4, Vec3};
 
 mod cast;
@@ -12,7 +11,7 @@ use crate::{
     epa,
     query::TreeQuery,
     util::{support, SupportPoint},
-    CollisionPrimitive, CollisionTree, Contact, Object, Simplex,
+    CollisionPrimitive, CollisionTree, Contact, Node, Simplex,
 };
 
 pub struct Ray {
@@ -98,11 +97,11 @@ impl Ray {
         ))
     }
 
-    pub fn cast<'r, 'w, 't, T: Deref<Target = CollisionTree<A>>, A: Array<Item = Object>>(
+    pub fn cast<'r, 'w, 't, T: Deref<Target = CollisionTree<N>>, N: Node>(
         &'r self,
         world: &'w World,
         tree: &'t T,
-    ) -> TreeQuery<'t, A, RayCaster<'r, 'w>> {
+    ) -> TreeQuery<'t, N, RayCaster<'r, 'w>> {
         tree.query(RayCaster::new(self, world))
     }
 

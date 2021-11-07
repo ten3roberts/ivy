@@ -1,5 +1,5 @@
 use hecs::{Entity, World};
-use ivy_base::{Position, Scale};
+use ivy_base::Scale;
 use ultraviolet::Vec3;
 
 use super::Ray;
@@ -35,20 +35,23 @@ impl<'r, 'w> RayCaster<'r, 'w> {
     }
 }
 
-impl<'o, 'r, 'w> Visitor<'o> for RayCaster<'r, 'w> {
+impl<'o, 'r, 'w, N: Node> Visitor<'o, N> for RayCaster<'r, 'w> {
     type Output = RayCastIterator<'r, 'w, 'o>;
 
-    fn accept(&self, bounds: &crate::Cube, origin: Position, _depth: usize) -> bool {
-        bounds.check_aabb_intersect(origin, Scale(Vec3::one()), self.ray)
-    }
+    fn accept(&self, node: &'o N) -> Option<Self::Output> {
+        if !node
+            .bounds()
+            .check_aabb_intersect(node.origin(), Scale(Vec3::one()), self.ray)
+        {
+            return None;
+        }
 
-    fn visit<T: smallvec::Array<Item = crate::Object>>(&self, node: &'o Node<T>) -> Self::Output {
         let objects = node.objects().iter();
-        RayCastIterator {
+        Some(RayCastIterator {
             ray: self.ray,
             world: self.world,
             objects,
-        }
+        })
     }
 }
 pub struct RayCastIterator<'a, 'w, 'o> {

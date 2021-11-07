@@ -1,23 +1,27 @@
 use std::mem;
 
-use hecs::World;
+use hecs::{Entity, World};
 use ivy_base::{Events, Gizmos, Position, Rotation, Scale, TimedScope, TransformMatrix};
-use ivy_resources::Key;
 use slotmap::SlotMap;
 use smallvec::{Array, SmallVec};
+use ultraviolet::Vec3;
 
-use crate::{util::TOLERANCE, Collider, Cube, Sphere};
+use crate::{util::TOLERANCE, Collider, Sphere};
 
+mod binary_node;
 mod index;
-mod node;
 pub mod query;
+mod traits;
 mod visitor;
 
+pub use binary_node::*;
 pub use index::*;
-pub use node::*;
+pub use traits::*;
 pub use visitor::*;
 
 use self::query::TreeQuery;
+
+pub type Nodes<N> = SlotMap<NodeIndex, N>;
 
 /// Marker for where the object is in the tree
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -26,10 +30,8 @@ pub struct TreeMarker {
     object: Object,
 }
 
-pub(crate) type Nodes<T> = SlotMap<NodeIndex, Node<T>>;
-
-pub struct CollisionTree<T: Array<Item = Object>> {
-    nodes: SlotMap<NodeIndex, Node<T>>,
+pub struct CollisionTree<N> {
+    nodes: SlotMap<NodeIndex, N>,
     /// Objects removed from the tree due to splits. Bound to be replaced.
     /// Double buffer as insertions may cause new pops.
     popped: (Vec<Object>, Vec<Object>),
@@ -37,10 +39,11 @@ pub struct CollisionTree<T: Array<Item = Object>> {
     root: NodeIndex,
 }
 
-impl<T: Array<Item = Object>> CollisionTree<T> {
-    pub fn new(origin: Position, bounds: Cube) -> Self {
+impl<N: Node> CollisionTree<N> {
+    pub fn new(root: N) -> Self {
         let mut nodes = SlotMap::with_key();
-        let root = nodes.insert(Node::new(NodeIndex::null(), 0, origin, bounds));
+
+        let root = nodes.insert(root);
         Self {
             nodes,
             popped: (Vec::new(), Vec::new()),
@@ -54,12 +57,12 @@ impl<T: Array<Item = Object>> CollisionTree<T> {
     }
 
     /// Get a reference to the collision tree's nodes.
-    pub fn nodes(&self) -> &SlotMap<NodeIndex, Node<T>> {
+    pub fn nodes(&self) -> &SlotMap<NodeIndex, N> {
         &self.nodes
     }
 
     /// Get a mutable reference to the collision tree's nodes.
-    pub fn nodes_mut(&mut self) -> &mut SlotMap<NodeIndex, Node<T>> {
+    pub fn nodes_mut(&mut self) -> &mut SlotMap<NodeIndex, N> {
         &mut self.nodes
     }
 
@@ -127,7 +130,7 @@ impl<T: Array<Item = Object>> CollisionTree<T> {
                 let node = &nodes[index];
 
                 let object = &marker.object;
-                if !node.contains(object) || node.fits_child(nodes, object).is_some() {
+                if !node.contains(object) || index.fits_child(nodes, object).is_some() {
                     nodes[index].remove(object.entity);
                     popped.push(marker.object)
                 }
@@ -188,15 +191,41 @@ impl<T: Array<Item = Object>> CollisionTree<T> {
     /// visitor accepts and returns an iterator for each node containing the
     /// output of the visited node. Oftentimes, the output of the visitor is an
     /// iterator, which means that a nested iterator can be returned.
-    pub fn query<V>(&self, visitor: V) -> TreeQuery<T, V> {
+    pub fn query<V>(&self, visitor: V) -> TreeQuery<N, V> {
         TreeQuery::new(visitor, &self.nodes, self.root)
     }
 }
 
-impl<T: Array<Item = Object>> std::fmt::Debug for CollisionTree<T> {
+impl<N: Node> std::fmt::Debug for CollisionTree<N> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("CollisionTree")
             .field("root", &DebugNode::new(self.root, &self.nodes))
             .finish()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Object {
+    pub entity: Entity,
+    pub bound: Sphere,
+    pub origin: Vec3,
+    pub transform: TransformMatrix,
+    pub max_scale: f32,
+}
+
+impl Object {
+    pub fn new(entity: Entity, bound: Sphere, transform: TransformMatrix) -> Self {
+        Self {
+            entity,
+            bound,
+            transform,
+            origin: transform.extract_translation(),
+            max_scale: transform[0][0].max(transform[1][1]).max(transform[2][2]),
+        }
+    }
+
+    /// Get a reference to the object's entity.
+    pub fn entity(&self) -> Entity {
+        self.entity
     }
 }

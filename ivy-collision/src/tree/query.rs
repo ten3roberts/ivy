@@ -1,21 +1,15 @@
-use smallvec::{Array, SmallVec};
+use smallvec::SmallVec;
 
-use crate::{NodeIndex, Nodes, Object, Visitor};
+use crate::{Node, NodeIndex, Nodes, Visitor};
 
-pub struct TreeQuery<'a, T, V>
-where
-    T: Array<Item = Object>,
-{
+pub struct TreeQuery<'a, N, V> {
     visitor: V,
-    nodes: &'a Nodes<T>,
+    nodes: &'a Nodes<N>,
     stack: SmallVec<[NodeIndex; 16]>,
 }
 
-impl<'a, T, V> TreeQuery<'a, T, V>
-where
-    T: Array<Item = Object>,
-{
-    pub fn new(visitor: V, nodes: &'a Nodes<T>, root: NodeIndex) -> Self {
+impl<'a, N, V> TreeQuery<'a, N, V> {
+    pub fn new(visitor: V, nodes: &'a Nodes<N>, root: NodeIndex) -> Self {
         Self {
             visitor,
             nodes,
@@ -24,10 +18,10 @@ where
     }
 }
 
-impl<'a, T, V> Iterator for TreeQuery<'a, T, V>
+impl<'a, N, V> Iterator for TreeQuery<'a, N, V>
 where
-    T: Array<Item = Object>,
-    V: Visitor<'a>,
+    N: Node,
+    V: Visitor<'a, N>,
 {
     type Item = V::Output;
 
@@ -36,9 +30,9 @@ where
             let node = &self.nodes[current];
             // If the visitor wants to visit this node, push all children to the
             // stack and visit the node
-            if self.visitor.accept(&node.bounds, node.origin, node.depth) {
-                self.stack.extend(node.children_iter());
-                return Some(self.visitor.visit(node));
+            if let Some(output) = self.visitor.accept(node) {
+                self.stack.extend(node.children().iter().cloned());
+                return Some(output);
             }
         }
 

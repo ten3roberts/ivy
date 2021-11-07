@@ -1,13 +1,6 @@
-use ivy_base::Position;
-use smallvec::Array;
-
-use crate::{Cube, Node, Object};
-
-pub trait Visitor<'a> {
+pub trait Visitor<'a, N> {
     type Output;
-    /// Acceptance function to visit this node
-    fn accept(&self, bounds: &Cube, origin: Position, depth: usize) -> bool;
-
-    /// Function to be called for each node to be visited, returning result
-    fn visit<T: Array<Item = Object>>(&self, node: &'a Node<T>) -> Self::Output;
+    /// Acceptance function to visit this node. Returns Some<Output> if the node
+    /// was accepted
+    fn accept(&self, node: &'a N) -> Option<Self::Output>;
 }
