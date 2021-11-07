@@ -4,6 +4,7 @@ use std::{
 };
 
 use hecs::Entity;
+use ivy_base::{Color, DrawGizmos, Gizmo};
 use ultraviolet::Vec3;
 
 use super::*;
@@ -215,5 +216,22 @@ impl<T: Array<Item = Object>> BinaryNode<T> {
     /// is returned
     pub fn children_iter(&self) -> Cloned<Flatten<Iter<[NodeIndex; 2]>>> {
         self.children.iter().flatten().cloned()
+    }
+}
+
+impl<T: Array<Item = Object>> DrawGizmos for BinaryNode<T> {
+    fn draw_gizmos<U: std::ops::DerefMut<Target = Gizmos>>(&self, mut gizmos: U, _: Color) {
+        let color = Color::hsl(
+            self.depth as f32 * 60.0,
+            1.0,
+            if self.is_leaf() { 0.1 } else { 0.5 },
+        );
+
+        gizmos.push(Gizmo::Cube {
+            origin: *self.origin,
+            color,
+            half_extents: self.bounds.half_extents,
+            radius: 0.02 + 0.001 * self.depth as f32,
+        });
     }
 }

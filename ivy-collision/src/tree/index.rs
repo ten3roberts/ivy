@@ -1,11 +1,14 @@
 use hecs::Entity;
 use hecs::World;
+use ivy_base::Color;
+use ivy_base::DrawGizmos;
 use ivy_base::Events;
 use ivy_base::Gizmos;
 use slotmap::new_key_type;
 use smallvec::Array;
 use smallvec::SmallVec;
 use std::fmt::Debug;
+use std::ops::DerefMut;
 
 use crate::intersect;
 use crate::query::TreeQuery;
@@ -179,43 +182,17 @@ impl NodeIndex {
         Ok(())
     }
 
-    pub fn draw_gizmos<N: Node>(
+    pub fn draw_gizmos_recursive<N: Node + DrawGizmos>(
         self,
-        world: &World,
         nodes: &Nodes<N>,
-        depth: usize,
-        gizmos: &mut Gizmos,
+        mut gizmos: &mut Gizmos,
+        color: Color,
     ) {
-        // let node = &nodes[self];
+        nodes[self].draw_gizmos(gizmos.deref_mut(), color);
 
-        // let color = Color::hsl(
-        //     node.depth as f32 * 60.0,
-        //     1.0,
-        //     if node.children.is_some() { 0.1 } else { 0.5 },
-        // );
-
-        // if node.object_count != 0 {
-        //     gizmos.push(Gizmo::Cube {
-        //         origin: *node.origin,
-        //         color,
-        //         half_extents: node.bounds.half_extents,
-        //         radius: 0.02 + 0.001 * depth as f32,
-        //     });
-        // }
-
-        // // for obj in &node.objects {
-        // //     let coll = world.get::<Collider>(obj.entity).unwrap();
-        // //     let scale = world.get::<Scale>(obj.entity).unwrap();
-        // //     gizmos.push(Gizmo::Sphere {
-        // //         origin: obj.transform.extract_translation(),
-        // //         color: Color::magenta(),
-        // //         radius: Sphere::enclose(&*coll, *scale).radius,
-        // //         corner_radius: 1.0,
-        // //     });
-        // // }
-
-        // node.children_iter()
-        //     .for_each(|val| val.draw_gizmos(world, nodes, depth + 1, gizmos))
+        for val in nodes[self].children().iter() {
+            val.draw_gizmos_recursive(nodes, gizmos, color)
+        }
     }
 }
 

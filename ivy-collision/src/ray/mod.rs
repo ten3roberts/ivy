@@ -1,7 +1,7 @@
 use std::ops::Deref;
 
 use hecs::World;
-use ivy_base::{Position, TransformMatrix};
+use ivy_base::{DrawGizmos, Position, TransformMatrix, DEFAULT_RADIUS};
 use ultraviolet::{Mat4, Vec3};
 
 mod cast;
@@ -113,5 +113,21 @@ impl Ray {
     /// Get a reference to the ray's dir.
     pub fn dir(&self) -> Vec3 {
         self.dir
+    }
+}
+
+impl DrawGizmos for Ray {
+    fn draw_gizmos<T: std::ops::DerefMut<Target = ivy_base::Gizmos>>(
+        &self,
+        mut gizmos: T,
+        color: ivy_base::Color,
+    ) {
+        gizmos.push(ivy_base::Gizmo::Line {
+            origin: *self.origin,
+            color,
+            dir: self.dir,
+            radius: DEFAULT_RADIUS,
+            corner_radius: 1.0,
+        })
     }
 }

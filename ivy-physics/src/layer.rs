@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use crate::systems;
 use anyhow::Context;
 use hecs::World;
-use ivy_base::{Events, Layer, TimedScope};
+use ivy_base::{Color, DrawGizmos, Events, Layer, TimedScope};
 use ivy_collision::{Collision, CollisionTree, Node, Object};
 use ivy_resources::{Resources, Storage};
 
@@ -33,7 +33,7 @@ impl<N: Node + Storage> PhysicsLayer<N> {
     }
 }
 
-impl<N: Node + Storage> Layer for PhysicsLayer<N> {
+impl<N: Node + Storage + DrawGizmos> Layer for PhysicsLayer<N> {
     fn on_update(
         &mut self,
         world: &mut World,
@@ -57,7 +57,7 @@ impl<N: Node + Storage> Layer for PhysicsLayer<N> {
         // std::thread::sleep(Duration::from_secs(1));
         let mut gizmos = resources.get_default_mut()?;
 
-        tree.draw_gizmos(world, &mut *gizmos);
+        tree.draw_gizmos(&mut *gizmos, Color::default());
 
         tree.check_collisions::<[&Object; 128]>(world, events)?;
 

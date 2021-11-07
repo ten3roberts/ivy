@@ -4,6 +4,12 @@ use ultraviolet::Vec3;
 
 use crate::Color;
 
+mod traits;
+pub use traits::*;
+
+/// A default radius that looks good for small gizmos
+pub const DEFAULT_RADIUS: f32 = 0.1;
+
 #[derive(Copy, Clone, PartialEq)]
 /// Represents a 3D world overlay for debugging purposes.
 pub enum Gizmo {
@@ -67,11 +73,16 @@ impl Gizmos {
         }
     }
 
+    /// Begins a new section.
+    /// If a section already exists with the same name, the existing gizmos will be
+    /// cleared. If drawing singleton like types, consider using the typename as a
+    /// section name.
     pub fn begin_section(&mut self, section: Section) {
         self.current = Some(section);
         self.sections.get_mut(section).map(Vec::clear);
     }
 
+    /// Adds a new gizmos to the current section
     pub fn push(&mut self, gizmo: Gizmo) {
         let section = self.get_section();
 

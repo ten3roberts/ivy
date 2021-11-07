@@ -1,7 +1,9 @@
-use std::mem;
+use std::{any, mem};
 
 use hecs::{Entity, World};
-use ivy_base::{Events, Gizmos, Position, Rotation, Scale, TimedScope, TransformMatrix};
+use ivy_base::{
+    DrawGizmos, Events, Gizmos, Position, Rotation, Scale, TimedScope, TransformMatrix,
+};
 use slotmap::SlotMap;
 use smallvec::{Array, SmallVec};
 use ultraviolet::Vec3;
@@ -182,11 +184,6 @@ impl<N: Node> CollisionTree<N> {
             .check_collisions(world, events, &self.nodes, &mut stack)
     }
 
-    pub fn draw_gizmos(&self, world: &mut World, gizmos: &mut Gizmos) {
-        gizmos.begin_section("CollisionTree");
-        self.root.draw_gizmos(world, &self.nodes, 0, gizmos);
-    }
-
     /// Queries the tree with a given visitor. Traverses only the nodes that the
     /// visitor accepts and returns an iterator for each node containing the
     /// output of the visited node. Oftentimes, the output of the visitor is an
@@ -227,5 +224,17 @@ impl Object {
     /// Get a reference to the object's entity.
     pub fn entity(&self) -> Entity {
         self.entity
+    }
+}
+
+impl<N: Node + DrawGizmos> DrawGizmos for CollisionTree<N> {
+    fn draw_gizmos<T: std::ops::DerefMut<Target = Gizmos>>(
+        &self,
+        mut gizmos: T,
+        color: ivy_base::Color,
+    ) {
+        gizmos.begin_section(any::type_name::<Self>());
+        self.root
+            .draw_gizmos_recursive(&self.nodes, &mut gizmos, color)
     }
 }
