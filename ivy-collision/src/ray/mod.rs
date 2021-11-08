@@ -97,11 +97,15 @@ impl Ray {
         ))
     }
 
-    pub fn cast<'r, 'w, 't, T: Deref<Target = CollisionTree<N>>, N: Node>(
+    pub fn cast<'r, 'w, 't, T, N>(
         &'r self,
         world: &'w World,
         tree: &'t T,
-    ) -> TreeQuery<'t, N, RayCaster<'r, 'w>> {
+    ) -> TreeQuery<'t, N, RayCaster<'r, 'w>>
+    where
+        T: Deref<Target = CollisionTree<N>>,
+        N: 'static + Node,
+    {
         tree.query(RayCaster::new(self, world))
     }
 

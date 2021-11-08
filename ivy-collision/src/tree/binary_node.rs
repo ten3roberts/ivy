@@ -21,7 +21,7 @@ pub struct BinaryNode<T: Array<Item = Object>> {
     pub(crate) iteration: usize,
     pub(crate) origin: Position,
     pub(crate) bounds: Cube,
-    pub(crate) children: Option<[NodeIndex; 2]>,
+    pub(crate) children: Option<[NodeIndex<Self>; 2]>,
 }
 
 impl<T: Array<Item = Object>> std::ops::Deref for BinaryNode<T> {
@@ -32,7 +32,7 @@ impl<T: Array<Item = Object>> std::ops::Deref for BinaryNode<T> {
     }
 }
 
-impl<T: Array<Item = Object>> Node for BinaryNode<T> {
+impl<T: Array<Item = Object> + Send + Sync> Node for BinaryNode<T> {
     fn objects(&self) -> &[Object] {
         &self.objects
     }
@@ -104,7 +104,7 @@ impl<T: Array<Item = Object>> Node for BinaryNode<T> {
         self.bounds
     }
 
-    fn children(&self) -> &[NodeIndex] {
+    fn children(&self) -> &[NodeIndex<Self>] {
         match &self.children {
             Some(val) => val,
             None => &[],
@@ -154,12 +154,12 @@ impl<T: Array<Item = Object>> Node for BinaryNode<T> {
         [a, b]
     }
 
-    fn set_children(&mut self, children: &[NodeIndex]) {
+    fn set_children(&mut self, children: &[NodeIndex<Self>]) {
         self.children = Some([children[0], children[1]])
     }
 }
 
-impl<T: Array<Item = Object>> BinaryNode<T> {
+impl<T: Array<Item = Object> + Send + Sync> BinaryNode<T> {
     pub fn new(depth: usize, origin: Position, bounds: Cube) -> Self {
         Self {
             objects: Default::default(),
@@ -173,13 +173,13 @@ impl<T: Array<Item = Object>> BinaryNode<T> {
     }
 
     /// Returns the child that fully contains object, if any.
-    pub fn fits_child(&self, nodes: &Nodes<Self>, object: &Object) -> Option<NodeIndex> {
+    pub fn fits_child(&self, nodes: &Nodes<Self>, object: &Object) -> Option<NodeIndex<Self>> {
         self.children_iter()
             .find(|val| nodes[*val].contains(object))
     }
 
     #[inline]
-    pub fn set_children(&mut self, children: [NodeIndex; 2]) {
+    pub fn set_children(&mut self, children: [NodeIndex<Self>; 2]) {
         assert_eq!(self.children, None);
         self.children = Some(children);
     }
@@ -214,12 +214,12 @@ impl<T: Array<Item = Object>> BinaryNode<T> {
 
     /// Returns the node's children. If the node is a leaf node, and empty slice
     /// is returned
-    pub fn children_iter(&self) -> Cloned<Flatten<Iter<[NodeIndex; 2]>>> {
+    pub fn children_iter(&self) -> Cloned<Flatten<Iter<[NodeIndex<Self>; 2]>>> {
         self.children.iter().flatten().cloned()
     }
 }
 
-impl<T: Array<Item = Object>> DrawGizmos for BinaryNode<T> {
+impl<T: Array<Item = Object> + Send + Sync> DrawGizmos for BinaryNode<T> {
     fn draw_gizmos<U: std::ops::DerefMut<Target = Gizmos>>(&self, mut gizmos: U, _: Color) {
         let color = Color::hsl(
             self.depth as f32 * 60.0,

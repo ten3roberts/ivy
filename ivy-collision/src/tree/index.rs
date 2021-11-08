@@ -5,9 +5,12 @@ use ivy_base::DrawGizmos;
 use ivy_base::Events;
 use ivy_base::Gizmos;
 use slotmap::new_key_type;
+use slotmap::{Key, KeyData};
 use smallvec::Array;
 use smallvec::SmallVec;
 use std::fmt::Debug;
+use std::hash::Hash;
+use std::marker::PhantomData;
 use std::ops::DerefMut;
 
 use crate::intersect;
@@ -20,14 +23,107 @@ use super::Nodes;
 use super::Object;
 use super::TreeMarker;
 
+pub struct NodeIndex<T>(KeyData, PhantomData<T>);
+
+impl<T> NodeIndex<T> {
+    /// Creates a new handle that is always invalid and distinct from any non-null
+    /// handle. A null key can only be created through this method (or default
+    /// initialization of handles made with `new_key_type!`, which calls this
+    /// method).
+    ///
+    /// A null handle is always invalid, but an invalid key (that is, a key that
+    /// has been removed from the slot map) does not become a null handle. A null
+    /// is safe to use with any safe method of any slot map instance.
+    pub fn null() -> Self {
+        Key::null()
+    }
+
+    /// Checks if a handle is null. There is only a single null key, that is
+    /// `a.is_null() && b.is_null()` implies `a == b`.
+    pub fn is_null(&self) -> bool {
+        Key::is_null(self)
+    }
+
+    /// Removes the type from a handle, easier storage without using dynamic
+    /// dispatch
+    pub fn into_untyped(&self) -> NodeIndexUntyped {
+        NodeIndexUntyped(self.data())
+    }
+
+    /// Converts an untyped handle into a typed handle.
+    /// Behaviour is undefined if handle is converted back to the wrong type.
+    /// Use with care.
+    pub fn from_untyped(handle: NodeIndexUntyped) -> NodeIndex<T> {
+        Self(handle.data(), PhantomData)
+    }
+}
+
 new_key_type!(
-    pub struct NodeIndex;
+    pub struct NodeIndexUntyped;
 );
 
-impl NodeIndex {
+unsafe impl<T> Key for NodeIndex<T> {
+    fn data(&self) -> KeyData {
+        self.0
+    }
+}
+
+impl<T> PartialOrd for NodeIndex<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.0.cmp(&other.0))
+    }
+}
+
+impl<T> Ord for NodeIndex<T> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0.cmp(&other.0)
+    }
+}
+
+impl<T> Default for NodeIndex<T> {
+    fn default() -> Self {
+        Self(KeyData::default(), PhantomData)
+    }
+}
+
+impl<T> std::fmt::Debug for NodeIndex<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
+
+impl<T> Clone for NodeIndex<T> {
+    fn clone(&self) -> Self {
+        Self(self.0, PhantomData)
+    }
+}
+
+impl<T> Copy for NodeIndex<T> {}
+
+impl<T> PartialEq for NodeIndex<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl<T> Eq for NodeIndex<T> {}
+
+impl<T> Hash for NodeIndex<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.hash(state)
+    }
+}
+
+impl<T> From<KeyData> for NodeIndex<T> {
+    fn from(k: KeyData) -> Self {
+        Self(k, PhantomData)
+    }
+}
+
+impl<N: Node> NodeIndex<N> {
     // /// Returns the closest parent node that fully contains object. If object
     // /// doesn't fit, the root node is returned.
-    // pub fn pop_up<N: Node>(self, nodes: &mut Nodes<N>, object: &Object) -> NodeIndex {
+    // pub fn pop_up(self, nodes: &mut Nodes<N>, object: &Object) -> NodeIndex {
     //     let node = &nodes[self];
     //     let parent = node.parent;
     //     if node.contains(object) {
@@ -37,7 +133,7 @@ impl NodeIndex {
     //     }
     // }
 
-    pub fn fits_child<N: Node>(self, nodes: &Nodes<N>, object: &Object) -> Option<NodeIndex> {
+    pub fn fits_child(self, nodes: &Nodes<N>, object: &Object) -> Option<NodeIndex<N>> {
         nodes[self]
             .children()
             .iter()
@@ -46,7 +142,7 @@ impl NodeIndex {
     }
 
     /// Returns the deepest node that fully contains object.
-    pub fn push_down<N: Node>(self, nodes: &Nodes<N>, object: &Object) -> Self {
+    pub fn push_down(self, nodes: &Nodes<N>, object: &Object) -> Self {
         if let Some(child) = self.fits_child(nodes, object) {
             child.push_down(nodes, object)
         } else {
@@ -57,18 +153,18 @@ impl NodeIndex {
     /// Removes an entity from the node.
     /// Returns None if the entity didn't exists.
     /// This may happen if the entity was poepped from the node..
-    pub fn remove<N: Node>(self, nodes: &mut Nodes<N>, entity: Entity) -> Option<Object> {
+    pub fn remove(self, nodes: &mut Nodes<N>, entity: Entity) -> Option<Object> {
         nodes[self].remove(entity)
     }
 
     /// Inserts into node. Does not check if it is fully contained or if already
     /// in node.
-    pub fn insert<N: Node>(
+    pub fn insert(
         self,
         nodes: &mut Nodes<N>,
         object: Object,
         popped: &mut Vec<Object>,
-    ) -> TreeMarker {
+    ) -> TreeMarker<N> {
         let index = self.push_down(nodes, &object);
         let node = &mut nodes[index];
 
@@ -111,22 +207,22 @@ impl NodeIndex {
     }
 
     /// Splits the node in half
-    pub fn split<N: Node>(self, nodes: &mut Nodes<N>, popped: &mut Vec<Object>) {
+    pub fn split(self, nodes: &mut Nodes<N>, popped: &mut Vec<Object>) {
         let output = nodes[self].split(popped);
 
         let indices = output
             .into_iter()
             .map(|val| nodes.insert(val))
-            .collect::<SmallVec<[NodeIndex; 8]>>();
+            .collect::<SmallVec<[NodeIndex<N>; 8]>>();
 
         nodes[self].set_children(&indices)
     }
 
-    pub fn query<N, V>(self, nodes: &Nodes<N>, visitor: V) -> TreeQuery<N, V> {
+    pub fn query<V>(self, nodes: &Nodes<N>, visitor: V) -> TreeQuery<N, V> {
         TreeQuery::new(visitor, nodes, self)
     }
 
-    pub fn check_collisions<'a, N, G>(
+    pub fn check_collisions<'a, G>(
         self,
         world: &World,
         events: &mut Events,
@@ -181,13 +277,10 @@ impl NodeIndex {
 
         Ok(())
     }
+}
 
-    pub fn draw_gizmos_recursive<N: Node + DrawGizmos>(
-        self,
-        nodes: &Nodes<N>,
-        mut gizmos: &mut Gizmos,
-        color: Color,
-    ) {
+impl<N: Node + DrawGizmos> NodeIndex<N> {
+    pub fn draw_gizmos_recursive(self, nodes: &Nodes<N>, mut gizmos: &mut Gizmos, color: Color) {
         nodes[self].draw_gizmos(gizmos.deref_mut(), color);
 
         for val in nodes[self].children().iter() {
@@ -197,12 +290,12 @@ impl NodeIndex {
 }
 
 pub(crate) struct DebugNode<'a, N> {
-    index: NodeIndex,
+    index: NodeIndex<N>,
     nodes: &'a Nodes<N>,
 }
 
 impl<'a, N> DebugNode<'a, N> {
-    pub(crate) fn new(index: NodeIndex, nodes: &'a Nodes<N>) -> Self {
+    pub(crate) fn new(index: NodeIndex<N>, nodes: &'a Nodes<N>) -> Self {
         Self { index, nodes }
     }
 }

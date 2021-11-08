@@ -5,11 +5,11 @@ use crate::{Node, NodeIndex, Nodes, Visitor};
 pub struct TreeQuery<'a, N, V> {
     visitor: V,
     nodes: &'a Nodes<N>,
-    stack: SmallVec<[NodeIndex; 16]>,
+    stack: SmallVec<[NodeIndex<N>; 16]>,
 }
 
 impl<'a, N, V> TreeQuery<'a, N, V> {
-    pub fn new(visitor: V, nodes: &'a Nodes<N>, root: NodeIndex) -> Self {
+    pub fn new(visitor: V, nodes: &'a Nodes<N>, root: NodeIndex<N>) -> Self {
         Self {
             visitor,
             nodes,

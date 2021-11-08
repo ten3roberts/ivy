@@ -23,25 +23,25 @@ pub use visitor::*;
 
 use self::query::TreeQuery;
 
-pub type Nodes<N> = SlotMap<NodeIndex, N>;
+pub type Nodes<N> = SlotMap<NodeIndex<N>, N>;
 
 /// Marker for where the object is in the tree
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct TreeMarker {
-    index: NodeIndex,
+pub struct TreeMarker<N> {
+    index: NodeIndex<N>,
     object: Object,
 }
 
 pub struct CollisionTree<N> {
-    nodes: SlotMap<NodeIndex, N>,
+    nodes: SlotMap<NodeIndex<N>, N>,
     /// Objects removed from the tree due to splits. Bound to be replaced.
     /// Double buffer as insertions may cause new pops.
     popped: (Vec<Object>, Vec<Object>),
     iteration: usize,
-    root: NodeIndex,
+    root: NodeIndex<N>,
 }
 
-impl<N: Node> CollisionTree<N> {
+impl<N: 'static + Node> CollisionTree<N> {
     pub fn new(root: N) -> Self {
         let mut nodes = SlotMap::with_key();
 
@@ -59,19 +59,19 @@ impl<N: Node> CollisionTree<N> {
     }
 
     /// Get a reference to the collision tree's nodes.
-    pub fn nodes(&self) -> &SlotMap<NodeIndex, N> {
+    pub fn nodes(&self) -> &SlotMap<NodeIndex<N>, N> {
         &self.nodes
     }
 
     /// Get a mutable reference to the collision tree's nodes.
-    pub fn nodes_mut(&mut self) -> &mut SlotMap<NodeIndex, N> {
+    pub fn nodes_mut(&mut self) -> &mut SlotMap<NodeIndex<N>, N> {
         &mut self.nodes
     }
 
     pub fn register(&mut self, world: &mut World) {
         let inserted = world
             .query::<(&Collider, &Position, &Rotation, &Scale)>()
-            .without::<TreeMarker>()
+            .without::<TreeMarker<N>>()
             .iter()
             .map(|(e, (collider, position, rot, scale))| {
                 Object::new(
@@ -104,7 +104,7 @@ impl<N: Node> CollisionTree<N> {
         let iteration = self.iteration;
 
         world
-            .query::<(&Scale, &Position, &Rotation, &Collider, &mut TreeMarker)>()
+            .query::<(&Scale, &Position, &Rotation, &Collider, &mut TreeMarker<N>)>()
             .iter()
             .for_each(|(_, (scale, pos, rot, collider, marker))| {
                 let index = marker.index;
@@ -125,7 +125,7 @@ impl<N: Node> CollisionTree<N> {
         // Move entities between nodes when they no longer fit or fit into a
         // deeper child.
         world
-            .query::<&mut TreeMarker>()
+            .query::<&mut TreeMarker<N>>()
             .iter()
             .for_each(|(_, marker)| {
                 let index = marker.index;
@@ -152,7 +152,7 @@ impl<N: Node> CollisionTree<N> {
             front
                 .drain(..)
                 .try_for_each(|obj| -> Result<_, hecs::ComponentError> {
-                    let mut marker = world.get_mut::<TreeMarker>(obj.entity)?;
+                    let mut marker = world.get_mut::<TreeMarker<N>>(obj.entity)?;
 
                     let new_marker = root.insert(nodes, obj, back);
 

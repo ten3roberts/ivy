@@ -12,7 +12,7 @@ use super::NodeIndex;
 //     fn insert(&self, node: N) -> NodeIndex;
 // }
 
-pub trait Node {
+pub trait Node: Sized + Send + Sync {
     type SplitOutput: IntoIterator<Item = Self>;
     /// Returns the objects contained in the node
     fn objects(&self) -> &[Object];
@@ -37,7 +37,7 @@ pub trait Node {
 
     /// Returns the node's children. If the node is a leaf node, and empty slice
     /// is returned
-    fn children(&self) -> &[NodeIndex];
+    fn children(&self) -> &[NodeIndex<Self>];
 
     fn is_leaf(&self) -> bool {
         self.children().is_empty()
@@ -45,7 +45,7 @@ pub trait Node {
 
     /// Set the children of the node. Is called after [`split`] to assign the
     /// generated node indices.
-    fn set_children(&mut self, children: &[NodeIndex]);
+    fn set_children(&mut self, children: &[NodeIndex<Self>]);
 
     /// Splits the node returning the new children and pushed the objects in
     /// need of reallocation to the [`popped`] list. The children will then be
