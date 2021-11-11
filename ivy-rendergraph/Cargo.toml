@@ -9,6 +9,7 @@ edition = "2018"
 anyhow = "1.0.44"
 hecs = "0.6.5"
 itertools = "0.10.1"
+ivy-base = { path = "../ivy-base", version = "1.7" }
 ivy-graphics = { path = "../ivy-graphics", version = "1.7" }
 ivy-resources = { path = "../ivy-resources", version = "1.4.0" }
 ivy-vulkan = { path = "../ivy-vulkan", version = "1.7" }

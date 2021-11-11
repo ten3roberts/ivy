@@ -34,6 +34,7 @@ use physics::{
 use postprocessing::pbr::{create_pbr_pipeline, PBRInfo};
 use random::rand::SeedableRng;
 use random::{rand::rngs::StdRng, Random};
+use rendergraph::GraphicsLayer;
 use slotmap::SecondaryMap;
 use std::fmt::Write;
 use ultraviolet::{Rotor3, Vec3};
@@ -178,7 +179,7 @@ fn main() -> anyhow::Result<()> {
                 ),
             ))
         })?
-        .try_push_layer(|w, r, e| VulkanLayer::new(w, r, e))?
+        .try_push_layer(|w, r, e| GraphicsLayer::new(w, r, e, FRAMES_IN_FLIGHT))?
         .try_push_layer(|w, r, e| DebugLayer::new(w, r, e, 100.ms()))?
         .build();
 
@@ -740,10 +741,6 @@ new_shaderpass! {
 
 struct DisplayDebugReport;
 
-struct VulkanLayer {
-    context: Arc<VulkanContext>,
-}
-
 fn setup_ui(
     world: &mut World,
     resources: &Resources,
@@ -881,57 +878,6 @@ fn setup_ui(
     )?;
 
     Ok(())
-}
-
-impl VulkanLayer {
-    pub fn new(_: &mut World, resources: &Resources, _: &mut Events) -> anyhow::Result<Self> {
-        let context = resources.get_default::<Arc<VulkanContext>>()?.clone();
-
-        Ok(Self { context })
-    }
-}
-
-impl Layer for VulkanLayer {
-    fn on_update(
-        &mut self,
-        world: &mut World,
-        resources: &mut Resources,
-        _events: &mut Events,
-        _frame_time: Duration,
-    ) -> anyhow::Result<()> {
-        TimedScope::new(|elapsed| log::trace!("Vulkan layer took {:.3?}", elapsed));
-        let context = resources.get_default::<Arc<VulkanContext>>()?;
-        // Ensure gpu side data for cameras
-        GpuCameraData::create_gpu_cameras(&context, world, FRAMES_IN_FLIGHT)?;
-
-        let mut rendergraph = resources.get_default_mut::<RenderGraph>()?;
-
-        let current_frame = rendergraph.begin()?;
-
-        resources
-            .get_default_mut::<Swapchain>()?
-            .acquire_next_image(rendergraph.wait_semaphore(current_frame))?;
-
-        GpuCameraData::update_all_system(world, current_frame)?;
-        LightManager::update_all_system(world, current_frame)?;
-
-        rendergraph.execute(world, resources)?;
-        rendergraph.end()?;
-
-        // // Present results
-        resources.get_default::<Swapchain>()?.present(
-            context.present_queue(),
-            &[rendergraph.signal_semaphore(current_frame)],
-        )?;
-
-        Ok(())
-    }
-}
-
-impl Drop for VulkanLayer {
-    fn drop(&mut self) {
-        device::wait_idle(self.context.device()).expect("Failed to wait on device");
-    }
 }
 
 struct WindowLayer {

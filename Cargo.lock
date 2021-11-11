@@ -604,6 +604,7 @@ dependencies = [
  "anyhow",
  "hecs",
  "itertools",
+ "ivy-base",
  "ivy-graphics",
  "ivy-resources",
  "ivy-vulkan",

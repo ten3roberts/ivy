@@ -1,14 +1,16 @@
-mod camera_node;
+pub mod camera_node;
 mod error;
 mod fullscreen_node;
+mod layer;
 mod node;
-pub(crate) mod pass;
+pub mod pass;
 mod rendergraph;
 mod swapchain_node;
 
 pub use camera_node::*;
 pub use error::*;
 pub use fullscreen_node::*;
+pub use layer::*;
 pub use node::*;
 pub use rendergraph::*;
 pub use swapchain_node::*;
