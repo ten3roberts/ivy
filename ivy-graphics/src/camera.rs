@@ -2,13 +2,14 @@ use crate::Result;
 use ash::vk::{DescriptorSet, ShaderStageFlags};
 use derive_more::{AsRef, Deref, From, Into};
 use hecs::World;
+use ivy_base::Extent;
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
     descriptors::{DescriptorBuilder, IntoSet},
-    Buffer, Extent, Format, ImageUsage, SampleCountFlags, Texture, TextureInfo, VulkanContext,
+    Buffer, Format, ImageUsage, SampleCountFlags, Texture, TextureInfo, VulkanContext,
 };
 use std::sync::Arc;
-use ultraviolet::{Mat4, Vec4};
+use ultraviolet::{Mat4, Vec2, Vec3, Vec4};
 
 /// A camera holds a view and projection matrix.
 /// Use a system to update view matrix according to position and rotation.
@@ -84,6 +85,16 @@ impl Camera {
     pub fn set_view(&mut self, view: Mat4) {
         self.view = view;
         self.update_viewproj();
+    }
+
+    /// Transform a position in normalized device coordinates to a world
+    /// direction eminating from the camera.
+    pub fn to_world_ray(&self, pos: Vec2) -> Vec3 {
+        let ray_clip = Vec4::new(pos.x, pos.y, -1.0, 1.0);
+        let ray_eye = self.projection.inversed() * ray_clip;
+        (self.view.inversed() * Vec4::new(ray_eye.x, ray_eye.y, -1.0, 0.0))
+            .xyz()
+            .normalized()
     }
 }
 
