@@ -1,4 +1,4 @@
-use ivy_vulkan::Extent;
+use ivy_base::Extent;
 use std::path::PathBuf;
 use thiserror::Error;
 

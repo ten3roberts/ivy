@@ -1,18 +1,16 @@
 #![allow(dead_code)]
-use std::{
-    fmt::Display,
-    ops::Deref,
-    sync::{mpsc, Arc},
-    time::Duration,
-};
+use std::{fmt::Display, ops::Deref, sync::Arc, time::Duration};
 
 use anyhow::{anyhow, Context};
 use collision::{
     util::project_plane, BinaryNode, Collider, CollisionTree, Cube, Object, Ray, Sphere,
 };
 use flume::Receiver;
-use glfw::{Action, CursorMode, Glfw, Key, MouseButton, WindowEvent};
-use graphics::gizmos::GizmoRenderer;
+use glfw::{CursorMode, Key, MouseButton, WindowEvent};
+use graphics::{
+    gizmos::GizmoRenderer,
+    layer::{WindowLayer, WindowLayerInfo},
+};
 use hecs::*;
 use hecs_hierarchy::Hierarchy;
 use ivy::{
@@ -150,21 +148,18 @@ fn main() -> anyhow::Result<()> {
 
     let glfw = Arc::new(RwLock::new(glfw::init(glfw::FAIL_ON_ERRORS)?));
 
-    let mut app = App::builder()
-        .try_push_layer(|_, r, _| {
-            WindowLayer::new(
-                glfw,
-                r,
-                WindowInfo {
-                    // extent: Some(Extent::new(800, 600)),
-                    extent: None,
+    let window = WindowInfo {
+        // extent: Some(Extent::new(800, 600)),
+        extent: None,
 
-                    resizable: false,
-                    mode: WindowMode::Windowed,
-                    ..Default::default()
-                },
-            )
-        })?
+        resizable: false,
+        mode: WindowMode::Windowed,
+        ..Default::default()
+    };
+
+    let mut app = App::builder()
+        .try_push_layer(|_, r, _| WindowLayer::new(glfw, r, WindowLayerInfo { window }))?
+        .push_layer(UILayer::new)
         .try_push_layer(|w, r, e| -> anyhow::Result<_> {
             Ok(FixedTimeStep::new(
                 20.ms(),
@@ -472,12 +467,12 @@ fn setup_objects(
 
     let mut rng = StdRng::seed_from_u64(43);
 
-    const COUNT: usize = 128;
+    const COUNT: usize = 512;
 
     world
         .spawn_batch((0..COUNT).map(|_| {
-            let pos = Position(Vec3::rand_uniform(&mut rng) * 30.0);
-            let vel = Velocity::from(-pos.normalized()) * 5.0;
+            let pos = Position::rand_uniform(&mut rng) * 10.0;
+            let vel = Velocity::rand_uniform(&mut rng);
 
             (
                 AngularMass(5.0),
@@ -528,7 +523,7 @@ impl LogicLayer {
     ) -> anyhow::Result<Self> {
         let window = resources.get_default::<Window>()?;
 
-        let input = Input::new(window.cursor_pos(), events);
+        let input = Input::new(window, events);
 
         let input_vec = InputVector::new(
             InputAxis::keyboard(Key::D, Key::A),
@@ -536,10 +531,8 @@ impl LogicLayer {
             InputAxis::keyboard(Key::S, Key::W),
         );
 
-        let extent = window.extent();
-
         let camera = world.spawn((
-            Camera::perspective(1.0, extent.aspect(), 0.1, 100.0),
+            Camera::perspective(1.0, input.window_extent().aspect(), 0.1, 100.0),
             Mover::new(input_vec, Default::default(), 5.0, true),
             MainCamera,
             Position(Vec3::new(0.0, 0.0, 5.0)),
@@ -548,7 +541,7 @@ impl LogicLayer {
 
         let canvas = world.spawn((
             Canvas,
-            Size2D(extent.as_vec()),
+            Size2D(input.window_extent().into()),
             Position2D::new(0.0, 0.0),
             Camera::default(),
         ));
@@ -574,29 +567,12 @@ impl LogicLayer {
     pub fn handle_events(
         &mut self,
         world: &mut World,
-        resources: &Resources,
+        _resources: &Resources,
     ) -> anyhow::Result<()> {
-        let window = resources.get_default_mut::<Window>()?;
+        // let window = resources.get_default_mut::<Window>()?;
 
         for event in self.window_events.try_iter() {
             match event {
-                WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
-                    if self.cursor_mode == CursorMode::Normal {
-                        self.cursor_mode = CursorMode::Disabled;
-                    } else {
-                        self.cursor_mode = CursorMode::Normal;
-                    }
-
-                    window.set_cursor_mode(self.cursor_mode);
-                }
-                WindowEvent::Focus(false) => {
-                    self.cursor_mode = CursorMode::Normal;
-                    window.set_cursor_mode(self.cursor_mode)
-                }
-                WindowEvent::Focus(true) => {
-                    self.cursor_mode = CursorMode::Disabled;
-                    window.set_cursor_mode(self.cursor_mode)
-                }
                 WindowEvent::Scroll(_, scroll) => {
                     let mut mover = world.get_mut::<Mover>(self.entities.camera)?;
                     mover.speed = (mover.speed + scroll as f32 * 0.2).clamp(0.1, 20.0);
@@ -621,22 +597,27 @@ impl Layer for LogicLayer {
         self.handle_events(world, resources)
             .context("Failed to handle events")?;
 
-        self.input.on_update();
+        self.input.handle_events();
 
         let dt = frame_time.secs();
 
-        let (_e, (camera_pos, camera_rot)) = world
-            .query_mut::<(&Position, &mut Rotation)>()
-            .with::<Camera>()
+        let (_e, (camera, camera_pos, camera_rot)) = world
+            .query_mut::<(&Camera, &Position, &mut Rotation)>()
             .into_iter()
             .next()
             .unwrap();
 
-        let window = resources.get_default::<Window>()?;
+        let mut window = resources.get_default_mut::<Window>()?;
 
-        let mouse_movement = self.input.rel_mouse_pos() / window.extent().as_vec();
+        //  Only move camera if right mouse button is held
+        if self.input.mouse_button(MouseButton::Button2) {
+            window.set_cursor_mode(CursorMode::Disabled);
+            let mouse_movement = self.input.cursor_movement() / window.extent().as_vec();
 
-        self.camera_euler += mouse_movement.xyz();
+            self.camera_euler += mouse_movement.xyz();
+        } else {
+            window.set_cursor_mode(CursorMode::Normal);
+        }
 
         *camera_rot = Rotor3::from_euler_angles(
             self.camera_euler.z,
@@ -645,9 +626,12 @@ impl Layer for LogicLayer {
         )
         .into();
 
-        let camera_forward = camera_rot.into_matrix() * -Vec3::unit_z();
+        // Calculate cursor to world ray
+        let cursor_pos = self.input.normalized_cursor_pos();
 
-        let ray = Ray::new(*camera_pos, camera_forward);
+        let dir = camera.to_world_ray(*cursor_pos);
+
+        let ray = Ray::new(*camera_pos, dir);
         let mut gizmos = resources.get_default_mut::<Gizmos>()?;
 
         let tree = resources.get_default::<CollisionTree<CollisionNode>>()?;
@@ -671,7 +655,7 @@ impl Layer for LogicLayer {
                 let centering = sideways_offset * 500.0;
 
                 let dampening = sideways_movement * -50.0;
-                let target = *ray.origin() + camera_forward * 5.0;
+                let target = *ray.origin() + ray.dir() * 5.0;
                 let towards = target - point;
                 let towards_vel = (ray.dir() * ray.dir().dot(**vel)).dot(towards.normalized());
                 let max_vel = (5.0 * towards.mag_sq()).max(0.1);
@@ -679,14 +663,6 @@ impl Layer for LogicLayer {
                 let towards = towards.normalized() * 50.0 * (max_vel - towards_vel) / max_vel;
 
                 effector.apply_force(dampening + towards + centering);
-
-                gizmos.push(Gizmo::Line {
-                    origin: point,
-                    color: Color::blue(),
-                    dir: hit.contact.normal,
-                    radius: 0.02,
-                    corner_radius: 1.0,
-                });
 
                 for (i, p) in hit.contact.points.iter().enumerate() {
                     gizmos.push(Gizmo::Sphere {
@@ -754,7 +730,7 @@ fn setup_ui(
         .ok_or(anyhow!("Missing canvas"))?
         .0;
 
-    let image: Handle<Image> = resources.load(ImageInfo {
+    let heart: Handle<Image> = resources.load(ImageInfo {
         texture: "./res/textures/heart.png".into(),
         sampler: SamplerInfo::default(),
     })??;
@@ -779,10 +755,11 @@ fn setup_ui(
         canvas,
         (
             Widget,
-            image,
+            heart,
             ui_pass,
             RelativeOffset::new(-0.25, -0.5),
             AbsoluteSize::new(100.0, 100.0),
+            Interactive,
         ),
     )?;
 
@@ -790,7 +767,7 @@ fn setup_ui(
         canvas,
         (
             Widget,
-            image,
+            heart,
             ui_pass,
             WithTime::<RelativeOffset>::new(Box::new(|_, offset, elapsed, _| {
                 offset.x = (elapsed * 0.25).sin();
@@ -802,7 +779,7 @@ fn setup_ui(
 
     world.attach_new::<Widget, _>(
         widget2,
-        (Widget, ui_pass, OffsetSize::new(-10.0, -10.0), image),
+        (Widget, ui_pass, OffsetSize::new(-10.0, -10.0), heart),
     )?;
 
     world.attach_new::<Widget, _>(
@@ -853,7 +830,7 @@ fn setup_ui(
         widget2,
         (
             Widget,
-            image,
+            heart,
             ui_pass,
             WithTime::<RelativeOffset>::new(Box::new(|_, offset, elapsed, _| {
                 *offset = RelativeOffset::new((elapsed).cos() * 4.0, elapsed.sin() * 2.0) * 0.5
@@ -867,7 +844,7 @@ fn setup_ui(
         satellite,
         (
             Widget,
-            image,
+            heart,
             ui_pass,
             WithTime::<RelativeOffset>::new(Box::new(|_, offset, elapsed, _| {
                 *offset = RelativeOffset::new(-(elapsed * 5.0).cos(), -(elapsed * 5.0).sin()) * 0.5
@@ -878,50 +855,6 @@ fn setup_ui(
     )?;
 
     Ok(())
-}
-
-struct WindowLayer {
-    glfw: Arc<RwLock<Glfw>>,
-    events: mpsc::Receiver<(f64, WindowEvent)>,
-}
-
-impl WindowLayer {
-    pub fn new(
-        glfw: Arc<RwLock<Glfw>>,
-        resources: &Resources,
-        info: WindowInfo,
-    ) -> anyhow::Result<Self> {
-        let (window, events) = Window::new(glfw.clone(), info)?;
-        let context = Arc::new(VulkanContext::new(&window)?);
-
-        resources.insert(context)?;
-        resources.insert(window)?;
-
-        Ok(Self { glfw, events })
-    }
-}
-
-impl Layer for WindowLayer {
-    fn on_update(
-        &mut self,
-        _world: &mut World,
-        _: &mut Resources,
-        events: &mut Events,
-        _frame_time: Duration,
-    ) -> anyhow::Result<()> {
-        let _scope = TimedScope::new(|elapsed| log::trace!("Window layer took {:.3?}", elapsed));
-        self.glfw.write().poll_events();
-
-        for (_, event) in glfw::flush_messages(&self.events) {
-            if let WindowEvent::Close = event {
-                events.send(AppEvent::Exit);
-            }
-
-            events.send(event);
-        }
-
-        Ok(())
-    }
 }
 
 #[derive(Debug, Clone)]

@@ -41,17 +41,19 @@ impl Events {
         }
     }
 
-    /// Sends an event of type `T` to all subscribed listeners.
-    /// If no dispatcher exists for event `T`, a new one will be created.
-    pub fn send<T: Event>(&mut self, event: T) {
-        let dispatcher = self
-            .dispatchers
+    /// Returns the internal dispatcher for the specified event type.
+    pub fn dispatcher<T: Event>(&mut self) -> &mut EventDispatcher<T> {
+        self.dispatchers
             .entry(TypeId::of::<T>())
             .or_insert_with(new_event_dispatcher::<T>)
             .downcast_mut::<EventDispatcher<T>>()
-            .expect("Failed to downcast");
+            .expect("Failed to downcast")
+    }
 
-        dispatcher.send(event)
+    /// Sends an event of type `T` to all subscribed listeners.
+    /// If no dispatcher exists for event `T`, a new one will be created.
+    pub fn send<T: Event>(&mut self, event: T) {
+        self.dispatcher().send(event)
     }
 
     pub fn subscribe<S, T: Event>(&mut self, sender: S)

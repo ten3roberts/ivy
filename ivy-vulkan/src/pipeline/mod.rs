@@ -1,9 +1,11 @@
-use crate::{descriptors::DescriptorLayoutInfo, Error, Extent, Result, VertexDesc, VulkanContext};
+use crate::traits::FromExtent;
+use crate::{descriptors::DescriptorLayoutInfo, Error, Result, VertexDesc, VulkanContext};
 use arrayvec::ArrayVec;
 use ash::vk::{
-    BlendFactor, BlendOp, ColorComponentFlags, PipelineColorBlendAttachmentState, PipelineLayout,
-    PrimitiveTopology, PushConstantRange,
+    BlendFactor, BlendOp, ColorComponentFlags, Extent2D, PipelineColorBlendAttachmentState,
+    PipelineLayout, PrimitiveTopology, PushConstantRange,
 };
+use ivy_base::Extent;
 use std::{ffi::CString, sync::Arc};
 use std::{fs::File, path::PathBuf};
 
@@ -116,7 +118,7 @@ impl Pipeline {
 
         let scissors = [vk::Rect2D {
             offset: vk::Offset2D { x: 0, y: 0 },
-            extent: info.extent.into(),
+            extent: Extent2D::from_extent(info.extent),
         }];
 
         let viewport_state = vk::PipelineViewportStateCreateInfo::builder()

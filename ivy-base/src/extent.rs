@@ -4,8 +4,6 @@ use std::{
 };
 use ultraviolet::Vec2;
 
-use ash::vk;
-
 /// Represents a width and height.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct Extent {
@@ -57,45 +55,6 @@ impl Add<u32> for Extent {
 }
 
 // Conversions
-
-impl From<Extent> for vk::Extent2D {
-    fn from(val: Extent) -> Self {
-        vk::Extent2D {
-            width: val.width,
-            height: val.height,
-        }
-    }
-}
-
-impl From<Extent> for vk::Extent3D {
-    fn from(val: Extent) -> Self {
-        vk::Extent3D {
-            width: val.width,
-            height: val.height,
-            depth: 1,
-        }
-    }
-}
-
-impl From<Extent> for vk::Offset2D {
-    fn from(val: Extent) -> Self {
-        vk::Offset2D {
-            x: val.width as i32,
-            y: val.height as i32,
-        }
-    }
-}
-
-impl From<Extent> for vk::Offset3D {
-    fn from(val: Extent) -> Self {
-        vk::Offset3D {
-            x: val.width as i32,
-            y: val.height as i32,
-            z: 1,
-        }
-    }
-}
-
 impl From<Extent> for [u32; 2] {
     fn from(val: Extent) -> Self {
         [val.width, val.height]
@@ -105,15 +64,6 @@ impl From<Extent> for [u32; 2] {
 impl From<Extent> for (u32, u32) {
     fn from(val: Extent) -> Self {
         (val.width, val.height)
-    }
-}
-
-impl From<vk::Extent2D> for Extent {
-    fn from(v: vk::Extent2D) -> Self {
-        Self {
-            width: v.width,
-            height: v.height,
-        }
     }
 }
 

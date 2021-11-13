@@ -1,11 +1,11 @@
-use crate::{
-    buffer::Buffer, device, framebuffer::Framebuffer, renderpass::RenderPass, Extent, Result,
-};
+use crate::traits::FromExtent;
+use crate::{buffer::Buffer, device, framebuffer::Framebuffer, renderpass::RenderPass, Result};
+use ivy_base::Extent;
 use std::mem::size_of;
 use std::sync::Arc;
 
 use arrayvec::ArrayVec;
-use ash::vk::{self, PipelineLayout};
+use ash::vk::{self, Extent2D, PipelineLayout};
 use ash::vk::{IndexType, ShaderStageFlags};
 use ash::Device;
 
@@ -193,7 +193,7 @@ impl CommandBuffer {
             framebuffer: framebuffer.framebuffer(),
             render_area: vk::Rect2D {
                 offset: vk::Offset2D { x: 0, y: 0 },
-                extent: extent.into(),
+                extent: Extent2D::from_extent(extent),
             },
             clear_value_count: clear_values.len() as _,
             p_clear_values: clear_values.as_ptr(),

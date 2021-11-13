@@ -1,5 +1,6 @@
 use crate::*;
 use hecs::{Query, World};
+use ivy_base::{Position2D, Size2D};
 use ivy_graphics::{BaseRenderer, Mesh, Renderer, ShaderPass};
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{commands::CommandBuffer, descriptors::*, vk::IndexType, VulkanContext};

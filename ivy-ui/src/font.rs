@@ -1,10 +1,11 @@
 use crate::{Error, Result};
+use ivy_base::Extent;
 use ivy_graphics::{NormalizedRect, Rect, TextureAtlas};
 use ivy_resources::{Handle, LoadResource, Resources};
 use ivy_vulkan::{
     descriptors::{DescriptorBuilder, DescriptorSet, IntoSet},
     vk::ShaderStageFlags,
-    AddressMode, Extent, FilterMode, Format, ImageUsage, SampleCountFlags, Sampler, SamplerInfo,
+    AddressMode, FilterMode, Format, ImageUsage, SampleCountFlags, Sampler, SamplerInfo,
     TextureInfo, VulkanContext,
 };
 use std::{borrow::Cow, ops::Range, path::Path, sync::Arc};

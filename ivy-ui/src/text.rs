@@ -1,10 +1,10 @@
 use std::borrow::Cow;
 
 use crate::Result;
-use crate::Size2D;
 use crate::TextAlignment;
 use crate::WrapStyle;
 use fontdue::layout::{self, GlyphPosition, Layout, TextStyle};
+use ivy_base::Size2D;
 use ivy_graphics::NormalizedRect;
 use ultraviolet::{Vec2, Vec3};
 

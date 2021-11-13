@@ -1,7 +1,6 @@
 use derive_for::*;
 use derive_more::*;
 pub use fontdue::layout::{HorizontalAlign, VerticalAlign};
-use ultraviolet::Vec2;
 
 derive_for!(
     (
@@ -24,28 +23,18 @@ derive_for!(
         SubAssign,
         PartialEq,
     );
-    #[repr(transparent)]
-    pub struct Position2D(pub Vec2);
-    #[repr(transparent)]
-    pub struct Size2D(pub Vec2);
-    #[derive(Eq, Hash)]
+    #[derive(Hash, Eq, PartialOrd, Ord)]
     /// The depth of the widget from the root.
     #[repr(transparent)]
     pub struct WidgetDepth(pub u32);
 );
 
-impl Position2D {
-    pub fn new(x: f32, y: f32) -> Self {
-        Self(Vec2::new(x, y))
-    }
-}
-
-impl Size2D {
-    pub fn new(x: f32, y: f32) -> Self {
-        Self(Vec2::new(x, y))
-    }
-}
-
+/// Marker type specifying that this widget is interactive and will consume
+/// click events and not forward them down. Does not neccessarily mean that the
+/// widget will react to it.
+/// The interactive widget doesn't neccessarily need to be a visible object,
+/// which allows for transparent blockers in menus.
+pub struct Interactive;
 /// Marker type for UI and the UI hierarchy.
 pub struct Widget;
 

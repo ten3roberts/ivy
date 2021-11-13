@@ -1,8 +1,9 @@
 use crate::{Error, Result};
 use ash::vk;
+use ivy_base::Extent;
 use ivy_image::Image;
 use ivy_resources::{Handle, Resources};
-use ivy_vulkan::{Extent, Texture, TextureInfo, VulkanContext};
+use ivy_vulkan::{Texture, TextureInfo, VulkanContext};
 use rectangle_pack::{
     contains_smallest_box, volume_heuristic, GroupedRectsToPlace, PackedLocation, RectToInsert,
     RectanglePackOk, TargetBin,

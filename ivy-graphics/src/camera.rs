@@ -90,7 +90,7 @@ impl Camera {
     /// Transform a position in normalized device coordinates to a world
     /// direction eminating from the camera.
     pub fn to_world_ray(&self, pos: Vec2) -> Vec3 {
-        let ray_clip = Vec4::new(pos.x, pos.y, -1.0, 1.0);
+        let ray_clip = Vec4::new(pos.x, -pos.y, -1.0, 1.0);
         let ray_eye = self.projection.inversed() * ray_clip;
         (self.view.inversed() * Vec4::new(ray_eye.x, ray_eye.y, -1.0, 0.0))
             .xyz()

@@ -2,9 +2,8 @@
 use derive_for::*;
 use derive_more::*;
 use hecs::{Bundle, Query};
+use ivy_base::{Position2D, Size2D};
 use ultraviolet::Vec2;
-
-use crate::{Position2D, Size2D};
 
 derive_for!(
     (

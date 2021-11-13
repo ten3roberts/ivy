@@ -5,12 +5,13 @@ use crate::{
 use hash::Hash;
 use hecs::World;
 use itertools::Itertools;
+use ivy_base::Extent;
 use ivy_resources::{Handle, ResourceCache, Resources};
 use ivy_vulkan::{
     commands::{CommandBuffer, CommandPool},
     fence, semaphore,
     vk::{self, CommandBufferUsageFlags, PipelineStageFlags, Semaphore},
-    Extent, Fence, ImageLayout, PipelineInfo, RenderPass, Texture, VulkanContext,
+    Fence, ImageLayout, PipelineInfo, RenderPass, Texture, VulkanContext,
 };
 use slotmap::{new_key_type, SecondaryMap, SlotMap};
 use std::{hash, ops::Deref, sync::Arc, time::Duration};

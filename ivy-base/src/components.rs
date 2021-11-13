@@ -1,7 +1,8 @@
 use derive_for::*;
 use derive_more::*;
 use hecs::Query;
-use ultraviolet::{Bivec3, Mat4, Rotor3, Vec3};
+use ivy_random::Random;
+use ultraviolet::{Bivec3, Mat4, Rotor3, Vec2, Vec3};
 
 derive_for!(
 
@@ -34,6 +35,10 @@ derive_for!(
     /// Describes a scale in 3D space.
     #[repr(transparent)]
     pub struct Scale(pub Vec3);
+    #[repr(transparent)]
+    pub struct Position2D(pub Vec2);
+    #[repr(transparent)]
+    pub struct Size2D(pub Vec2);
 );
 
 impl Position {
@@ -63,12 +68,24 @@ impl Scale {
     }
 }
 
+impl Position2D {
+    pub fn new(x: f32, y: f32) -> Self {
+        Self(Vec2::new(x, y))
+    }
+}
+
+impl Size2D {
+    pub fn new(x: f32, y: f32) -> Self {
+        Self(Vec2::new(x, y))
+    }
+}
+
 #[derive(
     AsRef, PartialEq, Clone, Copy, Debug, Default, Deref, DerefMut, From, Into, Mul, MulAssign,
 )]
 #[repr(transparent)]
 /// A matrix transforming a point from local space to world space. This can
-/// be used to transform a direction relative to the entity to be relative to
+/// be used ~                                               │                                                                                              │to transform a direction relative to the entity to be relative to
 /// the world.
 /// Should not be inserted into the world as it can become outdated when either
 /// Position, Rotation, or Scale changes. Use TransformQuery instead.
@@ -103,5 +120,79 @@ impl<'a> TransformQuery<'a> {
     /// Converts the query into a transform matrix
     pub fn into_matrix(&self) -> TransformMatrix {
         TransformMatrix::new(*self.pos, *self.rot, *self.scale)
+    }
+}
+
+// Impl random
+
+impl Random for Position {
+    fn rand_unit<R: ivy_random::rand::Rng>(rng: &mut R) -> Self {
+        Position(Vec3::rand_unit(rng))
+    }
+
+    fn rand_sphere<R: ivy_random::rand::Rng>(rng: &mut R) -> Self {
+        Position(Vec3::rand_sphere(rng))
+    }
+
+    fn rand_constrained_sphere<R: ivy_random::rand::Rng>(rng: &mut R, r1: f32, r2: f32) -> Self {
+        Position(Vec3::rand_constrained_sphere(rng, r1, r2))
+    }
+
+    fn rand_uniform<R: ivy_random::rand::Rng>(rng: &mut R) -> Self {
+        Position(Vec3::rand_uniform(rng))
+    }
+}
+
+impl Random for Scale {
+    fn rand_unit<R: ivy_random::rand::Rng>(rng: &mut R) -> Self {
+        Scale(Vec3::rand_unit(rng))
+    }
+
+    fn rand_sphere<R: ivy_random::rand::Rng>(rng: &mut R) -> Self {
+        Scale(Vec3::rand_sphere(rng))
+    }
+
+    fn rand_constrained_sphere<R: ivy_random::rand::Rng>(rng: &mut R, r1: f32, r2: f32) -> Self {
+        Scale(Vec3::rand_constrained_sphere(rng, r1, r2))
+    }
+
+    fn rand_uniform<R: ivy_random::rand::Rng>(rng: &mut R) -> Self {
+        Scale(Vec3::rand_uniform(rng))
+    }
+}
+
+impl Random for Position2D {
+    fn rand_unit<R: ivy_random::rand::Rng>(rng: &mut R) -> Self {
+        Position2D(Vec2::rand_unit(rng))
+    }
+
+    fn rand_sphere<R: ivy_random::rand::Rng>(rng: &mut R) -> Self {
+        Position2D(Vec2::rand_sphere(rng))
+    }
+
+    fn rand_constrained_sphere<R: ivy_random::rand::Rng>(rng: &mut R, r1: f32, r2: f32) -> Self {
+        Position2D(Vec2::rand_constrained_sphere(rng, r1, r2))
+    }
+
+    fn rand_uniform<R: ivy_random::rand::Rng>(rng: &mut R) -> Self {
+        Position2D(Vec2::rand_uniform(rng))
+    }
+}
+
+impl Random for Size2D {
+    fn rand_unit<R: ivy_random::rand::Rng>(rng: &mut R) -> Self {
+        Size2D(Vec2::rand_unit(rng))
+    }
+
+    fn rand_sphere<R: ivy_random::rand::Rng>(rng: &mut R) -> Self {
+        Size2D(Vec2::rand_sphere(rng))
+    }
+
+    fn rand_constrained_sphere<R: ivy_random::rand::Rng>(rng: &mut R, r1: f32, r2: f32) -> Self {
+        Size2D(Vec2::rand_constrained_sphere(rng, r1, r2))
+    }
+
+    fn rand_uniform<R: ivy_random::rand::Rng>(rng: &mut R) -> Self {
+        Size2D(Vec2::rand_uniform(rng))
     }
 }

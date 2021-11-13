@@ -4,6 +4,7 @@ use derive_for::derive_for;
 use derive_more::*;
 use hecs::*;
 use ivy_base::Position;
+use ivy_random::Random;
 use ultraviolet::Vec3;
 
 derive_for!(
@@ -195,5 +196,41 @@ impl Default for AngularMass {
 impl Default for Resitution {
     fn default() -> Self {
         Self(0.0)
+    }
+}
+
+impl Random for Velocity {
+    fn rand_unit<R: ivy_random::rand::Rng>(rng: &mut R) -> Self {
+        Velocity(Vec3::rand_unit(rng))
+    }
+
+    fn rand_sphere<R: ivy_random::rand::Rng>(rng: &mut R) -> Self {
+        Velocity(Vec3::rand_sphere(rng))
+    }
+
+    fn rand_constrained_sphere<R: ivy_random::rand::Rng>(rng: &mut R, r1: f32, r2: f32) -> Self {
+        Velocity(Vec3::rand_constrained_sphere(rng, r1, r2))
+    }
+
+    fn rand_uniform<R: ivy_random::rand::Rng>(rng: &mut R) -> Self {
+        Velocity(Vec3::rand_uniform(rng))
+    }
+}
+
+impl Random for AngularVelocity {
+    fn rand_unit<R: ivy_random::rand::Rng>(rng: &mut R) -> Self {
+        AngularVelocity(Vec3::rand_unit(rng))
+    }
+
+    fn rand_sphere<R: ivy_random::rand::Rng>(rng: &mut R) -> Self {
+        AngularVelocity(Vec3::rand_sphere(rng))
+    }
+
+    fn rand_constrained_sphere<R: ivy_random::rand::Rng>(rng: &mut R, r1: f32, r2: f32) -> Self {
+        AngularVelocity(Vec3::rand_constrained_sphere(rng, r1, r2))
+    }
+
+    fn rand_uniform<R: ivy_random::rand::Rng>(rng: &mut R) -> Self {
+        AngularVelocity(Vec3::rand_uniform(rng))
     }
 }

@@ -1,6 +1,6 @@
 use std::{collections::HashMap, marker::PhantomData, ops::Deref, sync::Arc};
 
-use crate::{Key, KeyQuery, ShaderPass};
+use crate::{KeyQuery, RendererKey, ShaderPass};
 
 use super::*;
 
@@ -36,7 +36,7 @@ pub struct PassData<K, Obj> {
     marker: PhantomData<Obj>,
 }
 
-impl<K: Key, Obj: 'static> PassData<K, Obj> {
+impl<K: RendererKey, Obj: 'static> PassData<K, Obj> {
     pub fn new(
         context: Arc<VulkanContext>,
         capacity: u32,
@@ -343,7 +343,7 @@ impl<K: Key, Obj: 'static> PassData<K, Obj> {
 
 impl<K, Obj> PassData<K, Obj>
 where
-    K: Ord + Key,
+    K: Ord + RendererKey,
     Obj: 'static,
 {
     /// Sorts batches if dirty and clears the dirty flag

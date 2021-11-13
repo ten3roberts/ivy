@@ -110,7 +110,7 @@ impl Input {
         let pos = self.cursor_pos;
         Position2D::new(
             (2.0 * pos.x) / self.window_extent.width as f32 - 1.0,
-            (2.0 * pos.y) / self.window_extent.height as f32 - 1.0,
+            1.0 - (2.0 * pos.y) / self.window_extent.height as f32,
         )
     }
 

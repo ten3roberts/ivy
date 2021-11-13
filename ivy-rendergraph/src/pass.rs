@@ -1,11 +1,12 @@
 use crate::{Edge, EdgeKind, Node, NodeIndex, NodeKind, Result};
 use hecs::World;
+use ivy_base::Extent;
 use ivy_resources::{ResourceCache, Resources};
 use ivy_vulkan::{
     commands::CommandBuffer,
     vk::{self, ClearValue, ImageMemoryBarrier},
-    AttachmentDescription, AttachmentReference, Extent, Framebuffer, ImageLayout, LoadOp,
-    RenderPass, RenderPassInfo, StoreOp, SubpassDependency, SubpassInfo, Texture, VulkanContext,
+    AttachmentDescription, AttachmentReference, Framebuffer, ImageLayout, LoadOp, RenderPass,
+    RenderPassInfo, StoreOp, SubpassDependency, SubpassInfo, Texture, VulkanContext,
 };
 use slotmap::{SecondaryMap, SlotMap};
 use std::{

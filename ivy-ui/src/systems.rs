@@ -1,6 +1,7 @@
 use crate::Result;
 use hecs::{Entity, World};
 use hecs_hierarchy::Hierarchy;
+use ivy_base::{Color, Position2D, Size2D};
 use ivy_graphics::Camera;
 use ultraviolet::Mat4;
 
@@ -95,12 +96,12 @@ pub fn update_canvas(world: &World, canvas: Entity) -> Result<()> {
 /// Satisfies all widget by adding missing ModelMatrices, Position2D and Size2D
 pub fn statisfy_widgets(world: &mut World) {
     let entities = world
-        .query_mut::<&Widget>()
+        .query_mut::<(&Widget, Option<&Color>)>()
         .into_iter()
-        .map(|(e, _)| e)
+        .map(|(e, (_, color))| (e, color.cloned().unwrap_or_default()))
         .collect::<Vec<_>>();
 
-    entities.into_iter().for_each(|e| {
+    entities.into_iter().for_each(|(e, color)| {
         // Ignore errors, we just collected these entities and thus know they exist.
         let _ = world.insert(
             e,
@@ -108,6 +109,7 @@ pub fn statisfy_widgets(world: &mut World) {
                 Position2D::default(),
                 Size2D::default(),
                 WidgetDepth::default(),
+                color,
             ),
         );
     });

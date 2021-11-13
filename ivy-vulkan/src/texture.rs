@@ -1,9 +1,11 @@
 use crate::descriptors::DescriptorBindable;
-use crate::{buffer, commands::*, context::VulkanContext, extent::Extent, Error, Result};
+use crate::traits::FromExtent;
+use crate::{buffer, commands::*, context::VulkanContext, Error, Result};
 use crate::{Buffer, BufferAccess};
-use ash::vk::{ImageAspectFlags, ImageView, SharingMode};
+use ash::vk::{Extent3D, ImageAspectFlags, ImageView, SharingMode};
 use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc};
 use gpu_allocator::MemoryLocation;
+use ivy_base::Extent;
 use ivy_resources::LoadResource;
 use std::borrow::Cow;
 use std::ops::Deref;
@@ -107,7 +109,7 @@ impl Texture {
         let image_info = vk::ImageCreateInfo {
             image_type: vk::ImageType::TYPE_2D,
             format: info.format,
-            extent: info.extent.into(),
+            extent: Extent3D::from_extent(info.extent),
             mip_levels,
             array_layers: 1,
             samples: info.samples,

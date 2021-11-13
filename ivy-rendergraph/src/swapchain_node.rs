@@ -4,6 +4,7 @@ use crate::{NodeKind, Result};
 use anyhow::Context;
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
+    traits::FromExtent,
     vk::{self, ClearValue, ImageBlit, ImageSubresourceLayers, Offset3D, PipelineStageFlags},
     ImageLayout, ImageUsage, SampleCountFlags, Swapchain, Texture, TextureInfo, VulkanContext,
 };
@@ -136,7 +137,7 @@ impl Node for SwapchainNode {
     ) -> anyhow::Result<()> {
         let swapchain = resources.get(self.swapchain)?;
         let extent = swapchain.extent();
-        let offset = extent.into();
+        let offset = Offset3D::from_extent(extent);
 
         let image_index = swapchain
             .image_index()

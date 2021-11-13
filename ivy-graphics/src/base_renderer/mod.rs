@@ -10,13 +10,13 @@ use ivy_vulkan::VulkanContext;
 pub use pass::*;
 
 pub trait KeyQuery: Send + Sync + Query {
-    type K: Key;
+    type K: RendererKey;
     fn into_key(&self) -> Self::K;
 }
 
-pub trait Key: std::hash::Hash + std::cmp::Eq + Copy {}
+pub trait RendererKey: std::hash::Hash + std::cmp::Eq + Copy {}
 
-impl<T> Key for T where T: std::hash::Hash + std::cmp::Eq + Copy {}
+impl<T> RendererKey for T where T: std::hash::Hash + std::cmp::Eq + Copy {}
 
 type ObjectId = u32;
 
@@ -35,7 +35,7 @@ pub struct BaseRenderer<K, Obj> {
 
 impl<Obj, K: 'static> BaseRenderer<K, Obj>
 where
-    K: Key,
+    K: RendererKey,
     Obj: 'static,
 {
     pub fn new(

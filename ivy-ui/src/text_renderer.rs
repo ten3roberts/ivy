@@ -17,7 +17,8 @@ use crate::Result;
 use crate::Text;
 use crate::UIVertex;
 use crate::WrapStyle;
-use crate::{components::Position2D, Error, Size2D};
+use crate::{Error};
+use ivy_base::{Size2D, Position2D};
 use crate::{Font, TextAlignment};
 
 #[derive(Query)]

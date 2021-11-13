@@ -14,6 +14,7 @@ glfw = { version = "0.42.0", features = [ "vulkan" ] }
 gpu-allocator = "0.10.0"
 ivy-image = { path = "../ivy-image", version = "1.1.0" }
 ivy-resources = { path = "../ivy-resources", version = "1.4.0" }
+ivy-base = { path = "../ivy-base", version = "1.8.0" }
 log = "0.4.14"
 parking_lot = "0.11.2"
 smallvec = "1.7.0"

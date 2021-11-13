@@ -1,5 +1,5 @@
 use crate::descriptors::{DescriptorAllocator, DescriptorLayoutCache};
-use crate::surface::Backend;
+use crate::traits::Backend;
 use crate::{commands::CommandPool, device::QueueFamilies, Result, *};
 use ash::extensions::ext::DebugUtils;
 use ash::extensions::khr::Surface;

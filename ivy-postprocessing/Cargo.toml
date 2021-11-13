@@ -12,6 +12,7 @@ derive_more = "0.99.16"
 hecs = { version = "0.6.5", features = [ "macros" ] }
 itertools = "0.10.1"
 ivy-graphics = { path = "../ivy-graphics", version = "1.7" }
+ivy-base = { path = "../ivy-base", version = "1.8" }
 ivy-rendergraph = { path = "../ivy-rendergraph", version = "1.7" }
 ivy-resources = { path = "../ivy-resources", version = "1.4.0" }
 ivy-vulkan = { path = "../ivy-vulkan", version = "1.7" }

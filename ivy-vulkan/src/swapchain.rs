@@ -1,11 +1,13 @@
-use crate::surface::Backend;
+use crate::traits::*;
 use crate::ImageUsage;
-use crate::{Error, Extent, Result, VulkanContext};
+use crate::{Error, Result, VulkanContext};
 use ash::extensions::khr::Surface;
 pub use ash::extensions::khr::Swapchain as SwapchainLoader;
+use ash::vk::Extent2D;
 use ash::vk::{self, Image, SurfaceKHR};
 use ash::Device;
 use ash::Instance;
+use ivy_base::Extent;
 use std::{cmp, sync::Arc};
 
 /// The maximum number of images in the swapchain. Actual image count may be less but never more.
@@ -100,7 +102,7 @@ fn pick_present_mode(
 fn pick_extent<T: Backend>(window: &T, capabilities: &vk::SurfaceCapabilitiesKHR) -> Extent {
     // The extent of the surface needs to match exactly
     if capabilities.current_extent.width != std::u32::MAX {
-        return capabilities.current_extent.into();
+        return capabilities.current_extent.into_extent();
     }
 
     // Freely choose extent based on window and min-max capabilities
@@ -176,7 +178,7 @@ impl Swapchain {
             .min_image_count(image_count)
             .image_format(surface_format.format)
             .image_color_space(surface_format.color_space)
-            .image_extent(extent.into())
+            .image_extent(Extent2D::from_extent(extent))
             .image_array_layers(1)
             // For now, render directly to the images
             .image_usage(info.usage)

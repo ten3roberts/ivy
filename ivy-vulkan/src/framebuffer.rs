@@ -1,4 +1,5 @@
-use crate::{Extent, RenderPass, Result};
+use crate::{RenderPass, Result};
+use ivy_base::Extent;
 use std::sync::Arc;
 
 use ash::vk;
@@ -24,7 +25,7 @@ impl Framebuffer {
     ) -> Result<Self> {
         let create_info = vk::FramebufferCreateInfo::builder()
             .render_pass(renderpass.renderpass())
-            .attachments(attachments)
+            .attachments(&attachments)
             .width(extent.width)
             .height(extent.height)
             .layers(1);

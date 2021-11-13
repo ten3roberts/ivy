@@ -1,12 +1,12 @@
 //! A buffer represents a piece of memory that can be accessed by the GPU and used to store and
 //! write data. Buffers
-use crate::{
-    commands::*, context::VulkanContext, descriptors::DescriptorBindable, Error, Extent, Result,
-};
+use crate::{commands::*, context::VulkanContext, descriptors::DescriptorBindable, Error, Result};
+
 use gpu_allocator::{
     vulkan::{self, *},
     MemoryLocation,
 };
+use ivy_base::Extent;
 use std::{
     ffi::c_void,
     mem::{self, size_of},

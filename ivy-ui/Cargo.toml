@@ -16,10 +16,13 @@ fontdue = "0.6.2"
 hecs = "0.6.5"
 hecs-hierarchy = "0.4.0"
 ivy-base = { path = "../ivy-base", version = "1.4" }
+glfw = "0.42.0"
 ivy-graphics = { path = "../ivy-graphics", version = "1.7" }
 ivy-image = { path = "../ivy-image", version = "1.4" }
 ivy-rendergraph = { path = "../ivy-rendergraph", version = "1.7" }
 ivy-resources = { path = "../ivy-resources", version = "1.4.0" }
 ivy-vulkan = { path = "../ivy-vulkan", version = "1.7" }
+ivy-input = { path = "../ivy-input", version = "1.8" }
 thiserror = "1.0.30"
 ultraviolet = { version = "0.8.1", features = [ "int" ] }
+flume = "0.10.9"
