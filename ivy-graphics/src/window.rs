@@ -6,7 +6,8 @@ use std::{
 
 use ash::vk::{Handle, SurfaceKHR};
 use glfw::{ClientApiHint, CursorMode, Glfw, WindowEvent, WindowHint};
-use ivy_vulkan::{surface::Backend, Extent};
+use ivy_base::Extent;
+use ivy_vulkan::traits::Backend;
 use parking_lot::RwLock;
 use ultraviolet::Vec2;
 
@@ -128,12 +129,14 @@ impl Backend for Window {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WindowMode {
     Windowed,
     Borderless,
     Fullscreen,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WindowInfo {
     /// The windows size. Set to none to use the monitors size.
     pub extent: Option<Extent>,

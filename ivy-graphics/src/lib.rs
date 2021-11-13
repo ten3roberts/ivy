@@ -14,6 +14,7 @@ mod shaderpass;
 mod atlas;
 mod base_renderer;
 pub mod gizmos;
+pub mod layer;
 mod light;
 pub mod systems;
 mod window;
