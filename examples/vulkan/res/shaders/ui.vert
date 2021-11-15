@@ -5,6 +5,7 @@ layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec2 texCoord;
 
 layout(location = 0) out vec2 fragTexCoord;
+layout(location = 1) out vec4 fragColor;
 
 layout(binding = 0) uniform CameraData {
   mat4 viewproj;
@@ -13,9 +14,10 @@ layout(binding = 0) uniform CameraData {
 
 struct ObjectData {
   mat4 mvp;
+  vec4 color;
 };
 
-layout(std140,set = 1, binding = 0) readonly buffer ObjectBuffer{ 
+layout(std140,set = 1, binding = 0) readonly buffer ObjectBuffer{
   ObjectData objects[];
 } objectBuffer;
 
@@ -23,5 +25,6 @@ void main() {
   ObjectData objectData = objectBuffer.objects[gl_InstanceIndex];
 
   fragTexCoord = texCoord;
+  fragColor = objectData.color;
   gl_Position = cameraData.viewproj * objectData.mvp * vec4(inPosition, 1);
 }

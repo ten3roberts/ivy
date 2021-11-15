@@ -1,3 +1,4 @@
+#![allow(non_snake_case)]
 use anyhow::Context;
 use flume::Receiver;
 use glfw::WindowEvent;
@@ -10,6 +11,7 @@ use crate::Canvas;
 mod event_handling;
 use event_handling::*;
 
+/// UI abstraction layer.
 pub struct UILayer {
     rx: Receiver<WindowEvent>,
     state: InteractiveState,

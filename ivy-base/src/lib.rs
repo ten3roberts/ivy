@@ -9,14 +9,16 @@ mod layer;
 mod logger;
 pub mod macros;
 mod time;
+mod updatable;
 
 pub use app::{App, AppBuilder, AppEvent};
 pub use color::*;
 pub use components::*;
-pub use extent::*;
 pub use dir::*;
 pub use events::{EventSender, Events};
+pub use extent::*;
 pub use gizmos::*;
 pub use layer::*;
 pub use logger::Logger;
 pub use time::{Clock, FromDuration, IntoDuration, TimedScope};
+pub use updatable::*;

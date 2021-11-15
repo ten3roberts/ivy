@@ -159,7 +159,7 @@ fn main() -> anyhow::Result<()> {
 
     let mut app = App::builder()
         .try_push_layer(|_, r, _| WindowLayer::new(glfw, r, WindowLayerInfo { window }))?
-        .push_layer(UILayer::new)
+        .push_layer(|w, r, e| (UILayer::new(w, r, e), ReactiveLayer::<Color>::new(w, r, e)))
         .try_push_layer(|w, r, e| -> anyhow::Result<_> {
             Ok(FixedTimeStep::new(
                 20.ms(),
@@ -467,7 +467,7 @@ fn setup_objects(
 
     let mut rng = StdRng::seed_from_u64(43);
 
-    const COUNT: usize = 512;
+    const COUNT: usize = 64;
 
     world
         .spawn_batch((0..COUNT).map(|_| {
@@ -760,6 +760,10 @@ fn setup_ui(
             RelativeOffset::new(-0.25, -0.5),
             AbsoluteSize::new(100.0, 100.0),
             Interactive,
+            Reactive {
+                normal: Color::white(),
+                pressed: Color::gray(),
+            },
         ),
     )?;
 

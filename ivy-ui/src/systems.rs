@@ -1,4 +1,4 @@
-use crate::Result;
+use crate::{events::WidgetEvent, Result};
 use hecs::{Entity, World};
 use hecs_hierarchy::Hierarchy;
 use ivy_base::{Color, Position2D, Size2D};
@@ -113,4 +113,19 @@ pub fn statisfy_widgets(world: &mut World) {
             ),
         );
     });
+}
+
+pub fn reactive_system<T: 'static + Copy + Send + Sync, I: Iterator<Item = WidgetEvent>>(
+    world: &World,
+    events: I,
+) -> Result<()> {
+    events
+        .filter_map(|event| ReactiveState::try_from_event(&event).map(|val| (event.entity(), val)))
+        .try_for_each(|(entity, state)| -> Result<()> {
+            eprintln!("Got: {:?}", state);
+            let mut query = world.query_one::<(&mut T, &Reactive<T>)>(entity)?;
+            let (val, reactive) = query.get().expect("Unsatisfied components");
+            reactive.update(val, state);
+            Ok(())
+        })
 }

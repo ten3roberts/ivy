@@ -4,7 +4,10 @@ use ivy_base::{Events, Position2D, Size2D};
 use ivy_input::InputEvent;
 use ultraviolet::Vec2;
 
-use crate::{events::WidgetEvent, Interactive, WidgetDepth};
+use crate::{
+    events::{WidgetEvent, WidgetEventKind},
+    Interactive, WidgetDepth,
+};
 
 pub const MAX_BUTTON: usize = glfw::MouseButton::Button8 as usize;
 
@@ -35,7 +38,7 @@ pub fn handle_events<I: Iterator<Item = WindowEvent>>(
             } if state.active_widget.is_some() => None,
             InputEvent::CharTyped(c) => {
                 if let Some(widget) = state.active_widget {
-                    WidgetEvent::CharTyped(widget, c);
+                    events.send(WidgetEvent::new(widget, WidgetEventKind::CharTyped(c)));
                     None
                 } else {
                     Some(event)
@@ -49,7 +52,7 @@ pub fn handle_events<I: Iterator<Item = WindowEvent>>(
                 state.active_widget = intersect_widget(world, cursor_pos);
                 if let Some(widget) = state.active_widget {
                     state.pressed[button as usize] = Some(widget);
-                    events.send(WidgetEvent::Pressed(widget, button));
+                    events.send(WidgetEvent::new(widget, WidgetEventKind::Pressed(button)));
                     None
                 } else {
                     Some(event)
@@ -63,10 +66,15 @@ pub fn handle_events<I: Iterator<Item = WindowEvent>>(
                 mods: _,
             } if state.pressed[button as usize].is_some() => {
                 let current_widget = intersect_widget(world, cursor_pos);
-                if current_widget == state.pressed[button as usize] {
-                    if let Some(widget) = current_widget {
-                        events.send(WidgetEvent::Released(widget, button));
+                if let Some(widget) = current_widget {
+                    if current_widget == state.pressed[button as usize] {
+                        events.send(WidgetEvent::new(widget, WidgetEventKind::Released(button)));
                     }
+                } else {
+                    events.send(WidgetEvent::new(
+                        state.pressed[button as usize].unwrap(),
+                        WidgetEventKind::ReleasedBackground(button),
+                    ));
                 }
 
                 state.pressed[button as usize] = None;
