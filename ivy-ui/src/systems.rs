@@ -3,7 +3,7 @@ use crate::{
     events::WidgetEvent,
     InteractiveState, Result,
 };
-use glfw::{Action, WindowEvent};
+use glfw::{Action, Key, WindowEvent};
 use hecs::{Entity, World};
 use hecs_hierarchy::Hierarchy;
 use ivy_base::{Color, Events, Position2D, Size2D};
@@ -147,12 +147,26 @@ pub fn handle_events<I: Iterator<Item = WindowEvent>>(
     window_events: I,
     cursor_pos: Position2D,
     state: &mut InteractiveState,
+    unfocus_key: Key,
 ) {
     window_events.for_each(|val| {
         let event = InputEvent::from(val);
         let hovered_widget = intersect_widget(world, cursor_pos);
 
         let event = match (event, hovered_widget, state.focused()) {
+            (
+                InputEvent::Key {
+                    key,
+                    action: Action::Press,
+                    scancode: _,
+                    mods: _,
+                },
+                _,
+                _,
+            ) if key == unfocus_key => {
+                state.unfocus(events);
+                None
+            }
             // Mouse was clicked on a ui element
             (
                 InputEvent::MouseButton {

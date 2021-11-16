@@ -157,9 +157,18 @@ fn main() -> anyhow::Result<()> {
         ..Default::default()
     };
 
+    let ui_info = UILayerInfo {
+        unfocus_key: Some(Key::Escape),
+    };
+
     let mut app = App::builder()
         .try_push_layer(|_, r, _| WindowLayer::new(glfw, r, WindowLayerInfo { window }))?
-        .push_layer(|w, r, e| (UILayer::new(w, r, e), ReactiveLayer::<Color>::new(w, r, e)))
+        .push_layer(|w, r, e| {
+            (
+                UILayer::new(w, r, e, ui_info),
+                ReactiveLayer::<Color>::new(w, r, e),
+            )
+        })
         .try_push_layer(|w, r, e| -> anyhow::Result<_> {
             Ok(FixedTimeStep::new(
                 20.ms(),
@@ -783,10 +792,10 @@ fn setup_ui(
             text_pass,
             image_pass: ui_pass,
             font,
-            reactive: Reactive::new(Color::rgba(1.0, 1.0, 1.0, 0.8), Color::black()),
+            reactive: Reactive::new(Color::white(), Color::gray()),
             background: input_field,
-            size: AbsoluteSize::new(512.0, 80.0),
-            offset: RelativeOffset::new(0.0, 0.0),
+            size: AbsoluteSize::new(512.0, 64.0),
+            offset: RelativeOffset::new(0.8, 0.8),
             text_padding: Vec2::new(10.0, 10.0),
         },
     )?;
