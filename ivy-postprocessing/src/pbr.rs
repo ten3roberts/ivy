@@ -144,6 +144,7 @@ pub fn create_pbr_pipeline<GeometryPass: ShaderPass, PostProcessingPass: ShaderP
             resource: *depth_attachment,
         }),
         &[],
+        &[],
         &[
             ClearValue::color(0.0, 0.0, 0.0, 1.0),
             ClearValue::color(0.0, 0.0, 0.0, 1.0),

@@ -2,7 +2,7 @@ use derive_more::*;
 use palette::{FromColor, Hsla, Hsva, Srgba};
 use ultraviolet::{Vec3, Vec4};
 
-/// Color/tint of object
+/// Color/tint of an object
 #[derive(
     AsRef,
     Clone,

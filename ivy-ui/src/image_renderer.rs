@@ -70,7 +70,7 @@ impl Renderer for ImageRenderer {
 
         let pass = self.base_renderer.pass_mut::<Pass>()?;
 
-        pass.get_unbatched::<Pass, KeyQuery, _>(world);
+        pass.get_unbatched::<Pass, KeyQuery, ObjectDataQuery, _, _>(world);
         pass.build_batches::<Pass, KeyQuery, _, _>(world, &passes)?;
         pass.update::<Pass, ObjectDataQuery, _>(world, current_frame)?;
 

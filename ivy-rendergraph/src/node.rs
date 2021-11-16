@@ -2,7 +2,9 @@ use anyhow::Context;
 use hecs::World;
 use ivy_graphics::{Renderer, ShaderPass};
 use ivy_resources::{Handle, Resources};
-use ivy_vulkan::{commands::CommandBuffer, vk::ClearValue, ImageLayout, LoadOp, StoreOp, Texture};
+use ivy_vulkan::{
+    commands::CommandBuffer, vk::Buffer, vk::ClearValue, ImageLayout, LoadOp, StoreOp, Texture,
+};
 use std::{any::type_name, marker::PhantomData};
 
 /// Represents a node in the renderpass.
@@ -22,6 +24,14 @@ pub trait Node: 'static + Send {
     /// Returns the optional depth attachment for this node. Should not be execution heavy function
     fn depth_attachment(&self) -> Option<&AttachmentInfo> {
         None
+    }
+
+    fn buffer_reads(&self) -> &[Buffer] {
+        &[]
+    }
+
+    fn buffer_writes(&self) -> &[Buffer] {
+        &[]
     }
 
     /// Returns the clear values to initiate this renderpass

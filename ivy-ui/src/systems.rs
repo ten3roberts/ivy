@@ -1,9 +1,15 @@
-use crate::{events::WidgetEvent, Result};
+use crate::{
+    constraints::{UIOffset, UISize},
+    events::WidgetEvent,
+    InteractiveState, Result,
+};
+use glfw::{Action, WindowEvent};
 use hecs::{Entity, World};
 use hecs_hierarchy::Hierarchy;
-use ivy_base::{Color, Position2D, Size2D};
+use ivy_base::{Color, Events, Position2D, Size2D};
 use ivy_graphics::Camera;
-use ultraviolet::Mat4;
+use ivy_input::InputEvent;
+use ultraviolet::{Mat4, Vec2};
 
 use crate::{constraints::ConstraintQuery, *};
 
@@ -34,14 +40,14 @@ pub fn update_from(world: &World, parent: Entity, depth: u32) -> Result<()> {
     drop(query);
 
     world.children::<Widget>(parent).try_for_each(|child| {
-        apply_constaints(world, child, position, size)?;
+        apply_constraints(world, child, position, size)?;
         assert!(parent != child);
         update_from(world, child, depth + 1)
     })
 }
 
 /// Applies the constaints associated to entity and uses the given parent.
-fn apply_constaints(
+fn apply_constraints(
     world: &World,
     entity: Entity,
     parent_pos: Position2D,
@@ -55,21 +61,26 @@ fn apply_constaints(
     let (pos, size) = query.get().ok_or(hecs::NoSuchEntity)?;
 
     *pos = parent_pos
-        + Position2D(
-            *constraints.abs_offset.map(|v| *v).unwrap_or_default()
-                + *constraints.rel_offset.map(|v| *v).unwrap_or_default() * *parent_size,
-        );
+        + constraints
+            .rel_offset
+            .map(|val| val.calculate(parent_size))
+            .unwrap_or_default()
+        + constraints
+            .abs_offset
+            .map(|val| val.calculate(parent_size))
+            .unwrap_or_default();
 
-    *size = Size2D(*constraints.abs_size.map(|v| *v).unwrap_or_default())
-        + Size2D(
-            constraints
-                .rel_size
-                .map(|v| parent_size.y * **v)
-                .unwrap_or_default(),
-        )
+    *size = constraints
+        .rel_size
+        .map(|val| val.calculate(parent_size))
+        .unwrap_or_default()
+        + constraints
+            .abs_size
+            .map(|val| val.calculate(parent_size))
+            .unwrap_or_default()
         + constraints
             .offset_size
-            .map(|v| parent_size + Size2D(**v))
+            .map(|val| val.calculate(parent_size))
             .unwrap_or_default();
 
     if let Some(aspect) = constraints.aspect {
@@ -128,4 +139,128 @@ pub fn reactive_system<T: 'static + Copy + Send + Sync, I: Iterator<Item = Widge
             reactive.update(val, state);
             Ok(())
         })
+}
+
+pub fn handle_events<I: Iterator<Item = WindowEvent>>(
+    world: &World,
+    events: &mut Events,
+    window_events: I,
+    cursor_pos: Position2D,
+    state: &mut InteractiveState,
+) {
+    window_events.for_each(|val| {
+        let event = InputEvent::from(val);
+        let hovered_widget = intersect_widget(world, cursor_pos);
+
+        let event = match (event, hovered_widget, state.focused()) {
+            // Mouse was clicked on a ui element
+            (
+                InputEvent::MouseButton {
+                    button,
+                    action: Action::Press,
+                    mods,
+                },
+                Some(hovered_widget),
+                _,
+            ) => {
+                events.send(WidgetEvent::new(
+                    hovered_widget.id(),
+                    InputEvent::MouseButton {
+                        button,
+                        action: Action::Press,
+                        mods,
+                    },
+                ));
+
+                // New focus, unfocus old
+                if state.focused() != Some(&hovered_widget) {
+                    state.set_focus(hovered_widget, events);
+                }
+
+                None
+            }
+            // Mouse was clicked outside UI, lose focus
+            (
+                InputEvent::MouseButton {
+                    button,
+                    action: Action::Press,
+                    mods,
+                },
+                None,
+                Some(_),
+            ) => {
+                state.unfocus(events);
+                Some(InputEvent::MouseButton {
+                    button,
+                    action: Action::Press,
+                    mods,
+                })
+            }
+            (
+                InputEvent::MouseButton {
+                    button,
+                    action: Action::Release,
+                    mods,
+                },
+                hovered_widget,
+                Some(widget),
+            ) => {
+                // Mouse was released on the same widget
+                if hovered_widget == Some(*widget) {
+                    events.send(WidgetEvent::new(
+                        widget.id(),
+                        InputEvent::MouseButton {
+                            button,
+                            action: Action::Release,
+                            mods,
+                        },
+                    ));
+                }
+                // Send unfocus event if widget is not sticky
+                if !widget.sticky() {
+                    state.unfocus(events);
+                }
+
+                None
+            }
+            // If a widget is focused and all else was handled, forward all events
+            (event, _, Some(widget)) => {
+                events.send(WidgetEvent::new(widget.id(), event));
+                None
+            }
+
+            (event, _, _) => Some(event),
+        };
+
+        if let Some(event) = event {
+            events.send(event);
+        }
+    })
+}
+
+/// Returns the first widget that intersects the postiion
+fn intersect_widget(world: &World, point: Position2D) -> Option<FocusedWidget> {
+    world
+        .query::<(&Position2D, &Size2D, &WidgetDepth)>()
+        .with::<Interactive>()
+        .iter()
+        .filter_map(|(e, (pos, size, depth))| {
+            if box_intersection(*pos, *size, *point) {
+                Some((e, *depth))
+            } else {
+                None
+            }
+        })
+        .max_by_key(|(_, depth)| *depth)
+        .map(|(e, _)| FocusedWidget::new(e, world.get::<Sticky>(e).ok().is_some()))
+}
+
+fn box_intersection(pos: Position2D, size: Size2D, point: Vec2) -> bool {
+    let pos = *pos;
+    let size = *size;
+
+    point.x > pos.x - size.x
+        && point.x < pos.x + size.x
+        && point.y > pos.y - size.y
+        && point.y < pos.y + size.y
 }

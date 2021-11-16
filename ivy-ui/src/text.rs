@@ -114,6 +114,39 @@ impl Text {
             glyphs: self.layout.glyphs().iter(),
         })
     }
+
+    pub fn append(&mut self, ch: char) {
+        self.dirty = true;
+        let s = self.str.to_mut();
+        s.push(ch);
+    }
+
+    /// Removes the last word
+    pub fn remove_back_word(&mut self) {
+        let s = self.str.to_mut();
+
+        if s.len() == 0 {
+            return;
+        }
+
+        self.dirty = true;
+        let mut first = true;
+
+        while let Some(c) = s.pop() {
+            if !first && !c.is_alphanumeric() {
+                s.push(c);
+                break;
+            }
+            first = false;
+        }
+    }
+
+    /// Removes the last char
+    pub fn remove_back(&mut self) {
+        self.dirty = true;
+        let s = self.str.to_mut();
+        s.pop();
+    }
 }
 
 /// An iterator for producing quads for a text string.

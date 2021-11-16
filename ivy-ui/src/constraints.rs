@@ -106,3 +106,43 @@ pub struct ConstraintBundle {
     pub abs_size: AbsoluteSize,
     pub aspect: Aspect,
 }
+
+/// Trait for encompassing the different size constraints
+pub trait UISize {
+    fn calculate(&self, parent_size: Size2D) -> Size2D;
+}
+
+impl UISize for AbsoluteSize {
+    fn calculate(&self, _: Size2D) -> Size2D {
+        Size2D(**self)
+    }
+}
+
+impl UISize for RelativeSize {
+    fn calculate(&self, parent_size: Size2D) -> Size2D {
+        Size2D(**self * *parent_size)
+    }
+}
+
+impl UISize for OffsetSize {
+    fn calculate(&self, parent_size: Size2D) -> Size2D {
+        Size2D(*parent_size + **self)
+    }
+}
+
+/// Trait for encompassing the different offset constraints
+pub trait UIOffset {
+    fn calculate(&self, parent_size: Size2D) -> Position2D;
+}
+
+impl UIOffset for AbsoluteOffset {
+    fn calculate(&self, _: Size2D) -> Position2D {
+        Position2D(**self)
+    }
+}
+
+impl UIOffset for RelativeOffset {
+    fn calculate(&self, parent_size: Size2D) -> Position2D {
+        Position2D(**self * *parent_size)
+    }
+}

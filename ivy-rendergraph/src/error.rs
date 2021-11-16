@@ -1,8 +1,6 @@
-use ivy_resources::Handle;
-use ivy_vulkan::Texture;
 use thiserror::Error;
 
-use crate::{NodeIndex, NodeKind};
+use crate::{NodeIndex, NodeKind, ResourceKind};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -21,7 +19,7 @@ pub enum Error {
     DependencyCycle,
 
     #[error("Node read attachment is missing corresponding write attachment for {2:?} required by node {0:?}: {1:?}")]
-    MissingWrite(NodeIndex, &'static str, Handle<Texture>),
+    MissingWrite(NodeIndex, &'static str, ResourceKind),
 
     #[error("Resource acquisition error")]
     Resource(#[from] ivy_resources::Error),

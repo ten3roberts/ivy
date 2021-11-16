@@ -2,8 +2,8 @@ use crate::collision::resolve_collision;
 use crate::components::*;
 use crate::Result;
 use hecs::World;
-use ivy_collision::Collision;
 use ivy_base::{Position, Rotation};
+use ivy_collision::Collision;
 use ultraviolet::Bivec3;
 use ultraviolet::Rotor3;
 

@@ -1,4 +1,4 @@
-use crate::{Edge, EdgeKind, Node, NodeIndex, NodeKind, Result};
+use crate::{Edge, EdgeKind, Node, NodeIndex, NodeKind, ResourceKind, Result};
 use hecs::World;
 use ivy_base::Extent;
 use ivy_resources::{ResourceCache, Resources};
@@ -355,12 +355,61 @@ impl PassKind {
         // Get the dependencies of node.
         let mut src_stage = vk::PipelineStageFlags::default();
 
+        // let buffer_barriers = dependencies
+        //     .get(pass_nodes[0])
+        //     .into_iter()
+        //     .flat_map(|val| val.iter())
+        //     .filter_map(|val| {
+        //         if let ResourceKind::Buffer(buf) = val.resource {
+        //             Some((val, buf))
+        //         } else {
+        //             None
+        //         }
+        //     })
+        //     .map(|(edge, buf)| -> Result<_> {
+        //         let src = buffers.get(buf)?;
+
+        //         let aspect_mask =
+        //             if edge.read_access == vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE {
+        //                 vk::ImageAspectFlags::DEPTH
+        //             } else {
+        //                 vk::ImageAspectFlags::COLOR
+        //             };
+        //         src_stage = edge.write_stage.max(src_stage);
+
+        //         Ok(BufferM {
+        //             src_access_mask: edge.write_access,
+        //             dst_access_mask: vk::AccessFlags::TRANSFER_READ,
+        //             old_layout: edge.layout,
+        //             new_layout: ImageLayout::TRANSFER_SRC_OPTIMAL,
+        //             src_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
+        //             dst_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
+        //             image: src.image(),
+        //             subresource_range: vk::ImageSubresourceRange {
+        //                 aspect_mask,
+        //                 base_mip_level: 0,
+        //                 level_count: src.mip_levels(),
+        //                 base_array_layer: 0,
+        //                 layer_count: 1,
+        //             },
+        //             ..Default::default()
+        //         })
+        //     })
+        //     .collect::<Result<Vec<_>>>()?;
+
         let image_barriers = dependencies
             .get(pass_nodes[0])
             .into_iter()
             .flat_map(|val| val.iter())
-            .map(|edge| -> Result<_> {
-                let src = textures.get(edge.resource)?;
+            .filter_map(|val| {
+                if let ResourceKind::Texture(tex) = val.resource {
+                    Some((val, tex))
+                } else {
+                    None
+                }
+            })
+            .map(|(edge, texture)| -> Result<_> {
+                let src = textures.get(texture)?;
 
                 let aspect_mask =
                     if edge.read_access == vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE {

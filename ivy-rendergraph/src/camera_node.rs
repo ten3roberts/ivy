@@ -8,7 +8,7 @@ use ivy_graphics::{GpuCameraData, Renderer, ShaderPass};
 use ivy_resources::{Handle, Resources, Storage};
 use ivy_vulkan::{
     descriptors::{DescriptorBuilder, DescriptorSet, IntoSet, MultiDescriptorBindable},
-    vk::{ClearValue, ShaderStageFlags},
+    vk::{self, ClearValue, ShaderStageFlags},
     CombinedImageSampler, InputAttachment, Sampler, Texture, VulkanContext,
 };
 
@@ -23,6 +23,7 @@ pub struct CameraNode<Pass, T: Renderer<Error = E>, E> {
     read_attachments: Vec<Handle<Texture>>,
     input_attachments: Vec<Handle<Texture>>,
     depth_attachment: Option<AttachmentInfo>,
+    buffer_reads: Vec<vk::Buffer>,
     clear_values: Vec<ClearValue>,
     sets: Option<Vec<DescriptorSet>>,
 }
@@ -42,6 +43,7 @@ where
         read_attachments: &[(Handle<Texture>, Handle<Sampler>)],
         input_attachments: &[Handle<Texture>],
         depth_attachment: Option<AttachmentInfo>,
+        buffer_reads: &[vk::Buffer],
         bindables: &[&dyn MultiDescriptorBindable],
         clear_values: &[ClearValue],
         frames_in_flight: usize,
@@ -92,6 +94,7 @@ where
             read_attachments: read_attachments.iter().map(|(a, _)| *a).collect_vec(),
             input_attachments: input_attachments.to_owned(),
             depth_attachment,
+            buffer_reads: buffer_reads.to_owned(),
             clear_values: clear_values.to_owned(),
         })
     }
@@ -117,6 +120,10 @@ where
 
     fn depth_attachment(&self) -> Option<&AttachmentInfo> {
         self.depth_attachment.as_ref()
+    }
+
+    fn buffer_reads(&self) -> &[vk::Buffer] {
+        &self.buffer_reads
     }
 
     fn clear_values(&self) -> &[ivy_vulkan::vk::ClearValue] {

@@ -3,23 +3,22 @@ use hecs::{Query, World};
 use ivy_graphics::{BaseRenderer, Mesh, Renderer};
 use ivy_rendergraph::Node;
 use ivy_resources::{Handle, Resources};
-use ivy_vulkan::device;
 use ivy_vulkan::{
     commands::CommandBuffer,
     descriptors::IntoSet,
     vk::{self, AccessFlags, BufferCopy, BufferMemoryBarrier, IndexType},
-    Buffer, BufferAccess, BufferUsage, VulkanContext,
+    BufferAccess, BufferUsage, VulkanContext,
 };
+use ivy_vulkan::{device, Buffer};
 use std::{mem::size_of, sync::Arc};
 use ultraviolet::Mat4;
 
-use crate::Result;
 use crate::Text;
 use crate::UIVertex;
 use crate::WrapStyle;
-use crate::{Error};
-use ivy_base::{Size2D, Position2D};
+use crate::{Error, Result};
 use crate::{Font, TextAlignment};
+use ivy_base::{Position2D, Size2D};
 
 #[derive(Query)]
 struct TextQuery<'a> {
@@ -89,6 +88,10 @@ impl TextRenderer {
             glyph_count: 0,
             frames_in_flight,
         })
+    }
+
+    pub fn vertex_buffer(&self) -> vk::Buffer {
+        self.mesh.vertex_buffer().buffer()
     }
 
     // Creates a mesh able to store `capacity` characters
@@ -162,18 +165,14 @@ impl TextRenderer {
             match &mut self.free[index - 1..=index] {
                 [a, b] => {
                     if a.offset + a.len + block.len == b.offset {
-                        eprintln!("Merging both");
                         a.len += block.len + b.len;
                         self.free.remove(index);
                     } else if a.offset + a.len == block.offset {
-                        eprintln!("Merging left");
                         a.len += block.len;
                     } else if block.offset + block.len == b.offset {
-                        eprintln!("Merging right");
                         b.len += block.len;
                         b.offset = block.len;
                     } else {
-                        eprintln!("Inserting");
                         self.free.insert(index, block);
                     }
                 }
@@ -388,7 +387,7 @@ impl Renderer for TextRenderer {
 
         {
             let pass = self.base_renderer.pass_mut::<Pass>()?;
-            pass.get_unbatched::<Pass, KeyQuery, _>(world);
+            pass.get_unbatched::<Pass, KeyQuery, ObjectDataQuery, _, _>(world);
             pass.build_batches::<Pass, KeyQuery, _, _>(world, &passes)?;
             pass.update::<Pass, ObjectDataQuery, _>(world, current_frame)?;
         }
@@ -476,17 +475,29 @@ impl<'a> ivy_graphics::KeyQuery for KeyQuery<'a> {
 
 pub struct TextUpdateNode {
     text_renderer: Handle<TextRenderer>,
+    buffer: vk::Buffer,
 }
 
 impl TextUpdateNode {
-    pub fn new(text_renderer: Handle<TextRenderer>) -> Self {
-        Self { text_renderer }
+    pub fn new(resources: &Resources, text_renderer: Handle<TextRenderer>) -> Result<Self> {
+        let buffer = resources
+            .get::<TextRenderer>(text_renderer)?
+            .vertex_buffer();
+
+        Ok(Self {
+            text_renderer,
+            buffer,
+        })
     }
 }
 
 impl Node for TextUpdateNode {
     fn node_kind(&self) -> ivy_rendergraph::NodeKind {
         ivy_rendergraph::NodeKind::Transfer
+    }
+
+    fn buffer_writes(&self) -> &[vk::Buffer] {
+        std::slice::from_ref(&self.buffer)
     }
 
     fn execute(

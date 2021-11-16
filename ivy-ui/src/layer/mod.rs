@@ -7,13 +7,14 @@ use ivy_base::{Events, Layer, Size2D};
 use ivy_graphics::Window;
 use ivy_resources::Resources;
 
-use crate::Canvas;
+use crate::{events::WidgetEvent, handle_events, input_field_system, Canvas};
 mod event_handling;
-use event_handling::*;
+pub use event_handling::*;
 
 /// UI abstraction layer.
 pub struct UILayer {
     rx: Receiver<WindowEvent>,
+    input_field_events: Receiver<WidgetEvent>,
     state: InteractiveState,
 }
 
@@ -22,9 +23,12 @@ impl UILayer {
         let (tx, rx) = flume::unbounded();
 
         events.subscribe(tx);
+        let (tx, input_field_events) = flume::unbounded();
+        events.subscribe(tx);
 
         Self {
             rx,
+            input_field_events,
             state: InteractiveState::default(),
         }
     }
@@ -56,6 +60,10 @@ impl Layer for UILayer {
             cursor_pos.into(),
             &mut self.state,
         );
+
+        if let Some(active) = self.state.focused() {
+            input_field_system(world, self.input_field_events.try_iter(), active.id())?;
+        }
 
         Ok(())
     }

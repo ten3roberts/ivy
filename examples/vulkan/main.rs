@@ -35,7 +35,7 @@ use random::{rand::rngs::StdRng, Random};
 use rendergraph::GraphicsLayer;
 use slotmap::SecondaryMap;
 use std::fmt::Write;
-use ultraviolet::{Rotor3, Vec3};
+use ultraviolet::{Rotor3, Vec2, Vec3};
 use vulkan::vk::CullModeFlags;
 
 use log::*;
@@ -228,7 +228,7 @@ fn setup_graphics(
     let text_renderer = resources.insert(TextRenderer::new(
         context.clone(),
         16,
-        128,
+        512,
         FRAMES_IN_FLIGHT,
     )?)?;
 
@@ -271,6 +271,7 @@ fn setup_graphics(
         None,
         &[],
         &[],
+        &[],
         FRAMES_IN_FLIGHT,
     )?);
 
@@ -289,12 +290,13 @@ fn setup_graphics(
         &[],
         &[],
         None,
+        &[resources.get(text_renderer)?.vertex_buffer()],
         &[],
         &[],
         FRAMES_IN_FLIGHT,
     )?);
 
-    rendergraph.add_node(TextUpdateNode::new(text_renderer));
+    rendergraph.add_node(TextUpdateNode::new(resources, text_renderer)?);
 
     rendergraph.add_node(SwapchainNode::new(
         context.clone(),
@@ -735,6 +737,11 @@ fn setup_ui(
         sampler: SamplerInfo::default(),
     })??;
 
+    let input_field: Handle<Image> = resources.load(ImageInfo {
+        texture: "./res/textures/field.png".into(),
+        sampler: SamplerInfo::default(),
+    })??;
+
     let font: Handle<Font> = resources.load((
         FontInfo {
             size: 64.0,
@@ -761,10 +768,27 @@ fn setup_ui(
             AbsoluteSize::new(100.0, 100.0),
             Interactive,
             Reactive {
-                normal: Color::white(),
-                pressed: Color::gray(),
+                unfocused: Color::white(),
+                focused: Color::gray(),
             },
+            Aspect(1.0),
         ),
+    )?;
+
+    InputField::spawn(
+        world,
+        canvas,
+        InputFieldInfo {
+            text: Text::new("Sample"),
+            text_pass,
+            image_pass: ui_pass,
+            font,
+            reactive: Reactive::new(Color::rgba(1.0, 1.0, 1.0, 0.8), Color::black()),
+            background: input_field,
+            size: AbsoluteSize::new(512.0, 80.0),
+            offset: RelativeOffset::new(0.0, 0.0),
+            text_padding: Vec2::new(10.0, 10.0),
+        },
     )?;
 
     let widget2 = world.attach_new::<Widget, _>(
@@ -778,6 +802,7 @@ fn setup_ui(
             })),
             RelativeOffset::new(0.0, -0.5),
             RelativeSize::new(0.2, 0.2),
+            Aspect(1.0),
         ),
     )?;
 
@@ -809,10 +834,12 @@ fn setup_ui(
             Widget,
             font,
             Text::new("Ivy"),
-            TextAlignment::new(HorizontalAlign::Center, VerticalAlign::Bottom),
+            TextAlignment::new(HorizontalAlign::Left, VerticalAlign::Bottom),
             text_pass,
             RelativeOffset::new(0.0, 0.0),
-            OffsetSize::new(0.7, 0.7),
+            RelativeSize::new(0.5, 0.5),
+            Aspect(1.0),
+            // Color::green(),
         ),
     )?;
 
@@ -826,7 +853,7 @@ fn setup_ui(
             Text::new(""),
             TextAlignment::new(HorizontalAlign::Left, VerticalAlign::Top),
             RelativeOffset::new(0.0, 0.0),
-            OffsetSize::new(-10.0, 0.0),
+            OffsetSize::new(-10.0, -10.0),
         ),
     )?;
 
@@ -841,6 +868,7 @@ fn setup_ui(
             })),
             RelativeOffset::default(),
             RelativeSize::new(0.4, 0.4),
+            Aspect(1.0),
         ),
     )?;
 
@@ -855,6 +883,7 @@ fn setup_ui(
             })),
             RelativeOffset::default(),
             AbsoluteSize::new(50.0, 50.0),
+            Aspect(1.0),
         ),
     )?;
 

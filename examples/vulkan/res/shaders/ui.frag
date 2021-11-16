@@ -12,7 +12,7 @@ void main() {
     vec4 sampled = texture(albedo, fragTexCoord);
     vec4 color = sampled * fragColor;
 
-    if (color.a < 0.9)
+    if (color.a < 0.01)
     discard;
 
     outColor = color;

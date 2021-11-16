@@ -2,42 +2,45 @@
 //! Window events are captured and forwarded to input events if no UI element
 //! captured it.
 
-use glfw::MouseButton;
 use hecs::Entity;
+use ivy_input::InputEvent;
 
 /// Event for a clicked ui widget
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct WidgetEvent {
-    entity: Entity,
-    kind: WidgetEventKind,
+    pub entity: Entity,
+    pub kind: InputEvent,
 }
 
 impl WidgetEvent {
-    pub fn new(entity: Entity, kind: WidgetEventKind) -> Self {
+    pub fn new(entity: Entity, kind: InputEvent) -> Self {
         Self { entity, kind }
     }
 
     /// Get a reference to the widget event's entity.
+    #[inline]
     pub fn entity(&self) -> Entity {
         self.entity
     }
 
     /// Get a reference to the widget event's kind.
-    pub fn kind(&self) -> &WidgetEventKind {
+    #[inline]
+    pub fn kind(&self) -> &InputEvent {
         &self.kind
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum WidgetEventKind {
-    /// The mouse button was pressed down on this widget
-    Pressed(MouseButton),
-    /// The mouse button was pressed down and subsequently released on this
-    /// widget
-    Released(MouseButton),
-    /// A character was pressed while this widget was active
-    CharTyped(char),
-    /// Mouse button was released after pressing a widget but the cursor was no
-    /// longer on the same widget.
-    ReleasedBackground(MouseButton),
-}
+// #[derive(Debug, Clone, Copy, PartialEq)]
+// pub enum WidgetEventKind {
+//     /// The mouse button was pressed down on this widget
+//     Pressed(MouseButton),
+//     Key
+//     /// The mouse button was pressed down and subsequently released on this
+//     /// widget
+//     Released(MouseButton),
+//     /// A character was pressed while this widget was active
+//     CharTyped(char),
+//     /// Mouse button was released after pressing a widget but the cursor was no
+//     /// longer on the same widget.
+//     ReleasedBackground(MouseButton),
+// }

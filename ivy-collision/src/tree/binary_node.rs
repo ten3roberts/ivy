@@ -118,12 +118,10 @@ impl<T: Array<Item = Object> + Send + Sync> Node for BinaryNode<T> {
     type SplitOutput = [Self; 2];
 
     fn split(&mut self, popped: &mut Vec<Object>) -> Self::SplitOutput {
-        // eprintln!("Splitting");
         let mut center = Vec3::zero();
         let mut max = Vec3::zero();
         let mut min = Vec3::zero();
 
-        eprintln!("Children: {:?}", self.children);
         assert!(self.children.is_none());
 
         self.objects.iter().for_each(|val| {

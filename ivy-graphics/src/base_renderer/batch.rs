@@ -118,6 +118,12 @@ pub struct BatchIdIterator<Obj> {
 
 impl<Obj> BatchIdIterator<Obj> {
     pub fn new(batch: &BatchData<Obj>) -> Self {
+        dbg!(
+            batch.first_instance,
+            batch.instance_count,
+            std::any::type_name::<Obj>()
+        );
+
         Self {
             curr: batch.first_instance,
             max: batch.instance_count + batch.first_instance,

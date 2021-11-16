@@ -38,6 +38,11 @@ pub struct Interactive;
 /// Marker type for UI and the UI hierarchy.
 pub struct Widget;
 
+/// Marker type specifying that a widget should remain active even after the
+/// mouse button was released. Release events will still be sent, but input will
+/// continue to be absorbed and sent to the widget.
+pub struct Sticky;
+
 #[derive(Clone, Copy, PartialEq)]
 pub struct TextAlignment {
     pub horizontal: HorizontalAlign,
@@ -74,6 +79,6 @@ pub enum WrapStyle {
 
 impl Default for WrapStyle {
     fn default() -> Self {
-        Self::Word
+        Self::Overflow
     }
 }
