@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use fontdue::layout::{HorizontalAlign, VerticalAlign};
 use glfw::{Action, Key, Modifiers};
 use hecs::{Component, Entity, World};
@@ -12,13 +14,10 @@ use crate::{
     Font, Image, Interactive, Reactive, Result, Sticky, Text, TextAlignment, Widget, WrapStyle,
 };
 
-pub struct InputField {
-    text: Entity,
-}
-
 /// A bundle for easily creating input fields with a reactive component
 #[derive(Debug)]
 pub struct InputFieldInfo<T, U, G> {
+    pub placeholder: Cow<'static, str>,
     pub text_pass: Handle<U>,
     pub image_pass: Handle<G>,
     pub font: Handle<Font>,
@@ -35,6 +34,7 @@ pub struct InputFieldInfo<T, U, G> {
 impl<T: Default, U, G> Default for InputFieldInfo<T, U, G> {
     fn default() -> Self {
         Self {
+            placeholder: Default::default(),
             text_pass: Default::default(),
             image_pass: Default::default(),
             font: Default::default(),
@@ -50,7 +50,21 @@ impl<T: Default, U, G> Default for InputFieldInfo<T, U, G> {
     }
 }
 
+pub struct InputField {
+    text: Entity,
+    val: Cow<'static, str>,
+    placeholder: Cow<'static, str>,
+}
+
 impl InputField {
+    pub fn new(text: Entity, val: Cow<'static, str>, placeholder: Cow<'static, str>) -> Self {
+        Self {
+            text,
+            val,
+            placeholder,
+        }
+    }
+
     /// Creates a new input field
     pub fn spawn<T: Component, U: Component, G: Component>(
         world: &mut World,
@@ -63,7 +77,7 @@ impl InputField {
             AbsoluteSize(-info.text_padding),
             RelativeSize::new(1.0, 1.0),
             info.text_pass,
-            Text::default(),
+            Text::new(info.placeholder.to_owned()),
             info.font,
             WrapStyle::Overflow,
             TextAlignment::new(HorizontalAlign::Right, VerticalAlign::Middle),
@@ -74,7 +88,7 @@ impl InputField {
             (
                 Widget,
                 Sticky,
-                InputField { text },
+                InputField::new(text, "".into(), info.placeholder),
                 Interactive,
                 info.origin,
                 info.image_pass,
@@ -91,6 +105,50 @@ impl InputField {
 
         Ok(field)
     }
+
+    /// Returns the entered value of placeholder
+    pub fn val(&self) -> &Cow<'static, str> {
+        if self.val.is_empty() {
+            &self.placeholder
+        } else {
+            &self.val
+        }
+    }
+
+    fn sync(&self, text: &mut Text) {
+        let src = self.val();
+        text.val_mut().clone_from(src);
+    }
+
+    fn append(&mut self, ch: char) {
+        dbg!(&self.val);
+        let s = self.val.to_mut();
+        s.push(ch);
+    }
+    /// Removes the last word
+    fn remove_back_word(&mut self) {
+        let s = self.val.to_mut();
+
+        if s.len() == 0 {
+            return;
+        }
+
+        let mut first = true;
+
+        while let Some(c) = s.pop() {
+            if !first && !c.is_alphanumeric() {
+                s.push(c);
+                break;
+            }
+            first = false;
+        }
+    }
+
+    /// Removes the last char
+    fn remove_back(&mut self) {
+        let s = self.val.to_mut();
+        s.pop();
+    }
 }
 
 pub fn input_field_system<I: Iterator<Item = WidgetEvent>>(
@@ -98,25 +156,31 @@ pub fn input_field_system<I: Iterator<Item = WidgetEvent>>(
     events: I,
     active: Entity,
 ) -> Result<()> {
-    if let Some(field) = world.get::<InputField>(active).ok() {
+    if let Some(mut field) = world.get_mut::<InputField>(active).ok() {
         let mut text = world.get_mut::<Text>(field.text)?;
-
         events.for_each(|event| match event.kind {
             InputEvent::CharTyped(c) => {
-                text.append(c);
+                field.append(c);
+                field.sync(&mut text);
             }
             InputEvent::Key {
                 key: Key::Backspace,
                 scancode: _,
                 action: Action::Repeat | Action::Press,
                 mods: Modifiers::Control,
-            } => text.remove_back_word(),
+            } => {
+                field.remove_back_word();
+                field.sync(&mut text)
+            }
             InputEvent::Key {
                 key: Key::Backspace,
                 scancode: _,
                 action: Action::Repeat | Action::Press,
                 mods: _,
-            } => text.remove_back(),
+            } => {
+                field.remove_back();
+                field.sync(&mut text)
+            }
             _ => {}
         })
     }

@@ -773,6 +773,7 @@ fn setup_ui(
         world,
         canvas,
         InputFieldInfo {
+            placeholder: "Enter text: ".into(),
             text_pass,
             image_pass: ui_pass,
             font,

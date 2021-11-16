@@ -51,7 +51,6 @@ fn apply_constraints(
     parent_pos: Position2D,
     parent_size: Size2D,
 ) -> Result<()> {
-    eprintln!("Here");
     let mut constaints_query = world.query_one::<ConstraintQuery>(entity)?;
     let constraints = constaints_query.get().ok_or(hecs::NoSuchEntity)?;
 
