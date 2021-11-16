@@ -11,14 +11,14 @@ use ivy_vulkan::{
 };
 use ivy_vulkan::{device, Buffer};
 use std::{mem::size_of, sync::Arc};
-use ultraviolet::Mat4;
+use ultraviolet::{Mat4, Vec4};
 
 use crate::Text;
 use crate::UIVertex;
 use crate::WrapStyle;
 use crate::{Error, Result};
 use crate::{Font, TextAlignment};
-use ivy_base::{Position2D, Size2D};
+use ivy_base::{Color, Position2D, Size2D};
 
 #[derive(Query)]
 struct TextQuery<'a> {
@@ -434,6 +434,7 @@ impl Renderer for TextRenderer {
 #[derive(Debug, Clone, Copy)]
 struct ObjectData {
     mvp: Mat4,
+    color: Vec4,
     offset: u32,
     len: u32,
 }
@@ -441,6 +442,7 @@ struct ObjectData {
 #[derive(Query)]
 struct ObjectDataQuery<'a> {
     position: &'a Position2D,
+    color: &'a Color,
     text: &'a Text,
     block: &'a BufferAllocation,
 }
@@ -449,6 +451,7 @@ impl<'a> Into<ObjectData> for ObjectDataQuery<'a> {
     fn into(self) -> ObjectData {
         ObjectData {
             mvp: Mat4::from_translation(self.position.xyz()),
+            color: self.color.into(),
             offset: self.block.offset,
             len: self.text.len() as u32,
         }

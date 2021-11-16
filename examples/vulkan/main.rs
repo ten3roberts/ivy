@@ -826,6 +826,7 @@ fn setup_ui(
             Widget,
             font,
             Text::new("Hello, World!"),
+            Color::black(),
             TextAlignment {
                 horizontal: HorizontalAlign::Center,
                 vertical: VerticalAlign::Middle,
@@ -848,7 +849,7 @@ fn setup_ui(
             RelativeOffset::new(0.0, 0.0),
             RelativeSize::new(0.5, 0.5),
             Aspect(1.0),
-            // Color::green(),
+            Color::green(),
         ),
     )?;
 

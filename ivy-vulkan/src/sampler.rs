@@ -45,7 +45,7 @@ impl std::hash::Hash for SamplerInfo {
 impl Default for SamplerInfo {
     fn default() -> Self {
         Self {
-            address_mode: AddressMode::REPEAT,
+            address_mode: AddressMode::CLAMP_TO_EDGE,
             mag_filter: FilterMode::LINEAR,
             min_filter: FilterMode::NEAREST,
             unnormalized_coordinates: false,
