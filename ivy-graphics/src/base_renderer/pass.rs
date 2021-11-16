@@ -114,20 +114,22 @@ impl<K: RendererKey, Obj: 'static> PassData<K, Obj> {
 
     /// Collects all entities that have yet to be placed into a batch in the current
     /// pass.
-    pub fn get_unbatched<'a, Pass, Q, F>(&mut self, world: &'a mut World)
+    pub fn get_unbatched<'a, Pass, Q, O, F, W>(&mut self, world: &'a mut World)
     where
         Pass: ShaderPass,
         Q: Query<Fetch = F> + KeyQuery<K = K>,
         F: Fetch<'a, Item = Q>,
+        O: 'a + Query<Fetch = W> + Into<Obj>,
+        W: Fetch<'a, Item = O>,
     {
         let query = world
-            .query_mut::<(&Handle<Pass>, Q)>()
+            .query_mut::<(&Handle<Pass>, Q, O)>()
             .without::<BatchMarker<Obj, Pass>>();
 
         self.unbatched.extend(
             query
                 .into_iter()
-                .map(|(e, (pass, keyq))| (e, pass.into_untyped(), keyq.into_key())),
+                .map(|(e, (pass, keyq, _))| (e, pass.into_untyped(), keyq.into_key())),
         );
     }
 
