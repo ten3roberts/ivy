@@ -7,7 +7,7 @@ use ivy_base::{Events, Layer, Size2D};
 use ivy_graphics::Window;
 use ivy_resources::Resources;
 
-use crate::{events::WidgetEvent, handle_events, input_field_system, Canvas};
+use crate::{events::WidgetEvent, handle_events, input_field_system, systems, Canvas};
 mod event_handling;
 pub use event_handling::*;
 
@@ -17,6 +17,8 @@ pub struct UILayerInfo {
 }
 
 /// UI abstraction layer.
+/// Handles raw input events and filters them through the UI system, and then
+/// through the world in the form of [`InputEvent`]s.
 pub struct UILayer {
     rx: Receiver<WindowEvent>,
     input_field_events: Receiver<WidgetEvent>,
@@ -54,6 +56,9 @@ impl Layer for UILayer {
         events: &mut Events,
         _frame_time: std::time::Duration,
     ) -> anyhow::Result<()> {
+        systems::statisfy_widgets(world);
+        systems::update(world)?;
+
         let window = resources.get_default::<Window>()?;
         // Transform the cursor position to canvas size
         let cursor_pos = window.normalized_cursor_pos();

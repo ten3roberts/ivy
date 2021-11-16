@@ -22,10 +22,11 @@ derive_for!(
     /// Constrains the size of a widget to pixels.
     pub struct AbsoluteSize(pub Vec2);
 
-    /// Constrains the size to be offset from the parent size;
-    pub struct OffsetSize(pub Vec2);
     /// Constrains the widget width to a multiple of height.
     pub struct Aspect(pub f32);
+
+    /// The offset of the origin from the center of the sprite.
+    pub struct Origin2D(pub Vec2);
 );
 
 impl From<AbsoluteOffset> for Position2D {
@@ -76,26 +77,26 @@ impl AbsoluteSize {
     }
 }
 
-impl OffsetSize {
-    pub fn new(x: f32, y: f32) -> Self {
-        Self(Vec2::new(x, y))
-    }
-}
-
 impl Aspect {
     pub fn new(aspect: f32) -> Self {
         Self(aspect)
     }
 }
 
+impl Origin2D {
+    pub fn new(x: f32, y: f32) -> Self {
+        Self(Vec2::new(x, y))
+    }
+}
+
 #[derive(Query)]
 pub struct ConstraintQuery<'a> {
-    pub rel_offset: Option<&'a RelativeOffset>,
-    pub abs_offset: Option<&'a AbsoluteOffset>,
-    pub rel_size: Option<&'a RelativeSize>,
-    pub abs_size: Option<&'a AbsoluteSize>,
-    pub offset_size: Option<&'a OffsetSize>,
+    pub rel_offset: &'a RelativeOffset,
+    pub abs_offset: &'a AbsoluteOffset,
+    pub rel_size: &'a RelativeSize,
+    pub abs_size: &'a AbsoluteSize,
     pub aspect: Option<&'a Aspect>,
+    pub origin: &'a Origin2D,
 }
 
 #[derive(Bundle)]
@@ -121,12 +122,6 @@ impl UISize for AbsoluteSize {
 impl UISize for RelativeSize {
     fn calculate(&self, parent_size: Size2D) -> Size2D {
         Size2D(**self * *parent_size)
-    }
-}
-
-impl UISize for OffsetSize {
-    fn calculate(&self, parent_size: Size2D) -> Size2D {
-        Size2D(*parent_size + **self)
     }
 }
 

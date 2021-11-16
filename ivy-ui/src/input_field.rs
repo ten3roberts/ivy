@@ -7,7 +7,7 @@ use ivy_resources::Handle;
 use ultraviolet::Vec2;
 
 use crate::{
-    constraints::{OffsetSize, RelativeOffset, UIOffset, UISize},
+    constraints::{AbsoluteOffset, AbsoluteSize, Origin2D, RelativeOffset, RelativeSize},
     events::WidgetEvent,
     Font, Image, Interactive, Reactive, Result, Sticky, Text, TextAlignment, Widget, WrapStyle,
 };
@@ -17,37 +17,53 @@ pub struct InputField {
 }
 
 /// A bundle for easily creating input fields with a reactive component
-pub struct InputFieldInfo<S: UISize, O: UIOffset, T, U, G> {
-    pub text: Text,
+#[derive(Debug)]
+pub struct InputFieldInfo<T, U, G> {
     pub text_pass: Handle<U>,
     pub image_pass: Handle<G>,
     pub font: Handle<Font>,
     pub reactive: Reactive<T>,
     pub background: Handle<Image>,
-    pub size: S,
-    pub offset: O,
+    pub rel_size: RelativeSize,
+    pub rel_offset: RelativeOffset,
+    pub abs_size: AbsoluteSize,
+    pub abs_offset: AbsoluteOffset,
+    pub origin: Origin2D,
     pub text_padding: Vec2,
+}
+
+impl<T: Default, U, G> Default for InputFieldInfo<T, U, G> {
+    fn default() -> Self {
+        Self {
+            text_pass: Default::default(),
+            image_pass: Default::default(),
+            font: Default::default(),
+            reactive: Default::default(),
+            background: Default::default(),
+            rel_size: Default::default(),
+            rel_offset: Default::default(),
+            abs_size: Default::default(),
+            abs_offset: Default::default(),
+            origin: Default::default(),
+            text_padding: Default::default(),
+        }
+    }
 }
 
 impl InputField {
     /// Creates a new input field
-    pub fn spawn<
-        S: UISize + Component,
-        O: UIOffset + Component,
-        T: Component,
-        U: Component,
-        G: Component,
-    >(
+    pub fn spawn<T: Component, U: Component, G: Component>(
         world: &mut World,
         root: Entity,
-        info: InputFieldInfo<S, O, T, U, G>,
+        info: InputFieldInfo<T, U, G>,
     ) -> Result<Entity> {
         let text = world.spawn((
             Widget,
             RelativeOffset::new(0.0, 0.0),
-            OffsetSize(-info.text_padding),
+            AbsoluteSize(-info.text_padding),
+            RelativeSize::new(1.0, 1.0),
             info.text_pass,
-            info.text,
+            Text::default(),
             info.font,
             WrapStyle::Overflow,
             TextAlignment::new(HorizontalAlign::Right, VerticalAlign::Middle),
@@ -60,10 +76,13 @@ impl InputField {
                 Sticky,
                 InputField { text },
                 Interactive,
+                info.origin,
                 info.image_pass,
                 info.background,
-                info.size,
-                info.offset,
+                info.abs_size,
+                info.abs_offset,
+                info.rel_size,
+                info.rel_offset,
                 info.reactive,
             ),
         )?;

@@ -18,6 +18,18 @@ pub struct Text {
     old_wrap: WrapStyle,
 }
 
+impl std::fmt::Debug for Text {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Text").field("str", &self.str).finish()
+    }
+}
+
+impl Default for Text {
+    fn default() -> Self {
+        Self::new("")
+    }
+}
+
 impl Text {
     pub fn new<S: Into<Cow<'static, str>>>(str: S) -> Self {
         let layout = Layout::new(fontdue::layout::CoordinateSystem::PositiveYUp);

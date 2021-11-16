@@ -16,6 +16,24 @@ pub struct Reactive<T> {
     pub focused: T,
 }
 
+impl<T: std::fmt::Debug> std::fmt::Debug for Reactive<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Reactive")
+            .field("unfocused", &self.unfocused)
+            .field("focused", &self.focused)
+            .finish()
+    }
+}
+
+impl<T: Default> Default for Reactive<T> {
+    fn default() -> Self {
+        Self {
+            unfocused: Default::default(),
+            focused: Default::default(),
+        }
+    }
+}
+
 impl<T> Reactive<T> {
     pub fn new(normal: T, pressed: T) -> Self {
         Self {

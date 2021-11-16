@@ -551,9 +551,9 @@ impl LogicLayer {
         ));
 
         let canvas = world.spawn((
+            Widget,
             Canvas,
-            Size2D(input.window_extent().into()),
-            Position2D::new(0.0, 0.0),
+            AbsoluteSize(input.window_extent().into()),
             Camera::default(),
         ));
 
@@ -699,21 +699,6 @@ impl Layer for LogicLayer {
             graphics::systems::update_view_matrices(world);
         }
 
-        {
-            let _scope = TimedScope::new(|elapsed| log::trace!("--UI took {:.3?}", elapsed));
-
-            let canvas = world
-                .query::<(&Canvas, &Camera)>()
-                .iter()
-                .next()
-                .ok_or(anyhow!("Missing canvas"))?
-                .0;
-
-            ui::systems::statisfy_widgets(world);
-            ui::systems::update_canvas(world, canvas)?;
-            ui::systems::update(world)?;
-        }
-
         Ok(())
     }
 }
@@ -788,15 +773,17 @@ fn setup_ui(
         world,
         canvas,
         InputFieldInfo {
-            text: Text::new("Sample"),
             text_pass,
             image_pass: ui_pass,
             font,
             reactive: Reactive::new(Color::white(), Color::gray()),
             background: input_field,
-            size: AbsoluteSize::new(512.0, 64.0),
-            offset: RelativeOffset::new(0.8, 0.8),
+            abs_size: AbsoluteSize::new(512.0, 64.0),
+            abs_offset: AbsoluteOffset::new(-10.0, -10.0),
+            rel_offset: RelativeOffset::new(1.0, 1.0),
             text_padding: Vec2::new(10.0, 10.0),
+            origin: Origin2D::new(1.0, 1.0),
+            ..InputFieldInfo::default()
         },
     )?;
 
@@ -817,7 +804,13 @@ fn setup_ui(
 
     world.attach_new::<Widget, _>(
         widget2,
-        (Widget, ui_pass, OffsetSize::new(-10.0, -10.0), heart),
+        (
+            Widget,
+            ui_pass,
+            RelativeSize::new(1.0, 1.0),
+            AbsoluteSize::new(-10.0, -10.0),
+            heart,
+        ),
     )?;
 
     world.attach_new::<Widget, _>(
@@ -863,7 +856,8 @@ fn setup_ui(
             Text::new(""),
             TextAlignment::new(HorizontalAlign::Left, VerticalAlign::Top),
             RelativeOffset::new(0.0, 0.0),
-            OffsetSize::new(-10.0, -10.0),
+            RelativeSize::new(1.0, 1.0),
+            AbsoluteSize::new(-10.0, -10.0),
         ),
     )?;
 

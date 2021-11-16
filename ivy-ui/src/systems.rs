@@ -1,8 +1,4 @@
-use crate::{
-    constraints::{UIOffset, UISize},
-    events::WidgetEvent,
-    InteractiveState, Result,
-};
+use crate::{constraints::*, events::WidgetEvent, InteractiveState, Result};
 use glfw::{Action, Key, WindowEvent};
 use hecs::{Entity, World};
 use hecs_hierarchy::Hierarchy;
@@ -17,6 +13,8 @@ use crate::{constraints::ConstraintQuery, *};
 /// Also updates canvas cameras.
 pub fn update(world: &World) -> Result<()> {
     world.roots::<Widget>().iter().try_for_each(|(root, _)| {
+        apply_constraints(world, root, Position2D::default(), Size2D::new(1.0, 1.0))?;
+
         if world.get::<Canvas>(root).is_ok() {
             update_canvas(world, root)?;
         }
@@ -53,6 +51,7 @@ fn apply_constraints(
     parent_pos: Position2D,
     parent_size: Size2D,
 ) -> Result<()> {
+    eprintln!("Here");
     let mut constaints_query = world.query_one::<ConstraintQuery>(entity)?;
     let constraints = constaints_query.get().ok_or(hecs::NoSuchEntity)?;
 
@@ -60,28 +59,13 @@ fn apply_constraints(
 
     let (pos, size) = query.get().ok_or(hecs::NoSuchEntity)?;
 
-    *pos = parent_pos
-        + constraints
-            .rel_offset
-            .map(|val| val.calculate(parent_size))
-            .unwrap_or_default()
-        + constraints
-            .abs_offset
-            .map(|val| val.calculate(parent_size))
-            .unwrap_or_default();
+    *size =
+        constraints.rel_size.calculate(parent_size) + constraints.abs_size.calculate(parent_size);
 
-    *size = constraints
-        .rel_size
-        .map(|val| val.calculate(parent_size))
-        .unwrap_or_default()
-        + constraints
-            .abs_size
-            .map(|val| val.calculate(parent_size))
-            .unwrap_or_default()
-        + constraints
-            .offset_size
-            .map(|val| val.calculate(parent_size))
-            .unwrap_or_default();
+    *pos = parent_pos
+        + constraints.rel_offset.calculate(parent_size)
+        + constraints.abs_offset.calculate(parent_size)
+        - Position2D(**constraints.origin * **size);
 
     if let Some(aspect) = constraints.aspect {
         size.x = size.y * **aspect
@@ -104,25 +88,46 @@ pub fn update_canvas(world: &World, canvas: Entity) -> Result<()> {
     Ok(())
 }
 
+struct Satisfied;
+
 /// Satisfies all widget by adding missing ModelMatrices, Position2D and Size2D
 pub fn statisfy_widgets(world: &mut World) {
     let entities = world
-        .query_mut::<(&Widget, Option<&Color>)>()
+        .query_mut::<(
+            &Widget,
+            Option<&RelativeOffset>,
+            Option<&RelativeSize>,
+            Option<&AbsoluteOffset>,
+            Option<&AbsoluteSize>,
+            Option<&Origin2D>,
+            Option<&Color>,
+        )>()
+        .without::<Satisfied>()
         .into_iter()
-        .map(|(e, (_, color))| (e, color.cloned().unwrap_or_default()))
+        .map(
+            |(e, (_, rel_off, rel_size, abs_off, abs_size, origin, color))| {
+                (
+                    e,
+                    (
+                        rel_off.cloned().unwrap_or_default(),
+                        rel_size.cloned().unwrap_or_default(),
+                        abs_off.cloned().unwrap_or_default(),
+                        abs_size.cloned().unwrap_or_default(),
+                        origin.cloned().unwrap_or_default(),
+                        color.cloned().unwrap_or_default(),
+                        Position2D::default(),
+                        Size2D::default(),
+                        WidgetDepth::default(),
+                        Satisfied,
+                    ),
+                )
+            },
+        )
         .collect::<Vec<_>>();
 
-    entities.into_iter().for_each(|(e, color)| {
+    entities.into_iter().for_each(|(e, components)| {
         // Ignore errors, we just collected these entities and thus know they exist.
-        let _ = world.insert(
-            e,
-            (
-                Position2D::default(),
-                Size2D::default(),
-                WidgetDepth::default(),
-                color,
-            ),
-        );
+        let _ = world.insert(e, components);
     });
 }
 
