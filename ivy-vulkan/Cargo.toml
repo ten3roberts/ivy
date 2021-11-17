@@ -8,7 +8,7 @@ description = "Low level vulkan abstractions for the Ivy game engine."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-arrayvec = "0.7.1"
+arrayvec = "0.7.2"
 ash = "0.33.3"
 glfw = { version = "0.42.0", features = [ "vulkan" ] }
 gpu-allocator = "0.10.0"

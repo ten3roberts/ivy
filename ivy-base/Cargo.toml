@@ -7,7 +7,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.44"
+anyhow = "1.0.45"
 crossbeam-channel = { version = "0.5.1", optional = true }
 derive-for = "1.2.2"
 derive_more = "0.99.16"
