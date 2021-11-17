@@ -164,6 +164,40 @@ impl Resources {
         })
     }
 
+    /// Attempts to load and insert a default resource from the given create info. If
+    /// info from the same info already exists, it will be returned. This means
+    /// the load function has to be injective over `info`.
+    pub fn load_default<T, I, E, G>(&self, info: G) -> Result<std::result::Result<Handle<T>, E>>
+    where
+        G: Into<I>,
+        I: std::hash::Hash + Eq + Storage,
+        T: Storage + LoadResource<Info = I, Error = E>,
+    {
+        let mut cache = self.fetch_mut()?;
+        let mut info_cache: CellRefMut<InfoCache<I, T>> = self
+            .default_entry()?
+            .or_insert_with(|| InfoCache(HashMap::new()));
+
+        let info = info.into();
+
+        let handle = match info_cache.0.entry(info) {
+            Entry::Occupied(entry) => {
+                println!("Deduplicated: {:?}", type_name::<T>());
+                Ok(Ok(*entry.get()))
+            }
+            Entry::Vacant(entry) => {
+                let val = match cache.load(self, entry.key()) {
+                    Ok(val) => val,
+                    Err(e) => return Ok(Err(e)),
+                };
+                Ok(Ok(*entry.insert(val)))
+            }
+        }??;
+
+        cache.set_default(handle);
+
+        Ok(Ok(handle))
+    }
     /// Attempts to load and insert a resource from the given create info. If
     /// info from the same info already exists, it will be returned. This means
     /// the load function has to be injective over `info`.
