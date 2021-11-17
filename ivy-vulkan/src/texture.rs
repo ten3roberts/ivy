@@ -76,6 +76,23 @@ pub struct Texture {
 }
 
 impl Texture {
+    /// Loads a color texture from an image in memory.
+    /// Uses the width and height of the loaded image, no resizing.
+    /// Uses mipmapping.
+    pub fn from_memory(context: Arc<VulkanContext>, data: &[u8]) -> Result<Self> {
+        let image = ivy_image::Image::load_from_memory(data, 4)?;
+
+        let extent = (image.width(), image.height()).into();
+
+        let texture = Self::new(context, &TextureInfo::color(extent))?;
+
+        let size = image.width() as u64 * image.height() as u64 * 4;
+
+        assert_eq!(size, image.pixels().len() as _);
+
+        texture.write(image.pixels())?;
+        Ok(texture)
+    }
     /// Loads a color texture from an image file.
     /// Uses the width and height of the loaded image, no resizing.
     /// Uses mipmapping.

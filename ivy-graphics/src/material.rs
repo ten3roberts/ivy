@@ -106,6 +106,32 @@ impl Material {
     pub fn buffer(&self) -> &Buffer {
         &self.buffer
     }
+
+    pub fn from_gltf(
+        context: Arc<VulkanContext>,
+        material: gltf::Material,
+        textures: &[Handle<Texture>],
+        resources: &Resources,
+    ) -> Result<Self> {
+        let pbr_info = material.pbr_metallic_roughness();
+        let albedo = pbr_info.base_color_texture();
+        let albedo = if let Some(base_color) = albedo {
+            textures[base_color.texture().index()]
+        } else {
+            resources.default()?
+        };
+
+        let sampler: Handle<Sampler> = resources.load(SamplerInfo::default())??;
+
+        Self::new(
+            context,
+            resources,
+            albedo,
+            sampler,
+            pbr_info.roughness_factor(),
+            pbr_info.metallic_factor(),
+        )
+    }
 }
 
 impl IntoSet for Material {

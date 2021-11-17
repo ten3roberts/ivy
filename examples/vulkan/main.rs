@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use std::{fmt::Display, ops::Deref, sync::Arc, time::Duration};
+use std::{borrow::Cow, fmt::Display, ops::Deref, sync::Arc, time::Duration};
 
 use anyhow::{anyhow, Context};
 use collision::{
@@ -420,11 +420,15 @@ fn setup_objects(
 ) -> anyhow::Result<Entities> {
     resources.insert(Gizmos::default())?;
 
+    resources.load_default::<Texture, _, _, _>(Cow::from("./res/textures/metal.png"))??;
+
     let document: Handle<Document> = resources
-        .load("./res/models/cube.gltf")
+        .load("./res/models/cube_material.gltf")
         .context("Failed to load cube model")??;
 
     let cube_mesh = resources.get(document)?.mesh(0);
+
+    let material = resources.get(document)?.material(0);
 
     let document: Handle<Document> = resources
         .load("./res/models/sphere.gltf")
@@ -432,12 +436,12 @@ fn setup_objects(
 
     let _sphere_mesh = resources.get(document)?.mesh(0);
 
-    let material: Handle<Material> = resources.load(MaterialInfo {
-        albedo: "./res/textures/metal.png".into(),
-        roughness: 0.05,
-        metallic: 0.9,
-        ..Default::default()
-    })??;
+    // let material: Handle<Material> = resources.load(MaterialInfo {
+    //     albedo: "./res/textures/metal.png".into(),
+    //     roughness: 0.05,
+    //     metallic: 0.9,
+    //     ..Default::default()
+    // })??;
 
     world.spawn((
         Position(Vec3::new(0.0, 5.0, 5.0)),
@@ -767,6 +771,25 @@ fn setup_ui(
             },
             Aspect(1.0),
         ),
+    )?;
+
+    InputField::spawn(
+        world,
+        canvas,
+        InputFieldInfo {
+            placeholder: "Enter text: ".into(),
+            text_pass,
+            image_pass: ui_pass,
+            font,
+            reactive: Reactive::new(Color::white(), Color::gray()),
+            background: input_field,
+            abs_size: AbsoluteSize::new(512.0, 64.0),
+            abs_offset: AbsoluteOffset::new(10.0, 10.0),
+            rel_offset: RelativeOffset::new(1.0, -1.0),
+            text_padding: Vec2::new(10.0, 10.0),
+            origin: Origin2D::new(1.0, 0.0),
+            ..InputFieldInfo::default()
+        },
     )?;
 
     InputField::spawn(

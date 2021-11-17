@@ -8,4 +8,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum Error {
     #[error("Failed to load image from path: {0:?}")]
     FileLoading(PathBuf),
+    #[error("Failed to load image from memory")]
+    MemoryLoading,
 }

@@ -76,7 +76,7 @@ impl Image {
     }
 
     /// Loads an image from memory, such as a memory mapped file
-    pub fn load_from_memory(buf: &[u8], desired_channels: i32) -> Option<Self> {
+    pub fn load_from_memory(buf: &[u8], desired_channels: i32) -> Result<Self> {
         let mut width: c_int = 0;
         let mut height: c_int = 0;
         let mut channels: c_int = desired_channels;
@@ -94,7 +94,7 @@ impl Image {
         };
 
         if pixels_raw.is_null() {
-            return None;
+            return Err(Error::MemoryLoading);
         }
 
         // Desired channels override channels
@@ -106,7 +106,7 @@ impl Image {
         let pixels = unsafe { Vec::from_raw_parts(pixels_raw, image_size, image_size) };
         let pixels = pixels.into_boxed_slice();
 
-        Some(Image::new(width as _, height as _, channels as _, pixels))
+        Ok(Image::new(width as _, height as _, channels as _, pixels))
     }
 
     pub fn width(&self) -> u32 {
