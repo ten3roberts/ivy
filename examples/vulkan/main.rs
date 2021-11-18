@@ -477,7 +477,14 @@ fn setup_objects(
     let light = world.attach_new::<Connection, _>(
         sphere_object,
         (
-            ConnectionKind::Rigid,
+            ConnectionKind::Spring {
+                strength: 20.0,
+                dampening: 5.0,
+            },
+            Mass(1.0),
+            Velocity::default(),
+            AngularVelocity::default(),
+            AngularMass(1.0),
             OffsetPosition::new(0.0, 3.0, 0.0),
             Position::default(),
             PointLight::new(0.2, Vec3::new(0.0, 0.0, 500.0)),
@@ -487,8 +494,8 @@ fn setup_objects(
     world.attach_new::<Connection, _>(
         light,
         (
-            assets.geometry_pass,
             ConnectionKind::Rigid,
+            assets.geometry_pass,
             OffsetPosition::new(1.0, 0.0, 0.0),
             cube_mesh,
             Position::default(),

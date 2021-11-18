@@ -28,15 +28,19 @@ fn update_subtree(world: &World, root: Entity) -> Result<()> {
                     TransformQueryMut,
                     RbQueryMut,
                     &ConnectionKind,
+                    &mut Effector,
                 )>(child)?;
 
-                if let Some((offset, child_trans, child_rb, connection_kind)) = query.get() {
+                if let Some((offset, child_trans, child_rb, connection_kind, effector)) =
+                    query.get()
+                {
                     connection_kind.update(
                         offset,
                         child_trans,
                         child_rb,
                         &parent_trans,
                         &parent_rb,
+                        effector,
                     );
                 }
                 drop(query);

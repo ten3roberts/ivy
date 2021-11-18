@@ -7,7 +7,7 @@ pub use systems::*;
 use ultraviolet::Vec3;
 
 use crate::{
-    components::{RbBundle, RbQuery, RbQueryMut, Velocity},
+    components::{Effector, RbBundle, RbQuery, RbQueryMut, Velocity},
     util::point_vel,
 };
 
@@ -48,6 +48,8 @@ pub struct Connection;
 pub enum ConnectionKind {
     /// Connection will not budge
     Rigid,
+    /// The connection will excert a force to return to the desired position
+    Spring { strength: f32, dampening: f32 },
 }
 
 impl ConnectionKind {
@@ -58,13 +60,23 @@ impl ConnectionKind {
         child_rb: RbQueryMut,
         parent_trans: &TransformBundle,
         parent_rb: &RbBundle,
+        effector: &mut Effector,
     ) {
         let pos = parent_trans.into_matrix().transform_point3(**offset);
-        let vel = point_vel(pos - *parent_trans.pos, parent_rb.ang_vel);
         match self {
             Self::Rigid => {
+                let vel = point_vel(pos - *parent_trans.pos, parent_rb.ang_vel);
                 *child_trans.pos = pos.into();
                 *child_rb.vel = Velocity(vel) + parent_rb.vel;
+                *child_rb.ang_vel = parent_rb.ang_vel;
+                *child_trans.rot = parent_trans.rot;
+            }
+            Self::Spring {
+                strength,
+                dampening,
+            } => {
+                let displacement = pos - **child_trans.pos;
+                effector.apply_force(displacement * *strength + **child_rb.vel * -dampening);
                 *child_rb.ang_vel = parent_rb.ang_vel;
                 *child_trans.rot = parent_trans.rot;
             }
