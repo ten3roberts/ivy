@@ -20,9 +20,12 @@ fn update_subtree(world: &World, root: Entity) -> Result<()> {
         let parent_rb = parent_rb.into_owned();
         drop(query);
 
+        // Create an effector for storing the applied effects
+        let mut dummy_effector = Effector::new();
+
         world
             .children::<Connection>(root)
-            .try_for_each(|child| -> Result<()> {
+            .try_for_each(|child| -> Result<_> {
                 let mut query = world.query_one::<(
                     &OffsetPosition,
                     &OffsetRotation,
@@ -49,11 +52,19 @@ fn update_subtree(world: &World, root: Entity) -> Result<()> {
                         &parent_trans,
                         &parent_rb,
                         effector,
+                        &mut dummy_effector,
                     );
                 }
                 drop(query);
-                update_subtree(world, child)
-            })
+                update_subtree(world, child)?;
+
+                Ok(())
+            })?;
+
+        let mut effector = world.get_mut::<Effector>(root)?;
+        *effector += dummy_effector;
+
+        Ok(())
     } else {
         Ok(())
     }

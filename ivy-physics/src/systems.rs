@@ -1,7 +1,11 @@
 use crate::collision::resolve_collision;
 use crate::components::*;
+use crate::connections::Connection;
+use crate::connections::ConnectionKind;
 use crate::Result;
+use hecs::Entity;
 use hecs::World;
+use hecs_hierarchy::Hierarchy;
 use ivy_base::{Position, Rotation};
 use ivy_collision::Collision;
 use ultraviolet::Bivec3;
@@ -44,6 +48,28 @@ pub fn wrap_around_system(world: &World) {
     });
 }
 
+/// Returns the root of the rigid system, along with its mass
+pub fn get_rigid_root(world: &World, child: Entity) -> Result<(Entity, Mass)> {
+    let mut system_mass = *world.get::<Mass>(child)?;
+    let mut root = child;
+
+    for val in world.ancestors::<Connection>(child) {
+        root = val;
+        system_mass += *world.get::<Mass>(val)?;
+        dbg!(system_mass);
+
+        match *world.get::<ConnectionKind>(child)? {
+            ConnectionKind::Rigid => {}
+            ConnectionKind::Spring {
+                strength: _,
+                dampening: _,
+            } => break,
+        };
+    }
+
+    Ok((root, system_mass))
+}
+
 pub fn resolve_collisions<I: Iterator<Item = Collision>>(
     world: &mut World,
     mut collisions: I,
@@ -51,17 +77,23 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
     collisions.try_for_each(|coll| -> Result<()> {
         assert_ne!(coll.a, coll.b);
 
-        let mut a_query = world.query_one::<(RbQuery, &Position)>(coll.a)?;
-        let (a, a_pos) = a_query.get().unwrap();
+        // Trace up to the root of the rigid connection before solving
+        // collisions
+        let (a, a_mass) = get_rigid_root(world, coll.a)?;
+        let (b, b_mass) = get_rigid_root(world, coll.b)?;
+
+        let mut a_query = world.query_one::<(RbQuery, &Position)>(a)?;
+        let (mut a, a_pos) = a_query.get().unwrap();
         let a_pos = *a_pos;
-        let a_mass = **a.mass;
 
-        let mut b_query = world.query_one::<(RbQuery, &Position)>(coll.b)?;
+        let mut b_query = world.query_one::<(RbQuery, &Position)>(b)?;
 
-        let (b, b_pos) = b_query.get().unwrap();
+        let (mut b, b_pos) = b_query.get().unwrap();
         let b_pos = *b_pos;
-        let b_mass = **b.mass;
 
+        // Modify mass to include all children masses
+        a.mass = &a_mass;
+        b.mass = &b_mass;
         let total_mass = a_mass + b_mass;
 
         let impulse = resolve_collision(&coll.contact, &a, a_pos, &b, b_pos);
@@ -72,11 +104,11 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
             let dir = coll.contact.normal * coll.contact.depth;
 
             let mut pos = world.get_mut::<Position>(coll.a)?;
-            *pos -= Position(dir * (b_mass / total_mass));
+            *pos -= Position(dir * (*b_mass / *total_mass));
             drop(pos);
 
             let mut pos = world.get_mut::<Position>(coll.b)?;
-            *pos += Position(dir * (a_mass / total_mass));
+            *pos += Position(dir * (*a_mass / *total_mass));
             drop(pos);
         }
 

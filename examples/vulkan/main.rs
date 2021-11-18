@@ -478,10 +478,10 @@ fn setup_objects(
         sphere_object,
         (
             ConnectionKind::Spring {
-                strength: 20.0,
-                dampening: 5.0,
+                strength: 100.0,
+                dampening: 50.0,
             },
-            Mass(1.0),
+            Mass(50.0),
             OffsetRotation::default(),
             Velocity::default(),
             AngularVelocity::default(),
@@ -495,8 +495,12 @@ fn setup_objects(
     world.attach_new::<Connection, _>(
         light,
         (
-            ConnectionKind::Rigid,
-            OffsetRotation::from_euler_angles(1.0, 0.0, 0.0),
+            ConnectionKind::Spring {
+                strength: 200.0,
+                dampening: 10.0,
+            },
+            OffsetRotation::euler_angles(1.0, 0.0, 0.0),
+            Mass(20.0),
             assets.geometry_pass,
             OffsetPosition::new(1.0, 0.0, 0.0),
             cube_mesh,

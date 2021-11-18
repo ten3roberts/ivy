@@ -24,6 +24,7 @@ derive_for!(
         Sub,
         SubAssign,
         Div, DivAssign,
+        Neg
     );
     #[repr(transparent)]
     pub struct Velocity(pub Vec3);
@@ -106,7 +107,13 @@ pub struct RbQueryMut<'a> {
     pub ang_mass: &'a mut AngularMass,
 }
 
-/// Manages the forces applied to an entity
+/// Manages the forces applied to an entity.
+/// Stored in the entity and is a middle hand for manipulating velocity and
+/// angular velocity through direct changes, forces, and impulses. It is
+/// recommended to change forces through the effector due to the stacking effect
+/// and non requirement of knowing the dt.
+///
+/// It is also possible to create a dummy effector to "record" physics effects.
 #[derive(Clone)]
 pub struct Effector {
     net_force: Vec3,
@@ -182,6 +189,58 @@ impl Effector {
         AngularVelocity(
             self.net_torque * dt / ang_mass.0 + self.net_angular_impulse / ang_mass.0 + self.net_dw,
         )
+    }
+}
+
+impl std::ops::Add<Effector> for Effector {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self {
+            net_force: self.net_force + rhs.net_force,
+            net_impulse: self.net_impulse + rhs.net_impulse,
+            net_dv: self.net_dv + rhs.net_dv,
+            net_torque: self.net_torque + rhs.net_torque,
+            net_angular_impulse: self.net_angular_impulse + rhs.net_angular_impulse,
+            net_dw: self.net_dw + rhs.net_dw,
+        }
+    }
+}
+
+impl std::ops::AddAssign<Effector> for Effector {
+    fn add_assign(&mut self, rhs: Self) {
+        self.net_force += rhs.net_force;
+        self.net_impulse += rhs.net_impulse;
+        self.net_dv += rhs.net_dv;
+        self.net_torque += rhs.net_torque;
+        self.net_angular_impulse += rhs.net_angular_impulse;
+        self.net_dw += rhs.net_dw;
+    }
+}
+
+impl std::ops::Add<&Effector> for Effector {
+    type Output = Self;
+
+    fn add(self, rhs: &Self) -> Self::Output {
+        Self {
+            net_force: self.net_force + rhs.net_force,
+            net_impulse: self.net_impulse + rhs.net_impulse,
+            net_dv: self.net_dv + rhs.net_dv,
+            net_torque: self.net_torque + rhs.net_torque,
+            net_angular_impulse: self.net_angular_impulse + rhs.net_angular_impulse,
+            net_dw: self.net_dw + rhs.net_dw,
+        }
+    }
+}
+
+impl std::ops::AddAssign<&Effector> for Effector {
+    fn add_assign(&mut self, rhs: &Self) {
+        self.net_force += rhs.net_force;
+        self.net_impulse += rhs.net_impulse;
+        self.net_dv += rhs.net_dv;
+        self.net_torque += rhs.net_torque;
+        self.net_angular_impulse += rhs.net_angular_impulse;
+        self.net_dw += rhs.net_dw;
     }
 }
 
