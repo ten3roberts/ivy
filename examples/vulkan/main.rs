@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use std::{borrow::Cow, fmt::Display, ops::Deref, sync::Arc, time::Duration};
+use std::{fmt::Display, ops::Deref, sync::Arc, time::Duration};
 
 use anyhow::{anyhow, Context};
 use collision::{
@@ -199,7 +199,7 @@ fn setup_graphics(
     let window = resources.get_default::<Window>()?;
 
     let swapchain_info = ivy_vulkan::SwapchainInfo {
-        present_mode: vk::PresentModeKHR::MAILBOX,
+        present_mode: vk::PresentModeKHR::IMMEDIATE,
         image_count: FRAMES_IN_FLIGHT as u32 + 1,
         ..Default::default()
     };
@@ -355,6 +355,7 @@ fn setup_graphics(
             fragmentshader: "./res/shaders/default.frag.spv".into(),
             samples: SampleCountFlags::TYPE_1,
             extent: swapchain_extent,
+            cull_mode: CullModeFlags::NONE,
             ..rendergraph.pipeline_info(geometry_node)?
         },
     )?;
@@ -418,30 +419,20 @@ fn setup_objects(
     assets: &Assets,
     camera: Entity,
 ) -> anyhow::Result<Entities> {
+    let _scope = TimedScope::new(|elapsed| eprintln!("Object setup took {:.3?}", elapsed));
     resources.insert(Gizmos::default())?;
 
-    resources.load_default::<Texture, _, _, _>(Cow::from("./res/textures/metal.png"))??;
-
     let document: Handle<Document> = resources
-        .load("./res/models/cube_material.gltf")
+        .load("./res/models/cube.glb")
         .context("Failed to load cube model")??;
 
     let cube_mesh = resources.get(document)?.mesh(0);
-
-    let material = resources.get(document)?.material(0);
 
     let document: Handle<Document> = resources
         .load("./res/models/sphere.gltf")
         .context("Failed to load sphere model")??;
 
-    let _sphere_mesh = resources.get(document)?.mesh(0);
-
-    // let material: Handle<Material> = resources.load(MaterialInfo {
-    //     albedo: "./res/textures/metal.png".into(),
-    //     roughness: 0.05,
-    //     metallic: 0.9,
-    //     ..Default::default()
-    // })??;
+    let sphere_mesh = resources.get(document)?.mesh(0);
 
     world.spawn((
         Position(Vec3::new(0.0, 5.0, 5.0)),
@@ -475,8 +466,7 @@ fn setup_objects(
             1.0,
             false,
         ),
-        _sphere_mesh,
-        material,
+        sphere_mesh,
         assets.geometry_pass,
     ));
 
@@ -498,7 +488,6 @@ fn setup_objects(
                 vel,
                 Resitution(0.5),
                 Scale::uniform(0.5),
-                material,
                 assets.geometry_pass,
                 cube_mesh,
             )
@@ -607,7 +596,7 @@ impl Layer for LogicLayer {
         _events: &mut Events,
         frame_time: Duration,
     ) -> anyhow::Result<()> {
-        let _scope = TimedScope::new(|elapsed| log::trace!("Logic layer took {:.3?}", elapsed));
+        // let _scope = TimedScope::new(|elapsed| log::trace!("Logic layer took {:.3?}", elapsed));
 
         self.handle_events(world, resources)
             .context("Failed to handle events")?;
@@ -653,7 +642,7 @@ impl Layer for LogicLayer {
 
         gizmos.begin_section("ray casting");
         if self.input.mouse_button(MouseButton::Button1) {
-            let _scope = TimedScope::new(|elapsed| eprintln!("Ray casting took {:.3?}", elapsed));
+            // let _scope = TimedScope::new(|elapsed| eprintln!("Ray casting took {:.3?}", elapsed));
 
             // Perform a ray cast with tractor beam example
             for hit in ray.cast(world, &tree).flatten() {
@@ -696,8 +685,8 @@ impl Layer for LogicLayer {
 
         {
             // TODO timed_scope!
-            let _scope =
-                TimedScope::new(|elapsed| log::trace!("--Graphics updating took {:.3?}", elapsed));
+            // let _scope =
+            //     TimedScope::new(|elapsed| log::trace!("--Graphics updating took {:.3?}", elapsed));
 
             graphics::systems::satisfy_objects(world);
             graphics::systems::update_view_matrices(world);
@@ -1004,7 +993,7 @@ impl Layer for DebugLayer {
         _: &mut Events,
         frametime: Duration,
     ) -> anyhow::Result<()> {
-        let _scope = TimedScope::new(|elapsed| log::trace!("Debug layer took {:.3?}", elapsed));
+        // let _scope = TimedScope::new(|elapsed| log::trace!("Debug layer took {:.3?}", elapsed));
         self.min = frametime.min(self.min);
         self.max = frametime.max(self.max);
 

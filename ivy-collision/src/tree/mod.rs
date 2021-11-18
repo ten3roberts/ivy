@@ -92,7 +92,7 @@ impl<N: 'static + Node> CollisionTree<N> {
     }
 
     pub fn update(&mut self, world: &mut World) -> Result<(), hecs::ComponentError> {
-        let _scope = TimedScope::new(|elapsed| eprintln!("Tree updating took {:.3?}", elapsed));
+        // let _scope = TimedScope::new(|elapsed| eprintln!("Tree updating took {:.3?}", elapsed));
 
         self.register(world);
 
@@ -176,8 +176,8 @@ impl<N: 'static + Node> CollisionTree<N> {
         world: &mut World,
         events: &mut Events,
     ) -> Result<(), hecs::ComponentError> {
-        let _scope =
-            TimedScope::new(|elapsed| eprintln!("Tree collision checking took {:.3?}", elapsed));
+        // let _scope =
+        //     TimedScope::new(|elapsed| eprintln!("Tree collision checking took {:.3?}", elapsed));
         let mut stack = SmallVec::<G>::new();
 
         self.root

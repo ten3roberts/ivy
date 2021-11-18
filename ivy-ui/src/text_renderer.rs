@@ -96,7 +96,7 @@ impl TextRenderer {
 
     // Creates a mesh able to store `capacity` characters
     pub fn create_mesh(context: Arc<VulkanContext>, glyph_capacity: u32) -> Result<Mesh<UIVertex>> {
-        let mut mesh = Mesh::new_uninit(context, glyph_capacity * 4, glyph_capacity * 6)?;
+        let mut mesh = Mesh::new_uninit(context, glyph_capacity * 4, glyph_capacity * 6, vec![])?;
 
         // Pre fill indices
         let indices = (0..glyph_capacity * 6)

@@ -58,7 +58,6 @@ impl Renderer for MeshRenderer {
             let key = batch.key();
 
             let mesh = meshes.get(key.mesh)?;
-            let material = materials.get(key.material)?;
 
             cmd.bind_pipeline(batch.pipeline());
 
@@ -66,23 +65,44 @@ impl Renderer for MeshRenderer {
                 cmd.bind_descriptor_sets(batch.layout(), 0, sets, offsets);
             }
 
-            cmd.bind_descriptor_sets(
-                batch.layout(),
-                sets.len() as u32,
-                &[frame_set, material.set(current_frame)],
-                &[],
-            );
-
             cmd.bind_vertexbuffer(0, mesh.vertex_buffer());
             cmd.bind_indexbuffer(mesh.index_buffer(), IndexType::UINT32, 0);
 
-            cmd.draw_indexed(
-                mesh.index_count(),
-                batch.instance_count(),
-                0,
-                0,
-                batch.first_instance(),
-            );
+            let primitives = mesh.primitives();
+            let instance_count = batch.instance_count();
+            let first_instance = batch.first_instance();
+
+            if let Some(material) = key.material {
+                let material = materials.get(material)?;
+                cmd.bind_descriptor_sets(
+                    batch.layout(),
+                    sets.len() as u32,
+                    &[frame_set, material.set(current_frame)],
+                    &[],
+                );
+                cmd.draw_indexed(mesh.index_count(), instance_count, 0, 0, first_instance);
+            } else {
+                primitives.iter().try_for_each(|val| -> Result<()> {
+                    let material = materials.get(val.material)?;
+
+                    cmd.bind_descriptor_sets(
+                        batch.layout(),
+                        sets.len() as u32,
+                        &[frame_set, material.set(current_frame)],
+                        &[],
+                    );
+
+                    cmd.draw_indexed(
+                        val.index_count,
+                        instance_count,
+                        val.first_index,
+                        0,
+                        first_instance,
+                    );
+
+                    Ok(())
+                })?;
+            }
         }
 
         Ok(())
@@ -117,13 +137,13 @@ impl<'a> Into<ObjectData> for ObjectDataQuery<'a> {
 #[derive(Query, PartialEq, Eq)]
 struct KeyQuery<'a> {
     mesh: &'a Handle<Mesh>,
-    material: &'a Handle<Material>,
+    material: Option<&'a Handle<Material>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct Key {
     mesh: Handle<Mesh>,
-    material: Handle<Material>,
+    material: Option<Handle<Material>>,
 }
 
 impl<'a> crate::KeyQuery for KeyQuery<'a> {
@@ -132,7 +152,7 @@ impl<'a> crate::KeyQuery for KeyQuery<'a> {
     fn into_key(&self) -> Self::K {
         Self::K {
             mesh: *self.mesh,
-            material: *self.material,
+            material: self.material.cloned(),
         }
     }
 }

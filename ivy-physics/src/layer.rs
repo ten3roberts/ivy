@@ -41,7 +41,7 @@ impl<N: Node + Storage + DrawGizmos> Layer for PhysicsLayer<N> {
         events: &mut Events,
         frame_time: std::time::Duration,
     ) -> anyhow::Result<()> {
-        let _scope = TimedScope::new(|elapsed| eprintln!("Physics layer took {:.3?}", elapsed));
+        // let _scope = TimedScope::new(|elapsed| eprintln!("Physics layer took {:.3?}", elapsed));
         let dt = frame_time.as_secs_f32();
         systems::integrate_angular_velocity(world, dt);
         systems::integrate_velocity(world, dt);

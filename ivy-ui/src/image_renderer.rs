@@ -32,7 +32,7 @@ impl ImageRenderer {
 
             let indices: [u32; 6] = [0, 1, 2, 2, 3, 0];
 
-            Mesh::new(context, &vertices, &indices)
+            Mesh::new(context, &vertices, &indices, vec![])
         }?;
 
         let base_renderer = BaseRenderer::new(context, capacity, frames_in_flight)?;

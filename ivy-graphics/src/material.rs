@@ -30,6 +30,7 @@ impl std::hash::Hash for MaterialInfo {
 
 /// A material contains shader properties such as albedo and other parameters. A material does not
 /// define the graphics pipeline nor shaders as that is per pass dependent.
+/// *Note*: prefer Materials instead to store several materials.
 pub struct Material {
     set: DescriptorSet,
     albedo: Handle<Texture>,
@@ -49,6 +50,7 @@ impl Material {
         roughness: f32,
         metallic: f32,
     ) -> Result<Self> {
+        eprintln!("roughness: {}, metallic: {}", roughness, metallic);
         let buffer = Buffer::new(
             context.clone(),
             ivy_vulkan::BufferUsage::UNIFORM_BUFFER,

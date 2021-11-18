@@ -1,6 +1,8 @@
 use crate::{Error, Material, Mesh, Result};
 use std::{borrow::Cow, path::Path, path::PathBuf, sync::Arc};
 
+use gltf::Gltf;
+use ivy_base::TimedScope;
 use ivy_resources::{Handle, LoadResource, Resources};
 use ivy_vulkan::{Texture, VulkanContext};
 use ultraviolet::*;
@@ -22,6 +24,33 @@ pub struct Document {
     nodes: Vec<Node>,
 }
 
+// /// Import the buffer data referenced by a glTF document.
+// fn import_buffer_data(
+//     document: &gltf::Document,
+//     base: Option<&Path>,
+//     mut blob: Option<Vec<u8>>,
+// ) -> Result<Vec<gltf::buffer::Data>> {
+//     let mut buffers = Vec::new();
+//     for buffer in document.buffers() {
+//         let mut data = match buffer.source() {
+//             buffer::Source::Uri(uri) => Scheme::read(base, uri),
+//             buffer::Source::Bin => blob.take().ok_or(Error::MissingBlob),
+//         }?;
+//         if data.len() < buffer.length() {
+//             return Err(Error::BufferLength {
+//                 buffer: buffer.index(),
+//                 expected: buffer.length(),
+//                 actual: data.len(),
+//             });
+//         }
+//         while data.len() % 4 != 0 {
+//             data.push(0);
+//         }
+//         buffers.push(gltf::buffer::Data(data));
+//     }
+//     Ok(buffers)
+// }
+
 impl Document {
     /// Loads a gltf document/asset from path
     pub fn from_file<P, O>(
@@ -33,8 +62,10 @@ impl Document {
         P: AsRef<Path> + ToOwned<Owned = O>,
         O: Into<PathBuf>,
     {
-        let (document, buffers, _images) =
-            gltf::import(&path).map_err(|e| Error::GltfImport(e, Some(path.to_owned().into())))?;
+        let (document, buffers, _images) = {
+            let _scope = TimedScope::new(|elapsed| eprintln!("Gltf import took {:.3?}", elapsed));
+            gltf::import(&path).map_err(|e| Error::GltfImport(e, Some(path.to_owned().into())))
+        }?;
 
         Self::from_gltf(context, resources, document, &buffers)
     }
@@ -47,22 +78,16 @@ impl Document {
         document: gltf::Document,
         buffers: &[gltf::buffer::Data],
     ) -> Result<Self> {
-        let mut mesh_cache = resources.fetch_mut::<Mesh>()?;
-        let mut material_cache = resources.fetch_mut::<Material>()?;
+        let _scope = TimedScope::new(|elapsed| eprintln!("Document loading took {:.3?}", elapsed));
+
         let mut texture_cache = resources.fetch_mut::<Texture>()?;
-
-        let meshes = document
-            .meshes()
-            .map(|mesh| {
-                Mesh::from_gltf(context.clone(), mesh, buffers).map(|mesh| mesh_cache.insert(mesh))
-            })
-            .collect::<Result<Vec<_>>>()?;
-
-        drop(mesh_cache);
 
         let textures = document
             .textures()
             .map(|val| {
+                let _scope =
+                    TimedScope::new(|elapsed| eprintln!("Texture loading took {:.3?}", elapsed));
+
                 let data = val.source().source();
                 let texture = match data {
                     gltf::image::Source::View { view, mime_type: _ } => {
@@ -83,13 +108,31 @@ impl Document {
 
         drop(texture_cache);
 
+        let mut material_cache = resources.fetch_mut::<Material>()?;
         let materials = document
             .materials()
             .map(|material| {
+                let _scope =
+                    TimedScope::new(|elapsed| eprintln!("Material loading took {:.3?}", elapsed));
                 Material::from_gltf(context.clone(), material, &textures, resources)
                     .map(|material| material_cache.insert(material))
             })
             .collect::<Result<Vec<_>>>()?;
+
+        drop(material_cache);
+
+        let mut mesh_cache = resources.fetch_mut::<Mesh>()?;
+        let meshes = document
+            .meshes()
+            .map(|mesh| {
+                let _scope =
+                    TimedScope::new(|elapsed| eprintln!("Mesh loading took {:.3?}", elapsed));
+                Mesh::from_gltf(context.clone(), mesh, buffers, &materials)
+                    .map(|mesh| mesh_cache.insert(mesh))
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        drop(mesh_cache);
 
         let nodes = document
             .nodes()
