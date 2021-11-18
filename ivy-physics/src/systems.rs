@@ -51,20 +51,20 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
     collisions.try_for_each(|coll| -> Result<()> {
         assert_ne!(coll.a, coll.b);
 
-        let mut a_query = world.query_one::<RbQuery>(coll.a)?;
-        let a = a_query.get().unwrap();
-
-        let mut b_query = world.query_one::<RbQuery>(coll.b)?;
-
-        let b = b_query.get().unwrap();
-        let a_pos = *a.pos;
-        let b_pos = *b.pos;
+        let mut a_query = world.query_one::<(RbQuery, &Position)>(coll.a)?;
+        let (a, a_pos) = a_query.get().unwrap();
+        let a_pos = *a_pos;
         let a_mass = **a.mass;
+
+        let mut b_query = world.query_one::<(RbQuery, &Position)>(coll.b)?;
+
+        let (b, b_pos) = b_query.get().unwrap();
+        let b_pos = *b_pos;
         let b_mass = **b.mass;
 
         let total_mass = a_mass + b_mass;
 
-        let impulse = resolve_collision(&coll.contact, &a, &b);
+        let impulse = resolve_collision(&coll.contact, &a, a_pos, &b, b_pos);
 
         drop((a_query, b_query));
 

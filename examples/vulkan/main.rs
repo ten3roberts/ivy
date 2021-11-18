@@ -26,7 +26,8 @@ use ivy::{
 use ivy_resources::Resources;
 use parking_lot::RwLock;
 use physics::{
-    components::{AngularMass, Effector, Mass, Resitution, Velocity},
+    components::{AngularMass, AngularVelocity, Effector, Mass, Resitution, Velocity},
+    connections::{Connection, ConnectionKind, OffsetPosition},
     PhysicsLayer,
 };
 use postprocessing::pbr::{create_pbr_pipeline, PBRInfo};
@@ -86,19 +87,20 @@ impl Mover {
     }
 }
 
-fn move_system(world: &mut World, input: &Input, dt: f32) {
+fn move_system(world: &mut World, input: &Input) {
     world
-        .query::<(&Mover, &mut Position, &mut Rotation)>()
+        .query::<(&Mover, &mut Velocity, &mut AngularVelocity, &Rotation)>()
         .iter()
-        .for_each(|(_, (m, p, r))| {
+        .for_each(|(_, (m, v, a, r))| {
+            let movement = m.translate.get(input);
             if m.local {
-                *p += Position(r.into_matrix() * m.translate.get(input)) * m.speed * dt;
+                *v = Velocity(r.into_matrix() * movement) * m.speed;
             } else {
-                *p += Position(m.translate.get(input)) * m.speed * dt;
+                *v = Velocity(movement) * m.speed;
             }
 
-            let rot = m.rotate.get(input) * dt;
-            *r = Rotation(**r * Rotor3::from_euler_angles(rot.x, rot.y, rot.z));
+            let ang = m.rotate.get(input);
+            *a = ang.into();
         })
 }
 
@@ -427,6 +429,12 @@ fn setup_objects(
         .context("Failed to load cube model")??;
 
     let cube_mesh = resources.get(document)?.mesh(0);
+    let material = resources.load::<Material, _, _, _>(MaterialInfo {
+        albedo: "./res/textures/metal.png".into(),
+        sampler: SamplerInfo::default(),
+        roughness: 0.01,
+        metallic: 1.0,
+    })??;
 
     let document: Handle<Document> = resources
         .load("./res/models/sphere.gltf")
@@ -439,18 +447,14 @@ fn setup_objects(
         PointLight::new(1.0, Vec3::new(1.0, 1.0, 0.7) * 5000.0),
     ));
 
-    world.spawn((
-        Position(Vec3::new(7.0, 0.0, 0.0)),
-        PointLight::new(0.4, Vec3::new(0.0, 0.0, 500.0)),
-    ));
-
-    world.spawn((
+    let sphere_object = world.spawn((
         Collider::new(Sphere::new(1.0)),
         Color::rgb(1.0, 1.0, 1.0),
         Mass(20.0),
         Velocity::default(),
         Position::new(0.0, 0.6, -1.2),
         Scale::uniform(1.0),
+        material,
         // Rotation::euler_angles(0.0, 1.0, 1.0),
         Mover::new(
             InputVector {
@@ -469,6 +473,30 @@ fn setup_objects(
         sphere_mesh,
         assets.geometry_pass,
     ));
+
+    let light = world.attach_new::<Connection, _>(
+        sphere_object,
+        (
+            ConnectionKind::Rigid,
+            OffsetPosition::new(0.0, 3.0, 0.0),
+            Position::default(),
+            PointLight::new(0.2, Vec3::new(0.0, 0.0, 500.0)),
+        ),
+    )?;
+
+    world.attach_new::<Connection, _>(
+        light,
+        (
+            assets.geometry_pass,
+            ConnectionKind::Rigid,
+            OffsetPosition::new(1.0, 0.0, 0.0),
+            cube_mesh,
+            Position::default(),
+            Scale::uniform(0.3),
+            Collider::new(Cube::uniform(1.0)),
+            Color::blue(),
+        ),
+    )?;
 
     let mut rng = StdRng::seed_from_u64(43);
 
@@ -681,7 +709,7 @@ impl Layer for LogicLayer {
         WithTime::<RelativeOffset>::update(world, dt);
         Periodic::<Text>::update(world);
 
-        move_system(world, &self.input, dt);
+        move_system(world, &self.input);
 
         {
             // TODO timed_scope!
@@ -691,6 +719,20 @@ impl Layer for LogicLayer {
             graphics::systems::satisfy_objects(world);
             graphics::systems::update_view_matrices(world);
         }
+
+        gizmos.begin_section("velocity");
+        world
+            .query::<(&Position, &Velocity)>()
+            .iter()
+            .for_each(|(_, (pos, vel))| {
+                gizmos.push(Gizmo::Line {
+                    origin: **pos,
+                    color: Color::blue(),
+                    dir: **vel,
+                    radius: 0.01,
+                    corner_radius: 1.0,
+                });
+            });
 
         Ok(())
     }

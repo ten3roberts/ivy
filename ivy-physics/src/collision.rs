@@ -1,20 +1,19 @@
+use ivy_base::Position;
 use ivy_collision::Contact;
 use ultraviolet::Vec3;
 
-use crate::components::*;
-
-pub fn point_vel(p: Vec3, w: AngularVelocity) -> Vec3 {
-    if w.mag_sq() < std::f32::EPSILON {
-        Vec3::default()
-    } else {
-        -p.cross(*w)
-    }
-}
+use crate::{components::*, util::point_vel};
 
 /// Generates an impulse for solving a collision.
-pub fn resolve_collision(intersection: &Contact, a: &RbQuery, b: &RbQuery) -> Vec3 {
-    let ra = intersection.points[0] - **a.pos;
-    let rb = intersection.points[1] - **b.pos;
+pub fn resolve_collision(
+    intersection: &Contact,
+    a: &RbQuery,
+    a_pos: Position,
+    b: &RbQuery,
+    b_pos: Position,
+) -> Vec3 {
+    let ra = intersection.points[0] - *a_pos;
+    let rb = intersection.points[1] - *b_pos;
     let aw = *a.ang_vel;
     let bw = *b.ang_vel;
     let n = intersection.normal;

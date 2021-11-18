@@ -1,6 +1,6 @@
 use derive_for::*;
 use derive_more::*;
-use hecs::Query;
+use hecs::{Bundle, Query};
 use ivy_random::Random;
 use ultraviolet::{Bivec3, Mat4, Rotor3, Vec2, Vec3};
 
@@ -107,7 +107,7 @@ impl<'a> From<TransformQuery<'a>> for TransformMatrix {
     }
 }
 
-#[derive(Query, AsRef, PartialEq, Debug)]
+#[derive(Query, AsRef, PartialEq, Debug, Copy, Clone)]
 /// Represents a query for Position, Rotation, and Scale.
 /// Can easily be converted into a TransformMatrix.
 pub struct TransformQuery<'a> {
@@ -117,6 +117,44 @@ pub struct TransformQuery<'a> {
 }
 
 impl<'a> TransformQuery<'a> {
+    /// Converts the query into a transform matrix
+    pub fn into_matrix(&self) -> TransformMatrix {
+        TransformMatrix::new(*self.pos, *self.rot, *self.scale)
+    }
+
+    pub fn into_owned(&self) -> TransformBundle {
+        TransformBundle {
+            pos: *self.pos,
+            rot: *self.rot,
+            scale: *self.scale,
+        }
+    }
+}
+
+#[derive(Bundle, AsRef, PartialEq, Debug, Copy, Clone)]
+pub struct TransformBundle {
+    pub pos: Position,
+    pub rot: Rotation,
+    pub scale: Scale,
+}
+
+impl TransformBundle {
+    /// Converts the query into a transform matrix
+    pub fn into_matrix(&self) -> TransformMatrix {
+        TransformMatrix::new(self.pos, self.rot, self.scale)
+    }
+}
+
+#[derive(Query, AsRef, PartialEq, Debug)]
+/// Represents a query for Position, Rotation, and Scale.
+/// Can easily be converted into a TransformMatrix.
+pub struct TransformQueryMut<'a> {
+    pub pos: &'a mut Position,
+    pub rot: &'a mut Rotation,
+    pub scale: &'a mut Scale,
+}
+
+impl<'a> TransformQueryMut<'a> {
     /// Converts the query into a transform matrix
     pub fn into_matrix(&self) -> TransformMatrix {
         TransformMatrix::new(*self.pos, *self.rot, *self.scale)

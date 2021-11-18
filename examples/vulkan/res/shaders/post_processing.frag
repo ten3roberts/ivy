@@ -36,7 +36,7 @@ layout(binding = 6) uniform LightSceneData {
 } lightSceneData;
 
 layout(binding = 7) readonly buffer LightBufferData {
-	LightData lights[]; 
+	LightData lights[];
 } lightBuffer;
 
 
@@ -136,8 +136,8 @@ vec3 PBR(vec3 albedo, vec3 pos, vec3 normal, float roughness, float metallic) {
 
 		vec3 fresnel = FresnelSchlick(max(dot(halfway, cameraDir), 0.0), F0);
 
-		float NDF = DistributionGGX(normal, halfway, roughness);       
-		float G   = GeometrySmith(normal, cameraDir, lightDir, roughness);       
+		float NDF = DistributionGGX(normal, halfway, roughness);
+		float G   = GeometrySmith(normal, cameraDir, lightDir, roughness);
 
 		vec3 numerator    = NDF * G * fresnel;
 		float denominator = 4.0 * max(dot(normal, cameraDir), 0.0) * max(dot(normal, lightDir), 0.0)  + 0.0001;
@@ -148,7 +148,7 @@ vec3 PBR(vec3 albedo, vec3 pos, vec3 normal, float roughness, float metallic) {
 
 		kD *= 1.0 - metallic;
 
-		float ndotL = max(dot(normal, lightDir), 0.0);        
+		float ndotL = max(dot(normal, lightDir), 0.0);
 
 
 		Lo += (kD * albedo / PI + specular) * radiance * ndotL;
@@ -158,7 +158,6 @@ vec3 PBR(vec3 albedo, vec3 pos, vec3 normal, float roughness, float metallic) {
 }
 
 void main() {
-	vec3 albedo = subpassLoad(albedoBuffer).xyz;
 
 	float depth = subpassLoad(depthInput).x;
 
@@ -167,13 +166,14 @@ void main() {
 		return;
 	}
 
+	vec3 albedo = subpassLoad(albedoBuffer).xyz;
+
 	vec2 roughnessMetallic = subpassLoad(roughnessMetallicBuffer).xy;
 	float roughness = roughnessMetallic.x;
 	float metallic = roughnessMetallic.y;
 
 	vec3 normal = subpassLoad(normalBuffer).xyz;
 	vec3 pos = subpassLoad(posBuffer).xyz;
-
 
 	vec3 color = vec3(0);
 

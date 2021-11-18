@@ -26,17 +26,16 @@ struct Satisfied;
 
 pub fn satisfy_objects(world: &mut World) {
     let entities = world
-        .query_mut::<(Option<&Position>, Option<&Rotation>, Option<&Scale>)>()
+        .query_mut::<(&Position, Option<&Rotation>, Option<&Scale>)>()
         .without::<Satisfied>()
         .into_iter()
-        .map(|(e, (p, r, s))| (e, p.cloned(), r.cloned(), s.cloned()))
+        .map(|(e, (_, r, s))| (e, r.cloned(), s.cloned()))
         .collect::<Vec<_>>();
 
-    entities.into_iter().for_each(|(e, p, r, s)| {
+    entities.into_iter().for_each(|(e, r, s)| {
         let _ = world.insert(
             e,
             (
-                p.unwrap_or_default(),
                 r.unwrap_or_default(),
                 s.unwrap_or_else(|| Scale::new(1.0, 1.0, 1.0)),
                 Satisfied,

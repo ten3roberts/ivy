@@ -1,9 +1,7 @@
 use std::{any, mem};
 
 use hecs::{Entity, World};
-use ivy_base::{
-    DrawGizmos, Events, Gizmos, Position, Rotation, Scale, TimedScope, TransformMatrix,
-};
+use ivy_base::{DrawGizmos, Events, Gizmos, Position, Rotation, Scale, TransformMatrix};
 use slotmap::SlotMap;
 use smallvec::{Array, SmallVec};
 use ultraviolet::Vec3;

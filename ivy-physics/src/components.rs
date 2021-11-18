@@ -3,12 +3,12 @@ use core::f32;
 use derive_for::derive_for;
 use derive_more::*;
 use hecs::*;
-use ivy_base::Position;
 use ivy_random::Random;
 use ultraviolet::Vec3;
 
 derive_for!(
     (
+        PartialEq,
         Add,
         Clone,
         Copy,
@@ -67,14 +67,43 @@ impl AngularVelocity {
     }
 }
 
-#[derive(Query)]
+#[derive(Query, Clone, Copy, Debug, PartialEq)]
 pub struct RbQuery<'a> {
-    pub pos: &'a Position,
     pub resitution: &'a Resitution,
     pub vel: &'a Velocity,
     pub ang_vel: &'a AngularVelocity,
     pub mass: &'a Mass,
     pub ang_mass: &'a AngularMass,
+}
+
+impl<'a> RbQuery<'a> {
+    pub fn into_owned(&self) -> RbBundle {
+        RbBundle {
+            resitution: *self.resitution,
+            vel: *self.vel,
+            ang_vel: *self.ang_vel,
+            mass: *self.mass,
+            ang_mass: *self.ang_mass,
+        }
+    }
+}
+
+#[derive(Bundle, Clone, Copy, Debug, PartialEq)]
+pub struct RbBundle {
+    pub resitution: Resitution,
+    pub vel: Velocity,
+    pub ang_vel: AngularVelocity,
+    pub mass: Mass,
+    pub ang_mass: AngularMass,
+}
+
+#[derive(Query, PartialEq)]
+pub struct RbQueryMut<'a> {
+    pub resitution: &'a mut Resitution,
+    pub vel: &'a mut Velocity,
+    pub ang_vel: &'a mut AngularVelocity,
+    pub mass: &'a mut Mass,
+    pub ang_mass: &'a mut AngularMass,
 }
 
 /// Manages the forces applied to an entity

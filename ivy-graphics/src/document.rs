@@ -1,8 +1,6 @@
 use crate::{Error, Material, Mesh, Result};
 use std::{borrow::Cow, path::Path, path::PathBuf, sync::Arc};
 
-use gltf::Gltf;
-use ivy_base::TimedScope;
 use ivy_resources::{Handle, LoadResource, Resources};
 use ivy_vulkan::{Texture, VulkanContext};
 use ultraviolet::*;
@@ -63,7 +61,6 @@ impl Document {
         O: Into<PathBuf>,
     {
         let (document, buffers, _images) = {
-            let _scope = TimedScope::new(|elapsed| eprintln!("Gltf import took {:.3?}", elapsed));
             gltf::import(&path).map_err(|e| Error::GltfImport(e, Some(path.to_owned().into())))
         }?;
 
@@ -78,16 +75,11 @@ impl Document {
         document: gltf::Document,
         buffers: &[gltf::buffer::Data],
     ) -> Result<Self> {
-        let _scope = TimedScope::new(|elapsed| eprintln!("Document loading took {:.3?}", elapsed));
-
         let mut texture_cache = resources.fetch_mut::<Texture>()?;
 
         let textures = document
             .textures()
             .map(|val| {
-                let _scope =
-                    TimedScope::new(|elapsed| eprintln!("Texture loading took {:.3?}", elapsed));
-
                 let data = val.source().source();
                 let texture = match data {
                     gltf::image::Source::View { view, mime_type: _ } => {
@@ -112,8 +104,6 @@ impl Document {
         let materials = document
             .materials()
             .map(|material| {
-                let _scope =
-                    TimedScope::new(|elapsed| eprintln!("Material loading took {:.3?}", elapsed));
                 Material::from_gltf(context.clone(), material, &textures, resources)
                     .map(|material| material_cache.insert(material))
             })
@@ -125,8 +115,6 @@ impl Document {
         let meshes = document
             .meshes()
             .map(|mesh| {
-                let _scope =
-                    TimedScope::new(|elapsed| eprintln!("Mesh loading took {:.3?}", elapsed));
                 Mesh::from_gltf(context.clone(), mesh, buffers, &materials)
                     .map(|mesh| mesh_cache.insert(mesh))
             })

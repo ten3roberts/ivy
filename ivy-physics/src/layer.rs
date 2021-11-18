@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use crate::systems;
 use anyhow::Context;
 use hecs::World;
-use ivy_base::{Color, DrawGizmos, Events, Layer, TimedScope};
+use ivy_base::{Color, DrawGizmos, Events, Layer};
 use ivy_collision::{Collision, CollisionTree, Node, Object};
 use ivy_resources::{Resources, Storage};
 
@@ -43,9 +43,9 @@ impl<N: Node + Storage + DrawGizmos> Layer for PhysicsLayer<N> {
     ) -> anyhow::Result<()> {
         // let _scope = TimedScope::new(|elapsed| eprintln!("Physics layer took {:.3?}", elapsed));
         let dt = frame_time.as_secs_f32();
+        systems::satisfy_objects(world);
         systems::integrate_angular_velocity(world, dt);
         systems::integrate_velocity(world, dt);
-        systems::satisfy_objects(world);
 
         let mut tree = resources
             .get_default_mut::<CollisionTree<N>>()
@@ -64,6 +64,9 @@ impl<N: Node + Storage + DrawGizmos> Layer for PhysicsLayer<N> {
         systems::resolve_collisions(world, self.rx.try_iter())?;
 
         systems::apply_effectors(world, dt);
+
+        crate::connections::update_connections(world)
+            .context("Failed to update physics connections")?;
 
         Ok(())
     }
