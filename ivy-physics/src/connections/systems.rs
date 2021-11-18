@@ -1,7 +1,7 @@
 use crate::Result;
 use hecs::*;
 use hecs_hierarchy::*;
-use ivy_base::{TransformQuery, TransformQueryMut};
+use ivy_base::{Color, Gizmos, Position, TransformQuery, TransformQueryMut};
 
 use super::*;
 
@@ -68,4 +68,43 @@ fn update_subtree(world: &World, root: Entity) -> Result<()> {
     } else {
         Ok(())
     }
+}
+
+/// Recursively draw the connection tree using gizmos
+pub fn draw_connections(world: &World, gizmos: &mut Gizmos) -> Result<()> {
+    world
+        .roots::<Connection>()
+        .into_iter()
+        .try_for_each(|root| draw_subtree(world, root.0, gizmos))
+}
+
+fn draw_subtree(world: &World, root: Entity, gizmos: &mut Gizmos) -> Result<()> {
+    let parent_pos = world.get::<Position>(root)?;
+
+    world
+        .children::<Connection>(root)
+        .try_for_each(|child| -> Result<()> {
+            let mut query = world.query_one::<(&Position, &ConnectionKind)>(child)?;
+            let (pos, kind) = query
+                .get()
+                .expect("Failed to execute query in draw_connections");
+
+            let color = match kind {
+                ConnectionKind::Rigid => Color::green(),
+                ConnectionKind::Spring {
+                    strength: _,
+                    dampening: _,
+                } => Color::red(),
+            };
+
+            gizmos.push(ivy_base::Gizmo::Line {
+                origin: **parent_pos,
+                color,
+                dir: *(*pos - *parent_pos),
+                radius: 0.02,
+                corner_radius: 1.0,
+            });
+
+            draw_subtree(world, child, gizmos)
+        })
 }

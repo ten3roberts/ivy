@@ -27,7 +27,7 @@ use ivy_resources::Resources;
 use parking_lot::RwLock;
 use physics::{
     components::{AngularMass, AngularVelocity, Effector, Mass, Resitution, Velocity},
-    connections::{Connection, ConnectionKind, OffsetPosition, OffsetRotation},
+    connections::{draw_connections, Connection, ConnectionKind, OffsetPosition, OffsetRotation},
     PhysicsLayer,
 };
 use postprocessing::pbr::{create_pbr_pipeline, PBRInfo};
@@ -432,7 +432,7 @@ fn setup_objects(
     let material = resources.load::<Material, _, _, _>(MaterialInfo {
         albedo: "./res/textures/metal.png".into(),
         sampler: SamplerInfo::default(),
-        roughness: 0.01,
+        roughness: 0.1,
         metallic: 1.0,
     })??;
 
@@ -450,26 +450,26 @@ fn setup_objects(
     let sphere_object = world.spawn((
         Collider::new(Sphere::new(1.0)),
         Color::rgb(1.0, 1.0, 1.0),
-        Mass(20.0),
+        Mass(200.0),
         Velocity::default(),
         Position::new(0.0, 0.6, -1.2),
         Scale::uniform(1.0),
         material,
         // Rotation::euler_angles(0.0, 1.0, 1.0),
-        Mover::new(
-            InputVector {
-                x: InputAxis::keyboard(Key::L, Key::H),
-                y: InputAxis::keyboard(Key::K, Key::J),
-                z: InputAxis::keyboard(Key::I, Key::O),
-            },
-            InputVector {
-                x: InputAxis::none(),
-                y: InputAxis::keyboard(Key::Down, Key::Up),
-                z: InputAxis::keyboard(Key::Left, Key::Right),
-            },
-            1.0,
-            false,
-        ),
+        // Mover::new(
+        //     InputVector {
+        //         x: InputAxis::keyboard(Key::L, Key::H),
+        //         y: InputAxis::keyboard(Key::K, Key::J),
+        //         z: InputAxis::keyboard(Key::I, Key::O),
+        //     },
+        //     InputVector {
+        //         x: InputAxis::none(),
+        //         y: InputAxis::keyboard(Key::Down, Key::Up),
+        //         z: InputAxis::keyboard(Key::Left, Key::Right),
+        //     },
+        //     1.0,
+        //     false,
+        // ),
         sphere_mesh,
         assets.geometry_pass,
     ));
@@ -488,7 +488,7 @@ fn setup_objects(
             AngularMass(1.0),
             OffsetPosition::new(0.0, 3.0, 0.0),
             Position::default(),
-            PointLight::new(0.2, Vec3::new(0.0, 0.0, 500.0)),
+            PointLight::new(0.2, Vec3::new(0.0, 0.0, 5000.0)),
         ),
     )?;
 
@@ -496,8 +496,8 @@ fn setup_objects(
         light,
         (
             ConnectionKind::Spring {
-                strength: 200.0,
-                dampening: 10.0,
+                strength: 10.0,
+                dampening: 5.0,
             },
             OffsetRotation::euler_angles(1.0, 0.0, 0.0),
             Mass(20.0),
@@ -511,6 +511,21 @@ fn setup_objects(
         ),
     )?;
 
+    world.attach_new::<Connection, _>(
+        light,
+        (
+            ConnectionKind::Rigid,
+            OffsetRotation::euler_angles(0.0, 0.0, 0.0),
+            Mass(1.0),
+            assets.geometry_pass,
+            OffsetPosition::new(-1.0, 0.0, 2.0),
+            sphere_mesh,
+            material, // This mesh doesn't include materials
+            Position::default(),
+            Scale::uniform(0.3),
+            Collider::new(Sphere::new(1.0)),
+        ),
+    )?;
     let mut rng = StdRng::seed_from_u64(43);
 
     const COUNT: usize = 64;
@@ -681,7 +696,7 @@ impl Layer for LogicLayer {
 
         let tree = resources.get_default::<CollisionTree<CollisionNode>>()?;
 
-        gizmos.begin_section("ray casting");
+        gizmos.begin_section("Ray Casting");
         if self.input.mouse_button(MouseButton::Button1) {
             // let _scope = TimedScope::new(|elapsed| eprintln!("Ray casting took {:.3?}", elapsed));
 
@@ -733,7 +748,7 @@ impl Layer for LogicLayer {
             graphics::systems::update_view_matrices(world);
         }
 
-        gizmos.begin_section("velocity");
+        gizmos.begin_section("Velocity");
         world
             .query::<(&Position, &Velocity)>()
             .iter()
@@ -746,6 +761,8 @@ impl Layer for LogicLayer {
                     corner_radius: 1.0,
                 });
             });
+
+        draw_connections(world, &mut gizmos)?;
 
         Ok(())
     }
