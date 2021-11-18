@@ -25,17 +25,25 @@ fn update_subtree(world: &World, root: Entity) -> Result<()> {
             .try_for_each(|child| -> Result<()> {
                 let mut query = world.query_one::<(
                     &OffsetPosition,
+                    &OffsetRotation,
                     TransformQueryMut,
                     RbQueryMut,
                     &ConnectionKind,
                     &mut Effector,
                 )>(child)?;
 
-                if let Some((offset, child_trans, child_rb, connection_kind, effector)) =
-                    query.get()
+                if let Some((
+                    offset_pos,
+                    offset_rot,
+                    child_trans,
+                    child_rb,
+                    connection_kind,
+                    effector,
+                )) = query.get()
                 {
                     connection_kind.update(
-                        offset,
+                        offset_pos,
+                        offset_rot,
                         child_trans,
                         child_rb,
                         &parent_trans,

@@ -27,7 +27,7 @@ use ivy_resources::Resources;
 use parking_lot::RwLock;
 use physics::{
     components::{AngularMass, AngularVelocity, Effector, Mass, Resitution, Velocity},
-    connections::{Connection, ConnectionKind, OffsetPosition},
+    connections::{Connection, ConnectionKind, OffsetPosition, OffsetRotation},
     PhysicsLayer,
 };
 use postprocessing::pbr::{create_pbr_pipeline, PBRInfo};
@@ -482,6 +482,7 @@ fn setup_objects(
                 dampening: 5.0,
             },
             Mass(1.0),
+            OffsetRotation::default(),
             Velocity::default(),
             AngularVelocity::default(),
             AngularMass(1.0),
@@ -495,6 +496,7 @@ fn setup_objects(
         light,
         (
             ConnectionKind::Rigid,
+            OffsetRotation::from_euler_angles(1.0, 0.0, 0.0),
             assets.geometry_pass,
             OffsetPosition::new(1.0, 0.0, 0.0),
             cube_mesh,
