@@ -2,7 +2,6 @@ use core::f32;
 
 use derive_for::derive_for;
 use derive_more::*;
-use hecs::*;
 use ivy_random::Random;
 use ultraviolet::Vec3;
 
@@ -80,68 +79,6 @@ impl AngularVelocity {
     pub fn new(x: f32, y: f32, z: f32) -> Self {
         Self(Vec3::new(x, y, z))
     }
-}
-
-#[derive(Query, Clone, Copy, Debug, PartialEq)]
-pub struct RbQuery<'a> {
-    pub resitution: &'a Resitution,
-    pub vel: &'a Velocity,
-    pub ang_vel: &'a AngularVelocity,
-    pub mass: &'a Mass,
-    pub ang_mass: &'a AngularMass,
-    pub effector: &'a Effector,
-}
-
-impl<'a> RbQuery<'a> {
-    pub fn into_owned(&self) -> RbBundle {
-        RbBundle {
-            resitution: *self.resitution,
-            vel: *self.vel,
-            ang_vel: *self.ang_vel,
-            mass: *self.mass,
-            ang_mass: *self.ang_mass,
-            effector: self.effector.clone(),
-        }
-    }
-}
-
-#[derive(Default, Bundle, Debug)]
-/// Bundle for all things neccessary for all things physics
-pub struct RbBundle {
-    pub vel: Velocity,
-    pub mass: Mass,
-    pub ang_mass: AngularMass,
-    pub ang_vel: AngularVelocity,
-    pub resitution: Resitution,
-    pub effector: Effector,
-}
-
-impl RbBundle {
-    pub fn new(
-        mass: Mass,
-        vel: Velocity,
-        ang_vel: AngularVelocity,
-        ang_mass: AngularMass,
-        resitution: Resitution,
-    ) -> Self {
-        Self {
-            vel,
-            mass,
-            ang_vel,
-            ang_mass,
-            resitution,
-            effector: Default::default(),
-        }
-    }
-}
-
-#[derive(Query, PartialEq)]
-pub struct RbQueryMut<'a> {
-    pub resitution: &'a mut Resitution,
-    pub vel: &'a mut Velocity,
-    pub ang_vel: &'a mut AngularVelocity,
-    pub mass: &'a mut Mass,
-    pub ang_mass: &'a mut AngularMass,
 }
 
 /// Manages the forces applied to an entity.

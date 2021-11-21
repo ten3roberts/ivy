@@ -1,15 +1,15 @@
-use crate::collision::resolve_collision;
-use crate::components::*;
-use crate::connections::Connection;
-use crate::connections::ConnectionKind;
-use crate::Result;
-use hecs::Entity;
-use hecs::World;
+use crate::{
+    bundles::*,
+    collision::resolve_collision,
+    components::*,
+    connections::{Connection, ConnectionKind},
+    Result,
+};
+use hecs::{Entity, World};
 use hecs_hierarchy::Hierarchy;
 use ivy_base::{Position, Rotation};
 use ivy_collision::Collision;
-use ultraviolet::Bivec3;
-use ultraviolet::Rotor3;
+use ultraviolet::{Bivec3, Rotor3};
 
 use crate::components::{AngularVelocity, Velocity};
 

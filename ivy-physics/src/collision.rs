@@ -2,7 +2,7 @@ use ivy_base::Position;
 use ivy_collision::Contact;
 use ultraviolet::Vec3;
 
-use crate::{components::*, util::point_vel};
+use crate::{bundles::*, util::point_vel};
 
 /// Generates an impulse for solving a collision.
 pub fn resolve_collision(

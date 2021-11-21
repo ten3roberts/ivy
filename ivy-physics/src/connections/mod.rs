@@ -7,10 +7,7 @@ mod systems;
 pub use systems::*;
 use ultraviolet::{Bivec3, Rotor3, Vec3};
 
-use crate::{
-    components::{Effector, RbBundle, RbQuery, RbQueryMut, Velocity},
-    util::point_vel,
-};
+use crate::{bundles::*, components::*, util::point_vel};
 
 derive_for!(
     (

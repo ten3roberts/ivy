@@ -1,3 +1,4 @@
+pub mod bundles;
 pub mod collision;
 pub mod components;
 pub mod connections;
@@ -6,5 +7,6 @@ mod layer;
 pub mod systems;
 pub mod util;
 
+pub use bundles::*;
 pub use error::*;
 pub use layer::*;

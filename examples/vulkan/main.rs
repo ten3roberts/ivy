@@ -26,7 +26,8 @@ use ivy::{
 use ivy_resources::Resources;
 use parking_lot::RwLock;
 use physics::{
-    components::{AngularMass, AngularVelocity, Effector, Mass, RbBundle, Velocity},
+    bundles::*,
+    components::{AngularMass, AngularVelocity, Effector, Mass, Velocity},
     connections::{
         draw_connections, Connection, ConnectionBundle, ConnectionKind, PositionOffset,
         RotationOffset,
@@ -46,7 +47,7 @@ use log::*;
 
 const FRAMES_IN_FLIGHT: usize = 2;
 
-type CollisionNode = BinaryNode<[Object; 16]>;
+type CollisionNode = BinaryNode<[Object; 8]>;
 
 struct WithTime<T> {
     func: Box<dyn Fn(Entity, &mut T, f32, f32) + Send + Sync>,
@@ -452,22 +453,20 @@ fn setup_objects(
 
     let mut builder = EntityBuilder::new();
     builder
-        .add_bundle(RbBundle {
+        .add_bundle(RbColliderBundle {
             mass: Mass(100.0),
+            collider: Collider::new(Sphere::new(1.0)),
             ..Default::default()
         })
-        .add_bundle(TransformBundle {
+        .add_bundle(ObjectBundle {
             pos: Position::new(0.0, 0.6, -1.2),
             scale: Scale::uniform(0.5),
-            ..Default::default()
-        })
-        .add_bundle((
+            pass: assets.geometry_pass,
+            mesh: sphere_mesh,
             material,
-            sphere_mesh,
-            Collider::new(Sphere::new(1.0)),
-            assets.geometry_pass,
-            Color::red(),
-        ));
+            color: Color::red(),
+            ..Default::default()
+        });
 
     let sphere = world.spawn(builder.build());
 
@@ -492,43 +491,44 @@ fn setup_objects(
 
     let mut builder = EntityBuilder::new();
     builder
-        .add_bundle(TransformBundle {
+        .add_bundle(ObjectBundle {
             scale: Scale::uniform(0.25),
+            mesh: cube_mesh,
+            pass: assets.geometry_pass,
             ..Default::default()
         })
-        .add_bundle(RbBundle {
+        .add_bundle(RbColliderBundle {
             mass: Mass(10.0),
+            collider: Collider::new(Cube::uniform(1.0)),
             ..Default::default()
         })
         .add_bundle(ConnectionBundle::new(
             ConnectionKind::spring(10.0, 3.0),
             PositionOffset::new(2.0, 1.0, 0.0),
             RotationOffset::default(),
-        ))
-        .add_bundle((cube_mesh, assets.geometry_pass))
-        .add(Collider::new(Cube::uniform(1.0)));
+        ));
 
     world.attach_new::<Connection, _>(light, builder.build())?;
 
     let mut builder = EntityBuilder::new();
 
     builder
-        .add_bundle(TransformBundle {
+        .add_bundle(ObjectBundle {
             scale: Scale::uniform(0.25),
+            mesh: sphere_mesh,
+            pass: assets.geometry_pass,
+            material,
             ..Default::default()
         })
-        .add_bundle(RbBundle::default())
+        .add_bundle(RbColliderBundle {
+            collider: Collider::new(Sphere::new(1.0)),
+            mass: Mass(2.0),
+            ..Default::default()
+        })
         .add_bundle(ConnectionBundle::new(
             ConnectionKind::Rigid,
             PositionOffset::new(-1.0, 0.0, 2.0),
             Default::default(),
-        ))
-        .add_bundle((
-            sphere_mesh,
-            material,
-            assets.geometry_pass,
-            Color::white(),
-            Collider::new(Sphere::new(1.0)),
         ));
 
     world.attach_new::<Connection, _>(light, builder.build())?;
@@ -540,12 +540,15 @@ fn setup_objects(
         let pos = Position::rand_uniform(&mut rng) * 10.0;
         let vel = Velocity::rand_uniform(&mut rng);
         builder
-            .add_bundle(TransformBundle {
+            .add_bundle(ObjectBundle {
+                mesh: cube_mesh,
+                pass: assets.geometry_pass,
                 scale: Scale::uniform(0.5),
                 pos,
                 ..Default::default()
             })
-            .add_bundle(RbBundle {
+            .add_bundle(RbColliderBundle {
+                collider: Collider::new(Cube::uniform(1.0)),
                 vel,
                 mass: Mass(10.0),
                 ang_mass: AngularMass(2.0),
@@ -555,12 +558,6 @@ fn setup_objects(
                 ConnectionKind::Rigid,
                 PositionOffset::new(-1.0, 0.0, 2.0),
                 Default::default(),
-            ))
-            .add_bundle((
-                cube_mesh,
-                assets.geometry_pass,
-                Color::white(),
-                Collider::new(Cube::uniform(1.0)),
             ));
 
         world.spawn(builder.build());
@@ -761,27 +758,21 @@ impl Layer for LogicLayer {
 
         move_system(world, &self.input);
 
-        {
-            // TODO timed_scope!
-            // let _scope =
-            //     TimedScope::new(|elapsed| log::trace!("--Graphics updating took {:.3?}", elapsed));
+        graphics::systems::update_view_matrices(world);
 
-            graphics::systems::update_view_matrices(world);
-        }
-
-        gizmos.begin_section("Velocity");
-        world
-            .query::<(&Position, &Velocity)>()
-            .iter()
-            .for_each(|(_, (pos, vel))| {
-                gizmos.push(Gizmo::Line {
-                    origin: **pos,
-                    color: Color::blue(),
-                    dir: **vel,
-                    radius: 0.01,
-                    corner_radius: 1.0,
-                });
-            });
+        // gizmos.begin_section("Velocity");
+        // world
+        //     .query::<(&Position, &Velocity)>()
+        //     .iter()
+        //     .for_each(|(_, (pos, vel))| {
+        //         gizmos.push(Gizmo::Line {
+        //             origin: **pos,
+        //             color: Color::blue(),
+        //             dir: **vel,
+        //             radius: 0.01,
+        //             corner_radius: 1.0,
+        //         });
+        //     });
 
         draw_connections(world, &mut gizmos)?;
 

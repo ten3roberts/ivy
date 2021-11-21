@@ -72,16 +72,7 @@ impl Renderer for MeshRenderer {
             let instance_count = batch.instance_count();
             let first_instance = batch.first_instance();
 
-            if let Some(material) = key.material {
-                let material = materials.get(material)?;
-                cmd.bind_descriptor_sets(
-                    batch.layout(),
-                    sets.len() as u32,
-                    &[frame_set, material.set(current_frame)],
-                    &[],
-                );
-                cmd.draw_indexed(mesh.index_count(), instance_count, 0, 0, first_instance);
-            } else {
+            if !primitives.is_empty() {
                 primitives.iter().try_for_each(|val| -> Result<()> {
                     let material = materials.get(val.material)?;
 
@@ -102,6 +93,15 @@ impl Renderer for MeshRenderer {
 
                     Ok(())
                 })?;
+            } else if !key.material.is_null() {
+                let material = materials.get(key.material)?;
+                cmd.bind_descriptor_sets(
+                    batch.layout(),
+                    sets.len() as u32,
+                    &[frame_set, material.set(current_frame)],
+                    &[],
+                );
+                cmd.draw_indexed(mesh.index_count(), instance_count, 0, 0, first_instance);
             }
         }
 
@@ -137,13 +137,13 @@ impl<'a> Into<ObjectData> for ObjectDataQuery<'a> {
 #[derive(Query, PartialEq, Eq)]
 struct KeyQuery<'a> {
     mesh: &'a Handle<Mesh>,
-    material: Option<&'a Handle<Material>>,
+    material: &'a Handle<Material>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct Key {
     mesh: Handle<Mesh>,
-    material: Option<Handle<Material>>,
+    material: Handle<Material>,
 }
 
 impl<'a> crate::KeyQuery for KeyQuery<'a> {
@@ -152,7 +152,7 @@ impl<'a> crate::KeyQuery for KeyQuery<'a> {
     fn into_key(&self) -> Self::K {
         Self::K {
             mesh: *self.mesh,
-            material: self.material.cloned(),
+            material: *self.material,
         }
     }
 }
