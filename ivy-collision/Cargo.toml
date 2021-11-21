@@ -1,6 +1,6 @@
 [package]
 name = "ivy-collision"
-version = "1.8.0"
+version = "1.9.0"
 edition = "2018"
 description = "3D collision crate for Ivy"
 
