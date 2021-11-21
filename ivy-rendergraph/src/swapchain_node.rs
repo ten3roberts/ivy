@@ -125,7 +125,7 @@ impl Node for SwapchainNode {
     }
 
     fn debug_name(&self) -> &'static str {
-        "swapchain node"
+        "Swapchain Node"
     }
 
     fn execute(

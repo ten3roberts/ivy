@@ -65,8 +65,16 @@ impl Color {
         Self::rgba(0.0, 1.0, 0.0, 1.0)
     }
 
+    pub fn dark_green() -> Self {
+        Self::rgba(0.0, 0.0, 0.5, 1.0)
+    }
+
     pub fn blue() -> Self {
         Self::rgba(0.0, 0.0, 1.0, 1.0)
+    }
+
+    pub fn dark_blue() -> Self {
+        Self::rgba(0.0, 0.5, 0.0, 1.0)
     }
 
     pub fn cyan() -> Self {
@@ -75,6 +83,10 @@ impl Color {
 
     pub fn magenta() -> Self {
         Self::rgba(1.0, 0.0, 1.0, 1.0)
+    }
+
+    pub fn purple() -> Self {
+        Self::rgba(0.5, 0.0, 0.5, 1.0)
     }
 
     pub fn yellow() -> Self {

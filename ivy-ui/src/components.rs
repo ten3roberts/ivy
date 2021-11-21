@@ -1,6 +1,14 @@
+use std::borrow::Cow;
+
+use crate::{constraints::*, Canvas, Font, Image, Text};
 use derive_for::*;
 use derive_more::*;
 pub use fontdue::layout::{HorizontalAlign, VerticalAlign};
+use hecs::Bundle;
+use ivy_base::{Color, Position2D, Size2D};
+use ivy_graphics::Camera;
+use ivy_resources::Handle;
+use ultraviolet::Vec2;
 
 derive_for!(
     (
@@ -29,6 +37,135 @@ derive_for!(
     pub struct WidgetDepth(pub u32);
 );
 
+/// Bundle for widgets.
+/// Use further bundles for images and texts
+#[derive(Bundle, Clone, Debug, Default)]
+pub struct WidgetBundle {
+    pub widget: Widget,
+    pub depth: WidgetDepth,
+    pub abs_offset: AbsoluteOffset,
+    pub rel_offset: RelativeOffset,
+    pub abs_size: AbsoluteSize,
+    pub rel_size: RelativeSize,
+    pub origin: Origin2D,
+    pub aspect: Aspect,
+    pub pos: Position2D,
+    pub size: Size2D,
+}
+
+impl WidgetBundle {
+    pub fn new(
+        abs_offset: AbsoluteOffset,
+        rel_offset: RelativeOffset,
+        abs_size: AbsoluteSize,
+        rel_size: RelativeSize,
+        origin: Origin2D,
+        aspect: Aspect,
+    ) -> Self {
+        Self {
+            widget: Widget,
+            depth: WidgetDepth(0),
+            abs_offset,
+            rel_offset,
+            abs_size,
+            rel_size,
+            origin,
+            aspect,
+            pos: Default::default(),
+            size: Default::default(),
+        }
+    }
+}
+
+/// Bundle for widgets.
+/// Use further bundles for images and texts
+#[derive(Bundle, Clone, Debug, Default)]
+pub struct CanvasBundle {
+    pub widget: Widget,
+    pub depth: WidgetDepth,
+    pub abs_offset: AbsoluteOffset,
+    pub rel_offset: RelativeOffset,
+    pub abs_size: AbsoluteSize,
+    pub rel_size: RelativeSize,
+    pos: Position2D,
+    size: Size2D,
+    pub origin: Origin2D,
+    pub aspect: Aspect,
+    pub canvas: Canvas,
+    pub camera: Camera,
+}
+
+impl CanvasBundle {
+    pub fn new<E: Into<Vec2>>(extent: E) -> Self {
+        Self {
+            abs_size: AbsoluteSize(extent.into()),
+            ..Default::default()
+        }
+    }
+}
+
+#[derive(Bundle, Clone, Debug, Default)]
+/// Specialize widget into an image
+pub struct ImageBundle<T> {
+    pub image: Handle<Image>,
+    pub color: Color,
+    pub pass: Handle<T>,
+}
+
+impl<T> ImageBundle<T> {
+    pub fn new(image: Handle<Image>, color: Color, pass: Handle<T>) -> Self {
+        Self { image, color, pass }
+    }
+}
+
+#[derive(Bundle, Debug)]
+/// Specialize widget into text
+pub struct TextBundle<T> {
+    pub text: Text,
+    pub font: Handle<Font>,
+    pub color: Color,
+    pub wrap: WrapStyle,
+    pub align: TextAlignment,
+    pub pass: Handle<T>,
+}
+
+impl<T> Default for TextBundle<T> {
+    fn default() -> Self {
+        Self {
+            text: Default::default(),
+            font: Default::default(),
+            color: Default::default(),
+            wrap: Default::default(),
+            align: Default::default(),
+            pass: Default::default(),
+        }
+    }
+}
+
+impl<T> TextBundle<T> {
+    pub fn new(
+        text: Text,
+        font: Handle<Font>,
+        color: Color,
+        wrap: WrapStyle,
+        align: TextAlignment,
+        pass: Handle<T>,
+    ) -> Self {
+        Self {
+            text,
+            font,
+            color,
+            wrap,
+            align,
+            pass,
+        }
+    }
+
+    pub fn set_text<U: Into<Cow<'static, str>>>(&mut self, val: U) {
+        self.text.set(val)
+    }
+}
+
 /// Marker type specifying that this widget is interactive and will consume
 /// click events and not forward them down. Does not neccessarily mean that the
 /// widget will react to it.
@@ -36,6 +173,7 @@ derive_for!(
 /// which allows for transparent blockers in menus.
 pub struct Interactive;
 /// Marker type for UI and the UI hierarchy.
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct Widget;
 
 /// Marker type specifying that a widget should remain active even after the
@@ -55,6 +193,29 @@ impl TextAlignment {
             horizontal,
             vertical,
         }
+    }
+}
+
+impl std::fmt::Debug for TextAlignment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TextAlignment")
+            .field(
+                "horizontal",
+                match self.horizontal {
+                    HorizontalAlign::Left => &"Left",
+                    HorizontalAlign::Center => &"Center",
+                    HorizontalAlign::Right => &"Right",
+                },
+            )
+            .field(
+                "vertical",
+                match self.vertical {
+                    VerticalAlign::Top => &"Top",
+                    VerticalAlign::Middle => &"Middle",
+                    VerticalAlign::Bottom => &"Bottom",
+                },
+            )
+            .finish()
     }
 }
 
@@ -79,6 +240,6 @@ pub enum WrapStyle {
 
 impl Default for WrapStyle {
     fn default() -> Self {
-        Self::Overflow
+        Self::Word
     }
 }

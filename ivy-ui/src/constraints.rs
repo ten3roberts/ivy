@@ -23,6 +23,7 @@ derive_for!(
     pub struct AbsoluteSize(pub Vec2);
 
     /// Constrains the widget width to a multiple of height.
+    /// If value is zero the aspect is unconstrained.
     pub struct Aspect(pub f32);
 
     /// The offset of the origin from the center of the sprite.
@@ -95,7 +96,7 @@ pub struct ConstraintQuery<'a> {
     pub abs_offset: &'a AbsoluteOffset,
     pub rel_size: &'a RelativeSize,
     pub abs_size: &'a AbsoluteSize,
-    pub aspect: Option<&'a Aspect>,
+    pub aspect: &'a Aspect,
     pub origin: &'a Origin2D,
 }
 

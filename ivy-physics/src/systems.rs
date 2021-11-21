@@ -145,38 +145,3 @@ pub fn apply_effectors(world: &World, dt: f32) {
             effector.clear()
         })
 }
-
-struct Satisfied;
-
-pub fn satisfy_objects(world: &mut World) {
-    let entities = world
-        .query_mut::<(
-            Option<&Effector>,
-            Option<&Velocity>,
-            Option<&AngularVelocity>,
-            Option<&AngularMass>,
-            Option<&Mass>,
-            Option<&Resitution>,
-        )>()
-        .without::<Satisfied>()
-        .into_iter()
-        .map(|(e, (effector, vel, w, wm, m, res))| {
-            (
-                e,
-                (
-                    effector.cloned().unwrap_or_default(),
-                    vel.cloned().unwrap_or_default(),
-                    w.cloned().unwrap_or_default(),
-                    wm.cloned().unwrap_or_default(),
-                    m.cloned().unwrap_or_default(),
-                    res.cloned().unwrap_or_default(),
-                    Satisfied,
-                ),
-            )
-        })
-        .collect::<Vec<_>>();
-
-    entities.into_iter().for_each(|(e, val)| {
-        let _ = world.insert(e, val);
-    })
-}

@@ -2,7 +2,7 @@ use crate::{constraints::*, events::WidgetEvent, InteractiveState, Result};
 use glfw::{Action, Key, WindowEvent};
 use hecs::{Entity, World};
 use hecs_hierarchy::Hierarchy;
-use ivy_base::{Color, Events, Position2D, Size2D};
+use ivy_base::{Events, Position2D, Size2D};
 use ivy_graphics::Camera;
 use ivy_input::InputEvent;
 use ultraviolet::{Mat4, Vec2};
@@ -24,17 +24,12 @@ pub fn update(world: &World) -> Result<()> {
 }
 
 pub fn update_from(world: &World, parent: Entity, depth: u32) -> Result<()> {
-    let mut query = world.query_one::<(&Position2D, &Size2D, Option<&mut WidgetDepth>)>(parent)?;
-    let mut results = query.get().ok_or(hecs::NoSuchEntity)?;
-    let position = *results.0;
-    let size = *results.1;
+    let mut query = world.query_one::<(&Position2D, &Size2D, &mut WidgetDepth)>(parent)?;
+    let (position, size, curr_depth) = query.get().ok_or(hecs::NoSuchEntity)?;
+    let position = *position;
+    let size = *size;
+    *curr_depth = depth.into();
 
-    match results.2.as_mut() {
-        Some(val) => **val = depth.into(),
-        None => {}
-    };
-
-    drop(results);
     drop(query);
 
     world.children::<Widget>(parent).try_for_each(|child| {
@@ -66,8 +61,8 @@ fn apply_constraints(
         + constraints.abs_offset.calculate(parent_size)
         - Position2D(**constraints.origin * **size);
 
-    if let Some(aspect) = constraints.aspect {
-        size.x = size.y * **aspect
+    if **constraints.aspect != 0.0 {
+        size.x = size.y * **constraints.aspect
     }
 
     Ok(())
@@ -75,59 +70,14 @@ fn apply_constraints(
 
 /// Updates the canvas view and projection
 pub fn update_canvas(world: &World, canvas: Entity) -> Result<()> {
-    let mut camera_query =
-        world.query_one::<(&mut Camera, &Size2D, Option<&Position2D>)>(canvas)?;
+    let mut camera_query = world.query_one::<(&mut Camera, &Size2D, &Position2D)>(canvas)?;
 
     let (camera, size, position) = camera_query.get().ok_or(hecs::NoSuchEntity)?;
-    let position = *position.unwrap_or(&Position2D::default());
 
     camera.set_orthographic(size.x * 2.0, size.y * 2.0, 0.0, 100.0);
     camera.set_view(Mat4::from_translation(-position.xyz()));
 
     Ok(())
-}
-
-struct Satisfied;
-
-/// Satisfies all widget by adding missing ModelMatrices, Position2D and Size2D
-pub fn statisfy_widgets(world: &mut World) {
-    let entities = world
-        .query_mut::<(
-            &Widget,
-            Option<&RelativeOffset>,
-            Option<&RelativeSize>,
-            Option<&AbsoluteOffset>,
-            Option<&AbsoluteSize>,
-            Option<&Origin2D>,
-            Option<&Color>,
-        )>()
-        .without::<Satisfied>()
-        .into_iter()
-        .map(
-            |(e, (_, rel_off, rel_size, abs_off, abs_size, origin, color))| {
-                (
-                    e,
-                    (
-                        rel_off.cloned().unwrap_or_default(),
-                        rel_size.cloned().unwrap_or_default(),
-                        abs_off.cloned().unwrap_or_default(),
-                        abs_size.cloned().unwrap_or_default(),
-                        origin.cloned().unwrap_or_default(),
-                        color.cloned().unwrap_or_default(),
-                        Position2D::default(),
-                        Size2D::default(),
-                        WidgetDepth::default(),
-                        Satisfied,
-                    ),
-                )
-            },
-        )
-        .collect::<Vec<_>>();
-
-    entities.into_iter().for_each(|(e, components)| {
-        // Ignore errors, we just collected these entities and thus know they exist.
-        let _ = world.insert(e, components);
-    });
 }
 
 pub fn reactive_system<T: 'static + Copy + Send + Sync, I: Iterator<Item = WidgetEvent>>(

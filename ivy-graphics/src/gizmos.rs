@@ -165,8 +165,6 @@ impl Renderer for GizmoRenderer {
         }
 
         Ok(())
-
-        // cmd.draw_indexed(6, batch.instance_count(), 0, 0, batch.first_instance());
     }
 }
 

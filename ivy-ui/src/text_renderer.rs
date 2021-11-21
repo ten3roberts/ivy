@@ -517,7 +517,7 @@ impl Node for TextUpdateNode {
     }
 
     fn debug_name(&self) -> &'static str {
-        "text update"
+        "Text Update"
     }
 }
 

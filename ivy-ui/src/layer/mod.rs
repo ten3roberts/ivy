@@ -56,7 +56,6 @@ impl Layer for UILayer {
         events: &mut Events,
         _frame_time: std::time::Duration,
     ) -> anyhow::Result<()> {
-        systems::statisfy_widgets(world);
         systems::update(world)?;
 
         let window = resources.get_default::<Window>()?;

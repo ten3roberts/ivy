@@ -26,11 +26,13 @@ derive_for!(
         Div, DivAssign,
         Neg
     );
+    #[derive(Default)]
     #[repr(transparent)]
     pub struct Velocity(pub Vec3);
 
     /// Represents and angular velocity in xyz directions creating an axis and
     /// magnitude.
+    #[derive(Default)]
     #[repr(transparent)]
     pub struct AngularVelocity(pub Vec3);
 
@@ -41,6 +43,7 @@ derive_for!(
     /// Moment of intertia; angular mass and resistance to torque.
     pub struct AngularMass(pub f32);
 
+    #[derive(Default)]
     #[repr(transparent)]
     /// The elasticity of the physics material. A high value means that object is
     /// hard and will bounce back. A value of zero means the energy is absorbed.
@@ -48,6 +51,17 @@ derive_for!(
 
 );
 
+impl Default for Mass {
+    fn default() -> Self {
+        Self(1.0)
+    }
+}
+
+impl Default for AngularMass {
+    fn default() -> Self {
+        Self(1.0)
+    }
+}
 // impl AngularVelocity {
 //     /// Creates an angular velocity from an axis angle rotation. Note: Axis is
 //     /// assumed to be normalized.
@@ -75,6 +89,7 @@ pub struct RbQuery<'a> {
     pub ang_vel: &'a AngularVelocity,
     pub mass: &'a Mass,
     pub ang_mass: &'a AngularMass,
+    pub effector: &'a Effector,
 }
 
 impl<'a> RbQuery<'a> {
@@ -85,17 +100,39 @@ impl<'a> RbQuery<'a> {
             ang_vel: *self.ang_vel,
             mass: *self.mass,
             ang_mass: *self.ang_mass,
+            effector: self.effector.clone(),
         }
     }
 }
 
-#[derive(Bundle, Clone, Copy, Debug, PartialEq)]
+#[derive(Default, Bundle, Debug)]
+/// Bundle for all things neccessary for all things physics
 pub struct RbBundle {
-    pub resitution: Resitution,
     pub vel: Velocity,
-    pub ang_vel: AngularVelocity,
     pub mass: Mass,
     pub ang_mass: AngularMass,
+    pub ang_vel: AngularVelocity,
+    pub resitution: Resitution,
+    pub effector: Effector,
+}
+
+impl RbBundle {
+    pub fn new(
+        mass: Mass,
+        vel: Velocity,
+        ang_vel: AngularVelocity,
+        ang_mass: AngularMass,
+        resitution: Resitution,
+    ) -> Self {
+        Self {
+            vel,
+            mass,
+            ang_vel,
+            ang_mass,
+            resitution,
+            effector: Default::default(),
+        }
+    }
 }
 
 #[derive(Query, PartialEq)]
@@ -114,15 +151,15 @@ pub struct RbQueryMut<'a> {
 /// and non requirement of knowing the dt.
 ///
 /// It is also possible to create a dummy effector to "record" physics effects.
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Effector {
-    net_force: Vec3,
-    net_impulse: Vec3,
-    net_dv: Vec3,
+    force: Vec3,
+    impulse: Vec3,
+    delta_v: Vec3,
 
-    net_torque: Vec3,
-    net_angular_impulse: Vec3,
-    net_dw: Vec3,
+    torque: Vec3,
+    angular_impulse: Vec3,
+    delta_w: Vec3,
 }
 
 impl Effector {
@@ -136,58 +173,58 @@ impl Effector {
     }
 
     pub fn apply_torque(&mut self, torque: Vec3) {
-        self.net_torque += torque;
+        self.torque += torque;
     }
 
     pub fn apply_angular_impulse(&mut self, j: Vec3) {
-        self.net_angular_impulse += j;
+        self.angular_impulse += j;
     }
 
     pub fn apply_angular_velocity_change(&mut self, dw: Vec3) {
-        self.net_dw += dw;
+        self.delta_w += dw;
     }
 
     pub fn apply_force(&mut self, f: Vec3) {
-        self.net_force += f;
+        self.force += f;
     }
 
     pub fn apply_impulse(&mut self, j: Vec3) {
-        self.net_impulse += j
+        self.impulse += j
     }
 
     pub fn apply_velocity_change(&mut self, dv: Vec3) {
-        self.net_dv += dv;
+        self.delta_v += dv;
     }
 
     /// Applies a force at the specified position from center of mass
     pub fn apply_force_at(&mut self, f: Vec3, at: Vec3) {
-        self.net_force += f;
-        self.net_torque += at.cross(f);
+        self.force += f;
+        self.torque += at.cross(f);
     }
 
     /// Applies an impulse at the specified position from center of mass
     pub fn apply_impulse_at(&mut self, impulse: Vec3, at: Vec3) {
-        self.net_impulse += impulse;
-        self.net_angular_impulse += at.cross(impulse);
+        self.impulse += impulse;
+        self.angular_impulse += at.cross(impulse);
     }
 
     /// Applies a velocity change at the specified position from center of mass
     pub fn apply_velocity_change_at(&mut self, dv: Vec3, at: Vec3) {
-        self.net_dv += dv;
-        self.net_dw += at.cross(dv);
+        self.delta_v += dv;
+        self.delta_w += at.cross(dv);
     }
 
     /// Returns the total net effect of forces, impulses, and velocity changes
     /// during `dt`. Note, Effector should be clear afterwards.
     pub fn net_velocity_change(&self, mass: Mass, dt: f32) -> Velocity {
-        Velocity(self.net_force * dt / mass.0 + self.net_impulse / mass.0 + self.net_dv)
+        Velocity(self.force * dt / mass.0 + self.impulse / mass.0 + self.delta_v)
     }
     /// Returns the total net effect of torques, angular impulses, and angular
     /// velocity changes. Note: Effector should be cleared afterwards.
 
     pub fn net_angular_velocity_change(&self, ang_mass: AngularMass, dt: f32) -> AngularVelocity {
         AngularVelocity(
-            self.net_torque * dt / ang_mass.0 + self.net_angular_impulse / ang_mass.0 + self.net_dw,
+            self.torque * dt / ang_mass.0 + self.angular_impulse / ang_mass.0 + self.delta_w,
         )
     }
 }
@@ -197,24 +234,24 @@ impl std::ops::Add<Effector> for Effector {
 
     fn add(self, rhs: Self) -> Self::Output {
         Self {
-            net_force: self.net_force + rhs.net_force,
-            net_impulse: self.net_impulse + rhs.net_impulse,
-            net_dv: self.net_dv + rhs.net_dv,
-            net_torque: self.net_torque + rhs.net_torque,
-            net_angular_impulse: self.net_angular_impulse + rhs.net_angular_impulse,
-            net_dw: self.net_dw + rhs.net_dw,
+            force: self.force + rhs.force,
+            impulse: self.impulse + rhs.impulse,
+            delta_v: self.delta_v + rhs.delta_v,
+            torque: self.torque + rhs.torque,
+            angular_impulse: self.angular_impulse + rhs.angular_impulse,
+            delta_w: self.delta_w + rhs.delta_w,
         }
     }
 }
 
 impl std::ops::AddAssign<Effector> for Effector {
     fn add_assign(&mut self, rhs: Self) {
-        self.net_force += rhs.net_force;
-        self.net_impulse += rhs.net_impulse;
-        self.net_dv += rhs.net_dv;
-        self.net_torque += rhs.net_torque;
-        self.net_angular_impulse += rhs.net_angular_impulse;
-        self.net_dw += rhs.net_dw;
+        self.force += rhs.force;
+        self.impulse += rhs.impulse;
+        self.delta_v += rhs.delta_v;
+        self.torque += rhs.torque;
+        self.angular_impulse += rhs.angular_impulse;
+        self.delta_w += rhs.delta_w;
     }
 }
 
@@ -223,67 +260,37 @@ impl std::ops::Add<&Effector> for Effector {
 
     fn add(self, rhs: &Self) -> Self::Output {
         Self {
-            net_force: self.net_force + rhs.net_force,
-            net_impulse: self.net_impulse + rhs.net_impulse,
-            net_dv: self.net_dv + rhs.net_dv,
-            net_torque: self.net_torque + rhs.net_torque,
-            net_angular_impulse: self.net_angular_impulse + rhs.net_angular_impulse,
-            net_dw: self.net_dw + rhs.net_dw,
+            force: self.force + rhs.force,
+            impulse: self.impulse + rhs.impulse,
+            delta_v: self.delta_v + rhs.delta_v,
+            torque: self.torque + rhs.torque,
+            angular_impulse: self.angular_impulse + rhs.angular_impulse,
+            delta_w: self.delta_w + rhs.delta_w,
         }
     }
 }
 
 impl std::ops::AddAssign<&Effector> for Effector {
     fn add_assign(&mut self, rhs: &Self) {
-        self.net_force += rhs.net_force;
-        self.net_impulse += rhs.net_impulse;
-        self.net_dv += rhs.net_dv;
-        self.net_torque += rhs.net_torque;
-        self.net_angular_impulse += rhs.net_angular_impulse;
-        self.net_dw += rhs.net_dw;
+        self.force += rhs.force;
+        self.impulse += rhs.impulse;
+        self.delta_v += rhs.delta_v;
+        self.torque += rhs.torque;
+        self.angular_impulse += rhs.angular_impulse;
+        self.delta_w += rhs.delta_w;
     }
 }
 
 impl Default for Effector {
     fn default() -> Self {
         Self {
-            net_torque: Vec3::default(),
-            net_angular_impulse: Vec3::default(),
-            net_dw: Vec3::default(),
-            net_force: Vec3::default(),
-            net_impulse: Vec3::default(),
-            net_dv: Vec3::default(),
+            torque: Vec3::default(),
+            angular_impulse: Vec3::default(),
+            delta_w: Vec3::default(),
+            force: Vec3::default(),
+            impulse: Vec3::default(),
+            delta_v: Vec3::default(),
         }
-    }
-}
-
-impl Default for Velocity {
-    fn default() -> Self {
-        Self(Vec3::default())
-    }
-}
-
-impl Default for AngularVelocity {
-    fn default() -> Self {
-        Self(Vec3::default())
-    }
-}
-
-impl Default for Mass {
-    fn default() -> Self {
-        Self(f32::MAX / 4.0)
-    }
-}
-
-impl Default for AngularMass {
-    fn default() -> Self {
-        Self(f32::MAX / 4.0)
-    }
-}
-
-impl Default for Resitution {
-    fn default() -> Self {
-        Self(0.0)
     }
 }
 

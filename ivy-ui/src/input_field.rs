@@ -1,53 +1,29 @@
 use std::borrow::Cow;
 
-use fontdue::layout::{HorizontalAlign, VerticalAlign};
 use glfw::{Action, Key, Modifiers};
-use hecs::{Component, Entity, World};
+use hecs::{Component, Entity, EntityBuilder, World};
 use hecs_hierarchy::Hierarchy;
 use ivy_input::InputEvent;
-use ivy_resources::Handle;
+
 use ultraviolet::Vec2;
 
 use crate::{
-    constraints::{AbsoluteOffset, AbsoluteSize, Origin2D, RelativeOffset, RelativeSize},
+    constraints::{AbsoluteSize, RelativeSize},
     events::WidgetEvent,
-    Font, Image, Interactive, Reactive, Result, Sticky, Text, TextAlignment, Widget, WrapStyle,
+    Interactive, Result, Sticky, Text, TextBundle, Widget, WidgetBundle,
 };
 
 /// A bundle for easily creating input fields with a reactive component
-#[derive(Debug)]
-pub struct InputFieldInfo<T, U, G> {
+#[derive(Default)]
+pub struct InputFieldInfo<T> {
+    pub text: TextBundle<T>,
+    /// Specifies a builder for the field widget. In order to be rendered, the
+    /// builder *should* contain atleast a [ `crate::WidgetBundle` ] and a renderable bundle
+    /// such as [ `crate::ImageBundle` ].
+    pub field: EntityBuilder,
+    /// Placeholder text
     pub placeholder: Cow<'static, str>,
-    pub text_pass: Handle<U>,
-    pub image_pass: Handle<G>,
-    pub font: Handle<Font>,
-    pub reactive: Reactive<T>,
-    pub background: Handle<Image>,
-    pub rel_size: RelativeSize,
-    pub rel_offset: RelativeOffset,
-    pub abs_size: AbsoluteSize,
-    pub abs_offset: AbsoluteOffset,
-    pub origin: Origin2D,
     pub text_padding: Vec2,
-}
-
-impl<T: Default, U, G> Default for InputFieldInfo<T, U, G> {
-    fn default() -> Self {
-        Self {
-            placeholder: Default::default(),
-            text_pass: Default::default(),
-            image_pass: Default::default(),
-            font: Default::default(),
-            reactive: Default::default(),
-            background: Default::default(),
-            rel_size: Default::default(),
-            rel_offset: Default::default(),
-            abs_size: Default::default(),
-            abs_offset: Default::default(),
-            origin: Default::default(),
-            text_padding: Default::default(),
-        }
-    }
 }
 
 pub struct InputField {
@@ -57,49 +33,35 @@ pub struct InputField {
 }
 
 impl InputField {
-    pub fn new(text: Entity, val: Cow<'static, str>, placeholder: Cow<'static, str>) -> Self {
+    pub fn new(text: Entity, placeholder: Cow<'static, str>) -> Self {
         Self {
             text,
-            val,
+            val: Cow::Borrowed(""),
             placeholder,
         }
     }
 
     /// Creates a new input field
-    pub fn spawn<T: Component, U: Component, G: Component>(
+    pub fn spawn<T: Component>(
         world: &mut World,
         root: Entity,
-        info: InputFieldInfo<T, U, G>,
+        info: InputFieldInfo<T>,
     ) -> Result<Entity> {
-        let text = world.spawn((
-            Widget,
-            RelativeOffset::new(0.0, 0.0),
-            AbsoluteSize(-info.text_padding),
-            RelativeSize::new(1.0, 1.0),
-            info.text_pass,
-            Text::new(info.placeholder.to_owned()),
-            info.font,
-            WrapStyle::Overflow,
-            TextAlignment::new(HorizontalAlign::Right, VerticalAlign::Middle),
-        ));
+        let mut builder = EntityBuilder::new();
+        builder
+            .add_bundle(WidgetBundle {
+                abs_size: AbsoluteSize(-info.text_padding),
+                rel_size: RelativeSize::new(1.0, 1.0),
+                ..Default::default()
+            })
+            .add_bundle(info.text);
 
-        let field = world.attach_new::<Widget, _>(
-            root,
-            (
-                Widget,
-                Sticky,
-                InputField::new(text, "".into(), info.placeholder),
-                Interactive,
-                info.origin,
-                info.image_pass,
-                info.background,
-                info.abs_size,
-                info.abs_offset,
-                info.rel_size,
-                info.rel_offset,
-                info.reactive,
-            ),
-        )?;
+        let text = world.spawn(builder.build());
+
+        let mut builder = info.field;
+        builder.add_bundle((Interactive, Sticky, InputField::new(text, info.placeholder)));
+
+        let field = world.attach_new::<Widget, _>(root, builder.build())?;
 
         world.attach::<Widget>(text, field)?;
 

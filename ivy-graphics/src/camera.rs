@@ -13,6 +13,7 @@ use ultraviolet::{Mat4, Vec2, Vec3, Vec4};
 
 /// A camera holds a view and projection matrix.
 /// Use a system to update view matrix according to position and rotation.
+#[derive(Default, Debug, Clone)]
 pub struct Camera {
     projection: Mat4,
     view: Mat4,
@@ -23,11 +24,7 @@ pub struct Camera {
 impl Camera {
     /// Creates a new camera with identity projection and view matrices.
     pub fn new() -> Self {
-        Self {
-            projection: Mat4::identity(),
-            view: Mat4::identity(),
-            viewproj: Mat4::identity(),
-        }
+        Self::default()
     }
 
     /// Sets the camera to use a orthographic projection matrix.
@@ -95,12 +92,6 @@ impl Camera {
         (self.view.inversed() * Vec4::new(ray_eye.x, ray_eye.y, -1.0, 0.0))
             .xyz()
             .normalized()
-    }
-}
-
-impl Default for Camera {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

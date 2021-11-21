@@ -26,8 +26,11 @@ use ivy::{
 use ivy_resources::Resources;
 use parking_lot::RwLock;
 use physics::{
-    components::{AngularMass, AngularVelocity, Effector, Mass, Resitution, Velocity},
-    connections::{draw_connections, Connection, ConnectionKind, OffsetPosition, OffsetRotation},
+    components::{AngularMass, AngularVelocity, Effector, Mass, RbBundle, Velocity},
+    connections::{
+        draw_connections, Connection, ConnectionBundle, ConnectionKind, PositionOffset,
+        RotationOffset,
+    },
     PhysicsLayer,
 };
 use postprocessing::pbr::{create_pbr_pipeline, PBRInfo};
@@ -151,11 +154,9 @@ fn main() -> anyhow::Result<()> {
     let glfw = Arc::new(RwLock::new(glfw::init(glfw::FAIL_ON_ERRORS)?));
 
     let window = WindowInfo {
-        // extent: Some(Extent::new(800, 600)),
         extent: None,
-
         resizable: false,
-        mode: WindowMode::Windowed,
+        mode: WindowMode::Fullscreen,
         ..Default::default()
     };
 
@@ -266,6 +267,7 @@ fn setup_graphics(
     )?);
 
     let gizmo_node = rendergraph.add_node(CameraNode::<GizmoPass, _, _>::new(
+        "Gizmos Node",
         context.clone(),
         resources,
         camera,
@@ -287,6 +289,7 @@ fn setup_graphics(
     )?);
 
     let ui_node = rendergraph.add_node(CameraNode::<UIPass, _, _>::new(
+        "UI Node",
         context.clone(),
         resources,
         canvas,
@@ -447,108 +450,121 @@ fn setup_objects(
         PointLight::new(1.0, Vec3::new(1.0, 1.0, 0.7) * 5000.0),
     ));
 
-    let sphere_object = world.spawn((
-        Collider::new(Sphere::new(1.0)),
-        Color::rgb(1.0, 1.0, 1.0),
-        Mass(200.0),
-        Velocity::default(),
-        Position::new(0.0, 0.6, -1.2),
-        Scale::uniform(1.0),
-        material,
-        // Rotation::euler_angles(0.0, 1.0, 1.0),
-        // Mover::new(
-        //     InputVector {
-        //         x: InputAxis::keyboard(Key::L, Key::H),
-        //         y: InputAxis::keyboard(Key::K, Key::J),
-        //         z: InputAxis::keyboard(Key::I, Key::O),
-        //     },
-        //     InputVector {
-        //         x: InputAxis::none(),
-        //         y: InputAxis::keyboard(Key::Down, Key::Up),
-        //         z: InputAxis::keyboard(Key::Left, Key::Right),
-        //     },
-        //     1.0,
-        //     false,
-        // ),
-        sphere_mesh,
-        assets.geometry_pass,
-    ));
-
-    let light = world.attach_new::<Connection, _>(
-        sphere_object,
-        (
-            ConnectionKind::Spring {
-                strength: 100.0,
-                dampening: 50.0,
-            },
-            Mass(50.0),
-            OffsetRotation::default(),
-            Velocity::default(),
-            AngularVelocity::default(),
-            AngularMass(1.0),
-            OffsetPosition::new(0.0, 3.0, 0.0),
-            Position::default(),
-            PointLight::new(0.2, Vec3::new(0.0, 0.0, 5000.0)),
-        ),
-    )?;
-
-    world.attach_new::<Connection, _>(
-        light,
-        (
-            ConnectionKind::Spring {
-                strength: 10.0,
-                dampening: 5.0,
-            },
-            OffsetRotation::euler_angles(1.0, 0.0, 0.0),
-            Mass(20.0),
-            assets.geometry_pass,
-            OffsetPosition::new(1.0, 0.0, 0.0),
-            cube_mesh,
-            Position::default(),
-            Scale::uniform(0.3),
-            Collider::new(Cube::uniform(1.0)),
-            Color::blue(),
-        ),
-    )?;
-
-    world.attach_new::<Connection, _>(
-        light,
-        (
-            ConnectionKind::Rigid,
-            OffsetRotation::euler_angles(0.0, 0.0, 0.0),
-            Mass(1.0),
-            assets.geometry_pass,
-            OffsetPosition::new(-1.0, 0.0, 2.0),
+    let mut builder = EntityBuilder::new();
+    builder
+        .add_bundle(RbBundle {
+            mass: Mass(100.0),
+            ..Default::default()
+        })
+        .add_bundle(TransformBundle {
+            pos: Position::new(0.0, 0.6, -1.2),
+            scale: Scale::uniform(0.5),
+            ..Default::default()
+        })
+        .add_bundle((
+            material,
             sphere_mesh,
-            material, // This mesh doesn't include materials
-            Position::default(),
-            Scale::uniform(0.3),
             Collider::new(Sphere::new(1.0)),
-        ),
-    )?;
-    let mut rng = StdRng::seed_from_u64(43);
+            assets.geometry_pass,
+            Color::red(),
+        ));
+
+    let sphere = world.spawn(builder.build());
+
+    let mut builder = EntityBuilder::new();
+    builder
+        .add_bundle(TransformBundle {
+            scale: Scale::uniform(0.5),
+            ..Default::default()
+        })
+        .add_bundle(RbBundle {
+            mass: Mass(50.0),
+            ..Default::default()
+        })
+        .add_bundle(ConnectionBundle::new(
+            ConnectionKind::spring(100.0, 50.0),
+            PositionOffset::new(0.0, 4.0, 0.0),
+            RotationOffset::default(),
+        ))
+        .add_bundle((PointLight::new(0.2, Vec3::new(0.0, 0.0, 5000.0)),));
+
+    let light = world.attach_new::<Connection, _>(sphere, builder.build())?;
+
+    let mut builder = EntityBuilder::new();
+    builder
+        .add_bundle(TransformBundle {
+            scale: Scale::uniform(0.25),
+            ..Default::default()
+        })
+        .add_bundle(RbBundle {
+            mass: Mass(10.0),
+            ..Default::default()
+        })
+        .add_bundle(ConnectionBundle::new(
+            ConnectionKind::spring(10.0, 3.0),
+            PositionOffset::new(2.0, 1.0, 0.0),
+            RotationOffset::default(),
+        ))
+        .add_bundle((cube_mesh, assets.geometry_pass))
+        .add(Collider::new(Cube::uniform(1.0)));
+
+    world.attach_new::<Connection, _>(light, builder.build())?;
+
+    let mut builder = EntityBuilder::new();
+
+    builder
+        .add_bundle(TransformBundle {
+            scale: Scale::uniform(0.25),
+            ..Default::default()
+        })
+        .add_bundle(RbBundle::default())
+        .add_bundle(ConnectionBundle::new(
+            ConnectionKind::Rigid,
+            PositionOffset::new(-1.0, 0.0, 2.0),
+            Default::default(),
+        ))
+        .add_bundle((
+            sphere_mesh,
+            material,
+            assets.geometry_pass,
+            Color::white(),
+            Collider::new(Sphere::new(1.0)),
+        ));
+
+    world.attach_new::<Connection, _>(light, builder.build())?;
+    let mut rng = StdRng::seed_from_u64(42);
 
     const COUNT: usize = 64;
 
-    world
-        .spawn_batch((0..COUNT).map(|_| {
-            let pos = Position::rand_uniform(&mut rng) * 10.0;
-            let vel = Velocity::rand_uniform(&mut rng);
-
-            (
-                AngularMass(5.0),
-                Collider::new(Cube::uniform(1.0)),
-                Color::rgb(1.0, 1.0, 1.0),
-                Mass(10.0),
+    (0..COUNT).for_each(|_| {
+        let pos = Position::rand_uniform(&mut rng) * 10.0;
+        let vel = Velocity::rand_uniform(&mut rng);
+        builder
+            .add_bundle(TransformBundle {
+                scale: Scale::uniform(0.5),
                 pos,
+                ..Default::default()
+            })
+            .add_bundle(RbBundle {
                 vel,
-                Resitution(0.5),
-                Scale::uniform(0.5),
-                assets.geometry_pass,
+                mass: Mass(10.0),
+                ang_mass: AngularMass(2.0),
+                ..Default::default()
+            })
+            .add_bundle(ConnectionBundle::new(
+                ConnectionKind::Rigid,
+                PositionOffset::new(-1.0, 0.0, 2.0),
+                Default::default(),
+            ))
+            .add_bundle((
                 cube_mesh,
-            )
-        }))
-        .for_each(|_| {});
+                assets.geometry_pass,
+                Color::white(),
+                Collider::new(Cube::uniform(1.0)),
+            ));
+
+        world.spawn(builder.build());
+    });
 
     Ok(Entities { camera })
 }
@@ -591,20 +607,26 @@ impl LogicLayer {
             InputAxis::keyboard(Key::S, Key::W),
         );
 
-        let camera = world.spawn((
-            Camera::perspective(1.0, input.window_extent().aspect(), 0.1, 100.0),
-            Mover::new(input_vec, Default::default(), 5.0, true),
-            MainCamera,
-            Position(Vec3::new(0.0, 0.0, 5.0)),
-            Rotation(Rotor3::identity()),
-        ));
+        let mut builder = EntityBuilder::new();
 
-        let canvas = world.spawn((
-            Widget,
-            Canvas,
-            AbsoluteSize(input.window_extent().into()),
-            Camera::default(),
-        ));
+        builder
+            .add_bundle(TransformBundle {
+                pos: Position::new(0.0, 0.0, 5.0),
+                ..Default::default()
+            })
+            .add_bundle(RbBundle::default())
+            .add_bundle((
+                MainCamera,
+                Camera::perspective(1.0, input.window_extent().aspect(), 0.1, 100.0),
+                Mover::new(input_vec, Default::default(), 5.0, true),
+            ));
+
+        let camera = world.spawn(builder.build());
+
+        let mut builder = EntityBuilder::new();
+        builder.add_bundle(CanvasBundle::new(input.window_extent()));
+
+        let canvas = world.spawn(builder.build());
 
         let assets =
             setup_graphics(world, resources, camera, canvas).context("Failed to setup graphics")?;
@@ -744,7 +766,6 @@ impl Layer for LogicLayer {
             // let _scope =
             //     TimedScope::new(|elapsed| log::trace!("--Graphics updating took {:.3?}", elapsed));
 
-            graphics::systems::satisfy_objects(world);
             graphics::systems::update_view_matrices(world);
         }
 
@@ -803,7 +824,7 @@ fn setup_ui(
 
     let font: Handle<Font> = resources.load((
         FontInfo {
-            size: 64.0,
+            size: 48.0,
             ..Default::default()
         },
         "./res/fonts/Lora/Lora-VariableFont_wght.ttf".into(),
@@ -811,170 +832,193 @@ fn setup_ui(
 
     let monospace: Handle<Font> = resources.load((
         FontInfo {
-            size: 32.0,
+            size: 48.0,
             ..Default::default()
         },
         "./res/fonts/Roboto_Mono/RobotoMono-VariableFont_wght.ttf".into(),
     ))??;
 
-    world.attach_new::<Widget, _>(
-        canvas,
-        (
-            Widget,
-            heart,
-            ui_pass,
-            RelativeOffset::new(-0.25, -0.5),
-            AbsoluteSize::new(100.0, 100.0),
-            Interactive,
-            Reactive {
-                unfocused: Color::white(),
-                focused: Color::gray(),
-            },
-            Aspect(1.0),
-        ),
-    )?;
+    let mut builder = EntityBuilder::new();
+    builder
+        .add_bundle(WidgetBundle {
+            rel_offset: RelativeOffset::new(-0.25, -0.5),
+            abs_size: AbsoluteSize::new(100.0, 100.0),
+            aspect: Aspect(1.0),
+            ..Default::default()
+        })
+        .add_bundle(ImageBundle {
+            image: heart,
+            pass: ui_pass,
+            color: Color::white(),
+        })
+        .add_bundle((Interactive, Reactive::new(Color::white(), Color::gray())));
 
-    InputField::spawn(
-        world,
-        canvas,
-        InputFieldInfo {
-            placeholder: "Enter text: ".into(),
-            text_pass,
-            image_pass: ui_pass,
-            font,
-            reactive: Reactive::new(Color::white(), Color::gray()),
-            background: input_field,
-            abs_size: AbsoluteSize::new(512.0, 64.0),
-            abs_offset: AbsoluteOffset::new(10.0, 10.0),
+    world.attach_new::<Widget, _>(canvas, builder.build())?;
+
+    let mut builder = EntityBuilder::new();
+    builder
+        .add_bundle(WidgetBundle {
             rel_offset: RelativeOffset::new(1.0, -1.0),
-            text_padding: Vec2::new(10.0, 10.0),
-            origin: Origin2D::new(1.0, 0.0),
-            ..InputFieldInfo::default()
-        },
-    )?;
+            abs_offset: AbsoluteOffset::new(-10.0, 10.0),
+            abs_size: AbsoluteSize::new(512.0, 60.0),
+            origin: Origin2D::new(1.0, -1.0),
+            aspect: Aspect(0.0),
+            ..Default::default()
+        })
+        .add_bundle(ImageBundle {
+            image: input_field,
+            color: Color::white(),
+            pass: ui_pass,
+        })
+        .add(Reactive::new(Color::white(), Color::gray()));
 
     InputField::spawn(
         world,
         canvas,
         InputFieldInfo {
-            placeholder: "Enter text: ".into(),
-            text_pass,
-            image_pass: ui_pass,
-            font,
-            reactive: Reactive::new(Color::white(), Color::gray()),
-            background: input_field,
-            abs_size: AbsoluteSize::new(512.0, 64.0),
-            abs_offset: AbsoluteOffset::new(-10.0, -10.0),
-            rel_offset: RelativeOffset::new(1.0, 1.0),
+            text: TextBundle {
+                font,
+                pass: text_pass,
+                align: TextAlignment::new(HorizontalAlign::Left, VerticalAlign::Middle),
+                ..Default::default()
+            },
+            field: builder,
+            placeholder: "Enter text:".into(),
             text_padding: Vec2::new(10.0, 10.0),
-            origin: Origin2D::new(1.0, 1.0),
-            ..InputFieldInfo::default()
         },
     )?;
 
-    let widget2 = world.attach_new::<Widget, _>(
-        canvas,
-        (
-            Widget,
-            heart,
-            ui_pass,
-            WithTime::<RelativeOffset>::new(Box::new(|_, offset, elapsed, _| {
+    let mut builder = EntityBuilder::new();
+    builder
+        .add_bundle(WidgetBundle {
+            abs_size: AbsoluteSize::new(-10.0, -10.0),
+            rel_size: RelativeSize::new(1.0, 1.0),
+            ..Default::default()
+        })
+        .add_bundle(TextBundle {
+            font: monospace,
+            text: Text::new("Debug"),
+            color: Color::white(),
+            align: TextAlignment::new(HorizontalAlign::Left, VerticalAlign::Top),
+            pass: text_pass,
+            ..Default::default()
+        })
+        .add(DisplayDebugReport);
+
+    world.attach_new::<Widget, _>(canvas, builder.build())?;
+
+    let mut builder = EntityBuilder::new();
+    builder
+        .add_bundle(WidgetBundle {
+            rel_offset: RelativeOffset::new(0.0, -0.5),
+            rel_size: RelativeSize::new(0.2, 0.2),
+            aspect: Aspect(1.0),
+            ..Default::default()
+        })
+        .add_bundle(ImageBundle {
+            image: heart,
+            color: Color::white(),
+            pass: ui_pass,
+        })
+        .add(WithTime::<RelativeOffset>::new(Box::new(
+            |_, offset, elapsed, _| {
                 offset.x = (elapsed * 0.25).sin();
-            })),
-            RelativeOffset::new(0.0, -0.5),
-            RelativeSize::new(0.2, 0.2),
-            Aspect(1.0),
-        ),
-    )?;
-
-    world.attach_new::<Widget, _>(
-        widget2,
-        (
-            Widget,
-            ui_pass,
-            RelativeSize::new(1.0, 1.0),
-            AbsoluteSize::new(-10.0, -10.0),
-            heart,
-        ),
-    )?;
-
-    world.attach_new::<Widget, _>(
-        widget2,
-        (
-            Widget,
-            font,
-            Text::new("Hello, World!"),
-            Color::black(),
-            TextAlignment {
-                horizontal: HorizontalAlign::Center,
-                vertical: VerticalAlign::Middle,
             },
-            WrapStyle::Word,
-            RelativeSize::new(1.0, 1.0),
-            text_pass,
-            AbsoluteOffset::new(0.0, 0.0),
-        ),
-    )?;
+        )));
 
-    world.attach_new::<Widget, _>(
-        canvas,
-        (
-            Widget,
+    let widget2 = world.attach_new::<Widget, _>(canvas, builder.build())?;
+
+    let mut builder = EntityBuilder::new();
+    builder
+        .add_bundle(WidgetBundle {
+            abs_size: AbsoluteSize::new(-10.0, -10.0),
+            rel_size: RelativeSize::new(1.0, 1.0),
+            aspect: Aspect(1.0),
+            ..Default::default()
+        })
+        .add_bundle(ImageBundle {
+            image: heart,
+            color: Color::white(),
+            pass: ui_pass,
+        });
+
+    world.attach_new::<Widget, _>(widget2, builder.build())?;
+
+    let mut builder = EntityBuilder::new();
+    builder
+        .add_bundle(WidgetBundle {
+            rel_size: RelativeSize::new(1.0, 1.0),
+            ..Default::default()
+        })
+        .add_bundle(TextBundle {
+            text: Text::new("Hello, World!"),
             font,
-            Text::new("Ivy"),
-            TextAlignment::new(HorizontalAlign::Left, VerticalAlign::Bottom),
-            text_pass,
-            RelativeOffset::new(0.0, 0.0),
-            RelativeSize::new(0.5, 0.5),
-            Aspect(1.0),
-            Color::green(),
-        ),
-    )?;
+            color: Color::purple(),
+            align: TextAlignment::new(HorizontalAlign::Center, VerticalAlign::Top),
+            pass: text_pass,
+            ..Default::default()
+        });
 
-    world.attach_new::<Widget, _>(
-        canvas,
-        (
-            Widget,
-            monospace,
-            text_pass,
-            DisplayDebugReport,
-            Text::new(""),
-            TextAlignment::new(HorizontalAlign::Left, VerticalAlign::Top),
-            RelativeOffset::new(0.0, 0.0),
-            RelativeSize::new(1.0, 1.0),
-            AbsoluteSize::new(-10.0, -10.0),
-        ),
-    )?;
+    world.attach_new::<Widget, _>(widget2, builder.build())?;
 
-    let satellite = world.attach_new::<Widget, _>(
-        widget2,
-        (
-            Widget,
-            heart,
-            ui_pass,
-            WithTime::<RelativeOffset>::new(Box::new(|_, offset, elapsed, _| {
+    let mut builder = EntityBuilder::new();
+    builder
+        .add_bundle(WidgetBundle {
+            rel_size: RelativeSize::new(0.5, 0.5),
+            aspect: Aspect(1.0),
+            ..Default::default()
+        })
+        .add_bundle(TextBundle {
+            font,
+
+            text: Text::new("Ivy"),
+            color: Color::dark_green(),
+            align: TextAlignment::new(HorizontalAlign::Left, VerticalAlign::Bottom),
+            pass: ui_pass,
+            ..Default::default()
+        });
+
+    world.attach_new::<Widget, _>(widget2, builder.build())?;
+
+    let mut builder = EntityBuilder::new();
+    builder
+        .add_bundle(WidgetBundle {
+            rel_size: RelativeSize::new(0.4, 0.4),
+            aspect: Aspect(1.0),
+            ..Default::default()
+        })
+        .add_bundle(ImageBundle {
+            image: heart,
+            color: Color::white(),
+            pass: ui_pass,
+        })
+        .add(WithTime::<RelativeOffset>::new(Box::new(
+            |_, offset, elapsed, _| {
                 *offset = RelativeOffset::new((elapsed).cos() * 4.0, elapsed.sin() * 2.0) * 0.5
-            })),
-            RelativeOffset::default(),
-            RelativeSize::new(0.4, 0.4),
-            Aspect(1.0),
-        ),
-    )?;
+            },
+        )));
 
-    world.attach_new::<Widget, _>(
-        satellite,
-        (
-            Widget,
-            heart,
-            ui_pass,
-            WithTime::<RelativeOffset>::new(Box::new(|_, offset, elapsed, _| {
+    let satellite = world.attach_new::<Widget, _>(widget2, builder.build())?;
+
+    let mut builder = EntityBuilder::new();
+    builder
+        .add_bundle(WidgetBundle {
+            abs_size: AbsoluteSize::new(50.0, 50.0),
+            aspect: Aspect(1.0),
+            ..Default::default()
+        })
+        .add_bundle(ImageBundle {
+            image: heart,
+            color: Color::white(),
+            pass: ui_pass,
+        })
+        .add(WithTime::<RelativeOffset>::new(Box::new(
+            |_, offset, elapsed, _| {
                 *offset = RelativeOffset::new(-(elapsed * 5.0).cos(), -(elapsed * 5.0).sin()) * 0.5
-            })),
-            RelativeOffset::default(),
-            AbsoluteSize::new(50.0, 50.0),
-            Aspect(1.0),
-        ),
-    )?;
+            },
+        )));
+
+    world.attach_new::<Widget, _>(satellite, builder.build())?;
 
     Ok(())
 }

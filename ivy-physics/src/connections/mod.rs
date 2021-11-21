@@ -1,5 +1,6 @@
 use derive_for::*;
 use derive_more::*;
+use hecs::Bundle;
 use ivy_base::{TransformBundle, TransformQueryMut};
 
 mod systems;
@@ -33,17 +34,17 @@ derive_for!(
         PartialEq,
     );
     /// Describes the offset of the entity from the parent
-    pub struct OffsetPosition(pub Vec3);
-    pub struct OffsetRotation(pub Rotor3);
+    pub struct PositionOffset(pub Vec3);
+    pub struct RotationOffset(pub Rotor3);
 );
 
-impl OffsetPosition {
+impl PositionOffset {
     pub fn new(x: f32, y: f32, z: f32) -> Self {
         Self(Vec3::new(x, y, z))
     }
 }
 
-impl OffsetRotation {
+impl RotationOffset {
     pub fn euler_angles(roll: f32, pitch: f32, yaw: f32) -> Self {
         Self(Rotor3::from_euler_angles(roll, pitch, yaw))
     }
@@ -57,6 +58,7 @@ impl OffsetRotation {
 /// Marker type for two physically connected objects.
 pub struct Connection;
 
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ConnectionKind {
     /// Connection will not budge
     Rigid,
@@ -65,10 +67,23 @@ pub enum ConnectionKind {
 }
 
 impl ConnectionKind {
+    pub fn rigid() -> Self {
+        Self::Rigid
+    }
+
+    pub fn spring(strength: f32, dampening: f32) -> Self {
+        Self::Spring {
+            strength,
+            dampening,
+        }
+    }
+}
+
+impl ConnectionKind {
     fn update(
         &self,
-        offset_pos: &OffsetPosition,
-        offset_rot: &OffsetRotation,
+        offset_pos: &PositionOffset,
+        offset_rot: &RotationOffset,
         child_trans: TransformQueryMut,
         child_rb: RbQueryMut,
         parent_trans: &TransformBundle,
@@ -105,6 +120,27 @@ impl ConnectionKind {
                 *child_rb.ang_vel = parent_rb.ang_vel;
                 *child_trans.rot = parent_trans.rot * **offset_rot;
             }
+        }
+    }
+}
+
+#[derive(Bundle, Clone, Copy, Debug, PartialEq)]
+pub struct ConnectionBundle {
+    pub kind: ConnectionKind,
+    pub offset: PositionOffset,
+    pub rotation_offset: RotationOffset,
+}
+
+impl ConnectionBundle {
+    pub fn new(
+        kind: ConnectionKind,
+        offset: PositionOffset,
+        rotation_offset: RotationOffset,
+    ) -> Self {
+        Self {
+            kind,
+            offset,
+            rotation_offset,
         }
     }
 }

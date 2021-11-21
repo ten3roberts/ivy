@@ -53,8 +53,8 @@ impl Text {
     }
 
     /// Sets the texts value. If str is differerent the dirty flag will be set.
-    pub fn set<S: Into<Cow<'static, str>>>(&mut self, str: S) {
-        let str = str.into();
+    pub fn set<S: Into<Cow<'static, str>>>(&mut self, val: S) {
+        let str = val.into();
 
         if self.str != str {
             self.dirty = true;

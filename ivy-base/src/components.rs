@@ -23,23 +23,33 @@ derive_for!(
     MulAssign,
     Sub,
     SubAssign,
-    Default,
     PartialEq,
     );
     /// Describes a position in 3D space.
     #[repr(transparent)]
+    #[derive(Default, Neg)]
     pub struct Position(pub Vec3);
     /// Describes a rotation in 3D space.
     #[repr(transparent)]
+    #[derive(Default)]
     pub struct Rotation(pub Rotor3);
     /// Describes a scale in 3D space.
+    /// Default is overridden for an identity scale.
     #[repr(transparent)]
     pub struct Scale(pub Vec3);
     #[repr(transparent)]
+    #[derive(Default, Neg)]
     pub struct Position2D(pub Vec2);
     #[repr(transparent)]
+    #[derive(Default)]
     pub struct Size2D(pub Vec2);
 );
+
+impl Default for Scale {
+    fn default() -> Self {
+        Self(Vec3::one())
+    }
+}
 
 impl Position {
     pub fn new(x: f32, y: f32, z: f32) -> Self {
@@ -131,7 +141,7 @@ impl<'a> TransformQuery<'a> {
     }
 }
 
-#[derive(Bundle, AsRef, PartialEq, Debug, Copy, Clone)]
+#[derive(Default, Bundle, AsRef, PartialEq, Debug, Copy, Clone)]
 pub struct TransformBundle {
     pub pos: Position,
     pub rot: Rotation,
@@ -139,6 +149,10 @@ pub struct TransformBundle {
 }
 
 impl TransformBundle {
+    pub fn new(pos: Position, rot: Rotation, scale: Scale) -> Self {
+        Self { pos, rot, scale }
+    }
+
     /// Converts the query into a transform matrix
     pub fn into_matrix(&self) -> TransformMatrix {
         TransformMatrix::new(self.pos, self.rot, self.scale)

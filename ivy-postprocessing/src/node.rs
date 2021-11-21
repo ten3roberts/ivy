@@ -144,6 +144,6 @@ impl<Pass: ShaderPass> Node for PostProcessingNode<Pass> {
     }
 
     fn debug_name(&self) -> &'static str {
-        "post processing"
+        "Post Processing"
     }
 }

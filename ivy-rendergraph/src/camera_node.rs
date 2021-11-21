@@ -16,6 +16,7 @@ use crate::{AttachmentInfo, Node, NodeKind};
 
 /// A rendergraph node rendering the scene using the provided camera.
 pub struct CameraNode<Pass, T: Renderer<Error = E>, E> {
+    name: &'static str,
     camera: Entity,
     renderer: T,
     marker: PhantomData<(Pass, E)>,
@@ -35,6 +36,7 @@ where
     E: Into<anyhow::Error>,
 {
     pub fn new(
+        name: &'static str,
         context: Arc<VulkanContext>,
         resources: &Resources,
         camera: Entity,
@@ -86,6 +88,7 @@ where
         };
 
         Ok(Self {
+            name,
             camera,
             sets,
             renderer,
@@ -135,7 +138,7 @@ where
     }
 
     fn debug_name(&self) -> &'static str {
-        "camera node"
+        self.name
     }
 
     fn execute(

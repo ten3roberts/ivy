@@ -27,8 +27,8 @@ fn update_subtree(world: &World, root: Entity) -> Result<()> {
             .children::<Connection>(root)
             .try_for_each(|child| -> Result<_> {
                 let mut query = world.query_one::<(
-                    &OffsetPosition,
-                    &OffsetRotation,
+                    &PositionOffset,
+                    &RotationOffset,
                     TransformQueryMut,
                     RbQueryMut,
                     &ConnectionKind,
