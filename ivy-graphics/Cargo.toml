@@ -13,7 +13,7 @@ anymap = "0.12.1"
 ash = "0.33.3"
 derive_more = "0.99.16"
 glfw = "0.42.0"
-gltf = "0.16.0"
+gltf =  { version = "0.16.0", features = [ "KHR_lights_punctual" ] }
 hecs = "0.6.5"
 ivy-base = { path = "../ivy-base", version = "1.7" }
 ivy-image = { path = "../ivy-image", version = "1.1" }

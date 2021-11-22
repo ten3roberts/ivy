@@ -428,11 +428,11 @@ fn setup_objects(
     let _scope = TimedScope::new(|elapsed| eprintln!("Object setup took {:.3?}", elapsed));
     resources.insert(Gizmos::default())?;
 
-    let document: Handle<Document> = resources
+    let cube_document: Handle<Document> = resources
         .load("./res/models/cube.glb")
         .context("Failed to load cube model")??;
 
-    let cube_mesh = resources.get(document)?.mesh(0);
+    let cube_mesh = resources.get(cube_document)?.mesh(0);
     let material = resources.load::<Material, _, _, _>(MaterialInfo {
         albedo: "./res/textures/metal.png".into(),
         sampler: SamplerInfo::default(),
@@ -440,11 +440,31 @@ fn setup_objects(
         metallic: 1.0,
     })??;
 
-    let document: Handle<Document> = resources
+    let sphere_document: Handle<Document> = resources
         .load("./res/models/sphere.gltf")
         .context("Failed to load sphere model")??;
 
-    let sphere_mesh = resources.get(document)?.mesh(0);
+    let sphere_mesh = resources.get(sphere_document)?.mesh(0);
+
+    let mut builder = EntityBuilder::new();
+
+    resources
+        .get(cube_document)?
+        .nodes()
+        .iter()
+        .for_each(|val| info!("Node {:#?}", val));
+
+    resources
+        .get(cube_document)?
+        .build_node_by_name("Metal", &mut builder)?
+        .add_bundle(TransformBundle {
+            pos: Position::new(0.0, 3.0, 0.0),
+            rot: Rotation::default(),
+            scale: Scale::uniform(0.25),
+        })
+        .add(assets.geometry_pass);
+
+    world.spawn(builder.build());
 
     world.spawn((
         Position(Vec3::new(0.0, 5.0, 5.0)),

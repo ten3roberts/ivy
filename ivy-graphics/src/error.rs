@@ -32,4 +32,7 @@ pub enum Error {
 
     #[error("Key does not exist in the atlas")]
     InvalidAtlasKey,
+
+    #[error("The requested document node {0:?} does not exist")]
+    UnknownDocumentNode(String),
 }

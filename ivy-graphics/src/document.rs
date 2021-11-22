@@ -1,6 +1,8 @@
-use crate::{Error, Material, Mesh, Result};
+use crate::{Error, Material, Mesh, PointLight, Result};
+use hecs::{Bundle, EntityBuilder};
 use std::{borrow::Cow, path::Path, path::PathBuf, sync::Arc};
 
+use ivy_base::{Position, Rotation, Scale, TransformBundle};
 use ivy_resources::{Handle, LoadResource, Resources};
 use ivy_vulkan::{Texture, VulkanContext};
 use ultraviolet::*;
@@ -11,9 +13,42 @@ pub struct Node {
     name: String,
     /// The mesh index references by this node.
     mesh: Option<usize>,
-    position: Vec3,
-    rotation: Rotor3,
-    scale: Vec3,
+    light: Option<PointLight>,
+    pos: Position,
+    rot: Rotation,
+    scale: Scale,
+}
+
+impl Node {
+    /// Get a reference to the node's mesh.
+    pub fn mesh(&self) -> Option<usize> {
+        self.mesh
+    }
+
+    /// Get a reference to the node's light.
+    pub fn light(&self) -> Option<PointLight> {
+        self.light
+    }
+
+    /// Get a reference to the node's position.
+    pub fn pos(&self) -> Position {
+        self.pos
+    }
+
+    /// Get a reference to the node's rotation.
+    pub fn rot(&self) -> Rotation {
+        self.rot
+    }
+
+    /// Get a reference to the node's scale.
+    pub fn scale(&self) -> Scale {
+        self.scale
+    }
+
+    /// Get a reference to the node's name.
+    pub fn name(&self) -> &str {
+        self.name.as_ref()
+    }
 }
 
 pub struct Document {
@@ -21,33 +56,6 @@ pub struct Document {
     materials: Vec<Handle<Material>>,
     nodes: Vec<Node>,
 }
-
-// /// Import the buffer data referenced by a glTF document.
-// fn import_buffer_data(
-//     document: &gltf::Document,
-//     base: Option<&Path>,
-//     mut blob: Option<Vec<u8>>,
-// ) -> Result<Vec<gltf::buffer::Data>> {
-//     let mut buffers = Vec::new();
-//     for buffer in document.buffers() {
-//         let mut data = match buffer.source() {
-//             buffer::Source::Uri(uri) => Scheme::read(base, uri),
-//             buffer::Source::Bin => blob.take().ok_or(Error::MissingBlob),
-//         }?;
-//         if data.len() < buffer.length() {
-//             return Err(Error::BufferLength {
-//                 buffer: buffer.index(),
-//                 expected: buffer.length(),
-//                 actual: data.len(),
-//             });
-//         }
-//         while data.len() % 4 != 0 {
-//             data.push(0);
-//         }
-//         buffers.push(gltf::buffer::Data(data));
-//     }
-//     Ok(buffers)
-// }
 
 impl Document {
     /// Loads a gltf document/asset from path
@@ -126,12 +134,17 @@ impl Document {
             .nodes()
             .map(|node| {
                 let (position, rotation, scale) = node.transform().decomposed();
+                let light = node
+                    .light()
+                    .map(|val| PointLight::new(0.1, Vec3::from(val.color()) * val.intensity()));
+
                 Node {
                     name: node.name().unwrap_or_default().to_owned(),
+                    light,
                     mesh: node.mesh().map(|mesh| mesh.index()),
-                    position: Vec3::from(position),
-                    rotation: Rotor3::from_quaternion_array(rotation),
-                    scale: Vec3::from(scale),
+                    pos: Vec3::from(position).into(),
+                    rot: Rotor3::from_quaternion_array(rotation).into(),
+                    scale: Vec3::from(scale).into(),
                 }
             })
             .collect();
@@ -142,7 +155,9 @@ impl Document {
             materials,
         })
     }
+}
 
+impl Document {
     /// Returns a handle to the mesh at index. Mesh was inserted in the resource cache upon
     /// creation.
     pub fn material(&self, index: usize) -> Handle<Material> {
@@ -155,19 +170,75 @@ impl Document {
         self.meshes[index]
     }
 
+    /// Returns the nodes in the document
+    pub fn nodes(&self) -> &[Node] {
+        &self.nodes
+    }
+
     /// Returns a reference to the node at index.
     pub fn node(&self, index: usize) -> &Node {
         &self.nodes[index]
     }
 
     /// Searches for the node with name.
-    pub fn find_node<S>(&self, name: S) -> Option<&Node>
+    pub fn find_node<S>(&self, name: S) -> Result<&Node>
     where
         S: AsRef<str>,
     {
         let name = name.as_ref();
-        self.nodes.iter().find(|node| node.name == name)
+        self.nodes
+            .iter()
+            .find(|node| node.name == name)
+            .ok_or_else(|| Error::UnknownDocumentNode(name.to_owned()))
     }
+
+    pub fn build_node_by_name<'a, S: AsRef<str>>(
+        &self,
+        name: S,
+        builder: &'a mut EntityBuilder,
+    ) -> Result<&'a mut EntityBuilder> {
+        let node = self.find_node(name)?;
+        Ok(self.build_node_internal(node, builder))
+    }
+
+    /// Spawns a node using the supplied builder into the world
+    pub fn build_node<'a>(
+        &self,
+        index: usize,
+        builder: &'a mut EntityBuilder,
+    ) -> &'a mut EntityBuilder {
+        self.build_node_internal(self.node(index), builder)
+    }
+    /// Spawns a node using the supplied builder into the world
+    fn build_node_internal<'a>(
+        &self,
+        node: &Node,
+        builder: &'a mut EntityBuilder,
+    ) -> &'a mut EntityBuilder {
+        if let Some(mesh) = node.mesh {
+            builder.add::<Handle<Mesh>>(self.mesh(mesh));
+        }
+
+        if let Some(light) = node.light {
+            builder.add(light);
+        }
+
+        builder.add_bundle(TransformBundle {
+            pos: node.pos,
+            rot: node.rot,
+            scale: node.scale,
+        });
+
+        builder
+    }
+}
+
+#[derive(Bundle, Copy, Clone, Default)]
+pub struct NodeBundle {
+    pos: Position,
+    rot: Rotation,
+    scale: Scale,
+    mesh: Handle<Mesh>,
 }
 
 impl LoadResource for Document {

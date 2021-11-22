@@ -137,7 +137,7 @@ impl<'a> Into<ObjectData> for ObjectDataQuery<'a> {
 #[derive(Query, PartialEq, Eq)]
 struct KeyQuery<'a> {
     mesh: &'a Handle<Mesh>,
-    material: &'a Handle<Material>,
+    material: Option<&'a Handle<Material>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -152,7 +152,7 @@ impl<'a> crate::KeyQuery for KeyQuery<'a> {
     fn into_key(&self) -> Self::K {
         Self::K {
             mesh: *self.mesh,
-            material: *self.material,
+            material: self.material.cloned().unwrap_or_default(),
         }
     }
 }
