@@ -6,6 +6,7 @@ use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
     commands::CommandBuffer,
     descriptors::IntoSet,
+    shaderpass::ShaderPass,
     vk::{self, AccessFlags, BufferCopy, BufferMemoryBarrier, IndexType},
     BufferAccess, BufferUsage, VulkanContext,
 };
@@ -365,7 +366,7 @@ impl TextRenderer {
 
 impl Renderer for TextRenderer {
     type Error = Error;
-    fn draw<Pass: ivy_graphics::ShaderPass>(
+    fn draw<Pass: ShaderPass>(
         &mut self,
         // The ecs world
         world: &mut hecs::World,

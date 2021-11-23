@@ -1,9 +1,10 @@
 use anyhow::Context;
 use hecs::World;
-use ivy_graphics::{Renderer, ShaderPass};
+use ivy_graphics::Renderer;
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
-    commands::CommandBuffer, vk::Buffer, vk::ClearValue, ImageLayout, LoadOp, StoreOp, Texture,
+    commands::CommandBuffer, shaderpass::ShaderPass, vk::Buffer, vk::ClearValue, ImageLayout,
+    LoadOp, StoreOp, Texture,
 };
 use std::{any::type_name, marker::PhantomData};
 

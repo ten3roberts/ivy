@@ -34,7 +34,7 @@
 //!
 //! See the documentation for [`core::Layer`]
 
-pub use ivy_base as core;
+pub use ivy_base as base;
 /// Rexports
 pub use ivy_collision as collision;
 pub use ivy_graphics as graphics;
@@ -47,3 +47,10 @@ pub use ivy_rendergraph as rendergraph;
 pub use ivy_resources as resources;
 pub use ivy_ui as ui;
 pub use ivy_vulkan as vulkan;
+
+pub use base::{App, Extent, FromDuration, IntoDuration, Layer, Position, Rotation, Scale};
+pub use ivy_graphics::{Document, Mesh, MeshRenderer, TextureAtlas};
+pub use ivy_rendergraph::RenderGraph;
+pub use ivy_resources::{Handle, Resources};
+pub use ivy_ui::Widget;
+pub use ivy_vulkan::{ImageLayout, ImageUsage, Texture};

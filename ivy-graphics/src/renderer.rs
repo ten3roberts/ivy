@@ -1,10 +1,9 @@
 #![allow(non_snake_case)]
-use crate::ShaderPass;
 use anyhow::Context;
 use ash::vk::DescriptorSet;
 use hecs::World;
 use ivy_resources::{Handle, Resources, Storage};
-use ivy_vulkan::commands::CommandBuffer;
+use ivy_vulkan::{commands::CommandBuffer, shaderpass::ShaderPass};
 
 // Generic interface for a renderer.
 pub trait Renderer {

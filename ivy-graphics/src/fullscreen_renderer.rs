@@ -1,6 +1,7 @@
-use crate::{Error, Renderer, Result, ShaderPass};
+use crate::{Error, Renderer, Result};
 use ash::vk::DescriptorSet;
 use ivy_resources::Resources;
+use ivy_vulkan::shaderpass::ShaderPass;
 
 // Renders a fullscreen quad using the supplied shader pass and descriptors
 pub struct FullscreenRenderer;

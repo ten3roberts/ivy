@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use std::{fmt::Display, ops::Deref, sync::Arc, time::Duration};
+use std::{fmt::Display, sync::Arc, time::Duration};
 
 use anyhow::{anyhow, Context};
 use collision::{
@@ -14,7 +14,7 @@ use graphics::{
 use hecs::*;
 use hecs_hierarchy::Hierarchy;
 use ivy::{
-    core::*,
+    base::*,
     graphics::*,
     input::*,
     rendergraph::*,
@@ -41,7 +41,7 @@ use rendergraph::GraphicsLayer;
 use slotmap::SecondaryMap;
 use std::fmt::Write;
 use ultraviolet::{Rotor3, Vec2, Vec3};
-use vulkan::vk::CullModeFlags;
+use vulkan::vk::{CullModeFlags, PresentModeKHR};
 
 use log::*;
 
@@ -161,12 +161,18 @@ fn main() -> anyhow::Result<()> {
         ..Default::default()
     };
 
+    let swapchain = SwapchainInfo {
+        present_mode: PresentModeKHR::IMMEDIATE,
+        image_count: FRAMES_IN_FLIGHT as u32 + 1,
+        ..Default::default()
+    };
+
     let ui_info = UILayerInfo {
         unfocus_key: Some(Key::Escape),
     };
 
     let mut app = App::builder()
-        .try_push_layer(|_, r, _| WindowLayer::new(glfw, r, WindowLayerInfo { window }))?
+        .try_push_layer(|_, r, _| WindowLayer::new(glfw, r, WindowLayerInfo { window, swapchain }))?
         .push_layer(|w, r, e| {
             (
                 UILayer::new(w, r, e, ui_info),
@@ -194,149 +200,171 @@ fn main() -> anyhow::Result<()> {
     app.run().context("Failed to run application")
 }
 
+pub struct RenderGraphNodes {
+    pub geometry: NodeIndex,
+    pub gizmo: NodeIndex,
+    pub ui: NodeIndex,
+    pub postprocessing: NodeIndex,
+}
+
+impl RenderGraphNodes {
+    pub fn new(
+        world: &mut World,
+        main_camera: Entity,
+        canvas: Entity,
+        resources: &Resources,
+    ) -> anyhow::Result<Self> {
+        let context = resources.get_default::<Arc<VulkanContext>>()?;
+
+        let mut rendergraph = RenderGraph::new(context.clone(), FRAMES_IN_FLIGHT)
+            .context("Failed to create rendergraph")?;
+
+        let swapchain = resources.get_default::<Swapchain>()?;
+
+        let extent = swapchain.extent();
+
+        let final_lit = resources.insert(Texture::new(
+            context.clone(),
+            &TextureInfo {
+                extent,
+                mip_levels: 1,
+                usage: ImageUsage::COLOR_ATTACHMENT
+                    | ImageUsage::SAMPLED
+                    | ImageUsage::TRANSFER_SRC,
+                ..Default::default()
+            },
+        )?)?;
+
+        let image_renderer = resources.default::<ImageRenderer>()?;
+        let text_renderer = resources.default::<TextRenderer>()?;
+
+        let pbr_nodes =
+            rendergraph.add_nodes(create_pbr_pipeline::<GeometryPass, PostProcessingPass>(
+                context.clone(),
+                world,
+                &resources,
+                main_camera,
+                extent,
+                FRAMES_IN_FLIGHT,
+                &[],
+                &[AttachmentInfo {
+                    store_op: StoreOp::STORE,
+                    load_op: LoadOp::DONT_CARE,
+                    initial_layout: ImageLayout::UNDEFINED,
+                    final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                    resource: final_lit,
+                }],
+                &[],
+                PBRInfo {
+                    ambient_radience: Vec3::one() * 0.05,
+                    max_lights: 10,
+                },
+            )?);
+        let geometry = pbr_nodes[0];
+        let postprocessing = pbr_nodes[1];
+
+        let gizmo = rendergraph.add_node(CameraNode::<GizmoPass, _, _>::new(
+            "Gizmos Node",
+            context.clone(),
+            resources,
+            main_camera,
+            resources.default::<GizmoRenderer>()?,
+            &[AttachmentInfo {
+                store_op: StoreOp::STORE,
+                load_op: LoadOp::LOAD,
+                initial_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                resource: final_lit,
+            }],
+            &[],
+            &[world.get::<DepthAttachment>(main_camera)?.0],
+            None,
+            &[],
+            &[],
+            &[],
+            FRAMES_IN_FLIGHT,
+        )?);
+
+        let ui = rendergraph.add_node(CameraNode::<UIPass, _, _>::new(
+            "UI Node",
+            context.clone(),
+            resources,
+            canvas,
+            (image_renderer, text_renderer),
+            &[AttachmentInfo {
+                store_op: StoreOp::STORE,
+                load_op: LoadOp::LOAD,
+                initial_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                resource: final_lit,
+            }],
+            &[],
+            &[],
+            None,
+            &[resources.get(text_renderer)?.vertex_buffer()],
+            &[],
+            &[],
+            FRAMES_IN_FLIGHT,
+        )?);
+
+        rendergraph.add_node(TextUpdateNode::new(resources, text_renderer)?);
+
+        rendergraph.add_node(SwapchainNode::new(
+            context.clone(),
+            resources.default()?,
+            final_lit,
+            vec![],
+            &resources,
+        )?);
+
+        // Build renderpasses
+        rendergraph.build(resources.fetch()?, extent)?;
+
+        resources.insert_default(rendergraph)?;
+
+        Ok(Self {
+            geometry,
+            gizmo,
+            ui,
+            postprocessing,
+        })
+    }
+}
 fn setup_graphics(
     world: &mut World,
     resources: &Resources,
     camera: Entity,
     canvas: Entity,
 ) -> anyhow::Result<Assets> {
-    let window = resources.get_default::<Window>()?;
-
-    let swapchain_info = ivy_vulkan::SwapchainInfo {
-        present_mode: vk::PresentModeKHR::IMMEDIATE,
-        image_count: FRAMES_IN_FLIGHT as u32 + 1,
-        ..Default::default()
-    };
-
     let context = resources.get_default::<Arc<VulkanContext>>()?;
 
-    let swapchain = resources.insert_default(Swapchain::new(
-        context.clone(),
-        window.deref(),
-        swapchain_info,
-    )?)?;
-
-    let swapchain_extent = resources.get(swapchain)?.extent();
-
-    let final_lit = resources.insert(Texture::new(
-        context.clone(),
-        &TextureInfo {
-            extent: swapchain_extent,
-            mip_levels: 1,
-            usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::SAMPLED | ImageUsage::TRANSFER_SRC,
-            ..Default::default()
-        },
-    )?)?;
-
-    let mut rendergraph = RenderGraph::new(context.clone(), FRAMES_IN_FLIGHT)?;
+    // Setup renderers
 
     resources.insert(FullscreenRenderer)?;
     resources.insert(GizmoRenderer::new(context.clone())?)?;
 
     resources.insert(MeshRenderer::new(context.clone(), 16, FRAMES_IN_FLIGHT)?)?;
 
-    let image_renderer =
-        resources.insert(ImageRenderer::new(context.clone(), 16, FRAMES_IN_FLIGHT)?)?;
+    resources.insert(ImageRenderer::new(context.clone(), 16, FRAMES_IN_FLIGHT)?)?;
 
-    let text_renderer = resources.insert(TextRenderer::new(
+    resources.insert(TextRenderer::new(
         context.clone(),
         16,
         512,
         FRAMES_IN_FLIGHT,
     )?)?;
 
-    let pbr_nodes = rendergraph.add_nodes(create_pbr_pipeline::<GeometryPass, PostProcessingPass>(
-        context.clone(),
-        world,
-        &resources,
-        camera,
-        swapchain_extent,
-        FRAMES_IN_FLIGHT,
-        &[],
-        &[AttachmentInfo {
-            store_op: StoreOp::STORE,
-            load_op: LoadOp::DONT_CARE,
-            initial_layout: ImageLayout::UNDEFINED,
-            final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-            resource: final_lit,
-        }],
-        &[],
-        PBRInfo {
-            ambient_radience: Vec3::one() * 0.05,
-            max_lights: 10,
-        },
-    )?);
+    let nodes = RenderGraphNodes::new(world, camera, canvas, resources)?;
 
-    let gizmo_node = rendergraph.add_node(CameraNode::<GizmoPass, _, _>::new(
-        "Gizmos Node",
-        context.clone(),
-        resources,
-        camera,
-        resources.default::<GizmoRenderer>()?,
-        &[AttachmentInfo {
-            store_op: StoreOp::STORE,
-            load_op: LoadOp::LOAD,
-            initial_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-            final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-            resource: final_lit,
-        }],
-        &[],
-        &[world.get::<DepthAttachment>(camera)?.0],
-        None,
-        &[],
-        &[],
-        &[],
-        FRAMES_IN_FLIGHT,
-    )?);
+    let rendergraph = resources.get_default::<RenderGraph>()?;
 
-    let ui_node = rendergraph.add_node(CameraNode::<UIPass, _, _>::new(
-        "UI Node",
-        context.clone(),
-        resources,
-        canvas,
-        (image_renderer, text_renderer),
-        &[AttachmentInfo {
-            store_op: StoreOp::STORE,
-            load_op: LoadOp::LOAD,
-            initial_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-            final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-            resource: final_lit,
-        }],
-        &[],
-        &[],
-        None,
-        &[resources.get(text_renderer)?.vertex_buffer()],
-        &[],
-        &[],
-        FRAMES_IN_FLIGHT,
-    )?);
-
-    rendergraph.add_node(TextUpdateNode::new(resources, text_renderer)?);
-
-    rendergraph.add_node(SwapchainNode::new(
-        context.clone(),
-        swapchain,
-        final_lit,
-        vec![],
-        &resources,
-    )?);
-
-    // Build renderpasses
-    rendergraph.build(resources.fetch()?, swapchain_extent)?;
-
-    // Create pipelines
-    let geometry_node = pbr_nodes[0];
-    let post_processing_node = pbr_nodes[1];
-
-    let fullscreen_pipeline = Pipeline::new::<()>(
+    let postprocessing_pipeline = Pipeline::new::<()>(
         context.clone(),
         &PipelineInfo {
             vertexshader: "./res/shaders/fullscreen.vert.spv".into(),
             fragmentshader: "./res/shaders/post_processing.frag.spv".into(),
-            samples: SampleCountFlags::TYPE_1,
-            extent: swapchain_extent,
             cull_mode: CullModeFlags::NONE,
-            ..rendergraph.pipeline_info(post_processing_node)?
+            ..rendergraph.pipeline_info(nodes.postprocessing)?
         },
     )?;
 
@@ -346,10 +374,8 @@ fn setup_graphics(
             vertexshader: "./res/shaders/gizmos.vert.spv".into(),
             blending: true,
             fragmentshader: "./res/shaders/gizmos.frag.spv".into(),
-            samples: SampleCountFlags::TYPE_1,
-            extent: swapchain_extent,
             cull_mode: CullModeFlags::NONE,
-            ..rendergraph.pipeline_info(gizmo_node)?
+            ..rendergraph.pipeline_info(nodes.gizmo)?
         },
     )?;
 
@@ -360,16 +386,14 @@ fn setup_graphics(
             vertexshader: "./res/shaders/default.vert.spv".into(),
             fragmentshader: "./res/shaders/default.frag.spv".into(),
             samples: SampleCountFlags::TYPE_1,
-            extent: swapchain_extent,
-            cull_mode: CullModeFlags::NONE,
-            ..rendergraph.pipeline_info(geometry_node)?
+            ..rendergraph.pipeline_info(nodes.geometry)?
         },
     )?;
 
     let geometry_pass = resources.insert(GeometryPass(pipeline))?;
 
     // Insert one default post processing pass
-    resources.insert_default(PostProcessingPass(fullscreen_pipeline))?;
+    resources.insert_default(PostProcessingPass(postprocessing_pipeline))?;
     resources.insert_default(GizmoPass(gizmo_pipeline))?;
 
     let context = resources.get_default::<Arc<VulkanContext>>()?;
@@ -381,12 +405,7 @@ fn setup_graphics(
             blending: true,
             vertexshader: "./res/shaders/ui.vert.spv".into(),
             fragmentshader: "./res/shaders/ui.frag.spv".into(),
-            samples: SampleCountFlags::TYPE_1,
-            extent: swapchain_extent,
-            polygon_mode: vk::PolygonMode::FILL,
-            cull_mode: vk::CullModeFlags::NONE,
-            front_face: vk::FrontFace::CLOCKWISE,
-            ..rendergraph.pipeline_info(ui_node)?
+            ..rendergraph.pipeline_info(nodes.ui)?
         },
     )?;
 
@@ -397,20 +416,12 @@ fn setup_graphics(
             blending: true,
             vertexshader: "./res/shaders/text.vert.spv".into(),
             fragmentshader: "./res/shaders/text.frag.spv".into(),
-            samples: SampleCountFlags::TYPE_1,
-            extent: swapchain_extent,
-            polygon_mode: vk::PolygonMode::FILL,
-            cull_mode: vk::CullModeFlags::NONE,
-            front_face: vk::FrontFace::CLOCKWISE,
-            ..rendergraph.pipeline_info(ui_node)?
+            ..rendergraph.pipeline_info(nodes.ui)?
         },
     )?;
 
     let ui_pass = resources.insert(UIPass(ui_pipeline))?;
     let text_pass = resources.insert(UIPass(text_pipeline))?;
-
-    setup_ui(world, resources, ui_pass, text_pass)?;
-    resources.insert_default(rendergraph)?;
 
     Ok(Assets {
         geometry_pass,
@@ -424,6 +435,7 @@ fn setup_objects(
     resources: &Resources,
     assets: &Assets,
     camera: Entity,
+    canvas: Entity,
 ) -> anyhow::Result<Entities> {
     let _scope = TimedScope::new(|elapsed| eprintln!("Object setup took {:.3?}", elapsed));
     resources.insert(Gizmos::default())?;
@@ -586,7 +598,7 @@ fn setup_objects(
         world.spawn(builder.build());
     });
 
-    Ok(Entities { camera })
+    Ok(Entities { camera, canvas })
 }
 
 struct Assets {
@@ -597,6 +609,7 @@ struct Assets {
 
 struct Entities {
     camera: Entity,
+    canvas: Entity,
 }
 
 struct LogicLayer {
@@ -607,6 +620,7 @@ struct LogicLayer {
     cursor_mode: CursorMode,
 
     window_events: Receiver<WindowEvent>,
+    graphics_events: Receiver<GraphicsEvent>,
     assets: Assets,
     entities: Entities,
 }
@@ -651,9 +665,14 @@ impl LogicLayer {
         let assets =
             setup_graphics(world, resources, camera, canvas).context("Failed to setup graphics")?;
 
-        let entities = setup_objects(world, resources, &assets, camera)?;
+        let entities = setup_objects(world, resources, &assets, camera, canvas)?;
+
+        setup_ui(world, resources, &assets)?;
 
         let (tx, window_events) = flume::unbounded();
+        events.subscribe(tx);
+
+        let (tx, graphics_events) = flume::unbounded();
         events.subscribe(tx);
 
         Ok(Self {
@@ -662,6 +681,7 @@ impl LogicLayer {
             entities,
             assets,
             window_events,
+            graphics_events,
             cursor_mode: CursorMode::Normal,
         })
     }
@@ -669,7 +689,7 @@ impl LogicLayer {
     pub fn handle_events(
         &mut self,
         world: &mut World,
-        _resources: &Resources,
+        resources: &Resources,
     ) -> anyhow::Result<()> {
         // let window = resources.get_default_mut::<Window>()?;
 
@@ -680,6 +700,14 @@ impl LogicLayer {
                     mover.speed = (mover.speed + scroll as f32 * 0.2).clamp(0.1, 20.0);
                 }
                 _ => {}
+            }
+        }
+
+        for event in self.graphics_events.try_iter() {
+            match event {
+                GraphicsEvent::SwapchainRecreation => {
+                    setup_graphics(world, resources, self.entities.camera, self.entities.canvas)?;
+                }
             }
         }
         Ok(())
@@ -813,12 +841,7 @@ new_shaderpass! {
 
 struct DisplayDebugReport;
 
-fn setup_ui(
-    world: &mut World,
-    resources: &Resources,
-    ui_pass: Handle<UIPass>,
-    text_pass: Handle<UIPass>,
-) -> anyhow::Result<()> {
+fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow::Result<()> {
     let canvas = world
         .query::<&Canvas>()
         .iter()
@@ -862,7 +885,7 @@ fn setup_ui(
         })
         .add_bundle(ImageBundle {
             image: heart,
-            pass: ui_pass,
+            pass: assets.ui_pass,
             color: Color::white(),
         })
         .add_bundle((Interactive, Reactive::new(Color::white(), Color::gray())));
@@ -882,7 +905,7 @@ fn setup_ui(
         .add_bundle(ImageBundle {
             image: input_field,
             color: Color::white(),
-            pass: ui_pass,
+            pass: assets.ui_pass,
         })
         .add(Reactive::new(Color::white(), Color::gray()));
 
@@ -892,7 +915,7 @@ fn setup_ui(
         InputFieldInfo {
             text: TextBundle {
                 font,
-                pass: text_pass,
+                pass: assets.text_pass,
                 align: TextAlignment::new(HorizontalAlign::Left, VerticalAlign::Middle),
                 ..Default::default()
             },
@@ -914,7 +937,7 @@ fn setup_ui(
             text: Text::new("Debug"),
             color: Color::white(),
             align: TextAlignment::new(HorizontalAlign::Left, VerticalAlign::Top),
-            pass: text_pass,
+            pass: assets.text_pass,
             ..Default::default()
         })
         .add(DisplayDebugReport);
@@ -932,7 +955,7 @@ fn setup_ui(
         .add_bundle(ImageBundle {
             image: heart,
             color: Color::white(),
-            pass: ui_pass,
+            pass: assets.ui_pass,
         })
         .add(WithTime::<RelativeOffset>::new(Box::new(
             |_, offset, elapsed, _| {
@@ -953,7 +976,7 @@ fn setup_ui(
         .add_bundle(ImageBundle {
             image: heart,
             color: Color::white(),
-            pass: ui_pass,
+            pass: assets.ui_pass,
         });
 
     world.attach_new::<Widget, _>(widget2, builder.build())?;
@@ -969,7 +992,7 @@ fn setup_ui(
             font,
             color: Color::purple(),
             align: TextAlignment::new(HorizontalAlign::Center, VerticalAlign::Top),
-            pass: text_pass,
+            pass: assets.text_pass,
             ..Default::default()
         });
 
@@ -988,7 +1011,7 @@ fn setup_ui(
             text: Text::new("Ivy"),
             color: Color::dark_green(),
             align: TextAlignment::new(HorizontalAlign::Left, VerticalAlign::Bottom),
-            pass: ui_pass,
+            pass: assets.text_pass,
             ..Default::default()
         });
 
@@ -1004,7 +1027,7 @@ fn setup_ui(
         .add_bundle(ImageBundle {
             image: heart,
             color: Color::white(),
-            pass: ui_pass,
+            pass: assets.ui_pass,
         })
         .add(WithTime::<RelativeOffset>::new(Box::new(
             |_, offset, elapsed, _| {
@@ -1024,7 +1047,7 @@ fn setup_ui(
         .add_bundle(ImageBundle {
             image: heart,
             color: Color::white(),
-            pass: ui_pass,
+            pass: assets.ui_pass,
         })
         .add(WithTime::<RelativeOffset>::new(Box::new(
             |_, offset, elapsed, _| {

@@ -1,12 +1,12 @@
 use std::{any::TypeId, collections::HashMap, sync::Arc};
 
-use crate::{Result, ShaderPass};
+use crate::Result;
 
 mod batch;
 mod pass;
 pub use batch::*;
 use hecs::Query;
-use ivy_vulkan::VulkanContext;
+use ivy_vulkan::{shaderpass::ShaderPass, VulkanContext};
 pub use pass::*;
 
 pub trait KeyQuery: Send + Sync + Query {

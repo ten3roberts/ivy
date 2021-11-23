@@ -1,10 +1,11 @@
 use std::{marker::PhantomData, ops::Deref, sync::Arc};
 
-use ivy_graphics::{Result, ShaderPass};
+use ivy_graphics::Result;
 use ivy_rendergraph::{AttachmentInfo, Node, NodeKind};
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
     descriptors::{DescriptorBuilder, DescriptorSet, MultiDescriptorBindable},
+    shaderpass::ShaderPass,
     vk::{self, ShaderStageFlags},
     CombinedImageSampler, InputAttachment, Sampler, SamplerInfo, Texture, VulkanContext,
 };

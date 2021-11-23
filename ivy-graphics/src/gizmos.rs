@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use ash::vk::{DescriptorSet, IndexType, ShaderStageFlags};
 use ivy_base::Gizmos;
-use ivy_vulkan::VulkanContext;
+use ivy_vulkan::{shaderpass::ShaderPass, VulkanContext};
 use ultraviolet::{Mat4, Vec3, Vec4};
 
 use crate::{Mesh, Renderer, Result};
@@ -22,7 +22,7 @@ impl GizmoRenderer {
 impl Renderer for GizmoRenderer {
     type Error = crate::Error;
 
-    fn draw<Pass: crate::ShaderPass>(
+    fn draw<Pass: ShaderPass>(
         &mut self,
         // The ecs world
         _: &mut hecs::World,
@@ -43,7 +43,9 @@ impl Renderer for GizmoRenderer {
         let shaderpass = resources.get_default::<Pass>()?;
         let layout = shaderpass.pipeline_layout();
 
-        let gizmos = resources.get_default::<Gizmos>()?;
+        let gizmos = resources
+            .default_entry::<Gizmos>()?
+            .or_insert_with(|| Gizmos::default());
 
         cmd.bind_pipeline(shaderpass.pipeline());
 

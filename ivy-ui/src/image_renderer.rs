@@ -1,9 +1,11 @@
 use crate::*;
 use hecs::{Query, World};
 use ivy_base::{Color, Position2D, Size2D};
-use ivy_graphics::{BaseRenderer, Mesh, Renderer, ShaderPass};
+use ivy_graphics::{BaseRenderer, Mesh, Renderer};
 use ivy_resources::{Handle, Resources};
-use ivy_vulkan::{commands::CommandBuffer, descriptors::*, vk::IndexType, VulkanContext};
+use ivy_vulkan::{
+    commands::CommandBuffer, descriptors::*, shaderpass::ShaderPass, vk::IndexType, VulkanContext,
+};
 use std::sync::Arc;
 use ultraviolet::{Mat4, Vec2, Vec3, Vec4};
 

@@ -3,12 +3,13 @@ use std::sync::Arc;
 use anyhow::Result;
 use hecs::{Entity, World};
 use ivy_base::Extent;
-use ivy_graphics::{DepthAttachment, GpuCameraData, LightManager, MeshRenderer, ShaderPass};
+use ivy_graphics::{DepthAttachment, GpuCameraData, LightManager, MeshRenderer};
 use ivy_rendergraph::{AttachmentInfo, CameraNode, Node};
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
-    descriptors::MultiDescriptorBindable, vk::ClearValue, ClearValueExt, Format, ImageLayout,
-    ImageUsage, LoadOp, SampleCountFlags, StoreOp, Texture, TextureInfo, VulkanContext,
+    descriptors::MultiDescriptorBindable, shaderpass::ShaderPass, vk::ClearValue, ClearValueExt,
+    Format, ImageLayout, ImageUsage, LoadOp, SampleCountFlags, StoreOp, Texture, TextureInfo,
+    VulkanContext,
 };
 use ultraviolet::Vec3;
 

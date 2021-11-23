@@ -99,23 +99,26 @@ fn pick_present_mode(
     vk::PresentModeKHR::FIFO
 }
 
-fn pick_extent<T: Backend>(window: &T, capabilities: &vk::SurfaceCapabilitiesKHR) -> Extent {
+fn pick_extent(desired_extent: Extent, capabilities: &vk::SurfaceCapabilitiesKHR) -> Extent {
     // The extent of the surface needs to match exactly
     if capabilities.current_extent.width != std::u32::MAX {
         return capabilities.current_extent.into_extent();
     }
 
-    // Freely choose extent based on window and min-max capabilities
-    let extent = window.framebuffer_size();
-
     let width = cmp::max(
         capabilities.min_image_extent.width,
-        cmp::min(capabilities.max_image_extent.width, extent.width as u32),
+        cmp::min(
+            capabilities.max_image_extent.width,
+            desired_extent.width as u32,
+        ),
     );
 
     let height = cmp::max(
         capabilities.min_image_extent.height,
-        cmp::min(capabilities.max_image_extent.height, extent.height as u32),
+        cmp::min(
+            capabilities.max_image_extent.height,
+            desired_extent.height as u32,
+        ),
     );
 
     (width, height).into()
@@ -124,6 +127,7 @@ fn pick_extent<T: Backend>(window: &T, capabilities: &vk::SurfaceCapabilitiesKHR
 /// Contains a queue of images and is the link between vulkan and presenting image data to the
 /// system window.
 pub struct Swapchain {
+    support: SwapchainSupport,
     context: Arc<VulkanContext>,
     swapchain: vk::SwapchainKHR,
     images: Vec<Image>,
@@ -131,6 +135,7 @@ pub struct Swapchain {
     // The currently acquired swapchain image
     image_index: Option<u32>,
     surface_format: vk::SurfaceFormatKHR,
+    info: SwapchainInfo,
 }
 
 impl Swapchain {
@@ -171,7 +176,8 @@ impl Swapchain {
 
         let present_mode = pick_present_mode(&support.present_modes, info.present_mode);
 
-        let extent = pick_extent(window, &support.capabilities);
+        let extent = window.framebuffer_size();
+        let extent = pick_extent(extent, &support.capabilities);
 
         let create_info = vk::SwapchainCreateInfoKHR::builder()
             .surface(context.surface().unwrap())
@@ -180,7 +186,6 @@ impl Swapchain {
             .image_color_space(surface_format.color_space)
             .image_extent(Extent2D::from_extent(extent))
             .image_array_layers(1)
-            // For now, render directly to the images
             .image_usage(info.usage)
             .image_sharing_mode(sharing_mode)
             .queue_family_indices(queue_family_indices)
@@ -196,15 +201,72 @@ impl Swapchain {
         let images = unsafe { swapchain_loader.get_swapchain_images(swapchain)? };
 
         Ok(Swapchain {
+            support,
             context,
             swapchain,
             images,
             extent,
             surface_format,
             image_index: None,
+            info,
         })
     }
 
+    /// Recreates the swapchain.
+    pub fn recreate(&mut self, extent: Extent) -> Result<()> {
+        let context = &self.context;
+        let support = &self.support;
+        let info = self.info;
+        let image_count = self.image_count();
+
+        // The full set
+        let queue_family_indices = [
+            context.queue_families().graphics().unwrap(),
+            context.queue_families().present().unwrap(),
+        ];
+
+        // Decide sharing mode depending on if graphics == present
+        let (sharing_mode, queue_family_indices): (vk::SharingMode, &[u32]) =
+            if context.queue_families().graphics() == context.queue_families().present() {
+                (vk::SharingMode::EXCLUSIVE, &[])
+            } else {
+                (vk::SharingMode::CONCURRENT, &queue_family_indices)
+            };
+
+        let surface_format = pick_format(&support.formats, info.format);
+
+        let present_mode = pick_present_mode(&support.present_modes, info.present_mode);
+
+        let extent = pick_extent(extent, &support.capabilities);
+
+        let create_info = vk::SwapchainCreateInfoKHR::builder()
+            .surface(context.surface().unwrap())
+            .min_image_count(image_count as u32)
+            .image_format(surface_format.format)
+            .image_color_space(surface_format.color_space)
+            .image_extent(Extent2D::from_extent(extent))
+            .image_array_layers(1)
+            .image_usage(info.usage)
+            .image_sharing_mode(sharing_mode)
+            .queue_family_indices(queue_family_indices)
+            .pre_transform(support.capabilities.current_transform)
+            .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
+            .present_mode(present_mode)
+            .clipped(true)
+            .old_swapchain(self.swapchain);
+
+        let swapchain_loader = context.swapchain_loader();
+        let swapchain = unsafe { swapchain_loader.create_swapchain(&create_info, None)? };
+
+        let images = unsafe { swapchain_loader.get_swapchain_images(swapchain)? };
+
+        self.swapchain = swapchain;
+        self.images = images;
+        self.image_index = None;
+        self.extent = extent;
+
+        Ok(())
+    }
     // Returns the next available image in the swapchain. Remembers the acquired image index in
     // self. image index is set to None on failure
     pub fn acquire_next_image(&mut self, semaphore: vk::Semaphore) -> Result<u32> {

@@ -1,6 +1,6 @@
 use std::{collections::HashMap, marker::PhantomData, ops::Deref, sync::Arc};
 
-use crate::{KeyQuery, RendererKey, ShaderPass};
+use crate::{KeyQuery, RendererKey};
 
 use super::*;
 

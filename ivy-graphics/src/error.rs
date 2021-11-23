@@ -9,6 +9,9 @@ pub enum Error {
     #[error("Graphics vulkan error")]
     Vulkan(#[from] ivy_vulkan::Error),
 
+    #[error("Failed to initialize glfw")]
+    GlfwInitError(#[from] glfw::InitError),
+
     #[error("Gltf import failed{}: {0}", .1.as_ref().map(|path| format!(" for {:?}", path)).unwrap_or_default())]
     GltfImport(gltf::Error, Option<PathBuf>),
 

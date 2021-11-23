@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use crate::Layer;
+const MAX_ITERATIONS: f64 = 10.0;
 
 /// Abstracts a layer executing other layers at a fixed timestep.
 pub struct FixedTimeStep<T: Layer> {
@@ -28,9 +29,11 @@ impl<T: Layer> Layer for FixedTimeStep<T> {
         frame_time: Duration,
     ) -> anyhow::Result<()> {
         let ft_s = frame_time.as_secs_f64();
-        self.acc = (self.acc + ft_s).min(ft_s * 10.0);
 
         let dt = self.timestep.as_secs_f64();
+
+        self.acc = (self.acc + ft_s).min(ft_s * 10.0).min(dt * MAX_ITERATIONS);
+
         while self.acc > 0.0 {
             self.layers
                 .on_update(world, resources, events, self.timestep)?;

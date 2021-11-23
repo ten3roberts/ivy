@@ -4,10 +4,11 @@ use std::{any::type_name, marker::PhantomData, ops::Deref, sync::Arc};
 use anyhow::Context;
 use hecs::Entity;
 use itertools::Itertools;
-use ivy_graphics::{GpuCameraData, Renderer, ShaderPass};
+use ivy_graphics::{GpuCameraData, Renderer};
 use ivy_resources::{Handle, Resources, Storage};
 use ivy_vulkan::{
     descriptors::{DescriptorBuilder, DescriptorSet, IntoSet, MultiDescriptorBindable},
+    shaderpass::ShaderPass,
     vk::{self, ClearValue, ShaderStageFlags},
     CombinedImageSampler, InputAttachment, Sampler, Texture, VulkanContext,
 };

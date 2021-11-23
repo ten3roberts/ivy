@@ -7,7 +7,7 @@ use glfw::{Glfw, WindowEvent};
 use hecs::World;
 use ivy_base::{AppEvent, Events, Layer};
 use ivy_resources::Resources;
-use ivy_vulkan::VulkanContext;
+use ivy_vulkan::{Swapchain, SwapchainInfo, VulkanContext};
 use parking_lot::RwLock;
 
 use crate::{Window, WindowInfo};
@@ -16,12 +16,14 @@ use crate::{Window, WindowInfo};
 #[derive(Debug, Clone, PartialEq)]
 pub struct WindowLayerInfo {
     pub window: WindowInfo,
+    pub swapchain: SwapchainInfo,
 }
 
 impl Default for WindowLayerInfo {
     fn default() -> Self {
         Self {
             window: WindowInfo::default(),
+            swapchain: SwapchainInfo::default(),
         }
     }
 }
@@ -40,7 +42,10 @@ impl WindowLayer {
         let (window, events) = Window::new(glfw.clone(), info.window)?;
         let context = Arc::new(VulkanContext::new(&window)?);
 
+        let swapchain = Swapchain::new(context.clone(), &window, info.swapchain)?;
+
         resources.insert(context)?;
+        resources.insert(swapchain)?;
         resources.insert(window)?;
 
         Ok(Self { glfw, events })

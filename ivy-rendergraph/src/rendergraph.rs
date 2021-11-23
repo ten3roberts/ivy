@@ -188,6 +188,7 @@ impl RenderGraph {
         Ok(PipelineInfo {
             renderpass: pass.renderpass(),
             subpass,
+            extent: self.extent,
             color_attachment_count: node.color_attachments().len() as u32,
             depth_attachment: node.depth_attachment().is_some(),
             ..Default::default()

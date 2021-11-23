@@ -21,6 +21,10 @@ pub struct Window {
 unsafe impl Send for Window {}
 unsafe impl Sync for Window {}
 
+pub fn init() -> Result<Arc<RwLock<Glfw>>> {
+    Ok(Arc::new(RwLock::new(glfw::init(glfw::FAIL_ON_ERRORS)?)))
+}
+
 impl Window {
     pub fn new(
         glfw: Arc<RwLock<Glfw>>,
@@ -100,6 +104,12 @@ impl Window {
 
     pub fn extent(&self) -> Extent {
         self.inner.get_size().into()
+    }
+
+    /// Returns the window aspect ration
+    pub fn aspect(&self) -> f32 {
+        let size = self.extent();
+        size.width as f32 / size.height as f32
     }
 
     /// Returns the cursor position in pixels from the top left of the screen.

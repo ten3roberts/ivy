@@ -1,8 +1,9 @@
 use anyhow::Context;
-use ivy_graphics::{Renderer, ShaderPass};
+use ivy_graphics::Renderer;
 use ivy_resources::{Handle, Storage};
 use ivy_vulkan::{
     descriptors::{DescriptorSet, IntoSet},
+    shaderpass::ShaderPass,
     vk::ClearValue,
     Texture,
 };
