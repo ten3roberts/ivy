@@ -486,7 +486,8 @@ fn setup_objects(
             material,
             color: Color::red(),
             ..Default::default()
-        });
+        })
+        .add(Static);
 
     let sphere = world.spawn(builder.build());
 

@@ -80,13 +80,12 @@ impl ConnectionKind {
     fn update(
         &self,
         offset_pos: &PositionOffset,
-        offset_rot: &RotationOffset,
+        _offset_rot: &RotationOffset,
         child_trans: TransformQuery,
         rb: RbQueryMut,
         parent_trans: &TransformBundle,
-        parent_rb: &RbBundle,
+        parent_rb: &mut RbBundle,
         effector: &mut Effector,
-        parent_effector: &mut Effector,
     ) {
         // The desired postion
         let pos = Position(parent_trans.into_matrix().transform_point3(**offset_pos));
@@ -109,10 +108,12 @@ impl ConnectionKind {
                 let parent_inf = *parent_rb.mass / *total_mass;
 
                 effector.translate(*displacement * parent_inf);
-                parent_effector.translate(-*displacement * child_inf);
+                parent_rb.effector.translate(-*displacement * child_inf);
 
                 effector.apply_velocity_change(*vel_diff * parent_inf);
-                parent_effector.apply_velocity_change(*-vel_diff * child_inf);
+                parent_rb
+                    .effector
+                    .apply_velocity_change(*-vel_diff * child_inf);
             }
             Self::Spring {
                 strength,
@@ -120,7 +121,7 @@ impl ConnectionKind {
             } => {
                 let force = *displacement * *strength + **rb.vel * -dampening;
                 effector.apply_force(force);
-                parent_effector.apply_force(-force);
+                parent_rb.effector.apply_force(-force);
 
                 *rb.ang_vel = parent_rb.ang_vel;
                 // *child_trans.rot = parent_trans.rot * **offset_rot;

@@ -15,13 +15,18 @@ pub fn update_connections(world: &World) -> Result<()> {
 fn update_subtree(world: &World, root: Entity) -> Result<()> {
     let mut query = world.query_one::<(TransformQuery, RbQuery)>(root)?;
 
-    if let Some((parent_trans, parent_rb)) = query.get() {
+    if let Some((parent_trans, rb)) = query.get() {
         let parent_trans = parent_trans.into_owned();
-        let parent_rb = parent_rb.into_owned();
-        drop(query);
+        let mut parent_rb = RbBundle {
+            effector: Effector::new(),
+            vel: *rb.vel,
+            mass: *rb.mass,
+            ang_mass: *rb.ang_mass,
+            ang_vel: *rb.ang_vel,
+            resitution: *rb.resitution,
+        };
 
-        // Create an effector for storing the applied effects
-        let mut dummy_effector = Effector::new();
+        drop(query);
 
         world
             .children::<Connection>(root)
@@ -50,9 +55,8 @@ fn update_subtree(world: &World, root: Entity) -> Result<()> {
                         child_trans,
                         child_rb,
                         &parent_trans,
-                        &parent_rb,
+                        &mut parent_rb,
                         effector,
-                        &mut dummy_effector,
                     );
                 }
                 drop(query);
@@ -62,7 +66,7 @@ fn update_subtree(world: &World, root: Entity) -> Result<()> {
             })?;
 
         let mut effector = world.get_mut::<Effector>(root)?;
-        *effector += dummy_effector;
+        *effector += parent_rb.effector;
 
         Ok(())
     } else {

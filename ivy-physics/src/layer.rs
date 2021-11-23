@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use crate::systems;
 use anyhow::Context;
 use hecs::World;
-use ivy_base::{Color, DrawGizmos, Events, Layer};
+use ivy_base::{DrawGizmos, Events, Layer};
 use ivy_collision::{Collision, CollisionTree, Node, Object};
 use ivy_resources::{Resources, Storage};
 

@@ -248,3 +248,7 @@ impl Random for Size2D {
         Size2D(Vec2::rand_uniform(rng))
     }
 }
+
+#[derive(Default, Debug, Clone, Copy)]
+/// Marker type for objects that will not move through physics or other means.
+pub struct Static;

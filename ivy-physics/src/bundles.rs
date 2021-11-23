@@ -11,20 +11,6 @@ pub struct RbQuery<'a> {
     pub ang_vel: &'a AngularVelocity,
     pub mass: &'a Mass,
     pub ang_mass: &'a AngularMass,
-    pub effector: &'a Effector,
-}
-
-impl<'a> RbQuery<'a> {
-    pub fn into_owned(&self) -> RbBundle {
-        RbBundle {
-            resitution: *self.resitution,
-            vel: *self.vel,
-            ang_vel: *self.ang_vel,
-            mass: *self.mass,
-            ang_mass: *self.ang_mass,
-            effector: self.effector.clone(),
-        }
-    }
 }
 
 #[derive(Default, Bundle, Debug)]

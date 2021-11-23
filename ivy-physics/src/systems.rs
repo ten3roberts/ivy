@@ -1,13 +1,13 @@
 use crate::{
     bundles::*,
-    collision::resolve_collision,
+    collision::{resolve_collision, resolve_static_collision},
     components::*,
     connections::{Connection, ConnectionKind},
     Effector, Result,
 };
 use hecs::{Entity, World};
 use hecs_hierarchy::Hierarchy;
-use ivy_base::{Position, Rotation};
+use ivy_base::{Position, Rotation, Static};
 use ivy_collision::Collision;
 use ultraviolet::{Bivec3, Rotor3};
 
@@ -74,6 +74,13 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
     mut collisions: I,
 ) -> Result<()> {
     collisions.try_for_each(|coll| -> Result<()> {
+        // Check for static collision
+        if let Ok(_) = world.get::<Static>(coll.a) {
+            return resolve_static(world, coll.a, coll.b, coll.contact);
+        } else if let Ok(_) = world.get::<Static>(coll.b) {
+            return resolve_static(world, coll.b, coll.a, coll.contact);
+        }
+
         assert_ne!(coll.a, coll.b);
 
         // Trace up to the root of the rigid connection before solving
@@ -99,27 +106,44 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
 
         drop((a_query, b_query));
 
-        {
-            let dir = coll.contact.normal * coll.contact.depth;
-
-            let mut pos = world.get_mut::<Position>(coll.a)?;
-            *pos -= Position(dir * (*b_mass / *total_mass));
-            drop(pos);
-
-            let mut pos = world.get_mut::<Position>(coll.b)?;
-            *pos += Position(dir * (*a_mass / *total_mass));
-            drop(pos);
-        }
+        let dir = coll.contact.normal * coll.contact.depth;
 
         let mut effector = world.get_mut::<Effector>(coll.a)?;
         effector.apply_impulse_at(impulse, coll.contact.points[0] - *a_pos);
+        effector.translate(-dir * (*b_mass / *total_mass));
         drop(effector);
 
         let mut effector = world.get_mut::<Effector>(coll.b)?;
         effector.apply_impulse_at(-impulse, coll.contact.points[1] - *b_pos);
+        effector.translate(dir * (*a_mass / *total_mass));
 
         Ok(())
     })
+}
+
+// Resolves a static collision
+fn resolve_static(
+    world: &World,
+    a: Entity,
+    b: Entity,
+    contact: ivy_collision::Contact,
+) -> Result<()> {
+    let mut a_query = world.query_one::<Option<&Resitution>>(a)?;
+    let a_res = a_query
+        .get()
+        .expect("Static collider did not satisfy query");
+
+    let mut b_query = world.query_one::<(RbQuery, &Position, &mut Effector)>(b)?;
+
+    if let Some((rb, b_pos, effector)) = b_query.get() {
+        let impulse =
+            resolve_static_collision(&contact, a_res.cloned().unwrap_or_default(), &rb, *b_pos);
+        let dir = contact.normal * contact.depth;
+        effector.apply_impulse_at(-impulse, contact.points[1] - **b_pos);
+        effector.translate(dir);
+    }
+
+    Ok(())
 }
 
 /// Applies effectors to their respective entities and clears the effects.
@@ -134,6 +158,7 @@ pub fn apply_effectors(world: &World, dt: f32) {
             &Rotation,
             &mut Effector,
         )>()
+        .without::<Static>()
         .iter()
         .for_each(|(_, (vel, w, mass, angular_mass, pos, rot, effector))| {
             *vel += effector.net_velocity_change(*mass, dt);

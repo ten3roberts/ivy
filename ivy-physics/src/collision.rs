@@ -2,6 +2,7 @@ use ivy_base::Position;
 use ivy_collision::Contact;
 use ultraviolet::Vec3;
 
+use crate::components::Resitution;
 use crate::{bundles::*, util::point_vel};
 
 /// Generates an impulse for solving a collision.
@@ -33,6 +34,32 @@ pub fn resolve_collision(
             + 1.0 / **b.mass
             + ra.cross(n).mag_sq() / **a.ang_mass
             + rb.cross(n).mag_sq() / **b.ang_mass);
+
+    let impulse = j * intersection.normal;
+    impulse
+}
+
+pub fn resolve_static_collision(
+    intersection: &Contact,
+    a_resitution: Resitution,
+    b: &RbQuery,
+    b_pos: Position,
+) -> Vec3 {
+    let rb = intersection.points[1] - *b_pos;
+    let bw = *b.ang_vel;
+    let n = intersection.normal;
+
+    let b_vel = **b.vel + point_vel(rb, bw);
+    let contact_rel = (-b_vel).dot(n);
+
+    let resitution = a_resitution.min(b.resitution.0);
+
+    if contact_rel < 0.0 {
+        // eprintln!("Separating");
+        return Vec3::zero();
+    }
+    let j =
+        -(1.0 + resitution) * contact_rel / (1.0 / **b.mass + rb.cross(n).mag_sq() / **b.ang_mass);
 
     let impulse = j * intersection.normal;
     impulse
