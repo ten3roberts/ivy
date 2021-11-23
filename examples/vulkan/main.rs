@@ -27,12 +27,12 @@ use ivy_resources::Resources;
 use parking_lot::RwLock;
 use physics::{
     bundles::*,
-    components::{AngularMass, AngularVelocity, Effector, Mass, Velocity},
+    components::{AngularMass, AngularVelocity, Mass, Velocity},
     connections::{
         draw_connections, Connection, ConnectionBundle, ConnectionKind, PositionOffset,
         RotationOffset,
     },
-    PhysicsLayer,
+    Effector, PhysicsLayer,
 };
 use postprocessing::pbr::{create_pbr_pipeline, PBRInfo};
 use random::rand::SeedableRng;
@@ -474,7 +474,7 @@ fn setup_objects(
     let mut builder = EntityBuilder::new();
     builder
         .add_bundle(RbColliderBundle {
-            mass: Mass(100.0),
+            mass: Mass(50.0),
             collider: Collider::new(Sphere::new(1.0)),
             ..Default::default()
         })
@@ -494,6 +494,7 @@ fn setup_objects(
     builder
         .add_bundle(TransformBundle {
             scale: Scale::uniform(0.5),
+            pos: Position::new(0.0, 4.0, 0.0),
             ..Default::default()
         })
         .add_bundle(RbBundle {
@@ -542,7 +543,7 @@ fn setup_objects(
         })
         .add_bundle(RbColliderBundle {
             collider: Collider::new(Sphere::new(1.0)),
-            mass: Mass(2.0),
+            mass: Mass(10.0),
             ..Default::default()
         })
         .add_bundle(ConnectionBundle::new(
@@ -553,6 +554,7 @@ fn setup_objects(
 
     world.attach_new::<Connection, _>(light, builder.build())?;
     let mut rng = StdRng::seed_from_u64(42);
+    // world.spawn(builder.build());
 
     const COUNT: usize = 64;
 
@@ -570,7 +572,7 @@ fn setup_objects(
             .add_bundle(RbColliderBundle {
                 collider: Collider::new(Cube::uniform(1.0)),
                 vel,
-                mass: Mass(10.0),
+                mass: Mass(20.0),
                 ang_mass: AngularMass(2.0),
                 ..Default::default()
             })
@@ -628,7 +630,7 @@ impl LogicLayer {
 
         builder
             .add_bundle(TransformBundle {
-                pos: Position::new(0.0, 0.0, 5.0),
+                pos: Position::new(0.0, 0.0, 7.0),
                 ..Default::default()
             })
             .add_bundle(RbBundle::default())

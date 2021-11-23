@@ -52,12 +52,6 @@ impl<N: Node + Storage + DrawGizmos> Layer for PhysicsLayer<N> {
 
         tree.update(world)?;
 
-        // eprintln!("{:#?}", *tree);
-        // std::thread::sleep(Duration::from_secs(1));
-        let mut gizmos = resources.get_default_mut()?;
-
-        tree.draw_gizmos(&mut *gizmos, Color::default());
-
         tree.check_collisions::<[&Object; 128]>(world, events)?;
 
         systems::resolve_collisions(world, self.rx.try_iter())?;

@@ -1,13 +1,13 @@
 use derive_for::*;
 use derive_more::*;
 use hecs::Bundle;
-use ivy_base::{TransformBundle, TransformQueryMut};
+use ivy_base::{Position, TransformBundle, TransformQuery};
 
 mod systems;
 pub use systems::*;
 use ultraviolet::{Bivec3, Rotor3, Vec3};
 
-use crate::{bundles::*, components::*, util::point_vel};
+use crate::{bundles::*, components::*, util::point_vel, Effector};
 
 derive_for!(
     (
@@ -81,41 +81,49 @@ impl ConnectionKind {
         &self,
         offset_pos: &PositionOffset,
         offset_rot: &RotationOffset,
-        child_trans: TransformQueryMut,
-        child_rb: RbQueryMut,
+        child_trans: TransformQuery,
+        rb: RbQueryMut,
         parent_trans: &TransformBundle,
         parent_rb: &RbBundle,
         effector: &mut Effector,
         parent_effector: &mut Effector,
     ) {
-        let pos = parent_trans.into_matrix().transform_point3(**offset_pos);
+        // The desired postion
+        let pos = Position(parent_trans.into_matrix().transform_point3(**offset_pos));
+        let displacement = pos - *child_trans.pos;
         match self {
             Self::Rigid => {
                 // The desired velocity
                 let vel = Velocity(
-                    point_vel(pos - *parent_trans.pos, parent_rb.ang_vel) + *parent_rb.vel,
+                    point_vel(*pos - *parent_trans.pos, parent_rb.ang_vel) + *parent_rb.vel,
                 );
 
-                let vel_diff = *child_rb.vel - vel;
+                let total_mass = *rb.mass + parent_rb.mass;
 
-                *child_trans.pos = pos.into();
-                *child_rb.vel = vel;
-                *child_rb.ang_vel = parent_rb.ang_vel;
-                *child_trans.rot = parent_trans.rot * **offset_rot;
+                let vel_diff = vel - *rb.vel;
 
-                parent_effector.apply_impulse(*vel_diff * **child_rb.mass);
+                *rb.ang_vel = parent_rb.ang_vel;
+                // *child_trans.rot = parent_trans.rot * **offset_rot;
+
+                let child_inf = **rb.mass / *total_mass;
+                let parent_inf = *parent_rb.mass / *total_mass;
+
+                effector.translate(*displacement * parent_inf);
+                parent_effector.translate(-*displacement * child_inf);
+
+                effector.apply_velocity_change(*vel_diff * parent_inf);
+                parent_effector.apply_velocity_change(*-vel_diff * child_inf);
             }
             Self::Spring {
                 strength,
                 dampening,
             } => {
-                let displacement = pos - **child_trans.pos;
-                let force = displacement * *strength + **child_rb.vel * -dampening;
+                let force = *displacement * *strength + **rb.vel * -dampening;
                 effector.apply_force(force);
                 parent_effector.apply_force(-force);
 
-                *child_rb.ang_vel = parent_rb.ang_vel;
-                *child_trans.rot = parent_trans.rot * **offset_rot;
+                *rb.ang_vel = parent_rb.ang_vel;
+                // *child_trans.rot = parent_trans.rot * **offset_rot;
             }
         }
     }

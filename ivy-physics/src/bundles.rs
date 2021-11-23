@@ -1,5 +1,6 @@
 //! This module contains bundles and queries suitable for physics.
-use crate::components::{AngularMass, AngularVelocity, Effector, Mass, Resitution, Velocity};
+use crate::components::{AngularMass, AngularVelocity, Mass, Resitution, Velocity};
+use crate::Effector;
 use hecs::{Bundle, Query};
 use ivy_collision::Collider;
 

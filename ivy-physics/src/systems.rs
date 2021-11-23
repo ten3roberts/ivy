@@ -3,7 +3,7 @@ use crate::{
     collision::resolve_collision,
     components::*,
     connections::{Connection, ConnectionKind},
-    Result,
+    Effector, Result,
 };
 use hecs::{Entity, World};
 use hecs_hierarchy::Hierarchy;
@@ -56,7 +56,6 @@ pub fn get_rigid_root(world: &World, child: Entity) -> Result<(Entity, Mass)> {
     for val in world.ancestors::<Connection>(child) {
         root = val;
         system_mass += *world.get::<Mass>(val)?;
-        dbg!(system_mass);
 
         match *world.get::<ConnectionKind>(child)? {
             ConnectionKind::Rigid => {}
@@ -131,17 +130,22 @@ pub fn apply_effectors(world: &World, dt: f32) {
             Option<&mut AngularVelocity>,
             &Mass,
             Option<&mut AngularMass>,
+            &mut Position,
+            &Rotation,
             &mut Effector,
         )>()
         .iter()
-        .for_each(|(_, (vel, w, mass, angular_mass, effector))| {
+        .for_each(|(_, (vel, w, mass, angular_mass, pos, rot, effector))| {
             *vel += effector.net_velocity_change(*mass, dt);
+            *pos += effector.net_translation(rot);
+
             match (w, angular_mass) {
                 (Some(w), Some(angular_mass)) => {
                     *w += effector.net_angular_velocity_change(*angular_mass, dt)
                 }
                 _ => {}
             }
+
             effector.clear()
         })
 }

@@ -1,7 +1,7 @@
-use crate::Result;
+use crate::{Effector, Result};
 use hecs::*;
 use hecs_hierarchy::*;
-use ivy_base::{Color, Gizmos, Position, TransformQuery, TransformQueryMut};
+use ivy_base::{Color, Gizmos, Position, TransformQuery};
 
 use super::*;
 
@@ -29,7 +29,7 @@ fn update_subtree(world: &World, root: Entity) -> Result<()> {
                 let mut query = world.query_one::<(
                     &PositionOffset,
                     &RotationOffset,
-                    TransformQueryMut,
+                    TransformQuery,
                     RbQueryMut,
                     &ConnectionKind,
                     &mut Effector,

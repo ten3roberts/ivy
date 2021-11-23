@@ -48,15 +48,24 @@ impl Window {
                 info.title.as_ref(),
                 glfw::WindowMode::Windowed,
             ),
-            WindowMode::Borderless => {
-                glfw_mut.window_hint(WindowHint::Decorated(false));
-                glfw_mut.create_window(
+            WindowMode::Borderless => glfw_mut.with_primary_monitor(|glfw, monitor| {
+                let monitor = monitor?;
+                glfw.window_hint(WindowHint::Decorated(false));
+
+                let mode = monitor.get_video_mode()?;
+
+                glfw.window_hint(glfw::WindowHint::RedBits(Some(mode.red_bits)));
+                glfw.window_hint(glfw::WindowHint::GreenBits(Some(mode.green_bits)));
+                glfw.window_hint(glfw::WindowHint::BlueBits(Some(mode.blue_bits)));
+                glfw.window_hint(glfw::WindowHint::RefreshRate(Some(mode.refresh_rate)));
+
+                glfw.create_window(
                     extent.width,
                     extent.height,
                     info.title.as_ref(),
                     glfw::WindowMode::Windowed,
                 )
-            }
+            }),
             WindowMode::Fullscreen => glfw_mut.with_primary_monitor(|glfw, monitor| {
                 let monitor = monitor?;
                 let mode = monitor.get_video_mode()?;
@@ -64,6 +73,7 @@ impl Window {
                 glfw.window_hint(glfw::WindowHint::RedBits(Some(mode.red_bits)));
                 glfw.window_hint(glfw::WindowHint::GreenBits(Some(mode.green_bits)));
                 glfw.window_hint(glfw::WindowHint::BlueBits(Some(mode.blue_bits)));
+                glfw.window_hint(glfw::WindowHint::RefreshRate(Some(mode.refresh_rate)));
 
                 glfw.create_window(
                     extent.width,
