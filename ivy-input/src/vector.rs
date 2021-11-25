@@ -24,6 +24,7 @@ impl InputVector {
         }
     }
 
+    /// Returns the value of the input vector based on the current input state.
     pub fn get(&self, input: &Input) -> Vec3 {
         Vec3 {
             x: self.x.get(input),

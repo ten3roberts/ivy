@@ -215,11 +215,13 @@ impl Document {
         node: &Node,
         builder: &'a mut EntityBuilder,
     ) -> &'a mut EntityBuilder {
+        dbg!(node);
         if let Some(mesh) = node.mesh {
             builder.add::<Handle<Mesh>>(self.mesh(mesh));
         }
 
         if let Some(light) = node.light {
+            eprintln!("Building light");
             builder.add(light);
         }
 

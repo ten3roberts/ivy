@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use derive_for::*;
 use derive_more::*;
 use hecs::{Bundle, Query};
@@ -252,3 +254,26 @@ impl Random for Size2D {
 #[derive(Default, Debug, Clone, Copy)]
 /// Marker type for objects that will not move through physics or other means.
 pub struct Static;
+
+#[derive(Clone, Eq, PartialEq, PartialOrd, Ord, Default)]
+pub struct Name(Cow<'static, str>);
+
+impl Name {
+    pub fn new<S: Into<Cow<'static, str>>>(name: S) -> Self {
+        Self(name.into())
+    }
+}
+
+impl std::ops::Deref for Name {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.deref()
+    }
+}
+
+impl std::ops::DerefMut for Name {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.0.to_mut()
+    }
+}

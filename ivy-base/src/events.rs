@@ -56,6 +56,24 @@ impl Events {
         self.dispatcher().send(event)
     }
 
+    /// Shorthand to subscribe using a flume channel.
+    pub fn subscribe_flume<T: Event>(&mut self) -> flume::Receiver<T> {
+        let (tx, rx) = flume::unbounded();
+
+        if let Some(dispatcher) = self
+            .dispatchers
+            .entry(TypeId::of::<T>())
+            .or_insert_with(new_event_dispatcher::<T>)
+            .downcast_mut::<EventDispatcher<T>>()
+        {
+            dispatcher.subscribe(tx)
+        }
+
+        rx
+    }
+
+    /// Subscribes to an event of type T by sending events to teh provided
+    /// channel
     pub fn subscribe<S, T: Event>(&mut self, sender: S)
     where
         S: 'static + EventSender<T> + Send,

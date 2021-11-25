@@ -28,6 +28,10 @@ impl Default for WindowLayerInfo {
     }
 }
 
+/// Window and swapchain abstractions layer.
+/// Manages glfw window and swapchain, as well as forwarding events.
+/// **Note:** Not responsible for recreating the swapchain as this is better
+/// done during present in for example GraphicsLayer
 pub struct WindowLayer {
     glfw: Arc<RwLock<Glfw>>,
     events: mpsc::Receiver<(f64, WindowEvent)>,

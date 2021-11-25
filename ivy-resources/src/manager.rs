@@ -228,6 +228,45 @@ impl Resources {
         }
     }
 
+    /// Loads and return a reference from a given create info. Results are
+    /// cached. Reference should not be held for future loads of the same type
+    /// as it blocks insertion.
+    pub fn load_ref<T, I, E, G>(&self, info: G) -> Result<std::result::Result<CellRef<T>, E>>
+    where
+        G: Into<I>,
+        I: std::hash::Hash + Eq + Storage,
+        T: Storage + LoadResource<Info = I, Error = E>,
+    {
+        let handle = self.load::<T, I, E, G>(info)?;
+        match handle {
+            Ok(handle) => {
+                let val = self.get(handle)?;
+
+                Ok(Ok(val))
+            }
+            Err(e) => Ok(Err(e)),
+        }
+    }
+
+    /// Loads and return a reference from a given create info. Results are
+    /// cached. Reference should not be held for future loads of the same type
+    /// as it blocks insertion.
+    pub fn load_mut<T, I, E, G>(&self, info: G) -> Result<std::result::Result<CellRefMut<T>, E>>
+    where
+        G: Into<I>,
+        I: std::hash::Hash + Eq + Storage,
+        T: Storage + LoadResource<Info = I, Error = E>,
+    {
+        let handle = self.load::<T, I, E, G>(info)?;
+        match handle {
+            Ok(handle) => {
+                let val = self.get_mut(handle)?;
+
+                Ok(Ok(val))
+            }
+            Err(e) => Ok(Err(e)),
+        }
+    }
     /// Attempts to load and insert a resource from the given create info.
     pub fn load_uncached<T, I, E, G>(&self, info: G) -> Result<std::result::Result<Handle<T>, E>>
     where

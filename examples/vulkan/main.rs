@@ -462,12 +462,6 @@ fn setup_objects(
 
     resources
         .get(cube_document)?
-        .nodes()
-        .iter()
-        .for_each(|val| info!("Node {:#?}", val));
-
-    resources
-        .get(cube_document)?
         .build_node_by_name("Metal", &mut builder)?
         .add_bundle(TransformBundle {
             pos: Position::new(0.0, 3.0, 0.0),
@@ -1097,6 +1091,7 @@ impl<'a> Display for DebugReport<'a> {
             self.elapsed,
             self.position,
         )?;
+
         self.execution_times
             .map(|val| {
                 val.iter()

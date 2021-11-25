@@ -128,6 +128,14 @@ impl Input {
         self.old_cursor_pos - self.cursor_pos
     }
 
+    #[inline]
+    /// Returns the relative mouse movement in normalized coordinates between this and the previous
+    /// call to `on_update`. Does not take into account the time between each frame. To get the
+    /// cursor velocity, divide by deltatime.
+    pub fn normalized_cursor_movement(&self) -> Position2D {
+        self.cursor_movement() / self.window_extent().as_vec()
+    }
+
     /// Returns the amount scrolled this frame.
     #[inline]
     pub fn scroll(&self) -> Vec2 {

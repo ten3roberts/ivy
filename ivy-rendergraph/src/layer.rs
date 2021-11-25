@@ -47,6 +47,8 @@ impl GraphicsLayer {
             .get_default_mut::<Swapchain>()?
             .acquire_next_image(rendergraph.wait_semaphore(current_frame))?;
 
+        ivy_graphics::systems::update_view_matrices(world);
+
         GpuCameraData::update_all_system(world, current_frame)?;
         LightManager::update_all_system(world, current_frame)?;
 
