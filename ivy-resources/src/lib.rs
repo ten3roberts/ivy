@@ -4,6 +4,7 @@ mod entry;
 mod error;
 mod handle;
 mod manager;
+mod templates;
 mod traits;
 
 pub use cache::*;
@@ -12,4 +13,5 @@ pub use entry::*;
 pub use error::*;
 pub use handle::*;
 pub use manager::*;
+pub use templates::*;
 pub use traits::*;

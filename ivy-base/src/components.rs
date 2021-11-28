@@ -141,6 +141,21 @@ impl<'a> TransformQuery<'a> {
             scale: *self.scale,
         }
     }
+
+    /// Returns the forward direction of the transform
+    pub fn forward(&self) -> Vec3 {
+        self.rot.into_matrix() * Vec3::unit_z()
+    }
+
+    /// Returns the right direction of the transform
+    pub fn right(&self) -> Vec3 {
+        self.rot.into_matrix() * Vec3::unit_x()
+    }
+
+    /// Returns the up direction of the transform
+    pub fn up(&self) -> Vec3 {
+        self.rot.into_matrix() * Vec3::unit_y()
+    }
 }
 
 #[derive(Default, Bundle, AsRef, PartialEq, Debug, Copy, Clone)]
@@ -255,7 +270,7 @@ impl Random for Size2D {
 /// Marker type for objects that will not move through physics or other means.
 pub struct Static;
 
-#[derive(Clone, Eq, PartialEq, PartialOrd, Ord, Default)]
+#[derive(Clone, Eq, PartialEq, PartialOrd, Ord, Default, Hash, From, Into)]
 pub struct Name(Cow<'static, str>);
 
 impl Name {

@@ -48,9 +48,13 @@ pub use ivy_resources as resources;
 pub use ivy_ui as ui;
 pub use ivy_vulkan as vulkan;
 
-pub use base::{App, Extent, FromDuration, IntoDuration, Layer, Position, Rotation, Scale};
+pub use ivy_base::{
+    App, Extent, FromDuration, Gizmos, IntoDuration, Layer, Position, Rotation, Scale,
+};
+pub use ivy_collision::{Collider, CollisionTree, Cube, Sphere};
 pub use ivy_graphics::{Document, Mesh, MeshRenderer, TextureAtlas};
+pub use ivy_input::{Input, InputAxis, InputVector, Key};
 pub use ivy_rendergraph::RenderGraph;
-pub use ivy_resources::{Handle, Resources};
+pub use ivy_resources::{Handle, Resources, TemplateKey, TemplateStore};
 pub use ivy_ui::Widget;
 pub use ivy_vulkan::{ImageLayout, ImageUsage, Texture};

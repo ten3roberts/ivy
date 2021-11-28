@@ -3,7 +3,7 @@ mod events;
 mod input;
 mod vector;
 
-pub use glfw::{Action, Key};
+pub use glfw::{Action, Key, Modifiers};
 
 pub use axis::*;
 pub use events::*;

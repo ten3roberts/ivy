@@ -1,7 +1,7 @@
 use ultraviolet::{Mat4, Vec3};
 
 use crate::{
-    util::{minkowski_diff, MAX_ITERATIONS},
+    util::{minkowski_diff, MAX_ITERATIONS, TOLERANCE},
     CollisionPrimitive, Simplex,
 };
 
@@ -34,7 +34,11 @@ pub fn gjk<A: CollisionPrimitive, B: CollisionPrimitive>(
     while let Some(dir) = simplex.next_dir() {
         let dir = dir.normalized();
 
-        assert!((dir.mag() - 1.0 < 0.0001));
+        // Objects are inside of each other completely
+        if dir.mag_sq() - 1.0 < TOLERANCE {
+            return (false, simplex);
+        }
+
         // Get the next simplex
         let p = minkowski_diff(
             a_transform,

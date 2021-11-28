@@ -32,7 +32,7 @@ impl<T: Array<Item = Object>> std::ops::Deref for BinaryNode<T> {
     }
 }
 
-impl<T: Array<Item = Object> + Send + Sync> Node for BinaryNode<T> {
+impl<T: 'static + Array<Item = Object> + Send + Sync> Node for BinaryNode<T> {
     fn objects(&self) -> &[Object] {
         &self.objects
     }
@@ -157,7 +157,7 @@ impl<T: Array<Item = Object> + Send + Sync> Node for BinaryNode<T> {
     }
 }
 
-impl<T: Array<Item = Object> + Send + Sync> BinaryNode<T> {
+impl<T: 'static + Array<Item = Object> + Send + Sync> BinaryNode<T> {
     pub fn new(depth: usize, origin: Position, bounds: Cube) -> Self {
         Self {
             objects: Default::default(),
@@ -217,7 +217,7 @@ impl<T: Array<Item = Object> + Send + Sync> BinaryNode<T> {
     }
 }
 
-impl<T: Array<Item = Object> + Send + Sync> DrawGizmos for BinaryNode<T> {
+impl<T: 'static + Array<Item = Object> + Send + Sync> DrawGizmos for BinaryNode<T> {
     fn draw_gizmos<U: std::ops::DerefMut<Target = Gizmos>>(&self, mut gizmos: U, _: Color) {
         let color = Color::hsl(
             self.depth as f32 * 60.0,

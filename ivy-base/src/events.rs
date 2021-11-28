@@ -66,7 +66,7 @@ impl Events {
             .or_insert_with(new_event_dispatcher::<T>)
             .downcast_mut::<EventDispatcher<T>>()
         {
-            dispatcher.subscribe(tx)
+            dispatcher.subscribe(tx, |_| true)
         }
 
         rx
@@ -84,7 +84,23 @@ impl Events {
             .or_insert_with(new_event_dispatcher::<T>)
             .downcast_mut::<EventDispatcher<T>>()
         {
-            dispatcher.subscribe(sender)
+            dispatcher.subscribe(sender, |_| true)
+        }
+    }
+
+    /// Subscribes to an event of type T by sending events to teh provided
+    /// channel
+    pub fn subscribe_filter<S, T: Event>(&mut self, sender: S, filter: fn(&T) -> bool)
+    where
+        S: 'static + EventSender<T> + Send,
+    {
+        if let Some(dispatcher) = self
+            .dispatchers
+            .entry(TypeId::of::<T>())
+            .or_insert_with(new_event_dispatcher::<T>)
+            .downcast_mut::<EventDispatcher<T>>()
+        {
+            dispatcher.subscribe(sender, filter)
         }
     }
 }
@@ -122,18 +138,23 @@ where
         if self.subscribers.len() == 1 {
             self.subscribers[0].send(event);
         } else {
-            self.subscribers
-                .retain(|subscriber| subscriber.send(event.clone()));
+            self.subscribers.retain(|subscriber| {
+                if (subscriber.filter)(&event) {
+                    subscriber.send(event.clone())
+                } else {
+                    true
+                }
+            });
         }
     }
 
     /// Subscribes to events using sender to send events. The subscriber is automatically cleaned
     /// up when the receiving end is dropped.
-    pub fn subscribe<S>(&mut self, sender: S)
+    pub fn subscribe<S>(&mut self, sender: S, filter: fn(&T) -> bool)
     where
         S: 'static + EventSender<T> + Send,
     {
-        self.subscribers.push(Subscriber::new(sender));
+        self.subscribers.push(Subscriber::new(sender, filter));
     }
 }
 
@@ -141,15 +162,17 @@ impl<T: 'static + Send + Clone> AnyEventDispatcher for EventDispatcher<T> {}
 
 struct Subscriber<T> {
     sender: Box<dyn EventSender<T> + Send>,
+    filter: fn(&T) -> bool,
 }
 
 impl<T> Subscriber<T> {
-    pub fn new<S>(sender: S) -> Self
+    pub fn new<S>(sender: S, filter: fn(&T) -> bool) -> Self
     where
         S: 'static + EventSender<T> + Send,
     {
         Self {
             sender: Box::new(sender),
+            filter,
         }
     }
     pub fn send(&self, event: T) -> bool {

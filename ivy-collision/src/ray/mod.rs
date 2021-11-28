@@ -97,6 +97,19 @@ impl Ray {
         ))
     }
 
+    /// Cast the ray into the world and returns the closest intersection
+    pub fn cast_one<'r, 'w, 't, T, N>(
+        &'r self,
+        world: &'w World,
+        tree: &'t T,
+    ) -> Option<RayIntersection>
+    where
+        T: Deref<Target = CollisionTree<N>>,
+        N: 'static + Node,
+    {
+        tree.query(RayCaster::new(self, world)).flatten().min()
+    }
+
     pub fn cast<'r, 'w, 't, T, N>(
         &'r self,
         world: &'w World,

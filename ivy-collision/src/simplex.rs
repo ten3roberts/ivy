@@ -167,6 +167,15 @@ impl Simplex {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
+
+    pub(crate) fn last(&self) -> &SupportPoint {
+        match self {
+            Simplex::Point([a]) => a,
+            Simplex::Line([a, _]) => a,
+            Simplex::Triangle([a, _, _]) => a,
+            Simplex::Tetrahedron([a, _, _, _]) => a,
+        }
+    }
 }
 
 impl Index<usize> for Simplex {

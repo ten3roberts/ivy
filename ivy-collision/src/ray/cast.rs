@@ -7,9 +7,25 @@ use crate::{Collider, Contact, Node, Object, Visitor};
 
 /// Represents a collider ray intersection.
 /// Data about the ray is not saved.
+#[derive(Debug, Clone, PartialEq)]
 pub struct RayIntersection {
     pub entity: Entity,
     pub contact: Contact,
+}
+
+impl PartialOrd for RayIntersection {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.contact.depth.partial_cmp(&other.contact.depth)
+    }
+}
+
+impl Eq for RayIntersection {}
+
+impl Ord for RayIntersection {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.partial_cmp(other)
+            .expect("Failed to compare ray intersection")
+    }
 }
 
 impl RayIntersection {

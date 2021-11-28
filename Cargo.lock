@@ -460,6 +460,7 @@ version = "1.9.0"
 dependencies = [
  "anyhow",
  "atomic_refcell",
+ "derive_more",
  "flume",
  "glfw",
  "hecs",
@@ -623,6 +624,8 @@ name = "ivy-resources"
 version = "1.9.0"
 dependencies = [
  "atomic_refcell",
+ "derive_more",
+ "hecs",
  "parking_lot",
  "slotmap",
  "thiserror",

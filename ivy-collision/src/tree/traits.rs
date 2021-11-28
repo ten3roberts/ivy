@@ -12,7 +12,7 @@ use super::NodeIndex;
 //     fn insert(&self, node: N) -> NodeIndex;
 // }
 
-pub trait Node: Sized + Send + Sync {
+pub trait Node: 'static + Sized + Send + Sync {
     type SplitOutput: IntoIterator<Item = Self>;
     /// Returns the objects contained in the node
     fn objects(&self) -> &[Object];
