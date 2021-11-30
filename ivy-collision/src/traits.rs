@@ -9,6 +9,9 @@ pub trait CollisionPrimitive {
     fn support(&self, dir: Vec3) -> Vec3;
     /// Returns the maximum radius of the primitive. Used for sphere bounding.
     fn max_radius(&self) -> f32;
+
+    /// Dynamically clone type erased collider.
+    fn dyn_clone(&self) -> Box<dyn CollisionPrimitive + Send + Sync>;
 }
 
 pub trait RayIntersect: CollisionPrimitive + Sized {

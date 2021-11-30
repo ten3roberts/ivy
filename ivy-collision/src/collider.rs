@@ -17,7 +17,7 @@ impl std::fmt::Debug for Collider {
 
 impl Collider {
     /// Creates a new collider from collision primitive.
-    pub fn new<T: 'static + CollisionPrimitive + Send + Sync + Clone>(primitive: T) -> Self {
+    pub fn new<T: 'static + CollisionPrimitive + Send + Sync>(primitive: T) -> Self {
         Self {
             primitive: Box::new(primitive),
         }
@@ -37,5 +37,17 @@ impl CollisionPrimitive for Collider {
 
     fn max_radius(&self) -> f32 {
         self.primitive.max_radius()
+    }
+
+    fn dyn_clone(&self) -> Box<dyn CollisionPrimitive + Send + Sync> {
+        Box::new(self.clone())
+    }
+}
+
+impl Clone for Collider {
+    fn clone(&self) -> Self {
+        Self {
+            primitive: self.primitive.dyn_clone(),
+        }
     }
 }

@@ -1,8 +1,8 @@
 use crate::{Error, Material, Mesh, PointLight, Result};
-use hecs::{Bundle, EntityBuilder};
+use hecs::{Bundle, Component, EntityBuilder, EntityBuilderClone};
 use std::{borrow::Cow, path::Path, path::PathBuf, sync::Arc};
 
-use ivy_base::{Position, Rotation, Scale, TransformBundle};
+use ivy_base::{Position, Rotation, Scale};
 use ivy_resources::{Handle, LoadResource, Resources};
 use ivy_vulkan::{Texture, VulkanContext};
 use ultraviolet::*;
@@ -192,30 +192,25 @@ impl Document {
             .ok_or_else(|| Error::UnknownDocumentNode(name.to_owned()))
     }
 
-    pub fn build_node_by_name<'a, S: AsRef<str>>(
+    pub fn build_node_by_name<'a, S: AsRef<str>, B: GenericBuilder>(
         &self,
         name: S,
-        builder: &'a mut EntityBuilder,
-    ) -> Result<&'a mut EntityBuilder> {
+        builder: &'a mut B,
+    ) -> Result<&'a mut B> {
         let node = self.find_node(name)?;
         Ok(self.build_node_internal(node, builder))
     }
 
     /// Spawns a node using the supplied builder into the world
-    pub fn build_node<'a>(
-        &self,
-        index: usize,
-        builder: &'a mut EntityBuilder,
-    ) -> &'a mut EntityBuilder {
+    pub fn build_node<'a, B: GenericBuilder>(&self, index: usize, builder: &'a mut B) -> &'a mut B {
         self.build_node_internal(self.node(index), builder)
     }
     /// Spawns a node using the supplied builder into the world
-    fn build_node_internal<'a>(
+    fn build_node_internal<'a, B: GenericBuilder>(
         &self,
         node: &Node,
-        builder: &'a mut EntityBuilder,
-    ) -> &'a mut EntityBuilder {
-        dbg!(node);
+        builder: &'a mut B,
+    ) -> &'a mut B {
         if let Some(mesh) = node.mesh {
             builder.add::<Handle<Mesh>>(self.mesh(mesh));
         }
@@ -225,11 +220,9 @@ impl Document {
             builder.add(light);
         }
 
-        builder.add_bundle(TransformBundle {
-            pos: node.pos,
-            rot: node.rot,
-            scale: node.scale,
-        });
+        builder.add(node.pos);
+        builder.add(node.rot);
+        builder.add(node.scale);
 
         builder
     }
@@ -251,5 +244,22 @@ impl LoadResource for Document {
     fn load(resources: &ivy_resources::Resources, path: &Self::Info) -> Result<Self> {
         let context = resources.get_default::<Arc<VulkanContext>>()?;
         Self::from_file(context.clone(), resources, path.as_ref())
+    }
+}
+
+// Generic interface for cloneable and non coneable entity builders.
+pub trait GenericBuilder {
+    fn add<T: Component + Clone>(&mut self, component: T) -> &mut Self;
+}
+
+impl GenericBuilder for EntityBuilder {
+    fn add<T: Component + Clone>(&mut self, component: T) -> &mut Self {
+        self.add(component)
+    }
+}
+
+impl GenericBuilder for EntityBuilderClone {
+    fn add<T: Component + Clone>(&mut self, component: T) -> &mut Self {
+        self.add(component)
     }
 }

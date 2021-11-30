@@ -70,6 +70,10 @@ impl CollisionPrimitive for Cube {
     fn max_radius(&self) -> f32 {
         self.half_extents.mag()
     }
+
+    fn dyn_clone(&self) -> Box<dyn CollisionPrimitive + Send + Sync> {
+        Box::new(self.clone())
+    }
 }
 
 impl RayIntersect for Cube {
@@ -150,6 +154,10 @@ impl CollisionPrimitive for Sphere {
     fn max_radius(&self) -> f32 {
         self.radius
     }
+
+    fn dyn_clone(&self) -> Box<dyn CollisionPrimitive + Send + Sync> {
+        Box::new(self.clone())
+    }
 }
 
 impl RayIntersect for Sphere {
@@ -200,5 +208,9 @@ impl CollisionPrimitive for Capsule {
 
     fn max_radius(&self) -> f32 {
         self.half_height + self.radius
+    }
+
+    fn dyn_clone(&self) -> Box<dyn CollisionPrimitive + Send + Sync> {
+        Box::new(self.clone())
     }
 }

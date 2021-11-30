@@ -6,11 +6,11 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.45"
+anyhow = "1.0.51"
 derive-for = "1.2.2"
-derive_more = "0.99.16"
+derive_more = "0.99.17"
 flume = "0.10.9"
-hecs = "0.6.5"
+hecs = "0.7.1"
 ivy-collision = { path = "../ivy-collision", version = "1.8.0" }
 ivy-base = { path = "../ivy-base", version = "1.8" }
 ivy-random = { path = "../ivy-random", version = "1.8" }
@@ -19,4 +19,4 @@ ivy-resources = { path = "../ivy-resources", version = "1.8.0" }
 smallvec = "1.7.0"
 thiserror = "1.0.30"
 ultraviolet = "0.8.1"
-hecs-hierarchy = "0.5.0"
+hecs-hierarchy = "0.6.0"

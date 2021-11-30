@@ -7,13 +7,13 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.45"
+anyhow = "1.0.51"
 crossbeam-channel = { version = "0.5.1", optional = true }
 derive-for = "1.2.2"
-derive_more = "0.99.16"
+derive_more = "0.99.17"
 downcast-rs = "1.2.0"
 flume = "0.10.9"
-hecs = "0.6.5"
+hecs = "0.7.1"
 ivy-resources = { path = "../ivy-resources", version = "1.8.0" }
 ivy-random = { path = "../ivy-random", version = "1.8.0" }
 log = { version = "0.4.14", features = ["std"] }

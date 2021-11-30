@@ -2,7 +2,7 @@ use crate::{Error, Result};
 use std::{borrow::Cow, collections::HashMap};
 
 use derive_more::{From, Into};
-use hecs::{Component, DynamicBundle, Entity, World};
+use hecs::{BuiltEntityClone, Component, DynamicBundle, Entity, World};
 
 //// Generic container for storing entity templates for later retrieval and
 ///spawning. Intended to be stored inside resources or standalone.
@@ -15,6 +15,8 @@ impl TemplateStore {
         Self::default()
     }
 
+    /// Inserts a new template. A template is anything that is a closure or a
+    /// built cloneable entity.
     pub fn insert<T: Template>(&mut self, key: TemplateKey, template: T) {
         self.templates.insert(key, Box::new(template));
     }
@@ -93,29 +95,23 @@ impl From<&'static str> for TemplateKey {
 }
 
 pub trait Template: Component {
-    fn spawn<'a>(&mut self, world: &'a mut World) -> Entity;
+    fn spawn<'a>(&self, world: &'a mut World) -> Entity;
 }
 
-impl<T: FnMut(&mut World) -> Entity + Component> Template for T {
-    fn spawn<'a>(&mut self, world: &'a mut World) -> Entity {
+impl<T: Fn(&mut World) -> Entity + Component> Template for T {
+    fn spawn<'a>(&self, world: &'a mut World) -> Entity {
         (self)(world)
     }
 }
 
-// impl<B: DynamicBundle, T: Fn() -> B + 'static + Component> Template for T {
-//     fn spawn(&mut self, world: &mut World) -> Entity {
-//         world.spawn((self)())
-//     }
-// }
+impl Template for BuiltEntityClone {
+    fn spawn<'a>(&self, world: &'a mut World) -> Entity {
+        world.spawn(self)
+    }
+}
 
 // impl<T: 'static + DynamicBundle + Clone + Component> Template for T {
 //     fn spawn(&mut self, world: &mut World) -> Entity {
 //         world.spawn(self.clone())
-//     }
-// }
-
-// impl Template for EntityBuilder {
-//     fn spawn(&mut self,world: &mut World) {
-//         world.spawn(self.build())
 //     }
 // }

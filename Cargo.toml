@@ -34,22 +34,22 @@ ivy-rendergraph = { path = "./ivy-rendergraph" }
 ivy-resources = { path = "./ivy-resources" }
 ivy-ui = { path = "./ivy-ui" }
 ivy-vulkan = { path = "./ivy-vulkan" }
-hecs = "0.6.5"
-derive_more = "0.99.16"
+hecs = "0.7.1"
+derive_more = "0.99.17"
 
 [dev-dependencies]
-anyhow = "1.0.45"
+anyhow = "1.0.51"
 atomic_refcell = "0.1.8"
 
 flume = "0.10.9"
 parking_lot = "0.11.2"
 slotmap = "1.0.6"
-hecs = "0.6.5"
-glfw = { version = "0.42.0", features = [ "vulkan" ] }
-hecs-hierarchy = "0.5.0"
+hecs = "0.7.1"
+glfw = { version = "0.43.0", features = [ "vulkan" ] }
+hecs-hierarchy = "0.6.0"
 ultraviolet = "0.8.1"
 log = "0.4.14"
 
 
 [build-dependencies]
-anyhow = "1.0.45"
+anyhow = "1.0.51"
