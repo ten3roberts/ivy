@@ -1,6 +1,6 @@
 [package]
 name = "ivy-base"
-version = "1.9.0"
+version = "0.9.0"
 authors = ["Tim Roberts <ten3roberts@gmail.com>"]
 edition = "2018"
 
@@ -14,8 +14,8 @@ derive_more = "0.99.17"
 downcast-rs = "1.2.0"
 flume = "0.10.9"
 hecs = "0.7.1"
-ivy-resources = { path = "../ivy-resources", version = "1.8.0" }
-ivy-random = { path = "../ivy-random", version = "1.8.0" }
+ivy-resources = { path = "../ivy-resources", version = "0.9.0" }
+ivy-random = { path = "../ivy-random", version = "0.9.0" }
 log = { version = "0.4.14", features = ["std"] }
 palette = "0.6.0"
 thiserror = "1.0.30"

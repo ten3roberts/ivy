@@ -1,6 +1,6 @@
 [package]
 name = "ivy-graphics"
-version = "1.9.0"
+version = "0.9.0"
 authors = ["Tim Roberts <ten3roberts@gmail.com>"]
 edition = "2018"
 description = "Provides high level graphics abstractions like Meshes, Materials, etc. Builds on top of ivy-vulkan"
@@ -15,10 +15,10 @@ derive_more = "0.99.17"
 glfw = "0.43.0"
 gltf =  { version = "0.16.0", features = [ "KHR_lights_punctual" ] }
 hecs = "0.7.1"
-ivy-base = { path = "../ivy-base", version = "1.7" }
-ivy-image = { path = "../ivy-image", version = "1.1" }
-ivy-resources = { path = "../ivy-resources", version = "1.4.0" }
-ivy-vulkan = { path = "../ivy-vulkan", version = "1.7" }
+ivy-base = { path = "../ivy-base", version = "0.9" }
+ivy-image = { path = "../ivy-image", version = "0.1" }
+ivy-resources = { path = "../ivy-resources", version = "0.9.0" }
+ivy-vulkan = { path = "../ivy-vulkan", version = "0.9" }
 parking_lot = "0.11.2"
 rectangle-pack = "0.4.2"
 smallvec = "1.7.0"

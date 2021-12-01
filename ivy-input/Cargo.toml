@@ -1,6 +1,6 @@
 [package]
 name = "ivy-input"
-version = "1.9.0"
+version = "0.9.0"
 authors = ["Tim Roberts <ten3roberts@gmail.com>"]
 edition = "2018"
 
@@ -9,6 +9,6 @@ edition = "2018"
 [dependencies]
 flume = "0.10.9"
 glfw = { version = "0.43.0", features = [ "vulkan" ] }
-ivy-base = { path = "../ivy-base", version = "1.8.0" }
-ivy-graphics = { path = "../ivy-graphics", version = "1.8.0" }
+ivy-base = { path = "../ivy-base", version = "0.9.0" }
+ivy-graphics = { path = "../ivy-graphics", version = "0.9.0" }
 ultraviolet = "0.8.1"

@@ -1,6 +1,6 @@
 [package]
 name = "ivy-image"
-version = "1.9.0"
+version = "0.1.0"
 authors = ["Tim Roberts <ten3roberts@gmail.com>"]
 edition = "2018"
 description = "stb image loading library for ivy"

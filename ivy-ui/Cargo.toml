@@ -1,6 +1,6 @@
 [package]
 name = "ivy-ui"
-version = "1.9.0"
+version = "0.9.0"
 authors = ["Tim Roberts <ten3roberts@gmail.com>"]
 edition = "2018"
 description = "GUI library for Ivy"
@@ -15,14 +15,14 @@ derive_more = "0.99.17"
 fontdue = "0.6.2"
 hecs = "0.7.1"
 hecs-hierarchy = "0.6.0"
-ivy-base = { path = "../ivy-base", version = "1.4" }
+ivy-base = { path = "../ivy-base", version = "0.9" }
 glfw = "0.43.0"
-ivy-graphics = { path = "../ivy-graphics", version = "1.7" }
-ivy-image = { path = "../ivy-image", version = "1.4" }
-ivy-rendergraph = { path = "../ivy-rendergraph", version = "1.7" }
-ivy-resources = { path = "../ivy-resources", version = "1.4.0" }
-ivy-vulkan = { path = "../ivy-vulkan", version = "1.7" }
-ivy-input = { path = "../ivy-input", version = "1.8" }
+ivy-graphics = { path = "../ivy-graphics", version = "0.9" }
+ivy-image = { path = "../ivy-image", version = "0.1" }
+ivy-rendergraph = { path = "../ivy-rendergraph", version = "0.9" }
+ivy-resources = { path = "../ivy-resources", version = "0.9" }
+ivy-vulkan = { path = "../ivy-vulkan", version = "0.9" }
+ivy-input = { path = "../ivy-input", version = "0.9" }
 thiserror = "1.0.30"
 ultraviolet = { version = "0.8.1", features = [ "int" ] }
 flume = "0.10.9"
