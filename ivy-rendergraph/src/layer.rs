@@ -12,7 +12,7 @@ use crate::{RenderGraph, Result};
 /// A layer that abstracts the graphics rendering.  Executes the
 /// default rendergraph handle and properly acquires a swapchain image
 /// and presents, ensuring proper synchronization.
-/// [`frames_in_flight`] refers to the amount of frames that are
+/// `frames_in_flight` refers to the amount of frames that are
 /// queued on the graphics card. More frames means that the graphics
 /// card is kept busy and frames are produced more
 /// consequtively. However, latency is increased.

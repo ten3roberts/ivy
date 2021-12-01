@@ -166,7 +166,7 @@ impl Buffer {
         })
     }
 
-    /// Fallible version of [`write_iter`].
+    /// Fallible version of [`Self::write_iter`].
     pub fn try_write_iter<
         T: Copy + std::fmt::Debug,
         E,

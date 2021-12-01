@@ -1,7 +1,7 @@
 use ash::vk::PipelineLayout;
 
 /// Represents a single pass containing the pipeline and other data. Since
-/// [Material](crate::Material) does not
+/// [Material](ivy-graphics::Material) does not
 /// contain a pipeline, a `ShaderPass` can be considered a master material.
 pub trait ShaderPass: 'static + Send + Sync {
     /// Returns the pipeline used for this shaderpass.

@@ -134,7 +134,7 @@ impl<K: RendererKey, Obj: 'static> PassData<K, Obj> {
     }
 
     /// Builds rendering batches for shaderpass `T` for all objects not yet batched.
-    /// Note: [`get_unbatched`] needs to be run before to collect unbatched
+    /// Note: [`Self::get_unbatched`] needs to be run before to collect unbatched
     /// entities, this is due to lifetime limitations on world mutations.
     pub fn build_batches<'a, Pass, Q, F, U>(&mut self, world: &mut World, passes: &U) -> Result<()>
     where
@@ -366,7 +366,7 @@ where
     }
 
     /// Returns the batches in order from last sort.
-    /// Note: [`sort_batches`] or [`sort_batches_if_dirty`] needs to be called
+    /// Note: [`Self::sort_batches`] or [`Self::sort_batches_if_dirty`] needs to be called
     /// to ensure proper order.
     pub fn ordered_batches(&self) -> OrderedBatchIterator<K> {
         OrderedBatchIterator {

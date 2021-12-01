@@ -43,12 +43,12 @@ pub trait Node: 'static + Sized + Send + Sync {
         self.children().is_empty()
     }
 
-    /// Set the children of the node. Is called after [`split`] to assign the
+    /// Set the children of the node. Is called after [`Self::split`] to assign the
     /// generated node indices.
     fn set_children(&mut self, children: &[NodeIndex<Self>]);
 
     /// Splits the node returning the new children and pushed the objects in
-    /// need of reallocation to the [`popped`] list. The children will then be
+    /// need of reallocation to the `popped` list. The children will then be
     /// inserted into the arena and then set to the node by [`Node::set_children`]
     fn split(&mut self, popped: &mut Vec<Object>) -> Self::SplitOutput;
 }

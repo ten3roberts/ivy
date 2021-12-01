@@ -18,7 +18,7 @@ pub struct UILayerInfo {
 
 /// UI abstraction layer.
 /// Handles raw input events and filters them through the UI system, and then
-/// through the world in the form of [`InputEvent`]s.
+/// through the world in the form of [`ivy-input::InputEvent`]s.
 pub struct UILayer {
     rx: Receiver<WindowEvent>,
     input_field_events: Receiver<WidgetEvent>,

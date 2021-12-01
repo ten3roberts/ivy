@@ -9,7 +9,7 @@
 //! ## How it works
 //!
 //! ### Layers
-//! The core of the program is an application. [`core::App`]. It defines the
+//! The core of the program is an application. [`ivy-core::App`]. It defines the
 //! update loop, and event handling.
 //!
 //! From there, logic is extracted into layers which are run for each iteration.
@@ -32,7 +32,7 @@
 //! of a specific type. This is best used for low frequency data to avoid busy
 //! checking, like user input, state changes, or alike.
 //!
-//! See the documentation for [`core::Layer`]
+//! See the documentation for [`ivy-core::Layer`]
 
 pub use ivy_base as base;
 /// Rexports
