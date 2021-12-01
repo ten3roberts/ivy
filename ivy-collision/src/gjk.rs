@@ -34,10 +34,10 @@ pub fn gjk<A: CollisionPrimitive, B: CollisionPrimitive>(
     while let Some(dir) = simplex.next_dir() {
         let dir = dir.normalized();
 
-        // // // Objects are inside of each other completely
-        // if dir.mag_sq().is_nan() {
-        //     return (false, simplex);
-        // }
+        // // Objects are inside of each other completely
+        if dir.mag_sq() - 1.0 > TOLERANCE {
+            return (false, simplex);
+        }
 
         // Get the next simplex
         let p = minkowski_diff(

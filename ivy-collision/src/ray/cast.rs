@@ -1,5 +1,7 @@
-use hecs::{Entity, World};
-use ivy_base::Scale;
+use std::marker::PhantomData;
+
+use hecs::{Entity, Query, World};
+use ivy_base::{Position, Scale};
 use ultraviolet::Vec3;
 
 use super::Ray;
@@ -34,25 +36,35 @@ impl RayIntersection {
     }
 
     /// Returns the single ray contact point
-    pub fn point(&self) -> Vec3 {
+    pub fn point(&self) -> Position {
         self.contact.points[0]
+    }
+
+    /// Returns the single ray contact point
+    pub fn normal(&self) -> Vec3 {
+        self.contact.normal
     }
 }
 
 /// Visitor for casting a ray into the collision pruning tree
-pub struct RayCaster<'r, 'w> {
+pub struct RayCaster<'r, 'w, Q> {
     ray: &'r Ray,
     world: &'w World,
+    with: PhantomData<Q>,
 }
 
-impl<'r, 'w> RayCaster<'r, 'w> {
+impl<'r, 'w, Q> RayCaster<'r, 'w, Q> {
     pub fn new(ray: &'r Ray, world: &'w World) -> Self {
-        Self { ray, world }
+        Self {
+            ray,
+            world,
+            with: PhantomData,
+        }
     }
 }
 
-impl<'o, 'r, 'w, N: Node> Visitor<'o, N> for RayCaster<'r, 'w> {
-    type Output = RayCastIterator<'r, 'w, 'o>;
+impl<'o, 'r, 'w, N: Node, Q> Visitor<'o, N> for RayCaster<'r, 'w, Q> {
+    type Output = RayCastIterator<'r, 'w, 'o, Q>;
 
     fn accept(&self, node: &'o N) -> Option<Self::Output> {
         if !node
@@ -67,16 +79,18 @@ impl<'o, 'r, 'w, N: Node> Visitor<'o, N> for RayCaster<'r, 'w> {
             ray: self.ray,
             world: self.world,
             objects,
+            with: PhantomData,
         })
     }
 }
-pub struct RayCastIterator<'a, 'w, 'o> {
+pub struct RayCastIterator<'a, 'w, 'o, Q> {
     ray: &'a Ray,
     world: &'w World,
     objects: std::slice::Iter<'o, Object>,
+    with: PhantomData<Q>,
 }
 
-impl<'a, 'w, 'o> Iterator for RayCastIterator<'a, 'w, 'o> {
+impl<'a, 'w, 'o, Q: Query> Iterator for RayCastIterator<'a, 'w, 'o, Q> {
     type Item = RayIntersection;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -89,10 +103,17 @@ impl<'a, 'w, 'o> Iterator for RayCastIterator<'a, 'w, 'o> {
                 continue;
             }
 
-            let collider = self.world.get::<Collider>(object.entity).ok()?;
-            if let Some(contact) = self.ray.intersects(&*collider, &object.transform) {
-                return Some(RayIntersection::new(object.entity, contact));
-            }
+            let mut query = self
+                .world
+                .query_one::<(&Collider, Q)>(object.entity)
+                .expect("Query failed");
+
+            if let Some((collider, _)) = query.get() {
+                // let collider = self.world.get::<Collider>(object.entity).ok()?;
+                if let Some(contact) = self.ray.intersects(&*collider, &object.transform) {
+                    return Some(RayIntersection::new(object.entity, contact));
+                }
+            };
         }
     }
 }

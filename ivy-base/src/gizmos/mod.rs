@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use ultraviolet::Vec3;
 
-use crate::Color;
+use crate::{Color, Position};
 
 mod traits;
 pub use traits::*;
@@ -14,12 +14,12 @@ pub const DEFAULT_RADIUS: f32 = 0.1;
 /// Represents a 3D world overlay for debugging purposes.
 pub enum Gizmo {
     Sphere {
-        origin: Vec3,
+        origin: Position,
         color: Color,
         radius: f32,
     },
     Line {
-        origin: Vec3,
+        origin: Position,
         color: Color,
         dir: Vec3,
         radius: f32,
@@ -28,7 +28,7 @@ pub enum Gizmo {
         corner_radius: f32,
     },
     Cube {
-        origin: Vec3,
+        origin: Position,
         color: Color,
         half_extents: Vec3,
         radius: f32,
@@ -83,7 +83,7 @@ impl Gizmos {
     }
 
     /// Adds a new gizmos to the current section
-    pub fn push(&mut self, gizmo: Gizmo) {
+    pub fn draw(&mut self, gizmo: Gizmo) {
         let section = self.get_section();
 
         section.push(gizmo);

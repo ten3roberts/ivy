@@ -74,19 +74,23 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
     mut collisions: I,
 ) -> Result<()> {
     collisions.try_for_each(|coll| -> Result<()> {
+        // Ignore triggers
+        if coll.a.is_trigger || coll.b.is_trigger {
+            return Ok(());
+        }
         // Check for static collision
-        if let Ok(_) = world.get::<Static>(coll.a) {
-            return resolve_static(world, coll.a, coll.b, coll.contact);
-        } else if let Ok(_) = world.get::<Static>(coll.b) {
-            return resolve_static(world, coll.b, coll.a, coll.contact);
+        else if coll.a.is_static {
+            return resolve_static(world, coll.a.entity, coll.b.entity, coll.contact);
+        } else if coll.b.is_static {
+            return resolve_static(world, coll.b.entity, coll.a.entity, coll.contact);
         }
 
         assert_ne!(coll.a, coll.b);
 
         // Trace up to the root of the rigid connection before solving
         // collisions
-        let (a, a_mass) = get_rigid_root(world, coll.a)?;
-        let (b, b_mass) = get_rigid_root(world, coll.b)?;
+        let (a, a_mass) = get_rigid_root(world, *coll.a)?;
+        let (b, b_mass) = get_rigid_root(world, *coll.b)?;
 
         let mut a_query = world.query_one::<(RbQuery, &Position)>(a)?;
         let (mut a, a_pos) = a_query.get().unwrap();
@@ -108,13 +112,13 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
 
         let dir = coll.contact.normal * coll.contact.depth;
 
-        let mut effector = world.get_mut::<Effector>(coll.a)?;
-        effector.apply_impulse_at(impulse, coll.contact.points[0] - *a_pos);
+        let mut effector = world.get_mut::<Effector>(*coll.a)?;
+        effector.apply_impulse_at(impulse, coll.contact.points[0] - a_pos);
         effector.translate(-dir * (*b_mass / *total_mass));
         drop(effector);
 
-        let mut effector = world.get_mut::<Effector>(coll.b)?;
-        effector.apply_impulse_at(-impulse, coll.contact.points[1] - *b_pos);
+        let mut effector = world.get_mut::<Effector>(*coll.b)?;
+        effector.apply_impulse_at(-impulse, coll.contact.points[1] - b_pos);
         effector.translate(dir * (*a_mass / *total_mass));
 
         Ok(())
@@ -139,7 +143,7 @@ fn resolve_static(
         let impulse =
             resolve_static_collision(&contact, a_res.cloned().unwrap_or_default(), &rb, *b_pos);
         let dir = contact.normal * contact.depth;
-        effector.apply_impulse_at(-impulse, contact.points[1] - **b_pos);
+        effector.apply_impulse_at(-impulse, contact.points[1] - *b_pos);
         effector.translate(dir);
     }
 

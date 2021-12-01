@@ -775,12 +775,12 @@ impl Layer for LogicLayer {
 
                 // effector.apply_force(hit.contact.normal * -10.0);
                 let sideways_movement = project_plane(**vel, ray.dir());
-                let sideways_offset = project_plane(point - **pos, ray.dir());
+                let sideways_offset = project_plane(*point - **pos, ray.dir());
                 let centering = sideways_offset * 500.0;
 
                 let dampening = sideways_movement * -50.0;
                 let target = *ray.origin() + ray.dir() * 5.0;
-                let towards = target - point;
+                let towards = target - *point;
                 let towards_vel = (ray.dir() * ray.dir().dot(**vel)).dot(towards.normalized());
                 let max_vel = (5.0 * towards.mag_sq()).max(0.1);
 
@@ -789,7 +789,7 @@ impl Layer for LogicLayer {
                 effector.apply_force(dampening + towards + centering);
 
                 for (i, p) in hit.contact.points.iter().enumerate() {
-                    gizmos.push(Gizmo::Sphere {
+                    gizmos.draw(Gizmo::Sphere {
                         origin: *p,
                         color: Color::hsl(i as f32 * 30.0, 1.0, 0.5),
                         radius: 0.05 / (i + 1) as f32,

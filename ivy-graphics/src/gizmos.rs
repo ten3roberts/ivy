@@ -65,7 +65,7 @@ impl Renderer for GizmoRenderer {
                         ShaderStageFlags::VERTEX,
                         0,
                         &PushConstantData {
-                            model: Mat4::from_translation(*origin) * Mat4::from_scale(*radius),
+                            model: Mat4::from_translation(**origin) * Mat4::from_scale(*radius),
                             color: color.into(),
                             billboard_axis: Vec3::zero(),
                             corner_radius: 1.0,
@@ -86,7 +86,7 @@ impl Renderer for GizmoRenderer {
                         ShaderStageFlags::VERTEX,
                         0,
                         &PushConstantData {
-                            model: Mat4::from_translation(*origin + *dir * 0.5)
+                            model: Mat4::from_translation(**origin + *dir * 0.5)
                                 * Mat4::from_nonuniform_scale(Vec3::new(
                                     *radius,
                                     dir.mag() * 0.5,
@@ -118,7 +118,7 @@ impl Renderer for GizmoRenderer {
                                 0,
                                 &PushConstantData {
                                     model: Mat4::from_translation(
-                                        *origin
+                                        **origin
                                             + b * (Vec3::one() - (dir + v) + a * v) * *half_extents,
                                     ) * Mat4::from_nonuniform_scale(Vec3::new(
                                         *radius,

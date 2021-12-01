@@ -93,9 +93,8 @@ impl ConnectionKind {
         match self {
             Self::Rigid => {
                 // The desired velocity
-                let vel = Velocity(
-                    point_vel(*pos - *parent_trans.pos, parent_rb.ang_vel) + *parent_rb.vel,
-                );
+                let vel =
+                    Velocity(point_vel(pos - parent_trans.pos, parent_rb.ang_vel) + *parent_rb.vel);
 
                 let total_mass = *rb.mass + parent_rb.mass;
 

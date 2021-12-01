@@ -27,7 +27,7 @@ impl Cube {
         let dir = ray.dir();
         let inv_dir = Vec3::new(1.0 / dir.x, 1.0 / dir.y, 1.0 / dir.z);
 
-        let origin = ray.origin() - position;
+        let origin = ray.origin - position;
 
         let t1 = (-self.half_extents * *scale - *origin) * inv_dir;
         let t2 = (self.half_extents * *scale - *origin) * inv_dir;
@@ -83,7 +83,7 @@ impl RayIntersect for Cube {
         let dir = inv.transform_vec3(ray.dir());
         let inv_dir = Vec3::new(1.0 / dir.x, 1.0 / dir.y, 1.0 / dir.z);
 
-        let origin = inv.transform_point3(*ray.origin());
+        let origin = inv.transform_point3(*ray.origin);
 
         let t1 = (-self.half_extents - origin) * inv_dir;
         let t2 = (self.half_extents - origin) * inv_dir;
@@ -127,7 +127,7 @@ impl Sphere {
     /// Checks an axis aligned perfect sphere ray intersection
     pub fn check_aa_intersect(&self, pos: Position, ray: &Ray) -> bool {
         let dir = ray.dir();
-        let origin = *ray.origin() - *pos;
+        let origin = *ray.origin - *pos;
 
         let a = dir.dot(dir);
 
@@ -165,7 +165,7 @@ impl RayIntersect for Sphere {
     fn check_intersect(&self, transform: &TransformMatrix, ray: &Ray) -> bool {
         let inv = transform.inversed();
         let dir = inv.transform_vec3(ray.dir());
-        let origin = inv.transform_point3(*ray.origin());
+        let origin = inv.transform_point3(*ray.origin);
 
         let a = dir.dot(dir);
 

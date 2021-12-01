@@ -1,7 +1,9 @@
 use std::{any, mem};
 
-use hecs::{Entity, World};
-use ivy_base::{DrawGizmos, Events, Gizmos, Position, Rotation, Scale, TransformMatrix};
+use hecs::{Entity, Satisfies, World};
+use ivy_base::{
+    DrawGizmos, Events, Gizmos, Position, Rotation, Scale, Static, TransformMatrix, Trigger,
+};
 use slotmap::SlotMap;
 use smallvec::{Array, SmallVec};
 use ultraviolet::Vec3;
@@ -68,16 +70,27 @@ impl<N: 'static + Node> CollisionTree<N> {
 
     pub fn register(&mut self, world: &mut World) {
         let inserted = world
-            .query::<(&Collider, &Position, &Rotation, &Scale)>()
+            .query::<(
+                &Collider,
+                &Position,
+                &Rotation,
+                &Scale,
+                Satisfies<&Trigger>,
+                Satisfies<&Static>,
+            )>()
             .without::<TreeMarker<N>>()
             .iter()
-            .map(|(e, (collider, position, rot, scale))| {
-                Object::new(
-                    e,
-                    Sphere::enclose(collider, *scale),
-                    TransformMatrix::new(*position, *rot, *scale),
-                )
-            })
+            .map(
+                |(e, (collider, position, rot, scale, is_trigger, is_static))| {
+                    Object::new(
+                        e,
+                        Sphere::enclose(collider, *scale),
+                        TransformMatrix::new(*position, *rot, *scale),
+                        is_trigger,
+                        is_static,
+                    )
+                },
+            )
             .collect::<Vec<_>>();
 
         inserted.into_iter().for_each(|object| {
@@ -206,16 +219,52 @@ pub struct Object {
     pub origin: Vec3,
     pub transform: TransformMatrix,
     pub max_scale: f32,
+    pub is_trigger: bool,
+    pub is_static: bool,
+}
+
+/// Entity with additional contextual data
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct EntityPayload {
+    pub entity: Entity,
+    pub is_trigger: bool,
+    pub is_static: bool,
+}
+
+impl From<&Object> for EntityPayload {
+    fn from(val: &Object) -> Self {
+        Self {
+            entity: val.entity,
+            is_trigger: val.is_trigger,
+            is_static: val.is_static,
+        }
+    }
+}
+
+impl std::ops::Deref for EntityPayload {
+    type Target = Entity;
+
+    fn deref(&self) -> &Self::Target {
+        &self.entity
+    }
 }
 
 impl Object {
-    pub fn new(entity: Entity, bound: Sphere, transform: TransformMatrix) -> Self {
+    pub fn new(
+        entity: Entity,
+        bound: Sphere,
+        transform: TransformMatrix,
+        is_trigger: bool,
+        is_static: bool,
+    ) -> Self {
         Self {
             entity,
             bound,
             transform,
             origin: transform.extract_translation(),
             max_scale: transform[0][0].max(transform[1][1]).max(transform[2][2]),
+            is_trigger,
+            is_static,
         }
     }
 

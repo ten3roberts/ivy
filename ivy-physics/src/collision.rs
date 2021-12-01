@@ -13,8 +13,8 @@ pub fn resolve_collision(
     b: &RbQuery,
     b_pos: Position,
 ) -> Vec3 {
-    let ra = intersection.points[0] - *a_pos;
-    let rb = intersection.points[1] - *b_pos;
+    let ra = intersection.points[0] - a_pos;
+    let rb = intersection.points[1] - b_pos;
     let aw = *a.ang_vel;
     let bw = *b.ang_vel;
     let n = intersection.normal;
@@ -45,7 +45,7 @@ pub fn resolve_static_collision(
     b: &RbQuery,
     b_pos: Position,
 ) -> Vec3 {
-    let rb = intersection.points[1] - *b_pos;
+    let rb = intersection.points[1] - b_pos;
     let bw = *b.ang_vel;
     let n = intersection.normal;
 

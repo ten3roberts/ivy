@@ -239,27 +239,29 @@ impl<N: Node> NodeIndex<N> {
 
         // Check collision with objects above
         for i in 0..objects.len() {
-            let a = objects[i];
-            for b in objects[i + 1..].iter().chain(top_objects.iter().cloned()) {
-                // for b in objects[i + 1..].iter() {
-                assert_ne!(a.entity, b.entity);
+            let a = &objects[i];
+            if !a.is_static {
+                for b in objects[i + 1..].iter().chain(top_objects.iter().cloned()) {
+                    // for b in objects[i + 1..].iter() {
+                    assert_ne!(a.entity, b.entity);
 
-                // if true {
-                if a.bound.overlaps(a.origin, b.bound, b.origin) {
-                    let a_coll = world.get::<Collider>(a.entity)?;
-                    let b_coll = world.get::<Collider>(b.entity)?;
+                    // if true {
+                    if a.bound.overlaps(a.origin, b.bound, b.origin) {
+                        let a_coll = world.get::<Collider>(a.entity)?;
+                        let b_coll = world.get::<Collider>(b.entity)?;
 
-                    // Do full collision check
-                    if let Some(intersection) =
-                        intersect(&a.transform, &b.transform, &*a_coll, &*b_coll)
-                    {
-                        let collision = Collision {
-                            a: a.entity,
-                            b: b.entity,
-                            contact: intersection,
-                        };
+                        // Do full collision check
+                        if let Some(intersection) =
+                            intersect(&a.transform, &b.transform, &*a_coll, &*b_coll)
+                        {
+                            let collision = Collision {
+                                a: a.into(),
+                                b: b.into(),
+                                contact: intersection,
+                            };
 
-                        events.send(collision);
+                            events.send(collision);
+                        }
                     }
                 }
             }

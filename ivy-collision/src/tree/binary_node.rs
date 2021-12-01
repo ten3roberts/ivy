@@ -225,8 +225,8 @@ impl<T: 'static + Array<Item = Object> + Send + Sync> DrawGizmos for BinaryNode<
             if self.is_leaf() { 0.1 } else { 0.5 },
         );
 
-        gizmos.push(Gizmo::Cube {
-            origin: *self.origin,
+        gizmos.draw(Gizmo::Cube {
+            origin: self.origin,
             color,
             half_extents: self.bounds.half_extents,
             radius: 0.02 + 0.001 * self.depth as f32,

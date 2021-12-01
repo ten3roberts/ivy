@@ -1,59 +1,59 @@
 use std::ops::Index;
 
-use hecs::Entity;
+use ivy_base::Position;
 use ultraviolet::{Mat4, Vec3};
 
-use crate::{epa, gjk, util::minkowski_diff, CollisionPrimitive};
+use crate::{epa, gjk, util::minkowski_diff, CollisionPrimitive, EntityPayload};
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum ContactPoints {
-    Single([Vec3; 1]),
-    Double([Vec3; 2]),
+    Single([Position; 1]),
+    Double([Position; 2]),
 }
 
 impl ContactPoints {
-    pub fn single(p: Vec3) -> Self {
+    pub fn single(p: Position) -> Self {
         Self::Single([p])
     }
 
-    pub fn double(a: Vec3, b: Vec3) -> Self {
+    pub fn double(a: Position, b: Position) -> Self {
         Self::Double([a, b])
     }
 
-    pub fn points(&self) -> &[Vec3] {
+    pub fn points(&self) -> &[Position] {
         match self {
             ContactPoints::Single(val) => val,
             ContactPoints::Double(val) => val,
         }
     }
 
-    pub fn iter(&self) -> std::slice::Iter<Vec3> {
+    pub fn iter(&self) -> std::slice::Iter<Position> {
         self.into_iter()
     }
 }
 
-impl From<Vec3> for ContactPoints {
-    fn from(val: Vec3) -> Self {
+impl From<Position> for ContactPoints {
+    fn from(val: Position) -> Self {
         Self::Single([val])
     }
 }
 
-impl From<[Vec3; 1]> for ContactPoints {
-    fn from(val: [Vec3; 1]) -> Self {
+impl From<[Position; 1]> for ContactPoints {
+    fn from(val: [Position; 1]) -> Self {
         Self::Single(val)
     }
 }
 
-impl From<[Vec3; 2]> for ContactPoints {
-    fn from(val: [Vec3; 2]) -> Self {
+impl From<[Position; 2]> for ContactPoints {
+    fn from(val: [Position; 2]) -> Self {
         Self::Double(val)
     }
 }
 
 impl<'a> IntoIterator for &'a ContactPoints {
-    type Item = &'a Vec3;
+    type Item = &'a Position;
 
-    type IntoIter = std::slice::Iter<'a, Vec3>;
+    type IntoIter = std::slice::Iter<'a, Position>;
 
     fn into_iter(self) -> Self::IntoIter {
         match self {
@@ -64,7 +64,7 @@ impl<'a> IntoIterator for &'a ContactPoints {
 }
 
 impl Index<usize> for ContactPoints {
-    type Output = Vec3;
+    type Output = Position;
 
     fn index(&self, index: usize) -> &Self::Output {
         &self.points()[index]
@@ -82,8 +82,8 @@ pub struct Contact {
 /// Represents a collision between two entities.
 #[derive(Debug, Clone)]
 pub struct Collision {
-    pub a: Entity,
-    pub b: Entity,
+    pub a: EntityPayload,
+    pub b: EntityPayload,
     pub contact: Contact,
 }
 

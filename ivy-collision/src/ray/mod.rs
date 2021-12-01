@@ -1,6 +1,6 @@
 use std::ops::Deref;
 
-use hecs::World;
+use hecs::{Query, World};
 use ivy_base::{DrawGizmos, Position, TransformMatrix, DEFAULT_RADIUS};
 use ultraviolet::{Mat4, Vec3};
 
@@ -15,8 +15,8 @@ use crate::{
 };
 
 pub struct Ray {
-    origin: Position,
-    dir: Vec3,
+    pub(crate) origin: Position,
+    pub(crate) dir: Vec3,
 }
 
 impl Ray {
@@ -37,9 +37,9 @@ impl Ray {
         let a = support(transform, transform_inv, collider, dir);
 
         SupportPoint {
-            support: a - *self.origin,
+            support: *a - *self.origin,
             a,
-            b: *self.origin,
+            b: self.origin,
         }
     }
 
@@ -107,14 +107,41 @@ impl Ray {
         T: Deref<Target = CollisionTree<N>>,
         N: 'static + Node,
     {
-        tree.query(RayCaster::new(self, world)).flatten().min()
+        tree.query(RayCaster::<()>::new(self, world))
+            .flatten()
+            .min()
     }
 
     pub fn cast<'r, 'w, 't, T, N>(
         &'r self,
         world: &'w World,
         tree: &'t T,
-    ) -> TreeQuery<'t, N, RayCaster<'r, 'w>>
+    ) -> TreeQuery<'t, N, RayCaster<'r, 'w, ()>>
+    where
+        T: Deref<Target = CollisionTree<N>>,
+        N: 'static + Node,
+    {
+        tree.query(RayCaster::new(self, world))
+    }
+    /// Cast the ray into the world and returns the closest intersection
+    pub fn cast_one_with<'r, 'w, 't, Q, T, N>(
+        &'r self,
+        world: &'w World,
+        tree: &'t T,
+    ) -> Option<RayIntersection>
+    where
+        T: Deref<Target = CollisionTree<N>>,
+        N: 'static + Node,
+        Q: Query,
+    {
+        tree.query(RayCaster::<Q>::new(self, world)).flatten().min()
+    }
+
+    pub fn cast_with<'r, 'w, 't, Q, T, N>(
+        &'r self,
+        world: &'w World,
+        tree: &'t T,
+    ) -> TreeQuery<'t, N, RayCaster<'r, 'w, Q>>
     where
         T: Deref<Target = CollisionTree<N>>,
         N: 'static + Node,
@@ -139,8 +166,8 @@ impl DrawGizmos for Ray {
         mut gizmos: T,
         color: ivy_base::Color,
     ) {
-        gizmos.push(ivy_base::Gizmo::Line {
-            origin: *self.origin,
+        gizmos.draw(ivy_base::Gizmo::Line {
+            origin: self.origin,
             color,
             dir: self.dir,
             radius: DEFAULT_RADIUS,

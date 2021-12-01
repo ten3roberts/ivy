@@ -57,19 +57,19 @@ impl Effector {
     }
 
     /// Applies a force at the specified position from center of mass
-    pub fn apply_force_at(&mut self, f: Vec3, at: Vec3) {
+    pub fn apply_force_at(&mut self, f: Vec3, at: Position) {
         self.force += f;
         self.torque += at.cross(f);
     }
 
     /// Applies an impulse at the specified position from center of mass
-    pub fn apply_impulse_at(&mut self, impulse: Vec3, at: Vec3) {
+    pub fn apply_impulse_at(&mut self, impulse: Vec3, at: Position) {
         self.impulse += impulse;
         self.angular_impulse += at.cross(impulse);
     }
 
     /// Applies a velocity change at the specified position from center of mass
-    pub fn apply_velocity_change_at(&mut self, dv: Vec3, at: Vec3) {
+    pub fn apply_velocity_change_at(&mut self, dv: Vec3, at: Position) {
         self.delta_v += dv;
         self.delta_w += at.cross(dv);
     }

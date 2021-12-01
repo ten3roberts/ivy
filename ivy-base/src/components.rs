@@ -47,6 +47,14 @@ derive_for!(
     pub struct Size2D(pub Vec2);
 );
 
+impl std::ops::Mul<Position> for Rotation {
+    type Output = Position;
+
+    fn mul(self, rhs: Position) -> Self::Output {
+        Position(self.0 * *rhs)
+    }
+}
+
 impl Default for Scale {
     fn default() -> Self {
         Self(Vec3::one())
@@ -54,7 +62,7 @@ impl Default for Scale {
 }
 
 impl Position {
-    pub fn new(x: f32, y: f32, z: f32) -> Self {
+    pub const fn new(x: f32, y: f32, z: f32) -> Self {
         Self(Vec3::new(x, y, z))
     }
 }
@@ -66,7 +74,10 @@ impl Rotation {
     /// Creates an angular velocity from an axis angle rotation. Note: Axis is
     /// assumed to be normalized.
     pub fn axis_angle(angle: f32, axis: Vec3) -> Self {
-        Self(Rotor3::new(angle, Bivec3::from_normalized_axis(axis)))
+        Self(Rotor3::from_angle_plane(
+            angle,
+            Bivec3::from_normalized_axis(axis),
+        ))
     }
 }
 
@@ -269,6 +280,11 @@ impl Random for Size2D {
 #[derive(Default, Debug, Clone, Copy)]
 /// Marker type for objects that will not move through physics or other means.
 pub struct Static;
+
+/// Marker type for objects that will not interact with the physics system
+/// through collisions despite having colliders.
+#[derive(Default, Debug, Clone, Copy)]
+pub struct Trigger;
 
 #[derive(Clone, Eq, PartialEq, PartialOrd, Ord, Default, Hash, From, Into)]
 pub struct Name(Cow<'static, str>);
