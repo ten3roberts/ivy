@@ -233,7 +233,7 @@ impl TextRenderer {
         if let Some(inserted) = inserted {
             inserted
                 .into_iter()
-                .try_for_each(|(e, block)| world.insert_one(e, block))?;
+                .for_each(|(e, block)| world.insert_one(e, block).unwrap());
         } else {
             self.resize(world, nearest_power_2(self.glyph_count))?;
 

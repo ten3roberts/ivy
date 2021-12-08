@@ -89,6 +89,10 @@ impl Scale {
     pub fn uniform(val: f32) -> Self {
         Self(Vec3::new(val, val, val))
     }
+
+    pub fn zero() -> Self {
+        Self::uniform(0.0)
+    }
 }
 
 impl Position2D {
@@ -285,6 +289,10 @@ pub struct Static;
 /// through collisions despite having colliders.
 #[derive(Default, Debug, Clone, Copy)]
 pub struct Trigger;
+
+#[derive(Default, Debug, Clone, Copy)]
+/// Entity which won't be rendered.
+pub struct Hidden;
 
 #[derive(Clone, Eq, PartialEq, PartialOrd, Ord, Default, Hash, From, Into)]
 pub struct Name(Cow<'static, str>);

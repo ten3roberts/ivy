@@ -1,1 +1,1 @@
-./examples/vulkan/res/
+examples/vulkan/res

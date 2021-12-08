@@ -23,9 +23,6 @@ pub enum Error {
     #[error("Specified glyph {0:?} does not exists in the rasterized font")]
     MissingGlyph(u16),
 
-    #[error("UI component fetch error: {0}")]
-    ComponentError(#[from] hecs::ComponentError),
-
-    #[error("UI entity query error: {0}")]
-    NoSuchEntity(#[from] hecs::NoSuchEntity),
+    #[error("UI ecs error: {0}")]
+    EcsError(#[from] hecs_schedule::Error),
 }

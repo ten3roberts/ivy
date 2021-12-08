@@ -2,6 +2,7 @@ use crate::{constraints::*, events::WidgetEvent, InteractiveState, Result};
 use glfw::{Action, Key, WindowEvent};
 use hecs::{Entity, World};
 use hecs_hierarchy::Hierarchy;
+use hecs_schedule::GenericWorld;
 use ivy_base::{Events, Position2D, Size2D};
 use ivy_graphics::Camera;
 use ivy_input::InputEvent;
@@ -24,8 +25,8 @@ pub fn update(world: &World) -> Result<()> {
 }
 
 pub fn update_from(world: &World, parent: Entity, depth: u32) -> Result<()> {
-    let mut query = world.query_one::<(&Position2D, &Size2D, &mut WidgetDepth)>(parent)?;
-    let (position, size, curr_depth) = query.get().ok_or(hecs::NoSuchEntity)?;
+    let mut query = world.try_query_one::<(&Position2D, &Size2D, &mut WidgetDepth)>(parent)?;
+    let (position, size, curr_depth) = query.get()?;
     let position = *position;
     let size = *size;
     *curr_depth = depth.into();
@@ -46,12 +47,12 @@ fn apply_constraints(
     parent_pos: Position2D,
     parent_size: Size2D,
 ) -> Result<()> {
-    let mut constaints_query = world.query_one::<ConstraintQuery>(entity)?;
-    let constraints = constaints_query.get().ok_or(hecs::NoSuchEntity)?;
+    let mut constaints_query = world.try_query_one::<ConstraintQuery>(entity)?;
+    let constraints = constaints_query.get()?;
 
-    let mut query = world.query_one::<(&mut Position2D, &mut Size2D)>(entity)?;
+    let mut query = world.try_query_one::<(&mut Position2D, &mut Size2D)>(entity)?;
 
-    let (pos, size) = query.get().ok_or(hecs::NoSuchEntity)?;
+    let (pos, size) = query.get()?;
 
     *size =
         constraints.rel_size.calculate(parent_size) + constraints.abs_size.calculate(parent_size);
@@ -70,9 +71,9 @@ fn apply_constraints(
 
 /// Updates the canvas view and projection
 pub fn update_canvas(world: &World, canvas: Entity) -> Result<()> {
-    let mut camera_query = world.query_one::<(&mut Camera, &Size2D, &Position2D)>(canvas)?;
+    let mut camera_query = world.try_query_one::<(&mut Camera, &Size2D, &Position2D)>(canvas)?;
 
-    let (camera, size, position) = camera_query.get().ok_or(hecs::NoSuchEntity)?;
+    let (camera, size, position) = camera_query.get()?;
 
     camera.set_orthographic(size.x * 2.0, size.y * 2.0, 0.0, 100.0);
     camera.set_view(Mat4::from_translation(-position.xyz()));
@@ -88,8 +89,8 @@ pub fn reactive_system<T: 'static + Copy + Send + Sync, I: Iterator<Item = Widge
         .filter_map(|event| ReactiveState::try_from_event(&event).map(|val| (event.entity(), val)))
         .try_for_each(|(entity, state)| -> Result<()> {
             eprintln!("Got: {:?}", state);
-            let mut query = world.query_one::<(&mut T, &Reactive<T>)>(entity)?;
-            let (val, reactive) = query.get().expect("Unsatisfied components");
+            let mut query = world.try_query_one::<(&mut T, &Reactive<T>)>(entity)?;
+            let (val, reactive) = query.get()?;
             reactive.update(val, state);
             Ok(())
         })

@@ -10,7 +10,7 @@ description = "post processing helpers for ivy"
 anyhow = "1.0.51"
 derive_more = "0.99.17"
 hecs = { version = "0.7.1", features = [ "macros" ] }
-itertools = "0.10.1"
+itertools = "0.10.3"
 ivy-graphics = { path = "../ivy-graphics", version = "0.9" }
 ivy-base = { path = "../ivy-base", version = "0.9" }
 ivy-rendergraph = { path = "../ivy-rendergraph", version = "0.9" }

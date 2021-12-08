@@ -19,4 +19,4 @@ ivy-resources = { path = "../ivy-resources", version = "0.9.0" }
 smallvec = "1.7.0"
 thiserror = "1.0.30"
 ultraviolet = "0.8.1"
-hecs-hierarchy = "0.6.0"
+hecs-hierarchy = "0.7.2"

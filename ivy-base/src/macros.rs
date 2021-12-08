@@ -12,7 +12,6 @@ macro_rules! expand {
 }
 
 #[macro_export]
-#[allow(non_snake_case)]
 macro_rules! impl_for_tuples {
     ($macro:ident) => {
         $crate::expand!($macro, O, N, M, L, K, J, I, H, G, F, E, D, C, B, A);

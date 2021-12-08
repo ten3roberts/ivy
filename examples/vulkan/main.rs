@@ -12,7 +12,7 @@ use graphics::{
     layer::{WindowLayer, WindowLayerInfo},
 };
 use hecs::*;
-use hecs_hierarchy::Hierarchy;
+use hecs_hierarchy::*;
 use ivy::{
     base::*,
     graphics::*,
@@ -460,15 +460,15 @@ fn setup_objects(
 
     let mut builder = EntityBuilder::new();
 
-    resources
-        .get(cube_document)?
-        .build_node_by_name("Metal", &mut builder)?
-        .add_bundle(TransformBundle {
-            pos: Position::new(0.0, 3.0, 0.0),
-            rot: Rotation::default(),
-            scale: Scale::uniform(0.25),
-        })
-        .add(assets.geometry_pass);
+    // resources
+    //     .get(cube_document)?
+    //     .build_node_by_name("Metal", &mut builder)?
+    //     .add_bundle(TransformBundle {
+    //         pos: Position::new(0.0, 3.0, 0.0),
+    //         rot: Rotation::default(),
+    //         scale: Scale::uniform(0.25),
+    //     })
+    //     .add(assets.geometry_pass);
 
     world.spawn(builder.build());
 
@@ -492,8 +492,8 @@ fn setup_objects(
             material,
             color: Color::red(),
             ..Default::default()
-        })
-        .add(Static);
+        });
+    // .add(Static);
 
     let sphere = world.spawn(builder.build());
 

@@ -11,9 +11,6 @@ use parking_lot::{MappedRwLockWriteGuard, RwLock, RwLockWriteGuard};
 
 use crate::{Handle, ResourceCache};
 
-pub type ResourceView<'a, T> = CellRef<'a, ResourceCache<T>>;
-pub type ResourceViewMut<'a, T> = CellRefMut<'a, ResourceCache<T>>;
-
 /// ResourceManager is a container for multi-valued strongly typed assets.
 /// Any static Send + Sync type can be stored in the container and a handle is returned to access
 /// the value using interior mutability. Containers for each used type is automatically
@@ -36,7 +33,7 @@ impl Resources {
     ///
     /// Fails if the type is already mutably borrowed.
     #[inline]
-    pub fn fetch<T: Storage>(&self) -> Result<ResourceView<T>> {
+    pub fn fetch<T: Storage>(&self) -> Result<CellRef<ResourceCache<T>>> {
         // A raw pointer to the internally boxed AtomicRefCell is acquired. The pointer is
         // valid as long as self because caches can never be individually removed
         if let Some(val) = self.caches.read().get(&TypeId::of::<T>()) {
@@ -53,7 +50,7 @@ impl Resources {
     ///
     /// Fails if the type is already borrowed.
     #[inline]
-    pub fn fetch_mut<T: Storage>(&self) -> Result<ResourceViewMut<T>> {
+    pub fn fetch_mut<T: Storage>(&self) -> Result<CellRefMut<ResourceCache<T>>> {
         // A raw pointer to the internally boxed AtomicRefCell is acquired. The pointer is
         // valid as long as self because caches can never be individually removed
         if let Some(val) = self.caches.read().get(&TypeId::of::<T>()) {

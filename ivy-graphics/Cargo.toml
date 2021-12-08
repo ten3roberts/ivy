@@ -12,6 +12,7 @@ anyhow = "1.0.51"
 anymap = "0.12.1"
 ash = "0.33.3"
 derive_more = "0.99.17"
+flume = "0.10.9"
 glfw = "0.43.0"
 gltf =  { version = "0.16.0", features = [ "KHR_lights_punctual" ] }
 hecs = "0.7.1"

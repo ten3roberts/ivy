@@ -1,3 +1,5 @@
+mod borrow;
+mod borrow_default;
 mod cache;
 mod cell;
 mod entry;
@@ -7,6 +9,8 @@ mod manager;
 mod templates;
 mod traits;
 
+pub use borrow::*;
+pub use borrow_default::*;
 pub use cache::*;
 pub use cell::*;
 pub use entry::*;

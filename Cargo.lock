@@ -180,6 +180,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "crossbeam-deque"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6455c0ca19f0d2fbf751b908d5c55c1f5cbc65e03c4225427254b46890bdde1e"
+dependencies = [
+ "cfg-if",
+ "crossbeam-epoch",
+ "crossbeam-utils",
+]
+
+[[package]]
+name = "crossbeam-epoch"
+version = "0.9.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ec02e091aa634e2c3ada4a392989e7c3116673ef0ac5b72232439094d73b7fd"
+dependencies = [
+ "cfg-if",
+ "crossbeam-utils",
+ "lazy_static",
+ "memoffset",
+ "scopeguard",
+]
+
+[[package]]
 name = "crossbeam-utils"
 version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -361,9 +385,9 @@ dependencies = [
 
 [[package]]
 name = "gpu-allocator"
-version = "0.10.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f7b8a24b1bf513305427564a8571d73c89f8804f64584101faa174fa9410e5d3"
+checksum = "7e9e06ce6bad1b350131a525d8cde856dd7d5fcdeea7c3ff87031f77807ccd7b"
 dependencies = [
  "ash",
  "backtrace",
@@ -395,11 +419,12 @@ dependencies = [
 
 [[package]]
 name = "hecs-hierarchy"
-version = "0.6.0"
+version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a342f378dee83c3c48a47dab89c0d70111b946e6dc7e58c54229d978af7e718"
+checksum = "04495005f27ce2002030214ac81cd16e8dd3bb5ec4dd5dde5815c2065aa3cd4c"
 dependencies = [
  "hecs",
+ "hecs-schedule",
  "smallvec",
 ]
 
@@ -412,6 +437,29 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "hecs-schedule"
+version = "0.3.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b4d4b40aa30c81b21ed675323b7c3c9e82f5c201e188e0f877eb2088c3298827"
+dependencies = [
+ "anyhow",
+ "atomic_refcell",
+ "hecs",
+ "rayon",
+ "smallvec",
+ "thiserror",
+]
+
+[[package]]
+name = "hermit-abi"
+version = "0.1.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62b467343b94ba476dcb2500d242dadbb39557df889310ac77c5d99100aaac33"
+dependencies = [
+ "libc",
 ]
 
 [[package]]
@@ -447,9 +495,9 @@ dependencies = [
 
 [[package]]
 name = "itertools"
-version = "0.10.1"
+version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69ddb889f9d0d08a67338271fa9b62996bc788c7796a5c18cf057420aaed5eaf"
+checksum = "a9a9d19fa1e79b6215ff29b9d6880b706147f16e9b1dbb1e4e5947b5b02bc5e3"
 dependencies = [
  "either",
 ]
@@ -532,6 +580,7 @@ dependencies = [
  "anymap",
  "ash",
  "derive_more",
+ "flume",
  "glfw",
  "gltf",
  "hecs",
@@ -632,8 +681,10 @@ dependencies = [
  "atomic_refcell",
  "derive_more",
  "hecs",
+ "hecs-schedule",
  "parking_lot",
  "slotmap",
+ "smallvec",
  "thiserror",
 ]
 
@@ -649,6 +700,7 @@ dependencies = [
  "glfw",
  "hecs",
  "hecs-hierarchy",
+ "hecs-schedule",
  "ivy-base",
  "ivy-graphics",
  "ivy-image",
@@ -705,9 +757,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.108"
+version = "0.2.109"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8521a1b57e76b1ec69af7599e75e38e7b7fad6610f037db8c79b127201b5d119"
+checksum = "f98a04dce437184842841303488f70d0188c5f51437d2a834dc097eafa909a01"
 
 [[package]]
 name = "libloading"
@@ -751,6 +803,15 @@ name = "memchr"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "308cc39be01b73d0d18f82a0e7b2a3df85245f84af96fdddc5d202d27e47b86a"
+
+[[package]]
+name = "memoffset"
+version = "0.6.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5aa361d4faea93603064a027415f07bd8e1d5c88c9fbf68bf56a285428fd79ce"
+dependencies = [
+ "autocfg",
+]
 
 [[package]]
 name = "miniz_oxide"
@@ -819,6 +880,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9a64b1ec5cda2586e284722486d802acf1f7dbdc623e2bfc57e65ca1cd099290"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "num_cpus"
+version = "1.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "05499f3756671c15885fee9034446956fff3f243d6077b91e5767df161f766b3"
+dependencies = [
+ "hermit-abi",
+ "libc",
 ]
 
 [[package]]
@@ -1047,6 +1118,31 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fba75eee94a9d5273a68c9e1e105d9cffe1ef700532325788389e5a83e2522b7"
 dependencies = [
  "cty",
+]
+
+[[package]]
+name = "rayon"
+version = "1.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c06aca804d41dbc8ba42dfd964f0d01334eceb64314b9ecf7c5fad5188a06d90"
+dependencies = [
+ "autocfg",
+ "crossbeam-deque",
+ "either",
+ "rayon-core",
+]
+
+[[package]]
+name = "rayon-core"
+version = "1.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d78120e2c850279833f1dd3582f730c4ab53ed95aeaaaa862a2a5c71b1656d8e"
+dependencies = [
+ "crossbeam-channel",
+ "crossbeam-deque",
+ "crossbeam-utils",
+ "lazy_static",
+ "num_cpus",
 ]
 
 [[package]]

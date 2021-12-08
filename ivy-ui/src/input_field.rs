@@ -2,7 +2,8 @@ use std::borrow::Cow;
 
 use glfw::{Action, Key, Modifiers};
 use hecs::{Component, Entity, EntityBuilder, World};
-use hecs_hierarchy::Hierarchy;
+use hecs_hierarchy::*;
+use hecs_schedule::GenericWorld;
 use ivy_input::InputEvent;
 
 use ultraviolet::Vec2;
@@ -118,8 +119,8 @@ pub fn input_field_system<I: Iterator<Item = WidgetEvent>>(
     events: I,
     active: Entity,
 ) -> Result<()> {
-    if let Some(mut field) = world.get_mut::<InputField>(active).ok() {
-        let mut text = world.get_mut::<Text>(field.text)?;
+    if let Some(mut field) = world.try_get_mut::<InputField>(active).ok() {
+        let mut text = world.try_get_mut::<Text>(field.text)?;
         events.for_each(|event| match event.kind {
             InputEvent::CharTyped(c) => {
                 field.append(c);

@@ -6,6 +6,7 @@ use super::*;
 
 use ash::vk::{DescriptorSet, ShaderStageFlags};
 use hecs::{Entity, Fetch, Query, World};
+use ivy_base::Hidden;
 use ivy_resources::{Handle, HandleUntyped, ResourceCache};
 use ivy_vulkan::{
     descriptors::{DescriptorBuilder, IntoSet},
@@ -200,7 +201,9 @@ impl<K: RendererKey, Obj: 'static> PassData<K, Obj> {
 
         let batches = &mut self.batches;
 
-        let query = world.query_mut::<(&BatchMarker<Obj, Pass>, Q)>();
+        let query = world
+            .query_mut::<(&BatchMarker<Obj, Pass>, Q)>()
+            .without::<Hidden>();
 
         self.object_buffers[current_frame].write_slice::<Obj, _, _>(
             self.object_count as _,
@@ -214,8 +217,13 @@ impl<K: RendererKey, Obj: 'static> PassData<K, Obj> {
             },
         )?;
 
+        self.batches.iter_mut().for_each(|batch| {
+            batch.instance_count = batch.curr;
+        });
+
         Ok(())
     }
+
     /// Inserts a new entity into the correct batch. Note: The entity should not already exist in pass,
     /// behaviour is undefined. Marks the batch as dirty.
     fn insert_entity<Pass: ShaderPass>(

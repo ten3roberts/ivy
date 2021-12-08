@@ -11,7 +11,7 @@ description = "Low level vulkan abstractions for the Ivy game engine."
 arrayvec = "0.7.2"
 ash = "0.33.3"
 glfw = { version = "0.43.0", features = [ "vulkan" ] }
-gpu-allocator = "0.10.0"
+gpu-allocator = "0.11.0"
 ivy-image = { path = "../ivy-image", version = "0.1.0" }
 ivy-resources = { path = "../ivy-resources", version = "0.9.0" }
 ivy-base = { path = "../ivy-base", version = "0.9.0" }

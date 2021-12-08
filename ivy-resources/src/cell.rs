@@ -57,9 +57,9 @@ impl Drop for Cell {
 }
 
 pub struct CellRef<'a, T> {
-    value: &'a T,
-    borrow: AtomicRef<'a, dyn Storage>,
-    marker: PhantomData<T>,
+    pub(crate) value: &'a T,
+    pub(crate) borrow: AtomicRef<'a, dyn Storage>,
+    pub(crate) marker: PhantomData<T>,
 }
 
 impl<'a, T> CellRef<'a, T>
@@ -115,9 +115,9 @@ impl<'a, T> Deref for CellRef<'a, T> {
 }
 
 pub struct CellRefMut<'a, T> {
-    value: &'a mut T,
-    borrow: AtomicRefMut<'a, dyn Storage>,
-    marker: PhantomData<T>,
+    pub(crate) value: &'a mut T,
+    pub(crate) borrow: AtomicRefMut<'a, dyn Storage>,
+    pub(crate) marker: PhantomData<T>,
 }
 
 impl<'a, T> CellRefMut<'a, T>
