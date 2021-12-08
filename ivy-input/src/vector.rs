@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use glfw::Key;
 use ultraviolet::Vec3;
 
@@ -25,7 +27,7 @@ impl InputVector {
     }
 
     /// Returns the value of the input vector based on the current input state.
-    pub fn get(&self, input: &Input) -> Vec3 {
+    pub fn get(&self, input: &impl Deref<Target = Input>) -> Vec3 {
         Vec3 {
             x: self.x.get(input),
             y: self.y.get(input),

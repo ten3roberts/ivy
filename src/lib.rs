@@ -55,6 +55,6 @@ pub use ivy_collision::{Collider, CollisionTree, Contact, Cube, RayIntersect, Sp
 pub use ivy_graphics::{Document, Mesh, MeshRenderer, TextureAtlas};
 pub use ivy_input::{Input, InputAxis, InputVector, Key};
 pub use ivy_rendergraph::RenderGraph;
-pub use ivy_resources::{Handle, Resources, TemplateKey, TemplateStore};
+pub use ivy_resources::{DefaultRef, DefaultRefMut, Handle, Resources, TemplateKey, TemplateStore};
 pub use ivy_ui::Widget;
 pub use ivy_vulkan::{ImageLayout, ImageUsage, Texture};

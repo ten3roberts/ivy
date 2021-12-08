@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
-use hecs::{Entity, Query, World};
+use hecs::{Entity, Query};
+use hecs_schedule::GenericWorld;
 use ivy_base::{Position, Scale};
 use ultraviolet::Vec3;
 
@@ -47,14 +48,14 @@ impl RayIntersection {
 }
 
 /// Visitor for casting a ray into the collision pruning tree
-pub struct RayCaster<'r, 'w, Q> {
+pub struct RayCaster<'r, 'w, W, Q> {
     ray: &'r Ray,
-    world: &'w World,
+    world: &'w W,
     with: PhantomData<Q>,
 }
 
-impl<'r, 'w, Q> RayCaster<'r, 'w, Q> {
-    pub fn new(ray: &'r Ray, world: &'w World) -> Self {
+impl<'r, 'w, Q, W> RayCaster<'r, 'w, W, Q> {
+    pub fn new(ray: &'r Ray, world: &'w W) -> Self {
         Self {
             ray,
             world,
@@ -63,8 +64,8 @@ impl<'r, 'w, Q> RayCaster<'r, 'w, Q> {
     }
 }
 
-impl<'o, 'r, 'w, N: Node, Q> Visitor<'o, N> for RayCaster<'r, 'w, Q> {
-    type Output = RayCastIterator<'r, 'w, 'o, Q>;
+impl<'o, 'r, 'w, W: GenericWorld, N: Node, Q> Visitor<'o, N> for RayCaster<'r, 'w, W, Q> {
+    type Output = RayCastIterator<'r, 'w, 'o, W, Q>;
 
     fn accept(&self, node: &'o N) -> Option<Self::Output> {
         if !node
@@ -83,14 +84,15 @@ impl<'o, 'r, 'w, N: Node, Q> Visitor<'o, N> for RayCaster<'r, 'w, Q> {
         })
     }
 }
-pub struct RayCastIterator<'a, 'w, 'o, Q> {
+pub struct RayCastIterator<'a, 'w, 'o, W, Q> {
     ray: &'a Ray,
-    world: &'w World,
+    world: &'w W,
     objects: std::slice::Iter<'o, Object>,
     with: PhantomData<Q>,
 }
 
-impl<'a, 'w, 'o, Q: Query> Iterator for RayCastIterator<'a, 'w, 'o, Q> {
+/// Requires collider
+impl<'a, 'w, 'o, W: GenericWorld, Q: Query> Iterator for RayCastIterator<'a, 'w, 'o, W, Q> {
     type Item = RayIntersection;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -105,10 +107,10 @@ impl<'a, 'w, 'o, Q: Query> Iterator for RayCastIterator<'a, 'w, 'o, Q> {
 
             let mut query = self
                 .world
-                .query_one::<(&Collider, Q)>(object.entity)
+                .try_query_one::<(&Collider, Q)>(object.entity)
                 .expect("Query failed");
 
-            if let Some((collider, _)) = query.get() {
+            if let Ok((collider, _)) = query.get() {
                 // let collider = self.world.get::<Collider>(object.entity).ok()?;
                 if let Some(contact) = self.ray.intersects(&*collider, &object.transform) {
                     return Some(RayIntersection::new(object.entity, contact));

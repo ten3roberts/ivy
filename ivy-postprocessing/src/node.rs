@@ -38,8 +38,8 @@ impl<Pass: 'static + ShaderPass> PostProcessingNode<Pass> {
             context.clone(),
             &SamplerInfo {
                 address_mode: vk::SamplerAddressMode::CLAMP_TO_EDGE,
-                mag_filter: vk::Filter::LINEAR,
-                min_filter: vk::Filter::LINEAR,
+                mag_filter: vk::Filter::NEAREST,
+                min_filter: vk::Filter::NEAREST,
                 unnormalized_coordinates: false,
                 anisotropy: 16.0,
                 mip_levels: 1,

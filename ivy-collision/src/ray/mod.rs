@@ -1,6 +1,7 @@
 use std::ops::Deref;
 
-use hecs::{Query, World};
+use hecs::Query;
+use hecs_schedule::GenericWorld;
 use ivy_base::{DrawGizmos, Position, TransformMatrix, DEFAULT_RADIUS};
 use ultraviolet::{Mat4, Vec3};
 
@@ -98,53 +99,59 @@ impl Ray {
     }
 
     /// Cast the ray into the world and returns the closest intersection
-    pub fn cast_one<'r, 'w, 't, T, N>(
+    pub fn cast_one<'r, 'w, 't, W, T, N>(
         &'r self,
-        world: &'w World,
+        world: &'w W,
         tree: &'t T,
     ) -> Option<RayIntersection>
     where
         T: Deref<Target = CollisionTree<N>>,
         N: 'static + Node,
+        W: GenericWorld,
     {
-        tree.query(RayCaster::<()>::new(self, world))
+        tree.query(RayCaster::<W, ()>::new(self, world))
             .flatten()
             .min()
     }
 
-    pub fn cast<'r, 'w, 't, T, N>(
+    pub fn cast<'r, 'w, 't, T, W, N>(
         &'r self,
-        world: &'w World,
+        world: &'w W,
         tree: &'t T,
-    ) -> TreeQuery<'t, N, RayCaster<'r, 'w, ()>>
+    ) -> TreeQuery<'t, N, RayCaster<'r, 'w, W, ()>>
     where
         T: Deref<Target = CollisionTree<N>>,
         N: 'static + Node,
+        W: GenericWorld,
     {
         tree.query(RayCaster::new(self, world))
     }
     /// Cast the ray into the world and returns the closest intersection
-    pub fn cast_one_with<'r, 'w, 't, Q, T, N>(
+    pub fn cast_one_with<'r, 'w, 't, Q, T, W, N>(
         &'r self,
-        world: &'w World,
+        world: &'w W,
         tree: &'t T,
     ) -> Option<RayIntersection>
     where
         T: Deref<Target = CollisionTree<N>>,
         N: 'static + Node,
         Q: Query,
+        W: GenericWorld,
     {
-        tree.query(RayCaster::<Q>::new(self, world)).flatten().min()
+        tree.query(RayCaster::<W, Q>::new(self, world))
+            .flatten()
+            .min()
     }
 
-    pub fn cast_with<'r, 'w, 't, Q, T, N>(
+    pub fn cast_with<'r, 'w, 't, Q, T, W, N>(
         &'r self,
-        world: &'w World,
+        world: &'w W,
         tree: &'t T,
-    ) -> TreeQuery<'t, N, RayCaster<'r, 'w, Q>>
+    ) -> TreeQuery<'t, N, RayCaster<'r, 'w, W, Q>>
     where
         T: Deref<Target = CollisionTree<N>>,
         N: 'static + Node,
+        W: GenericWorld,
     {
         tree.query(RayCaster::new(self, world))
     }

@@ -1,6 +1,8 @@
 use std::{any::TypeId, collections::HashMap, sync::mpsc};
 
 use downcast_rs::{impl_downcast, Downcast};
+use hecs::Component;
+use parking_lot::Mutex;
 
 /// Manages event broadcasting for different types of events.
 /// Sending an event will send a clone of the event to all subscribed listeners.
@@ -112,33 +114,34 @@ impl Default for Events {
 }
 
 // Blanket type for events.
-pub trait Event: 'static + Clone + Send {}
-impl<T: 'static + Clone + Send> Event for T {}
+pub trait Event: Component + Clone {}
+impl<T: Component + Clone> Event for T {}
 
-trait AnyEventDispatcher: 'static + Send + Downcast {}
+trait AnyEventDispatcher: 'static + Send + Sync + Downcast {}
 impl_downcast!(AnyEventDispatcher);
 
 /// Handles event dispatching for a single type of event
-pub struct EventDispatcher<T> {
-    subscribers: Vec<Subscriber<T>>,
+pub struct EventDispatcher<T: Event> {
+    subscribers: Mutex<Vec<Subscriber<T>>>,
 }
 
 impl<T> EventDispatcher<T>
 where
-    T: Clone,
+    T: Event,
 {
     pub fn new() -> Self {
         Self {
-            subscribers: Vec::new(),
+            subscribers: Mutex::new(Vec::new()),
         }
     }
 
     /// Sends an event to all subscribed subscriber. Event is cloned for each registered subscriber. Requires mutable access to cleanup no longer active subscribers.
-    pub fn send(&mut self, event: T) {
-        if self.subscribers.len() == 1 {
-            self.subscribers[0].send(event);
+    pub fn send(&self, event: T) {
+        let mut subscribers = self.subscribers.lock();
+        if subscribers.len() == 1 {
+            subscribers[0].send(event);
         } else {
-            self.subscribers.retain(|subscriber| {
+            subscribers.retain(|subscriber| {
                 if (subscriber.filter)(&event) {
                     subscriber.send(event.clone())
                 } else {
@@ -154,11 +157,13 @@ where
     where
         S: 'static + EventSender<T> + Send,
     {
-        self.subscribers.push(Subscriber::new(sender, filter));
+        self.subscribers
+            .lock()
+            .push(Subscriber::new(sender, filter));
     }
 }
 
-impl<T: 'static + Send + Clone> AnyEventDispatcher for EventDispatcher<T> {}
+impl<T: Event> AnyEventDispatcher for EventDispatcher<T> {}
 
 struct Subscriber<T> {
     sender: Box<dyn EventSender<T> + Send>,
@@ -205,7 +210,7 @@ impl<T> EventSender<T> for flume::Sender<T> {
     }
 }
 
-fn new_event_dispatcher<T: 'static + Clone + Send>() -> Box<dyn AnyEventDispatcher> {
+fn new_event_dispatcher<T: Event>() -> Box<dyn AnyEventDispatcher> {
     let dispatcher: EventDispatcher<T> = EventDispatcher::new();
     Box::new(dispatcher)
 }

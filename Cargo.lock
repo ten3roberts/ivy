@@ -552,6 +552,7 @@ dependencies = [
  "ivy-resources",
  "log",
  "palette",
+ "parking_lot",
  "thiserror",
  "ultraviolet",
 ]
@@ -564,6 +565,7 @@ dependencies = [
  "derive-for",
  "derive_more",
  "hecs",
+ "hecs-schedule",
  "ivy-base",
  "ivy-resources",
  "palette",

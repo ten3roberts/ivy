@@ -20,3 +20,4 @@ log = { version = "0.4.14", features = ["std"] }
 palette = "0.6.0"
 thiserror = "1.0.30"
 ultraviolet = "0.8.1"
+parking_lot = "0.11.2"

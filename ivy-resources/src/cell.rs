@@ -18,7 +18,7 @@ pub struct Cell {
 
 // Since Storage implements Send + Sync, this is safe.
 unsafe impl Send for Cell {}
-// unsafe impl Sync for Cell {}
+unsafe impl Sync for Cell {}
 
 impl Cell {
     // A raw pointer to the internally boxed AtomicRefCell is stored. The pointer is

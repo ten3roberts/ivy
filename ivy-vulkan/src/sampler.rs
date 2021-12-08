@@ -46,7 +46,7 @@ impl Default for SamplerInfo {
     fn default() -> Self {
         Self {
             address_mode: AddressMode::CLAMP_TO_EDGE,
-            mag_filter: FilterMode::LINEAR,
+            mag_filter: FilterMode::NEAREST,
             min_filter: FilterMode::NEAREST,
             unnormalized_coordinates: false,
             anisotropy: 16.0,
