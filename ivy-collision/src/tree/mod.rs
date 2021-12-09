@@ -1,5 +1,6 @@
 use std::{any, mem};
 
+use flume::{Receiver, Sender};
 use hecs::{Entity, Satisfies, World};
 use ivy_base::{
     DrawGizmos, Events, Gizmos, Position, Rotation, Scale, Static, TransformMatrix, Trigger,
@@ -26,10 +27,21 @@ use self::query::TreeQuery;
 pub type Nodes<N> = SlotMap<NodeIndex<N>, N>;
 
 /// Marker for where the object is in the tree
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct TreeMarker<N> {
     index: NodeIndex<N>,
     object: Object,
+    on_drop: Sender<(NodeIndex<N>, Entity)>,
+}
+
+impl<N> Drop for TreeMarker<N> {
+    fn drop(&mut self) {
+        if !self.on_drop.is_disconnected() {
+            self.on_drop
+                .send((self.index, self.object.entity))
+                .expect("Failed to send drop message")
+        }
+    }
 }
 
 pub struct CollisionTree<N> {
@@ -39,18 +51,25 @@ pub struct CollisionTree<N> {
     popped: (Vec<Object>, Vec<Object>),
     iteration: usize,
     root: NodeIndex<N>,
+
+    tx: Sender<(NodeIndex<N>, Entity)>,
+    rx: Receiver<(NodeIndex<N>, Entity)>,
 }
 
-impl<N: 'static + Node> CollisionTree<N> {
+impl<N: 'static + CollisionTreeNode> CollisionTree<N> {
     pub fn new(root: N) -> Self {
         let mut nodes = SlotMap::with_key();
 
         let root = nodes.insert(root);
+        let (tx, rx) = flume::unbounded();
+
         Self {
             nodes,
             popped: (Vec::new(), Vec::new()),
             root,
             iteration: 0,
+            tx,
+            rx,
         }
     }
 
@@ -66,6 +85,13 @@ impl<N: 'static + Node> CollisionTree<N> {
     /// Get a mutable reference to the collision tree's nodes.
     pub fn nodes_mut(&mut self) -> &mut SlotMap<NodeIndex<N>, N> {
         &mut self.nodes
+    }
+
+    pub fn handle_removed(&mut self) {
+        let nodes = &mut self.nodes;
+        self.rx.try_iter().for_each(|(index, e)| {
+            let _ = nodes[index].remove(e);
+        })
     }
 
     pub fn register(&mut self, world: &mut World) {
@@ -95,9 +121,14 @@ impl<N: 'static + Node> CollisionTree<N> {
 
         inserted.into_iter().for_each(|object| {
             let entity = object.entity;
-            let marker = self
+            let index = self
                 .root
                 .insert(&mut self.nodes, object, &mut self.popped.0);
+            let marker = TreeMarker {
+                index,
+                object,
+                on_drop: self.tx.clone(),
+            };
             world.insert_one(entity, marker).unwrap();
         })
     }
@@ -165,11 +196,7 @@ impl<N: 'static + Node> CollisionTree<N> {
                 .try_for_each(|obj| -> Result<_, hecs::ComponentError> {
                     let mut marker = world.get_mut::<TreeMarker<N>>(obj.entity)?;
 
-                    let new_marker = root.insert(nodes, obj, back);
-
-                    // assert_ne!(marker.index, new_marker.index);
-
-                    *marker = new_marker;
+                    marker.index = root.insert(nodes, obj, back);
 
                     Ok(())
                 })?;
@@ -204,7 +231,7 @@ impl<N: 'static + Node> CollisionTree<N> {
     }
 }
 
-impl<N: Node> std::fmt::Debug for CollisionTree<N> {
+impl<N: CollisionTreeNode> std::fmt::Debug for CollisionTree<N> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("CollisionTree")
             .field("root", &DebugNode::new(self.root, &self.nodes))
@@ -274,7 +301,7 @@ impl Object {
     }
 }
 
-impl<N: Node + DrawGizmos> DrawGizmos for CollisionTree<N> {
+impl<N: CollisionTreeNode + DrawGizmos> DrawGizmos for CollisionTree<N> {
     fn draw_gizmos<T: std::ops::DerefMut<Target = Gizmos>>(
         &self,
         mut gizmos: T,

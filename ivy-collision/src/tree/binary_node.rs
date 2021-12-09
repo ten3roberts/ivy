@@ -32,7 +32,7 @@ impl<T: Array<Item = Object>> std::ops::Deref for BinaryNode<T> {
     }
 }
 
-impl<T: 'static + Array<Item = Object> + Send + Sync> Node for BinaryNode<T> {
+impl<T: 'static + Array<Item = Object> + Send + Sync> CollisionTreeNode for BinaryNode<T> {
     fn objects(&self) -> &[Object] {
         &self.objects
     }

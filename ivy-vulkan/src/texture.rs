@@ -405,7 +405,7 @@ fn generate_mipmaps(
                 image,
                 vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                 &[blit],
-                vk::Filter::NEAREST,
+                vk::Filter::LINEAR,
             );
 
             // Transition new mip level to SHADER_READ_ONLY_OPTIMAL

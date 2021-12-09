@@ -17,11 +17,10 @@ use crate::intersect;
 use crate::query::TreeQuery;
 use crate::Collider;
 use crate::Collision;
-use crate::Node;
+use crate::CollisionTreeNode;
 
 use super::Nodes;
 use super::Object;
-use super::TreeMarker;
 
 pub struct NodeIndex<T>(KeyData, PhantomData<T>);
 
@@ -120,7 +119,7 @@ impl<T> From<KeyData> for NodeIndex<T> {
     }
 }
 
-impl<N: Node> NodeIndex<N> {
+impl<N: CollisionTreeNode> NodeIndex<N> {
     // /// Returns the closest parent node that fully contains object. If object
     // /// doesn't fit, the root node is returned.
     // pub fn pop_up(self, nodes: &mut Nodes<N>, object: &Object) -> NodeIndex {
@@ -164,7 +163,7 @@ impl<N: Node> NodeIndex<N> {
         nodes: &mut Nodes<N>,
         object: Object,
         popped: &mut Vec<Object>,
-    ) -> TreeMarker<N> {
+    ) -> NodeIndex<N> {
         let index = self.push_down(nodes, &object);
         let node = &mut nodes[index];
 
@@ -174,36 +173,8 @@ impl<N: Node> NodeIndex<N> {
             index.split(nodes, popped);
             index.insert(nodes, object, popped)
         } else {
-            TreeMarker { index, object }
+            index
         }
-
-        // match node.remaining_capacity() {
-        //     Some(0) => {
-        //         index.split(nodes, popped);
-        //         index.insert(nodes, object, popped)
-        //     }
-        //     None => unreachable!(),
-        //     // Remaining capacoty and node is already split
-        //     Some(_) | None => {
-        //         node.push(object);
-        //         TreeMarker { index, object }
-        //     }
-        // }
-        // if let node.remaining_capacity().map(|val && node.children.is_none() {
-        // } else {
-        //     node.push(object);
-        //     TreeMarker { index, object }
-        // }
-
-        // NOde is full and not split
-        // if node.remaining_capacity() > 0 || node.children.is_some() {
-        //     node.push(object);
-        //     TreeMarker { index, object }
-        // } else {
-        //     eprintln!("Splitting");
-        //     index.split(nodes, popped);
-        //     index.insert(nodes, object, popped)
-        // }
     }
 
     /// Splits the node in half
@@ -230,7 +201,7 @@ impl<N: Node> NodeIndex<N> {
         top_objects: &mut SmallVec<G>,
     ) -> Result<(), hecs::ComponentError>
     where
-        N: Node,
+        N: CollisionTreeNode,
         G: Array<Item = &'a Object>,
     {
         let old_len = top_objects.len();
@@ -281,7 +252,7 @@ impl<N: Node> NodeIndex<N> {
     }
 }
 
-impl<N: Node + DrawGizmos> NodeIndex<N> {
+impl<N: CollisionTreeNode + DrawGizmos> NodeIndex<N> {
     pub fn draw_gizmos_recursive(self, nodes: &Nodes<N>, mut gizmos: &mut Gizmos, color: Color) {
         nodes[self].draw_gizmos(gizmos.deref_mut(), color);
 
@@ -302,7 +273,7 @@ impl<'a, N> DebugNode<'a, N> {
     }
 }
 
-impl<'a, N: Node> Debug for DebugNode<'a, N> {
+impl<'a, N: CollisionTreeNode> Debug for DebugNode<'a, N> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let node = &self.nodes[self.index];
 

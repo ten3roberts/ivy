@@ -12,7 +12,7 @@ use crate::{
     epa,
     query::TreeQuery,
     util::{support, SupportPoint},
-    CollisionPrimitive, CollisionTree, Contact, Node, Simplex,
+    CollisionPrimitive, CollisionTree, CollisionTreeNode, Contact, Simplex,
 };
 
 pub struct Ray {
@@ -106,7 +106,7 @@ impl Ray {
     ) -> Option<RayIntersection>
     where
         T: Deref<Target = CollisionTree<N>>,
-        N: 'static + Node,
+        N: 'static + CollisionTreeNode,
         W: GenericWorld,
     {
         tree.query(RayCaster::<W, ()>::new(self, world))
@@ -121,7 +121,7 @@ impl Ray {
     ) -> TreeQuery<'t, N, RayCaster<'r, 'w, W, ()>>
     where
         T: Deref<Target = CollisionTree<N>>,
-        N: 'static + Node,
+        N: 'static + CollisionTreeNode,
         W: GenericWorld,
     {
         tree.query(RayCaster::new(self, world))
@@ -134,7 +134,7 @@ impl Ray {
     ) -> Option<RayIntersection>
     where
         T: Deref<Target = CollisionTree<N>>,
-        N: 'static + Node,
+        N: 'static + CollisionTreeNode,
         Q: Query,
         W: GenericWorld,
     {
@@ -150,7 +150,7 @@ impl Ray {
     ) -> TreeQuery<'t, N, RayCaster<'r, 'w, W, Q>>
     where
         T: Deref<Target = CollisionTree<N>>,
-        N: 'static + Node,
+        N: 'static + CollisionTreeNode,
         W: GenericWorld,
     {
         tree.query(RayCaster::new(self, world))

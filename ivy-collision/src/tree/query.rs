@@ -1,6 +1,6 @@
 use smallvec::SmallVec;
 
-use crate::{Node, NodeIndex, Nodes, Visitor};
+use crate::{CollisionTreeNode, NodeIndex, Nodes, Visitor};
 
 pub struct TreeQuery<'a, N, V> {
     visitor: V,
@@ -20,7 +20,7 @@ impl<'a, N, V> TreeQuery<'a, N, V> {
 
 impl<'a, N, V> Iterator for TreeQuery<'a, N, V>
 where
-    N: Node,
+    N: CollisionTreeNode,
     V: Visitor<'a, N>,
 {
     type Item = V::Output;

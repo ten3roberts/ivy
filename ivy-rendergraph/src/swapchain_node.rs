@@ -180,7 +180,7 @@ impl Node for SwapchainNode {
                 src_offsets: [Offset3D::default(), offset],
                 dst_offsets: [Offset3D::default(), offset],
             }],
-            vk::Filter::NEAREST,
+            vk::Filter::LINEAR,
         );
 
         let barrier = vk::ImageMemoryBarrier {

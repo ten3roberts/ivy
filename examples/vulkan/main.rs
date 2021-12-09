@@ -96,14 +96,14 @@ fn move_system(world: &mut World, input: &Input) {
         .query::<(&Mover, &mut Velocity, &mut AngularVelocity, &Rotation)>()
         .iter()
         .for_each(|(_, (m, v, a, r))| {
-            let movement = m.translate.get(input);
+            let movement = m.translate.get(&input);
             if m.local {
                 *v = Velocity(r.into_matrix() * movement) * m.speed;
             } else {
                 *v = Velocity(movement) * m.speed;
             }
 
-            let ang = m.rotate.get(input);
+            let ang = m.rotate.get(&input);
             *a = ang.into();
         })
 }

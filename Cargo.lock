@@ -441,9 +441,9 @@ dependencies = [
 
 [[package]]
 name = "hecs-schedule"
-version = "0.3.11"
+version = "0.3.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4d4b40aa30c81b21ed675323b7c3c9e82f5c201e188e0f877eb2088c3298827"
+checksum = "49413f94191226b6cdb68fdd259d44839149754cc768187be03444029b95acaf"
 dependencies = [
  "anyhow",
  "atomic_refcell",
@@ -564,6 +564,7 @@ dependencies = [
  "arrayvec",
  "derive-for",
  "derive_more",
+ "flume",
  "hecs",
  "hecs-schedule",
  "ivy-base",

@@ -4,7 +4,7 @@ use crate::systems;
 use anyhow::Context;
 use hecs::World;
 use ivy_base::{DrawGizmos, Events, Layer};
-use ivy_collision::{Collision, CollisionTree, Node, Object};
+use ivy_collision::{Collision, CollisionTree, CollisionTreeNode, Object};
 use ivy_resources::{Resources, Storage};
 
 pub struct PhysicsLayer<N> {
@@ -12,7 +12,7 @@ pub struct PhysicsLayer<N> {
     marker: PhantomData<N>,
 }
 
-impl<N: Node + Storage> PhysicsLayer<N> {
+impl<N: CollisionTreeNode + Storage> PhysicsLayer<N> {
     pub fn new(
         _world: &mut World,
         resources: &mut Resources,
@@ -33,7 +33,7 @@ impl<N: Node + Storage> PhysicsLayer<N> {
     }
 }
 
-impl<N: Node + Storage + DrawGizmos> Layer for PhysicsLayer<N> {
+impl<N: CollisionTreeNode + Storage + DrawGizmos> Layer for PhysicsLayer<N> {
     fn on_update(
         &mut self,
         world: &mut World,

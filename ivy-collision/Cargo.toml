@@ -10,8 +10,9 @@ description = "3D collision crate for Ivy"
 arrayvec = "0.7.2"
 derive-for = "1.2.2"
 derive_more = "0.99.17"
+flume = "0.10.9"
 hecs = "0.7.1"
-hecs-schedule = "0.3"
+hecs-schedule = "0.3.12"
 ivy-base = { path = "../ivy-base", version = "0.9" }
 ivy-resources = { path = "../ivy-resources", version = "0.9" }
 palette = "0.6.0"

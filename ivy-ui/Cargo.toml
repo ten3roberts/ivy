@@ -26,4 +26,4 @@ ivy-input = { path = "../ivy-input", version = "0.9" }
 thiserror = "1.0.30"
 ultraviolet = { version = "0.8.1", features = [ "int" ] }
 flume = "0.10.9"
-hecs-schedule = "0.3.11"
+hecs-schedule = "0.3.12"

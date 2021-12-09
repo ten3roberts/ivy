@@ -6,7 +6,7 @@ use ivy_base::{Position, Scale};
 use ultraviolet::Vec3;
 
 use super::Ray;
-use crate::{Collider, Contact, Node, Object, Visitor};
+use crate::{Collider, CollisionTreeNode, Contact, Object, Visitor};
 
 /// Represents a collider ray intersection.
 /// Data about the ray is not saved.
@@ -64,7 +64,9 @@ impl<'r, 'w, Q, W> RayCaster<'r, 'w, W, Q> {
     }
 }
 
-impl<'o, 'r, 'w, W: GenericWorld, N: Node, Q> Visitor<'o, N> for RayCaster<'r, 'w, W, Q> {
+impl<'o, 'r, 'w, W: GenericWorld, N: CollisionTreeNode, Q> Visitor<'o, N>
+    for RayCaster<'r, 'w, W, Q>
+{
     type Output = RayCastIterator<'r, 'w, 'o, W, Q>;
 
     fn accept(&self, node: &'o N) -> Option<Self::Output> {
