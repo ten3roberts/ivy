@@ -157,6 +157,11 @@ fn rate_physical_device(
     }
 
     score += properties.limits.max_image_dimension2_d as Score;
+    score += properties.limits.max_image_dimension3_d as Score;
+    score += properties.limits.max_memory_allocation_count as Score;
+    score += properties.limits.max_color_attachments as Score;
+    score += properties.limits.max_sampler_allocation_count as Score;
+    score += properties.limits.max_bound_descriptor_sets as Score;
     score += properties.limits.max_push_constants_size as Score;
 
     Some(PhysicalDeviceInfo {
