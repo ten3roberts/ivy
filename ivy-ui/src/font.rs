@@ -190,7 +190,7 @@ impl LoadResource for Font {
             mag_filter: FilterMode::LINEAR,
             min_filter: FilterMode::LINEAR,
             unnormalized_coordinates: false,
-            anisotropy: 0.0,
+            anisotropy: 0,
             mip_levels: 1,
         })??;
 

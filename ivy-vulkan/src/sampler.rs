@@ -10,7 +10,7 @@ pub use vk::Filter as FilterMode;
 pub use vk::SamplerAddressMode as AddressMode;
 
 /// Specification dictating how a sampler is created
-#[derive(PartialEq, Debug, Copy, Clone)]
+#[derive(Eq, Hash, PartialEq, Debug, Copy, Clone)]
 pub struct SamplerInfo {
     pub address_mode: vk::SamplerAddressMode,
     /// Filter mode used for undersampling when there are fewer texels than pixels,
@@ -22,23 +22,23 @@ pub struct SamplerInfo {
     /// Set to true to map from 0..size instead of 0..1
     pub unnormalized_coordinates: bool,
     /// From 1.0 to 16.0
-    /// Anisotropy is automatically disabled if value is set to 1.0
-    pub anisotropy: f32,
+    /// Anisotropy is automatically disabled if value is set to 1.
+    /// Note: If using FilterMode::NEAREST, it is reccomended to disable anisotropy
+    pub anisotropy: u32,
     /// Number of mipmapping levels to use
     pub mip_levels: u32,
 }
 
-// Anisotropy should not be inf or nan
-impl Eq for SamplerInfo {}
-
-impl std::hash::Hash for SamplerInfo {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.address_mode.hash(state);
-        self.mag_filter.hash(state);
-        self.min_filter.hash(state);
-        self.unnormalized_coordinates.hash(state);
-        ((self.anisotropy * 100.0) as usize).hash(state);
-        self.mip_levels.hash(state);
+impl SamplerInfo {
+    /// Returns a sampler that does not interpolate, useful for pixel art
+    pub fn pixelated() -> Self {
+        Self {
+            mag_filter: FilterMode::NEAREST,
+            min_filter: FilterMode::NEAREST,
+            anisotropy: 1,
+            mip_levels: 1,
+            ..Default::default()
+        }
     }
 }
 
@@ -49,7 +49,7 @@ impl Default for SamplerInfo {
             mag_filter: FilterMode::LINEAR,
             min_filter: FilterMode::LINEAR,
             unnormalized_coordinates: false,
-            anisotropy: 16.0,
+            anisotropy: 8,
             mip_levels: 4,
         }
     }
@@ -63,12 +63,13 @@ pub struct Sampler {
 impl Sampler {
     // Creates a new sampler from the specified sampling options
     pub fn new(context: Arc<VulkanContext>, info: &SamplerInfo) -> Result<Self> {
-        let max_anisotropy = (info.anisotropy as f32).max(context.limits().max_sampler_anisotropy);
-        let anisotropy_enable = if max_anisotropy > 1.0 {
+        let anisotropy_enable = if info.anisotropy != 1 {
             vk::TRUE
         } else {
             vk::FALSE
         };
+
+        let max_anisotropy = (info.anisotropy as f32).max(context.limits().max_sampler_anisotropy);
 
         let create_info = vk::SamplerCreateInfo {
             s_type: vk::StructureType::SAMPLER_CREATE_INFO,

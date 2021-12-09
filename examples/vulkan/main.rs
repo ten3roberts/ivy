@@ -845,12 +845,12 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
 
     let heart: Handle<Image> = resources.load(ImageInfo {
         texture: "./res/textures/heart.png".into(),
-        sampler: SamplerInfo::default(),
+        sampler: SamplerInfo::pixelated(),
     })??;
 
     let input_field: Handle<Image> = resources.load(ImageInfo {
         texture: "./res/textures/field.png".into(),
-        sampler: SamplerInfo::default(),
+        sampler: SamplerInfo::pixelated(),
     })??;
 
     let font: Handle<Font> = resources.load((
