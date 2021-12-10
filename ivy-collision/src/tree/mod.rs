@@ -146,8 +146,8 @@ impl<N: 'static + CollisionTreeNode> CollisionTree<N> {
             Satisfies<&Static>,
         )>,
     ) -> Result<(), hecs_schedule::Error> {
-        self.handle_popped(&world)?;
         self.handle_removed();
+        self.handle_popped(&world)?;
 
         self.iteration += 1;
 

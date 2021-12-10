@@ -194,6 +194,10 @@ impl VulkanContext {
     pub fn descriptor_allocator(&self) -> &DescriptorAllocator {
         &self.descriptor_allocator
     }
+
+    pub fn wait_idle(&self) -> Result<()> {
+        unsafe { self.device().device_wait_idle().map_err(|e| e.into()) }
+    }
 }
 
 impl Drop for VulkanContext {
