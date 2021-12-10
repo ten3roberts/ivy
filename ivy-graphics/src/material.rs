@@ -54,7 +54,6 @@ impl Material {
         roughness: f32,
         metallic: f32,
     ) -> Result<Self> {
-        eprintln!("roughness: {}, metallic: {}", roughness, metallic);
         let buffer = Buffer::new(
             context.clone(),
             ivy_vulkan::BufferUsage::UNIFORM_BUFFER,

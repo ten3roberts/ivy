@@ -84,7 +84,7 @@ impl SamplerInfo {
 impl Default for SamplerInfo {
     fn default() -> Self {
         Self {
-            address_mode: AddressMode::CLAMP_TO_EDGE,
+            address_mode: AddressMode::REPEAT,
             mag_filter: FilterMode::LINEAR,
             min_filter: FilterMode::LINEAR,
             unnormalized_coordinates: false,

@@ -45,9 +45,11 @@ impl InputField {
     pub fn spawn<T: Component>(
         world: &mut World,
         root: Entity,
-        info: InputFieldInfo<T>,
+        mut info: InputFieldInfo<T>,
     ) -> Result<Entity> {
         let mut builder = EntityBuilder::new();
+        info.text.text.set(info.placeholder.clone());
+
         builder
             .add_bundle(WidgetBundle {
                 abs_size: AbsoluteSize(-info.text_padding),

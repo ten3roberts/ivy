@@ -220,9 +220,9 @@ enum VerticalAlignDef {
 #[derive(Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct TextAlignment {
-    #[serde(with = "HorizontalAlignDef")]
+    #[cfg_attr(feature = "serialize", serde(with = "HorizontalAlignDef"))]
     pub horizontal: HorizontalAlign,
-    #[serde(with = "VerticalAlignDef")]
+    #[cfg_attr(feature = "serialize", serde(with = "VerticalAlignDef"))]
     pub vertical: VerticalAlign,
 }
 

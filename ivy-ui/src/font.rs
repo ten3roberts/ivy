@@ -8,7 +8,7 @@ use ivy_vulkan::{
     AddressMode, FilterMode, Format, ImageUsage, SampleCountFlags, Sampler, SamplerInfo,
     TextureInfo, VulkanContext,
 };
-use std::{borrow::Cow, ops::Range, path::Path, sync::Arc};
+use std::{borrow::Cow, ops::Range, sync::Arc};
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct FontInfo {
@@ -17,6 +17,7 @@ pub struct FontInfo {
     pub glyphs: Range<char>,
     pub padding: u32,
     pub mip_levels: u32,
+    pub path: Cow<'static, str>,
 }
 
 impl Eq for FontInfo {}
@@ -37,6 +38,7 @@ impl Default for FontInfo {
             glyphs: 32 as char..128 as char,
             padding: 5,
             mip_levels: 1,
+            path: "".into(),
         }
     }
 }
@@ -50,16 +52,14 @@ pub struct Font {
 
 impl Font {
     /// Loads and rasterizes a font from file
-    pub fn new<P: AsRef<Path>>(
+    pub fn new(
         context: Arc<VulkanContext>,
         resources: &Resources,
-        path: P,
         sampler: Handle<Sampler>,
         info: &FontInfo,
     ) -> Result<Self> {
-        let path = path.as_ref();
-
-        let bytes = std::fs::read(path).map_err(|e| Error::Io(e, Some(path.to_owned())))?;
+        let bytes = std::fs::read(info.path.as_ref())
+            .map_err(|e| Error::Io(e, Some(info.path.to_string().into())))?;
 
         let font = fontdue::Font::from_bytes(&bytes[..], fontdue::FontSettings::default())
             .map_err(|e| Error::FontParsing(e))?;
@@ -178,7 +178,7 @@ fn nearest_power_2(val: u32) -> u32 {
 }
 
 impl LoadResource for Font {
-    type Info = (FontInfo, Cow<'static, str>);
+    type Info = FontInfo;
 
     type Error = Error;
 
@@ -194,12 +194,6 @@ impl LoadResource for Font {
             mip_levels: 1,
         })??;
 
-        Self::new(
-            context.clone(),
-            resources,
-            info.1.as_ref(),
-            sampler,
-            &info.0,
-        )
+        Self::new(context.clone(), resources, sampler, info)
     }
 }

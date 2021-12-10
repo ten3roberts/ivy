@@ -853,21 +853,17 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
         sampler: SamplerInfo::pixelated(),
     })??;
 
-    let font: Handle<Font> = resources.load((
-        FontInfo {
-            size: 48.0,
-            ..Default::default()
-        },
-        "./res/fonts/Lora/Lora-VariableFont_wght.ttf".into(),
-    ))??;
+    let font: Handle<Font> = resources.load(FontInfo {
+        size: 48.0,
+        path: "./res/fonts/Lora/Lora-VariableFont_wght.ttf".into(),
+        ..Default::default()
+    })??;
 
-    let monospace: Handle<Font> = resources.load((
-        FontInfo {
-            size: 48.0,
-            ..Default::default()
-        },
-        "./res/fonts/Roboto_Mono/RobotoMono-VariableFont_wght.ttf".into(),
-    ))??;
+    let monospace: Handle<Font> = resources.load(FontInfo {
+        size: 48.0,
+        path: "./res/fonts/Roboto_Mono/RobotoMono-VariableFont_wght.ttf".into(),
+        ..Default::default()
+    })??;
 
     let mut builder = EntityBuilder::new();
     builder

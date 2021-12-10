@@ -24,7 +24,7 @@ pub fn update(world: &World) -> Result<()> {
     })
 }
 
-pub fn update_from(world: &World, parent: Entity, depth: u32) -> Result<()> {
+pub(crate) fn update_from(world: &impl GenericWorld, parent: Entity, depth: u32) -> Result<()> {
     let mut query = world.try_query_one::<(&Position2D, &Size2D, &mut WidgetDepth)>(parent)?;
     let (position, size, curr_depth) = query.get()?;
     let position = *position;
@@ -33,16 +33,19 @@ pub fn update_from(world: &World, parent: Entity, depth: u32) -> Result<()> {
 
     drop(query);
 
-    world.children::<Widget>(parent).try_for_each(|child| {
-        apply_constraints(world, child, position, size)?;
-        assert!(parent != child);
-        update_from(world, child, depth + 1)
-    })
+    if let Ok(layout) = world.try_get::<WidgetLayout>(parent) {
+        layout.update(world, parent, position, size, depth)
+    } else {
+        world.children::<Widget>(parent).try_for_each(|child| {
+            apply_constraints(world, child, position, size)?;
+            update_from(world, child, depth + 1)
+        })
+    }
 }
 
-/// Applies the constaints associated to entity and uses the given parent.
-fn apply_constraints(
-    world: &World,
+/// Applies the constraints associated to entity and uses the given parent.
+pub(crate) fn apply_constraints(
+    world: &impl GenericWorld,
     entity: Entity,
     parent_pos: Position2D,
     parent_size: Size2D,

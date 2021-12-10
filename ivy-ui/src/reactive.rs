@@ -94,9 +94,9 @@ impl<T: 'static + Copy + Send + Sync> Layer for ReactiveLayer<T> {
     fn on_update(
         &mut self,
         world: &mut hecs::World,
-        _resources: &mut ivy_resources::Resources,
-        _events: &mut ivy_base::Events,
-        _frame_time: std::time::Duration,
+        _: &mut ivy_resources::Resources,
+        _: &mut ivy_base::Events,
+        _: std::time::Duration,
     ) -> anyhow::Result<()> {
         systems::reactive_system::<T, _>(world, self.rx.try_iter()).context(format!(
             "Failed to execute reactive layer for {:?}",
