@@ -15,7 +15,6 @@ use crate::{
 };
 
 /// A bundle for easily creating input fields with a reactive component
-#[derive(Default)]
 pub struct InputFieldInfo<T> {
     pub text: TextBundle<T>,
     /// Specifies a builder for the field widget. In order to be rendered, the

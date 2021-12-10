@@ -1,24 +1,63 @@
 use crate::descriptors::DescriptorBindable;
 use crate::{Error, Result, Texture, VulkanContext};
+use ash::vk;
+use ivy_resources::LoadResource;
+#[cfg(feature = "serialize")]
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use ash::vk;
+#[derive(Hash, Eq, Default, Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+/// Wraps vk::SamplerAddressMode
+pub struct AddressMode(i32);
 
-use ivy_resources::LoadResource;
-// Re-export enums
-pub use vk::Filter as FilterMode;
-pub use vk::SamplerAddressMode as AddressMode;
+impl AddressMode {
+    pub const REPEAT: Self = Self(0);
+    pub const MIRRORED_REPEAT: Self = Self(1);
+    pub const CLAMP_TO_EDGE: Self = Self(2);
+    pub const CLAMP_TO_BORDER: Self = Self(3);
 
+    pub fn from_raw(val: i32) -> Self {
+        Self(val)
+    }
+}
+
+#[derive(Hash, Eq, Default, Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+/// Wraps vk::Filter
+pub struct FilterMode(i32);
+
+impl FilterMode {
+    pub const NEAREST: Self = Self(0);
+    pub const LINEAR: Self = Self(1);
+
+    pub fn from_raw(val: i32) -> Self {
+        Self(val)
+    }
+}
+
+impl From<AddressMode> for vk::SamplerAddressMode {
+    fn from(val: AddressMode) -> Self {
+        Self::from_raw(val.0)
+    }
+}
+
+impl From<FilterMode> for vk::Filter {
+    fn from(val: FilterMode) -> Self {
+        Self::from_raw(val.0)
+    }
+}
 /// Specification dictating how a sampler is created
 #[derive(Eq, Hash, PartialEq, Debug, Copy, Clone)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct SamplerInfo {
-    pub address_mode: vk::SamplerAddressMode,
+    pub address_mode: AddressMode,
     /// Filter mode used for undersampling when there are fewer texels than pixels,
     /// e.g; scaling up
-    pub mag_filter: vk::Filter,
+    pub mag_filter: FilterMode,
     /// Filter mode used for oversampling when there are more texels than pixels,
     /// e.g; scaling down
-    pub min_filter: vk::Filter,
+    pub min_filter: FilterMode,
     /// Set to true to map from 0..size instead of 0..1
     pub unnormalized_coordinates: bool,
     /// From 1.0 to 16.0
@@ -75,14 +114,14 @@ impl Sampler {
             s_type: vk::StructureType::SAMPLER_CREATE_INFO,
             p_next: std::ptr::null(),
             flags: vk::SamplerCreateFlags::default(),
-            mag_filter: info.mag_filter,
-            min_filter: info.min_filter,
+            mag_filter: info.mag_filter.into(),
+            min_filter: info.min_filter.into(),
             mipmap_mode: vk::SamplerMipmapMode::LINEAR,
             min_lod: 0.0,
             max_lod: info.mip_levels as f32,
-            address_mode_u: info.address_mode,
-            address_mode_v: info.address_mode,
-            address_mode_w: info.address_mode,
+            address_mode_u: info.address_mode.into(),
+            address_mode_v: info.address_mode.into(),
+            address_mode_w: info.address_mode.into(),
             mip_lod_bias: 0.0,
             anisotropy_enable,
             max_anisotropy,

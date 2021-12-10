@@ -67,6 +67,7 @@ pub enum NodeKind {
 }
 
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct AttachmentInfo {
     // TODO, derive from edges
     pub store_op: StoreOp,

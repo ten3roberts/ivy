@@ -11,9 +11,13 @@ use ivy_vulkan::{
 use std::sync::Arc;
 use ultraviolet::{Mat4, Vec2, Vec3, Vec4};
 
+#[cfg(feature = "serialize")]
+use serde::{Deserialize, Serialize};
+
 /// A camera holds a view and projection matrix.
 /// Use a system to update view matrix according to position and rotation.
 #[derive(Default, Debug, Clone)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct Camera {
     projection: Mat4,
     view: Mat4,

@@ -1,14 +1,15 @@
 use crate::Result;
-use std::{
-    borrow::Cow,
-    sync::{mpsc::Receiver, Arc},
-};
-
 use ash::vk::{Handle, SurfaceKHR};
 use glfw::{ClientApiHint, CursorMode, Glfw, WindowEvent, WindowHint};
 use ivy_base::Extent;
 use ivy_vulkan::traits::Backend;
 use parking_lot::RwLock;
+#[cfg(feature = "serialize")]
+use serde::{Deserialize, Serialize};
+use std::{
+    borrow::Cow,
+    sync::{mpsc::Receiver, Arc},
+};
 use ultraviolet::Vec2;
 
 use crate::Error;
@@ -162,6 +163,7 @@ impl Backend for Window {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub enum WindowMode {
     Windowed,
     Borderless,
@@ -169,6 +171,7 @@ pub enum WindowMode {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct WindowInfo {
     /// The windows size. Set to none to use the monitors size.
     pub extent: Option<Extent>,

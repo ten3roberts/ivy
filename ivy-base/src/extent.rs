@@ -1,3 +1,5 @@
+#[cfg(feature = "serialize")]
+use serde::{Deserialize, Serialize};
 use std::{
     fmt::Display,
     ops::{Add, Mul},
@@ -6,6 +8,7 @@ use ultraviolet::Vec2;
 
 /// Represents a width and height.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct Extent {
     pub width: u32,
     pub height: u32,

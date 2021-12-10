@@ -87,6 +87,7 @@ impl PBRAttachments {
     }
 }
 
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct PBRInfo {
     pub ambient_radience: Vec3,
     pub max_lights: u64,

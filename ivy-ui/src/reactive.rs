@@ -9,8 +9,12 @@ use ivy_resources::Resources;
 
 use crate::{events::WidgetEvent, systems};
 
+#[cfg(feature = "serialize")]
+use serde::{Deserialize, Serialize};
+
 /// A struct specifying how a widget should react based on hover, press, and
 /// release. The struct holds the values which will be used for each state
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct Reactive<T> {
     pub unfocused: T,
     pub focused: T,
@@ -44,6 +48,7 @@ impl<T> Reactive<T> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub enum ReactiveState {
     Unfocused,
     Focused,

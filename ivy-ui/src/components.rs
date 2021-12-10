@@ -8,6 +8,8 @@ use hecs::Bundle;
 use ivy_base::{Color, Position2D, Size2D};
 use ivy_graphics::Camera;
 use ivy_resources::Handle;
+#[cfg(feature = "serialize")]
+use serde::{Deserialize, Serialize};
 use ultraviolet::Vec2;
 
 derive_for!(
@@ -30,16 +32,21 @@ derive_for!(
         Sub,
         SubAssign,
         PartialEq,
+        Hash,
+        Eq,
+        PartialOrd,
+        Ord,
     );
-    #[derive(Hash, Eq, PartialOrd, Ord)]
     /// The depth of the widget from the root.
     #[repr(transparent)]
+    #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
     pub struct WidgetDepth(pub u32);
 );
 
 /// Bundle for widgets.
 /// Use further bundles for images and texts
 #[derive(Bundle, Clone, Debug, Default)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct WidgetBundle {
     pub widget: Widget,
     pub depth: WidgetDepth,
@@ -80,6 +87,7 @@ impl WidgetBundle {
 /// Bundle for widgets.
 /// Use further bundles for images and texts
 #[derive(Bundle, Clone, Debug, Default)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct CanvasBundle {
     pub widget: Widget,
     pub depth: WidgetDepth,
@@ -171,19 +179,50 @@ impl<T> TextBundle<T> {
 /// widget will react to it.
 /// The interactive widget doesn't neccessarily need to be a visible object,
 /// which allows for transparent blockers in menus.
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct Interactive;
 /// Marker type for UI and the UI hierarchy.
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct Widget;
 
 /// Marker type specifying that a widget should remain active even after the
 /// mouse button was released. Release events will still be sent, but input will
 /// continue to be absorbed and sent to the widget.
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct Sticky;
 
+#[cfg(feature = "serialize")]
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "HorizontalAlign")]
+enum HorizontalAlignDef {
+    /// Aligns text to the left of the region defined by the max_width.
+    Left,
+    /// Aligns text to the center of the region defined by the max_width.
+    Center,
+    /// Aligns text to the right of the region defined by the max_width.
+    Right,
+}
+
+#[cfg(feature = "serialize")]
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "VerticalAlign")]
+enum VerticalAlignDef {
+    /// Aligns text to the top of the region defined by the max_height.
+    Top,
+    /// Aligns text to the middle of the region defined by the max_height.
+    Middle,
+    /// Aligns text to the bottom of the region defined by the max_height.
+    Bottom,
+}
+
 #[derive(Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct TextAlignment {
+    #[serde(with = "HorizontalAlignDef")]
     pub horizontal: HorizontalAlign,
+    #[serde(with = "VerticalAlignDef")]
     pub vertical: VerticalAlign,
 }
 
@@ -229,6 +268,7 @@ impl Default for TextAlignment {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub enum WrapStyle {
     /// Text flows outside bounds.
     Overflow,

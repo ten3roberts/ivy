@@ -4,6 +4,8 @@ use derive_for::*;
 use derive_more::*;
 use hecs::{Bundle, Query};
 use ivy_random::Random;
+#[cfg(feature = "serialize")]
+use serde::{Deserialize, Serialize};
 use ultraviolet::{Bivec3, Mat4, Rotor3, Vec2, Vec3};
 
 derive_for!(
@@ -30,24 +32,30 @@ derive_for!(
     /// Describes a position in 3D space.
     #[repr(transparent)]
     #[derive(Default, Neg)]
+    #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
     pub struct Position(pub Vec3);
     /// Describes a rotation in 3D space.
     #[repr(transparent)]
     #[derive(Default)]
+    #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
     pub struct Rotation(pub Rotor3);
     /// Describes a scale in 3D space.
     /// Default is overridden for an identity scale.
     #[repr(transparent)]
+    #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
     pub struct Scale(pub Vec3);
     #[repr(transparent)]
     #[derive(Default, Neg)]
+    #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
     pub struct Position2D(pub Vec2);
     #[repr(transparent)]
     #[derive(Default)]
+    #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
     pub struct Size2D(pub Vec2);
 
     #[repr(transparent)]
     #[derive(Default)]
+    #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
     /// Wrapper for strongly typed floating point deltatime
     pub struct DeltaTime(f32);
 );
@@ -121,6 +129,7 @@ impl Size2D {
 /// the world.
 /// Should not be inserted into the world as it can become outdated when either
 /// Position, Rotation, or Scale changes. Use TransformQuery instead.
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct TransformMatrix(pub Mat4);
 
 impl TransformMatrix {
@@ -179,6 +188,7 @@ impl<'a> TransformQuery<'a> {
 }
 
 #[derive(Default, Bundle, AsRef, PartialEq, Debug, Copy, Clone)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct TransformBundle {
     pub pos: Position,
     pub rot: Rotation,
@@ -288,18 +298,22 @@ impl Random for Size2D {
 
 #[derive(Default, Debug, Clone, Copy)]
 /// Marker type for objects that will not move through physics or other means.
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct Static;
 
 /// Marker type for objects that will not interact with the physics system
 /// through collisions despite having colliders.
 #[derive(Default, Debug, Clone, Copy)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct Trigger;
 
 #[derive(Default, Debug, Clone, Copy)]
 /// Entity which won't be rendered.
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct Hidden;
 
 #[derive(Clone, Eq, PartialEq, PartialOrd, Ord, Default, Hash, From, Into)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct Name(Cow<'static, str>);
 
 impl Name {

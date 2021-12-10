@@ -71,6 +71,7 @@ impl Default for TemplateStore {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord, Default, Hash, Into, From)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct TemplateKey(Cow<'static, str>);
 
 impl TemplateKey {

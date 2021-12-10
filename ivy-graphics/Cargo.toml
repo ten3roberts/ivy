@@ -25,3 +25,8 @@ rectangle-pack = "0.4.2"
 smallvec = "1.7.0"
 thiserror = "1.0.30"
 ultraviolet = "0.8.1"
+serde = { version = "1.0", features = [ "derive" ], optional = true}
+
+[features]
+default = []
+serialize = [ "serde", "ultraviolet/serde" ]

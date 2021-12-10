@@ -8,6 +8,9 @@ use ivy_vulkan::{
     Sampler, SamplerInfo, Texture, VulkanContext,
 };
 
+#[cfg(feature = "serialize")]
+use serde::{Deserialize, Serialize};
+
 /// A GUI image component containing a texture and associated sampler. The attached widget
 /// component will dictate where and how it will be drawn.
 pub struct Image {
@@ -62,6 +65,7 @@ impl IntoSet for Image {
 }
 
 #[derive(Hash, Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct ImageInfo {
     pub texture: Cow<'static, str>,
     pub sampler: SamplerInfo,

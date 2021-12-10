@@ -6,8 +6,9 @@ use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
     descriptors::{DescriptorBuilder, DescriptorSet, MultiDescriptorBindable},
     shaderpass::ShaderPass,
-    vk::{self, ShaderStageFlags},
-    CombinedImageSampler, InputAttachment, Sampler, SamplerInfo, Texture, VulkanContext,
+    vk::ShaderStageFlags,
+    AddressMode, CombinedImageSampler, FilterMode, InputAttachment, Sampler, SamplerInfo, Texture,
+    VulkanContext,
 };
 
 pub struct PostProcessingNode<Pass> {
@@ -37,9 +38,9 @@ impl<Pass: 'static + ShaderPass> PostProcessingNode<Pass> {
         let sampler = Sampler::new(
             context.clone(),
             &SamplerInfo {
-                address_mode: vk::SamplerAddressMode::CLAMP_TO_EDGE,
-                mag_filter: vk::Filter::LINEAR,
-                min_filter: vk::Filter::LINEAR,
+                address_mode: AddressMode::CLAMP_TO_EDGE,
+                mag_filter: FilterMode::LINEAR,
+                min_filter: FilterMode::LINEAR,
                 unnormalized_coordinates: false,
                 anisotropy: 16,
                 mip_levels: 1,

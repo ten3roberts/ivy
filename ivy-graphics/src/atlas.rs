@@ -12,9 +12,13 @@ use std::collections::BTreeMap;
 use std::hash::Hash;
 use std::sync::Arc;
 
+#[cfg(feature = "serialize")]
+use serde::{Deserialize, Serialize};
+
 pub type BinId = ();
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct Rect {
     // Offset to the right of the bitmap
     pub x: u32,
@@ -39,6 +43,7 @@ impl From<PackedLocation> for Rect {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct NormalizedRect {
     pub x: f32,
     pub y: f32,

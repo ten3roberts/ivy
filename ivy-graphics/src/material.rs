@@ -8,7 +8,11 @@ use ivy_vulkan::{
     Buffer, Sampler, SamplerInfo, Texture, VulkanContext,
 };
 
+#[cfg(feature = "serialize")]
+use serde::{Deserialize, Serialize};
+
 #[derive(Debug, Clone, PartialEq, Default)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct MaterialInfo {
     pub albedo: Cow<'static, str>,
     pub sampler: SamplerInfo,

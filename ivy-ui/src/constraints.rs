@@ -3,6 +3,8 @@ use derive_for::*;
 use derive_more::*;
 use hecs::{Bundle, Query};
 use ivy_base::{Position2D, Size2D};
+#[cfg(feature = "serialize")]
+use serde::{Deserialize, Serialize};
 use ultraviolet::Vec2;
 
 derive_for!(
@@ -11,22 +13,28 @@ derive_for!(
         Into, Mul, MulAssign, Sub, SubAssign,
     );
     /// Constrains the position to an offset in pixels from parent origin.
+    #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
     pub struct AbsoluteOffset(pub Vec2);
+    #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
     pub struct RelativeOffset(pub Vec2);
     /// Constrains the size of a widget to a multiple of the parent size. If paired
     /// with [`Aspect`] width is ignored.
     /// The aspect ratio of the parent is not preserved, as only the height will be
     /// considered from the parent. This ensures the window width doesn't stretch UI
     /// widgets.
+    #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
     pub struct RelativeSize(pub Vec2);
     /// Constrains the size of a widget to pixels.
+    #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
     pub struct AbsoluteSize(pub Vec2);
 
     /// Constrains the widget width to a multiple of height.
     /// If value is zero the aspect is unconstrained.
+    #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
     pub struct Aspect(pub f32);
 
     /// The offset of the origin from the center of the sprite.
+    #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
     pub struct Origin2D(pub Vec2);
 );
 

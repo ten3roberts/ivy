@@ -2,6 +2,9 @@ use derive_more::*;
 use palette::{FromColor, Hsla, Hsva, Srgba};
 use ultraviolet::{Vec3, Vec4};
 
+#[cfg(feature = "serialize")]
+use serde::{Deserialize, Serialize};
+
 /// Color/tint of an object
 #[derive(
     AsRef,
@@ -19,6 +22,7 @@ use ultraviolet::{Vec3, Vec4};
     PartialEq,
 )]
 #[repr(transparent)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct Color(pub Srgba);
 
 impl Color {

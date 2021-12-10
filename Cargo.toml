@@ -54,3 +54,13 @@ log = "0.4.14"
 
 [build-dependencies]
 anyhow = "1.0.51"
+
+[features]
+default = []
+serialize = [
+  "ivy-base/serialize",
+  "ivy-ui/serialize",
+  "ivy-physics/serialize",
+  "ivy-vulkan/serialize",
+  "ivy-graphics/serialize"
+]

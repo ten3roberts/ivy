@@ -3,6 +3,8 @@ use core::f32;
 use derive_for::derive_for;
 use derive_more::*;
 use ivy_random::Random;
+#[cfg(feature = "serialize")]
+use serde::{Deserialize, Serialize};
 use ultraviolet::Vec3;
 
 derive_for!(
@@ -27,25 +29,30 @@ derive_for!(
     );
     #[derive(Default)]
     #[repr(transparent)]
+    #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
     pub struct Velocity(pub Vec3);
 
     /// Represents and angular velocity in xyz directions creating an axis and
     /// magnitude.
     #[derive(Default)]
     #[repr(transparent)]
+    #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
     pub struct AngularVelocity(pub Vec3);
 
     #[repr(transparent)]
+    #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
     pub struct Mass(pub f32);
 
     #[repr(transparent)]
     /// Moment of intertia; angular mass and resistance to torque.
+    #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
     pub struct AngularMass(pub f32);
 
     #[derive(Default)]
     #[repr(transparent)]
     /// The elasticity of the physics material. A high value means that object is
     /// hard and will bounce back. A value of zero means the energy is absorbed.
+    #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
     pub struct Resitution(pub f32);
 
 );
