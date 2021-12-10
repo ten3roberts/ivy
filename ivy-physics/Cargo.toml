@@ -2,6 +2,7 @@
 name = "ivy-physics"
 version = "0.9.0"
 edition = "2018"
+description = "Provides physics for the Ivy framework"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -19,4 +20,5 @@ ivy-resources = { path = "../ivy-resources", version = "0.9.0" }
 smallvec = "1.7.0"
 thiserror = "1.0.30"
 ultraviolet = "0.8.1"
-hecs-hierarchy = "0.7.2"
+hecs-hierarchy = "0.8.0"
+hecs-schedule = "0.3.16"

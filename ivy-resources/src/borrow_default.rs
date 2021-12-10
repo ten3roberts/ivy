@@ -9,31 +9,31 @@ use hecs_schedule::{
 use crate::{BorrowMarker, ResourceView, ResourceViewMut};
 use smallvec::smallvec;
 
-pub struct DefaultRef<'a, T> {
+pub struct DefaultResource<'a, T> {
     value: *const T,
     view: ResourceView<'a, T>,
 }
 
-impl<'a, T> DefaultRef<'a, T> {
+impl<'a, T> DefaultResource<'a, T> {
     /// Get a reference to the default ref's view.
     pub fn view(&self) -> &ResourceView<'a, T> {
         &self.view
     }
 }
 
-pub struct DefaultRefMut<'a, T> {
+pub struct DefaultResourceMut<'a, T> {
     value: *mut T,
     view: ResourceViewMut<'a, T>,
 }
 
-impl<'a, T> DefaultRefMut<'a, T> {
+impl<'a, T> DefaultResourceMut<'a, T> {
     /// Get a reference to the default ref mut's view.
     pub fn view(&self) -> &ResourceViewMut<'a, T> {
         &self.view
     }
 }
 
-impl<'a, T> std::ops::Deref for DefaultRef<'a, T> {
+impl<'a, T> std::ops::Deref for DefaultResource<'a, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -41,7 +41,7 @@ impl<'a, T> std::ops::Deref for DefaultRef<'a, T> {
     }
 }
 
-impl<'a, T> std::ops::Deref for DefaultRefMut<'a, T> {
+impl<'a, T> std::ops::Deref for DefaultResourceMut<'a, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -49,36 +49,36 @@ impl<'a, T> std::ops::Deref for DefaultRefMut<'a, T> {
     }
 }
 
-impl<'a, T> std::ops::DerefMut for DefaultRefMut<'a, T> {
+impl<'a, T> std::ops::DerefMut for DefaultResourceMut<'a, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { &mut *self.value }
     }
 }
 
-impl<'a, T: Component> ContextBorrow<'a> for DefaultRef<'a, T> {
+impl<'a, T: Component> ContextBorrow<'a> for DefaultResource<'a, T> {
     type Target = Self;
 
     fn borrow(context: &'a Context) -> hecs_schedule::error::Result<Self::Target> {
         let view = ResourceView::<T>::borrow(context)?;
 
         let value = view.0.get_default().unwrap() as *const _;
-        Ok(DefaultRef { value, view })
+        Ok(DefaultResource { value, view })
     }
 }
-impl<'a, T: Component> ContextBorrow<'a> for DefaultRefMut<'a, T> {
+impl<'a, T: Component> ContextBorrow<'a> for DefaultResourceMut<'a, T> {
     type Target = Self;
 
     fn borrow(context: &'a Context) -> hecs_schedule::error::Result<Self::Target> {
         let mut view = ResourceViewMut::<T>::borrow(context)?;
 
         let value = view.deref_mut().get_default_mut().unwrap() as *mut _;
-        Ok(DefaultRefMut { value, view })
+        Ok(DefaultResourceMut { value, view })
     }
 }
 
-impl<'a, T: 'static> ComponentBorrow for DefaultRef<'a, T> {
+impl<'a, T: 'static> ComponentBorrow for DefaultResource<'a, T> {
     fn borrows() -> Borrows {
-        smallvec![BorrowMarker::<&T>::access()]
+        smallvec![Access::of::<&BorrowMarker<T>>()]
     }
 
     fn has_dynamic(id: std::any::TypeId, exclusive: bool) -> bool {
@@ -92,13 +92,13 @@ impl<'a, T: 'static> ComponentBorrow for DefaultRef<'a, T> {
     }
 }
 
-impl<'a, T: 'static> ComponentBorrow for DefaultRefMut<'a, T> {
+impl<'a, T: 'static> ComponentBorrow for DefaultResourceMut<'a, T> {
     fn borrows() -> Borrows {
-        smallvec![BorrowMarker::<&T>::access()]
+        smallvec![Access::of::<&mut BorrowMarker<T>>()]
     }
 
     fn has_dynamic(id: std::any::TypeId, _: bool) -> bool {
-        let l = Access::of::<&T>();
+        let l = Access::of::<&mut T>();
 
         l.id() == id
     }
@@ -108,5 +108,5 @@ impl<'a, T: 'static> ComponentBorrow for DefaultRefMut<'a, T> {
     }
 }
 
-impl_into_borrow!(Component, DefaultRef => DefaultRefBorrow);
-impl_into_borrow!(Component, DefaultRefMut => DefaultRefMutBorrow);
+impl_into_borrow!(Component, DefaultResource => DefaultRefBorrow);
+impl_into_borrow!(Component, DefaultResourceMut => DefaultRefMutBorrow);

@@ -10,7 +10,7 @@ mod templates;
 mod traits;
 
 pub use borrow::*;
-pub use borrow_default::{DefaultRef, DefaultRefMut};
+pub use borrow_default::{DefaultResource, DefaultResourceMut};
 pub use cache::*;
 pub use cell::*;
 pub use entry::*;

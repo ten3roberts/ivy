@@ -63,15 +63,9 @@ impl<'a, T: Component> ContextBorrow<'a> for ResourceView<'a, T> {
 
 pub(crate) struct BorrowMarker<T>(PhantomData<T>);
 
-impl<T: IntoAccess> IntoAccess for BorrowMarker<T> {
-    fn access() -> Access {
-        Access::of::<T>()
-    }
-}
-
 impl<'a, T: 'static> ComponentBorrow for ResourceView<'a, T> {
     fn borrows() -> borrow::Borrows {
-        smallvec![BorrowMarker::<&T>::access()]
+        smallvec![Access::of::<&BorrowMarker<T>>()]
     }
 
     fn has_dynamic(id: std::any::TypeId, exclusive: bool) -> bool {
@@ -99,7 +93,7 @@ impl<'a, T: Component> ContextBorrow<'a> for ResourceViewMut<'a, T> {
 
                 let value = cell
                     .fetch_mut()
-                    .expect("Failed to borrow from resources")
+                    .expect("Failed to borrow from resources mutably")
                     .value as *mut _;
 
                 ResourceViewMut { value, cell }
@@ -109,17 +103,17 @@ impl<'a, T: Component> ContextBorrow<'a> for ResourceViewMut<'a, T> {
 
 impl<'a, T: 'static> ComponentBorrow for ResourceViewMut<'a, T> {
     fn borrows() -> borrow::Borrows {
-        smallvec![BorrowMarker::<&mut T>::access()]
+        smallvec![Access::of::<&mut BorrowMarker<T>>()]
     }
 
     fn has_dynamic(id: std::any::TypeId, _: bool) -> bool {
-        let l = Access::of::<&T>();
+        let l = Access::of::<&mut T>();
 
         l.id() == id
     }
 
     fn has<U: IntoAccess>() -> bool {
-        Access::of::<&T>().id() == U::access().id()
+        Access::of::<&mut T>().id() == U::access().id()
     }
 }
 

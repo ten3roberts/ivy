@@ -229,7 +229,7 @@ impl<T: 'static + Array<Item = Object> + Send + Sync> DrawGizmos for BinaryNode<
             origin: self.origin,
             color,
             half_extents: self.bounds.half_extents,
-            radius: 0.02 + 0.001 * self.depth as f32,
+            radius: 0.001 + 0.001 * self.depth as f32,
         });
     }
 }

@@ -13,7 +13,7 @@ use crate::{constraints::ConstraintQuery, *};
 /// Updates all UI trees and applies constraints.
 /// Also updates canvas cameras.
 pub fn update(world: &World) -> Result<()> {
-    world.roots::<Widget>().iter().try_for_each(|(root, _)| {
+    world.roots::<Widget>()?.iter().try_for_each(|(root, _)| {
         apply_constraints(world, root, Position2D::default(), Size2D::new(1.0, 1.0))?;
 
         if world.get::<Canvas>(root).is_ok() {

@@ -1,5 +1,5 @@
 use hecs::Entity;
-use hecs::World;
+use hecs_schedule::GenericWorld;
 use ivy_base::Color;
 use ivy_base::DrawGizmos;
 use ivy_base::Events;
@@ -195,11 +195,11 @@ impl<N: CollisionTreeNode> NodeIndex<N> {
 
     pub fn check_collisions<'a, G>(
         self,
-        world: &World,
+        world: &impl GenericWorld,
         events: &mut Events,
         nodes: &'a Nodes<N>,
         top_objects: &mut SmallVec<G>,
-    ) -> Result<(), hecs::ComponentError>
+    ) -> hecs_schedule::error::Result<()>
     where
         N: CollisionTreeNode,
         G: Array<Item = &'a Object>,
@@ -218,8 +218,8 @@ impl<N: CollisionTreeNode> NodeIndex<N> {
 
                     // if true {
                     if a.bound.overlaps(a.origin, b.bound, b.origin) {
-                        let a_coll = world.get::<Collider>(a.entity)?;
-                        let b_coll = world.get::<Collider>(b.entity)?;
+                        let a_coll = world.try_get::<Collider>(a.entity)?;
+                        let b_coll = world.try_get::<Collider>(b.entity)?;
 
                         // Do full collision check
                         if let Some(intersection) =

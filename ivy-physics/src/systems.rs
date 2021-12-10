@@ -5,43 +5,44 @@ use crate::{
     connections::{Connection, ConnectionKind},
     Effector, Result,
 };
-use hecs::{Entity, World};
+use hecs::Entity;
 use hecs_hierarchy::Hierarchy;
-use ivy_base::{Position, Rotation, Static};
+use hecs_schedule::{GenericWorld, Read, SubWorld};
+use ivy_base::{DeltaTime, Position, Rotation, Static};
 use ivy_collision::Collision;
 use ultraviolet::{Bivec3, Rotor3};
 
 use crate::components::{AngularVelocity, Velocity};
 
-pub fn integrate_velocity(world: &World, dt: f32) {
+pub fn integrate_velocity(world: SubWorld<(&mut Position, &Velocity)>, dt: Read<DeltaTime>) {
     world
-        .query::<(&mut Position, &Velocity)>()
+        .native_query()
         .iter()
-        .for_each(|(_, (pos, vel))| *pos += Position(vel.0 * dt));
+        .for_each(|(_, (pos, vel))| *pos += Position(**vel * **dt));
 }
 
-pub fn integrate_angular_velocity(world: &World, dt: f32) {
-    world
-        .query::<(&mut Rotation, &AngularVelocity)>()
-        .into_iter()
-        .for_each(|(_, (rot, w))| {
-            let mag = w.mag();
-            if mag > 0.0 {
-                let w = Rotor3::from_angle_plane(mag * dt, Bivec3::from_normalized_axis(w.0 / mag));
-                *rot = Rotation(w * rot.0);
-            }
-        });
+pub fn integrate_angular_velocity(
+    world: SubWorld<(&mut Rotation, &AngularVelocity)>,
+    dt: Read<DeltaTime>,
+) {
+    world.native_query().into_iter().for_each(|(_, (rot, w))| {
+        let mag = w.mag();
+        if mag > 0.0 {
+            let w = Rotor3::from_angle_plane(mag * **dt, Bivec3::from_normalized_axis(w.0 / mag));
+            *rot = Rotation(w * rot.0);
+        }
+    });
 }
 
-pub fn gravity_system(world: &World, dt: f32) {
+pub fn gravity_system(world: SubWorld<&mut Velocity>, dt: Read<DeltaTime>) {
     world
-        .query::<&mut Velocity>()
+        .native_query()
         .iter()
-        .for_each(|(_, vel)| vel.y -= 1.0 * dt)
+        .for_each(|(_, vel)| vel.y -= 1.0 * **dt)
 }
 
-pub fn wrap_around_system(world: &World) {
-    world.query::<&mut Position>().iter().for_each(|(_, pos)| {
+pub fn wrap_around_system(world: SubWorld<&mut Position>) {
+    world.native_query().iter().for_each(|(_, pos)| {
         if pos.y < -100.0 {
             pos.y = 100.0
         }
@@ -49,15 +50,15 @@ pub fn wrap_around_system(world: &World) {
 }
 
 /// Returns the root of the rigid system, along with its mass
-pub fn get_rigid_root(world: &World, child: Entity) -> Result<(Entity, Mass)> {
-    let mut system_mass = *world.get::<Mass>(child)?;
+pub fn get_rigid_root(world: &impl GenericWorld, child: Entity) -> Result<(Entity, Mass)> {
+    let mut system_mass = *world.try_get::<Mass>(child)?;
     let mut root = child;
 
     for val in world.ancestors::<Connection>(child) {
         root = val;
-        system_mass += *world.get::<Mass>(val)?;
+        system_mass += *world.try_get::<Mass>(val)?;
 
-        match *world.get::<ConnectionKind>(child)? {
+        match *world.try_get::<ConnectionKind>(child)? {
             ConnectionKind::Rigid => {}
             ConnectionKind::Spring {
                 strength: _,
@@ -70,8 +71,9 @@ pub fn get_rigid_root(world: &World, child: Entity) -> Result<(Entity, Mass)> {
 }
 
 pub fn resolve_collisions<I: Iterator<Item = Collision>>(
-    world: &mut World,
+    world: SubWorld<(RbQuery, &Position, &mut Effector)>,
     mut collisions: I,
+    // _events: Read<Events>, // Wait for events
 ) -> Result<()> {
     collisions.try_for_each(|coll| -> Result<()> {
         // Ignore triggers
@@ -80,23 +82,23 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
         }
         // Check for static collision
         else if coll.a.is_static {
-            return resolve_static(world, coll.a.entity, coll.b.entity, coll.contact);
+            return resolve_static(&world, coll.a.entity, coll.b.entity, coll.contact);
         } else if coll.b.is_static {
-            return resolve_static(world, coll.b.entity, coll.a.entity, coll.contact);
+            return resolve_static(&world, coll.b.entity, coll.a.entity, coll.contact);
         }
 
         assert_ne!(coll.a, coll.b);
 
         // Trace up to the root of the rigid connection before solving
         // collisions
-        let (a, a_mass) = get_rigid_root(world, *coll.a)?;
-        let (b, b_mass) = get_rigid_root(world, *coll.b)?;
+        let (a, a_mass) = get_rigid_root(&world, *coll.a)?;
+        let (b, b_mass) = get_rigid_root(&world, *coll.b)?;
 
-        let mut a_query = world.query_one::<(RbQuery, &Position)>(a)?;
+        let mut a_query = world.try_query_one::<(RbQuery, &Position)>(a)?;
         let (mut a, a_pos) = a_query.get().unwrap();
         let a_pos = *a_pos;
 
-        let mut b_query = world.query_one::<(RbQuery, &Position)>(b)?;
+        let mut b_query = world.try_query_one::<(RbQuery, &Position)>(b)?;
 
         let (mut b, b_pos) = b_query.get().unwrap();
         let b_pos = *b_pos;
@@ -127,19 +129,19 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
 
 // Resolves a static collision
 fn resolve_static(
-    world: &World,
+    world: &impl GenericWorld,
     a: Entity,
     b: Entity,
     contact: ivy_collision::Contact,
 ) -> Result<()> {
-    let mut a_query = world.query_one::<Option<&Resitution>>(a)?;
+    let mut a_query = world.try_query_one::<Option<&Resitution>>(a)?;
     let a_res = a_query
         .get()
         .expect("Static collider did not satisfy query");
 
-    let mut b_query = world.query_one::<(RbQuery, &Position, &mut Effector)>(b)?;
+    let mut b_query = world.try_query_one::<(RbQuery, &Position, &mut Effector)>(b)?;
 
-    if let Some((rb, b_pos, effector)) = b_query.get() {
+    if let Ok((rb, b_pos, effector)) = b_query.get() {
         let impulse =
             resolve_static_collision(&contact, a_res.cloned().unwrap_or_default(), &rb, *b_pos);
         let dir = contact.normal * contact.depth;
@@ -151,29 +153,19 @@ fn resolve_static(
 }
 
 /// Applies effectors to their respective entities and clears the effects.
-pub fn apply_effectors(world: &World, dt: f32) {
+pub fn apply_effectors(
+    world: SubWorld<(RbQueryMut, &mut Position, &Rotation, &mut Effector)>,
+    dt: Read<DeltaTime>,
+) {
     world
-        .query::<(
-            &mut Velocity,
-            Option<&mut AngularVelocity>,
-            &Mass,
-            Option<&mut AngularMass>,
-            &mut Position,
-            &Rotation,
-            &mut Effector,
-        )>()
+        .native_query()
         .without::<Static>()
         .iter()
-        .for_each(|(_, (vel, w, mass, angular_mass, pos, rot, effector))| {
-            *vel += effector.net_velocity_change(*mass, dt);
+        .for_each(|(_, (rb, pos, rot, effector))| {
+            *rb.vel += effector.net_velocity_change(*rb.mass, **dt);
             *pos += effector.net_translation(rot);
 
-            match (w, angular_mass) {
-                (Some(w), Some(angular_mass)) => {
-                    *w += effector.net_angular_velocity_change(*angular_mass, dt)
-                }
-                _ => {}
-            }
+            *rb.ang_vel += effector.net_angular_velocity_change(*rb.ang_mass, **dt);
 
             effector.clear()
         })

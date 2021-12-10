@@ -419,9 +419,9 @@ dependencies = [
 
 [[package]]
 name = "hecs-hierarchy"
-version = "0.7.2"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04495005f27ce2002030214ac81cd16e8dd3bb5ec4dd5dde5815c2065aa3cd4c"
+checksum = "74af4b77c0aec9e70bf4ba8ee76f731c1e384ae3213dc22d87ce05052aad5f44"
 dependencies = [
  "hecs",
  "hecs-schedule",
@@ -441,9 +441,9 @@ dependencies = [
 
 [[package]]
 name = "hecs-schedule"
-version = "0.3.12"
+version = "0.3.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "49413f94191226b6cdb68fdd259d44839149754cc768187be03444029b95acaf"
+checksum = "4e5aaf36906713ecc844022581860f69b9532660019a7fc406d57e0bd49c33c8"
 dependencies = [
  "anyhow",
  "atomic_refcell",
@@ -519,6 +519,7 @@ dependencies = [
  "glfw",
  "hecs",
  "hecs-hierarchy",
+ "hecs-schedule",
  "ivy-base",
  "ivy-collision",
  "ivy-graphics",
@@ -628,6 +629,7 @@ dependencies = [
  "flume",
  "hecs",
  "hecs-hierarchy",
+ "hecs-schedule",
  "ivy-base",
  "ivy-collision",
  "ivy-graphics",
@@ -760,9 +762,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.109"
+version = "0.2.110"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f98a04dce437184842841303488f70d0188c5f51437d2a834dc097eafa909a01"
+checksum = "b58a4469763e4e3a906c4ed786e1c70512d16aa88f84dded826da42640fc6a1c"
 
 [[package]]
 name = "libloading"

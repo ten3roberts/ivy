@@ -14,7 +14,7 @@ derive-for = "1.2.2"
 derive_more = "0.99.17"
 fontdue = "0.6.2"
 hecs = "0.7.1"
-hecs-hierarchy = "0.7.2"
+hecs-hierarchy = "0.8.0"
 ivy-base = { path = "../ivy-base", version = "0.9" }
 glfw = "0.43.0"
 ivy-graphics = { path = "../ivy-graphics", version = "0.9" }
@@ -26,4 +26,4 @@ ivy-input = { path = "../ivy-input", version = "0.9" }
 thiserror = "1.0.30"
 ultraviolet = { version = "0.8.1", features = [ "int" ] }
 flume = "0.10.9"
-hecs-schedule = "0.3.12"
+hecs-schedule = "0.3.16"

@@ -1,10 +1,13 @@
 use std::{any, mem};
 
 use flume::{Receiver, Sender};
-use hecs::{Entity, Satisfies, World};
+use hecs::{Entity, Satisfies};
+use hecs_schedule::{CommandBuffer, GenericWorld, SubWorld, Write};
 use ivy_base::{
-    DrawGizmos, Events, Gizmos, Position, Rotation, Scale, Static, TransformMatrix, Trigger,
+    Color, DrawGizmos, Events, Gizmos, Position, Rotation, Scale, Static, TransformMatrix,
+    TransformQuery, Trigger,
 };
+use ivy_resources::{DefaultResource, DefaultResourceMut};
 use slotmap::SlotMap;
 use smallvec::{Array, SmallVec};
 use ultraviolet::Vec3;
@@ -94,29 +97,29 @@ impl<N: 'static + CollisionTreeNode> CollisionTree<N> {
         })
     }
 
-    pub fn register(&mut self, world: &mut World) {
+    pub fn register(
+        &mut self,
+        world: SubWorld<(
+            TransformQuery,
+            &Collider,
+            Satisfies<&Trigger>,
+            Satisfies<&Static>,
+        )>,
+        cmd: &mut CommandBuffer,
+    ) {
         let inserted = world
-            .query::<(
-                &Collider,
-                &Position,
-                &Rotation,
-                &Scale,
-                Satisfies<&Trigger>,
-                Satisfies<&Static>,
-            )>()
+            .native_query()
             .without::<TreeMarker<N>>()
             .iter()
-            .map(
-                |(e, (collider, position, rot, scale, is_trigger, is_static))| {
-                    Object::new(
-                        e,
-                        Sphere::enclose(collider, *scale),
-                        TransformMatrix::new(*position, *rot, *scale),
-                        is_trigger,
-                        is_static,
-                    )
-                },
-            )
+            .map(|(e, (transform, collider, is_trigger, is_static))| {
+                Object::new(
+                    e,
+                    Sphere::enclose(collider, *transform.scale),
+                    transform.into_matrix(),
+                    is_trigger,
+                    is_static,
+                )
+            })
             .collect::<Vec<_>>();
 
         inserted.into_iter().for_each(|object| {
@@ -129,16 +132,22 @@ impl<N: 'static + CollisionTreeNode> CollisionTree<N> {
                 object,
                 on_drop: self.tx.clone(),
             };
-            world.insert_one(entity, marker).unwrap();
+            cmd.insert_one(entity, marker);
         })
     }
 
-    pub fn update(&mut self, world: &mut World) -> Result<(), hecs::ComponentError> {
-        // let _scope = TimedScope::new(|elapsed| eprintln!("Tree updating took {:.3?}", elapsed));
-
-        self.register(world);
-
-        self.handle_popped(world)?;
+    pub fn update(
+        &mut self,
+        world: SubWorld<(
+            TransformQuery,
+            &Collider,
+            &mut TreeMarker<N>,
+            Satisfies<&Trigger>,
+            Satisfies<&Static>,
+        )>,
+    ) -> Result<(), hecs_schedule::Error> {
+        self.handle_popped(&world)?;
+        self.handle_removed();
 
         self.iteration += 1;
 
@@ -180,26 +189,24 @@ impl<N: 'static + CollisionTreeNode> CollisionTree<N> {
                 }
             });
 
-        self.handle_popped(world)?;
+        self.handle_popped(&world)?;
 
         Ok(())
     }
 
-    pub fn handle_popped(&mut self, world: &mut World) -> Result<(), hecs::ComponentError> {
+    pub fn handle_popped(&mut self, world: &impl GenericWorld) -> hecs_schedule::error::Result<()> {
         let nodes = &mut self.nodes;
         let root = self.root;
         while !self.popped.0.is_empty() {
             let (front, back) = &mut self.popped;
 
-            front
-                .drain(..)
-                .try_for_each(|obj| -> Result<_, hecs::ComponentError> {
-                    let mut marker = world.get_mut::<TreeMarker<N>>(obj.entity)?;
+            front.drain(..).try_for_each(|obj| -> Result<_, _> {
+                let mut marker = world.try_get_mut::<TreeMarker<N>>(obj.entity)?;
 
-                    marker.index = root.insert(nodes, obj, back);
+                marker.index = root.insert(nodes, obj, back);
 
-                    Ok(())
-                })?;
+                Ok(())
+            })?;
 
             // Swap buffers and keep going
             mem::swap(&mut self.popped.0, &mut self.popped.1);
@@ -211,15 +218,13 @@ impl<N: 'static + CollisionTreeNode> CollisionTree<N> {
     #[inline]
     pub fn check_collisions<'a, G: Array<Item = &'a Object>>(
         &'a self,
-        world: &mut World,
+        world: SubWorld<&Collider>,
         events: &mut Events,
-    ) -> Result<(), hecs::ComponentError> {
-        // let _scope =
-        //     TimedScope::new(|elapsed| eprintln!("Tree collision checking took {:.3?}", elapsed));
+    ) -> hecs_schedule::error::Result<()> {
         let mut stack = SmallVec::<G>::new();
 
         self.root
-            .check_collisions(world, events, &self.nodes, &mut stack)
+            .check_collisions(&world, events, &self.nodes, &mut stack)
     }
 
     /// Queries the tree with a given visitor. Traverses only the nodes that the
@@ -236,6 +241,58 @@ impl<N: CollisionTreeNode> std::fmt::Debug for CollisionTree<N> {
         f.debug_struct("CollisionTree")
             .field("root", &DebugNode::new(self.root, &self.nodes))
             .finish()
+    }
+}
+
+impl<N: CollisionTreeNode> CollisionTree<N> {
+    pub fn register_system(
+        world: SubWorld<(
+            TransformQuery,
+            &Collider,
+            Satisfies<&Trigger>,
+            Satisfies<&Static>,
+        )>,
+        mut cmd: Write<CommandBuffer>,
+        mut tree: DefaultResourceMut<Self>,
+    ) -> hecs_schedule::error::Result<()> {
+        tree.register(world, &mut cmd);
+
+        Ok(())
+    }
+
+    pub fn update_system(
+        world: SubWorld<(
+            TransformQuery,
+            &Collider,
+            &mut TreeMarker<N>,
+            Satisfies<&Trigger>,
+            Satisfies<&Static>,
+        )>,
+        mut tree: DefaultResourceMut<Self>,
+    ) -> hecs_schedule::error::Result<()>
+    where
+        N: CollisionTreeNode,
+    {
+        tree.update(world)
+    }
+
+    pub fn check_collisions_system(
+        world: SubWorld<&Collider>,
+        tree: DefaultResourceMut<Self>,
+        mut events: Write<Events>,
+    ) -> hecs_schedule::error::Result<()>
+    where
+        N: CollisionTreeNode,
+    {
+        tree.check_collisions::<[&Object; 128]>(world, &mut events)?;
+
+        Ok(())
+    }
+}
+
+impl<N: CollisionTreeNode + DrawGizmos> CollisionTree<N> {
+    pub fn draw_system(tree: DefaultResource<Self>, gizmos: DefaultResourceMut<Gizmos>) {
+        tree.draw_gizmos(gizmos, Color::white())
     }
 }
 

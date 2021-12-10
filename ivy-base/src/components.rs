@@ -45,6 +45,11 @@ derive_for!(
     #[repr(transparent)]
     #[derive(Default)]
     pub struct Size2D(pub Vec2);
+
+    #[repr(transparent)]
+    #[derive(Default)]
+    /// Wrapper for strongly typed floating point deltatime
+    pub struct DeltaTime(f32);
 );
 
 impl std::ops::Mul<Position> for Rotation {

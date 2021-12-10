@@ -1,21 +1,32 @@
 use crate::{Effector, Result};
 use hecs::*;
 use hecs_hierarchy::*;
+use hecs_schedule::{GenericWorld, SubWorld};
 use ivy_base::{Color, Gizmos, Position, TransformQuery};
 
 use super::*;
 
-pub fn update_connections(world: &World) -> Result<()> {
+pub fn update_connections(
+    world: SubWorld<(
+        &ConnectionKind,
+        &PositionOffset,
+        &RotationOffset,
+        &mut Effector,
+        HierarchyQuery<Connection>,
+        RbQueryMut,
+        TransformQuery,
+    )>,
+) -> Result<()> {
     world
-        .roots::<Connection>()
+        .roots::<Connection>()?
         .into_iter()
-        .try_for_each(|root| update_subtree(world, root.0))
+        .try_for_each(|root| update_subtree(&world, root.0))
 }
 
-fn update_subtree(world: &World, root: Entity) -> Result<()> {
-    let mut query = world.query_one::<(TransformQuery, RbQuery)>(root)?;
+fn update_subtree(world: &impl GenericWorld, root: Entity) -> Result<()> {
+    let mut query = world.try_query_one::<(TransformQuery, RbQuery)>(root)?;
 
-    if let Some((parent_trans, rb)) = query.get() {
+    if let Ok((parent_trans, rb)) = query.get() {
         let parent_trans = parent_trans.into_owned();
         let mut parent_rb = RbBundle {
             effector: Effector::new(),
@@ -31,7 +42,7 @@ fn update_subtree(world: &World, root: Entity) -> Result<()> {
         world
             .children::<Connection>(root)
             .try_for_each(|child| -> Result<_> {
-                let mut query = world.query_one::<(
+                let mut query = world.try_query_one::<(
                     &PositionOffset,
                     &RotationOffset,
                     TransformQuery,
@@ -40,7 +51,7 @@ fn update_subtree(world: &World, root: Entity) -> Result<()> {
                     &mut Effector,
                 )>(child)?;
 
-                if let Some((
+                if let Ok((
                     offset_pos,
                     offset_rot,
                     child_trans,
@@ -65,7 +76,7 @@ fn update_subtree(world: &World, root: Entity) -> Result<()> {
                 Ok(())
             })?;
 
-        let mut effector = world.get_mut::<Effector>(root)?;
+        let mut effector = world.try_get_mut::<Effector>(root)?;
         *effector += parent_rb.effector;
 
         Ok(())
@@ -75,20 +86,20 @@ fn update_subtree(world: &World, root: Entity) -> Result<()> {
 }
 
 /// Recursively draw the connection tree using gizmos
-pub fn draw_connections(world: &World, gizmos: &mut Gizmos) -> Result<()> {
+pub fn draw_connections(world: &impl GenericWorld, gizmos: &mut Gizmos) -> Result<()> {
     world
-        .roots::<Connection>()
+        .roots::<Connection>()?
         .into_iter()
         .try_for_each(|root| draw_subtree(world, root.0, gizmos))
 }
 
-fn draw_subtree(world: &World, root: Entity, gizmos: &mut Gizmos) -> Result<()> {
-    let parent_pos = world.get::<Position>(root)?;
+fn draw_subtree(world: &impl GenericWorld, root: Entity, gizmos: &mut Gizmos) -> Result<()> {
+    let parent_pos = world.try_get::<Position>(root)?;
 
     world
         .children::<Connection>(root)
         .try_for_each(|child| -> Result<()> {
-            let mut query = world.query_one::<(&Position, &ConnectionKind)>(child)?;
+            let mut query = world.try_query_one::<(&Position, &ConnectionKind)>(child)?;
             let (pos, kind) = query
                 .get()
                 .expect("Failed to execute query in draw_connections");

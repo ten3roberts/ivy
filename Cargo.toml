@@ -35,6 +35,7 @@ ivy-resources = { path = "./ivy-resources" }
 ivy-ui = { path = "./ivy-ui" }
 ivy-vulkan = { path = "./ivy-vulkan" }
 hecs = "0.7.1"
+hecs-schedule = "0.3.16"
 derive_more = "0.99.17"
 
 [dev-dependencies]
@@ -46,7 +47,7 @@ parking_lot = "0.11.2"
 slotmap = "1.0.6"
 hecs = "0.7.1"
 glfw = { version = "0.43.0", features = [ "vulkan" ] }
-hecs-hierarchy = "0.7.2"
+hecs-hierarchy = "0.8.0"
 ultraviolet = "0.8.1"
 log = "0.4.14"
 
