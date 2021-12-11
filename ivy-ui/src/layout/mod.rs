@@ -8,7 +8,7 @@ use ivy_base::{Position2D, Size2D};
 /// Immediate children of a widget with a layout will be placed automatically
 /// and have their position constraints ignored.
 pub struct WidgetLayout {
-    kind: LayoutKind,
+    _kind: LayoutKind,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -17,7 +17,7 @@ pub enum LayoutKind {
 }
 impl WidgetLayout {
     pub fn new(kind: LayoutKind) -> Self {
-        Self { kind }
+        Self { _kind: kind }
     }
 
     pub fn update(

@@ -6,7 +6,7 @@ use ivy_base::{Position, Scale};
 use ultraviolet::Vec3;
 
 use super::Ray;
-use crate::{Collider, CollisionTreeNode, Contact, Object, Visitor};
+use crate::{Collider, CollisionObject, CollisionTreeNode, Contact, Visitor};
 
 /// Represents a collider ray intersection.
 /// Data about the ray is not saved.
@@ -89,7 +89,7 @@ impl<'o, 'r, 'w, W: GenericWorld, N: CollisionTreeNode, Q> Visitor<'o, N>
 pub struct RayCastIterator<'a, 'w, 'o, W, Q> {
     ray: &'a Ray,
     world: &'w W,
-    objects: std::slice::Iter<'o, Object>,
+    objects: std::slice::Iter<'o, CollisionObject>,
     with: PhantomData<Q>,
 }
 

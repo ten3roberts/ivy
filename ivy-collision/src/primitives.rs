@@ -110,7 +110,7 @@ impl Sphere {
 
     /// Returns true if two uniform spheres overlap.
     #[inline]
-    pub fn overlaps(&self, origin: Vec3, other: Self, other_origin: Vec3) -> bool {
+    pub fn overlaps(&self, origin: Position, other: &Self, other_origin: Position) -> bool {
         let total_radii = self.radius + other.radius;
 
         (origin - other_origin).mag_sq() < total_radii * total_radii

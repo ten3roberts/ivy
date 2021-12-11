@@ -10,18 +10,19 @@ use ivy_base::{
 use ivy_resources::{DefaultResource, DefaultResourceMut};
 use slotmap::SlotMap;
 use smallvec::{Array, SmallVec};
-use ultraviolet::Vec3;
 
 use crate::{util::TOLERANCE, Collider, Sphere};
 
 mod binary_node;
 mod index;
+mod intersect_visitor;
 pub mod query;
 mod traits;
 mod visitor;
 
 pub use binary_node::*;
 pub use index::*;
+pub use intersect_visitor::*;
 pub use traits::*;
 pub use visitor::*;
 
@@ -33,7 +34,7 @@ pub type Nodes<N> = SlotMap<NodeIndex<N>, N>;
 #[derive(Debug, Clone)]
 pub struct TreeMarker<N> {
     index: NodeIndex<N>,
-    object: Object,
+    object: CollisionObject,
     on_drop: Sender<(NodeIndex<N>, Entity)>,
 }
 
@@ -51,7 +52,7 @@ pub struct CollisionTree<N> {
     nodes: SlotMap<NodeIndex<N>, N>,
     /// Objects removed from the tree due to splits. Bound to be replaced.
     /// Double buffer as insertions may cause new pops.
-    popped: (Vec<Object>, Vec<Object>),
+    popped: (Vec<CollisionObject>, Vec<CollisionObject>),
     iteration: usize,
     root: NodeIndex<N>,
 
@@ -76,7 +77,7 @@ impl<N: 'static + CollisionTreeNode> CollisionTree<N> {
         }
     }
 
-    pub fn contains(&self, object: &Object) -> bool {
+    pub fn contains(&self, object: &CollisionObject) -> bool {
         self.nodes[self.root].contains(object)
     }
 
@@ -112,7 +113,7 @@ impl<N: 'static + CollisionTreeNode> CollisionTree<N> {
             .without::<TreeMarker<N>>()
             .iter()
             .map(|(e, (transform, collider, is_trigger, is_static))| {
-                Object::new(
+                CollisionObject::new(
                     e,
                     Sphere::enclose(collider, *transform.scale),
                     transform.into_matrix(),
@@ -165,7 +166,7 @@ impl<N: 'static + CollisionTreeNode> CollisionTree<N> {
                     marker.object.bound = Sphere::enclose(collider, *scale)
                 }
 
-                marker.object.origin = **pos;
+                marker.object.origin = *pos;
                 marker.object.transform = TransformMatrix::new(*pos, *rot, *scale);
 
                 nodes[index].set(marker.object, iteration)
@@ -216,7 +217,7 @@ impl<N: 'static + CollisionTreeNode> CollisionTree<N> {
     }
 
     #[inline]
-    pub fn check_collisions<'a, G: Array<Item = &'a Object>>(
+    pub fn check_collisions<'a, G: Array<Item = &'a CollisionObject>>(
         &'a self,
         world: SubWorld<&Collider>,
         events: &mut Events,
@@ -284,7 +285,7 @@ impl<N: CollisionTreeNode> CollisionTree<N> {
     where
         N: CollisionTreeNode,
     {
-        tree.check_collisions::<[&Object; 128]>(world, &mut events)?;
+        tree.check_collisions::<[&CollisionObject; 128]>(world, &mut events)?;
 
         Ok(())
     }
@@ -297,10 +298,10 @@ impl<N: CollisionTreeNode + DrawGizmos> CollisionTree<N> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Object {
+pub struct CollisionObject {
     pub entity: Entity,
     pub bound: Sphere,
-    pub origin: Vec3,
+    pub origin: Position,
     pub transform: TransformMatrix,
     pub max_scale: f32,
     pub is_trigger: bool,
@@ -315,8 +316,8 @@ pub struct EntityPayload {
     pub is_static: bool,
 }
 
-impl From<&Object> for EntityPayload {
-    fn from(val: &Object) -> Self {
+impl From<&CollisionObject> for EntityPayload {
+    fn from(val: &CollisionObject) -> Self {
         Self {
             entity: val.entity,
             is_trigger: val.is_trigger,
@@ -333,7 +334,7 @@ impl std::ops::Deref for EntityPayload {
     }
 }
 
-impl Object {
+impl CollisionObject {
     pub fn new(
         entity: Entity,
         bound: Sphere,
@@ -345,7 +346,7 @@ impl Object {
             entity,
             bound,
             transform,
-            origin: transform.extract_translation(),
+            origin: transform.extract_translation().into(),
             max_scale: transform[0][0].max(transform[1][1]).max(transform[2][2]),
             is_trigger,
             is_static,
@@ -355,6 +356,11 @@ impl Object {
     /// Get a reference to the object's entity.
     pub fn entity(&self) -> Entity {
         self.entity
+    }
+
+    //// Returns true if the bounding objects of the objects overlap
+    fn overlaps(&self, other: &CollisionObject) -> bool {
+        self.bound.overlaps(self.origin, &other.bound, other.origin)
     }
 }
 

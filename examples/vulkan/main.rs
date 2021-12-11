@@ -3,7 +3,7 @@ use std::{fmt::Display, sync::Arc, time::Duration};
 
 use anyhow::{anyhow, Context};
 use collision::{
-    util::project_plane, BinaryNode, Collider, CollisionTree, Cube, Object, Ray, Sphere,
+    util::project_plane, BinaryNode, Collider, CollisionObject, CollisionTree, Cube, Ray, Sphere,
 };
 use flume::Receiver;
 use glfw::{CursorMode, Key, MouseButton, WindowEvent};
@@ -47,7 +47,7 @@ use log::*;
 
 const FRAMES_IN_FLIGHT: usize = 2;
 
-type CollisionNode = BinaryNode<[Object; 8]>;
+type CollisionNode = BinaryNode<[CollisionObject; 8]>;
 
 struct WithTime<T> {
     func: Box<dyn Fn(Entity, &mut T, f32, f32) + Send + Sync>,

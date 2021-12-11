@@ -121,7 +121,7 @@ impl Ray {
     ) -> TreeQuery<'t, N, RayCaster<'r, 'w, W, ()>>
     where
         T: Deref<Target = CollisionTree<N>>,
-        N: 'static + CollisionTreeNode,
+        N: CollisionTreeNode,
         W: GenericWorld,
     {
         tree.query(RayCaster::new(self, world))

@@ -140,6 +140,14 @@ impl TransformMatrix {
                 * Mat4::from_nonuniform_scale(*scale),
         )
     }
+
+    pub fn extract_translation(&self) -> Position {
+        self.0.extract_translation().into()
+    }
+
+    pub fn extract_rotation(&self) -> Rotation {
+        self.0.extract_rotation().into()
+    }
 }
 
 impl<'a> From<TransformQuery<'a>> for TransformMatrix {

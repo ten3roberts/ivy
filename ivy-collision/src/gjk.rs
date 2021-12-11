@@ -34,7 +34,7 @@ pub fn gjk<A: CollisionPrimitive, B: CollisionPrimitive>(
     while let Some(dir) = simplex.next_dir() {
         let dir = dir.normalized();
 
-        // // Objects are inside of each other completely
+        // Objects are inside of each other completely
         if dir.mag_sq() - 1.0 > TOLERANCE {
             return (false, simplex);
         }
@@ -52,11 +52,9 @@ pub fn gjk<A: CollisionPrimitive, B: CollisionPrimitive>(
 
         // New point was not past the origin
         // No collision
-        if iterations > MAX_ITERATIONS || p.support.dot(dir) < 0.0 {
+        if iterations > MAX_ITERATIONS || p.support.dot(dir) <= 0.0 {
             return (false, simplex);
         }
-
-        // p.pos += p.normalized() * 1.0;
 
         simplex.push(p);
         iterations += 1;

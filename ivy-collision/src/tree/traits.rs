@@ -2,7 +2,7 @@ use hecs::Entity;
 use ivy_base::Position;
 use ultraviolet::Vec3;
 
-use crate::{Cube, Object};
+use crate::{CollisionObject, Cube, Sphere};
 
 use super::NodeIndex;
 
@@ -15,21 +15,25 @@ use super::NodeIndex;
 pub trait CollisionTreeNode: 'static + Sized + Send + Sync {
     type SplitOutput: IntoIterator<Item = Self>;
     /// Returns the objects contained in the node
-    fn objects(&self) -> &[Object];
+    fn objects(&self) -> &[CollisionObject];
 
     fn entity_count(&self) -> usize;
     /// Returns true if the object is considered contained in node
-    fn contains(&self, object: &Object) -> bool;
+    fn contains(&self, object: &CollisionObject) -> bool {
+        self.contains_separate(&object.bound, object.origin)
+    }
+
+    fn contains_separate(&self, bound: &Sphere, origin: Position) -> bool;
     /// Returns true if a point is contained within the node
     fn contains_point(&self, point: Vec3) -> bool;
     /// Sets/updates the value of the object already stored within
-    fn set(&mut self, object: Object, iteration: usize);
+    fn set(&mut self, object: CollisionObject, iteration: usize);
     /// Adds a new object entity to the node.
     /// If it was not possible to add the object, the object is returned as an Err
     /// variant.
-    fn try_add(&mut self, object: Object) -> Result<(), Object>;
+    fn try_add(&mut self, object: CollisionObject) -> Result<(), CollisionObject>;
     /// Removes an object entity from the node
-    fn remove(&mut self, entity: Entity) -> Option<Object>;
+    fn remove(&mut self, entity: Entity) -> Option<CollisionObject>;
     /// Returns the node origin
     fn origin(&self) -> Position;
     /// Returns the node bounds
@@ -50,5 +54,5 @@ pub trait CollisionTreeNode: 'static + Sized + Send + Sync {
     /// Splits the node returning the new children and pushed the objects in
     /// need of reallocation to the `popped` list. The children will then be
     /// inserted into the arena and then set to the node by [`Node::set_children`]
-    fn split(&mut self, popped: &mut Vec<Object>) -> Self::SplitOutput;
+    fn split(&mut self, popped: &mut Vec<CollisionObject>) -> Self::SplitOutput;
 }

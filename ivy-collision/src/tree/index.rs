@@ -19,8 +19,8 @@ use crate::Collider;
 use crate::Collision;
 use crate::CollisionTreeNode;
 
+use super::CollisionObject;
 use super::Nodes;
-use super::Object;
 
 pub struct NodeIndex<T>(KeyData, PhantomData<T>);
 
@@ -132,7 +132,7 @@ impl<N: CollisionTreeNode> NodeIndex<N> {
     //     }
     // }
 
-    pub fn fits_child(self, nodes: &Nodes<N>, object: &Object) -> Option<NodeIndex<N>> {
+    pub fn fits_child(self, nodes: &Nodes<N>, object: &CollisionObject) -> Option<NodeIndex<N>> {
         nodes[self]
             .children()
             .iter()
@@ -141,7 +141,7 @@ impl<N: CollisionTreeNode> NodeIndex<N> {
     }
 
     /// Returns the deepest node that fully contains object.
-    pub fn push_down(self, nodes: &Nodes<N>, object: &Object) -> Self {
+    pub fn push_down(self, nodes: &Nodes<N>, object: &CollisionObject) -> Self {
         if let Some(child) = self.fits_child(nodes, object) {
             child.push_down(nodes, object)
         } else {
@@ -152,7 +152,7 @@ impl<N: CollisionTreeNode> NodeIndex<N> {
     /// Removes an entity from the node.
     /// Returns None if the entity didn't exists.
     /// This may happen if the entity was poepped from the node..
-    pub fn remove(self, nodes: &mut Nodes<N>, entity: Entity) -> Option<Object> {
+    pub fn remove(self, nodes: &mut Nodes<N>, entity: Entity) -> Option<CollisionObject> {
         nodes[self].remove(entity)
     }
 
@@ -161,8 +161,8 @@ impl<N: CollisionTreeNode> NodeIndex<N> {
     pub fn insert(
         self,
         nodes: &mut Nodes<N>,
-        object: Object,
-        popped: &mut Vec<Object>,
+        object: CollisionObject,
+        popped: &mut Vec<CollisionObject>,
     ) -> NodeIndex<N> {
         let index = self.push_down(nodes, &object);
         let node = &mut nodes[index];
@@ -178,7 +178,7 @@ impl<N: CollisionTreeNode> NodeIndex<N> {
     }
 
     /// Splits the node in half
-    pub fn split(self, nodes: &mut Nodes<N>, popped: &mut Vec<Object>) {
+    pub fn split(self, nodes: &mut Nodes<N>, popped: &mut Vec<CollisionObject>) {
         let output = nodes[self].split(popped);
 
         let indices = output
@@ -202,7 +202,7 @@ impl<N: CollisionTreeNode> NodeIndex<N> {
     ) -> hecs_schedule::error::Result<()>
     where
         N: CollisionTreeNode,
-        G: Array<Item = &'a Object>,
+        G: Array<Item = &'a CollisionObject>,
     {
         let old_len = top_objects.len();
         let node = &nodes[self];
@@ -217,7 +217,7 @@ impl<N: CollisionTreeNode> NodeIndex<N> {
                     assert_ne!(a.entity, b.entity);
 
                     // if true {
-                    if a.bound.overlaps(a.origin, b.bound, b.origin) {
+                    if a.overlaps(b) {
                         let a_coll = world.try_get::<Collider>(a.entity)?;
                         let b_coll = world.try_get::<Collider>(b.entity)?;
 

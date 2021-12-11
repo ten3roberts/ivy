@@ -13,7 +13,7 @@ use crate::{util::max_axis, Cube};
 #[derive(Debug)]
 /// The node in collision tree.
 /// Implements basic functionality. Tree behaviours are contained in [`NodeIndex`].
-pub struct BinaryNode<T: Array<Item = Object>> {
+pub struct BinaryNode<T: Array<Item = CollisionObject>> {
     // Data for the iteration
     pub(crate) objects: SmallVec<T>,
     pub(crate) entity_count: usize,
@@ -24,7 +24,7 @@ pub struct BinaryNode<T: Array<Item = Object>> {
     pub(crate) children: Option<[NodeIndex<Self>; 2]>,
 }
 
-impl<T: Array<Item = Object>> std::ops::Deref for BinaryNode<T> {
+impl<T: Array<Item = CollisionObject>> std::ops::Deref for BinaryNode<T> {
     type Target = Vec3;
 
     fn deref(&self) -> &Self::Target {
@@ -32,8 +32,8 @@ impl<T: Array<Item = Object>> std::ops::Deref for BinaryNode<T> {
     }
 }
 
-impl<T: 'static + Array<Item = Object> + Send + Sync> CollisionTreeNode for BinaryNode<T> {
-    fn objects(&self) -> &[Object] {
+impl<T: 'static + Array<Item = CollisionObject> + Send + Sync> CollisionTreeNode for BinaryNode<T> {
+    fn objects(&self) -> &[CollisionObject] {
         &self.objects
     }
 
@@ -41,13 +41,13 @@ impl<T: 'static + Array<Item = Object> + Send + Sync> CollisionTreeNode for Bina
         self.entity_count
     }
 
-    fn contains(&self, object: &Object) -> bool {
-        object.origin.x + object.bound.radius < self.origin.x + self.bounds.x
-            && object.origin.x - object.bound.radius > self.origin.x - self.bounds.x
-            && object.origin.y + object.bound.radius < self.origin.y + self.bounds.y
-            && object.origin.y - object.bound.radius > self.origin.y - self.bounds.y
-            && object.origin.z + object.bound.radius < self.origin.z + self.bounds.z
-            && object.origin.z - object.bound.radius > self.origin.z - self.bounds.z
+    fn contains_separate(&self, bound: &Sphere, origin: Position) -> bool {
+        origin.x + bound.radius < self.origin.x + self.bounds.x
+            && origin.x - bound.radius > self.origin.x - self.bounds.x
+            && origin.y + bound.radius < self.origin.y + self.bounds.y
+            && origin.y - bound.radius > self.origin.y - self.bounds.y
+            && origin.z + bound.radius < self.origin.z + self.bounds.z
+            && origin.z - bound.radius > self.origin.z - self.bounds.z
     }
 
     fn contains_point(&self, point: Vec3) -> bool {
@@ -59,7 +59,7 @@ impl<T: 'static + Array<Item = Object> + Send + Sync> CollisionTreeNode for Bina
             && point.z > self.origin.z - self.bounds.z
     }
 
-    fn set(&mut self, object: Object, iteration: usize) {
+    fn set(&mut self, object: CollisionObject, iteration: usize) {
         if iteration != self.iteration {
             self.iteration = iteration;
             // Use set_len since object doesn't implement drop
@@ -69,7 +69,7 @@ impl<T: 'static + Array<Item = Object> + Send + Sync> CollisionTreeNode for Bina
         assert!(self.objects.len() <= self.entity_count);
     }
 
-    fn try_add(&mut self, object: Object) -> Result<(), Object> {
+    fn try_add(&mut self, object: CollisionObject) -> Result<(), CollisionObject> {
         // Node is not already split and full
         if self.is_leaf() && self.entity_count >= self.objects.inline_size() {
             Err(object)
@@ -80,7 +80,7 @@ impl<T: 'static + Array<Item = Object> + Send + Sync> CollisionTreeNode for Bina
         }
     }
 
-    fn remove(&mut self, entity: Entity) -> Option<Object> {
+    fn remove(&mut self, entity: Entity) -> Option<CollisionObject> {
         if let Some((index, _)) = self
             .objects
             .iter()
@@ -117,7 +117,7 @@ impl<T: 'static + Array<Item = Object> + Send + Sync> CollisionTreeNode for Bina
 
     type SplitOutput = [Self; 2];
 
-    fn split(&mut self, popped: &mut Vec<Object>) -> Self::SplitOutput {
+    fn split(&mut self, popped: &mut Vec<CollisionObject>) -> Self::SplitOutput {
         let mut center = Vec3::zero();
         let mut max = Vec3::zero();
         let mut min = Vec3::zero();
@@ -125,9 +125,9 @@ impl<T: 'static + Array<Item = Object> + Send + Sync> CollisionTreeNode for Bina
         assert!(self.children.is_none());
 
         self.objects.iter().for_each(|val| {
-            center += val.origin;
-            max = max.max_by_component(val.origin);
-            min = min.min_by_component(val.origin);
+            center += *val.origin;
+            max = max.max_by_component(*val.origin);
+            min = min.min_by_component(*val.origin);
         });
 
         let width = (max - min).abs();
@@ -157,7 +157,7 @@ impl<T: 'static + Array<Item = Object> + Send + Sync> CollisionTreeNode for Bina
     }
 }
 
-impl<T: 'static + Array<Item = Object> + Send + Sync> BinaryNode<T> {
+impl<T: 'static + Array<Item = CollisionObject> + Send + Sync> BinaryNode<T> {
     pub fn new(depth: usize, origin: Position, bounds: Cube) -> Self {
         Self {
             objects: Default::default(),
@@ -171,7 +171,11 @@ impl<T: 'static + Array<Item = Object> + Send + Sync> BinaryNode<T> {
     }
 
     /// Returns the child that fully contains object, if any.
-    pub fn fits_child(&self, nodes: &Nodes<Self>, object: &Object) -> Option<NodeIndex<Self>> {
+    pub fn fits_child(
+        &self,
+        nodes: &Nodes<Self>,
+        object: &CollisionObject,
+    ) -> Option<NodeIndex<Self>> {
         self.children_iter()
             .find(|val| nodes[*val].contains(object))
     }
@@ -217,7 +221,7 @@ impl<T: 'static + Array<Item = Object> + Send + Sync> BinaryNode<T> {
     }
 }
 
-impl<T: 'static + Array<Item = Object> + Send + Sync> DrawGizmos for BinaryNode<T> {
+impl<T: 'static + Array<Item = CollisionObject> + Send + Sync> DrawGizmos for BinaryNode<T> {
     fn draw_gizmos<U: std::ops::DerefMut<Target = Gizmos>>(&self, mut gizmos: U, _: Color) {
         let color = Color::hsl(
             self.depth as f32 * 60.0,
