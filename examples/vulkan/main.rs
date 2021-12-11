@@ -167,18 +167,9 @@ fn main() -> anyhow::Result<()> {
         ..Default::default()
     };
 
-    let ui_info = UILayerInfo {
-        unfocus_key: Some(Key::Escape),
-    };
-
     let mut app = App::builder()
         .try_push_layer(|_, r, _| WindowLayer::new(glfw, r, WindowLayerInfo { window, swapchain }))?
-        .push_layer(|w, r, e| {
-            (
-                UILayer::new(w, r, e, ui_info),
-                ReactiveLayer::<Color>::new(w, r, e),
-            )
-        })
+        .push_layer(|w, r, e| (UILayer::new(w, r, e), ReactiveLayer::<Color>::new(w, r, e)))
         .try_push_layer(|w, r, e| -> anyhow::Result<_> {
             Ok(FixedTimeStep::new(
                 20.ms(),

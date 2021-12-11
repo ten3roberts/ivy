@@ -29,3 +29,12 @@ impl WidgetEvent {
         &self.kind
     }
 }
+
+/// Events to control the UI layer
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum UIControl {
+    /// Release focus of the currently focused entity
+    Unfocus,
+    /// Set focus to the given entity
+    Focus(Entity),
+}

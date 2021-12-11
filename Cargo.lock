@@ -441,9 +441,9 @@ dependencies = [
 
 [[package]]
 name = "hecs-schedule"
-version = "0.3.16"
+version = "0.3.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e5aaf36906713ecc844022581860f69b9532660019a7fc406d57e0bd49c33c8"
+checksum = "ac9c1461474ec9a4bc8b87bd6826a5dc471a7ff870e0b2a35957d44597dd7899"
 dependencies = [
  "anyhow",
  "atomic_refcell",
@@ -768,9 +768,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.110"
+version = "0.2.109"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b58a4469763e4e3a906c4ed786e1c70512d16aa88f84dded826da42640fc6a1c"
+checksum = "f98a04dce437184842841303488f70d0188c5f51437d2a834dc097eafa909a01"
 
 [[package]]
 name = "libloading"
@@ -1189,9 +1189,9 @@ dependencies = [
 
 [[package]]
 name = "ryu"
-version = "1.0.6"
+version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c9613b5a66ab9ba26415184cfc41156594925a9cf3a2057e57f31ff145f6568"
+checksum = "254df5081ce98661a883445175e52efe99d1cb2a5552891d965d2f5d0cad1c16"
 
 [[package]]
 name = "safe_arch"

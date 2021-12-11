@@ -1,8 +1,8 @@
 use crate::{constraints::*, events::WidgetEvent, InteractiveState, Result};
-use glfw::{Action, Key, WindowEvent};
+use glfw::{Action, WindowEvent};
 use hecs::{Entity, World};
 use hecs_hierarchy::Hierarchy;
-use hecs_schedule::GenericWorld;
+use hecs_schedule::{GenericWorld, Read, SubWorld, Write};
 use ivy_base::{Events, Position2D, Size2D};
 use ivy_graphics::Camera;
 use ivy_input::InputEvent;
@@ -99,32 +99,27 @@ pub fn reactive_system<T: 'static + Copy + Send + Sync, I: Iterator<Item = Widge
         })
 }
 
-pub fn handle_events<I: Iterator<Item = WindowEvent>>(
-    world: &World,
-    events: &mut Events,
-    window_events: I,
-    cursor_pos: Position2D,
-    state: &mut InteractiveState,
-    unfocus_key: Key,
+pub fn handle_events(
+    world: SubWorld<(&Position2D, &Size2D, &WidgetDepth, &Sticky)>,
+    mut events: Write<Events>,
+    mut state: Write<InteractiveState>,
+    cursor_pos: Read<Position2D>,
+    window_events: impl Iterator<Item = WindowEvent>,
+    control_events: impl Iterator<Item = UIControl>,
 ) {
-    window_events.for_each(|val| {
-        let event = InputEvent::from(val);
-        let hovered_widget = intersect_widget(world, cursor_pos);
+    control_events.for_each(|event| match event {
+        UIControl::Unfocus => state.unfocus(&mut events),
+        UIControl::Focus(entity) => state.set_focus(
+            FocusedWidget::new(entity, world.try_get::<Sticky>(entity).is_ok()),
+            &mut events,
+        ),
+    });
+
+    window_events.for_each(|event| {
+        let event = InputEvent::from(event);
+        let hovered_widget = intersect_widget(&world, *cursor_pos);
 
         let event = match (event, hovered_widget, state.focused()) {
-            (
-                InputEvent::Key {
-                    key,
-                    action: Action::Press,
-                    scancode: _,
-                    mods: _,
-                },
-                _,
-                _,
-            ) if key == unfocus_key => {
-                state.unfocus(events);
-                None
-            }
             // Mouse was clicked on a ui element
             (
                 InputEvent::MouseButton {
@@ -146,7 +141,7 @@ pub fn handle_events<I: Iterator<Item = WindowEvent>>(
 
                 // New focus, unfocus old
                 if state.focused() != Some(&hovered_widget) {
-                    state.set_focus(hovered_widget, events);
+                    state.set_focus(hovered_widget, &mut events);
                 }
 
                 None
@@ -161,7 +156,7 @@ pub fn handle_events<I: Iterator<Item = WindowEvent>>(
                 None,
                 Some(_),
             ) => {
-                state.unfocus(events);
+                state.unfocus(&mut events);
                 Some(InputEvent::MouseButton {
                     button,
                     action: Action::Press,
@@ -190,7 +185,7 @@ pub fn handle_events<I: Iterator<Item = WindowEvent>>(
                 }
                 // Send unfocus event if widget is not sticky
                 if !widget.sticky() {
-                    state.unfocus(events);
+                    state.unfocus(&mut events);
                 }
 
                 None
@@ -211,9 +206,10 @@ pub fn handle_events<I: Iterator<Item = WindowEvent>>(
 }
 
 /// Returns the first widget that intersects the postiion
-fn intersect_widget(world: &World, point: Position2D) -> Option<FocusedWidget> {
+fn intersect_widget(world: &impl GenericWorld, point: Position2D) -> Option<FocusedWidget> {
     world
-        .query::<(&Position2D, &Size2D, &WidgetDepth)>()
+        .try_query::<(&Position2D, &Size2D, &WidgetDepth)>()
+        .unwrap()
         .with::<Interactive>()
         .iter()
         .filter_map(|(e, (pos, size, depth))| {
@@ -224,7 +220,7 @@ fn intersect_widget(world: &World, point: Position2D) -> Option<FocusedWidget> {
             }
         })
         .max_by_key(|(_, depth)| *depth)
-        .map(|(e, _)| FocusedWidget::new(e, world.get::<Sticky>(e).ok().is_some()))
+        .map(|(e, _)| FocusedWidget::new(e, world.try_get::<Sticky>(e).ok().is_some()))
 }
 
 fn box_intersection(pos: Position2D, size: Size2D, point: Vec2) -> bool {

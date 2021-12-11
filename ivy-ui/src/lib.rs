@@ -50,6 +50,7 @@ mod vertex;
 pub use canvas::*;
 pub use components::*;
 pub use error::*;
+pub use events::*;
 pub use font::*;
 pub use image::*;
 pub use image_renderer::*;

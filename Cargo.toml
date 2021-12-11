@@ -35,7 +35,7 @@ ivy-resources = { path = "./ivy-resources" }
 ivy-ui = { path = "./ivy-ui" }
 ivy-vulkan = { path = "./ivy-vulkan" }
 hecs = "0.7.1"
-hecs-schedule = "0.3.16"
+hecs-schedule = "0.3.18"
 derive_more = "0.99.17"
 
 [dev-dependencies]

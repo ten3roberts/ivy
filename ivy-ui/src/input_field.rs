@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use glfw::{Action, Key, Modifiers};
 use hecs::{Component, Entity, EntityBuilder, World};
 use hecs_hierarchy::*;
-use hecs_schedule::GenericWorld;
+use hecs_schedule::{GenericWorld, Read, SubWorld};
 use ivy_input::InputEvent;
 
 use ultraviolet::Vec2;
@@ -11,7 +11,7 @@ use ultraviolet::Vec2;
 use crate::{
     constraints::{AbsoluteSize, RelativeSize},
     events::WidgetEvent,
-    Interactive, Result, Sticky, Text, TextBundle, Widget, WidgetBundle,
+    Interactive, InteractiveState, Result, Sticky, Text, TextBundle, Widget, WidgetBundle,
 };
 
 /// A bundle for easily creating input fields with a reactive component
@@ -115,39 +115,47 @@ impl InputField {
     }
 }
 
-pub fn input_field_system<I: Iterator<Item = WidgetEvent>>(
-    world: &World,
-    events: I,
-    active: Entity,
+pub fn input_field_system(
+    world: SubWorld<(&mut InputField, &mut Text)>,
+    state: Read<InteractiveState>,
+    events: impl Iterator<Item = WidgetEvent>,
 ) -> Result<()> {
-    if let Some(mut field) = world.try_get_mut::<InputField>(active).ok() {
-        let mut text = world.try_get_mut::<Text>(field.text)?;
-        events.for_each(|event| match event.kind {
-            InputEvent::CharTyped(c) => {
-                field.append(c);
-                field.sync(&mut text);
-            }
-            InputEvent::Key {
-                key: Key::Backspace,
-                scancode: _,
-                action: Action::Repeat | Action::Press,
-                mods: Modifiers::Control,
-            } => {
-                field.remove_back_word();
-                field.sync(&mut text)
-            }
-            InputEvent::Key {
-                key: Key::Backspace,
-                scancode: _,
-                action: Action::Repeat | Action::Press,
-                mods: _,
-            } => {
-                field.remove_back();
-                field.sync(&mut text)
-            }
-            _ => {}
-        })
-    }
+    let focused = match state.focused() {
+        Some(val) => val,
+        None => return Ok(()),
+    };
+
+    let mut field = match world.try_get_mut::<InputField>(focused.id()).ok() {
+        Some(field) => field,
+        None => return Ok(()),
+    };
+
+    let mut text = world.try_get_mut::<Text>(field.text)?;
+    events.for_each(|event| match event.kind {
+        InputEvent::CharTyped(c) => {
+            field.append(c);
+            field.sync(&mut text);
+        }
+        InputEvent::Key {
+            key: Key::Backspace,
+            scancode: _,
+            action: Action::Repeat | Action::Press,
+            mods: Modifiers::Control,
+        } => {
+            field.remove_back_word();
+            field.sync(&mut text)
+        }
+        InputEvent::Key {
+            key: Key::Backspace,
+            scancode: _,
+            action: Action::Repeat | Action::Press,
+            mods: _,
+        } => {
+            field.remove_back();
+            field.sync(&mut text)
+        }
+        _ => {}
+    });
 
     Ok(())
 }

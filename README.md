@@ -24,6 +24,7 @@ multiple `ivy` crates.
 ## How it works
 
 ### Layers
+
 The core of the program is an application. [`core::App`]. It defines the
 update loop, and event handling.
 
@@ -33,6 +34,11 @@ sockets, rendering using vulkan, or dispatching ECS workloads.
 
 Due to the layered design, several high level concepts can work together and
 not interfere, aswell as being inserted based on different configurations.
+
+Layers can be thought of as plugin in high level containers of behaviour.
+
+The existance of layer allow importing of behaviour from other crates without
+concern of implementation details.
 
 ### Inter-layer communication
 The application exposes different ways in which two layers can influence

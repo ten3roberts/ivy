@@ -1,49 +1,52 @@
 #![allow(non_snake_case)]
 use anyhow::Context;
-use flume::Receiver;
-use glfw::{Key, WindowEvent};
 use hecs::World;
-use ivy_base::{Events, Layer, Size2D};
+use hecs_schedule::{Read, Schedule, SubWorld, Write};
+use ivy_base::{Events, Layer, Position2D, Size2D};
 use ivy_graphics::Window;
 use ivy_resources::Resources;
 
-use crate::{events::WidgetEvent, handle_events, input_field_system, systems, Canvas};
+use crate::{handle_events, input_field_system, systems, Canvas};
 mod event_handling;
 pub use event_handling::*;
-
-pub struct UILayerInfo {
-    /// Universal key to unfocus a focused widget
-    pub unfocus_key: Option<Key>,
-}
 
 /// UI abstraction layer.
 /// Handles raw input events and filters them through the UI system, and then
 /// through the world in the form of [`ivy-input::InputEvent`]s.
 pub struct UILayer {
-    rx: Receiver<WindowEvent>,
-    input_field_events: Receiver<WidgetEvent>,
     state: InteractiveState,
-    unfocus_key: Key,
+    schedule: Schedule,
 }
 
 impl UILayer {
-    pub fn new(
-        _world: &mut World,
-        _resources: &mut Resources,
-        events: &mut Events,
-        info: UILayerInfo,
-    ) -> Self {
-        let (tx, rx) = flume::unbounded();
+    pub fn new(_world: &mut World, _resources: &mut Resources, events: &mut Events) -> Self {
+        let window_rx = events.subscribe_flume();
+        let control_rx = events.subscribe_flume();
+        let input_field_rx = events.subscribe_flume();
 
-        events.subscribe(tx);
-        let (tx, input_field_events) = flume::unbounded();
-        events.subscribe(tx);
+        let schedule = Schedule::builder()
+            .add_system(
+                move |w: SubWorld<_>, state: Write<_>, events: Write<_>, cursor_pos: Read<_>| {
+                    handle_events(
+                        w,
+                        events,
+                        state,
+                        cursor_pos,
+                        window_rx.try_iter(),
+                        control_rx.try_iter(),
+                    )
+                },
+            )
+            .add_system(move |w: SubWorld<_>, state: Read<_>| {
+                input_field_system(w, state, input_field_rx.try_iter())
+            })
+            .build();
+
+        eprintln!("UI Layer: {}", schedule.batch_info());
 
         Self {
-            rx,
-            input_field_events,
             state: InteractiveState::default(),
-            unfocus_key: info.unfocus_key.unwrap_or(Key::Unknown),
+            schedule,
         }
     }
 }
@@ -67,20 +70,11 @@ impl Layer for UILayer {
             .next()
             .context("Failed to get canvas")?;
 
-        let cursor_pos = cursor_pos * **size;
+        let mut cursor_pos = Position2D(cursor_pos * **size);
 
-        handle_events(
-            world,
-            events,
-            self.rx.try_iter(),
-            cursor_pos.into(),
-            &mut self.state,
-            self.unfocus_key,
-        );
-
-        if let Some(active) = self.state.focused() {
-            input_field_system(world, self.input_field_events.try_iter(), active.id())?;
-        }
+        self.schedule
+            .execute((world, events, &mut self.state, &mut cursor_pos))
+            .context("Failed to execute UI schedule")?;
 
         Ok(())
     }
