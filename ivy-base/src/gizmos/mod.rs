@@ -8,7 +8,7 @@ mod traits;
 pub use traits::*;
 
 /// A default radius that looks good for small gizmos
-pub const DEFAULT_RADIUS: f32 = 0.1;
+pub const DEFAULT_RADIUS: f32 = 0.2;
 
 #[derive(Copy, Clone, PartialEq)]
 /// Represents a 3D world overlay for debugging purposes.

@@ -80,7 +80,7 @@ impl RayIntersect for Cube {
     // https://www.jcgt.org/published/0007/03/04/paper-lowres.pdf
     fn check_intersect(&self, transform: &TransformMatrix, ray: &Ray) -> bool {
         let inv = transform.inversed();
-        let dir = inv.transform_vec3(ray.dir());
+        let dir = inv.transform_vec3(ray.dir()).normalized();
         let inv_dir = Vec3::new(1.0 / dir.x, 1.0 / dir.y, 1.0 / dir.z);
 
         let origin = inv.transform_point3(*ray.origin);
@@ -164,7 +164,7 @@ impl RayIntersect for Sphere {
     // https://gist.github.com/wwwtyro/beecc31d65d1004f5a9d
     fn check_intersect(&self, transform: &TransformMatrix, ray: &Ray) -> bool {
         let inv = transform.inversed();
-        let dir = inv.transform_vec3(ray.dir());
+        let dir = inv.transform_vec3(ray.dir()).normalized();
         let origin = inv.transform_point3(*ray.origin);
 
         let a = dir.dot(dir);

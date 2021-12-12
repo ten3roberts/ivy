@@ -68,6 +68,20 @@ impl std::ops::Mul<Position> for Rotation {
     }
 }
 
+impl std::ops::Mul<Rotation> for Rotation {
+    type Output = Rotation;
+
+    fn mul(self, rhs: Rotation) -> Self::Output {
+        Rotation(self.0 * rhs.0)
+    }
+}
+
+impl std::ops::MulAssign<Rotation> for Rotation {
+    fn mul_assign(&mut self, rhs: Rotation) {
+        *self = Rotation(self.0 * rhs.0)
+    }
+}
+
 impl Default for Scale {
     fn default() -> Self {
         Self(Vec3::one())
