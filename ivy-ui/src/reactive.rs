@@ -4,10 +4,9 @@ use anyhow::Context;
 use flume::Receiver;
 use hecs::World;
 use ivy_base::{Events, Layer};
-use ivy_input::InputEvent;
 use ivy_resources::Resources;
 
-use crate::{events::WidgetEvent, systems};
+use crate::{events::WidgetEvent, systems, WidgetEventKind};
 
 #[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
@@ -57,8 +56,8 @@ pub enum ReactiveState {
 impl ReactiveState {
     pub fn try_from_event(event: &WidgetEvent) -> Option<Self> {
         match event.kind() {
-            InputEvent::Focus(true) => Some(Self::Focused),
-            InputEvent::Focus(false) => Some(Self::Unfocused),
+            WidgetEventKind::Focus(true) => Some(Self::Focused),
+            WidgetEventKind::Focus(false) => Some(Self::Unfocused),
             _ => None,
         }
     }

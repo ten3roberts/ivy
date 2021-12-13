@@ -2,18 +2,22 @@
 //! Window events are captured and forwarded to input events if no UI element
 //! captured it.
 
+use std::convert::TryFrom;
+
+use glfw::{Action, Key, Modifiers, MouseButton, Scancode};
 use hecs::Entity;
 use ivy_input::InputEvent;
+use ultraviolet::Vec2;
 
 /// Event for a clicked ui widget
 #[derive(Debug, Clone, PartialEq)]
 pub struct WidgetEvent {
     pub entity: Entity,
-    pub kind: InputEvent,
+    pub kind: WidgetEventKind,
 }
 
 impl WidgetEvent {
-    pub fn new(entity: Entity, kind: InputEvent) -> Self {
+    pub fn new(entity: Entity, kind: WidgetEventKind) -> Self {
         Self { entity, kind }
     }
 
@@ -25,7 +29,7 @@ impl WidgetEvent {
 
     /// Get a reference to the widget event's kind.
     #[inline]
-    pub fn kind(&self) -> &InputEvent {
+    pub fn kind(&self) -> &WidgetEventKind {
         &self.kind
     }
 }
@@ -33,8 +37,73 @@ impl WidgetEvent {
 /// Events to control the UI layer
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum UIControl {
-    /// Release focus of the currently focused entity
-    Unfocus,
-    /// Set focus to the given entity
-    Focus(Entity),
+    /// Set or release focus to the given entity
+    Focus(Option<Entity>),
+}
+
+/// A subset of input events for UI widgets
+#[derive(Debug, Clone, PartialEq)]
+pub enum WidgetEventKind {
+    Key {
+        key: Key,
+        scancode: Scancode,
+        action: Action,
+        mods: Modifiers,
+    },
+
+    /// Scroll wheel event in horizontal and vertical
+    Scroll(Vec2),
+    /// A typed char with applied modifiers
+    CharTyped(char),
+    CharModifiers {
+        c: char,
+        mods: Modifiers,
+    },
+
+    /// Explicit focus given or lost
+    Focus(bool),
+    /// Cursor is above
+    Hover(bool),
+
+    /// Widget was clicked
+    /// Usually sent at the same time as focus
+    MouseButton {
+        button: MouseButton,
+        action: Action,
+        mods: Modifiers,
+    },
+}
+
+impl TryFrom<InputEvent> for WidgetEventKind {
+    type Error = InputEvent;
+
+    fn try_from(value: InputEvent) -> Result<Self, Self::Error> {
+        match value {
+            InputEvent::Key {
+                key,
+                scancode,
+                action,
+                mods,
+            } => Ok(Self::Key {
+                key,
+                scancode,
+                action,
+                mods,
+            }),
+            InputEvent::Scroll(val) => Ok(Self::Scroll(val)),
+            InputEvent::CharTyped(val) => Ok(Self::CharTyped(val)),
+            InputEvent::CharModifiers { c, mods } => Ok(Self::CharModifiers { c, mods }),
+            InputEvent::Focus(val) => Ok(Self::Focus(val)),
+            InputEvent::MouseButton {
+                button,
+                action,
+                mods,
+            } => Ok(Self::MouseButton {
+                button,
+                action,
+                mods,
+            }),
+            other => Err(other),
+        }
+    }
 }

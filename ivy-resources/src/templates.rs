@@ -3,6 +3,8 @@ use std::{borrow::Cow, collections::HashMap};
 
 use derive_more::{From, Into};
 use hecs::{Component, DynamicBundle, Entity, EntityBuilderClone, World};
+#[cfg(feature = "serialize")]
+use serde::{Deserialize, Serialize};
 
 //// Generic container for storing entity templates for later retrieval and
 ///spawning. Intended to be stored inside resources or standalone.
@@ -43,8 +45,10 @@ impl TemplateStore {
     }
 
     //     /// Builds a template and returns it
-    pub fn builder(&self, key: &TemplateKey) -> Result<EntityBuilderClone> {
-        Ok(self.get(key)?.builder())
+    pub fn builder(&self, key: TemplateKey) -> Result<EntityBuilderClone> {
+        let mut builder = self.get(&key)?.builder();
+        builder.add(key);
+        Ok(builder)
     }
 
     /// Spawns a template by key into the world and assigns the provided bundle.

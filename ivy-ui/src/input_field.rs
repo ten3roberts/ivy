@@ -4,7 +4,6 @@ use glfw::{Action, Key, Modifiers};
 use hecs::{Component, Entity, EntityBuilder, World};
 use hecs_hierarchy::*;
 use hecs_schedule::{GenericWorld, Read, SubWorld};
-use ivy_input::InputEvent;
 
 use ultraviolet::Vec2;
 
@@ -12,6 +11,7 @@ use crate::{
     constraints::{AbsoluteSize, RelativeSize},
     events::WidgetEvent,
     Interactive, InteractiveState, Result, Sticky, Text, TextBundle, Widget, WidgetBundle,
+    WidgetEventKind,
 };
 
 /// A bundle for easily creating input fields with a reactive component
@@ -125,18 +125,18 @@ pub fn input_field_system(
         None => return Ok(()),
     };
 
-    let mut field = match world.try_get_mut::<InputField>(focused.id()).ok() {
+    let mut field = match world.try_get_mut::<InputField>(focused).ok() {
         Some(field) => field,
         None => return Ok(()),
     };
 
     let mut text = world.try_get_mut::<Text>(field.text)?;
     events.for_each(|event| match event.kind {
-        InputEvent::CharTyped(c) => {
+        WidgetEventKind::CharTyped(c) => {
             field.append(c);
             field.sync(&mut text);
         }
-        InputEvent::Key {
+        WidgetEventKind::Key {
             key: Key::Backspace,
             scancode: _,
             action: Action::Repeat | Action::Press,
@@ -145,7 +145,7 @@ pub fn input_field_system(
             field.remove_back_word();
             field.sync(&mut text)
         }
-        InputEvent::Key {
+        WidgetEventKind::Key {
             key: Key::Backspace,
             scancode: _,
             action: Action::Repeat | Action::Press,

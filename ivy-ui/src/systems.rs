@@ -1,3 +1,5 @@
+use std::convert::TryInto;
+
 use crate::{constraints::*, events::WidgetEvent, InteractiveState, Result};
 use glfw::{Action, WindowEvent};
 use hecs::{Entity, World};
@@ -108,95 +110,88 @@ pub fn handle_events(
     control_events: impl Iterator<Item = UIControl>,
 ) {
     control_events.for_each(|event| match event {
-        UIControl::Unfocus => state.unfocus(&mut events),
-        UIControl::Focus(entity) => state.set_focus(
-            FocusedWidget::new(entity, world.try_get::<Sticky>(entity).is_ok()),
+        UIControl::Focus(widget) => state.set_focus(
+            widget,
+            widget
+                .map(|val| world.try_get::<Sticky>(val).is_err())
+                .unwrap_or_default(),
             &mut events,
         ),
     });
 
+    let hovered = intersect_widget(&world, *cursor_pos);
+    let sticky = hovered
+        .map(|val| world.get::<Sticky>(val).is_err())
+        .unwrap_or_default();
+
     window_events.for_each(|event| {
         let event = InputEvent::from(event);
-        let hovered_widget = intersect_widget(&world, *cursor_pos);
 
-        let event = match (event, hovered_widget, state.focused()) {
+        state.set_hovered(hovered, &mut events);
+
+        let event = match event {
             // Mouse was clicked on a ui element
-            (
-                InputEvent::MouseButton {
-                    button,
-                    action: Action::Press,
-                    mods,
-                },
-                Some(hovered_widget),
-                _,
-            ) => {
-                events.send(WidgetEvent::new(
-                    hovered_widget.id(),
-                    InputEvent::MouseButton {
+            InputEvent::MouseButton {
+                button,
+                action: Action::Press,
+                mods,
+            } => {
+                state.set_focus(hovered, sticky, &mut events);
+                // Swallow or forward event
+                if let Some(widget) = hovered {
+                    events.send(WidgetEvent::new(
+                        widget,
+                        WidgetEventKind::MouseButton {
+                            button,
+                            action: Action::Press,
+                            mods,
+                        },
+                    ));
+
+                    None
+                } else {
+                    Some(InputEvent::MouseButton {
                         button,
                         action: Action::Press,
                         mods,
-                    },
-                ));
-
-                // New focus, unfocus old
-                if state.focused() != Some(&hovered_widget) {
-                    state.set_focus(hovered_widget, &mut events);
+                    })
                 }
-
-                None
             }
-            // Mouse was clicked outside UI, lose focus
-            (
-                InputEvent::MouseButton {
-                    button,
-                    action: Action::Press,
-                    mods,
-                },
-                None,
-                Some(_),
-            ) => {
-                state.unfocus(&mut events);
-                Some(InputEvent::MouseButton {
-                    button,
-                    action: Action::Press,
-                    mods,
-                })
-            }
-            (
-                InputEvent::MouseButton {
-                    button,
-                    action: Action::Release,
-                    mods,
-                },
-                hovered_widget,
-                Some(widget),
-            ) => {
+            InputEvent::MouseButton {
+                button,
+                action: Action::Release,
+                mods,
+            } if hovered.is_some() && state.focused().is_some() => {
+                let hovered = hovered.unwrap();
                 // Mouse was released on the same widget
-                if hovered_widget == Some(*widget) {
+                if Some(hovered) == state.focused() {
                     events.send(WidgetEvent::new(
-                        widget.id(),
-                        InputEvent::MouseButton {
+                        hovered,
+                        WidgetEventKind::MouseButton {
                             button,
                             action: Action::Release,
                             mods,
                         },
                     ));
                 }
+
                 // Send unfocus event if widget is not sticky
-                if !widget.sticky() {
-                    state.unfocus(&mut events);
+                if state.sticky() {
+                    state.set_focus(None, false, &mut events);
                 }
 
                 None
             }
             // If a widget is focused and all else was handled, forward all events
-            (event, _, Some(widget)) => {
-                events.send(WidgetEvent::new(widget.id(), event));
-                None
-            }
+            event if state.focused().is_some() => match event.try_into() {
+                Ok(val) => {
+                    events.send(WidgetEvent::new(state.focused().unwrap(), val));
+                    None
+                }
+                Err(val) => Some(val),
+            },
 
-            (event, _, _) => Some(event),
+            event => Some(event),
         };
 
         if let Some(event) = event {
@@ -206,7 +201,7 @@ pub fn handle_events(
 }
 
 /// Returns the first widget that intersects the postiion
-fn intersect_widget(world: &impl GenericWorld, point: Position2D) -> Option<FocusedWidget> {
+fn intersect_widget(world: &impl GenericWorld, point: Position2D) -> Option<Entity> {
     world
         .try_query::<(&Position2D, &Size2D, &WidgetDepth)>()
         .unwrap()
@@ -214,13 +209,13 @@ fn intersect_widget(world: &impl GenericWorld, point: Position2D) -> Option<Focu
         .iter()
         .filter_map(|(e, (pos, size, depth))| {
             if box_intersection(*pos, *size, *point) {
-                Some((e, *depth))
+                Some((e, depth))
             } else {
                 None
             }
         })
         .max_by_key(|(_, depth)| *depth)
-        .map(|(e, _)| FocusedWidget::new(e, world.try_get::<Sticky>(e).ok().is_some()))
+        .map(|(a, _)| a)
 }
 
 fn box_intersection(pos: Position2D, size: Size2D, point: Vec2) -> bool {

@@ -62,5 +62,6 @@ serialize = [
   "ivy-ui/serialize",
   "ivy-physics/serialize",
   "ivy-vulkan/serialize",
+  "ivy-resources/serialize",
   "ivy-graphics/serialize"
 ]

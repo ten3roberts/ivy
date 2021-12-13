@@ -691,6 +691,7 @@ dependencies = [
  "hecs",
  "hecs-schedule",
  "parking_lot",
+ "serde",
  "slotmap",
  "smallvec",
  "thiserror",
