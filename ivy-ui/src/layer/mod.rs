@@ -26,7 +26,7 @@ impl UILayer {
 
         let schedule = Schedule::builder()
             .add_system(
-                move |w: SubWorld<_>, state: Write<_>, events: Write<_>, cursor_pos: Read<_>| {
+                move |w: Write<_>, state: Write<_>, events: Write<_>, cursor_pos: Read<_>| {
                     handle_events(
                         w,
                         events,

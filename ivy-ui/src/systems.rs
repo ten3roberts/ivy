@@ -4,7 +4,7 @@ use crate::{constraints::*, events::WidgetEvent, InteractiveState, Result};
 use glfw::{Action, WindowEvent};
 use hecs::{Entity, World};
 use hecs_hierarchy::Hierarchy;
-use hecs_schedule::{GenericWorld, Read, SubWorld, Write};
+use hecs_schedule::{GenericWorld, Read, Write};
 use ivy_base::{Events, Position2D, Size2D};
 use ivy_graphics::Camera;
 use ivy_input::InputEvent;
@@ -102,7 +102,7 @@ pub fn reactive_system<T: 'static + Copy + Send + Sync, I: Iterator<Item = Widge
 }
 
 pub fn handle_events(
-    world: SubWorld<(&Position2D, &Size2D, &WidgetDepth, &Sticky)>,
+    world: Write<World>,
     mut events: Write<Events>,
     mut state: Write<InteractiveState>,
     cursor_pos: Read<Position2D>,
@@ -119,7 +119,7 @@ pub fn handle_events(
         ),
     });
 
-    let hovered = intersect_widget(&world, *cursor_pos);
+    let hovered = intersect_widget(&*world, *cursor_pos);
     let sticky = hovered
         .map(|val| world.get::<Sticky>(val).is_err())
         .unwrap_or_default();
@@ -137,8 +137,15 @@ pub fn handle_events(
                 mods,
             } => {
                 state.set_focus(hovered, sticky, &mut events);
+
                 // Swallow or forward event
                 if let Some(widget) = hovered {
+                    let entity = world.entity(widget).unwrap();
+
+                    if let Some(click) = entity.get::<OnClick>() {
+                        click.0(entity, &mut events);
+                    }
+
                     events.send(WidgetEvent::new(
                         widget,
                         WidgetEventKind::MouseButton {

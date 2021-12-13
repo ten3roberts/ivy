@@ -1,7 +1,5 @@
 use thiserror::Error;
 
-use crate::TemplateKey;
-
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Error, Clone)]
@@ -19,7 +17,4 @@ pub enum Error {
     Borrow(&'static str),
     #[error("Resource cache for {0:?} cannot be mutably borrowed while it is immutably borrowed")]
     BorrowMut(&'static str),
-
-    #[error("Invalid template key {0:?}")]
-    InvalidTemplateKey(TemplateKey),
 }

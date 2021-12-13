@@ -45,6 +45,7 @@ pub use ivy_postprocessing as postprocessing;
 pub use ivy_random as random;
 pub use ivy_rendergraph as rendergraph;
 pub use ivy_resources as resources;
+pub use ivy_templates as templates;
 pub use ivy_ui as ui;
 pub use ivy_vulkan as vulkan;
 
@@ -55,8 +56,7 @@ pub use ivy_collision::{Collider, CollisionTree, Contact, Cube, RayIntersect, Sp
 pub use ivy_graphics::{Document, Mesh, MeshRenderer, TextureAtlas};
 pub use ivy_input::{Input, InputAxis, InputVector, Key};
 pub use ivy_rendergraph::RenderGraph;
-pub use ivy_resources::{
-    DefaultResource, DefaultResourceMut, Handle, Resources, TemplateKey, TemplateStore,
-};
+pub use ivy_resources::{DefaultResource, DefaultResourceMut, Handle, Resources};
+pub use ivy_templates::{TemplateKey, TemplateStore};
 pub use ivy_ui::Widget;
 pub use ivy_vulkan::{ImageLayout, ImageUsage, Texture};

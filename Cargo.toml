@@ -23,6 +23,7 @@ members = [
 
 [dependencies]
 ivy-collision = { path = "./ivy-collision" }
+ivy-templates = { path = "./ivy-templates" }
 ivy-base = { path = "./ivy-base" }
 ivy-graphics = { path = "./ivy-graphics" }
 ivy-image = { path = "./ivy-image" }
@@ -63,5 +64,6 @@ serialize = [
   "ivy-physics/serialize",
   "ivy-vulkan/serialize",
   "ivy-resources/serialize",
+  "ivy-templates/serialize",
   "ivy-graphics/serialize"
 ]

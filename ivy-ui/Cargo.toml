@@ -28,6 +28,7 @@ ultraviolet = { version = "0.8.1", features = [ "int" ] }
 flume = "0.10.9"
 hecs-schedule = "0.3.18"
 serde = { version = "1.0.131", features = [ "derive" ], optional = true }
+records = "0.1.1"
 
 [features]
 default = []

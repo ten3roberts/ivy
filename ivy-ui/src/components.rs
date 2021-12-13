@@ -4,8 +4,8 @@ use crate::{constraints::*, Canvas, Font, Image, Text};
 use derive_for::*;
 use derive_more::*;
 pub use fontdue::layout::{HorizontalAlign, VerticalAlign};
-use hecs::Bundle;
-use ivy_base::{Color, Position2D, Size2D};
+use hecs::{Bundle, Entity, EntityRef, World};
+use ivy_base::{Color, Events, Position2D, Size2D};
 use ivy_graphics::Camera;
 use ivy_resources::Handle;
 #[cfg(feature = "serialize")]
@@ -281,5 +281,16 @@ pub enum WrapStyle {
 impl Default for WrapStyle {
     fn default() -> Self {
         Self::Word
+    }
+}
+
+/// Provide a function to execute when a widget is clicked.
+/// This can be used to send extra events when a specific widget is clicked.
+pub struct OnClick(pub fn(entity: EntityRef, &mut Events));
+
+impl OnClick {
+    pub fn execute(&self, world: &mut World, events: &mut Events, entity: Entity) {
+        let entity = world.entity(entity).expect("Entity does not exist");
+        (self.0)(entity, events)
     }
 }
