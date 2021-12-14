@@ -44,7 +44,15 @@ impl Events {
     }
 
     /// Returns the internal dispatcher for the specified event type.
-    pub fn dispatcher<T: Event>(&mut self) -> &mut EventDispatcher<T> {
+    pub fn dispatcher<T: Event>(&self) -> Option<&EventDispatcher<T>> {
+        self.dispatchers.get(&TypeId::of::<T>()).map(|val| {
+            val.downcast_ref::<EventDispatcher<T>>()
+                .expect("Failed to downcast")
+        })
+    }
+
+    /// Returns the internal dispatcher for the specified event type.
+    pub fn dispatcher_mut<T: Event>(&mut self) -> &mut EventDispatcher<T> {
         self.dispatchers
             .entry(TypeId::of::<T>())
             .or_insert_with(new_event_dispatcher::<T>)
@@ -54,22 +62,17 @@ impl Events {
 
     /// Sends an event of type `T` to all subscribed listeners.
     /// If no dispatcher exists for event `T`, a new one will be created.
-    pub fn send<T: Event>(&mut self, event: T) {
-        self.dispatcher().send(event)
+    pub fn send<T: Event>(&self, event: T) {
+        if let Some(dispatcher) = self.dispatcher() {
+            dispatcher.send(event)
+        }
     }
 
     /// Shorthand to subscribe using a flume channel.
     pub fn subscribe_flume<T: Event>(&mut self) -> flume::Receiver<T> {
         let (tx, rx) = flume::unbounded();
 
-        if let Some(dispatcher) = self
-            .dispatchers
-            .entry(TypeId::of::<T>())
-            .or_insert_with(new_event_dispatcher::<T>)
-            .downcast_mut::<EventDispatcher<T>>()
-        {
-            dispatcher.subscribe(tx, |_| true)
-        }
+        self.dispatcher_mut().subscribe(tx, |_| true);
 
         rx
     }
@@ -80,14 +83,7 @@ impl Events {
     where
         S: 'static + EventSender<T> + Send,
     {
-        if let Some(dispatcher) = self
-            .dispatchers
-            .entry(TypeId::of::<T>())
-            .or_insert_with(new_event_dispatcher::<T>)
-            .downcast_mut::<EventDispatcher<T>>()
-        {
-            dispatcher.subscribe(sender, |_| true)
-        }
+        self.dispatcher_mut().subscribe(sender, |_| true)
     }
 
     /// Subscribes to an event of type T by sending events to teh provided
@@ -96,14 +92,18 @@ impl Events {
     where
         S: 'static + EventSender<T> + Send,
     {
-        if let Some(dispatcher) = self
-            .dispatchers
-            .entry(TypeId::of::<T>())
-            .or_insert_with(new_event_dispatcher::<T>)
-            .downcast_mut::<EventDispatcher<T>>()
-        {
-            dispatcher.subscribe(sender, filter)
-        }
+        self.dispatcher_mut().subscribe(sender, filter)
+    }
+
+    /// Blocks all events of a certain type. All events sent will be silently
+    /// ignored.
+    pub fn block<T: Event>(&mut self, block: bool) {
+        self.dispatcher_mut::<T>().blocked = block
+    }
+
+    /// Return true if events of type T are blocked
+    pub fn is_blocked<T: Event>(&mut self) -> bool {
+        self.dispatcher_mut::<T>().blocked
     }
 }
 
@@ -123,6 +123,7 @@ impl_downcast!(AnyEventDispatcher);
 /// Handles event dispatching for a single type of event
 pub struct EventDispatcher<T: Event> {
     subscribers: Mutex<Vec<Subscriber<T>>>,
+    blocked: bool,
 }
 
 impl<T> EventDispatcher<T>
@@ -132,11 +133,16 @@ where
     pub fn new() -> Self {
         Self {
             subscribers: Mutex::new(Vec::new()),
+            blocked: false,
         }
     }
 
     /// Sends an event to all subscribed subscriber. Event is cloned for each registered subscriber. Requires mutable access to cleanup no longer active subscribers.
     pub fn send(&self, event: T) {
+        if self.blocked {
+            return;
+        }
+
         let mut subscribers = self.subscribers.lock();
         if subscribers.len() == 1 {
             subscribers[0].send(event);
@@ -153,7 +159,7 @@ where
 
     /// Subscribes to events using sender to send events. The subscriber is automatically cleaned
     /// up when the receiving end is dropped.
-    pub fn subscribe<S>(&mut self, sender: S, filter: fn(&T) -> bool)
+    pub fn subscribe<S>(&self, sender: S, filter: fn(&T) -> bool)
     where
         S: 'static + EventSender<T> + Send,
     {
