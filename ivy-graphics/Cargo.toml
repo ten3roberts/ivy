@@ -26,6 +26,7 @@ smallvec = "1.7.0"
 thiserror = "1.0.30"
 ultraviolet = "0.8.1"
 serde = { version = "1.0.131", features = [ "derive" ], optional = true }
+records = "0.1.1"
 
 [features]
 default = []

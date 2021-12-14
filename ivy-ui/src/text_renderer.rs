@@ -17,8 +17,8 @@ use ultraviolet::{Mat4, Vec4};
 use crate::Text;
 use crate::UIVertex;
 use crate::WrapStyle;
+use crate::{Alignment, Font};
 use crate::{Error, Result};
-use crate::{Font, TextAlignment};
 use ivy_base::{Color, Position2D, Size2D, Visible};
 
 #[derive(Query)]
@@ -27,7 +27,7 @@ struct TextQuery<'a> {
     font: &'a Handle<Font>,
     block: &'a mut BufferAllocation,
     bounds: &'a Size2D,
-    alignment: Option<&'a TextAlignment>,
+    alignment: Option<&'a Alignment>,
     wrap: Option<&'a WrapStyle>,
 }
 

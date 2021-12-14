@@ -70,6 +70,33 @@ impl InputField {
         Ok(field)
     }
 
+    pub fn spawn_tree<T: Component>(
+        tree: &TreeBuilder<T>,
+        mut info: InputFieldInfo<impl Component>,
+    ) -> Result<Entity> {
+        info.text.text.set(info.placeholder.clone());
+
+        let mut builder = EntityBuilder::new();
+
+        builder
+            .add_bundle(WidgetBundle {
+                abs_size: AbsoluteSize(-info.text_padding),
+                rel_size: RelativeSize::new(1.0, 1.0),
+                ..Default::default()
+            })
+            .add_bundle(info.text);
+
+        let text = tree.spawn(builder.build());
+
+        let mut builder = info.field;
+        builder.add_bundle((Interactive, Sticky, InputField::new(text, info.placeholder)));
+
+        let root = tree.spawn_tree(builder.build());
+
+        root.attach(text);
+        Ok(root.entity())
+    }
+
     /// Returns the entered value of placeholder
     pub fn val(&self) -> &Cow<'static, str> {
         if self.val.is_empty() {

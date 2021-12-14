@@ -596,6 +596,7 @@ dependencies = [
  "ivy-resources",
  "ivy-vulkan",
  "parking_lot",
+ "records",
  "rectangle-pack",
  "serde",
  "smallvec",

@@ -6,6 +6,7 @@ use std::convert::TryFrom;
 
 use glfw::{Action, Key, Modifiers, MouseButton, Scancode};
 use hecs::Entity;
+use ivy_base::Position2D;
 use ivy_input::InputEvent;
 use ultraviolet::Vec2;
 
@@ -44,6 +45,7 @@ pub enum UIControl {
 /// A subset of input events for UI widgets
 #[derive(Debug, Clone, PartialEq)]
 pub enum WidgetEventKind {
+    CursorPos(Position2D),
     Key {
         key: Key,
         scancode: Scancode,
@@ -90,6 +92,7 @@ impl TryFrom<InputEvent> for WidgetEventKind {
                 action,
                 mods,
             }),
+            InputEvent::CursorPos(val) => Ok(Self::CursorPos(val)),
             InputEvent::Scroll(val) => Ok(Self::Scroll(val)),
             InputEvent::CharTyped(val) => Ok(Self::CharTyped(val)),
             InputEvent::CharModifiers { c, mods } => Ok(Self::CharModifiers { c, mods }),

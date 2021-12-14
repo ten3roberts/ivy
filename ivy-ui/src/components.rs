@@ -112,12 +112,22 @@ impl CanvasBundle {
     }
 }
 
-#[derive(Bundle, Clone, Debug, Default)]
+#[derive(Bundle, Clone, Debug)]
 /// Specialize widget into an image
 pub struct ImageBundle<T> {
     pub image: Handle<Image>,
     pub color: Color,
     pub pass: Handle<T>,
+}
+
+impl<T> Default for ImageBundle<T> {
+    fn default() -> Self {
+        Self {
+            image: Default::default(),
+            color: Default::default(),
+            pass: Default::default(),
+        }
+    }
 }
 
 impl<T> ImageBundle<T> {
@@ -133,7 +143,7 @@ pub struct TextBundle<T> {
     pub font: Handle<Font>,
     pub color: Color,
     pub wrap: WrapStyle,
-    pub align: TextAlignment,
+    pub align: Alignment,
     pub pass: Handle<T>,
 }
 
@@ -156,7 +166,7 @@ impl<T> TextBundle<T> {
         font: Handle<Font>,
         color: Color,
         wrap: WrapStyle,
-        align: TextAlignment,
+        align: Alignment,
         pass: Handle<T>,
     ) -> Self {
         Self {
@@ -219,23 +229,23 @@ enum VerticalAlignDef {
 
 #[derive(Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
-pub struct TextAlignment {
+pub struct Alignment {
     #[cfg_attr(feature = "serialize", serde(with = "HorizontalAlignDef"))]
     pub horizontal: HorizontalAlign,
     #[cfg_attr(feature = "serialize", serde(with = "VerticalAlignDef"))]
     pub vertical: VerticalAlign,
 }
 
-impl TextAlignment {
+impl Alignment {
     pub fn new(horizontal: HorizontalAlign, vertical: VerticalAlign) -> Self {
-        TextAlignment {
+        Alignment {
             horizontal,
             vertical,
         }
     }
 }
 
-impl std::fmt::Debug for TextAlignment {
+impl std::fmt::Debug for Alignment {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TextAlignment")
             .field(
@@ -258,9 +268,9 @@ impl std::fmt::Debug for TextAlignment {
     }
 }
 
-impl Default for TextAlignment {
+impl Default for Alignment {
     fn default() -> Self {
-        TextAlignment {
+        Alignment {
             horizontal: HorizontalAlign::Left,
             vertical: VerticalAlign::Top,
         }

@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
+use crate::Alignment;
 use crate::Result;
-use crate::TextAlignment;
 use crate::WrapStyle;
 use fontdue::layout::{self, GlyphPosition, Layout, TextStyle};
 use ivy_base::Size2D;
@@ -94,7 +94,7 @@ impl Text {
         font: &'a Font,
         bounds: Size2D,
         wrap: WrapStyle,
-        alignment: TextAlignment,
+        alignment: Alignment,
     ) -> Result<TextLayout<'a, std::slice::Iter<GlyphPosition>>> {
         self.old_bounds = bounds;
         self.old_wrap = wrap;

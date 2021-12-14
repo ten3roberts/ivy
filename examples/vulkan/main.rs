@@ -897,7 +897,7 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
             text: TextBundle {
                 font,
                 pass: assets.text_pass,
-                align: TextAlignment::new(HorizontalAlign::Left, VerticalAlign::Middle),
+                align: Alignment::new(HorizontalAlign::Left, VerticalAlign::Middle),
                 ..Default::default()
             },
             field: builder,
@@ -917,7 +917,7 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
             font: monospace,
             text: Text::new("Debug"),
             color: Color::white(),
-            align: TextAlignment::new(HorizontalAlign::Left, VerticalAlign::Top),
+            align: Alignment::new(HorizontalAlign::Left, VerticalAlign::Top),
             pass: assets.text_pass,
             ..Default::default()
         })
@@ -973,7 +973,7 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
             text: Text::new("Hello, World!"),
             font,
             color: Color::purple(),
-            align: TextAlignment::new(HorizontalAlign::Center, VerticalAlign::Top),
+            align: Alignment::new(HorizontalAlign::Center, VerticalAlign::Top),
             pass: assets.text_pass,
             ..Default::default()
         });
@@ -992,7 +992,7 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
 
             text: Text::new("Ivy"),
             color: Color::dark_green(),
-            align: TextAlignment::new(HorizontalAlign::Left, VerticalAlign::Bottom),
+            align: Alignment::new(HorizontalAlign::Left, VerticalAlign::Bottom),
             pass: assets.text_pass,
             ..Default::default()
         });

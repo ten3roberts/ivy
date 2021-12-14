@@ -110,8 +110,9 @@ pub fn reactive_system<T: 'static + Copy + Send + Sync, I: Iterator<Item = Widge
         .try_for_each(|(entity, state)| -> Result<()> {
             eprintln!("Got: {:?}", state);
             let mut query = world.try_query_one::<(&mut T, &Reactive<T>)>(entity)?;
-            let (val, reactive) = query.get()?;
-            reactive.update(val, state);
+            if let Ok((val, reactive)) = query.get() {
+                reactive.update(val, state);
+            }
             Ok(())
         })
 }
@@ -125,18 +126,13 @@ pub fn handle_events(
     control_events: impl Iterator<Item = UIControl>,
 ) {
     control_events.for_each(|event| match event {
-        UIControl::Focus(widget) => state.set_focus(
-            widget,
-            widget
-                .map(|val| world.try_get::<Sticky>(val).is_err())
-                .unwrap_or_default(),
-            &mut events,
-        ),
+        UIControl::Focus(widget) => state.set_focus(widget, true, &mut events),
     });
 
     let hovered = intersect_widget(&*world, *cursor_pos);
+
     let sticky = hovered
-        .map(|val| world.get::<Sticky>(val).is_err())
+        .map(|val| world.get::<Sticky>(val).is_ok())
         .unwrap_or_default();
 
     window_events.for_each(|event| {
@@ -198,7 +194,8 @@ pub fn handle_events(
                 }
 
                 // Send unfocus event if widget is not sticky
-                if state.sticky() {
+                dbg!("Sticky: {:?}", state.sticky());
+                if !state.sticky() {
                     state.set_focus(None, false, &mut events);
                 }
 
@@ -225,12 +222,12 @@ pub fn handle_events(
 /// Returns the first widget that intersects the postiion
 fn intersect_widget(world: &impl GenericWorld, point: Position2D) -> Option<Entity> {
     world
-        .try_query::<(&Position2D, &Size2D, &WidgetDepth)>()
+        .try_query::<(&Position2D, &Size2D, &WidgetDepth, &Visible)>()
         .unwrap()
         .with::<Interactive>()
         .iter()
-        .filter_map(|(e, (pos, size, depth))| {
-            if box_intersection(*pos, *size, *point) {
+        .filter_map(|(e, (pos, size, depth, visible))| {
+            if visible.is_visible() && box_intersection(*pos, *size, *point) {
                 Some((e, depth))
             } else {
                 None
