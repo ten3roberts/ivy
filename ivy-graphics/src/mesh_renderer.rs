@@ -1,7 +1,7 @@
 use crate::{BaseRenderer, BatchMarker, Error, Material, Mesh, Renderer, Result};
 use ash::vk::{DescriptorSet, IndexType};
 use hecs::{Query, World};
-use ivy_base::{Color, Hidden, Position, Rotation, Scale};
+use ivy_base::{Color, Position, Rotation, Scale, Visible};
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
     commands::CommandBuffer, descriptors::IntoSet, shaderpass::ShaderPass, VulkanContext,
@@ -53,8 +53,15 @@ impl Renderer for MeshRenderer {
         pass.get_unbatched::<Pass, KeyQuery, ObjectDataQuery>(world);
         pass.build_batches::<Pass, KeyQuery>(world, &*passes)?;
         let iter = world
-            .query_mut::<(&BatchMarker<ObjectData, Pass>, ObjectDataQuery)>()
-            .without::<Hidden>();
+            .query_mut::<(&BatchMarker<ObjectData, Pass>, ObjectDataQuery, &Visible)>()
+            .into_iter()
+            .filter_map(|(e, (marker, obj, visible))| {
+                if visible.is_visible() {
+                    Some((e, (marker, obj)))
+                } else {
+                    None
+                }
+            });
 
         pass.update(current_frame, iter)?;
 

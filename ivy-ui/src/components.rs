@@ -1,15 +1,14 @@
-use std::borrow::Cow;
-
 use crate::{constraints::*, Canvas, Font, Image, Text};
 use derive_for::*;
 use derive_more::*;
 pub use fontdue::layout::{HorizontalAlign, VerticalAlign};
 use hecs::{Bundle, Entity, EntityRef, World};
-use ivy_base::{Color, Events, Position2D, Size2D};
+use ivy_base::{Color, Events, Position2D, Size2D, Visible};
 use ivy_graphics::Camera;
 use ivy_resources::Handle;
 #[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use ultraviolet::Vec2;
 
 derive_for!(
@@ -49,6 +48,7 @@ derive_for!(
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct WidgetBundle {
     pub widget: Widget,
+    pub visible: Visible,
     pub depth: WidgetDepth,
     pub abs_offset: AbsoluteOffset,
     pub rel_offset: RelativeOffset,
@@ -78,8 +78,7 @@ impl WidgetBundle {
             rel_size,
             origin,
             aspect,
-            pos: Default::default(),
-            size: Default::default(),
+            ..Default::default()
         }
     }
 }
@@ -90,6 +89,7 @@ impl WidgetBundle {
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct CanvasBundle {
     pub widget: Widget,
+    pub visible: Visible,
     pub depth: WidgetDepth,
     pub abs_offset: AbsoluteOffset,
     pub rel_offset: RelativeOffset,

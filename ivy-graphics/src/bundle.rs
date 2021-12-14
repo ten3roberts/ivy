@@ -1,5 +1,5 @@
 use hecs::Bundle;
-use ivy_base::{Color, Position, Rotation, Scale};
+use ivy_base::{Color, Position, Rotation, Scale, Visible};
 use ivy_resources::Handle;
 
 use crate::{Material, Mesh};
@@ -12,6 +12,7 @@ use crate::{Material, Mesh};
 /// object won't be rendererd.
 #[derive(Bundle, Clone)]
 pub struct ObjectBundle<Pass> {
+    pub visible: Visible,
     pub pos: Position,
     pub rot: Rotation,
     pub scale: Scale,
@@ -25,6 +26,7 @@ pub struct ObjectBundle<Pass> {
 impl<Pass> std::fmt::Debug for ObjectBundle<Pass> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ObjectBundle")
+            .field("visible", &self.visible)
             .field("pos", &self.pos)
             .field("rot", &self.rot)
             .field("scale", &self.scale)
@@ -39,6 +41,7 @@ impl<Pass> std::fmt::Debug for ObjectBundle<Pass> {
 impl<Pass> Default for ObjectBundle<Pass> {
     fn default() -> Self {
         Self {
+            visible: Default::default(),
             pos: Default::default(),
             rot: Default::default(),
             scale: Default::default(),

@@ -28,6 +28,7 @@ pub use document::*;
 pub use error::*;
 pub use events::*;
 pub use fullscreen_renderer::*;
+pub use glfw::CursorMode;
 pub use light::*;
 pub use material::*;
 pub use mesh::*;

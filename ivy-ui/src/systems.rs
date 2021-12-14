@@ -5,7 +5,7 @@ use glfw::{Action, WindowEvent};
 use hecs::{Entity, World};
 use hecs_hierarchy::Hierarchy;
 use hecs_schedule::{GenericWorld, Read, Write};
-use ivy_base::{Events, Position2D, Size2D};
+use ivy_base::{Events, Position2D, Size2D, Visible};
 use ivy_graphics::Camera;
 use ivy_input::InputEvent;
 use ultraviolet::{Mat4, Vec2};
@@ -16,7 +16,13 @@ use crate::{constraints::ConstraintQuery, *};
 /// Also updates canvas cameras.
 pub fn update(world: &World) -> Result<()> {
     world.roots::<Widget>()?.iter().try_for_each(|(root, _)| {
-        apply_constraints(world, root, Position2D::default(), Size2D::new(1.0, 1.0))?;
+        apply_constraints(
+            world,
+            root,
+            Position2D::default(),
+            Size2D::new(1.0, 1.0),
+            true,
+        )?;
 
         if world.get::<Canvas>(root).is_ok() {
             update_canvas(world, root)?;
@@ -27,19 +33,22 @@ pub fn update(world: &World) -> Result<()> {
 }
 
 pub(crate) fn update_from(world: &impl GenericWorld, parent: Entity, depth: u32) -> Result<()> {
-    let mut query = world.try_query_one::<(&Position2D, &Size2D, &mut WidgetDepth)>(parent)?;
-    let (position, size, curr_depth) = query.get()?;
+    let mut query =
+        world.try_query_one::<(&Position2D, &Size2D, &mut WidgetDepth, &mut Visible)>(parent)?;
+    let (position, size, curr_depth, visible) = query.get()?;
     let position = *position;
     let size = *size;
     *curr_depth = depth.into();
 
+    let is_visible = visible.is_visible();
+
     drop(query);
 
     if let Ok(layout) = world.try_get::<WidgetLayout>(parent) {
-        layout.update(world, parent, position, size, depth)
+        layout.update(world, parent, position, size, depth, is_visible)
     } else {
         world.children::<Widget>(parent).try_for_each(|child| {
-            apply_constraints(world, child, position, size)?;
+            apply_constraints(world, child, position, size, is_visible)?;
             update_from(world, child, depth + 1)
         })
     }
@@ -51,13 +60,19 @@ pub(crate) fn apply_constraints(
     entity: Entity,
     parent_pos: Position2D,
     parent_size: Size2D,
+    is_visible: bool,
 ) -> Result<()> {
-    let mut constaints_query = world.try_query_one::<ConstraintQuery>(entity)?;
-    let constraints = constaints_query.get()?;
+    let mut constaints_query =
+        world.try_query_one::<(ConstraintQuery, &mut Position2D, &mut Size2D, &mut Visible)>(
+            entity,
+        )?;
+    let (constraints, pos, size, visible) = constaints_query.get()?;
 
-    let mut query = world.try_query_one::<(&mut Position2D, &mut Size2D)>(entity)?;
-
-    let (pos, size) = query.get()?;
+    if !is_visible {
+        *visible = Visible::HiddenInherit;
+    } else if *visible == Visible::HiddenInherit {
+        *visible = Visible::Visible;
+    }
 
     *size =
         constraints.rel_size.calculate(parent_size) + constraints.abs_size.calculate(parent_size);

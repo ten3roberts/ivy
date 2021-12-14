@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use hecs::{Entity, Query};
 use hecs_schedule::GenericWorld;
-use ivy_base::{Position, Scale};
+use ivy_base::{Position, Scale, Visible};
 use ultraviolet::Vec3;
 
 use super::Ray;
@@ -93,6 +93,13 @@ pub struct RayCastIterator<'a, 'w, 'o, W, Q> {
     with: PhantomData<Q>,
 }
 
+/// Query required for ray casting
+#[derive(Query)]
+pub struct RayCastQuery<'a> {
+    collider: &'a Collider,
+    visible: &'a Visible,
+}
+
 /// Requires collider
 impl<'a, 'w, 'o, W: GenericWorld, Q: Query> Iterator for RayCastIterator<'a, 'w, 'o, W, Q> {
     type Item = RayIntersection;
@@ -109,12 +116,15 @@ impl<'a, 'w, 'o, W: GenericWorld, Q: Query> Iterator for RayCastIterator<'a, 'w,
 
             let mut query = self
                 .world
-                .try_query_one::<(&Collider, Q)>(object.entity)
+                .try_query_one::<(RayCastQuery, Q)>(object.entity)
                 .expect("Query failed");
 
-            if let Ok((collider, _)) = query.get() {
-                // let collider = self.world.get::<Collider>(object.entity).ok()?;
-                if let Some(contact) = self.ray.intersects(&*collider, &object.transform) {
+            if let Ok((q, _)) = query.get() {
+                if q.visible.is_hidden() {
+                    continue;
+                }
+
+                if let Some(contact) = self.ray.intersects(&*q.collider, &object.transform) {
                     return Some(RayIntersection::new(object.entity, contact));
                 }
             };

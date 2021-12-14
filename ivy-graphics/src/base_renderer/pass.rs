@@ -130,7 +130,6 @@ impl<K: RendererKey, Obj: 'static> PassData<K, Obj> {
                 .into_iter()
                 .map(|(e, (pass, keyq, _))| (e, pass.into_untyped(), keyq.into_key())),
         );
-        dbg!(self.unbatched.len());
     }
 
     /// Builds rendering batches for shaderpass `T` for all objects not yet batched.
@@ -201,16 +200,11 @@ impl<K: RendererKey, Obj: 'static> PassData<K, Obj> {
 
         let batches = &mut self.batches;
 
-        // let query = world
-        //     .query_mut::<(&BatchMarker<Obj, Pass>, Q)>()
-        //     .without::<Hidden>();
-
         self.object_buffers[current_frame].write_slice::<Obj, _, _>(
             self.object_count as _,
             0,
             move |data| {
                 iter.into_iter().for_each(|(_, (marker, obj))| {
-                    dbg!("Iterating object");
                     let batch = &mut batches[marker.batch_id];
                     data[(batch.first_instance + batch.curr) as usize] = obj.into();
                     batch.curr += 1;

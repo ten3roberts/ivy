@@ -5,7 +5,7 @@ use hecs::{Entity, Satisfies};
 use hecs_schedule::{CommandBuffer, GenericWorld, SubWorld, Write};
 use ivy_base::{
     Color, DrawGizmos, Events, Gizmos, Position, Rotation, Scale, Static, TransformMatrix,
-    TransformQuery, Trigger,
+    TransformQuery, Trigger, Visible,
 };
 use ivy_resources::{DefaultResource, DefaultResourceMut};
 use slotmap::SlotMap;
@@ -93,8 +93,15 @@ impl<N: 'static + CollisionTreeNode> CollisionTree<N> {
 
     pub fn handle_removed(&mut self) {
         let nodes = &mut self.nodes;
+        let popped = &mut self.popped;
         self.rx.try_iter().for_each(|(index, e)| {
             let _ = nodes[index].remove(e);
+            if let Some(idx) = popped.1.iter().position(|val| val.entity == e) {
+                popped.1.swap_remove(idx);
+            }
+            if let Some(idx) = popped.0.iter().position(|val| val.entity == e) {
+                popped.0.swap_remove(idx);
+            }
         })
     }
 
@@ -105,6 +112,7 @@ impl<N: 'static + CollisionTreeNode> CollisionTree<N> {
             &Collider,
             Satisfies<&Trigger>,
             Satisfies<&Static>,
+            &Visible,
         )>,
         cmd: &mut CommandBuffer,
     ) {
@@ -112,15 +120,18 @@ impl<N: 'static + CollisionTreeNode> CollisionTree<N> {
             .native_query()
             .without::<TreeMarker<N>>()
             .iter()
-            .map(|(e, (transform, collider, is_trigger, is_static))| {
-                CollisionObject::new(
-                    e,
-                    Sphere::enclose(collider, *transform.scale),
-                    transform.into_matrix(),
-                    is_trigger,
-                    is_static,
-                )
-            })
+            .map(
+                |(e, (transform, collider, is_trigger, is_static, is_visible))| {
+                    CollisionObject::new(
+                        e,
+                        Sphere::enclose(collider, *transform.scale),
+                        transform.into_matrix(),
+                        is_trigger,
+                        is_visible.is_visible(),
+                        is_static,
+                    )
+                },
+            )
             .collect::<Vec<_>>();
 
         inserted.into_iter().for_each(|object| {
@@ -147,7 +158,6 @@ impl<N: 'static + CollisionTreeNode> CollisionTree<N> {
             Satisfies<&Static>,
         )>,
     ) -> Result<(), hecs_schedule::Error> {
-        self.handle_removed();
         self.handle_popped(&world)?;
 
         self.iteration += 1;
@@ -196,6 +206,7 @@ impl<N: 'static + CollisionTreeNode> CollisionTree<N> {
     }
 
     pub fn handle_popped(&mut self, world: &impl GenericWorld) -> hecs_schedule::error::Result<()> {
+        self.handle_removed();
         let nodes = &mut self.nodes;
         let root = self.root;
         while !self.popped.0.is_empty() {
@@ -252,6 +263,7 @@ impl<N: CollisionTreeNode> CollisionTree<N> {
             &Collider,
             Satisfies<&Trigger>,
             Satisfies<&Static>,
+            &Visible,
         )>,
         mut cmd: Write<CommandBuffer>,
         mut tree: DefaultResourceMut<Self>,
@@ -305,6 +317,7 @@ pub struct CollisionObject {
     pub transform: TransformMatrix,
     pub max_scale: f32,
     pub is_trigger: bool,
+    pub is_visible: bool,
     pub is_static: bool,
 }
 
@@ -340,6 +353,7 @@ impl CollisionObject {
         bound: Sphere,
         transform: TransformMatrix,
         is_trigger: bool,
+        is_visible: bool,
         is_static: bool,
     ) -> Self {
         Self {
@@ -349,6 +363,7 @@ impl CollisionObject {
             origin: transform.extract_translation().into(),
             max_scale: transform[0][0].max(transform[1][1]).max(transform[2][2]),
             is_trigger,
+            is_visible,
             is_static,
         }
     }

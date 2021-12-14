@@ -942,7 +942,8 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
             |_, offset, elapsed, _| {
                 offset.x = (elapsed * 0.25).sin();
             },
-        )));
+        )))
+        .add(Visible::Hidden);
 
     let widget2 = world.attach_new::<Widget, _>(canvas, builder.build())?;
 

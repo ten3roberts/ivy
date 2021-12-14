@@ -26,6 +26,7 @@ impl WidgetLayout {
         position: Position2D,
         size: Size2D,
         depth: u32,
+        is_visible: bool,
     ) -> Result<()> {
         let mut cursor = *position - *size;
 
@@ -33,7 +34,7 @@ impl WidgetLayout {
 
         match self.kind {
             LayoutKind::Horizontal => iter.try_for_each(|child| -> Result<()> {
-                apply_constraints(world, child, position, size)?;
+                apply_constraints(world, child, position, size, is_visible)?;
                 let mut query = world.try_query_one::<(&mut Position2D, &Size2D)>(child)?;
 
                 let (child_pos, child_size) = query.get()?;

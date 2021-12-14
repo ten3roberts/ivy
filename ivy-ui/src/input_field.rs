@@ -85,7 +85,6 @@ impl InputField {
     }
 
     fn append(&mut self, ch: char) {
-        dbg!(&self.val);
         let s = self.val.to_mut();
         s.push(ch);
     }

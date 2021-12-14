@@ -2,7 +2,7 @@ use crate::{Error, Material, Mesh, PointLight, Result};
 use hecs::{Bundle, Component, EntityBuilder, EntityBuilderClone};
 use std::{borrow::Cow, path::Path, path::PathBuf, sync::Arc};
 
-use ivy_base::{Position, Rotation, Scale};
+use ivy_base::{Position, Rotation, Scale, Visible};
 use ivy_resources::{Handle, LoadResource, Resources};
 use ivy_vulkan::{Texture, VulkanContext};
 use ultraviolet::*;
@@ -223,6 +223,7 @@ impl Document {
         builder.add(node.pos);
         builder.add(node.rot);
         builder.add(node.scale);
+        builder.add(Visible::default());
 
         builder
     }

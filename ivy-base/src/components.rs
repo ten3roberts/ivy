@@ -329,10 +329,49 @@ pub struct Static;
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct Trigger;
 
-#[derive(Default, Debug, Clone, Copy)]
-/// Entity which won't be rendered.
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
-pub struct Hidden;
+/// Signifies if the entity should be visible or not. Default is true
+pub enum Visible {
+    /// Entity is fully visible
+    Visible,
+    /// Entity is explicitely hidden
+    Hidden,
+    /// Entity is hidden by a parent node
+    HiddenInherit,
+}
+
+impl Visible {
+    /// Returns true if it is considered visible
+    #[inline]
+    pub fn is_visible(self) -> bool {
+        self == Self::Visible
+    }
+
+    /// Returns false if it is considered visible
+    #[inline]
+    pub fn is_hidden(self) -> bool {
+        !self.is_visible()
+    }
+}
+
+impl std::ops::Not for Visible {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        if self.is_visible() {
+            Self::Hidden
+        } else {
+            Self::Visible
+        }
+    }
+}
+
+impl Default for Visible {
+    fn default() -> Self {
+        Self::Visible
+    }
+}
 
 #[derive(Clone, Eq, PartialEq, PartialOrd, Ord, Default, Hash, From, Into)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
