@@ -1,7 +1,7 @@
 use crate::*;
 use hecs::{Query, World};
-use ivy_base::{Color, Position2D, Size2D};
-use ivy_graphics::{BaseRenderer, Mesh, Renderer};
+use ivy_base::{Color, Hidden, Position2D, Size2D};
+use ivy_graphics::{BaseRenderer, BatchMarker, Mesh, Renderer};
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
     commands::CommandBuffer, descriptors::*, shaderpass::ShaderPass, vk::IndexType, VulkanContext,
@@ -72,9 +72,13 @@ impl Renderer for ImageRenderer {
 
         let pass = self.base_renderer.pass_mut::<Pass>()?;
 
-        pass.get_unbatched::<Pass, KeyQuery, ObjectDataQuery, _, _>(world);
-        pass.build_batches::<Pass, KeyQuery, _, _>(world, &passes)?;
-        pass.update::<Pass, ObjectDataQuery, _>(world, current_frame)?;
+        pass.get_unbatched::<Pass, KeyQuery, ObjectDataQuery>(world);
+        pass.build_batches::<Pass, KeyQuery>(world, &passes)?;
+        let iter = world
+            .query_mut::<(&BatchMarker<ObjectData, Pass>, ObjectDataQuery)>()
+            .without::<Hidden>();
+
+        pass.update(current_frame, iter)?;
 
         pass.sort_batches_if_dirty();
 

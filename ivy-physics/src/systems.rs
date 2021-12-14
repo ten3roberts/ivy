@@ -6,7 +6,7 @@ use crate::{
     Effector, Result,
 };
 use hecs::Entity;
-use hecs_hierarchy::Hierarchy;
+use hecs_hierarchy::{Hierarchy, HierarchyQuery};
 use hecs_schedule::{GenericWorld, Read, SubWorld};
 use ivy_base::{DeltaTime, Position, Rotation, Static};
 use ivy_collision::Collision;
@@ -71,7 +71,13 @@ pub fn get_rigid_root(world: &impl GenericWorld, child: Entity) -> Result<(Entit
 }
 
 pub fn resolve_collisions<I: Iterator<Item = Collision>>(
-    world: SubWorld<(RbQuery, &Position, &mut Effector)>,
+    world: SubWorld<(
+        RbQuery,
+        &Position,
+        &mut Effector,
+        HierarchyQuery<Connection>,
+        &ConnectionKind,
+    )>,
     mut collisions: I,
     // _events: Read<Events>, // Wait for events
 ) -> Result<()> {

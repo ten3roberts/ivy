@@ -6,7 +6,6 @@ use super::*;
 
 use ash::vk::{DescriptorSet, ShaderStageFlags};
 use hecs::{Entity, Fetch, Query, World};
-use ivy_base::Hidden;
 use ivy_resources::{Handle, HandleUntyped, ResourceCache};
 use ivy_vulkan::{
     descriptors::{DescriptorBuilder, IntoSet},
@@ -115,13 +114,12 @@ impl<K: RendererKey, Obj: 'static> PassData<K, Obj> {
 
     /// Collects all entities that have yet to be placed into a batch in the current
     /// pass.
-    pub fn get_unbatched<'a, Pass, Q, O, F, W>(&mut self, world: &'a mut World)
+    pub fn get_unbatched<'a, Pass, Q, O>(&mut self, world: &'a mut World)
     where
         Pass: ShaderPass,
-        Q: Query<Fetch = F> + KeyQuery<K = K>,
-        F: Fetch<'a, Item = Q>,
-        O: 'a + Query<Fetch = W> + Into<Obj>,
-        W: Fetch<'a, Item = O>,
+        Q: 'a + KeyQuery<K = K> + Query,
+        <Q as Query>::Fetch: Fetch<'a, Item = Q>,
+        O: Query,
     {
         let query = world
             .query_mut::<(&Handle<Pass>, Q, O)>()
@@ -132,17 +130,21 @@ impl<K: RendererKey, Obj: 'static> PassData<K, Obj> {
                 .into_iter()
                 .map(|(e, (pass, keyq, _))| (e, pass.into_untyped(), keyq.into_key())),
         );
+        dbg!(self.unbatched.len());
     }
 
     /// Builds rendering batches for shaderpass `T` for all objects not yet batched.
     /// Note: [`Self::get_unbatched`] needs to be run before to collect unbatched
     /// entities, this is due to lifetime limitations on world mutations.
-    pub fn build_batches<'a, Pass, Q, F, U>(&mut self, world: &mut World, passes: &U) -> Result<()>
+    pub fn build_batches<'a, Pass, Q>(
+        &mut self,
+        world: &mut World,
+        passes: &ResourceCache<Pass>,
+    ) -> Result<()>
     where
-        U: Deref<Target = ResourceCache<Pass>>,
         Pass: ShaderPass,
-        Q: Query<Fetch = F>,
-        F: Fetch<'a, Item = Q>,
+        Q: KeyQuery<K = K>,
+        <Q as Query>::Fetch: Fetch<'a, Item = Q>,
     {
         let frames_in_flight = self.frames_in_flight;
         let object_count = &mut self.object_count;
@@ -176,14 +178,12 @@ impl<K: RendererKey, Obj: 'static> PassData<K, Obj> {
     }
 
     /// Updates the GPU side data of pass
-    pub fn update<'a, Pass, Q, F>(
+    pub fn update<'a, Pass>(
         &mut self,
-        world: &'a mut World,
         current_frame: usize,
+        iter: impl IntoIterator<Item = (Entity, (&'a BatchMarker<Obj, Pass>, impl Into<Obj>))>,
     ) -> Result<()>
     where
-        Q: 'a + Query<Fetch = F> + Into<Obj>,
-        F: Fetch<'a, Item = Q>,
         Pass: ShaderPass,
     {
         // Update batch offsets
@@ -201,17 +201,18 @@ impl<K: RendererKey, Obj: 'static> PassData<K, Obj> {
 
         let batches = &mut self.batches;
 
-        let query = world
-            .query_mut::<(&BatchMarker<Obj, Pass>, Q)>()
-            .without::<Hidden>();
+        // let query = world
+        //     .query_mut::<(&BatchMarker<Obj, Pass>, Q)>()
+        //     .without::<Hidden>();
 
         self.object_buffers[current_frame].write_slice::<Obj, _, _>(
             self.object_count as _,
             0,
             move |data| {
-                query.into_iter().for_each(|(_, (batch_marker, o))| {
-                    let batch = &mut batches[batch_marker.batch_id];
-                    data[(batch.first_instance + batch.curr) as usize] = o.into();
+                iter.into_iter().for_each(|(_, (marker, obj))| {
+                    dbg!("Iterating object");
+                    let batch = &mut batches[marker.batch_id];
+                    data[(batch.first_instance + batch.curr) as usize] = obj.into();
                     batch.curr += 1;
                 })
             },
@@ -261,14 +262,13 @@ impl<K: RendererKey, Obj: 'static> PassData<K, Obj> {
 
     /// Returns or creates the appropriate batch for the combined shaderpass and
     /// key
-    pub fn get_batch<U, Pass>(
+    pub fn get_batch<Pass>(
         &mut self,
-        passes: U,
+        passes: &ResourceCache<Pass>,
         pass: Handle<Pass>,
         key: K,
     ) -> Result<&mut BatchData<K>>
     where
-        U: Deref<Target = ResourceCache<Pass>>,
         Pass: ShaderPass,
     {
         Self::get_batch_internal(

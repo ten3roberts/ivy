@@ -419,9 +419,9 @@ dependencies = [
 
 [[package]]
 name = "hecs-hierarchy"
-version = "0.8.0"
+version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74af4b77c0aec9e70bf4ba8ee76f731c1e384ae3213dc22d87ce05052aad5f44"
+checksum = "b9d10306e57b55172b89342e882ec9b3d6e06d6bc4ce8cec369f62cb7be73dd8"
 dependencies = [
  "hecs",
  "hecs-schedule",
@@ -441,9 +441,9 @@ dependencies = [
 
 [[package]]
 name = "hecs-schedule"
-version = "0.3.18"
+version = "0.3.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac9c1461474ec9a4bc8b87bd6826a5dc471a7ff870e0b2a35957d44597dd7899"
+checksum = "f90eec82255d8275b02ad2e235977826fc80ebd724d22d20fb0ed517810fdcf5"
 dependencies = [
  "anyhow",
  "atomic_refcell",
