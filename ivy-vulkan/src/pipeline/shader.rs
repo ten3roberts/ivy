@@ -1,13 +1,14 @@
 use crate::Pipeline;
 use crate::Result;
 use crate::VulkanContext;
-use arrayvec::ArrayVec;
 use std::io::{Read, Seek};
 
 use crate::descriptors;
 use ash::vk;
+use ash::vk::PushConstantRange;
 use ash::Device;
 use descriptors::*;
+use smallvec::SmallVec;
 
 use crate::Error;
 
@@ -68,8 +69,8 @@ pub fn reflect<S: AsRef<spirv_reflect::ShaderModule>>(
 ) -> Result<vk::PipelineLayout> {
     let mut sets: [DescriptorLayoutInfo; MAX_SETS] = Default::default();
 
-    let mut push_constant_ranges: ArrayVec<vk::PushConstantRange, MAX_PUSH_CONSTANTS> =
-        ArrayVec::new();
+    let mut push_constant_ranges: SmallVec<[PushConstantRange; MAX_PUSH_CONSTANTS]> =
+        Default::default();
 
     for module in modules {
         let module = module.as_ref();

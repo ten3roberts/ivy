@@ -4,7 +4,7 @@ use gltf::{buffer, image};
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{Texture, VulkanContext};
 
-use crate::{Result, Scheme};
+use crate::{Error, Result, Scheme};
 
 /// Import the buffer data referenced by a glTF document.
 pub fn import_buffer_data(
@@ -48,8 +48,12 @@ pub fn import_image_data(
         .map(|image| -> Result<Handle<Texture>> {
             match image.source() {
                 image::Source::Uri { uri, mime_type: _ } => {
-                    dbg!(uri);
-                    Ok(resources.load::<Texture, _, _, _>(uri.to_owned())??)
+                    let data = Scheme::read(base, uri)
+                        .map_err(|e| Error::GltfImport(e, Some(base.into())))?;
+
+                    let texture = Texture::from_memory(context.clone(), &data)?;
+                    Ok(resources.insert(texture)?)
+                    // Ok(resources.from_memory::<Texture, _, _, _>(uri.to_owned())??)
                 }
                 image::Source::View { view, mime_type: _ } => {
                     let parent_buffer_data = &buffer_data[view.buffer().index()].0;

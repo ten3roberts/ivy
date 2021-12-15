@@ -1,7 +1,8 @@
 use crate::Result;
-use arrayvec::ArrayVec;
 use ash::vk;
+use ash::vk::SubpassDescription;
 use ash::Device;
+use smallvec::SmallVec;
 use std::sync::Arc;
 
 pub use vk::AttachmentDescription;
@@ -88,7 +89,7 @@ impl RenderPass {
             .subpasses
             .iter()
             .map(|subpass| subpass.into())
-            .collect::<ArrayVec<vk::SubpassDescription, MAX_SUBPASSES>>();
+            .collect::<SmallVec<[SubpassDescription; MAX_SUBPASSES]>>();
 
         let create_info = vk::RenderPassCreateInfo::builder()
             .attachments(info.attachments)

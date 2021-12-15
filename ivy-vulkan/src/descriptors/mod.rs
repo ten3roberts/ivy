@@ -16,7 +16,7 @@ pub use vk::DescriptorSet;
 
 /// Highest binding allowed for descriptor set. This is deliberately set low as the bindings should
 /// be kept as compact as possible.
-pub const MAX_BINDINGS: usize = 8;
+pub const MAX_BINDINGS: usize = 16;
 pub use vk::DescriptorSetLayoutBinding as DescriptorSetBinding;
 
 pub struct DescriptorPool {

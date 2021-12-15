@@ -15,6 +15,7 @@ hecs = "0.7.1"
 hecs-schedule = "0.3.18"
 ivy-base = { path = "../ivy-base", version = "0.9" }
 ivy-resources = { path = "../ivy-resources", version = "0.9" }
+ordered-float = "2.8.0"
 palette = "0.6.0"
 records = "0.1.1"
 slotmap = "1.0.6"

@@ -1,6 +1,7 @@
 use crate::{Error, Material, Mesh, PointLight, Result};
-use gltf::{buffer, image, Gltf};
+use gltf::Gltf;
 use hecs::{Bundle, Component, EntityBuilder, EntityBuilderClone};
+use smallvec::SmallVec;
 use std::{borrow::Cow, path::Path, path::PathBuf, sync::Arc};
 
 use ivy_base::{Position, Rotation, Scale, Visible};
@@ -8,8 +9,10 @@ use ivy_resources::{Handle, LoadResource, Resources};
 use ivy_vulkan::{Texture, VulkanContext};
 use ultraviolet::*;
 
+mod joint;
 pub(crate) mod scheme;
 pub(crate) mod util;
+pub use joint::*;
 
 pub(crate) use scheme::*;
 pub(crate) use util::*;
@@ -19,16 +22,18 @@ pub struct Node {
     /// The name of this node.
     name: String,
     /// The mesh index references by this node.
-    mesh: Option<usize>,
+    mesh: Option<Handle<Mesh>>,
     light: Option<PointLight>,
+    skin: Option<Handle<Skin>>,
     pos: Position,
     rot: Rotation,
     scale: Scale,
+    children: SmallVec<[usize; 4]>,
 }
 
 impl Node {
     /// Get a reference to the node's mesh.
-    pub fn mesh(&self) -> Option<usize> {
+    pub fn mesh(&self) -> Option<Handle<Mesh>> {
         self.mesh
     }
 
@@ -56,11 +61,22 @@ impl Node {
     pub fn name(&self) -> &str {
         self.name.as_ref()
     }
+
+    /// Get a reference to the node's skin.
+    pub fn skin(&self) -> Option<Handle<Skin>> {
+        self.skin
+    }
+
+    /// Get a reference to the node's children.
+    pub fn children(&self) -> &SmallVec<[usize; 4]> {
+        &self.children
+    }
 }
 
 pub struct Document {
     meshes: Vec<Handle<Mesh>>,
     materials: Vec<Handle<Material>>,
+    skins: Vec<Handle<Skin>>,
     nodes: Vec<Node>,
 }
 
@@ -116,6 +132,13 @@ impl Document {
             })
             .collect::<Result<Vec<_>>>()?;
 
+        let mut skins = resources.fetch_mut()?;
+
+        let skins: Vec<_> = document
+            .skins()
+            .map(|skin| Skin::from_gltf(skin, buffers).map(|skin| skins.insert(skin)))
+            .collect::<Result<Vec<_>>>()?;
+
         drop(mesh_cache);
 
         let nodes = document
@@ -128,17 +151,20 @@ impl Document {
 
                 Node {
                     name: node.name().unwrap_or_default().to_owned(),
+                    skin: node.skin().map(|skin| skins[skin.index()]),
                     light,
-                    mesh: node.mesh().map(|mesh| mesh.index()),
+                    mesh: node.mesh().map(|mesh| meshes[mesh.index()]),
                     pos: Vec3::from(position).into(),
                     rot: Rotor3::from_quaternion_array(rotation).into(),
                     scale: Vec3::from(scale).into(),
+                    children: node.children().map(|val| val.index()).collect(),
                 }
             })
             .collect();
 
         Ok(Self {
             meshes,
+            skins,
             nodes,
             materials,
         })
@@ -150,6 +176,11 @@ impl Document {
     /// creation.
     pub fn material(&self, index: usize) -> Handle<Material> {
         self.materials[index]
+    }
+
+    /// Returns the skin associated to the node
+    pub fn skin(&self, index: usize) -> Handle<Skin> {
+        self.skins[index]
     }
 
     /// Returns a handle to the mesh at index. Mesh was inserted in the resource cache upon
@@ -186,21 +217,26 @@ impl Document {
         builder: &'a mut B,
     ) -> Result<&'a mut B> {
         let node = self.find_node(name)?;
-        Ok(self.build_node_internal(node, builder))
+        Ok(self.build_node(node, builder))
+    }
+
+    /// Get a reference to the document's skins.
+    pub fn skins(&self) -> &[Handle<Skin>] {
+        self.skins.as_ref()
     }
 
     /// Spawns a node using the supplied builder into the world
-    pub fn build_node<'a, B: GenericBuilder>(&self, index: usize, builder: &'a mut B) -> &'a mut B {
-        self.build_node_internal(self.node(index), builder)
-    }
-    /// Spawns a node using the supplied builder into the world
-    fn build_node_internal<'a, B: GenericBuilder>(
+    pub fn build_node_by_index<'a, B: GenericBuilder>(
         &self,
-        node: &Node,
+        index: usize,
         builder: &'a mut B,
     ) -> &'a mut B {
+        self.build_node(self.node(index), builder)
+    }
+    /// Spawns a node using the supplied builder into the world
+    pub fn build_node<'a, B: GenericBuilder>(&self, node: &Node, builder: &'a mut B) -> &'a mut B {
         if let Some(mesh) = node.mesh {
-            builder.add::<Handle<Mesh>>(self.mesh(mesh));
+            builder.add::<Handle<Mesh>>(mesh);
         }
 
         if let Some(light) = node.light {

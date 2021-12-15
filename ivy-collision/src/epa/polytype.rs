@@ -1,3 +1,4 @@
+use ordered_float::OrderedFloat;
 use smallvec::{Array, SmallVec};
 use std::ops::Index;
 use ultraviolet::Vec3;
@@ -112,8 +113,7 @@ impl Polytype {
         self.faces
             .iter()
             .enumerate()
-            .filter(|(_, val)| val.distance.is_finite())
-            .max_by(|a, b| a.1.distance.partial_cmp(&b.1.distance).unwrap())
+            .max_by_key(|val| OrderedFloat(val.1.distance))
             .map(|(a, b)| (a as u16, *b))
     }
 
@@ -121,8 +121,7 @@ impl Polytype {
         self.faces
             .iter()
             .enumerate()
-            .filter(|(_, val)| val.distance.is_finite())
-            .min_by(|a, b| a.1.distance.partial_cmp(&b.1.distance).unwrap())
+            .max_by_key(|val| OrderedFloat(val.1.distance))
             .map(|(a, b)| (a as u16, *b))
     }
 

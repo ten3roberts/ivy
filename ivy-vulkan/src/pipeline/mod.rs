@@ -1,11 +1,11 @@
 use crate::traits::FromExtent;
 use crate::{descriptors::DescriptorLayoutInfo, Error, Result, VertexDesc, VulkanContext};
-use arrayvec::ArrayVec;
 use ash::vk::{
     BlendFactor, BlendOp, ColorComponentFlags, Extent2D, PipelineColorBlendAttachmentState,
     PipelineLayout, PrimitiveTopology, PushConstantRange,
 };
 use ivy_base::Extent;
+use smallvec::SmallVec;
 use std::{ffi::CString, sync::Arc};
 use std::{fs::File, path::PathBuf};
 
@@ -246,7 +246,7 @@ impl Pipeline {
             .iter()
             .take_while(|set| !set.bindings().is_empty())
             .map(|set| layout_cache.get(set))
-            .collect::<std::result::Result<ArrayVec<_, MAX_SETS>, _>>()?;
+            .collect::<std::result::Result<SmallVec<[_; MAX_SETS]>, _>>()?;
 
         let create_info = vk::PipelineLayoutCreateInfo {
             set_layout_count: set_layouts.len() as u32,

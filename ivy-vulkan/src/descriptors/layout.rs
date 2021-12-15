@@ -1,21 +1,20 @@
 use crate::Result;
-use std::{cmp::Ord, collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
-use arrayvec::ArrayVec;
-use ash::vk;
+use ash::vk::DescriptorSetLayout;
+use ash::vk::DescriptorSetLayoutCreateInfo;
 use ash::Device;
 use parking_lot::RwLock;
+use smallvec::SmallVec;
 use std::hash::{Hash, Hasher};
 
 use super::DescriptorSetBinding;
 use super::MAX_BINDINGS;
 
-pub use vk::DescriptorSetLayout;
-
 #[derive(Clone, Debug)]
 pub struct DescriptorLayoutInfo {
     // The bindings for the layout
-    bindings: ArrayVec<DescriptorSetBinding, MAX_BINDINGS>,
+    bindings: SmallVec<[DescriptorSetBinding; MAX_BINDINGS]>,
 }
 
 // Impl send and sync because of the immutable sampler in bindings not implementing it
@@ -25,7 +24,7 @@ unsafe impl Sync for DescriptorLayoutInfo {}
 impl DescriptorLayoutInfo {
     pub fn new(bindings: &[DescriptorSetBinding]) -> Self {
         let mut layout = Self {
-            bindings: ArrayVec::new(),
+            bindings: Default::default(),
         };
 
         for binding in bindings {
@@ -106,7 +105,7 @@ impl DescriptorLayoutInfo {
 impl Default for DescriptorLayoutInfo {
     fn default() -> Self {
         Self {
-            bindings: ArrayVec::new(),
+            bindings: Default::default(),
         }
     }
 }
@@ -182,7 +181,7 @@ impl Drop for DescriptorLayoutCache {
 }
 
 pub fn create(device: &Device, info: &DescriptorLayoutInfo) -> Result<DescriptorSetLayout> {
-    let create_info = vk::DescriptorSetLayoutCreateInfo {
+    let create_info = DescriptorSetLayoutCreateInfo {
         binding_count: info.bindings.len() as u32,
         p_bindings: info.bindings.as_ptr(),
         ..Default::default()
@@ -198,6 +197,8 @@ pub fn destroy(device: &Device, layout: DescriptorSetLayout) {
 
 #[cfg(test)]
 mod tests {
+    use ash::vk::DescriptorType;
+
     use super::*;
     #[test]
     /// Test the order is sorted after insertion
@@ -208,7 +209,7 @@ mod tests {
 
         bindings[0] = DescriptorSetBinding {
             binding: 0,
-            descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+            descriptor_type: DescriptorType::UNIFORM_BUFFER,
             descriptor_count: 1,
             ..Default::default()
         };
@@ -219,7 +220,7 @@ mod tests {
 
         bindings[2] = DescriptorSetBinding {
             binding: 2,
-            descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+            descriptor_type: DescriptorType::UNIFORM_BUFFER,
             descriptor_count: 1,
             ..Default::default()
         };
@@ -230,7 +231,7 @@ mod tests {
 
         bindings[1] = DescriptorSetBinding {
             binding: 1,
-            descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+            descriptor_type: DescriptorType::UNIFORM_BUFFER,
             descriptor_count: 1,
             ..Default::default()
         };
@@ -241,7 +242,7 @@ mod tests {
 
         bindings[3] = DescriptorSetBinding {
             binding: 3,
-            descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+            descriptor_type: DescriptorType::UNIFORM_BUFFER,
             descriptor_count: 1,
             ..Default::default()
         };
@@ -252,7 +253,7 @@ mod tests {
 
         bindings[5] = DescriptorSetBinding {
             binding: 5,
-            descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+            descriptor_type: DescriptorType::UNIFORM_BUFFER,
             descriptor_count: 1,
             ..Default::default()
         };
@@ -263,7 +264,7 @@ mod tests {
 
         bindings[4] = DescriptorSetBinding {
             binding: 4,
-            descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+            descriptor_type: DescriptorType::UNIFORM_BUFFER,
             descriptor_count: 1,
             ..Default::default()
         };
@@ -272,7 +273,7 @@ mod tests {
 
         layout.insert(DescriptorSetBinding {
             binding: 4,
-            descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+            descriptor_type: DescriptorType::COMBINED_IMAGE_SAMPLER,
             descriptor_count: 1,
             ..Default::default()
         });

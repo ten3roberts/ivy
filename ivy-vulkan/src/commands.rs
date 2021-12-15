@@ -1,10 +1,10 @@
 use crate::traits::FromExtent;
 use crate::{buffer::Buffer, device, framebuffer::Framebuffer, renderpass::RenderPass, Result};
 use ivy_base::Extent;
+use smallvec::SmallVec;
 use std::mem::size_of;
 use std::sync::Arc;
 
-use arrayvec::ArrayVec;
 use ash::vk::{self, Extent2D, PipelineLayout};
 use ash::vk::{IndexType, ShaderStageFlags};
 use ash::Device;
@@ -248,7 +248,7 @@ impl CommandBuffer {
         first_binding: u32,
         vertexbuffers: &[B],
     ) {
-        let buffers: ArrayVec<vk::Buffer, MAX_VB_BINDING> =
+        let buffers: SmallVec<[vk::Buffer; MAX_VB_BINDING]> =
             vertexbuffers.iter().map(|vb| *vb.as_ref()).collect();
 
         unsafe {

@@ -1,6 +1,6 @@
 use crate::{Buffer, BufferUsage, Error, Result, VulkanContext};
-use arrayvec::ArrayVec;
 use ash::vk::{self, DescriptorSet, ImageLayout, WriteDescriptorSet};
+use smallvec::SmallVec;
 
 use super::{
     DescriptorBindable, DescriptorLayoutCache, DescriptorSetBinding, MultiDescriptorBindable,
@@ -10,8 +10,8 @@ use vk::{DescriptorType, ShaderStageFlags};
 
 pub struct DescriptorBuilder {
     // `bindings` and `writes` are of the same size.
-    bindings: ArrayVec<DescriptorSetBinding, MAX_BINDINGS>,
-    writes: ArrayVec<WriteDescriptorSet, MAX_BINDINGS>,
+    bindings: SmallVec<[DescriptorSetBinding; MAX_BINDINGS]>,
+    writes: SmallVec<[WriteDescriptorSet; MAX_BINDINGS]>,
     buffer_infos: [vk::DescriptorBufferInfo; MAX_BINDINGS],
     image_infos: [vk::DescriptorImageInfo; MAX_BINDINGS],
     // Holds a map to where in the writes array each binding is, or MAX_BINDINGS
