@@ -109,7 +109,7 @@ impl Rotation {
 }
 
 impl Scale {
-    pub fn new(x: f32, y: f32, z: f32) -> Self {
+    pub const fn new(x: f32, y: f32, z: f32) -> Self {
         Self(Vec3::new(x, y, z))
     }
 
@@ -123,13 +123,13 @@ impl Scale {
 }
 
 impl Position2D {
-    pub fn new(x: f32, y: f32) -> Self {
+    pub const fn new(x: f32, y: f32) -> Self {
         Self(Vec2::new(x, y))
     }
 }
 
 impl Size2D {
-    pub fn new(x: f32, y: f32) -> Self {
+    pub const fn new(x: f32, y: f32) -> Self {
         Self(Vec2::new(x, y))
     }
 }

@@ -179,18 +179,19 @@ pub fn handle_events(
                 button,
                 action: Action::Release,
                 mods,
-            } if hovered.is_some() && state.focused().is_some() => {
-                let hovered = hovered.unwrap();
+            } if state.focused().is_some() => {
                 // Mouse was released on the same widget
-                if Some(hovered) == state.focused() {
-                    events.send(WidgetEvent::new(
-                        hovered,
-                        WidgetEventKind::MouseButton {
-                            button,
-                            action: Action::Release,
-                            mods,
-                        },
-                    ));
+                if let Some(hovered) = hovered {
+                    if Some(hovered) == state.focused() {
+                        events.send(WidgetEvent::new(
+                            hovered,
+                            WidgetEventKind::MouseButton {
+                                button,
+                                action: Action::Release,
+                                mods,
+                            },
+                        ));
+                    }
                 }
 
                 // Send unfocus event if widget is not sticky

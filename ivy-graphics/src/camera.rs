@@ -245,5 +245,5 @@ impl IntoSet for GpuCameraData {
     }
 }
 
-/// Narke
+/// Marker for the main camera
 pub struct MainCamera;

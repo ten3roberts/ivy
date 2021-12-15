@@ -45,7 +45,7 @@ impl From<AbsoluteOffset> for Position2D {
 }
 
 impl AbsoluteOffset {
-    pub fn new(x: f32, y: f32) -> Self {
+    pub const fn new(x: f32, y: f32) -> Self {
         Self(Vec2::new(x, y))
     }
 }
@@ -57,7 +57,7 @@ impl From<RelativeOffset> for Position2D {
 }
 
 impl RelativeOffset {
-    pub fn new(x: f32, y: f32) -> Self {
+    pub const fn new(x: f32, y: f32) -> Self {
         Self(Vec2::new(x, y))
     }
 }
@@ -69,7 +69,7 @@ impl From<RelativeSize> for Size2D {
 }
 
 impl RelativeSize {
-    pub fn new(x: f32, y: f32) -> Self {
+    pub const fn new(x: f32, y: f32) -> Self {
         Self(Vec2::new(x, y))
     }
 }
@@ -81,19 +81,19 @@ impl From<AbsoluteSize> for Size2D {
 }
 
 impl AbsoluteSize {
-    pub fn new(x: f32, y: f32) -> Self {
+    pub const fn new(x: f32, y: f32) -> Self {
         Self(Vec2::new(x, y))
     }
 }
 
 impl Aspect {
-    pub fn new(aspect: f32) -> Self {
+    pub const fn new(aspect: f32) -> Self {
         Self(aspect)
     }
 }
 
 impl Origin2D {
-    pub fn new(x: f32, y: f32) -> Self {
+    pub const fn new(x: f32, y: f32) -> Self {
         Self(Vec2::new(x, y))
     }
 }

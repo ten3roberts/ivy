@@ -1,4 +1,5 @@
 use crate::{Error, Material, Mesh, PointLight, Result};
+use gltf::{buffer, image, Gltf};
 use hecs::{Bundle, Component, EntityBuilder, EntityBuilderClone};
 use std::{borrow::Cow, path::Path, path::PathBuf, sync::Arc};
 
@@ -6,6 +7,12 @@ use ivy_base::{Position, Rotation, Scale, Visible};
 use ivy_resources::{Handle, LoadResource, Resources};
 use ivy_vulkan::{Texture, VulkanContext};
 use ultraviolet::*;
+
+pub(crate) mod scheme;
+pub(crate) mod util;
+
+pub(crate) use scheme::*;
+pub(crate) use util::*;
 
 #[derive(Debug, Clone)]
 pub struct Node {
@@ -68,11 +75,16 @@ impl Document {
         P: AsRef<Path> + ToOwned<Owned = O>,
         O: Into<PathBuf>,
     {
-        let (document, buffers, _images) = {
-            gltf::import(&path).map_err(|e| Error::GltfImport(e, Some(path.to_owned().into())))
-        }?;
+        let path = path.as_ref();
+        let Gltf { document, blob } =
+            Gltf::open(path).map_err(|e| Error::GltfImport(e, Some(path.to_owned().into())))?;
 
-        Self::from_gltf(context, resources, document, &buffers)
+        let buffers = import_buffer_data(&document, blob, path)
+            .map_err(|e| Error::GltfImport(e, Some(path.to_owned().into())))?;
+
+        let textures = import_image_data(&document, path, &buffers, resources)?;
+
+        Self::from_gltf(context, resources, document, &buffers, textures)
     }
 
     /// Loads a gltf import document's meshes and scene data. Will insert the meshes into the
@@ -82,32 +94,8 @@ impl Document {
         resources: &Resources,
         document: gltf::Document,
         buffers: &[gltf::buffer::Data],
+        textures: Vec<Handle<Texture>>,
     ) -> Result<Self> {
-        let mut texture_cache = resources.fetch_mut::<Texture>()?;
-
-        let textures = document
-            .textures()
-            .map(|val| {
-                let data = val.source().source();
-                let texture = match data {
-                    gltf::image::Source::View { view, mime_type: _ } => {
-                        let buffer = &buffers[view.buffer().index()];
-                        let raw = &buffer[view.offset()..view.offset() + view.length()];
-                        let texture = Texture::from_memory(context.clone(), raw)?;
-                        Ok(texture)
-                    }
-                    gltf::image::Source::Uri { uri, mime_type: _ } => {
-                        Texture::load(context.clone(), uri)
-                    }
-                };
-                texture
-                    .map(|val| texture_cache.insert(val))
-                    .map_err(|e| e.into())
-            })
-            .collect::<Result<Vec<_>>>()?;
-
-        drop(texture_cache);
-
         let mut material_cache = resources.fetch_mut::<Material>()?;
         let materials = document
             .materials()

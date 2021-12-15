@@ -19,6 +19,7 @@ pub struct WidgetLayout {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum LayoutKind {
     Horizontal,
+    Vertical,
 }
 
 impl WidgetLayout {
@@ -43,34 +44,53 @@ impl WidgetLayout {
 
         let x = match self.align.horizontal {
             HorizontalAlign::Left => position.x - size.x,
-            HorizontalAlign::Center => position.x - total_size.x / 2.0,
-            HorizontalAlign::Right => position.x + total_size.x / 2.0,
+            HorizontalAlign::Center => position.x + total_size.x,
+            HorizontalAlign::Right => position.x + total_size.x,
         };
 
         let y = match self.align.vertical {
             fontdue::layout::VerticalAlign::Top => position.y - size.y,
-            fontdue::layout::VerticalAlign::Middle => position.y - total_size.y,
+            fontdue::layout::VerticalAlign::Middle => position.y + total_size.y,
             fontdue::layout::VerticalAlign::Bottom => position.y + total_size.y,
         };
 
-        let mut cursor = Position2D::new(x, y);
-
         let mut iter = world.children::<Widget>(parent);
         match self.kind {
-            LayoutKind::Horizontal => iter.try_for_each(|child| -> Result<()> {
-                apply_constraints(world, child, position, size, is_visible)?;
-                let mut query = world.try_query_one::<(&mut Position2D, &Size2D)>(child)?;
+            LayoutKind::Horizontal => {
+                let mut cursor = Position2D::new(x, y);
+                iter.try_for_each(|child| -> Result<()> {
+                    apply_constraints(world, child, position, size, is_visible)?;
+                    let mut query = world.try_query_one::<(&mut Position2D, &Size2D)>(child)?;
 
-                let (child_pos, child_size) = query.get()?;
+                    let (child_pos, child_size) = query.get()?;
 
-                *child_pos = cursor + Position2D(**child_size);
-                cursor.x += child_size.x * 2.0 + self.spacing.x;
+                    *child_pos = cursor; //+ Position2D(**child_size);
+                    cursor.x += child_size.x * 2.0 + self.spacing.x;
 
-                drop(query);
+                    drop(query);
 
-                update_from(world, child, depth + 1)?;
-                Ok(())
-            })?,
+                    update_from(world, child, depth + 1)?;
+                    Ok(())
+                })?
+            }
+
+            LayoutKind::Vertical => {
+                let mut cursor = Position2D::new(0.0, y);
+                iter.try_for_each(|child| -> Result<()> {
+                    apply_constraints(world, child, position, size, is_visible)?;
+                    let mut query = world.try_query_one::<(&mut Position2D, &Size2D)>(child)?;
+
+                    let (child_pos, child_size) = query.get()?;
+
+                    *child_pos = cursor; // + Position2D(**child_size);
+                    cursor.y -= child_size.y * 2.0 + self.spacing.y;
+
+                    drop(query);
+
+                    update_from(world, child, depth + 1)?;
+                    Ok(())
+                })?
+            }
         }
 
         Ok(())
