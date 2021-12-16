@@ -121,7 +121,8 @@ impl Polytype {
         self.faces
             .iter()
             .enumerate()
-            .max_by_key(|val| OrderedFloat(val.1.distance))
+            .filter(|(_, val)| val.distance.is_finite())
+            .min_by(|a, b| a.1.distance.partial_cmp(&b.1.distance).unwrap())
             .map(|(a, b)| (a as u16, *b))
     }
 
