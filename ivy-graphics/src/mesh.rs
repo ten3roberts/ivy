@@ -1,6 +1,7 @@
 use crate::{Material, Result};
 use ash::vk;
 use gltf::{buffer, Semantic};
+use itertools::izip;
 use ivy_resources::Handle;
 use std::mem::size_of;
 use std::sync::Arc;
@@ -220,25 +221,6 @@ impl Mesh<Vertex> {
         Self::new(context, &vertices, &indices, vec![])
     }
 
-    /// Creates a mesh from an structure-of-arrays vertex data
-    /// Each index refers to the direct index of positions, normals and texcoords
-    pub fn from_soa(
-        context: Arc<VulkanContext>,
-        positions: &[Vec3],
-        normals: &[Vec3],
-        texcoords: &[Vec2],
-        indices: &[u32],
-        primitives: Vec<Primitive>,
-    ) -> Result<Self> {
-        let mut vertices = Vec::with_capacity(positions.len());
-
-        for i in 0..positions.len() {
-            vertices.push(Vertex::new(positions[i], normals[i], texcoords[i]));
-        }
-
-        Self::new(context, vertices.as_slice(), &indices, primitives)
-    }
-
     /// Loads a mesh from gltf asset. Loads positions, normals, and texture coordinates.
     pub fn from_gltf(
         context: Arc<VulkanContext>,
@@ -246,25 +228,46 @@ impl Mesh<Vertex> {
         buffers: &[buffer::Data],
         materials: &[Handle<Material>],
     ) -> Result<Self> {
-        let mut positions = Vec::new();
-        let mut normals = Vec::new();
-        let mut texcoords = Vec::new();
+        let mut vertices = Vec::new();
         let mut indices = Vec::new();
 
         let mut primitives = Vec::new();
 
         for primitive in mesh.primitives() {
-            let indices_accessor = primitive.indices().ok_or(Error::SparseAccessor)?;
-            let indices_view = indices_accessor.view().ok_or(Error::SparseAccessor)?;
-
+            let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
             let first_index = indices.len() as u32;
-            match indices_accessor.size() {
-                2 => load_u16_as_u32(&indices_view, buffers, &mut indices, positions.len() as u32),
-                4 => load_u32(&indices_view, buffers, &mut indices, positions.len() as u32),
-                _ => unimplemented!(),
-            }
+            let offset = vertices.len() as u32;
+            indices.extend(
+                reader
+                    .read_indices()
+                    .into_iter()
+                    .flat_map(|val| val.into_u32())
+                    .map(|val| val + offset),
+            );
 
             let index_count = indices.len() as u32 - first_index;
+
+            let pos = reader
+                .read_positions()
+                .into_iter()
+                .flatten()
+                .map(Vec3::from);
+
+            let norm = reader.read_normals().into_iter().flatten().map(Vec3::from);
+
+            let texcoord = reader
+                .read_tex_coords(0)
+                .into_iter()
+                .flat_map(|val| val.into_f32())
+                .map(Vec2::from);
+
+            vertices.extend(
+                izip!(pos, norm, texcoord).map(|(position, normal, texcoord)| Vertex {
+                    position,
+                    normal,
+                    texcoord,
+                }),
+            );
 
             // Keep track of which materials map to which part of the index buffer
             if let Some(material) = materials.get(primitive.material().index().unwrap_or(0)) {
@@ -274,84 +277,8 @@ impl Mesh<Vertex> {
                     material: *material,
                 });
             }
-
-            for (semantic, accessor) in primitive.attributes() {
-                let view = accessor.view().ok_or(Error::SparseAccessor)?;
-                match semantic {
-                    Semantic::Positions => load_vec3(&view, buffers, &mut positions),
-                    Semantic::Normals => load_vec3(&view, buffers, &mut normals),
-                    Semantic::TexCoords(_) => load_vec2(&view, buffers, &mut texcoords),
-                    Semantic::Tangents => {}
-                    Semantic::Colors(_) => {}
-                    Semantic::Joints(_) => {}
-                    Semantic::Weights(_) => {}
-                };
-            }
         }
 
-        // Pad incase these weren't included in geometry
-        pad_vec(&mut normals, Vec3::unit_z(), positions.len());
-        pad_vec(&mut texcoords, Vec2::zero(), positions.len());
-
-        Self::from_soa(
-            context, &positions, &normals, &texcoords, &indices, primitives,
-        )
+        Self::new(context, &vertices, &indices, primitives)
     }
-}
-
-// Pads a vector with copies of val to ensure it is atleast `len` elements
-fn pad_vec<T: Copy>(vec: &mut Vec<T>, val: T, len: usize) {
-    vec.extend(repeat(val).take(len - vec.len()))
-}
-
-fn load_u16_as_u32(
-    view: &buffer::View,
-    buffers: &[buffer::Data],
-    indices: &mut Vec<u32>,
-    offset: u32,
-) {
-    let buffer = &buffers[view.buffer().index()];
-
-    let raw_data = &buffer[view.offset()..view.offset() + view.length()];
-    indices.extend(
-        raw_data
-            .chunks_exact(2)
-            .map(|val| u16::from_le_bytes([val[0], val[1]]) as u32 + offset),
-    )
-}
-
-fn load_u32(view: &buffer::View, buffers: &[buffer::Data], indices: &mut Vec<u32>, offset: u32) {
-    let buffer = &buffers[view.buffer().index()];
-
-    let raw_data = &buffer[view.offset()..view.offset() + view.length()];
-    indices.extend(
-        raw_data
-            .chunks_exact(4)
-            .map(|val| u32::from_le_bytes([val[0], val[1], val[2], val[3]]) + offset),
-    )
-}
-
-fn load_vec2(view: &buffer::View, buffers: &[buffer::Data], buf: &mut Vec<Vec2>) {
-    let buffer = &buffers[view.buffer().index()];
-
-    let raw_data = &buffer[view.offset()..view.offset() + view.length()];
-    buf.extend(raw_data.chunks_exact(8).map(|val| {
-        Vec2::new(
-            f32::from_le_bytes([val[0], val[1], val[2], val[3]]),
-            f32::from_le_bytes([val[4], val[5], val[6], val[7]]),
-        )
-    }))
-}
-
-fn load_vec3(view: &buffer::View, buffers: &[buffer::Data], buf: &mut Vec<Vec3>) {
-    let buffer = &buffers[view.buffer().index()];
-
-    let raw_data = &buffer[view.offset()..view.offset() + view.length()];
-    buf.extend(raw_data.chunks_exact(12).map(|val| {
-        Vec3::new(
-            f32::from_le_bytes([val[0], val[1], val[2], val[3]]),
-            f32::from_le_bytes([val[4], val[5], val[6], val[7]]),
-            f32::from_le_bytes([val[8], val[9], val[10], val[11]]),
-        )
-    }))
 }
