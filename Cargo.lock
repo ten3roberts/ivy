@@ -597,6 +597,7 @@ dependencies = [
  "ivy-image",
  "ivy-resources",
  "ivy-vulkan",
+ "ordered-float",
  "parking_lot",
  "records",
  "rectangle-pack",

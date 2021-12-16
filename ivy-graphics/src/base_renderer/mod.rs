@@ -71,6 +71,11 @@ where
             .get(&TypeId::of::<Pass>())
             .expect("Pass does not exist")
     }
+
+    /// Get a reference to the base renderer's context.
+    pub fn context(&self) -> &Arc<VulkanContext> {
+        &self.context
+    }
 }
 
 type BatchId = usize;

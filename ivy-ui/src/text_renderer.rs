@@ -1,6 +1,6 @@
 use anyhow::Context;
 use hecs::{Query, World};
-use ivy_graphics::{BaseRenderer, BatchMarker, Mesh, Renderer};
+use ivy_graphics::{Allocator, BaseRenderer, BatchMarker, BufferAllocation, Mesh, Renderer};
 use ivy_rendergraph::Node;
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
@@ -25,41 +25,20 @@ use ivy_base::{Color, Position2D, Size2D, Visible};
 struct TextQuery<'a> {
     text: &'a mut Text,
     font: &'a Handle<Font>,
-    block: &'a mut BufferAllocation,
+    block: &'a mut BufferAllocation<Marker>,
     bounds: &'a Size2D,
     alignment: Option<&'a Alignment>,
     wrap: Option<&'a WrapStyle>,
-}
-
-/// Attached to each text that has a part of the buffer reserved for its text
-/// mesh data. `len` and `block` refers to the number of quads allocated, not
-/// vertices nor indices.
-#[derive(Debug, Clone, Copy, PartialEq)]
-struct BufferAllocation {
-    // Length in number of characters
-    len: u32,
-    // Offset in number of characters
-    offset: u32,
-}
-
-impl BufferAllocation {
-    pub fn new(len: u32, offset: u32) -> Self {
-        Self { len, offset }
-    }
 }
 
 /// Renders arbitrary text using associated font and text objects attached to
 /// entity. TextUpdateNode needs to be added to rendergraph before as the text
 /// vertex data needs to be updated with a transfer.
 pub struct TextRenderer {
-    context: Arc<VulkanContext>,
     mesh: Mesh<UIVertex>,
-    // Free contiguos blocks in mesh
-    free: Vec<BufferAllocation>,
-    /// The number of registered text objects
     staging_buffers: Vec<Buffer>,
+    allocator: Allocator<Marker>,
     base_renderer: BaseRenderer<Key, ObjectData>,
-    glyph_capacity: u32,
     /// The total number of glyphs
     glyph_count: u32,
     frames_in_flight: usize,
@@ -80,12 +59,10 @@ impl TextRenderer {
         let base_renderer = BaseRenderer::new(context.clone(), capacity, frames_in_flight)?;
 
         Ok(Self {
-            context,
             mesh,
-            free: vec![BufferAllocation::new(glyph_capacity, 0)],
             staging_buffers,
             base_renderer,
-            glyph_capacity,
+            allocator: Allocator::new(glyph_capacity as _),
             glyph_count: 0,
             frames_in_flight,
         })
@@ -129,88 +106,19 @@ impl TextRenderer {
             .collect::<Result<Vec<_>>>()
     }
 
-    /// Allocates a contiguous block in the mesh
-    fn allocate(&mut self, len: u32) -> Option<BufferAllocation> {
-        let (index, block) = self
-            .free
-            .iter_mut()
-            .enumerate()
-            .find(|(_, block)| block.len >= len)?;
+    fn grow(&mut self) -> Result<()> {
+        let context = self.base_renderer.context();
+        device::wait_idle(self.base_renderer.context().device())?;
 
-        if block.len == len {
-            Some(self.free.remove(index))
-        } else {
-            let mut block = std::mem::replace(
-                block,
-                BufferAllocation {
-                    len: block.len - len,
-                    offset: block.offset + len,
-                },
-            );
+        self.allocator.grow_double();
 
-            block.len = len;
-            Some(block)
-        }
-    }
-
-    fn free(&mut self, block: BufferAllocation) {
-        let index = self
-            .free
-            .iter()
-            .enumerate()
-            .find(|val| val.1.offset > block.offset)
-            .map(|val| val.0)
-            .unwrap_or(self.free.len());
-
-        if index != 0 && index != self.free.len() {
-            match &mut self.free[index - 1..=index] {
-                [a, b] => {
-                    if a.offset + a.len + block.len == b.offset {
-                        a.len += block.len + b.len;
-                        self.free.remove(index);
-                    } else if a.offset + a.len == block.offset {
-                        a.len += block.len;
-                    } else if block.offset + block.len == b.offset {
-                        b.len += block.len;
-                        b.offset = block.len;
-                    } else {
-                        self.free.insert(index, block);
-                    }
-                }
-                _ => unreachable!(),
-            }
-        }
-    }
-
-    fn resize(&mut self, world: &mut World, glyph_capacity: u32) -> Result<()> {
-        device::wait_idle(self.context.device())?;
-
-        // eprintln!(
-        //     "Resizing glyph_capacity from {} to {}",
-        //     self.glyph_capacity, glyph_capacity
-        // );
-
-        self.glyph_capacity = glyph_capacity;
-
-        self.mesh = Self::create_mesh(self.context.clone(), glyph_capacity)?;
+        self.mesh = Self::create_mesh(context.clone(), self.allocator.capacity() as _)?;
 
         self.staging_buffers = Self::create_staging_buffers(
-            self.context.clone(),
-            glyph_capacity,
+            context.clone(),
+            self.allocator.capacity() as _,
             self.frames_in_flight,
         )?;
-
-        self.free = vec![BufferAllocation::new(glyph_capacity, 0)];
-
-        // Refit all blocks
-        world
-            .query_mut::<(&Text, &mut BufferAllocation)>()
-            .into_iter()
-            .for_each(|(_, (text, block))| {
-                *block = self
-                    .allocate(text.len() as u32)
-                    .expect("Cannot allocate after resize");
-            });
 
         Ok(())
     }
@@ -222,11 +130,11 @@ impl TextRenderer {
     fn register_entities(&mut self, world: &mut World) -> Result<()> {
         let inserted = world
             .query::<&Text>()
-            .without::<BufferAllocation>()
+            .without::<BufferAllocation<Marker>>()
             .iter()
             .map(|(e, text)| {
                 self.glyph_count += text.len() as u32;
-                self.allocate(text.len() as u32).map(|block| (e, block))
+                self.allocator.allocate(text.len()).map(|block| (e, block))
             })
             .collect::<Option<Vec<_>>>();
 
@@ -235,7 +143,7 @@ impl TextRenderer {
                 .into_iter()
                 .for_each(|(e, block)| world.insert_one(e, block).unwrap());
         } else {
-            self.resize(world, nearest_power_2(self.glyph_count))?;
+            self.grow()?;
 
             return self.register_entities(world);
         }
@@ -256,18 +164,18 @@ impl TextRenderer {
 
         // Reallocate as needed
         let success = world
-            .query_mut::<(&Text, &mut BufferAllocation)>()
+            .query_mut::<(&Text, &mut BufferAllocation<Marker>)>()
             .into_iter()
             .map(|(_, (text, block))| {
                 self.glyph_count += text.len() as u32;
 
                 // Reallocate to fit longer text
-                if text.len() as u32 > block.len {
-                    let len = nearest_power_2(text.len() as u32);
+                if text.len() > block.len() {
+                    let len = nearest_power_2(text.len());
 
-                    self.free(*block);
+                    self.allocator.free(*block);
 
-                    if let Some(new_block) = self.allocate(len) {
+                    if let Some(new_block) = self.allocator.allocate(len) {
                         *block = new_block;
                         true
                     } else {
@@ -281,7 +189,7 @@ impl TextRenderer {
 
         // Resize to fit
         if !success {
-            self.resize(world, nearest_power_2(self.glyph_count))?;
+            self.grow()?;
             return self.update_dirty_texts(world, resources, cmd, current_frame);
         }
 
@@ -308,7 +216,7 @@ impl TextRenderer {
 
                 let region = &[BufferCopy {
                     src_offset: offset,
-                    dst_offset: query.block.offset as u64 * 4 * size_of::<UIVertex>() as u64,
+                    dst_offset: query.block.offset() as u64 * 4 * size_of::<UIVertex>() as u64,
                     size,
                 }];
 
@@ -456,7 +364,7 @@ struct ObjectDataQuery<'a> {
     position: &'a Position2D,
     color: &'a Color,
     text: &'a Text,
-    block: &'a BufferAllocation,
+    block: &'a BufferAllocation<Marker>,
 }
 
 impl<'a> Into<ObjectData> for ObjectDataQuery<'a> {
@@ -464,7 +372,7 @@ impl<'a> Into<ObjectData> for ObjectDataQuery<'a> {
         ObjectData {
             mvp: Mat4::from_translation(self.position.xyz()),
             color: self.color.into(),
-            offset: self.block.offset,
+            offset: self.block.offset() as u32,
             len: self.text.len() as u32,
         }
     }
@@ -533,10 +441,13 @@ impl Node for TextUpdateNode {
     }
 }
 
-fn nearest_power_2(val: u32) -> u32 {
+fn nearest_power_2(val: usize) -> usize {
     let mut result = 1;
     while result < val {
         result *= 2;
     }
     result
 }
+
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+struct Marker;

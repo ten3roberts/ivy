@@ -5,7 +5,7 @@ use ivy_resources::Handle;
 use std::mem::size_of;
 use std::sync::Arc;
 use std::{iter::repeat, marker::PhantomData};
-use ultraviolet::{Vec2, Vec3};
+use ultraviolet::{Vec2, Vec3, Vec4};
 
 use crate::Error;
 use ivy_vulkan as vulkan;
@@ -13,20 +13,23 @@ use vulkan::{Buffer, BufferAccess, BufferUsage, VertexDesc, VulkanContext};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 /// A simple vertex type with position, normal and texcoord.
+#[records::record]
 pub struct Vertex {
     position: Vec3,
     normal: Vec3,
     texcoord: Vec2,
 }
 
-impl Vertex {
-    pub fn new(position: Vec3, normal: Vec3, texcoord: Vec2) -> Self {
-        Self {
-            position,
-            normal,
-            texcoord,
-        }
-    }
+/// A simple vertex type with position, normal and texcoord.
+#[records::record]
+pub struct SkinnedVertex {
+    position: Vec3,
+    normal: Vec3,
+    texcoord: Vec2,
+    /// Joint indices
+    joints: Vec4,
+    /// Corresponding weight
+    weights: Vec4,
 }
 
 impl vulkan::VertexDesc for Vertex {

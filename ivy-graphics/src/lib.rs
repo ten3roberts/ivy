@@ -14,12 +14,17 @@ mod mesh;
 mod mesh_renderer;
 mod renderer;
 
+mod allocator;
+mod animator;
 mod events;
 pub mod gizmos;
 pub mod layer;
+mod skinned_mesh_renderer;
 pub mod systems;
 pub mod window;
 
+pub use allocator::*;
+pub use animator::*;
 pub use atlas::*;
 pub use base_renderer::*;
 pub use bundle::*;
@@ -34,4 +39,5 @@ pub use material::*;
 pub use mesh::*;
 pub use mesh_renderer::*;
 pub use renderer::*;
+pub use skinned_mesh_renderer::*;
 pub use window::*;
