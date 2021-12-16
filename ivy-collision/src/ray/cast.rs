@@ -3,6 +3,7 @@ use std::marker::PhantomData;
 use hecs::{Entity, Query};
 use hecs_schedule::GenericWorld;
 use ivy_base::{Position, Scale, Visible};
+use ordered_float::OrderedFloat;
 use ultraviolet::Vec3;
 
 use super::Ray;
@@ -26,8 +27,7 @@ impl Eq for RayIntersection {}
 
 impl Ord for RayIntersection {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.partial_cmp(other)
-            .expect("Failed to compare ray intersection")
+        OrderedFloat(self.contact.depth).cmp(&OrderedFloat(other.contact.depth))
     }
 }
 
