@@ -593,6 +593,8 @@ dependencies = [
  "glfw",
  "gltf",
  "hecs",
+ "hecs-schedule",
+ "itertools",
  "ivy-base",
  "ivy-image",
  "ivy-resources",

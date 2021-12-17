@@ -1,18 +1,19 @@
-use std::collections::BTreeMap;
+use std::collections::{btree_map::Iter, BTreeMap};
 
-use gltf::animation::{
-    util::{ReadOutputs, Rotations, Scales, Translations},
-    Sampler,
-};
-use ivy_base::{Position, Rotation, Scale, TransformBundle};
-use ivy_resources::{Handle, ResourceCache};
+use gltf::animation::util::{ReadOutputs, Rotations, Scales, Translations};
+use hecs_schedule::{Read, SubWorld};
+use itertools::Itertools;
+use ivy_base::{DeltaTime, Position, Rotation, Scale, TransformBundle, TransformMatrix};
+use ivy_resources::{Handle, ResourceCache, ResourceView};
 use ordered_float::OrderedFloat;
 use ultraviolet::{Lerp, Rotor3, Slerp, Vec3};
 
-use crate::Result;
+use crate::{JointIndex, Result, Skin};
 
 #[derive(Debug)]
 pub struct Animation {
+    name: String,
+    duration: f32,
     channels: Vec<Channel>,
 }
 
@@ -23,33 +24,67 @@ impl Animation {
         let channels = channels
             .map(|channel| {
                 let target = channel.target();
-                let bone = target.node().index();
+                let joint = target.node().index();
                 let reader = channel.reader(|buffer| Some(&buffers[buffer.index()]));
                 let inputs = reader.read_inputs().unwrap();
                 let outputs = reader.read_outputs().unwrap();
 
                 let values = KeyFrameValues::new(outputs);
-                let times = inputs.map(OrderedFloat).collect();
+                let times = inputs.collect();
 
                 Channel {
-                    bone,
+                    joint,
                     times,
                     values,
                 }
             })
-            .collect();
+            .collect_vec();
 
-        Self { channels }
+        let duration = *channels
+            .iter()
+            .flat_map(|val| val.times.get(val.times.len() - 1))
+            .map(|val| OrderedFloat(*val))
+            .max()
+            .unwrap_or_default();
+
+        Self {
+            name: animation.name().unwrap_or_default().to_owned(),
+            duration,
+            channels,
+        }
+    }
+
+    /// Get a reference to the animation's name.
+    pub fn name(&self) -> &str {
+        self.name.as_ref()
+    }
+
+    /// Get a reference to the animation's duration.
+    pub fn duration(&self) -> f32 {
+        self.duration
+    }
+
+    /// Get a reference to the animation's channels.
+    pub fn channels(&self) -> &[Channel] {
+        self.channels.as_ref()
+    }
+
+    pub fn channel(&self, index: usize) -> &Channel {
+        &self.channels[index]
     }
 }
+
+type ChannelIndex = usize;
+type Frame = usize;
 
 #[derive(Debug, Clone)]
 pub struct Animator {
     animation: Handle<Animation>,
     /// The keyframe index for each channel
-    states: BTreeMap<usize, (usize, TransformBundle)>,
+    states: BTreeMap<ChannelIndex, Frame>,
+    joints: BTreeMap<JointIndex, TransformBundle>,
     /// The current animation time
-    time: OrderedFloat<f32>,
+    time: f32,
 }
 
 impl Animator {
@@ -57,6 +92,7 @@ impl Animator {
         Self {
             animation,
             states: Default::default(),
+            joints: Default::default(),
             time: Default::default(),
         }
     }
@@ -66,16 +102,24 @@ impl Animator {
         let animation = animations.get(self.animation)?;
 
         // Loop through all states and check if the frame should be changed
+        self.time = self.time + dt;
 
-        self.time = OrderedFloat(dt);
+        if self.time > animation.duration() {
+            self.time = self.time % animation.duration();
+            self.states.clear();
+        }
 
+        // Populate all bones
         animation
             .channels
             .iter()
             .enumerate()
             .for_each(|(index, channel)| {
                 // Get or initiate state
-                let (current, transform) = self.states.entry(index).or_default();
+                let current = self.states.entry(index).or_default();
+
+                let transform = self.joints.entry(channel.joint).or_default();
+
                 let next = (*current + 1) % channel.times.len();
 
                 let start = channel.times[*current];
@@ -84,33 +128,70 @@ impl Animator {
                 let progress = (self.time - start) / (end - start);
 
                 // Go to the next frame
-                if progress >= OrderedFloat(1.0) {
+                if progress >= 1.0 {
                     *current = next;
                 }
 
                 match &channel.values {
                     KeyFrameValues::Positions(val) => {
-                        transform.pos = val[*current].lerp(*val[next], *progress).into()
+                        transform.pos = val[*current].lerp(*val[next], progress).into()
                     }
                     KeyFrameValues::Rotations(val) => {
-                        transform.rot = val[*current].slerp(*val[next], *progress).into()
+                        transform.rot = val[*current].slerp(*val[next], progress).into()
                     }
                     KeyFrameValues::Scales(val) => {
-                        transform.scale = val[*current].lerp(*val[next], *progress).into()
+                        transform.scale = val[*current].lerp(*val[next], progress).into()
                     }
                 };
             });
 
         Ok(())
     }
+
+    pub fn joints(&self) -> Iter<JointIndex, TransformBundle> {
+        self.joints.iter()
+    }
+
+    pub fn fill_sparse(
+        &mut self,
+        skin: &Skin,
+        data: &mut [TransformMatrix],
+        current: JointIndex,
+        parent: TransformMatrix,
+    ) {
+        let transform = self.joints.entry(current).or_insert_with(|| {
+            skin.joint(current)
+                .expect("Missing joint in skin")
+                .local_bind_transform
+        });
+        let skin_joint = skin.joint(current).expect("Missing joint in skin");
+        let current_transform = parent * transform.into_matrix();
+        data[skin.joint_to_index(current)] = current_transform * skin_joint.inverse_bind_matrix;
+
+        for child in skin_joint.children.iter() {
+            self.fill_sparse(skin, data, *child, current_transform)
+        }
+    }
+
+    /// ECS system for updating all animators
+    pub fn system(
+        world: SubWorld<&mut Self>,
+        animations: ResourceView<Animation>,
+        dt: Read<DeltaTime>,
+    ) -> Result<()> {
+        world
+            .native_query()
+            .iter()
+            .try_for_each(|(_, animator)| animator.progress(&*animations, **dt))
+    }
 }
 
 #[derive(Debug, Clone)]
 /// A channel describes a single transform component of a bone
-struct Channel {
-    /// Bone index
-    bone: usize,
-    times: Vec<OrderedFloat<f32>>,
+pub struct Channel {
+    /// Joint index
+    joint: usize,
+    times: Vec<f32>,
     values: KeyFrameValues,
 }
 

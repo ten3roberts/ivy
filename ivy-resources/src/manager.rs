@@ -173,7 +173,8 @@ impl Resources {
         let mut cache = self.fetch_mut()?;
         let mut info_cache: CellRefMut<InfoCache<I, T>> = self
             .default_entry()?
-            .or_insert_with(|| InfoCache(HashMap::new()));
+            .or_insert_with(|| InfoCache(HashMap::new()))
+            .borrow;
 
         let info = info.into();
 
@@ -206,7 +207,8 @@ impl Resources {
     {
         let mut info_cache: CellRefMut<InfoCache<I, T>> = self
             .default_entry()?
-            .or_insert_with(|| InfoCache(HashMap::new()));
+            .or_insert_with(|| InfoCache(HashMap::new()))
+            .borrow;
 
         let info = info.into();
 

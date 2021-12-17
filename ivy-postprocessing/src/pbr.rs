@@ -3,9 +3,9 @@ use std::sync::Arc;
 use anyhow::Result;
 use hecs::{Entity, World};
 use ivy_base::Extent;
-use ivy_graphics::{DepthAttachment, GpuCameraData, LightManager, MeshRenderer};
+use ivy_graphics::{DepthAttachment, GpuCameraData, LightManager, Renderer};
 use ivy_rendergraph::{AttachmentInfo, CameraNode, Node};
-use ivy_resources::{Handle, Resources};
+use ivy_resources::{Handle, Resources, Storage};
 use ivy_vulkan::{
     descriptors::MultiDescriptorBindable, shaderpass::ShaderPass, vk::ClearValue, ClearValueExt,
     Format, ImageLayout, ImageUsage, LoadOp, SampleCountFlags, StoreOp, Texture, TextureInfo,
@@ -104,28 +104,35 @@ impl Default for PBRInfo {
 
 /// Installs PBR rendering for the specified camera. Returns a list of nodes suitable for
 /// rendergraph insertions. Configures gpu camera data and light management.
-pub fn create_pbr_pipeline<GeometryPass: ShaderPass, PostProcessingPass: ShaderPass>(
+pub fn create_pbr_pipeline<GeometryPass, PostProcessingPass, R>(
     context: Arc<VulkanContext>,
     world: &mut World,
     resources: &Resources,
     camera: Entity,
+    renderer: R,
     extent: Extent,
     frames_in_flight: usize,
     read_attachments: &[Handle<Texture>],
     color_attachments: &[AttachmentInfo],
     bindables: &[&dyn MultiDescriptorBindable],
     info: PBRInfo,
-) -> Result<[Box<dyn Node>; 2]> {
+) -> Result<[Box<dyn Node>; 2]>
+where
+    GeometryPass: ShaderPass,
+    PostProcessingPass: ShaderPass,
+    R: Renderer + Storage,
+    R::Error: Storage + Into<anyhow::Error>,
+{
     let pbr_attachments = PBRAttachments::new(context.clone(), resources, extent)?;
 
     let depth_attachment = DepthAttachment::new(context.clone(), resources, extent)?;
 
-    let camera_node = Box::new(CameraNode::<GeometryPass, _, _>::new(
+    let camera_node = Box::new(CameraNode::<GeometryPass, R>::new(
         "PBR Camera Node",
         context.clone(),
         resources,
         camera,
-        resources.default::<MeshRenderer>()?,
+        renderer,
         &pbr_attachments
             .as_slice()
             .iter()

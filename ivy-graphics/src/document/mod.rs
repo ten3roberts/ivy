@@ -1,4 +1,4 @@
-use crate::{Error, Material, Mesh, PointLight, Result};
+use crate::{Animation, Error, Material, Mesh, PointLight, Result, SkinnedMesh};
 use gltf::Gltf;
 use hecs::{Bundle, Component, EntityBuilder, EntityBuilderClone};
 use smallvec::SmallVec;
@@ -23,6 +23,7 @@ pub struct Node {
     name: String,
     /// The mesh index references by this node.
     mesh: Option<Handle<Mesh>>,
+    skinned_mesh: Option<Handle<SkinnedMesh>>,
     light: Option<PointLight>,
     skin: Option<Handle<Skin>>,
     pos: Position,
@@ -71,11 +72,17 @@ impl Node {
     pub fn children(&self) -> &SmallVec<[usize; 4]> {
         &self.children
     }
+
+    /// Get a reference to the node's skinned mesh.
+    pub fn skinned_mesh(&self) -> Option<Handle<SkinnedMesh>> {
+        self.skinned_mesh
+    }
 }
 
 pub struct Document {
     meshes: Vec<Handle<Mesh>>,
     materials: Vec<Handle<Material>>,
+    animations: Vec<Handle<Animation>>,
     skins: Vec<Handle<Skin>>,
     nodes: Vec<Node>,
 }
@@ -132,11 +139,32 @@ impl Document {
             })
             .collect::<Result<Vec<_>>>()?;
 
+        let mut skinned_meshes = resources.fetch_mut::<SkinnedMesh>()?;
+
+        // There may not be joint and weight information of all meshes
+        let skinned_meshes = document
+            .meshes()
+            .map(|mesh| -> Result<Option<Handle<SkinnedMesh>>> {
+                match Mesh::from_gltf_skinned(context.clone(), mesh, buffers, &materials) {
+                    Ok(val) => Ok(Some(skinned_meshes.insert(val))),
+                    Err(Error::EmptyMesh) => Ok(None),
+                    Err(e) => Err(e),
+                }
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let mut animations = resources.fetch_mut::<Animation>()?;
+
+        let animations = document
+            .animations()
+            .map(|anim| Animation::from_gltf(anim, buffers))
+            .map(|val| animations.insert(val))
+            .collect::<Vec<_>>();
+
         let mut skins = resources.fetch_mut()?;
 
         let skins: Vec<_> = document
             .skins()
-            .map(|skin| Skin::from_gltf(skin, buffers).map(|skin| skins.insert(skin)))
+            .map(|skin| Skin::from_gltf(&document, skin, buffers).map(|skin| skins.insert(skin)))
             .collect::<Result<Vec<_>>>()?;
 
         drop(mesh_cache);
@@ -154,6 +182,7 @@ impl Document {
                     skin: node.skin().map(|skin| skins[skin.index()]),
                     light,
                     mesh: node.mesh().map(|mesh| meshes[mesh.index()]),
+                    skinned_mesh: node.mesh().and_then(|mesh| skinned_meshes[mesh.index()]),
                     pos: Vec3::from(position).into(),
                     rot: Rotor3::from_quaternion_array(rotation).into(),
                     scale: Vec3::from(scale).into(),
@@ -164,10 +193,16 @@ impl Document {
 
         Ok(Self {
             meshes,
+            animations,
             skins,
             nodes,
             materials,
         })
+    }
+
+    /// Get a reference to the document's animations.
+    pub fn animations(&self) -> &[Handle<Animation>] {
+        self.animations.as_ref()
     }
 }
 
@@ -178,9 +213,19 @@ impl Document {
         self.materials[index]
     }
 
-    /// Returns the skin associated to the node
+    /// Returns the skin at index
     pub fn skin(&self, index: usize) -> Handle<Skin> {
         self.skins[index]
+    }
+
+    /// Returns the animation at index
+    pub fn animation(&self, index: usize) -> Handle<Animation> {
+        self.animations[index]
+    }
+
+    /// Get a reference to the document's skins.
+    pub fn skins(&self) -> &[Handle<Skin>] {
+        self.skins.as_ref()
     }
 
     /// Returns a handle to the mesh at index. Mesh was inserted in the resource cache upon
@@ -215,14 +260,10 @@ impl Document {
         &self,
         name: S,
         builder: &'a mut B,
+        info: &NodeBuildInfo,
     ) -> Result<&'a mut B> {
         let node = self.find_node(name)?;
-        Ok(self.build_node(node, builder))
-    }
-
-    /// Get a reference to the document's skins.
-    pub fn skins(&self) -> &[Handle<Skin>] {
-        self.skins.as_ref()
+        Ok(self.build_node(node, builder, info))
     }
 
     /// Spawns a node using the supplied builder into the world
@@ -230,18 +271,36 @@ impl Document {
         &self,
         index: usize,
         builder: &'a mut B,
+        info: &NodeBuildInfo,
     ) -> &'a mut B {
-        self.build_node(self.node(index), builder)
+        self.build_node(self.node(index), builder, info)
     }
     /// Spawns a node using the supplied builder into the world
-    pub fn build_node<'a, B: GenericBuilder>(&self, node: &Node, builder: &'a mut B) -> &'a mut B {
-        if let Some(mesh) = node.mesh {
-            builder.add::<Handle<Mesh>>(mesh);
-        }
-
+    pub fn build_node<'a, B: GenericBuilder>(
+        &self,
+        node: &Node,
+        builder: &'a mut B,
+        info: &NodeBuildInfo,
+    ) -> &'a mut B {
         if let Some(light) = node.light {
             eprintln!("Building light");
             builder.add(light);
+        }
+
+        // Add skinning info
+        if info.skinned {
+            if let Some(mesh) = node.skinned_mesh {
+                dbg!("Inserting skinned mesh");
+                builder.add(mesh);
+            } else if let Some(mesh) = node.mesh {
+                builder.add(mesh);
+            }
+            if let Some(skin) = node.skin {
+                dbg!("Inserting skin");
+                builder.add(skin);
+            }
+        } else if let Some(mesh) = node.mesh() {
+            builder.add(mesh);
         }
 
         builder.add(node.pos);
@@ -287,4 +346,10 @@ impl GenericBuilder for EntityBuilderClone {
     fn add<T: Component + Clone>(&mut self, component: T) -> &mut Self {
         self.add(component)
     }
+}
+
+#[records::record]
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
+pub struct NodeBuildInfo {
+    skinned: bool,
 }

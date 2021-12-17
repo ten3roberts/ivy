@@ -21,6 +21,7 @@ pub mod traits;
 pub mod vertex;
 
 pub use buffer::*;
+pub use commands::*;
 pub use context::VulkanContext;
 pub use error::*;
 pub use fence::Fence;

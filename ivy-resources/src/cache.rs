@@ -1,4 +1,4 @@
-use crate::{entry::Entry, LoadResource, Resources, Result};
+use crate::{entry::Entry, CellRefMut, HandleWrapper, LoadResource, Resources, Result};
 use std::any::type_name;
 
 use slotmap::SlotMap;
@@ -38,7 +38,7 @@ impl<T: 'static + Sized> ResourceCache<T> {
     // If the cache is empty, the default is set to the first inserted value.
     // Returns a reference to the new value.
     #[inline]
-    pub fn insert_get(&mut self, value: T) -> &mut T {
+    pub fn insert_get(&mut self, value: T) -> HandleWrapper<T, &mut T> {
         let handle = self.slots.insert(value);
 
         // Set the default to the first inserted value
@@ -46,7 +46,30 @@ impl<T: 'static + Sized> ResourceCache<T> {
             self.default = handle;
         }
 
-        &mut self.slots[handle]
+        HandleWrapper {
+            handle,
+            borrow: &mut self.slots[handle],
+        }
+    }
+
+    // Inserts a new resource into the cache.
+    // If the cache is empty, the default is set to the first inserted value.
+    // Returns a reference to the new value.
+    #[inline]
+    pub fn insert_get_cell(cache: CellRefMut<Self>, value: T) -> HandleWrapper<T, CellRefMut<T>> {
+        let mut handle = Default::default();
+        let borrow = cache.map(|cache| {
+            handle = cache.slots.insert(value);
+
+            // Set the default to the first inserted value
+            if cache.slots.len() == 1 {
+                cache.default = handle;
+            }
+
+            &mut cache.slots[handle]
+        });
+
+        HandleWrapper { handle, borrow }
     }
 
     // Inserts a new resource into the cache and marks it as the default

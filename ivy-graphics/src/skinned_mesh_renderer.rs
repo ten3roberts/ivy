@@ -1,15 +1,17 @@
-use crate::{Allocator, BaseRenderer, BatchMarker, Error, Material, Mesh, Renderer, Result};
-use ash::vk::{DescriptorSet, IndexType};
+use crate::{
+    Allocator, Animator, BaseRenderer, BatchMarker, BufferAllocation, Error, Material, Renderer,
+    Result, Skin, SkinnedMesh,
+};
+use ash::vk::{DescriptorSet, IndexType, ShaderStageFlags};
 use hecs::{Query, World};
+use hecs_schedule::CommandBuffer;
 use ivy_base::{Color, Position, Rotation, Scale, TransformMatrix, Visible};
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
-    commands::CommandBuffer, descriptors::IntoSet, device, shaderpass::ShaderPass, Buffer,
-    BufferUsage, VulkanContext,
+    descriptors::IntoSet, device, shaderpass::ShaderPass, Buffer, BufferUsage, VulkanContext,
 };
-use parking_lot::lock_api::RawRwLockFair;
 use smallvec::SmallVec;
-use std::sync::Arc;
+use std::{iter::repeat, sync::Arc};
 use ultraviolet::{Mat4, Vec4};
 
 /// A mesh renderer using vkCmdDrawIndirectIndexed and efficient batching.
@@ -17,8 +19,9 @@ pub struct SkinnedMeshRenderer {
     base_renderer: BaseRenderer<Key, ObjectData>,
     frames_in_flight: usize,
     /// Buffers containing joint transforms
-    buffers: SmallVec<[Buffer; 3]>,
-    allocator: Allocator<Self>,
+    buffers: SmallVec<[(Buffer, DescriptorSet); 3]>,
+    allocator: Allocator<Marker>,
+    cmd: CommandBuffer,
 }
 
 impl SkinnedMeshRenderer {
@@ -38,6 +41,7 @@ impl SkinnedMeshRenderer {
             allocator: Allocator::new(capacity as _),
             buffers,
             frames_in_flight,
+            cmd: CommandBuffer::new(),
         })
     }
 
@@ -45,28 +49,86 @@ impl SkinnedMeshRenderer {
         context: Arc<VulkanContext>,
         joint_capacity: u32,
         frames_in_flight: usize,
-    ) -> Result<SmallVec<[Buffer; 3]>> {
+    ) -> Result<SmallVec<[(Buffer, DescriptorSet); 3]>> {
         (0..frames_in_flight)
             .map(|_| {
-                Buffer::new_uninit::<TransformMatrix>(
+                let buffer = Buffer::new_iter(
                     context.clone(),
-                    BufferUsage::UNIFORM_BUFFER,
+                    BufferUsage::STORAGE_BUFFER,
                     ivy_vulkan::BufferAccess::Mapped,
                     joint_capacity as _,
-                )
-                .map_err(|e| e.into())
+                    repeat(TransformMatrix::default()),
+                )?;
+
+                let set = ivy_vulkan::descriptors::DescriptorBuilder::new()
+                    .bind_buffer(0, ShaderStageFlags::VERTEX, &buffer)?
+                    .build(&context)?;
+
+                Ok((buffer, set))
             })
             .collect()
+    }
+
+    /// Registers all unregistered entities capable of being rendered for specified pass. Does
+    /// nothing if entities are already registered. Call this function after adding new entities to the world.
+    /// # Failures
+    /// Fails if object buffer cannot be reallocated to accomodate new entities.
+    fn register_entities(&mut self, world: &mut World, resources: &Resources) -> Result<()> {
+        let skins = resources.fetch::<Skin>()?;
+
+        let needs_resize = world
+            .query_mut::<&Handle<Skin>>()
+            .without::<BufferAllocation<Marker>>()
+            .into_iter()
+            .try_for_each(|(e, skin)| {
+                let skin = skins.get(*skin).unwrap();
+                let block = self.allocator.allocate(skin.joint_count())?;
+                self.cmd.insert_one(e, block);
+                Some(())
+            })
+            .is_none();
+
+        self.cmd.execute(world);
+
+        if needs_resize {
+            self.grow()?;
+
+            return self.register_entities(world, resources);
+        }
+
+        Ok(())
+    }
+
+    fn update_joints(
+        &mut self,
+        world: &mut World,
+        resources: &Resources,
+        current_frame: usize,
+    ) -> Result<()> {
+        let skins = resources.fetch::<Skin>()?;
+        self.buffers[current_frame]
+            .0
+            .write_slice(
+                self.allocator.capacity() as _,
+                0,
+                |data: &mut [TransformMatrix]| {
+                    world
+                        .query_mut::<(&mut Animator, &Handle<Skin>, &BufferAllocation<Marker>)>()
+                        .into_iter()
+                        .for_each(|(_, (animator, skin, block))| {
+                            let slice = &mut data[block.offset()..block.offset() + block.len()];
+                            let skin = skins.get(*skin).unwrap();
+                            let root = skin.root();
+                            animator.fill_sparse(skin, slice, root, TransformMatrix::default());
+                        })
+                },
+            )
+            .map_err(|e| e.into())
     }
 
     fn grow(&mut self) -> Result<()> {
         let context = self.base_renderer.context();
         device::wait_idle(context.device())?;
-
-        // eprintln!(
-        //     "Resizing glyph_capacity from {} to {}",
-        //     self.glyph_capacity, glyph_capacity
-        // );
 
         self.allocator.grow_double();
 
@@ -80,14 +142,6 @@ impl SkinnedMeshRenderer {
     }
 }
 
-#[records::record]
-struct BufferAllocation {
-    /// Number of matrices
-    len: u32,
-    // The first matrix
-    offset: u32,
-}
-
 impl Renderer for SkinnedMeshRenderer {
     type Error = Error;
     /// Will draw all entities with a Handle<Material>, Handle<Mesh>, Modelmatrix and Shaderpass `Handle<T>`
@@ -96,7 +150,7 @@ impl Renderer for SkinnedMeshRenderer {
         // The ecs world
         world: &mut World,
         // The commandbuffer to record into
-        cmd: &CommandBuffer,
+        cmd: &ivy_vulkan::CommandBuffer,
         // The current swapchain image or backbuffer index
         current_frame: usize,
         // Descriptor sets to bind before renderer specific sets
@@ -107,13 +161,17 @@ impl Renderer for SkinnedMeshRenderer {
         resources: &Resources,
     ) -> Result<()> {
         let passes = resources.fetch::<Pass>()?;
-        let meshes = resources.fetch::<Mesh>()?;
+        let meshes = resources.fetch::<SkinnedMesh>()?;
         let materials = resources.fetch::<Material>()?;
+
+        self.register_entities(world, resources)?;
+        self.update_joints(world, resources, current_frame)?;
 
         let pass = self.base_renderer.pass_mut::<Pass>()?;
 
         pass.get_unbatched::<Pass, KeyQuery, ObjectDataQuery>(world);
         pass.build_batches::<Pass, KeyQuery>(world, &*passes)?;
+
         let iter = world
             .query_mut::<(&BatchMarker<ObjectData, Pass>, ObjectDataQuery, &Visible)>()
             .into_iter()
@@ -128,6 +186,7 @@ impl Renderer for SkinnedMeshRenderer {
         pass.update(current_frame, iter)?;
 
         let frame_set = pass.set(current_frame);
+        let joint_set = self.buffers[current_frame].1;
 
         for batch in pass.batches() {
             let key = batch.key();
@@ -147,14 +206,23 @@ impl Renderer for SkinnedMeshRenderer {
             let instance_count = batch.instance_count();
             let first_instance = batch.first_instance();
 
-            if !primitives.is_empty() {
+            if !key.material.is_null() {
+                let material = materials.get(key.material)?;
+                cmd.bind_descriptor_sets(
+                    batch.layout(),
+                    sets.len() as u32,
+                    &[frame_set, material.set(current_frame), joint_set],
+                    &[],
+                );
+                cmd.draw_indexed(mesh.index_count(), instance_count, 0, 0, first_instance);
+            } else if !primitives.is_empty() {
                 primitives.iter().try_for_each(|val| -> Result<()> {
                     let material = materials.get(val.material)?;
 
                     cmd.bind_descriptor_sets(
                         batch.layout(),
                         sets.len() as u32,
-                        &[frame_set, material.set(current_frame)],
+                        &[frame_set, material.set(current_frame), joint_set],
                         &[],
                     );
 
@@ -168,15 +236,6 @@ impl Renderer for SkinnedMeshRenderer {
 
                     Ok(())
                 })?;
-            } else if !key.material.is_null() {
-                let material = materials.get(key.material)?;
-                cmd.bind_descriptor_sets(
-                    batch.layout(),
-                    sets.len() as u32,
-                    &[frame_set, material.set(current_frame)],
-                    &[],
-                );
-                cmd.draw_indexed(mesh.index_count(), instance_count, 0, 0, first_instance);
             }
         }
 
@@ -184,10 +243,14 @@ impl Renderer for SkinnedMeshRenderer {
     }
 }
 
-#[repr(C, align(16))]
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
 struct ObjectData {
     model: Mat4,
     color: Vec4,
+    offset: u32,
+    len: u32,
+    pad: [f32; 2],
 }
 
 #[derive(Query)]
@@ -196,6 +259,7 @@ struct ObjectDataQuery<'a> {
     rotation: &'a Rotation,
     scale: &'a Scale,
     color: Option<&'a Color>,
+    block: &'a BufferAllocation<Marker>,
 }
 
 impl<'a> Into<ObjectData> for ObjectDataQuery<'a> {
@@ -205,19 +269,22 @@ impl<'a> Into<ObjectData> for ObjectDataQuery<'a> {
                 * self.rotation.into_matrix().into_homogeneous()
                 * Mat4::from_nonuniform_scale(**self.scale),
             color: self.color.cloned().unwrap_or(Color::white()).into(),
+            offset: self.block.offset() as u32,
+            len: self.block.len() as u32,
+            pad: Default::default(),
         }
     }
 }
 
 #[derive(Query, PartialEq, Eq)]
 struct KeyQuery<'a> {
-    mesh: &'a Handle<Mesh>,
+    mesh: &'a Handle<SkinnedMesh>,
     material: Option<&'a Handle<Material>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct Key {
-    mesh: Handle<Mesh>,
+    mesh: Handle<SkinnedMesh>,
     material: Handle<Material>,
 }
 
@@ -231,3 +298,6 @@ impl<'a> crate::KeyQuery for KeyQuery<'a> {
         }
     }
 }
+
+#[derive(Default, Debug, Clone, Eq, PartialEq)]
+struct Marker;

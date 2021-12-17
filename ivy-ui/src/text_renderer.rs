@@ -351,7 +351,7 @@ impl Renderer for TextRenderer {
 }
 
 #[repr(C, align(16))]
-#[derive(Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
 struct ObjectData {
     mvp: Mat4,
     color: Vec4,

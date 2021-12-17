@@ -98,6 +98,7 @@ impl Buffer {
             access,
         })
     }
+
     /// Creates a new buffer and fills it with vertex data using staging
     /// buffer. Buffer will be the same size as provided data.
     pub fn new<T>(
@@ -110,6 +111,23 @@ impl Buffer {
 
         // Fill the buffer with provided data
         buffer.fill(0, data)?;
+
+        Ok(buffer)
+    }
+
+    /// Creates a new buffer and fills it with vertex data using staging
+    /// buffer. Buffer will be the same size as provided data.
+    pub fn new_iter<T>(
+        context: Arc<VulkanContext>,
+        usage: BufferUsage,
+        access: BufferAccess,
+        len: DeviceSize,
+        iter: impl IntoIterator<Item = T>,
+    ) -> Result<Self> {
+        let mut buffer = Self::new_uninit::<T>(context, usage, access, len)?;
+
+        // Fill the buffer with provided data
+        buffer.write_iter(0, iter.into_iter())?;
 
         Ok(buffer)
     }

@@ -117,6 +117,7 @@ impl Renderer for ImageRenderer {
 }
 
 #[repr(C, align(16))]
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
 struct ObjectData {
     mvp: Mat4,
     color: Vec4,

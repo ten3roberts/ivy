@@ -1,67 +1,117 @@
-use crate::{Material, Result};
-use ash::vk;
-use gltf::{buffer, Semantic};
+use crate::{Error, Material, Result};
+use ash::vk::{
+    self, VertexInputAttributeDescription, VertexInputBindingDescription, VertexInputRate,
+};
+use gltf::buffer;
 use itertools::izip;
 use ivy_resources::Handle;
+use std::marker::PhantomData;
 use std::mem::size_of;
 use std::sync::Arc;
-use std::{iter::repeat, marker::PhantomData};
-use ultraviolet::{Vec2, Vec3, Vec4};
+use ultraviolet::{IVec4, Vec2, Vec3, Vec4};
 
-use crate::Error;
 use ivy_vulkan as vulkan;
 use vulkan::{Buffer, BufferAccess, BufferUsage, VertexDesc, VulkanContext};
 
-#[derive(Debug, Clone, Copy, PartialEq)]
 /// A simple vertex type with position, normal and texcoord.
 #[records::record]
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct Vertex {
     position: Vec3,
     normal: Vec3,
     texcoord: Vec2,
 }
 
-/// A simple vertex type with position, normal and texcoord.
+/// A skinned vertex type with position, normal, texcoord and skinning
+/// information.
 #[records::record]
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct SkinnedVertex {
     position: Vec3,
     normal: Vec3,
     texcoord: Vec2,
     /// Joint indices
-    joints: Vec4,
+    joints: IVec4,
     /// Corresponding weight
     weights: Vec4,
 }
 
 impl vulkan::VertexDesc for Vertex {
-    const BINDING_DESCRIPTIONS: &'static [vk::VertexInputBindingDescription] =
-        &[vk::VertexInputBindingDescription {
+    const BINDING_DESCRIPTIONS: &'static [VertexInputBindingDescription] =
+        &[VertexInputBindingDescription {
             binding: 0,
             stride: size_of::<Self>() as u32,
-            input_rate: vk::VertexInputRate::VERTEX,
+            input_rate: VertexInputRate::VERTEX,
         }];
 
-    const ATTRIBUTE_DESCRIPTIONS: &'static [vk::VertexInputAttributeDescription] = &[
+    const ATTRIBUTE_DESCRIPTIONS: &'static [VertexInputAttributeDescription] = &[
         // vec3 3*4 bytes
-        vk::VertexInputAttributeDescription {
+        VertexInputAttributeDescription {
             binding: 0,
             location: 0,
             format: vk::Format::R32G32B32_SFLOAT,
             offset: 0,
         },
         // vec3 3*4 bytes
-        vk::VertexInputAttributeDescription {
+        VertexInputAttributeDescription {
             binding: 0,
             location: 1,
             format: vk::Format::R32G32B32_SFLOAT,
             offset: 12,
         },
         // vec2 2*4 bytes
-        vk::VertexInputAttributeDescription {
+        VertexInputAttributeDescription {
             binding: 0,
             location: 2,
             format: vk::Format::R32G32_SFLOAT,
             offset: 12 + 12,
+        },
+    ];
+}
+
+impl vulkan::VertexDesc for SkinnedVertex {
+    const BINDING_DESCRIPTIONS: &'static [VertexInputBindingDescription] =
+        &[VertexInputBindingDescription {
+            binding: 0,
+            stride: size_of::<Self>() as u32,
+            input_rate: VertexInputRate::VERTEX,
+        }];
+
+    const ATTRIBUTE_DESCRIPTIONS: &'static [VertexInputAttributeDescription] = &[
+        // vec3 3*4 bytes
+        VertexInputAttributeDescription {
+            binding: 0,
+            location: 0,
+            format: vk::Format::R32G32B32_SFLOAT,
+            offset: 0,
+        },
+        // vec3 3*4 bytes
+        VertexInputAttributeDescription {
+            binding: 0,
+            location: 1,
+            format: vk::Format::R32G32B32_SFLOAT,
+            offset: 12,
+        },
+        // vec2 2*4 bytes
+        VertexInputAttributeDescription {
+            binding: 0,
+            location: 2,
+            format: vk::Format::R32G32_SFLOAT,
+            offset: 12 + 12,
+        },
+        VertexInputAttributeDescription {
+            binding: 0,
+            location: 3,
+            format: vk::Format::R32G32B32A32_SINT,
+            offset: 12 + 12 + 8,
+        },
+        VertexInputAttributeDescription {
+            binding: 0,
+            location: 4,
+            format: vk::Format::R32G32B32A32_SFLOAT,
+            offset: 12 + 12 + 8 + 16,
         },
     ];
 }
@@ -91,6 +141,8 @@ impl Primitive {
     }
 }
 
+pub type SkinnedMesh = Mesh<SkinnedVertex>;
+
 /// Represents a vertex and index buffer of `mesh::Vertex` mesh.
 pub struct Mesh<V = Vertex> {
     vertex_buffer: Buffer,
@@ -109,6 +161,10 @@ impl<V: VertexDesc> Mesh<V> {
         indices: &[u32],
         primitives: Vec<Primitive>,
     ) -> Result<Self> {
+        if vertices.is_empty() {
+            return Err(Error::EmptyMesh);
+        }
+
         let vertex_buffer = Buffer::new(
             context.clone(),
             BufferUsage::VERTEX_BUFFER,
@@ -261,13 +317,76 @@ impl Mesh<Vertex> {
                 .flat_map(|val| val.into_f32())
                 .map(Vec2::from);
 
-            vertices.extend(
-                izip!(pos, norm, texcoord).map(|(position, normal, texcoord)| Vertex {
-                    position,
-                    normal,
-                    texcoord,
-                }),
+            vertices.extend(izip!(pos, norm, texcoord).map(Vertex::from));
+
+            // Keep track of which materials map to which part of the index buffer
+            if let Some(material) = materials.get(primitive.material().index().unwrap_or(0)) {
+                primitives.push(Primitive {
+                    first_index,
+                    index_count,
+                    material: *material,
+                });
+            }
+        }
+
+        Self::new(context, &vertices, &indices, primitives)
+    }
+}
+
+impl Mesh<SkinnedVertex> {
+    /// Loads a mesh from gltf asset. Loads positions, normals, and texture coordinates.
+    pub fn from_gltf_skinned(
+        context: Arc<VulkanContext>,
+        mesh: gltf::Mesh,
+        buffers: &[buffer::Data],
+        materials: &[Handle<Material>],
+    ) -> Result<Self> {
+        let mut vertices = Vec::new();
+        let mut indices = Vec::new();
+
+        let mut primitives = Vec::new();
+
+        for primitive in mesh.primitives() {
+            let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
+            let first_index = indices.len() as u32;
+            let offset = vertices.len() as u32;
+            indices.extend(
+                reader
+                    .read_indices()
+                    .into_iter()
+                    .flat_map(|val| val.into_u32())
+                    .map(|val| val + offset),
             );
+
+            let index_count = indices.len() as u32 - first_index;
+
+            let pos = reader
+                .read_positions()
+                .into_iter()
+                .flatten()
+                .map(Vec3::from);
+
+            let norm = reader.read_normals().into_iter().flatten().map(Vec3::from);
+
+            let texcoord = reader
+                .read_tex_coords(0)
+                .into_iter()
+                .flat_map(|val| val.into_f32())
+                .map(Vec2::from);
+
+            let weights = reader
+                .read_weights(0)
+                .into_iter()
+                .flat_map(|val| val.into_f32())
+                .map(Vec4::from);
+
+            let joints = reader
+                .read_joints(0)
+                .into_iter()
+                .flat_map(|val| val.into_u16())
+                .map(|val| IVec4::new(val[0] as i32, val[1] as i32, val[2] as i32, val[3] as i32));
+
+            vertices.extend(izip!(pos, norm, texcoord, joints, weights).map(SkinnedVertex::from));
 
             // Keep track of which materials map to which part of the index buffer
             if let Some(material) = materials.get(primitive.material().index().unwrap_or(0)) {

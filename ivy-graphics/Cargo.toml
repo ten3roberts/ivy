@@ -30,6 +30,8 @@ records = "0.1.1"
 base64 = "0.12.0"
 slotmap = "1.0.6"
 ordered-float = "2.8.0"
+itertools = "0.10.3"
+hecs-schedule = "0.3.19"
 
 [features]
 default = []

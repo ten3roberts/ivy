@@ -16,11 +16,11 @@ use ivy_vulkan::{
 use crate::{AttachmentInfo, Node, NodeKind};
 
 /// A rendergraph node rendering the scene using the provided camera.
-pub struct CameraNode<Pass, T: Renderer<Error = E>, E> {
+pub struct CameraNode<Pass, R: Renderer> {
     name: &'static str,
     camera: Entity,
-    renderer: T,
-    marker: PhantomData<(Pass, E)>,
+    renderer: R,
+    marker: PhantomData<Pass>,
     color_attachments: Vec<AttachmentInfo>,
     read_attachments: Vec<Handle<Texture>>,
     input_attachments: Vec<Handle<Texture>>,
@@ -30,18 +30,18 @@ pub struct CameraNode<Pass, T: Renderer<Error = E>, E> {
     sets: Option<Vec<DescriptorSet>>,
 }
 
-impl<Pass, T, E> CameraNode<Pass, T, E>
+impl<Pass, R> CameraNode<Pass, R>
 where
     Pass: ShaderPass + Storage,
-    T: Renderer<Error = E> + Storage,
-    E: Into<anyhow::Error>,
+    R: Renderer + Storage,
+    R::Error: Into<anyhow::Error>,
 {
     pub fn new(
         name: &'static str,
         context: Arc<VulkanContext>,
         resources: &Resources,
         camera: Entity,
-        renderer: T,
+        renderer: R,
         color_attachments: &[AttachmentInfo],
         read_attachments: &[(Handle<Texture>, Handle<Sampler>)],
         input_attachments: &[Handle<Texture>],
@@ -104,11 +104,11 @@ where
     }
 }
 
-impl<Pass, T, E> Node for CameraNode<Pass, T, E>
+impl<Pass, R> Node for CameraNode<Pass, R>
 where
     Pass: ShaderPass + Storage,
-    T: Renderer<Error = E> + Storage,
-    E: 'static + Into<anyhow::Error> + Send + Sync,
+    R: Renderer + Storage,
+    R::Error: Into<anyhow::Error> + Storage,
 {
     fn color_attachments(&self) -> &[AttachmentInfo] {
         &self.color_attachments
@@ -166,7 +166,7 @@ where
                 .map_err(|e| e.into())
                 .context(format!(
                     "CameraNode failed to draw using supplied renderer: {:?}",
-                    type_name::<T>()
+                    type_name::<R>()
                 ))?;
         } else {
             self.renderer
@@ -174,7 +174,7 @@ where
                 .map_err(|e| e.into())
                 .context(format!(
                     "CameraNode failed to draw using supplied renderer: {:?}",
-                    type_name::<T>()
+                    type_name::<R>()
                 ))?;
         }
 

@@ -230,11 +230,12 @@ impl RenderGraphNodes {
         let text_renderer = resources.default::<TextRenderer>()?;
 
         let pbr_nodes =
-            rendergraph.add_nodes(create_pbr_pipeline::<GeometryPass, PostProcessingPass>(
+            rendergraph.add_nodes(create_pbr_pipeline::<GeometryPass, PostProcessingPass, _>(
                 context.clone(),
                 world,
                 &resources,
                 main_camera,
+                resources.default::<MeshRenderer>()?,
                 extent,
                 FRAMES_IN_FLIGHT,
                 &[],
@@ -254,7 +255,7 @@ impl RenderGraphNodes {
         let geometry = pbr_nodes[0];
         let postprocessing = pbr_nodes[1];
 
-        let gizmo = rendergraph.add_node(CameraNode::<GizmoPass, _, _>::new(
+        let gizmo = rendergraph.add_node(CameraNode::<GizmoPass, _>::new(
             "Gizmos Node",
             context.clone(),
             resources,
@@ -276,7 +277,7 @@ impl RenderGraphNodes {
             FRAMES_IN_FLIGHT,
         )?);
 
-        let ui = rendergraph.add_node(CameraNode::<UIPass, _, _>::new(
+        let ui = rendergraph.add_node(CameraNode::<UIPass, _>::new(
             "UI Node",
             context.clone(),
             resources,

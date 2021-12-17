@@ -38,4 +38,13 @@ pub enum Error {
 
     #[error("The requested document node {0:?} does not exist")]
     UnknownDocumentNode(String),
+
+    #[error("Attempt to create mesh with no vertices")]
+    EmptyMesh,
+
+    #[error("No armature was present for skin")]
+    MissingArmature,
+
+    #[error("Unable to locate root of armature")]
+    MissingRoot,
 }

@@ -85,7 +85,16 @@ impl Renderer for MeshRenderer {
             let instance_count = batch.instance_count();
             let first_instance = batch.first_instance();
 
-            if !primitives.is_empty() {
+            if !key.material.is_null() {
+                let material = materials.get(key.material)?;
+                cmd.bind_descriptor_sets(
+                    batch.layout(),
+                    sets.len() as u32,
+                    &[frame_set, material.set(current_frame)],
+                    &[],
+                );
+                cmd.draw_indexed(mesh.index_count(), instance_count, 0, 0, first_instance);
+            } else if !primitives.is_empty() {
                 primitives.iter().try_for_each(|val| -> Result<()> {
                     let material = materials.get(val.material)?;
 
@@ -106,15 +115,6 @@ impl Renderer for MeshRenderer {
 
                     Ok(())
                 })?;
-            } else if !key.material.is_null() {
-                let material = materials.get(key.material)?;
-                cmd.bind_descriptor_sets(
-                    batch.layout(),
-                    sets.len() as u32,
-                    &[frame_set, material.set(current_frame)],
-                    &[],
-                );
-                cmd.draw_indexed(mesh.index_count(), instance_count, 0, 0, first_instance);
             }
         }
 
@@ -123,6 +123,7 @@ impl Renderer for MeshRenderer {
 }
 
 #[repr(C, align(16))]
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
 struct ObjectData {
     model: Mat4,
     color: Vec4,

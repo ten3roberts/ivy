@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, time::Duration};
 
 use derive_for::*;
 use derive_more::*;
@@ -57,8 +57,14 @@ derive_for!(
     #[derive(Default)]
     #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
     /// Wrapper for strongly typed floating point deltatime
-    pub struct DeltaTime(f32);
+    pub struct DeltaTime(pub f32);
 );
+
+impl From<Duration> for DeltaTime {
+    fn from(val: Duration) -> Self {
+        Self(val.as_secs_f32())
+    }
+}
 
 impl std::ops::Mul<Position> for Rotation {
     type Output = Position;
@@ -145,6 +151,14 @@ impl Size2D {
 /// Position, Rotation, or Scale changes. Use TransformQuery instead.
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct TransformMatrix(pub Mat4);
+
+impl std::ops::Mul<TransformMatrix> for TransformMatrix {
+    type Output = TransformMatrix;
+
+    fn mul(self, rhs: TransformMatrix) -> Self::Output {
+        TransformMatrix(self.0 * rhs.0)
+    }
+}
 
 impl TransformMatrix {
     pub fn new(pos: Position, rot: Rotation, scale: Scale) -> Self {
