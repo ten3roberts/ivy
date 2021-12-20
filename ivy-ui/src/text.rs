@@ -18,6 +18,12 @@ pub struct Text {
     old_wrap: WrapStyle,
 }
 
+impl Clone for Text {
+    fn clone(&self) -> Self {
+        Self::new(self.str.clone())
+    }
+}
+
 impl std::fmt::Debug for Text {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Text").field("str", &self.str).finish()

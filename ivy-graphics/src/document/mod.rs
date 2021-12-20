@@ -282,6 +282,10 @@ impl Document {
         builder: &'a mut B,
         info: &NodeBuildInfo,
     ) -> &'a mut B {
+        if let Some(mesh) = node.mesh {
+            builder.add(mesh);
+        }
+
         if let Some(light) = node.light {
             eprintln!("Building light");
             builder.add(light);
@@ -292,15 +296,11 @@ impl Document {
             if let Some(mesh) = node.skinned_mesh {
                 dbg!("Inserting skinned mesh");
                 builder.add(mesh);
-            } else if let Some(mesh) = node.mesh {
-                builder.add(mesh);
             }
             if let Some(skin) = node.skin {
                 dbg!("Inserting skin");
                 builder.add(skin);
             }
-        } else if let Some(mesh) = node.mesh() {
-            builder.add(mesh);
         }
 
         builder.add(node.pos);

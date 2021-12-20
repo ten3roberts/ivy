@@ -141,8 +141,8 @@ impl<T: 'static + Array<Item = CollisionObject> + Send + Sync> CollisionTreeNode
         let a_origin = *origin - off;
         let b_origin = *origin + off;
 
-        let a = BinaryNode::new(self.depth + 1, a_origin.into(), Cube::new(extents));
-        let b = BinaryNode::new(self.depth + 1, b_origin.into(), Cube::new(extents));
+        let a = BinaryNode::new(self.depth + 1, a_origin.into(), Cube::from(extents));
+        let b = BinaryNode::new(self.depth + 1, b_origin.into(), Cube::from(extents));
 
         // Repartition selfs. Retain those that do not fit in any new leaf, and
         // push those that do to the popped list.

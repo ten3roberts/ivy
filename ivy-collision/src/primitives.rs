@@ -11,8 +11,10 @@ pub struct Cube {
 }
 
 impl Cube {
-    pub fn new(half_extents: Vec3) -> Self {
-        Self { half_extents }
+    pub fn new(x: f32, y: f32, z: f32) -> Self {
+        Self {
+            half_extents: Vec3::new(x, y, z),
+        }
     }
 
     pub fn uniform(half_extent: f32) -> Self {
@@ -212,5 +214,11 @@ impl CollisionPrimitive for Capsule {
 
     fn dyn_clone(&self) -> Box<dyn CollisionPrimitive + Send + Sync> {
         Box::new(self.clone())
+    }
+}
+
+impl From<Vec3> for Cube {
+    fn from(v: Vec3) -> Self {
+        Self { half_extents: v }
     }
 }

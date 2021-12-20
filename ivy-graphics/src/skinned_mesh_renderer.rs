@@ -142,6 +142,12 @@ impl SkinnedMeshRenderer {
     }
 }
 
+impl Drop for SkinnedMeshRenderer {
+    fn drop(&mut self) {
+        self.base_renderer.context().wait_idle().unwrap();
+    }
+}
+
 impl Renderer for SkinnedMeshRenderer {
     type Error = Error;
     /// Will draw all entities with a Handle<Material>, Handle<Mesh>, Modelmatrix and Shaderpass `Handle<T>`

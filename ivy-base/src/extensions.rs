@@ -1,7 +1,7 @@
 //! This module provides extension to various types including, but not limited
 //! to, hecs.
 
-use hecs::{Component, Entity, EntityBuilder, World};
+use hecs::{Component, Entity, EntityBuilder, EntityRef, World};
 
 use crate::Name;
 
@@ -50,20 +50,23 @@ impl<'w, T: Component> Iterator for WorldTagIterator<'w, T> {
 
 pub trait WorldExt {
     /// Finds an entity by name
-    fn by_name(&self, name: Name) -> Option<Entity>;
+    fn by_name(&self, name: Name) -> Option<EntityRef>;
     /// Finds an entity by tag
-    fn by_tag<T: Component>(&self) -> Option<Entity>;
+    fn by_tag<T: Component>(&self) -> Option<EntityRef>;
 }
 
 impl WorldExt for World {
-    fn by_name(&self, name: Name) -> Option<Entity> {
+    fn by_name(&self, name: Name) -> Option<EntityRef> {
         self.query::<&Name>()
             .iter()
             .find(|(_, val)| **val == name)
-            .map(|(e, _)| e)
+            .map(|(e, _)| self.entity(e).unwrap())
     }
 
-    fn by_tag<T: Component>(&self) -> Option<Entity> {
-        self.query::<&T>().iter().next().map(|(e, _)| e)
+    fn by_tag<T: Component>(&self) -> Option<EntityRef> {
+        self.query::<&T>()
+            .iter()
+            .next()
+            .map(|(e, _)| self.entity(e).unwrap())
     }
 }

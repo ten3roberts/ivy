@@ -1,6 +1,6 @@
 use ultraviolet::Vec3;
 
-use crate::{CollisionPrimitive, Cube};
+use crate::{CollisionPrimitive, Cube, Sphere};
 
 /// Generic collider holding any primitive implementing a support function.
 pub struct Collider {
@@ -21,6 +21,14 @@ impl Collider {
         Self {
             primitive: Box::new(primitive),
         }
+    }
+
+    pub fn cube(x: f32, y: f32, z: f32) -> Self {
+        Self::new(Cube::new(x, y, z))
+    }
+
+    pub fn sphere(radius: f32) -> Self {
+        Self::new(Sphere::new(radius))
     }
 }
 
