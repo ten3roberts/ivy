@@ -6,6 +6,7 @@ use ivy_vulkan::{
     descriptors::{DescriptorBuilder, IntoSet},
     Buffer, VulkanContext,
 };
+use ordered_float::OrderedFloat;
 use std::sync::Arc;
 use ultraviolet::Vec3;
 
@@ -119,7 +120,8 @@ impl LightManager {
                 },
             ));
 
-        self.lights.sort_unstable();
+        self.lights
+            .sort_unstable_by_key(|val| -OrderedFloat(val.reference_illuminance));
         self.num_lights = self.max_lights.min(self.lights.len() as u64);
 
         // Use the first `max_lights` lights and upload to gpu
@@ -183,19 +185,6 @@ struct LightData {
 }
 
 impl std::cmp::Eq for LightData {}
-
-impl std::cmp::PartialOrd for LightData {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.reference_illuminance
-            .partial_cmp(&other.reference_illuminance)
-    }
-}
-
-impl std::cmp::Ord for LightData {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.partial_cmp(other).unwrap_or(std::cmp::Ordering::Equal)
-    }
-}
 
 #[repr(C)]
 struct LightSceneData {
