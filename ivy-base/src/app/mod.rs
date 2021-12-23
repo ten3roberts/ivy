@@ -9,7 +9,7 @@ use hecs::World;
 
 use crate::{
     layer::{Layer, LayerStack},
-    Clock, Events,
+    Clock, Events, Gizmos,
 };
 
 use ivy_resources::Resources;
@@ -34,12 +34,16 @@ impl App {
 
         let (tx, rx) = flume::unbounded();
         events.subscribe(tx);
+        let resources = Resources::new();
+
+        // Will never fail
+        resources.insert(Gizmos::default()).unwrap();
 
         Self {
             name: "Ivy".into(),
             layers: LayerStack::new(),
             world: World::new(),
-            resources: Resources::new(),
+            resources,
             events,
             rx,
             running: false,

@@ -44,6 +44,7 @@ impl WindowLayer {
         info: WindowLayerInfo,
     ) -> anyhow::Result<Self> {
         let (window, events) = Window::new(glfw.clone(), info.window)?;
+
         let context = Arc::new(VulkanContext::new(&window)?);
 
         let swapchain = Swapchain::new(context.clone(), &window, info.swapchain)?;

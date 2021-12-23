@@ -53,7 +53,6 @@ pub fn import_image_data(
 
                     let texture = Texture::from_memory(context.clone(), &data)?;
                     Ok(resources.insert(texture)?)
-                    // Ok(resources.from_memory::<Texture, _, _, _>(uri.to_owned())??)
                 }
                 image::Source::View { view, mime_type: _ } => {
                     let parent_buffer_data = &buffer_data[view.buffer().index()].0;

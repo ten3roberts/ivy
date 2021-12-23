@@ -1,7 +1,7 @@
 use crate::Result;
 use ash::vk::{DescriptorSet, ShaderStageFlags};
 use hecs::World;
-use ivy_base::Position;
+use ivy_base::{Position, Rotation};
 use ivy_vulkan::{
     descriptors::{DescriptorBuilder, IntoSet},
     Buffer, VulkanContext,
@@ -105,23 +105,30 @@ impl LightManager {
     pub fn update_system(
         &mut self,
         world: &World,
-        center: Vec3,
+        center: Position,
+        forward: Vec3,
         current_frame: usize,
     ) -> Result<()> {
         self.lights.clear();
-        self.lights
-            .extend(world.query::<(&PointLight, &Position)>().iter().map(
-                |(_, (light, position))| LightData {
-                    position: position.0,
+        self.lights.extend(
+            world
+                .query::<(&PointLight, &Position)>()
+                .iter()
+                .map(|(_, (light, position))| LightData {
+                    position: *position,
                     radiance: light.radiance,
-                    reference_illuminance: (light.radiance / (center - position.0).mag_sq()).mag(),
+                    reference_illuminance: (light.radiance.mag_sq()
+                        / (center - *position).mag_sq()),
                     radius: light.radius,
                     ..Default::default()
-                },
-            ));
+                })
+                .filter(|val| val.reference_illuminance > 0.01),
+        );
 
-        self.lights
-            .sort_unstable_by_key(|val| -OrderedFloat(val.reference_illuminance));
+        self.lights.sort_unstable_by_key(|val| {
+            -OrderedFloat(val.reference_illuminance * (center - val.position).dot(forward))
+        });
+
         self.num_lights = self.max_lights.min(self.lights.len() as u64);
 
         // Use the first `max_lights` lights and upload to gpu
@@ -140,10 +147,11 @@ impl LightManager {
 
     pub fn update_all_system(world: &World, current_frame: usize) -> Result<()> {
         world
-            .query::<(&mut LightManager, &Position)>()
+            .query::<(&mut LightManager, &Position, &Rotation)>()
             .iter()
-            .try_for_each(|(_, (light_manager, position))| {
-                light_manager.update_system(world, position.0, current_frame)
+            .try_for_each(|(_, (light_manager, position, rot))| {
+                let forward = **rot * Vec3::unit_z();
+                light_manager.update_system(world, *position, forward, current_frame)
             })
     }
 
@@ -178,7 +186,7 @@ impl IntoSet for LightManager {
 #[repr(C, align(16))]
 #[derive(Default, PartialEq, Debug)]
 struct LightData {
-    position: Vec3,
+    position: Position,
     reference_illuminance: f32,
     radiance: Vec3,
     radius: f32,
