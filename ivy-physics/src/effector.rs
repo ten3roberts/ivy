@@ -85,15 +85,23 @@ impl Effector {
     /// Returns the total net effect of forces, impulses, and velocity changes
     /// during `dt`. Note, Effector should be clear afterwards.
     pub fn net_velocity_change(&self, mass: Mass, dt: f32) -> Velocity {
-        Velocity(self.force * dt / mass.0 + self.impulse / mass.0 + self.delta_v)
+        if mass == Mass(0.0) {
+            Velocity(self.delta_v)
+        } else {
+            Velocity(self.force * dt / mass.0 + self.impulse / mass.0 + self.delta_v)
+        }
     }
     /// Returns the total net effect of torques, angular impulses, and angular
     /// velocity changes. Note: Effector should be cleared afterwards.
 
     pub fn net_angular_velocity_change(&self, ang_mass: AngularMass, dt: f32) -> AngularVelocity {
-        AngularVelocity(
-            self.torque * dt / ang_mass.0 + self.angular_impulse / ang_mass.0 + self.delta_w,
-        )
+        if ang_mass == AngularMass(0.0) {
+            AngularVelocity(self.delta_w)
+        } else {
+            AngularVelocity(
+                self.torque * dt / ang_mass.0 + self.angular_impulse / ang_mass.0 + self.delta_w,
+            )
+        }
     }
 
     pub fn net_translation(&self, rotation: &Rotation) -> Position {

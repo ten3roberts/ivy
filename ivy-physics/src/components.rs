@@ -25,16 +25,15 @@ derive_for!(
         Sub,
         SubAssign,
         Div, DivAssign,
-        Neg
+        Neg,
+        Default
     );
-    #[derive(Default)]
     #[repr(transparent)]
     #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
     pub struct Velocity(pub Vec3);
 
     /// Represents and angular velocity in xyz directions creating an axis and
     /// magnitude.
-    #[derive(Default)]
     #[repr(transparent)]
     #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
     pub struct AngularVelocity(pub Vec3);
@@ -48,7 +47,6 @@ derive_for!(
     #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
     pub struct AngularMass(pub f32);
 
-    #[derive(Default)]
     #[repr(transparent)]
     /// The elasticity of the physics material. A high value means that object is
     /// hard and will bounce back. A value of zero means the energy is absorbed.
@@ -56,18 +54,6 @@ derive_for!(
     pub struct Resitution(pub f32);
 
 );
-
-impl Default for Mass {
-    fn default() -> Self {
-        Self(1.0)
-    }
-}
-
-impl Default for AngularMass {
-    fn default() -> Self {
-        Self(1.0)
-    }
-}
 
 impl Velocity {
     pub fn new(x: f32, y: f32, z: f32) -> Self {
