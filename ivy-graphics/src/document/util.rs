@@ -44,9 +44,9 @@ pub fn import_image_data(
     let context = resources.get_default::<Arc<VulkanContext>>()?;
 
     document
-        .images()
-        .map(|image| -> Result<Handle<Texture>> {
-            match image.source() {
+        .textures()
+        .map(|tex| -> Result<Handle<Texture>> {
+            match tex.source().source() {
                 image::Source::Uri { uri, mime_type: _ } => {
                     let data = Scheme::read(base, uri)
                         .map_err(|e| Error::GltfImport(e, Some(base.into())))?;
