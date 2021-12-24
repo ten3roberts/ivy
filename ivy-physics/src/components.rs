@@ -32,6 +32,10 @@ derive_for!(
     #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
     pub struct Velocity(pub Vec3);
 
+    #[repr(transparent)]
+    /// The strength of gravity
+    #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+    pub struct Gravity(pub Vec3);
     /// Represents and angular velocity in xyz directions creating an axis and
     /// magnitude.
     #[repr(transparent)]
@@ -48,6 +52,11 @@ derive_for!(
     pub struct AngularMass(pub f32);
 
     #[repr(transparent)]
+    /// How strongly the entity is affected by gravity, is at all
+    #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+    pub struct GravityInfluence(pub f32);
+
+    #[repr(transparent)]
     /// The elasticity of the physics material. A high value means that object is
     /// hard and will bounce back. A value of zero means the energy is absorbed.
     #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
@@ -56,6 +65,12 @@ derive_for!(
 );
 
 impl Velocity {
+    pub fn new(x: f32, y: f32, z: f32) -> Self {
+        Self(Vec3::new(x, y, z))
+    }
+}
+
+impl Gravity {
     pub fn new(x: f32, y: f32, z: f32) -> Self {
         Self(Vec3::new(x, y, z))
     }

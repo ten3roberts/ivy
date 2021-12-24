@@ -40,14 +40,15 @@ pub fn resolve_collision(
 }
 
 pub fn resolve_static_collision(
-    intersection: &Contact,
+    contact: Position,
+    normal: Vec3,
     a_resitution: Resitution,
     b: &RbQuery,
     b_pos: Position,
 ) -> Vec3 {
-    let rb = intersection.points[1] - b_pos;
+    let rb = contact - b_pos;
     let bw = *b.ang_vel;
-    let n = intersection.normal;
+    let n = normal;
 
     let b_vel = **b.vel + point_vel(rb, bw);
     let contact_rel = (-b_vel).dot(n);
@@ -61,6 +62,6 @@ pub fn resolve_static_collision(
     let j =
         -(1.0 + resitution) * contact_rel / (1.0 / **b.mass + rb.cross(n).mag_sq() / **b.ang_mass);
 
-    let impulse = j * intersection.normal;
+    let impulse = j * normal;
     impulse
 }

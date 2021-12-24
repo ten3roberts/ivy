@@ -64,5 +64,7 @@ pub use ivy_resources::{
     CellRef, CellRefMut, DefaultResource, DefaultResourceMut, Handle, Resources,
 };
 pub use ivy_templates::{TemplateKey, TemplateStore};
-pub use ivy_ui::Widget;
+pub use ivy_ui::{
+    constraints::*, Canvas, CanvasBundle, ImageBundle, ImageInfo, TextBundle, Widget, WidgetBundle,
+};
 pub use ivy_vulkan::{ImageLayout, ImageUsage, ShaderPass, Texture};

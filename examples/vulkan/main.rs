@@ -32,7 +32,7 @@ use physics::{
         draw_connections, Connection, ConnectionBundle, ConnectionKind, PositionOffset,
         RotationOffset,
     },
-    Effector, PhysicsLayer,
+    Effector, PhysicsLayer, PhysicsLayerInfo,
 };
 use postprocessing::pbr::{create_pbr_pipeline, PBRInfo};
 use random::rand::SeedableRng;
@@ -178,7 +178,14 @@ fn main() -> anyhow::Result<()> {
                         w,
                         r,
                         e,
-                        CollisionNode::new(0, Position::default(), Cube::uniform(100.0)),
+                        PhysicsLayerInfo {
+                            tree_root: CollisionNode::new(
+                                0,
+                                Position::default(),
+                                Cube::uniform(100.0),
+                            ),
+                            gravity: Gravity::default(),
+                        },
                     )?,
                     LogicLayer::new(w, r, e)?,
                 ),

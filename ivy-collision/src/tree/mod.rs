@@ -112,7 +112,7 @@ impl<N: 'static + CollisionTreeNode> CollisionTree<N> {
             &Collider,
             Satisfies<&Trigger>,
             Satisfies<&Static>,
-            &Visible,
+            Option<&Visible>,
         )>,
         cmd: &mut CommandBuffer,
     ) {
@@ -127,7 +127,7 @@ impl<N: 'static + CollisionTreeNode> CollisionTree<N> {
                         Sphere::enclose(collider, *transform.scale),
                         transform.into_matrix(),
                         is_trigger,
-                        is_visible.is_visible(),
+                        is_visible.map(|val| val.is_visible()).unwrap_or(true),
                         is_static,
                     )
                 },
@@ -263,7 +263,7 @@ impl<N: CollisionTreeNode> CollisionTree<N> {
             &Collider,
             Satisfies<&Trigger>,
             Satisfies<&Static>,
-            &Visible,
+            Option<&Visible>,
         )>,
         mut cmd: Write<CommandBuffer>,
         mut tree: DefaultResourceMut<Self>,

@@ -1,6 +1,6 @@
 use ultraviolet::Vec3;
 
-use crate::{CollisionPrimitive, Cube, Sphere};
+use crate::{Capsule, CollisionPrimitive, Cube, Sphere};
 
 /// Generic collider holding any primitive implementing a support function.
 pub struct Collider {
@@ -16,19 +16,26 @@ impl std::fmt::Debug for Collider {
 }
 
 impl Collider {
-    /// Creates a new collider from collision primitive.
+    /// Creates a new collider from arbitrary collision primitive.
     pub fn new<T: 'static + CollisionPrimitive + Send + Sync>(primitive: T) -> Self {
         Self {
             primitive: Box::new(primitive),
         }
     }
 
+    /// Creates a cuboidal collider
     pub fn cube(x: f32, y: f32, z: f32) -> Self {
         Self::new(Cube::new(x, y, z))
     }
 
+    /// Creates a spherical collider
     pub fn sphere(radius: f32) -> Self {
         Self::new(Sphere::new(radius))
+    }
+
+    /// Creates a capsule collider
+    pub fn capsule(half_height: f32, radius: f32) -> Self {
+        Self::new(Capsule::new(half_height, radius))
     }
 }
 

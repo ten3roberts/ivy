@@ -9,8 +9,8 @@ use hecs::Entity;
 use hecs_hierarchy::{Hierarchy, HierarchyQuery};
 use hecs_schedule::{GenericWorld, Read, SubWorld};
 use ivy_base::{DeltaTime, Position, Rotation, Static};
-use ivy_collision::Collision;
-use ultraviolet::{Bivec3, Rotor3};
+use ivy_collision::{util::TOLERANCE, Collision};
+use ultraviolet::{Bivec3, Rotor3, Vec3};
 
 use crate::components::{AngularVelocity, Velocity};
 
@@ -19,6 +19,19 @@ pub fn integrate_velocity(world: SubWorld<(&mut Position, &Velocity)>, dt: Read<
         .native_query()
         .iter()
         .for_each(|(_, (pos, vel))| *pos += Position(**vel * **dt));
+}
+
+pub fn gravity(world: SubWorld<(&GravityInfluence, &Mass, &mut Effector)>, gravity: Read<Gravity>) {
+    if gravity.mag_sq() < TOLERANCE {
+        return;
+    }
+
+    world
+        .native_query()
+        .iter()
+        .for_each(|(_, (influence, mass, effector))| {
+            effector.apply_force(**gravity * **influence * **mass)
+        })
 }
 
 pub fn integrate_angular_velocity(
@@ -88,9 +101,23 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
         }
         // Check for static collision
         else if coll.a.is_static {
-            return resolve_static(&world, coll.a.entity, coll.b.entity, coll.contact);
+            return resolve_static(
+                &world,
+                coll.a.entity,
+                coll.b.entity,
+                coll.contact.points[1],
+                coll.contact.normal,
+                coll.contact.depth,
+            );
         } else if coll.b.is_static {
-            return resolve_static(&world, coll.b.entity, coll.a.entity, coll.contact);
+            return resolve_static(
+                &world,
+                coll.b.entity,
+                coll.a.entity,
+                coll.contact.points[0],
+                -coll.contact.normal,
+                coll.contact.depth,
+            );
         }
 
         assert_ne!(coll.a, coll.b);
@@ -138,7 +165,9 @@ fn resolve_static(
     world: &impl GenericWorld,
     a: Entity,
     b: Entity,
-    contact: ivy_collision::Contact,
+    contact: Position,
+    normal: Vec3,
+    depth: f32,
 ) -> Result<()> {
     let mut a_query = world.try_query_one::<Option<&Resitution>>(a)?;
     let a_res = a_query
@@ -148,10 +177,17 @@ fn resolve_static(
     let mut b_query = world.try_query_one::<(RbQuery, &Position, &mut Effector)>(b)?;
 
     if let Ok((rb, b_pos, effector)) = b_query.get() {
-        let impulse =
-            resolve_static_collision(&contact, a_res.cloned().unwrap_or_default(), &rb, *b_pos);
-        let dir = contact.normal * contact.depth;
-        effector.apply_impulse_at(-impulse, contact.points[1] - *b_pos);
+        let impulse = resolve_static_collision(
+            contact,
+            normal,
+            a_res.cloned().unwrap_or_default(),
+            &rb,
+            *b_pos,
+        );
+
+        let dir = normal * depth;
+
+        effector.apply_impulse_at(-impulse, contact - *b_pos);
         effector.translate(dir);
     }
 
