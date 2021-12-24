@@ -622,16 +622,16 @@ impl LogicLayer {
         let input = Input::new(window, events);
 
         let input_vec = InputVector::new(
-            InputAxis::keyboard(Key::D, Key::A),
+            InputAxis::keyboard(Key::A, Key::D),
             InputAxis::keyboard(Key::Space, Key::LeftControl),
-            InputAxis::keyboard(Key::S, Key::W),
+            InputAxis::keyboard(Key::W, Key::S),
         );
 
         let mut builder = EntityBuilder::new();
 
         builder
             .add_bundle(TransformBundle {
-                pos: Position::new(0.0, 0.0, 7.0),
+                pos: Position::new(0.0, 0.0, -7.0),
                 ..Default::default()
             })
             .add_bundle(RbBundle::default())
@@ -796,20 +796,6 @@ impl Layer for LogicLayer {
         move_system(world, &self.input);
 
         graphics::systems::update_view_matrices(world);
-
-        // gizmos.begin_section("Velocity");
-        // world
-        //     .query::<(&Position, &Velocity)>()
-        //     .iter()
-        //     .for_each(|(_, (pos, vel))| {
-        //         gizmos.push(Gizmo::Line {
-        //             origin: **pos,
-        //             color: Color::blue(),
-        //             dir: **vel,
-        //             radius: 0.01,
-        //             corner_radius: 1.0,
-        //         });
-        //     });
 
         draw_connections(world, &mut gizmos)?;
 

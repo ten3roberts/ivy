@@ -14,7 +14,7 @@ pub fn update_connections(
         &mut Effector,
         HierarchyQuery<Connection>,
         RbQueryMut,
-        TransformQuery,
+        TransformQueryMut,
     )>,
 ) -> Result<()> {
     world
@@ -45,7 +45,7 @@ fn update_subtree(world: &impl GenericWorld, root: Entity) -> Result<()> {
                 let mut query = world.try_query_one::<(
                     &PositionOffset,
                     &RotationOffset,
-                    TransformQuery,
+                    TransformQueryMut,
                     RbQueryMut,
                     &ConnectionKind,
                     &mut Effector,
@@ -70,6 +70,7 @@ fn update_subtree(world: &impl GenericWorld, root: Entity) -> Result<()> {
                         effector,
                     );
                 }
+
                 drop(query);
                 update_subtree(world, child)?;
 

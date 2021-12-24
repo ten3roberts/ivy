@@ -287,18 +287,15 @@ impl Document {
         }
 
         if let Some(light) = node.light {
-            eprintln!("Building light");
             builder.add(light);
         }
 
         // Add skinning info
         if info.skinned {
             if let Some(mesh) = node.skinned_mesh {
-                dbg!("Inserting skinned mesh");
                 builder.add(mesh);
             }
             if let Some(skin) = node.skin {
-                dbg!("Inserting skin");
                 builder.add(skin);
             }
         }

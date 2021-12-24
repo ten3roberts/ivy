@@ -1,7 +1,7 @@
 use crate::Result;
 use ash::vk::{DescriptorSet, ShaderStageFlags};
 use hecs::World;
-use ivy_base::{Position, Rotation};
+use ivy_base::Position;
 use ivy_vulkan::{
     descriptors::{DescriptorBuilder, IntoSet},
     Buffer, VulkanContext,
@@ -106,7 +106,6 @@ impl LightManager {
         &mut self,
         world: &World,
         center: Position,
-        forward: Vec3,
         current_frame: usize,
     ) -> Result<()> {
         self.lights.clear();
@@ -125,9 +124,8 @@ impl LightManager {
                 .filter(|val| val.reference_illuminance > 0.01),
         );
 
-        self.lights.sort_unstable_by_key(|val| {
-            -OrderedFloat(val.reference_illuminance * (center - val.position).dot(forward))
-        });
+        self.lights
+            .sort_unstable_by_key(|val| -OrderedFloat(val.reference_illuminance));
 
         self.num_lights = self.max_lights.min(self.lights.len() as u64);
 
@@ -147,11 +145,10 @@ impl LightManager {
 
     pub fn update_all_system(world: &World, current_frame: usize) -> Result<()> {
         world
-            .query::<(&mut LightManager, &Position, &Rotation)>()
+            .query::<(&mut LightManager, &Position)>()
             .iter()
-            .try_for_each(|(_, (light_manager, position, rot))| {
-                let forward = **rot * Vec3::unit_z();
-                light_manager.update_system(world, *position, forward, current_frame)
+            .try_for_each(|(_, (light_manager, position))| {
+                light_manager.update_system(world, *position, current_frame)
             })
     }
 

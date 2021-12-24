@@ -20,9 +20,9 @@ impl InputVector {
 
     pub fn wasd() -> Self {
         Self {
-            x: InputAxis::keyboard(Key::D, Key::A),
+            x: InputAxis::keyboard(Key::A, Key::D),
             y: InputAxis::none(),
-            z: InputAxis::keyboard(Key::S, Key::W),
+            z: InputAxis::keyboard(Key::W, Key::S),
         }
     }
 

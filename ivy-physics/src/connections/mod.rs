@@ -1,7 +1,7 @@
 use derive_for::*;
 use derive_more::*;
 use hecs::Bundle;
-use ivy_base::{Position, TransformBundle, TransformQuery};
+use ivy_base::{Position, TransformBundle, TransformQueryMut};
 
 mod systems;
 pub use systems::*;
@@ -48,7 +48,10 @@ impl RotationOffset {
     /// Creates an angular velocity from an axis angle rotation. Note: Axis is
     /// assumed to be normalized.
     pub fn axis_angle(angle: f32, axis: Vec3) -> Self {
-        Self(Rotor3::new(angle, Bivec3::from_normalized_axis(axis)))
+        Self(Rotor3::from_angle_plane(
+            angle,
+            Bivec3::from_normalized_axis(axis),
+        ))
     }
 }
 
@@ -61,6 +64,12 @@ pub enum ConnectionKind {
     Rigid,
     /// The connection will excert a force to return to the desired position
     Spring { strength: f32, dampening: f32 },
+}
+
+impl Default for ConnectionKind {
+    fn default() -> Self {
+        Self::Rigid
+    }
 }
 
 impl ConnectionKind {
@@ -80,8 +89,8 @@ impl ConnectionKind {
     fn update(
         &self,
         offset_pos: &PositionOffset,
-        _offset_rot: &RotationOffset,
-        child_trans: TransformQuery,
+        offset_rot: &RotationOffset,
+        child_trans: TransformQueryMut,
         rb: RbQueryMut,
         parent_trans: &TransformBundle,
         parent_rb: &mut RbBundle,
@@ -113,6 +122,8 @@ impl ConnectionKind {
                 parent_rb
                     .effector
                     .apply_velocity_change(*-vel_diff * child_inf);
+
+                *child_trans.rot = parent_trans.rot * **offset_rot;
             }
             Self::Spring {
                 strength,
@@ -123,13 +134,13 @@ impl ConnectionKind {
                 parent_rb.effector.apply_force(-force);
 
                 *rb.ang_vel = parent_rb.ang_vel;
-                // *child_trans.rot = parent_trans.rot * **offset_rot;
+                *child_trans.rot = parent_trans.rot * **offset_rot;
             }
         }
     }
 }
 
-#[derive(Bundle, Clone, Copy, Debug, PartialEq)]
+#[derive(Default, Bundle, Clone, Copy, Debug, PartialEq)]
 pub struct ConnectionBundle {
     pub kind: ConnectionKind,
     pub offset: PositionOffset,

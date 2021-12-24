@@ -42,6 +42,8 @@ pub mod macros;
 mod time;
 mod updatable;
 
+use std::f32::consts::PI;
+
 pub use app::{App, AppBuilder, AppEvent};
 pub use color::*;
 pub use components::*;
@@ -54,3 +56,10 @@ pub use layer::*;
 pub use logger::Logger;
 pub use time::{Clock, FromDuration, IntoDuration, TimedScope};
 pub use updatable::*;
+
+/// 45 degrees in radians
+pub const DEG_45: f32 = PI * 0.25;
+/// 90 degrees in radians
+pub const DEG_90: f32 = PI * 0.5;
+/// 180 degrees in radians
+pub const DEG_180: f32 = PI;
