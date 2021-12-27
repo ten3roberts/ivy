@@ -22,22 +22,6 @@ impl Cube {
             half_extents: Vec3::new(half_extent, half_extent, half_extent),
         }
     }
-
-    /// Performs ray intersection testing by assuming the cube is axis aligned
-    /// and has a scale of 1.0
-    pub fn check_aabb_intersect(&self, position: Position, scale: Scale, ray: &Ray) -> bool {
-        let dir = ray.dir();
-        let inv_dir = Vec3::new(1.0 / dir.x, 1.0 / dir.y, 1.0 / dir.z);
-
-        let origin = ray.origin - position;
-
-        let t1 = (-self.half_extents * *scale - *origin) * inv_dir;
-        let t2 = (self.half_extents * *scale - *origin) * inv_dir;
-        let tmin = t1.min_by_component(t2);
-        let tmax = t1.max_by_component(t2);
-
-        tmin.component_max() <= tmax.component_min()
-    }
 }
 
 impl Deref for Cube {

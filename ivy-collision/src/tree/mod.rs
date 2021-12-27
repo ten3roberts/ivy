@@ -1,19 +1,19 @@
-use std::{any, mem};
+use std::any;
 
-use flume::{Receiver, Sender};
-use hecs::{Entity, Satisfies};
+use hecs::{Entity, Query};
 use hecs_schedule::{CommandBuffer, GenericWorld, SubWorld, Write};
 use ivy_base::{
-    Color, DrawGizmos, Events, Gizmos, Position, Rotation, Scale, Static, TransformMatrix,
-    TransformQuery, Trigger, Visible,
+    Color, DrawGizmos, Events, Gizmos, Static, TransformMatrix, TransformQuery, Trigger, Visible,
 };
 use ivy_resources::{DefaultResource, DefaultResourceMut};
-use slotmap::SlotMap;
-use smallvec::{Array, SmallVec};
+use records::record;
+use slotmap::{new_key_type, SlotMap};
+use smallvec::Array;
 
-use crate::{util::TOLERANCE, Collider, Sphere};
+use crate::{BoundingBox, Collider, CollisionPrimitive};
 
 mod binary_node;
+mod bvh;
 mod index;
 mod intersect_visitor;
 pub mod query;
@@ -21,6 +21,7 @@ mod traits;
 mod visitor;
 
 pub use binary_node::*;
+pub use bvh::*;
 pub use index::*;
 pub use intersect_visitor::*;
 pub use traits::*;
@@ -28,215 +29,106 @@ pub use visitor::*;
 
 use self::query::TreeQuery;
 
-pub type Nodes<N> = SlotMap<NodeIndex<N>, N>;
+pub type Nodes<N> = SlotMap<NodeIndex, N>;
 
-/// Marker for where the object is in the tree
-#[derive(Debug, Clone)]
-pub struct TreeMarker<N> {
-    index: NodeIndex<N>,
-    object: CollisionObject,
-    on_drop: Sender<(NodeIndex<N>, Entity)>,
+new_key_type! {
+    pub struct ObjectIndex;
 }
 
-impl<N> Drop for TreeMarker<N> {
-    fn drop(&mut self) {
-        if !self.on_drop.is_disconnected() {
-            self.on_drop
-                .send((self.index, self.object.entity))
-                .expect("Failed to send drop message")
-        }
-    }
+/// Marker for where the object is in the tree
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct Object {
+    pub entity: Entity,
+    pub index: ObjectIndex,
 }
 
 pub struct CollisionTree<N> {
-    nodes: SlotMap<NodeIndex<N>, N>,
+    nodes: SlotMap<NodeIndex, N>,
     /// Objects removed from the tree due to splits. Bound to be replaced.
     /// Double buffer as insertions may cause new pops.
-    popped: (Vec<CollisionObject>, Vec<CollisionObject>),
-    iteration: usize,
-    root: NodeIndex<N>,
+    root: NodeIndex,
 
-    tx: Sender<(NodeIndex<N>, Entity)>,
-    rx: Receiver<(NodeIndex<N>, Entity)>,
+    objects: SlotMap<ObjectIndex, ObjectData>,
+    /// Objects that need to be reinserted into the tree
+    popped: Vec<Object>,
 }
 
-impl<N: 'static + CollisionTreeNode> CollisionTree<N> {
+impl<N: CollisionTreeNode> CollisionTree<N> {
     pub fn new(root: N) -> Self {
         let mut nodes = SlotMap::with_key();
 
         let root = nodes.insert(root);
-        let (tx, rx) = flume::unbounded();
 
         Self {
             nodes,
-            popped: (Vec::new(), Vec::new()),
             root,
-            iteration: 0,
-            tx,
-            rx,
+            objects: SlotMap::with_key(),
+            popped: Vec::new(),
         }
     }
 
-    pub fn contains(&self, object: &CollisionObject) -> bool {
-        self.nodes[self.root].contains(object)
-    }
-
     /// Get a reference to the collision tree's nodes.
-    pub fn nodes(&self) -> &SlotMap<NodeIndex<N>, N> {
+    pub fn nodes(&self) -> &SlotMap<NodeIndex, N> {
         &self.nodes
     }
 
+    pub fn node(&self, index: NodeIndex) -> Option<&N> {
+        self.nodes.get(index)
+    }
+
     /// Get a mutable reference to the collision tree's nodes.
-    pub fn nodes_mut(&mut self) -> &mut SlotMap<NodeIndex<N>, N> {
+    pub fn nodes_mut(&mut self) -> &mut SlotMap<NodeIndex, N> {
         &mut self.nodes
     }
 
-    pub fn handle_removed(&mut self) {
-        let nodes = &mut self.nodes;
-        let popped = &mut self.popped;
-        self.rx.try_iter().for_each(|(index, e)| {
-            let _ = nodes[index].remove(e);
-            if let Some(idx) = popped.1.iter().position(|val| val.entity == e) {
-                popped.1.swap_remove(idx);
-            }
-            if let Some(idx) = popped.0.iter().position(|val| val.entity == e) {
-                popped.0.swap_remove(idx);
-            }
-        })
+    fn insert(&mut self, entity: Entity, object: ObjectData) -> Object {
+        let index = self.objects.insert(object);
+        let object = Object { entity, index };
+
+        N::insert(self.root, &mut self.nodes, object, &self.objects);
+
+        object
     }
 
-    pub fn register(
-        &mut self,
-        world: SubWorld<(
-            TransformQuery,
-            &Collider,
-            Satisfies<&Trigger>,
-            Satisfies<&Static>,
-            Option<&Visible>,
-        )>,
-        cmd: &mut CommandBuffer,
-    ) {
-        let inserted = world
-            .native_query()
-            .without::<TreeMarker<N>>()
-            .iter()
-            .map(
-                |(e, (transform, collider, is_trigger, is_static, is_visible))| {
-                    CollisionObject::new(
-                        e,
-                        Sphere::enclose(collider, *transform.scale),
-                        transform.into_matrix(),
-                        is_trigger,
-                        is_visible.map(|val| val.is_visible()).unwrap_or(true),
-                        is_static,
-                    )
-                },
-            )
-            .collect::<Vec<_>>();
+    pub fn register(&mut self, world: SubWorld<ObjectQuery>, cmd: &mut CommandBuffer) {
+        for (e, q) in world.native_query().without::<Object>().iter() {
+            let obj: ObjectData = q.into();
 
-        inserted.into_iter().for_each(|object| {
-            let entity = object.entity;
-            let index = self
-                .root
-                .insert(&mut self.nodes, object, &mut self.popped.0);
-            let marker = TreeMarker {
-                index,
-                object,
-                on_drop: self.tx.clone(),
-            };
-            cmd.insert_one(entity, marker);
-        })
+            cmd.insert_one(e, self.insert(e, obj))
+        }
     }
 
     pub fn update(
         &mut self,
-        world: SubWorld<(
-            TransformQuery,
-            &Collider,
-            &mut TreeMarker<N>,
-            Satisfies<&Trigger>,
-            Satisfies<&Static>,
-        )>,
+        world: SubWorld<(&Object, ObjectQuery)>,
     ) -> Result<(), hecs_schedule::Error> {
-        self.handle_popped(&world)?;
+        // Update object data
+        for (_, (obj, q)) in world.native_query().iter() {
+            let data: ObjectData = q.into();
+            self.objects[obj.index] = data;
+        }
 
-        self.iteration += 1;
+        // Update tree
+        N::update(self.root, &mut self.nodes, &self.objects, &mut self.popped);
 
-        let nodes = &mut self.nodes;
-        let iteration = self.iteration;
-
-        world
-            .query::<(&Scale, &Position, &Rotation, &Collider, &mut TreeMarker<N>)>()
-            .iter()
-            .for_each(|(_, (scale, pos, rot, collider, marker))| {
-                let index = marker.index;
-
-                // Bounds have changed
-                if (marker.object.max_scale - scale.component_max()).abs() < TOLERANCE {
-                    marker.object.bound = Sphere::enclose(collider, *scale)
-                }
-
-                marker.object.origin = *pos;
-                marker.object.transform = TransformMatrix::new(*pos, *rot, *scale);
-
-                nodes[index].set(marker.object, iteration)
-            });
-
-        let popped = &mut self.popped.0;
-
-        // Move entities between nodes when they no longer fit or fit into a
-        // deeper child.
-        world
-            .query::<&mut TreeMarker<N>>()
-            .iter()
-            .for_each(|(_, marker)| {
-                let index = marker.index;
-                let node = &nodes[index];
-
-                let object = &marker.object;
-                if !node.contains(object) || index.fits_child(nodes, object).is_some() {
-                    nodes[index].remove(object.entity);
-                    popped.push(marker.object)
-                }
-            });
-
-        self.handle_popped(&world)?;
-
-        Ok(())
-    }
-
-    pub fn handle_popped(&mut self, world: &impl GenericWorld) -> hecs_schedule::error::Result<()> {
-        self.handle_removed();
-        let nodes = &mut self.nodes;
-        let root = self.root;
-        while !self.popped.0.is_empty() {
-            let (front, back) = &mut self.popped;
-
-            front.drain(..).try_for_each(|obj| -> Result<_, _> {
-                let mut marker = world.try_get_mut::<TreeMarker<N>>(obj.entity)?;
-
-                marker.index = root.insert(nodes, obj, back);
-
-                Ok(())
-            })?;
-
-            // Swap buffers and keep going
-            mem::swap(&mut self.popped.0, &mut self.popped.1);
+        for object in self.popped.drain(..) {
+            N::insert(self.root, &mut self.nodes, object, &self.objects)
         }
 
         Ok(())
     }
 
     #[inline]
-    pub fn check_collisions<'a, G: Array<Item = &'a CollisionObject>>(
+    pub fn check_collisions<'a, G: Array<Item = &'a ObjectData>>(
         &'a self,
         world: SubWorld<&Collider>,
         events: &mut Events,
     ) -> hecs_schedule::error::Result<()> {
-        let mut stack = SmallVec::<G>::new();
+        let colliders = world.try_get_column()?;
 
-        self.root
-            .check_collisions(&world, events, &self.nodes, &mut stack)
+        N::check_collisions(&colliders, events, self.root, &self.nodes, &self.objects);
+
+        Ok(())
     }
 
     /// Queries the tree with a given visitor. Traverses only the nodes that the
@@ -244,7 +136,12 @@ impl<N: 'static + CollisionTreeNode> CollisionTree<N> {
     /// output of the visited node. Oftentimes, the output of the visitor is an
     /// iterator, which means that a nested iterator can be returned.
     pub fn query<V>(&self, visitor: V) -> TreeQuery<N, V> {
-        TreeQuery::new(visitor, &self.nodes, self.root)
+        TreeQuery::new(visitor, self, self.root)
+    }
+
+    /// Get a reference to the collision tree's objects.
+    pub fn objects(&self) -> &SlotMap<ObjectIndex, ObjectData> {
+        &self.objects
     }
 }
 
@@ -258,13 +155,7 @@ impl<N: CollisionTreeNode> std::fmt::Debug for CollisionTree<N> {
 
 impl<N: CollisionTreeNode> CollisionTree<N> {
     pub fn register_system(
-        world: SubWorld<(
-            TransformQuery,
-            &Collider,
-            Satisfies<&Trigger>,
-            Satisfies<&Static>,
-            Option<&Visible>,
-        )>,
+        world: SubWorld<ObjectQuery>,
         mut cmd: Write<CommandBuffer>,
         mut tree: DefaultResourceMut<Self>,
     ) -> hecs_schedule::error::Result<()> {
@@ -274,18 +165,9 @@ impl<N: CollisionTreeNode> CollisionTree<N> {
     }
 
     pub fn update_system(
-        world: SubWorld<(
-            TransformQuery,
-            &Collider,
-            &mut TreeMarker<N>,
-            Satisfies<&Trigger>,
-            Satisfies<&Static>,
-        )>,
+        world: SubWorld<(&Object, ObjectQuery)>,
         mut tree: DefaultResourceMut<Self>,
-    ) -> hecs_schedule::error::Result<()>
-    where
-        N: CollisionTreeNode,
-    {
+    ) -> hecs_schedule::error::Result<()> {
         tree.update(world)
     }
 
@@ -297,7 +179,7 @@ impl<N: CollisionTreeNode> CollisionTree<N> {
     where
         N: CollisionTreeNode,
     {
-        tree.check_collisions::<[&CollisionObject; 128]>(world, &mut events)?;
+        tree.check_collisions::<[&ObjectData; 128]>(world, &mut events)?;
 
         Ok(())
     }
@@ -310,15 +192,35 @@ impl<N: CollisionTreeNode + DrawGizmos> CollisionTree<N> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct CollisionObject {
-    pub entity: Entity,
-    pub bound: Sphere,
-    pub origin: Position,
+#[record]
+pub struct ObjectData {
+    pub bounds: BoundingBox,
     pub transform: TransformMatrix,
-    pub max_scale: f32,
     pub is_trigger: bool,
     pub is_visible: bool,
     pub is_static: bool,
+}
+
+#[derive(Query)]
+pub struct ObjectQuery<'a> {
+    transform: TransformQuery<'a>,
+    collider: &'a Collider,
+    is_trigger: Option<&'a Trigger>,
+    is_static: Option<&'a Static>,
+    is_visible: Option<&'a Visible>,
+}
+
+impl<'a> Into<ObjectData> for ObjectQuery<'a> {
+    fn into(self) -> ObjectData {
+        let transform = self.transform.into_matrix();
+        ObjectData::new(
+            self.collider.bounding_box(transform),
+            transform,
+            self.is_trigger.is_some(),
+            self.is_visible.map(|val| val.is_visible()).unwrap_or(true),
+            self.is_static.is_some(),
+        )
+    }
 }
 
 /// Entity with additional contextual data
@@ -329,53 +231,11 @@ pub struct EntityPayload {
     pub is_static: bool,
 }
 
-impl From<&CollisionObject> for EntityPayload {
-    fn from(val: &CollisionObject) -> Self {
-        Self {
-            entity: val.entity,
-            is_trigger: val.is_trigger,
-            is_static: val.is_static,
-        }
-    }
-}
-
 impl std::ops::Deref for EntityPayload {
     type Target = Entity;
 
     fn deref(&self) -> &Self::Target {
         &self.entity
-    }
-}
-
-impl CollisionObject {
-    pub fn new(
-        entity: Entity,
-        bound: Sphere,
-        transform: TransformMatrix,
-        is_trigger: bool,
-        is_visible: bool,
-        is_static: bool,
-    ) -> Self {
-        Self {
-            entity,
-            bound,
-            transform,
-            origin: transform.extract_translation().into(),
-            max_scale: transform[0][0].max(transform[1][1]).max(transform[2][2]),
-            is_trigger,
-            is_visible,
-            is_static,
-        }
-    }
-
-    /// Get a reference to the object's entity.
-    pub fn entity(&self) -> Entity {
-        self.entity
-    }
-
-    //// Returns true if the bounding objects of the objects overlap
-    fn overlaps(&self, other: &CollisionObject) -> bool {
-        self.bound.overlaps(self.origin, &other.bound, other.origin)
     }
 }
 

@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use crate::{components::Gravity, connections, systems};
 use hecs::World;
 use hecs_schedule::{Schedule, SubWorld};
-use ivy_base::{DeltaTime, DrawGizmos, Events, Layer};
+use ivy_base::{Color, DeltaTime, DrawGizmos, Events, Layer};
 use ivy_collision::{CollisionTree, CollisionTreeNode};
 use ivy_resources::{Resources, Storage};
 
@@ -11,16 +11,22 @@ use ivy_resources::{Resources, Storage};
 pub struct PhysicsLayerInfo<N> {
     pub gravity: Gravity,
     pub tree_root: N,
+    pub debug: bool,
 }
 
 impl<N> PhysicsLayerInfo<N> {
-    pub fn new(gravity: Gravity, tree_root: N) -> Self {
-        Self { gravity, tree_root }
+    pub fn new(gravity: Gravity, tree_root: N, debug: bool) -> Self {
+        Self {
+            gravity,
+            tree_root,
+            debug,
+        }
     }
 }
 
 pub struct PhysicsLayer<N> {
     gravity: Gravity,
+    debug: bool,
     schedule: Schedule,
     marker: PhantomData<N>,
 }
@@ -55,10 +61,9 @@ impl<N: CollisionTreeNode + Storage> PhysicsLayer<N> {
             .add_system(systems::apply_effectors)
             .build();
 
-        eprintln!("Physics layer schedule: {}", schedule.batch_info());
-
         Ok(Self {
             gravity: info.gravity,
+            debug: info.debug,
             schedule,
             marker: PhantomData,
         })
@@ -73,12 +78,16 @@ impl<N: CollisionTreeNode + Storage + DrawGizmos> Layer for PhysicsLayer<N> {
         events: &mut Events,
         frame_time: std::time::Duration,
     ) -> anyhow::Result<()> {
-        // let _scope = TimedScope::new(|elapsed| eprintln!("Physics layer took {:.3?}", elapsed));
         let mut dt: DeltaTime = frame_time.as_secs_f32().into();
+
+        if self.debug {
+            let root = resources.get_default::<CollisionTree<N>>()?;
+            let gizmos = resources.get_default_mut()?;
+            root.draw_gizmos(gizmos, Color::white());
+        }
 
         self.schedule
             .execute((world, resources, events, &mut dt, &mut self.gravity))?;
         Ok(())
     }
-    // add code here
 }

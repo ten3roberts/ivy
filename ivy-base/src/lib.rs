@@ -39,6 +39,7 @@ pub mod gizmos;
 mod layer;
 mod logger;
 pub mod macros;
+pub mod math;
 mod time;
 mod updatable;
 

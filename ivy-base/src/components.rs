@@ -98,6 +98,10 @@ impl Position {
     pub const fn new(x: f32, y: f32, z: f32) -> Self {
         Self(Vec3::new(x, y, z))
     }
+
+    pub const fn zero() -> Self {
+        Self(Vec3::new(0.0, 0.0, 0.0))
+    }
 }
 
 impl Rotation {

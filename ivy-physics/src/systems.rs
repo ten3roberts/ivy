@@ -12,7 +12,7 @@ use ivy_base::{DeltaTime, Position, Rotation, Static};
 use ivy_collision::{util::TOLERANCE, Collision};
 use ultraviolet::{Bivec3, Rotor3, Vec3};
 
-use crate::components::{AngularVelocity, Velocity};
+use crate::components::AngularVelocity;
 
 pub fn integrate_velocity(world: SubWorld<(&mut Position, &Velocity)>, dt: Read<DeltaTime>) {
     world

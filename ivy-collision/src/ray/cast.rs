@@ -1,13 +1,14 @@
-use std::marker::PhantomData;
+use std::{marker::PhantomData, slice::Iter};
 
 use hecs::{Entity, Query};
 use hecs_schedule::GenericWorld;
-use ivy_base::{Position, Scale, Visible};
+use ivy_base::{Position, Visible};
 use ordered_float::OrderedFloat;
+use slotmap::SlotMap;
 use ultraviolet::Vec3;
 
 use super::Ray;
-use crate::{Collider, CollisionObject, CollisionTreeNode, Contact, Visitor};
+use crate::{Collider, CollisionTreeNode, Contact, Object, ObjectData, ObjectIndex, Visitor};
 
 /// Represents a collider ray intersection.
 /// Data about the ray is not saved.
@@ -69,11 +70,12 @@ impl<'o, 'r, 'w, W: GenericWorld, N: CollisionTreeNode, Q> Visitor<'o, N>
 {
     type Output = RayCastIterator<'r, 'w, 'o, W, Q>;
 
-    fn accept(&self, node: &'o N) -> Option<Self::Output> {
-        if !node
-            .bounds()
-            .check_aabb_intersect(node.origin(), Scale(Vec3::one()), self.ray)
-        {
+    fn accept(
+        &self,
+        node: &'o N,
+        data: &'o SlotMap<ObjectIndex, ObjectData>,
+    ) -> Option<Self::Output> {
+        if !node.bounds().check_ray(self.ray) {
             return None;
         }
 
@@ -81,6 +83,7 @@ impl<'o, 'r, 'w, W: GenericWorld, N: CollisionTreeNode, Q> Visitor<'o, N>
         Some(RayCastIterator {
             ray: self.ray,
             world: self.world,
+            data,
             objects,
             with: PhantomData,
         })
@@ -89,7 +92,8 @@ impl<'o, 'r, 'w, W: GenericWorld, N: CollisionTreeNode, Q> Visitor<'o, N>
 pub struct RayCastIterator<'a, 'w, 'o, W, Q> {
     ray: &'a Ray,
     world: &'w W,
-    objects: std::slice::Iter<'o, CollisionObject>,
+    objects: Iter<'o, Object>,
+    data: &'o SlotMap<ObjectIndex, ObjectData>,
     with: PhantomData<Q>,
 }
 
@@ -107,10 +111,9 @@ impl<'a, 'w, 'o, W: GenericWorld, Q: Query> Iterator for RayCastIterator<'a, 'w,
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             let object = self.objects.next()?;
-            if !object
-                .bound
-                .check_aa_intersect(object.origin.into(), self.ray)
-            {
+            let data = &self.data[object.index];
+
+            if !data.bounds.check_ray(self.ray) {
                 continue;
             }
 
@@ -124,7 +127,7 @@ impl<'a, 'w, 'o, W: GenericWorld, Q: Query> Iterator for RayCastIterator<'a, 'w,
                     continue;
                 }
 
-                if let Some(contact) = self.ray.intersects(&*q.collider, &object.transform) {
+                if let Some(contact) = self.ray.intersects(&*q.collider, &data.transform) {
                     return Some(RayIntersection::new(object.entity, contact));
                 }
             };

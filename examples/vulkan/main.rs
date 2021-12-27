@@ -2,9 +2,7 @@
 use std::{fmt::Display, sync::Arc, time::Duration};
 
 use anyhow::{anyhow, Context};
-use collision::{
-    util::project_plane, BinaryNode, Collider, CollisionObject, CollisionTree, Cube, Ray, Sphere,
-};
+use collision::{util::project_plane, BVHNode, Collider, CollisionTree, Cube, Ray, Sphere};
 use flume::Receiver;
 use glfw::{CursorMode, Key, MouseButton, WindowEvent};
 use graphics::{
@@ -27,7 +25,7 @@ use ivy_resources::Resources;
 use parking_lot::RwLock;
 use physics::{
     bundles::*,
-    components::{AngularMass, AngularVelocity, Mass, Velocity},
+    components::{AngularMass, AngularVelocity, Mass},
     connections::{
         draw_connections, Connection, ConnectionBundle, ConnectionKind, PositionOffset,
         RotationOffset,
@@ -47,7 +45,7 @@ use log::*;
 
 const FRAMES_IN_FLIGHT: usize = 2;
 
-type CollisionNode = BinaryNode<[CollisionObject; 8]>;
+type CollisionNode = BVHNode;
 
 struct WithTime<T> {
     func: Box<dyn Fn(Entity, &mut T, f32, f32) + Send + Sync>,
@@ -179,12 +177,12 @@ fn main() -> anyhow::Result<()> {
                         r,
                         e,
                         PhysicsLayerInfo {
-                            tree_root: CollisionNode::new(
-                                0,
-                                Position::default(),
-                                Cube::uniform(100.0),
+                            tree_root: BVHNode::new(
+                                collision::BoundingBox::new(Vec3::one() * 200.0, Position::zero()),
+                                Default::default(),
                             ),
                             gravity: Gravity::default(),
+                            debug: true,
                         },
                     )?,
                     LogicLayer::new(w, r, e)?,
@@ -491,8 +489,8 @@ fn setup_objects(
             material,
             color: Color::red(),
             ..Default::default()
-        });
-    // .add(Static);
+        })
+        .add(Static);
 
     let sphere = world.spawn(builder.build());
 
@@ -562,11 +560,12 @@ fn setup_objects(
     let mut rng = StdRng::seed_from_u64(42);
     // world.spawn(builder.build());
 
-    const COUNT: usize = 64;
+    const COUNT: usize = 256;
 
     (0..COUNT).for_each(|_| {
-        let pos = Position::rand_uniform(&mut rng) * 10.0;
-        let vel = Velocity::rand_uniform(&mut rng);
+        let pos = Position::rand_uniform(&mut rng) * 5.0;
+        // let vel = Velocity::rand_uniform(&mut rng);
+        let vel = Velocity::default();
         builder
             .add_bundle(ObjectBundle {
                 mesh: cube_mesh,
@@ -579,7 +578,7 @@ fn setup_objects(
                 collider: Collider::new(Cube::uniform(1.0)),
                 vel,
                 mass: Mass(20.0),
-                ang_mass: AngularMass(2.0),
+                ang_mass: AngularMass(5.0),
                 ..Default::default()
             })
             .add_bundle(ConnectionBundle::new(
@@ -744,7 +743,7 @@ impl Layer for LogicLayer {
 
         *camera_rot = Rotor3::from_euler_angles(
             self.camera_euler.z,
-            self.camera_euler.y,
+            -self.camera_euler.y,
             -self.camera_euler.x,
         )
         .into();

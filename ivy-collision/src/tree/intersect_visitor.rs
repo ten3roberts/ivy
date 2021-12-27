@@ -2,20 +2,20 @@ use std::{marker::PhantomData, slice::Iter};
 
 use hecs::Query;
 use hecs_schedule::GenericWorld;
-use ivy_base::{Position, TransformMatrix};
+use ivy_base::TransformMatrix;
+use slotmap::SlotMap;
 
 use crate::{
-    intersect, query::TreeQuery, Collider, CollisionObject, CollisionPrimitive, CollisionTree,
-    CollisionTreeNode, Contact, Sphere, Visitor,
+    intersect, query::TreeQuery, BoundingBox, Collider, CollisionPrimitive, CollisionTree,
+    CollisionTreeNode, Contact, Object, ObjectData, ObjectIndex, Visitor,
 };
 
 /// Performs intersection testing for a provided temporary collider.
 ///
 /// Use with [crate::CollisionTree::query].
 pub struct IntersectVisitor<'a, 'w, W, C, Q = ()> {
-    bound: Sphere,
+    bounds: BoundingBox,
     collider: &'a C,
-    origin: Position,
     transform: TransformMatrix,
     world: &'w W,
     with: PhantomData<Q>,
@@ -29,9 +29,8 @@ where
 {
     pub fn new(world: &'w W, collider: &'a C, transform: TransformMatrix) -> Self {
         Self {
-            bound: Sphere::new(collider.max_radius()),
+            bounds: collider.bounding_box(transform),
             collider,
-            origin: transform.extract_translation(),
             transform,
             world,
             with: PhantomData,
@@ -60,14 +59,18 @@ where
 {
     type Output = IntersectIterator<'o, 'a, 'w, W, C, Q>;
 
-    fn accept(&self, node: &'o N) -> Option<Self::Output> {
-        if node.contains_separate(&self.bound, self.origin) {
+    fn accept(
+        &self,
+        node: &'o N,
+        data: &'o SlotMap<ObjectIndex, ObjectData>,
+    ) -> Option<Self::Output> {
+        if node.bounds().contains(self.bounds) {
             Some(IntersectIterator {
                 collider: self.collider,
                 transform: self.transform,
+                data,
                 objects: node.objects().iter(),
-                bound: self.bound,
-                origin: self.origin,
+                bounds: self.bounds,
                 world: self.world,
                 with: PhantomData,
             })
@@ -79,10 +82,10 @@ where
 
 /// Iterator for object intersection
 pub struct IntersectIterator<'o, 'a, 'w, W, C, Q> {
-    bound: Sphere,
+    bounds: BoundingBox,
     collider: &'a C,
-    objects: Iter<'o, CollisionObject>,
-    origin: Position,
+    objects: Iter<'o, Object>,
+    data: &'o SlotMap<ObjectIndex, ObjectData>,
     transform: TransformMatrix,
     world: &'w W,
     with: PhantomData<Q>,
@@ -99,11 +102,9 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             let object = self.objects.next()?;
+            let data = &self.data[object.index];
 
-            if !object
-                .bound
-                .overlaps(object.origin, &self.bound, self.origin)
-            {
+            if !data.bounds.overlaps(self.bounds) {
                 continue;
             }
 
@@ -113,12 +114,9 @@ where
                 .expect("Failed to query entity");
 
             if let Ok((collider, _)) = query.get() {
-                if let Some(intersection) = intersect(
-                    &object.transform,
-                    &self.transform,
-                    &*collider,
-                    self.collider,
-                ) {
+                if let Some(intersection) =
+                    intersect(&data.transform, &self.transform, &*collider, self.collider)
+                {
                     return Some(intersection);
                 }
             };

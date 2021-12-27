@@ -7,7 +7,7 @@ mod systems;
 pub use systems::*;
 use ultraviolet::{Bivec3, Rotor3, Vec3};
 
-use crate::{bundles::*, components::*, util::point_vel, Effector};
+use crate::{bundles::*, components::Velocity, util::point_vel, Effector};
 
 derive_for!(
     (

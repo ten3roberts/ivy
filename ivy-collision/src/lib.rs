@@ -1,3 +1,4 @@
+mod aabb;
 mod collider;
 mod collision;
 mod epa;
@@ -9,6 +10,7 @@ mod traits;
 mod tree;
 pub mod util;
 
+pub use aabb::*;
 pub use collider::*;
 pub use collision::*;
 pub use epa::*;
