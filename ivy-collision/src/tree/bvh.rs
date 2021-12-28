@@ -12,7 +12,7 @@ use crate::{
 
 const MARGIN: f32 = 1.2;
 
-type Objects = SmallVec<[Object; 8]>;
+type Objects = SmallVec<[Object; 1]>;
 
 #[derive(Debug, Clone)]
 pub struct BVHNode {
@@ -112,8 +112,9 @@ impl BVHNode {
         // Sort by axis and select the median
         node.sort_by_axis(data);
         let median = node.objects.len() / 2;
-        let left = node.objects[0..median].into();
-        let right = node.objects[median..].into();
+        let left: Objects = node.objects[0..median].into();
+        let right: Objects = node.objects[median..].into();
+        assert_eq!(left.len() + right.len(), node.objects.len());
         let new_axis = node.axis.rotate();
         let depth = node.depth + 1;
 
@@ -126,11 +127,12 @@ impl BVHNode {
     }
 
     pub fn calculate_bounds_incremental(&self, object: &ObjectData) -> BoundingBox {
-        self.bounds.merge(
-            object
-                .bounds
-                .rel_margin(if object.is_static { 1.0 } else { MARGIN }),
-        )
+        self.bounds
+            .merge(
+                object
+                    .extended_bounds
+                    .rel_margin(if object.is_static { 1.0 } else { MARGIN }),
+            )
     }
 
     /// Updates the bounds of the object
@@ -142,7 +144,7 @@ impl BVHNode {
         let mut r = Vec3::new(f32::MIN, f32::MIN, f32::MIN);
 
         objects.iter().for_each(|val| {
-            let bounds = data[val.index].bounds;
+            let bounds = data[val.index].extended_bounds;
             let (l_obj, r_obj) = bounds.into_corners();
             l = l.min_by_component(l_obj);
             r = r.max_by_component(r_obj);
@@ -168,7 +170,6 @@ impl BVHNode {
 
         // Both leaves are dormant
         if a_node.is_static && b_node.is_static {
-            eprintln!("Both are static {:?} {:?}", a, b);
             return;
         }
 
@@ -221,8 +222,9 @@ impl BVHNode {
         let node = &mut nodes[index];
         if let Some([left, right]) = node.children {
             assert!(node.objects.is_empty());
-            let is_static = Self::update_impl(left, nodes, data, to_refit)
-                && Self::update_impl(right, nodes, data, to_refit);
+            let l = Self::update_impl(left, nodes, data, to_refit);
+            let r = Self::update_impl(right, nodes, data, to_refit);
+            let is_static = l && r;
 
             nodes[index].is_static = false;
             is_static
@@ -273,7 +275,7 @@ impl CollisionTreeNode for BVHNode {
         // Make bound fit object
         node.bounds = node.calculate_bounds_incremental(&obj);
 
-        node.is_static = false; //node.is_static && obj.is_static;
+        node.is_static = node.is_static && obj.is_static;
 
         // Internal node
         if let Some([left, right]) = node.children {
@@ -303,8 +305,8 @@ impl CollisionTreeNode for BVHNode {
         }
     }
 
-    fn remove(&mut self, e: hecs::Entity) -> Option<Object> {
-        if let Some(idx) = self.objects.iter().position(|val| val.entity == e) {
+    fn remove(&mut self, object: Object) -> Option<Object> {
+        if let Some(idx) = self.objects.iter().position(|val| *val == object) {
             Some(self.objects.swap_remove(idx))
         } else {
             None
@@ -382,11 +384,15 @@ impl DrawGizmos for BVHNode {
         mut gizmos: T,
         _: Color,
     ) {
-        let color = Color::hsl(
-            self.depth as f32 * 20.0,
-            1.0,
-            if self.is_leaf() { 0.5 } else { 0.1 },
-        );
+        if !self.is_leaf() {
+            return;
+        }
+
+        let color = if self.is_static {
+            Color::blue()
+        } else {
+            Color::yellow()
+        };
 
         gizmos.draw(ivy_base::Gizmo::Cube {
             origin: self.bounds.origin,

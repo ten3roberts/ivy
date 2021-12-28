@@ -1,7 +1,7 @@
 //! This module contains bundles and queries suitable for physics.
-use crate::components::{AngularMass, AngularVelocity, Mass, Resitution, Velocity};
 use crate::Effector;
 use hecs::{Bundle, Query};
+use ivy_base::{AngularMass, AngularVelocity, Mass, Resitution, Velocity};
 use ivy_collision::Collider;
 
 #[derive(Query, Clone, Copy, Debug, PartialEq)]
@@ -40,6 +40,11 @@ impl RbBundle {
             resitution,
             effector: Default::default(),
         }
+    }
+
+    /// Get a reference to the rb bundle's vel.
+    pub fn vel(&self) -> Velocity {
+        self.vel
     }
 }
 

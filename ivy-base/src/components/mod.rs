@@ -7,6 +7,8 @@ use ivy_random::Random;
 #[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
 use ultraviolet::{Bivec3, Mat4, Rotor3, Vec2, Vec3};
+mod physics;
+pub use physics::*;
 
 derive_for!(
 

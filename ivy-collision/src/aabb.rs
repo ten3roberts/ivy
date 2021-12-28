@@ -1,4 +1,4 @@
-use ivy_base::Position;
+use ivy_base::{DrawGizmos, Position};
 use ultraviolet::Vec3;
 
 use crate::Ray;
@@ -136,6 +136,28 @@ impl BoundingBox {
             origin: self.origin,
             extents: self.extents * margin,
         }
+    }
+
+    pub(crate) fn expand(&self, amount: Vec3) -> BoundingBox {
+        let extents = self.extents + amount.abs();
+        let origin = self.origin + Position(amount) * 0.5;
+
+        BoundingBox { origin, extents }
+    }
+}
+
+impl DrawGizmos for BoundingBox {
+    fn draw_gizmos<T: std::ops::DerefMut<Target = ivy_base::Gizmos>>(
+        &self,
+        mut gizmos: T,
+        color: ivy_base::Color,
+    ) {
+        gizmos.draw(ivy_base::Gizmo::Cube {
+            origin: self.origin,
+            color,
+            half_extents: self.extents,
+            radius: 0.01,
+        })
     }
 }
 

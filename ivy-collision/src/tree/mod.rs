@@ -1,7 +1,9 @@
 use std::any;
 
+use flume::{Receiver, Sender};
 use hecs::{Entity, Query};
 use hecs_schedule::{CommandBuffer, GenericWorld, SubWorld, Write};
+use ivy_base::components::Velocity;
 use ivy_base::{
     Color, DrawGizmos, Events, Gizmos, Static, TransformMatrix, TransformQuery, Trigger, Visible,
 };
@@ -31,6 +33,19 @@ use self::query::TreeQuery;
 
 pub type Nodes<N> = SlotMap<NodeIndex, N>;
 
+pub struct OnDrop {
+    object: Object,
+    tx: Sender<Object>,
+}
+
+impl Drop for OnDrop {
+    fn drop(&mut self) {
+        if !self.tx.is_disconnected() {
+            self.tx.send(self.object).unwrap()
+        }
+    }
+}
+
 new_key_type! {
     pub struct ObjectIndex;
 }
@@ -51,6 +66,8 @@ pub struct CollisionTree<N> {
     objects: SlotMap<ObjectIndex, ObjectData>,
     /// Objects that need to be reinserted into the tree
     popped: Vec<Object>,
+    tx: Sender<Object>,
+    rx: Receiver<Object>,
 }
 
 impl<N: CollisionTreeNode> CollisionTree<N> {
@@ -59,11 +76,15 @@ impl<N: CollisionTreeNode> CollisionTree<N> {
 
         let root = nodes.insert(root);
 
+        let (tx, rx) = flume::unbounded();
+
         Self {
             nodes,
             root,
             objects: SlotMap::with_key(),
             popped: Vec::new(),
+            tx,
+            rx,
         }
     }
 
@@ -93,8 +114,28 @@ impl<N: CollisionTreeNode> CollisionTree<N> {
     pub fn register(&mut self, world: SubWorld<ObjectQuery>, cmd: &mut CommandBuffer) {
         for (e, q) in world.native_query().without::<Object>().iter() {
             let obj: ObjectData = q.into();
+            let object = self.insert(e, obj);
 
-            cmd.insert_one(e, self.insert(e, obj))
+            let on_drop = OnDrop {
+                object,
+                tx: self.tx.clone(),
+            };
+
+            cmd.insert(e, (object, on_drop))
+        }
+    }
+
+    fn handle_removed(&mut self) {
+        for object in self.rx.try_iter() {
+            let index = N::locate(
+                self.root,
+                &mut self.nodes,
+                object,
+                &self.objects.remove(object.index).unwrap(),
+            )
+            .expect("Object in tree");
+
+            self.nodes[index].remove(object);
         }
     }
 
@@ -107,6 +148,8 @@ impl<N: CollisionTreeNode> CollisionTree<N> {
             let data: ObjectData = q.into();
             self.objects[obj.index] = data;
         }
+
+        self.handle_removed();
 
         // Update tree
         N::update(self.root, &mut self.nodes, &self.objects, &mut self.popped);
@@ -195,6 +238,7 @@ impl<N: CollisionTreeNode + DrawGizmos> CollisionTree<N> {
 #[record]
 pub struct ObjectData {
     pub bounds: BoundingBox,
+    pub extended_bounds: BoundingBox,
     pub transform: TransformMatrix,
     pub is_trigger: bool,
     pub is_visible: bool,
@@ -208,13 +252,16 @@ pub struct ObjectQuery<'a> {
     is_trigger: Option<&'a Trigger>,
     is_static: Option<&'a Static>,
     is_visible: Option<&'a Visible>,
+    velocity: &'a Velocity,
 }
 
 impl<'a> Into<ObjectData> for ObjectQuery<'a> {
     fn into(self) -> ObjectData {
         let transform = self.transform.into_matrix();
+        let bounds = self.collider.bounding_box(transform);
         ObjectData::new(
-            self.collider.bounding_box(transform),
+            bounds,
+            bounds.expand(**self.velocity * 0.1),
             transform,
             self.is_trigger.is_some(),
             self.is_visible.map(|val| val.is_visible()).unwrap_or(true),

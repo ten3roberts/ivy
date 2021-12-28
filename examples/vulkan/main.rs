@@ -25,7 +25,6 @@ use ivy_resources::Resources;
 use parking_lot::RwLock;
 use physics::{
     bundles::*,
-    components::{AngularMass, AngularVelocity, Mass},
     connections::{
         draw_connections, Connection, ConnectionBundle, ConnectionKind, PositionOffset,
         RotationOffset,
@@ -182,7 +181,7 @@ fn main() -> anyhow::Result<()> {
                                 Default::default(),
                             ),
                             gravity: Gravity::default(),
-                            debug: true,
+                            debug: false,
                         },
                     )?,
                     LogicLayer::new(w, r, e)?,
@@ -457,16 +456,6 @@ fn setup_objects(
 
     let mut builder = EntityBuilder::new();
 
-    // resources
-    //     .get(cube_document)?
-    //     .build_node_by_name("Metal", &mut builder)?
-    //     .add_bundle(TransformBundle {
-    //         pos: Position::new(0.0, 3.0, 0.0),
-    //         rot: Rotation::default(),
-    //         scale: Scale::uniform(0.25),
-    //     })
-    //     .add(assets.geometry_pass);
-
     world.spawn(builder.build());
 
     world.spawn((
@@ -560,7 +549,7 @@ fn setup_objects(
     let mut rng = StdRng::seed_from_u64(42);
     // world.spawn(builder.build());
 
-    const COUNT: usize = 64;
+    const COUNT: usize = 256;
 
     (0..COUNT).for_each(|_| {
         let pos = Position::rand_uniform(&mut rng) * 5.0;

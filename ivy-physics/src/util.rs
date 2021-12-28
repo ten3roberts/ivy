@@ -1,7 +1,6 @@
 //! This module contains physics utiliy functions
 
-use crate::components::AngularVelocity;
-use ivy_base::Position;
+use ivy_base::{components::AngularVelocity, Position};
 use ultraviolet::Vec3;
 
 /// Calculates the perpendicular velocity of a point rotating around origin.

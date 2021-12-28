@@ -1,4 +1,4 @@
-use hecs::{Column, Entity};
+use hecs::Column;
 use ivy_base::Events;
 use slotmap::SlotMap;
 
@@ -17,10 +17,34 @@ pub trait CollisionTreeNode: 'static + Sized + Send + Sync {
         data: &SlotMap<ObjectIndex, ObjectData>,
     );
     /// Removes an object entity from the node
-    fn remove(&mut self, entity: Entity) -> Option<Object>;
+    fn remove(&mut self, object: Object) -> Option<Object>;
 
     /// Returns the node bounds
     fn bounds(&self) -> BoundingBox;
+
+    fn locate(
+        index: NodeIndex,
+        nodes: &Nodes<Self>,
+        object: Object,
+        object_data: &ObjectData,
+    ) -> Option<NodeIndex> {
+        let node = &nodes[index];
+        if node.bounds().contains(object_data.bounds) {
+            let children = node.children();
+            if children.is_empty() {
+                node.objects()
+                    .iter()
+                    .find(|val| **val == object)
+                    .map(|_| index)
+            } else {
+                children
+                    .iter()
+                    .find_map(|val| Self::locate(*val, nodes, object, object_data))
+            }
+        } else {
+            None
+        }
+    }
 
     /// Returns the node's children. If the node is a leaf node, an empty slice
     /// is returned

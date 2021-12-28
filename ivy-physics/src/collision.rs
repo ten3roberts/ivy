@@ -1,9 +1,7 @@
-use ivy_base::math::Inverse;
-use ivy_base::Position;
+use ivy_base::{components::Resitution, math::Inverse, Position};
 use ivy_collision::Contact;
 use ultraviolet::Vec3;
 
-use crate::components::Resitution;
 use crate::{bundles::*, util::point_vel};
 
 /// Generates an impulse for solving a collision.

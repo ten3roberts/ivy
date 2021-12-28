@@ -1,6 +1,5 @@
 pub mod bundles;
 pub mod collision;
-pub mod components;
 pub mod connections;
 mod effector;
 mod error;

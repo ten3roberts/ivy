@@ -43,7 +43,7 @@ impl NodeIndex {
     ) {
         nodes[self].draw_gizmos(gizmos.deref_mut(), color);
 
-        for val in nodes[self].children().iter() {
+        for val in nodes[self].children() {
             val.draw_gizmos_recursive(nodes, gizmos, color)
         }
     }

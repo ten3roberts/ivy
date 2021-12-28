@@ -17,6 +17,7 @@ ivy-base = { path = "../ivy-base", version = "0.9" }
 ivy-resources = { path = "../ivy-resources", version = "0.9" }
 ordered-float = "2.8.0"
 palette = "0.6.0"
+rayon = "1.5.1"
 records = "0.1.1"
 slotmap = "1.0.6"
 smallvec = "1.7.0"

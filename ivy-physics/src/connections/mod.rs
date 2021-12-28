@@ -1,13 +1,13 @@
 use derive_for::*;
 use derive_more::*;
 use hecs::Bundle;
-use ivy_base::{Position, TransformBundle, TransformQueryMut};
+use ivy_base::{Position, TransformBundle, TransformQueryMut, Velocity};
 
 mod systems;
 pub use systems::*;
 use ultraviolet::{Bivec3, Rotor3, Vec3};
 
-use crate::{bundles::*, components::Velocity, util::point_vel, Effector};
+use crate::{bundles::*, util::point_vel, Effector};
 
 derive_for!(
     (

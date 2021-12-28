@@ -1,9 +1,9 @@
 use std::marker::PhantomData;
 
-use crate::{components::Gravity, connections, systems};
+use crate::{connections, systems};
 use hecs::World;
 use hecs_schedule::{Schedule, SubWorld};
-use ivy_base::{Color, DeltaTime, DrawGizmos, Events, Layer};
+use ivy_base::{Color, DeltaTime, DrawGizmos, Events, Gravity, Layer};
 use ivy_collision::{CollisionTree, CollisionTreeNode};
 use ivy_resources::{Resources, Storage};
 

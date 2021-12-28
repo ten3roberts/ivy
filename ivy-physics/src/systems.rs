@@ -1,18 +1,18 @@
 use crate::{
     bundles::*,
     collision::{resolve_collision, resolve_static_collision},
-    components::*,
     connections::{Connection, ConnectionKind},
     Effector, Result,
 };
 use hecs::Entity;
 use hecs_hierarchy::{Hierarchy, HierarchyQuery};
 use hecs_schedule::{GenericWorld, Read, SubWorld};
-use ivy_base::{DeltaTime, Position, Rotation, Static};
+use ivy_base::{
+    AngularVelocity, DeltaTime, Gravity, GravityInfluence, Mass, Position, Resitution, Rotation,
+    Static, Velocity,
+};
 use ivy_collision::{util::TOLERANCE, Collision};
 use ultraviolet::{Bivec3, Rotor3, Vec3};
-
-use crate::components::AngularVelocity;
 
 pub fn integrate_velocity(world: SubWorld<(&mut Position, &Velocity)>, dt: Read<DeltaTime>) {
     world
