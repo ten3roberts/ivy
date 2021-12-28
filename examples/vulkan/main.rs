@@ -148,7 +148,6 @@ fn main() -> anyhow::Result<()> {
 
     // Go up three levels
     ivy_base::normalize_dir(3)?;
-    std::env::set_current_dir("./examples/vulkan")?;
 
     let glfw = Arc::new(RwLock::new(glfw::init(glfw::FAIL_ON_ERRORS)?));
 

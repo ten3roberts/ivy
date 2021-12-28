@@ -1,1 +1,0 @@
-examples/vulkan/res
