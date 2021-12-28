@@ -12,7 +12,7 @@ use crate::{
 
 const MARGIN: f32 = 1.2;
 
-type Objects = SmallVec<[Object; 1]>;
+type Objects = SmallVec<[Object; 4]>;
 
 #[derive(Debug, Clone)]
 pub struct BVHNode {

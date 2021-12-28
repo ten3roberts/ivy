@@ -549,10 +549,10 @@ fn setup_objects(
     let mut rng = StdRng::seed_from_u64(42);
     // world.spawn(builder.build());
 
-    const COUNT: usize = 256;
+    const COUNT: usize = 10000;
 
     (0..COUNT).for_each(|_| {
-        let pos = Position::rand_uniform(&mut rng) * 5.0;
+        let pos = Position::rand_uniform(&mut rng) * 40.0;
         let vel = Velocity::rand_uniform(&mut rng);
 
         builder
