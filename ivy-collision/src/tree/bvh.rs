@@ -12,7 +12,7 @@ use crate::{
 
 const MARGIN: f32 = 1.2;
 
-type Objects = SmallVec<[Object; 16]>;
+type Objects = SmallVec<[Object; 8]>;
 
 #[derive(Debug, Clone)]
 pub struct BVHNode {
@@ -21,6 +21,8 @@ pub struct BVHNode {
     axis: Axis,
     children: Option<[NodeIndex; 2]>,
     depth: u32,
+    /// all objects inside this subtree is static
+    is_static: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -64,6 +66,7 @@ impl BVHNode {
             axis,
             children: None,
             depth: 0,
+            is_static: true,
         }
     }
 
@@ -76,12 +79,15 @@ impl BVHNode {
     ) -> NodeIndex {
         let bounds = Self::calculate_bounds(&objects, data);
 
+        let is_static = objects.iter().all(|val| data[val.index].is_static);
+
         let node = Self {
             bounds,
             objects: objects.into(),
             axis,
             children: None,
             depth,
+            is_static,
         };
 
         let index = nodes.insert(node);
@@ -132,44 +138,17 @@ impl BVHNode {
         objects: &[Object],
         data: &SlotMap<ObjectIndex, ObjectData>,
     ) -> BoundingBox {
-        let lx = objects
-            .iter()
-            .map(|val| OrderedFloat(data[val.index].bounds.neg_x()))
-            .min()
-            .unwrap_or_default();
+        let mut l = Vec3::new(f32::MAX, f32::MAX, f32::MAX);
+        let mut r = Vec3::new(f32::MIN, f32::MIN, f32::MIN);
 
-        let ly = objects
-            .iter()
-            .map(|val| OrderedFloat(data[val.index].bounds.neg_y()))
-            .min()
-            .unwrap_or_default();
+        objects.iter().for_each(|val| {
+            let bounds = data[val.index].bounds;
+            let (l_obj, r_obj) = bounds.into_corners();
+            l = l.min_by_component(l_obj);
+            r = r.max_by_component(r_obj);
+        });
 
-        let lz = objects
-            .iter()
-            .map(|val| OrderedFloat(data[val.index].bounds.neg_z()))
-            .min()
-            .unwrap_or_default();
-
-        let rx = objects
-            .iter()
-            .map(|val| OrderedFloat(data[val.index].bounds.x()))
-            .max()
-            .unwrap_or_default();
-
-        let ry = objects
-            .iter()
-            .map(|val| OrderedFloat(data[val.index].bounds.y()))
-            .max()
-            .unwrap_or_default();
-
-        let rz = objects
-            .iter()
-            .map(|val| OrderedFloat(data[val.index].bounds.z()))
-            .max()
-            .unwrap_or_default();
-
-        BoundingBox::from_corners(Vec3::new(*lx, *ly, *lz), Vec3::new(*rx, *ry, *rz))
-            .rel_margin(MARGIN)
+        BoundingBox::from_corners(l, r).rel_margin(MARGIN)
     }
 
     fn sort_by_axis(&mut self, data: &SlotMap<ObjectIndex, ObjectData>) {
@@ -186,6 +165,12 @@ impl BVHNode {
     ) {
         let a_node = &nodes[a];
         let b_node = &nodes[b];
+
+        // Both leaves are dormant
+        if a_node.is_static && b_node.is_static {
+            eprintln!("Both are static {:?} {:?}", a, b);
+            return;
+        }
 
         if !a_node.bounds.overlaps(b_node.bounds) {
             return;
@@ -226,6 +211,49 @@ impl BVHNode {
             nodes.remove(r).unwrap();
         }
     }
+
+    fn update_impl(
+        index: NodeIndex,
+        nodes: &mut Nodes<Self>,
+        data: &SlotMap<ObjectIndex, ObjectData>,
+        to_refit: &mut Vec<Object>,
+    ) -> bool {
+        let node = &mut nodes[index];
+        if let Some([left, right]) = node.children {
+            assert!(node.objects.is_empty());
+            let is_static = Self::update_impl(left, nodes, data, to_refit)
+                && Self::update_impl(right, nodes, data, to_refit);
+
+            nodes[index].is_static = false;
+            is_static
+        } else {
+            let bounds = node.bounds;
+
+            let mut removed = 0;
+            let mut is_static = true;
+
+            node.objects.retain(|val| {
+                let obj = data[val.index];
+
+                is_static = is_static && obj.is_static;
+
+                if bounds.contains(obj.bounds) {
+                    true
+                } else {
+                    removed += 1;
+                    to_refit.push(*val);
+                    false
+                }
+            });
+
+            if removed > 0 {
+                node.bounds = Self::calculate_bounds(&node.objects, data);
+            }
+
+            node.is_static = is_static;
+            is_static
+        }
+    }
 }
 
 impl CollisionTreeNode for BVHNode {
@@ -244,6 +272,8 @@ impl CollisionTreeNode for BVHNode {
 
         // Make bound fit object
         node.bounds = node.calculate_bounds_incremental(&obj);
+
+        node.is_static = false; //node.is_static && obj.is_static;
 
         // Internal node
         if let Some([left, right]) = node.children {
@@ -298,32 +328,7 @@ impl CollisionTreeNode for BVHNode {
         data: &SlotMap<ObjectIndex, ObjectData>,
         to_refit: &mut Vec<Object>,
     ) {
-        let node = &mut nodes[index];
-
-        let bounds = node.bounds;
-
-        let mut removed = 0;
-
-        node.objects.retain(|val| {
-            let obj = data[val.index];
-
-            if bounds.contains(obj.bounds) {
-                true
-            } else {
-                removed += 1;
-                to_refit.push(*val);
-                false
-            }
-        });
-
-        if removed > 0 {
-            node.bounds = Self::calculate_bounds(&node.objects, data);
-        }
-
-        if let Some([left, right]) = node.children {
-            Self::update(left, nodes, data, to_refit);
-            Self::update(right, nodes, data, to_refit);
-        }
+        Self::update_impl(index, nodes, data, to_refit);
     }
 
     fn check_collisions(
@@ -354,7 +359,7 @@ impl CollisionTreeNode for BVHNode {
             Self::traverse(left, right, nodes, &mut on_overlap);
             Self::check_collisions(colliders, events, left, nodes, data);
             Self::check_collisions(colliders, events, right, nodes, data);
-        } else {
+        } else if !node.is_static {
             // Check collisions for objects in the same leaf
             for (i, a) in node.objects.iter().enumerate() {
                 let a_obj = data[a.index];

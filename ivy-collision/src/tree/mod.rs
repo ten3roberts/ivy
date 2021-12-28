@@ -103,7 +103,7 @@ impl<N: CollisionTreeNode> CollisionTree<N> {
         world: SubWorld<(&Object, ObjectQuery)>,
     ) -> Result<(), hecs_schedule::Error> {
         // Update object data
-        for (_, (obj, q)) in world.native_query().iter() {
+        for (_, (obj, q)) in world.native_query().without::<Static>().iter() {
             let data: ObjectData = q.into();
             self.objects[obj.index] = data;
         }

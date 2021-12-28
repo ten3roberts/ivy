@@ -338,6 +338,9 @@ impl Random for Size2D {
 
 #[derive(Default, Debug, Clone, Copy)]
 /// Marker type for objects that will not move through physics or other means.
+/// Objects are assumed to remain in place and not move. Collisions between two
+/// static objects will be ignored, useful for level objects which may overlap
+/// but not generate collisions
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct Static;
 
