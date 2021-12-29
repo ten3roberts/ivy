@@ -2,7 +2,7 @@ use std::io::Read;
 use std::path::Path;
 use std::{fs, io};
 
-use gltf::Error;
+use crate::{Error, Result};
 
 /// Represents the set of URI schemes the importer supports.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -47,7 +47,7 @@ impl<'a> Scheme<'a> {
         }
     }
 
-    pub fn read(base: &Path, uri: &str) -> gltf::Result<Vec<u8>> {
+    pub fn read(base: &Path, uri: &str) -> Result<Vec<u8>> {
         match Scheme::parse(uri) {
             // The path may be unused in the Scheme::Data case
             // Example: "uri" : "data:application/octet-stream;base64,wsVHPgA...."
@@ -59,7 +59,7 @@ impl<'a> Scheme<'a> {
     }
 }
 
-fn read_to_end<P>(path: P) -> gltf::Result<Vec<u8>>
+fn read_to_end<P>(path: P) -> Result<Vec<u8>>
 where
     P: AsRef<Path>,
 {

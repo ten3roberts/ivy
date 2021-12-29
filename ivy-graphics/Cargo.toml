@@ -8,14 +8,14 @@ description = "Provides high level graphics abstractions like Meshes, Materials,
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.51"
+anyhow = "1.0.52"
 anymap = "0.12.1"
-ash = "0.33.3"
+ash = "0.35.0"
 derive_more = "0.99.17"
 flume = "0.10.9"
 glfw = "0.43.0"
 gltf =  { version = "0.16.0", features = [ "KHR_lights_punctual" ] }
-hecs = "0.7.1"
+hecs = "0.7.3"
 ivy-base = { path = "../ivy-base", version = "0.9" }
 ivy-image = { path = "../ivy-image", version = "0.1" }
 ivy-resources = { path = "../ivy-resources", version = "0.9.0" }
@@ -25,13 +25,13 @@ rectangle-pack = "0.4.2"
 smallvec = "1.7.0"
 thiserror = "1.0.30"
 ultraviolet = "0.8.1"
-serde = { version = "1.0.131", features = [ "derive" ], optional = true }
+serde = { version = "1.0.132", features = [ "derive" ], optional = true }
 records = "0.1.1"
-base64 = "0.12.0"
+base64 = "0.13.0"
 slotmap = "1.0.6"
 ordered-float = "2.8.0"
 itertools = "0.10.3"
-hecs-schedule = "0.3.19"
+hecs-schedule = "0.3.21"
 
 [features]
 default = []

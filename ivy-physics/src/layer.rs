@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use crate::{connections, systems};
 use hecs::World;
-use hecs_schedule::{Schedule, SubWorld};
+use hecs_schedule::{Read, Schedule, SubWorld, System};
 use ivy_base::{Color, DeltaTime, DrawGizmos, Events, Gravity, Layer};
 use ivy_collision::{CollisionTree, CollisionTreeNode};
 use ivy_resources::{Resources, Storage};
@@ -46,6 +46,9 @@ impl<N: CollisionTreeNode + Storage> PhysicsLayer<N> {
             .default_entry::<CollisionTree<N>>()?
             .or_insert_with(|| CollisionTree::new(tree_root));
 
+        let resolve_collisions =
+            move |w: SubWorld<_>, e: Read<_>| systems::resolve_collisions(w, rx.try_iter(), e);
+
         let schedule = Schedule::builder()
             .add_system(systems::integrate_velocity)
             .add_system(systems::integrate_angular_velocity)
@@ -56,7 +59,7 @@ impl<N: CollisionTreeNode + Storage> PhysicsLayer<N> {
             .flush()
             .add_system(CollisionTree::<N>::check_collisions_system)
             .barrier() // Explicit channel dependency
-            .add_system(move |w: SubWorld<_>| systems::resolve_collisions(w, rx.try_iter()))
+            .add_system(resolve_collisions.named("Resolve Collisions"))
             .add_system(systems::gravity)
             .add_system(systems::apply_effectors)
             .build();

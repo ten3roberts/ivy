@@ -1,5 +1,5 @@
 use ivy_base::Extent;
-use std::path::PathBuf;
+use std::{io, path::PathBuf};
 use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -47,4 +47,13 @@ pub enum Error {
 
     #[error("Unable to locate root of armature")]
     MissingRoot,
+
+    #[error("Failed to decode base64")]
+    Base64(#[from] base64::DecodeError),
+
+    #[error("Io Error")]
+    Io(#[from] io::Error),
+
+    #[error("Gltf scheme is not supported")]
+    UnsupportedScheme,
 }

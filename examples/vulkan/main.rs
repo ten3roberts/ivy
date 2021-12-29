@@ -176,12 +176,12 @@ fn main() -> anyhow::Result<()> {
                         r,
                         e,
                         PhysicsLayerInfo {
-                            tree_root: BVHNode::new(
+                            tree_root: CollisionNode::new(
                                 collision::BoundingBox::new(Vec3::one() * 200.0, Position::zero()),
                                 Default::default(),
                             ),
                             gravity: Gravity::default(),
-                            debug: false,
+                            debug: true,
                         },
                     )?,
                     LogicLayer::new(w, r, e)?,
@@ -547,12 +547,11 @@ fn setup_objects(
 
     world.attach_new::<Connection, _>(light, builder.build())?;
     let mut rng = StdRng::seed_from_u64(42);
-    // world.spawn(builder.build());
 
-    const COUNT: usize = 10000;
+    const COUNT: usize = 256;
 
     (0..COUNT).for_each(|_| {
-        let pos = Position::rand_uniform(&mut rng) * 40.0;
+        let pos = Position::rand_uniform(&mut rng) * 10.0;
         let vel = Velocity::rand_uniform(&mut rng);
 
         builder

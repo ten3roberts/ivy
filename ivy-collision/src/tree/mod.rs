@@ -252,21 +252,26 @@ pub struct ObjectQuery<'a> {
     is_trigger: Option<&'a Trigger>,
     is_static: Option<&'a Static>,
     is_visible: Option<&'a Visible>,
-    velocity: &'a Velocity,
+    velocity: Option<&'a Velocity>,
 }
 
 impl<'a> Into<ObjectData> for ObjectQuery<'a> {
     fn into(self) -> ObjectData {
         let transform = self.transform.into_matrix();
         let bounds = self.collider.bounding_box(transform);
-        ObjectData::new(
+        let extended_bounds = if let Some(vel) = self.velocity {
+            bounds.expand(**vel * 0.1)
+        } else {
+            bounds
+        };
+        ObjectData {
             bounds,
-            bounds.expand(**self.velocity * 0.1),
+            extended_bounds,
             transform,
-            self.is_trigger.is_some(),
-            self.is_visible.map(|val| val.is_visible()).unwrap_or(true),
-            self.is_static.is_some(),
-        )
+            is_trigger: self.is_trigger.is_some(),
+            is_visible: self.is_visible.map(|val| val.is_visible()).unwrap_or(true),
+            is_static: self.is_static.is_some(),
+        }
     }
 }
 

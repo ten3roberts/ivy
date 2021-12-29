@@ -8,8 +8,8 @@ use hecs::Entity;
 use hecs_hierarchy::{Hierarchy, HierarchyQuery};
 use hecs_schedule::{GenericWorld, Read, SubWorld};
 use ivy_base::{
-    AngularVelocity, DeltaTime, Gravity, GravityInfluence, Mass, Position, Resitution, Rotation,
-    Static, Velocity,
+    AngularVelocity, DeltaTime, Events, Gravity, GravityInfluence, Mass, Position, Resitution,
+    Rotation, Static, Velocity,
 };
 use ivy_collision::{util::TOLERANCE, Collision};
 use ultraviolet::{Bivec3, Rotor3, Vec3};
@@ -64,12 +64,21 @@ pub fn wrap_around_system(world: SubWorld<&mut Position>) {
 
 /// Returns the root of the rigid system, along with its mass
 pub fn get_rigid_root(world: &impl GenericWorld, child: Entity) -> Result<(Entity, Mass)> {
-    let mut system_mass = *world.try_get::<Mass>(child)?;
+    let mut system_mass = match world.try_get::<Mass>(child) {
+        Ok(mass) => *mass,
+        Err(_) => {
+            panic!("No mass in leaf");
+        }
+    };
+
     let mut root = child;
 
     for val in world.ancestors::<Connection>(child) {
         root = val;
-        system_mass += *world.try_get::<Mass>(val)?;
+        system_mass += match world.try_get::<Mass>(val) {
+            Ok(mass) => *mass,
+            Err(_) => break,
+        };
 
         match *world.try_get::<ConnectionKind>(child)? {
             ConnectionKind::Rigid => {}
@@ -92,7 +101,7 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
         &ConnectionKind,
     )>,
     mut collisions: I,
-    // _events: Read<Events>, // Wait for events
+    _events: Read<Events>, // Wait for events
 ) -> Result<()> {
     collisions.try_for_each(|coll| -> Result<()> {
         // Ignore triggers
@@ -118,12 +127,15 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
                 -coll.contact.normal,
                 coll.contact.depth,
             );
+        } else if coll.a.is_static && coll.b.is_static {
+            return Ok(());
         }
 
         assert_ne!(coll.a, coll.b);
 
         // Trace up to the root of the rigid connection before solving
         // collisions
+        dbg!(&coll);
         let (a, a_mass) = get_rigid_root(&world, *coll.a)?;
         let (b, b_mass) = get_rigid_root(&world, *coll.b)?;
 

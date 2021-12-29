@@ -1,8 +1,8 @@
-use hecs::Column;
+use hecs::{Column, Component};
 use ivy_base::{Color, DrawGizmos, Events};
 use ordered_float::OrderedFloat;
 use slotmap::SlotMap;
-use smallvec::{smallvec, SmallVec};
+use smallvec::{smallvec, Array, SmallVec};
 use ultraviolet::Vec3;
 
 use crate::{
@@ -12,17 +12,28 @@ use crate::{
 
 const MARGIN: f32 = 1.2;
 
-type Objects = SmallVec<[Object; 4]>;
-
 #[derive(Debug, Clone)]
-pub struct BVHNode {
+pub struct BVHNode<O: Array<Item = Object> = [Object; 1]> {
     bounds: BoundingBox,
-    objects: Objects,
+    objects: SmallVec<O>,
     axis: Axis,
     children: Option<[NodeIndex; 2]>,
     depth: u32,
     /// all objects inside this subtree is static
     is_static: bool,
+}
+
+impl<O: Array<Item = Object>> Default for BVHNode<O> {
+    fn default() -> Self {
+        Self {
+            bounds: Default::default(),
+            objects: Default::default(),
+            axis: Default::default(),
+            children: Default::default(),
+            depth: Default::default(),
+            is_static: Default::default(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -58,11 +69,14 @@ impl Axis {
     }
 }
 
-impl BVHNode {
+impl<O> BVHNode<O>
+where
+    O: Array<Item = Object>,
+{
     pub fn new(bounds: BoundingBox, axis: Axis) -> Self {
         Self {
             bounds,
-            objects: Objects::new(),
+            objects: SmallVec::new(),
             axis,
             children: None,
             depth: 0,
@@ -72,14 +86,14 @@ impl BVHNode {
 
     fn from_objects(
         nodes: &mut Nodes<Self>,
-        objects: Objects,
+        objects: SmallVec<O>,
         data: &SlotMap<ObjectIndex, ObjectData>,
         axis: Axis,
         depth: u32,
     ) -> NodeIndex {
-        let bounds = Self::calculate_bounds(&objects, data);
-
         let is_static = objects.iter().all(|val| data[val.index].is_static);
+
+        let bounds = Self::calculate_bounds(&objects, data, is_static);
 
         let node = Self {
             bounds,
@@ -112,8 +126,8 @@ impl BVHNode {
         // Sort by axis and select the median
         node.sort_by_axis(data);
         let median = node.objects.len() / 2;
-        let left: Objects = node.objects[0..median].into();
-        let right: Objects = node.objects[median..].into();
+        let left: SmallVec<O> = node.objects[0..median].into();
+        let right: SmallVec<O> = node.objects[median..].into();
         assert_eq!(left.len() + right.len(), node.objects.len());
         let new_axis = node.axis.rotate();
         let depth = node.depth + 1;
@@ -139,6 +153,7 @@ impl BVHNode {
     pub fn calculate_bounds(
         objects: &[Object],
         data: &SlotMap<ObjectIndex, ObjectData>,
+        is_static: bool,
     ) -> BoundingBox {
         let mut l = Vec3::new(f32::MAX, f32::MAX, f32::MAX);
         let mut r = Vec3::new(f32::MIN, f32::MIN, f32::MIN);
@@ -150,7 +165,7 @@ impl BVHNode {
             r = r.max_by_component(r_obj);
         });
 
-        BoundingBox::from_corners(l, r).rel_margin(MARGIN)
+        BoundingBox::from_corners(l, r).margin(if is_static { 1.0 } else { MARGIN })
     }
 
     fn sort_by_axis(&mut self, data: &SlotMap<ObjectIndex, ObjectData>) {
@@ -200,7 +215,7 @@ impl BVHNode {
     }
 
     /// Collapses a whole tree and fills `objects` with the objects in the tree
-    fn collapse(index: NodeIndex, nodes: &mut Nodes<Self>, objects: &mut Objects) {
+    fn collapse(index: NodeIndex, nodes: &mut Nodes<Self>, objects: &mut SmallVec<O>) {
         let node = &mut nodes[index];
 
         objects.append(&mut node.objects);
@@ -220,6 +235,11 @@ impl BVHNode {
         to_refit: &mut Vec<Object>,
     ) -> bool {
         let node = &mut nodes[index];
+
+        if node.is_static {
+            return true;
+        }
+
         if let Some([left, right]) = node.children {
             assert!(node.objects.is_empty());
             let l = Self::update_impl(left, nodes, data, to_refit);
@@ -249,7 +269,7 @@ impl BVHNode {
             });
 
             if removed > 0 {
-                node.bounds = Self::calculate_bounds(&node.objects, data);
+                node.bounds = Self::calculate_bounds(&node.objects, data, is_static);
             }
 
             node.is_static = is_static;
@@ -258,7 +278,7 @@ impl BVHNode {
     }
 }
 
-impl CollisionTreeNode for BVHNode {
+impl<O: Array<Item = Object> + Component> CollisionTreeNode for BVHNode<O> {
     fn objects(&self) -> &[Object] {
         &self.objects
     }
@@ -293,7 +313,7 @@ impl CollisionTreeNode for BVHNode {
 
                 let node = &mut nodes[index];
 
-                node.bounds = Self::calculate_bounds(&objects, data);
+                node.bounds = Self::calculate_bounds(&objects, data, node.is_static);
                 node.objects = objects;
                 Self::try_split(index, nodes, data);
             }
@@ -378,7 +398,7 @@ impl CollisionTreeNode for BVHNode {
     }
 }
 
-impl DrawGizmos for BVHNode {
+impl<O: Array<Item = Object> + Component> DrawGizmos for BVHNode<O> {
     fn draw_gizmos<T: std::ops::DerefMut<Target = ivy_base::Gizmos>>(
         &self,
         mut gizmos: T,
@@ -427,7 +447,7 @@ fn check_collision(
             b: crate::EntityPayload {
                 entity: b.entity,
                 is_trigger: b_obj.is_trigger,
-                is_static: a_obj.is_static,
+                is_static: b_obj.is_static,
             },
             contact,
         };

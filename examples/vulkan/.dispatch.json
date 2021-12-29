@@ -1,0 +1,5 @@
+{
+  "build": "cargo build --examples",
+  "check": "cargo check --examples",
+  "run": "cargo run --example vulkan"
+}

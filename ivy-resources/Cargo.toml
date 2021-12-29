@@ -9,13 +9,13 @@ edition = "2018"
 [dependencies]
 atomic_refcell = "0.1.8"
 derive_more = "0.99.17"
-hecs = "0.7.1"
-hecs-schedule = "0.3.18"
+hecs = "0.7.3"
+hecs-schedule = "0.3.21"
 parking_lot = "0.11.2"
 slotmap = "1.0.6"
 smallvec = "1.7.0"
 thiserror = "1.0.30"
-serde = { version = "1.0.131", features = [ "derive" ], optional = true }
+serde = { version = "1.0.132", features = [ "derive" ], optional = true }
 
 [features]
 default = []

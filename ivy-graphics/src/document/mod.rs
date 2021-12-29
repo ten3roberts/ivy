@@ -102,8 +102,7 @@ impl Document {
         let Gltf { document, blob } =
             Gltf::open(path).map_err(|e| Error::GltfImport(e, Some(path.to_owned().into())))?;
 
-        let buffers = import_buffer_data(&document, blob, path)
-            .map_err(|e| Error::GltfImport(e, Some(path.to_owned().into())))?;
+        let buffers = import_buffer_data(&document, blob, path)?;
 
         let textures = import_image_data(&document, path, &buffers, resources)?;
 

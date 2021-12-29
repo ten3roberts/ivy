@@ -8,13 +8,13 @@ description = "Base crate for the Ivy game engine"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.51"
+anyhow = "1.0.52"
 crossbeam-channel = { version = "0.5.1", optional = true }
 derive-for = "1.2.2"
 derive_more = "0.99.17"
 downcast-rs = "1.2.0"
 flume = "0.10.9"
-hecs = "0.7.1"
+hecs = "0.7.3"
 ivy-resources = { path = "../ivy-resources", version = "0.9.0" }
 ivy-random = { path = "../ivy-random", version = "0.9.0" }
 log = { version = "0.4.14", features = ["std"] }
@@ -22,7 +22,7 @@ palette = "0.6.0"
 thiserror = "1.0.30"
 ultraviolet = "0.8.1"
 parking_lot = "0.11.2"
-serde = { version = "1.0.131", features = [ "derive" ], optional = true }
+serde = { version = "1.0.132", features = [ "derive" ], optional = true }
 
 [features]
 default = []

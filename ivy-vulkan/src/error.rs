@@ -16,8 +16,6 @@ pub enum Error {
     MemoryAllocation(#[from] AllocationError),
     #[error("GLFW is not capable of creating vulkan surfaces")]
     SurfaceSupport,
-    #[error("Failed to create a vulkan instance")]
-    InstanceCreation(#[from] ash::InstanceError),
     #[error("Missing required extensions: {0:?}")]
     MissingExtensions(Vec<CString>),
     #[error("Missing required instance layers: {0:?}")]
