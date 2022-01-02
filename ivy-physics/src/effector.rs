@@ -1,5 +1,5 @@
+use glam::Vec3;
 use ivy_base::{math::Inverse, AngularMass, AngularVelocity, Mass, Position, Rotation, Velocity};
-use ultraviolet::Vec3;
 
 /// Manages the forces applied to an entity.
 /// Stored in the entity and is a middle hand for manipulating velocity and
@@ -98,7 +98,7 @@ impl Effector {
     }
 
     pub fn net_translation(&self, rotation: &Rotation) -> Position {
-        Position(self.translate + rotation.into_matrix() * self.local_translate)
+        Position(self.translate + rotation.mul_vec3(self.local_translate))
     }
 }
 

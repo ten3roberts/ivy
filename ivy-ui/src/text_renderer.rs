@@ -1,4 +1,5 @@
 use anyhow::Context;
+use glam::{Mat4, Vec4};
 use hecs::{Query, World};
 use ivy_graphics::{Allocator, BaseRenderer, BatchMarker, BufferAllocation, Mesh, Renderer};
 use ivy_rendergraph::Node;
@@ -12,7 +13,6 @@ use ivy_vulkan::{
 };
 use ivy_vulkan::{device, Buffer};
 use std::{mem::size_of, sync::Arc};
-use ultraviolet::{Mat4, Vec4};
 
 use crate::Text;
 use crate::UIVertex;
@@ -370,7 +370,7 @@ struct ObjectDataQuery<'a> {
 impl<'a> Into<ObjectData> for ObjectDataQuery<'a> {
     fn into(self) -> ObjectData {
         ObjectData {
-            mvp: Mat4::from_translation(self.position.xyz()),
+            mvp: Mat4::from_translation(self.position.extend(0.0)),
             color: self.color.into(),
             offset: self.block.offset() as u32,
             len: self.text.len() as u32,

@@ -5,7 +5,7 @@ use hecs_schedule::GenericWorld;
 use ivy_base::{Position, Visible};
 use ordered_float::OrderedFloat;
 use slotmap::SlotMap;
-use ultraviolet::Vec3;
+use glam::Vec3;
 
 use super::Ray;
 use crate::{Collider, CollisionTreeNode, Contact, Object, ObjectData, ObjectIndex, Visitor};

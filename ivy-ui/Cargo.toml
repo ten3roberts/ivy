@@ -24,7 +24,7 @@ ivy-resources = { path = "../ivy-resources", version = "0.9" }
 ivy-vulkan = { path = "../ivy-vulkan", version = "0.9" }
 ivy-input = { path = "../ivy-input", version = "0.9" }
 thiserror = "1.0.30"
-ultraviolet = { version = "0.8.1", features = [ "int" ] }
+glam = "0.20"
 flume = "0.10.9"
 hecs-schedule = "0.3.21"
 serde = { version = "1.0.132", features = [ "derive" ], optional = true }
@@ -32,4 +32,4 @@ records = "0.1.1"
 
 [features]
 default = []
-serialize = [ "serde", "ultraviolet/serde" ]
+serialize = [ "serde", "glam/serde" ]

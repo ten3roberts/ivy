@@ -1,5 +1,5 @@
+use glam::Vec3;
 use ivy_base::TransformMatrix;
-use ultraviolet::Vec3;
 
 use crate::{util::support, BoundingBox, Contact, Ray};
 
@@ -19,15 +19,15 @@ pub trait CollisionPrimitive {
     where
         Self: Sized,
     {
-        let inv = transform.inversed();
+        let inv = transform.inverse();
 
-        let lx = support(&*transform, &inv, self, -Vec3::unit_x()).x;
-        let ly = support(&*transform, &inv, self, -Vec3::unit_y()).y;
-        let lz = support(&*transform, &inv, self, -Vec3::unit_z()).z;
+        let lx = support(&*transform, &inv, self, -Vec3::X).x;
+        let ly = support(&*transform, &inv, self, -Vec3::Y).y;
+        let lz = support(&*transform, &inv, self, -Vec3::Z).z;
 
-        let rx = support(&*transform, &inv, self, Vec3::unit_x()).x;
-        let ry = support(&*transform, &inv, self, Vec3::unit_y()).y;
-        let rz = support(&*transform, &inv, self, Vec3::unit_z()).z;
+        let rx = support(&*transform, &inv, self, Vec3::X).x;
+        let ry = support(&*transform, &inv, self, Vec3::Y).y;
+        let rz = support(&*transform, &inv, self, Vec3::Z).z;
 
         BoundingBox::from_corners(Vec3::new(lx, ly, lz), Vec3::new(rx, ry, rz))
     }

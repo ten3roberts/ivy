@@ -5,7 +5,7 @@
 
 // use hecs::Entity;
 // use ivy_base::{Color, DrawGizmos, Gizmo};
-// use ultraviolet::Vec3;
+// use glam::Vec3;
 
 // use super::*;
 // use crate::{util::max_axis, Cube};

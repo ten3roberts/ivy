@@ -1,5 +1,5 @@
 use super::Face;
-use ultraviolet::Vec3;
+use glam::Vec3;
 
 use crate::{
     util::MAX_ITERATIONS,
@@ -21,11 +21,11 @@ pub fn epa<F: Fn(Vec3) -> SupportPoint>(support_func: F, simplex: Simplex) -> Co
             Some(val) => val,
             None => {
                 // eprintln!("The two shapes are the same");
-                let p = support_func(Vec3::unit_x());
+                let p = support_func(Vec3::X);
                 return Contact {
                     points: ContactPoints::double(p.a, p.b),
-                    depth: p.support.mag(),
-                    normal: p.support.normalized(),
+                    depth: p.support.length(),
+                    normal: p.support.normalize(),
                 };
                 // let p = support(a_transform, a_transform_inv, a_coll, Vec3::unit_x());
                 // return Intersection {

@@ -2,13 +2,14 @@ use core::f32;
 
 use derive_for::derive_for;
 use derive_more::*;
+use glam::Vec3;
 use ivy_random::Random;
 #[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
-use ultraviolet::Vec3;
 
 derive_for!(
     (
+        Display,
         PartialEq,
         Add,
         Clone,
@@ -65,11 +66,11 @@ derive_for!(
 );
 
 impl Velocity {
-    pub const fn new(x: f32, y: f32, z: f32) -> Self {
+    pub fn new(x: f32, y: f32, z: f32) -> Self {
         Self(Vec3::new(x, y, z))
     }
 
-    pub const fn zero() -> Self {
+    pub fn zero() -> Self {
         Self(Vec3::new(0.0, 0.0, 0.0))
     }
 }

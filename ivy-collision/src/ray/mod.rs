@@ -1,9 +1,9 @@
 use std::ops::Deref;
 
+use glam::{Mat4, Vec3};
 use hecs::Query;
 use hecs_schedule::GenericWorld;
 use ivy_base::{DrawGizmos, Position, TransformMatrix, DEFAULT_RADIUS};
-use ultraviolet::{Mat4, Vec3};
 
 mod cast;
 pub use cast::*;
@@ -24,7 +24,7 @@ impl Ray {
     pub fn new(origin: Position, dir: Vec3) -> Self {
         Self {
             origin,
-            dir: dir.normalized(),
+            dir: dir.normalize(),
         }
     }
 
@@ -52,7 +52,7 @@ impl Ray {
     ) -> Option<Contact> {
         // Check if any point is behind ray
 
-        let transform_inv = transform.inversed();
+        let transform_inv = transform.inverse();
         let p = self.support(collider, transform, &transform_inv, -self.dir);
         if p.support.dot(self.dir) < 0.0 {
             return None;
@@ -60,16 +60,16 @@ impl Ray {
 
         // Get first support function in direction of separation
         // let dir = (a_pos - b_pos).normalized();
-        let dir = Vec3::unit_x();
+        let dir = Vec3::X;
 
         let a = self.support(collider, transform, &transform_inv, dir);
 
         let mut simplex = Simplex::Point([a]);
 
         while let Some(dir) = simplex.next_flat(self.dir) {
-            let dir = dir.normalized();
+            let dir = dir.normalize();
 
-            assert!((dir.mag() - 1.0 < 0.0001));
+            assert!((dir.length() - 1.0 < 0.0001));
             // Get the next simplex
             let p = self.support(collider, transform, &transform_inv, dir);
 

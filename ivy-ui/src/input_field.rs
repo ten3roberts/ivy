@@ -5,7 +5,7 @@ use hecs::{Component, Entity, EntityBuilder, World};
 use hecs_hierarchy::*;
 use hecs_schedule::{GenericWorld, Read, SubWorld};
 
-use ultraviolet::Vec2;
+use glam::Vec2;
 
 use crate::{
     constraints::{AbsoluteSize, RelativeSize},

@@ -1,6 +1,6 @@
-use crate::Result;
 use ash::vk::{DescriptorSet, ShaderStageFlags};
 use derive_more::{AsRef, Deref, From, Into};
+use glam::{Mat4, Vec2, Vec3, Vec4, Vec4Swizzles};
 use hecs::World;
 use ivy_base::Extent;
 use ivy_resources::{Handle, Resources};
@@ -9,10 +9,11 @@ use ivy_vulkan::{
     Buffer, Format, ImageUsage, SampleCountFlags, Texture, TextureInfo, VulkanContext,
 };
 use std::sync::Arc;
-use ultraviolet::{Mat4, Vec2, Vec3, Vec4};
 
 #[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
+
+use crate::Result;
 
 /// A camera holds a view and projection matrix.
 /// Use a system to update view matrix according to position and rotation.
@@ -36,12 +37,12 @@ impl Camera {
         let hw = width / 2.0;
         let hh = height / 2.0;
 
-        self.projection = ultraviolet::projection::orthographic_vk(-hw, hw, -hh, hh, near, far);
+        self.projection = orthographic_vk(-hw, hw, -hh, hh, near, far);
         self.update_viewproj();
     }
 
     pub fn set_perspective(&mut self, fov: f32, aspect: f32, near: f32, far: f32) {
-        self.projection = ultraviolet::projection::perspective_vk(fov, aspect, near, far);
+        self.projection = perspective_vk(fov, aspect, near, far);
         self.update_viewproj();
     }
 
@@ -92,10 +93,10 @@ impl Camera {
     /// direction eminating from the camera.
     pub fn to_world_ray(&self, pos: Vec2) -> Vec3 {
         let ray_clip = Vec4::new(pos.x, -pos.y, -1.0, 1.0);
-        let ray_eye = self.projection.inversed() * ray_clip;
-        (self.view.inversed() * Vec4::new(ray_eye.x, ray_eye.y, -1.0, 0.0))
+        let ray_eye = self.projection.inverse() * ray_clip;
+        (self.view.inverse() * Vec4::new(ray_eye.x, ray_eye.y, -1.0, 0.0))
             .xyz()
-            .normalized()
+            .normalize()
     }
 }
 
@@ -191,7 +192,7 @@ impl GpuCameraData {
     // Updates the camera gpu side data from cpu side data for the current frame.
     pub fn update(&mut self, camera: &Camera, current_frame: usize) -> Result<()> {
         let view = camera.view();
-        let position = view.inversed()[3].xyz().into_homogeneous_point();
+        let position = view.inverse().col(3).xyz();
 
         self.uniformbuffers[current_frame]
             .fill(
@@ -200,7 +201,7 @@ impl GpuCameraData {
                     viewproj: camera.viewproj(),
                     view,
                     projection: camera.projection(),
-                    position,
+                    position: Vec4::new(position.x, position.y, position.z, 1.0),
                 }],
             )
             .map_err(|e| e.into())
@@ -247,3 +248,38 @@ impl IntoSet for GpuCameraData {
 
 /// Marker for the main camera
 pub struct MainCamera;
+
+#[inline]
+pub fn perspective_vk(vertical_fov: f32, aspect_ratio: f32, z_near: f32, z_far: f32) -> Mat4 {
+    let t = (vertical_fov / 2.0).tan();
+    let sy = 1.0 / t;
+    let sx = sy / aspect_ratio;
+    let nmf = z_near - z_far;
+
+    Mat4::from_cols(
+        Vec4::new(sx, 0.0, 0.0, 0.0),
+        Vec4::new(0.0, -sy, 0.0, 0.0),
+        Vec4::new(0.0, 0.0, z_far / nmf, -1.0),
+        Vec4::new(0.0, 0.0, z_near * z_far / nmf, 0.0),
+    )
+}
+
+/// Orthographic projection matrix for use with Vulkan.
+///
+/// This matrix is meant to be used when the source coordinate space is right-handed and y-up
+/// (the standard computer graphics coordinate space)and the destination space is right-handed
+/// and y-down, with Z (depth) clip extending from 0.0 (close) to 1.0 (far).
+#[inline]
+pub fn orthographic_vk(left: f32, right: f32, bottom: f32, top: f32, near: f32, far: f32) -> Mat4 {
+    let rml = right - left;
+    let rpl = right + left;
+    let tmb = top - bottom;
+    let tpb = top + bottom;
+    let fmn = far - near;
+    Mat4::from_cols(
+        Vec4::new(2.0 / rml, 0.0, 0.0, 0.0),
+        Vec4::new(0.0, -2.0 / tmb, 0.0, 0.0),
+        Vec4::new(0.0, 0.0, -1.0 / fmn, 0.0),
+        Vec4::new(-(rpl / rml), -(tpb / tmb), -(near / fmn), 1.0),
+    )
+}

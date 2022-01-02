@@ -20,10 +20,10 @@ ivy-random = { path = "../ivy-random", version = "0.9.0" }
 log = { version = "0.4.14", features = ["std"] }
 palette = "0.6.0"
 thiserror = "1.0.30"
-ultraviolet = "0.8.1"
+glam = "0.20"
 parking_lot = "0.11.2"
 serde = { version = "1.0.132", features = [ "derive" ], optional = true }
 
 [features]
 default = []
-serialize = [ "serde", "ultraviolet/serde", "palette/serializing" ]
+serialize = [ "serde", "glam/serde", "palette/serializing" ]

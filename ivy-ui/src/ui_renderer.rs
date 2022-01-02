@@ -9,7 +9,7 @@ use ivy_vulkan::{
     descriptors::{DescriptorAllocator, DescriptorLayoutCache, DescriptorSet},
     Buffer, VulkanContext,
 };
-use ultraviolet::{Mat4, Vec4};
+use glam::{Mat4, Vec4};
 
 use crate::ImageRenderer;
 

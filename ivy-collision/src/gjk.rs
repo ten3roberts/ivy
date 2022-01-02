@@ -1,4 +1,4 @@
-use ultraviolet::{Mat4, Vec3};
+use glam::{Mat4, Vec3};
 
 use crate::{
     util::{minkowski_diff, MAX_ITERATIONS, TOLERANCE},
@@ -17,7 +17,7 @@ pub fn gjk<A: CollisionPrimitive, B: CollisionPrimitive>(
 ) -> (bool, Simplex) {
     // Get first support function in direction of separation
     // let dir = (a_pos - b_pos).normalized();
-    let dir = Vec3::unit_x();
+    let dir = Vec3::X;
     let a = minkowski_diff(
         a_transform,
         b_transform,
@@ -32,10 +32,10 @@ pub fn gjk<A: CollisionPrimitive, B: CollisionPrimitive>(
 
     let mut iterations = 0;
     while let Some(dir) = simplex.next_dir() {
-        let dir = dir.normalized();
+        let dir = dir.normalize();
 
         // Objects are inside of each other completely
-        if dir.mag_sq() - 1.0 > TOLERANCE {
+        if dir.length_squared() - 1.0 > TOLERANCE {
             return (false, simplex);
         }
 

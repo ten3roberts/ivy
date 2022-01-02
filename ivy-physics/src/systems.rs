@@ -4,6 +4,7 @@ use crate::{
     connections::{Connection, ConnectionKind},
     Effector, Result,
 };
+use glam::{Quat, Vec3};
 use hecs::Entity;
 use hecs_hierarchy::{Hierarchy, HierarchyQuery};
 use hecs_schedule::{GenericWorld, Read, SubWorld};
@@ -12,7 +13,6 @@ use ivy_base::{
     Rotation, Static, Velocity,
 };
 use ivy_collision::{util::TOLERANCE, Collision};
-use ultraviolet::{Bivec3, Rotor3, Vec3};
 
 pub fn integrate_velocity(world: SubWorld<(&mut Position, &Velocity)>, dt: Read<DeltaTime>) {
     world
@@ -22,7 +22,7 @@ pub fn integrate_velocity(world: SubWorld<(&mut Position, &Velocity)>, dt: Read<
 }
 
 pub fn gravity(world: SubWorld<(&GravityInfluence, &Mass, &mut Effector)>, gravity: Read<Gravity>) {
-    if gravity.mag_sq() < TOLERANCE {
+    if gravity.length_squared() < TOLERANCE {
         return;
     }
 
@@ -39,9 +39,9 @@ pub fn integrate_angular_velocity(
     dt: Read<DeltaTime>,
 ) {
     world.native_query().into_iter().for_each(|(_, (rot, w))| {
-        let mag = w.mag();
+        let mag = w.length();
         if mag > 0.0 {
-            let w = Rotor3::from_angle_plane(mag * **dt, Bivec3::from_normalized_axis(w.0 / mag));
+            let w = Quat::from_axis_angle(w.0 / mag, mag * **dt);
             *rot = Rotation(w * rot.0);
         }
     });

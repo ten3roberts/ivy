@@ -1,10 +1,10 @@
 use std::ops::Deref;
 
 use flume::Receiver;
+use glam::Vec2;
 use glfw::{Action, Key, MouseButton};
 use ivy_base::{Events, Extent, Position2D};
 use ivy_graphics::Window;
-use ultraviolet::Vec2;
 
 use crate::events::InputEvent;
 
@@ -47,7 +47,7 @@ impl Input {
             cursor_pos,
             window_extent: window_size,
             old_cursor_pos: cursor_pos,
-            scroll: Vec2::zero(),
+            scroll: Vec2::ZERO,
         }
     }
 
@@ -55,7 +55,7 @@ impl Input {
     /// this each "frame".
     pub fn handle_events(&mut self) {
         self.old_cursor_pos = self.cursor_pos;
-        self.scroll = Vec2::zero();
+        self.scroll = Vec2::ZERO;
 
         for e in self.rx.try_iter() {
             match e {

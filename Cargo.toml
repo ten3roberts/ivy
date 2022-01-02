@@ -49,7 +49,7 @@ slotmap = "1.0.6"
 hecs = "0.7.3"
 glfw = { version = "0.43.0", features = [ "vulkan" ] }
 hecs-hierarchy = "0.8.1"
-ultraviolet = "0.8.1"
+glam = "0.20"
 log = "0.4.14"
 
 

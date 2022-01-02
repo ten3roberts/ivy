@@ -1,5 +1,5 @@
+use glam::Vec3;
 use ivy_base::{DrawGizmos, Position};
-use ultraviolet::Vec3;
 
 use crate::Ray;
 
@@ -84,10 +84,10 @@ impl BoundingBox {
 
         let t1 = (-self.extents - *origin) * inv_dir;
         let t2 = (self.extents - *origin) * inv_dir;
-        let tmin = t1.min_by_component(t2);
-        let tmax = t1.max_by_component(t2);
+        let tmin = t1.min(t2);
+        let tmax = t1.max(t2);
 
-        tmin.component_max() <= tmax.component_min()
+        tmin.max_element() <= tmax.min_element()
     }
 
     pub fn overlaps(&self, other: Self) -> bool {
@@ -113,8 +113,8 @@ impl BoundingBox {
         let (l0, r0) = self.into_corners();
         let (l1, r1) = other.into_corners();
 
-        let l = l0.min_by_component(l1);
-        let r = r0.max_by_component(r1);
+        let l = l0.min(l1);
+        let r = r0.max(r1);
 
         Self::from_corners(l, r)
     }
@@ -163,8 +163,8 @@ impl DrawGizmos for BoundingBox {
 
 #[cfg(test)]
 mod tests {
+    use glam::Vec3;
     use ivy_base::Position;
-    use ultraviolet::Vec3;
 
     use crate::BoundingBox;
 

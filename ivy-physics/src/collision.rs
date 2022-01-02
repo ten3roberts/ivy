@@ -1,6 +1,6 @@
+use glam::Vec3;
 use ivy_base::{components::Resitution, math::Inverse, Position};
 use ivy_collision::Contact;
-use ultraviolet::Vec3;
 
 use crate::{bundles::*, util::point_vel};
 
@@ -26,11 +26,11 @@ pub fn resolve_collision(
 
     if contact_rel < 0.0 {
         // eprintln!("Separating");
-        return Vec3::zero();
+        return Vec3::ZERO;
     }
     let j = -(1.0 + resitution) * contact_rel * (a.mass.inv() + b.mass.inv()).inv()
-        + ra.cross(n).mag_sq() * a.ang_mass.inv()
-        + rb.cross(n).mag_sq() * b.ang_mass.inv();
+        + ra.cross(n).length_squared() * a.ang_mass.inv()
+        + rb.cross(n).length_squared() * b.ang_mass.inv();
 
     let impulse = j * intersection.normal;
     impulse
@@ -54,9 +54,10 @@ pub fn resolve_static_collision(
 
     if contact_rel < 0.0 {
         // eprintln!("Separating");
-        return Vec3::zero();
+        return Vec3::ZERO;
     }
-    let j = -(1.0 + resitution) * contact_rel * **b.mass + rb.cross(n).mag_sq() * b.ang_mass.inv();
+    let j = -(1.0 + resitution) * contact_rel * **b.mass
+        + rb.cross(n).length_squared() * b.ang_mass.inv();
 
     let impulse = j * normal;
     impulse

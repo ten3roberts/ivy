@@ -16,4 +16,4 @@ ivy-base = { path = "../ivy-base", version = "0.9" }
 ivy-rendergraph = { path = "../ivy-rendergraph", version = "0.9" }
 ivy-resources = { path = "../ivy-resources", version = "0.9" }
 ivy-vulkan = { path = "../ivy-vulkan", version = "0.9" }
-ultraviolet = "0.8.1"
+glam = "0.20"

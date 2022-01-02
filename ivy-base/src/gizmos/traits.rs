@@ -1,6 +1,6 @@
 use std::ops::DerefMut;
 
-use ultraviolet::Vec3;
+use glam::Vec3;
 
 use crate::{Color, Position, DEFAULT_RADIUS};
 

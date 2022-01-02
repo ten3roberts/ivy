@@ -1,7 +1,7 @@
+use glam::Vec3;
 use ordered_float::OrderedFloat;
 use smallvec::{Array, SmallVec};
 use std::ops::Index;
-use ultraviolet::Vec3;
 
 use crate::{
     util::{barycentric_vector, ray_distance, SupportPoint},
@@ -26,7 +26,7 @@ impl Face {
 
         let normal = (p2.support - p1.support)
             .cross(p3.support - p1.support)
-            .normalized();
+            .normalize();
 
         // Distance to the origin of the minkowski difference
         let distance = normal.dot(p1.support);
@@ -57,11 +57,14 @@ impl Face {
             points[indices[2] as usize],
         ];
 
-        let total_radial: Vec3 = [p1, p2].iter().map(|p| p.support - reference_point).sum();
+        let total_radial: Vec3 = [p1, p2]
+            .iter()
+            .map(|p| p.support - reference_point)
+            .fold(Vec3::ZERO, |acc, val| acc + val);
 
         let normal = (p2.support - p1.support)
             .cross(p3.support - p1.support)
-            .normalized();
+            .normalize();
 
         let normal = normal * normal.dot(total_radial).signum();
 

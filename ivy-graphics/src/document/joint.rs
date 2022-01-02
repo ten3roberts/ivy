@@ -1,9 +1,9 @@
 use std::{collections::BTreeMap, slice::Iter};
 
+use glam::{Mat4, Quat, Vec3};
 use gltf::buffer::Data;
 use ivy_base::{Position, Rotation, Scale, TransformBundle, TransformMatrix};
 use smallvec::SmallVec;
-use ultraviolet::{Mat4, Rotor3, Vec3};
 
 use crate::{Error, Result};
 
@@ -41,7 +41,7 @@ impl Skin {
                 (
                     (index, idx),
                     Joint {
-                        inverse_bind_matrix: TransformMatrix(Mat4::new(
+                        inverse_bind_matrix: TransformMatrix(Mat4::from_cols(
                             ibm[0].into(),
                             ibm[1].into(),
                             ibm[2].into(),
@@ -49,7 +49,7 @@ impl Skin {
                         )),
                         local_bind_transform: TransformBundle {
                             pos: Position(Vec3::from(transform.0)),
-                            rot: Rotation(Rotor3::from_quaternion_array(transform.1)),
+                            rot: Rotation(Quat::from_array(transform.1)),
                             scale: Scale(Vec3::from(transform.2)),
                         },
                         children: joint.children().map(|val| val.index()).collect(),

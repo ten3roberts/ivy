@@ -5,7 +5,7 @@ use std::{
 
 use hecs::Entity;
 use ivy_base::TransformMatrix;
-use ultraviolet::Vec3;
+use glam::Vec3;
 
 use super::*;
 use crate::{Cube, Sphere};

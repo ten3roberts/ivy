@@ -1,11 +1,11 @@
 // use derive_for::*;
 use derive_for::*;
 use derive_more::*;
+use glam::Vec2;
 use hecs::{Bundle, Query};
 use ivy_base::{Position2D, Size2D};
 #[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
-use ultraviolet::Vec2;
 
 derive_for!(
     (
@@ -45,7 +45,7 @@ impl From<AbsoluteOffset> for Position2D {
 }
 
 impl AbsoluteOffset {
-    pub const fn new(x: f32, y: f32) -> Self {
+    pub fn new(x: f32, y: f32) -> Self {
         Self(Vec2::new(x, y))
     }
 }
@@ -57,7 +57,7 @@ impl From<RelativeOffset> for Position2D {
 }
 
 impl RelativeOffset {
-    pub const fn new(x: f32, y: f32) -> Self {
+    pub fn new(x: f32, y: f32) -> Self {
         Self(Vec2::new(x, y))
     }
 }
@@ -69,7 +69,7 @@ impl From<RelativeSize> for Size2D {
 }
 
 impl RelativeSize {
-    pub const fn new(x: f32, y: f32) -> Self {
+    pub fn new(x: f32, y: f32) -> Self {
         Self(Vec2::new(x, y))
     }
 }
@@ -81,19 +81,19 @@ impl From<AbsoluteSize> for Size2D {
 }
 
 impl AbsoluteSize {
-    pub const fn new(x: f32, y: f32) -> Self {
+    pub fn new(x: f32, y: f32) -> Self {
         Self(Vec2::new(x, y))
     }
 }
 
 impl Aspect {
-    pub const fn new(aspect: f32) -> Self {
+    pub fn new(aspect: f32) -> Self {
         Self(aspect)
     }
 }
 
 impl Origin2D {
-    pub const fn new(x: f32, y: f32) -> Self {
+    pub fn new(x: f32, y: f32) -> Self {
         Self(Vec2::new(x, y))
     }
 }

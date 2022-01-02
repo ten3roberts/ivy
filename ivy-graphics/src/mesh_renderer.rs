@@ -1,5 +1,6 @@
 use crate::{BaseRenderer, BatchMarker, Error, Material, Mesh, Renderer, Result};
 use ash::vk::{DescriptorSet, IndexType};
+use glam::{Mat4, Vec4};
 use hecs::{Query, World};
 use ivy_base::{Color, Position, Rotation, Scale, Visible};
 use ivy_resources::{Handle, Resources};
@@ -7,7 +8,6 @@ use ivy_vulkan::{
     commands::CommandBuffer, descriptors::IntoSet, shaderpass::ShaderPass, VulkanContext,
 };
 use std::sync::Arc;
-use ultraviolet::{Mat4, Vec4};
 
 /// A mesh renderer using vkCmdDrawIndirectIndexed and efficient batching.
 pub struct MeshRenderer {
@@ -141,8 +141,8 @@ impl<'a> Into<ObjectData> for ObjectDataQuery<'a> {
     fn into(self) -> ObjectData {
         ObjectData {
             model: Mat4::from_translation(**self.position)
-                * self.rotation.into_matrix().into_homogeneous()
-                * Mat4::from_nonuniform_scale(**self.scale),
+                * Mat4::from_mat3(self.rotation.into_matrix3())
+                * Mat4::from_scale(**self.scale),
             color: self.color.cloned().unwrap_or(Color::white()).into(),
         }
     }

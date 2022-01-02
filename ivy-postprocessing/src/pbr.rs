@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Result;
+use glam::Vec3;
 use hecs::{Entity, World};
 use ivy_base::Extent;
 use ivy_graphics::{DepthAttachment, GpuCameraData, LightManager, Renderer};
@@ -11,7 +12,6 @@ use ivy_vulkan::{
     Format, ImageLayout, ImageUsage, LoadOp, SampleCountFlags, StoreOp, Texture, TextureInfo,
     VulkanContext,
 };
-use ultraviolet::Vec3;
 
 use crate::node::PostProcessingNode;
 
@@ -96,7 +96,7 @@ pub struct PBRInfo {
 impl Default for PBRInfo {
     fn default() -> Self {
         Self {
-            ambient_radience: Vec3::one() * 0.1,
+            ambient_radience: Vec3::ONE * 0.1,
             max_lights: 10,
         }
     }

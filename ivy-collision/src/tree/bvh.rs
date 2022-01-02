@@ -1,9 +1,9 @@
+use glam::Vec3;
 use hecs::{Column, Component};
 use ivy_base::{Color, DrawGizmos, Events};
 use ordered_float::OrderedFloat;
 use slotmap::SlotMap;
 use smallvec::{smallvec, Array, SmallVec};
-use ultraviolet::Vec3;
 
 use crate::{
     intersect, BoundingBox, Collider, Collision, CollisionTreeNode, NodeIndex, Nodes, Object,
@@ -161,8 +161,8 @@ where
         objects.iter().for_each(|val| {
             let bounds = data[val.index].extended_bounds;
             let (l_obj, r_obj) = bounds.into_corners();
-            l = l.min_by_component(l_obj);
-            r = r.max_by_component(r_obj);
+            l = l.min(l_obj);
+            r = r.max(r_obj);
         });
 
         BoundingBox::from_corners(l, r).margin(if is_static { 1.0 } else { MARGIN })

@@ -24,7 +24,7 @@ parking_lot = "0.11.2"
 rectangle-pack = "0.4.2"
 smallvec = "1.7.0"
 thiserror = "1.0.30"
-ultraviolet = "0.8.1"
+glam = "0.20"
 serde = { version = "1.0.132", features = [ "derive" ], optional = true }
 records = "0.1.1"
 base64 = "0.13.0"
@@ -35,4 +35,4 @@ hecs-schedule = "0.3.21"
 
 [features]
 default = []
-serialize = [ "serde", "ultraviolet/serde" ]
+serialize = [ "serde", "glam/serde" ]

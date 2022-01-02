@@ -1,5 +1,5 @@
+use glam::{Mat4, Vec3};
 use ivy_base::Position;
-use ultraviolet::{Mat4, Vec3};
 
 use crate::{CollisionPrimitive, Ray};
 
@@ -45,7 +45,7 @@ pub fn support<T: CollisionPrimitive>(
     dir: Vec3,
 ) -> Position {
     transform
-        .transform_point3(coll.support(transform_inv.transform_vec3(dir).normalized()))
+        .transform_point3(coll.support(transform_inv.transform_vector3(dir).normalize()))
         .into()
 }
 
@@ -70,7 +70,7 @@ pub fn barycentric_vector(point: Vec3, p1: Vec3, p2: Vec3, p3: Vec3) -> (f32, f3
 /// Gets the normal of a direction vector with a reference point. Normal will
 /// face the same direciton as reference
 pub fn triple_prod(a: Vec3, b: Vec3, c: Vec3) -> Vec3 {
-    a.cross(b).cross(c).normalized()
+    a.cross(b).cross(c).normalize()
 }
 
 pub fn project_plane(a: Vec3, normal: Vec3) -> Vec3 {
@@ -121,7 +121,7 @@ pub fn edge_intersect(p: Vec3, tangent: Vec3, ray: &Ray) -> Vec3 {
     // Path of the edge point in in tangent plane
     let projected = project_plane(p, tangent);
 
-    ray.dir() * (p.mag() / (projected.dot(ray.dir())))
+    ray.dir() * (p.length() / (projected.dot(ray.dir())))
 }
 
 /// Returns an optional intersection between a triangle and a ray
@@ -147,7 +147,7 @@ pub fn triangle_ray(points: &[Vec3], ray: &Ray) -> Option<Vec3> {
         return None;
     }
 
-    let normal = (b - a).cross(c - a).normalized();
+    let normal = (b - a).cross(c - a).normalize();
     Some(plane_ray(a, normal, ray))
 }
 
@@ -175,7 +175,7 @@ pub fn triangle_intersect(points: &[Vec3], dir: Vec3) -> Option<Vec3> {
         return None;
     }
 
-    let normal = (b - a).cross(c - a).normalized();
+    let normal = (b - a).cross(c - a).normalize();
     Some(plane_intersect(a, normal, dir))
 }
 

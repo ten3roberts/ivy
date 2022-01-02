@@ -1,6 +1,6 @@
 use derive_more::*;
 use palette::{FromColor, Hsla, Hsva, Srgba};
-use ultraviolet::{Vec3, Vec4};
+use glam::{Vec3, Vec4};
 
 #[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};

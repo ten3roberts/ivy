@@ -4,6 +4,7 @@ use std::{fmt::Display, sync::Arc, time::Duration};
 use anyhow::{anyhow, Context};
 use collision::{util::project_plane, BVHNode, Collider, CollisionTree, Cube, Ray, Sphere};
 use flume::Receiver;
+use glam::{EulerRot, Quat, Vec2, Vec3};
 use glfw::{CursorMode, Key, MouseButton, WindowEvent};
 use graphics::{
     gizmos::GizmoRenderer,
@@ -37,7 +38,6 @@ use random::{rand::rngs::StdRng, Random};
 use rendergraph::GraphicsLayer;
 use slotmap::SecondaryMap;
 use std::fmt::Write;
-use ultraviolet::{Rotor3, Vec2, Vec3};
 use vulkan::vk::{CullModeFlags, PresentModeKHR};
 
 use log::*;
@@ -95,7 +95,7 @@ fn move_system(world: &mut World, input: &Input) {
         .for_each(|(_, (m, v, a, r))| {
             let movement = m.translate.get(&input);
             if m.local {
-                *v = Velocity(r.into_matrix() * movement) * m.speed;
+                *v = Velocity(r.mul_vec3(movement)) * m.speed;
             } else {
                 *v = Velocity(movement) * m.speed;
             }
@@ -177,11 +177,11 @@ fn main() -> anyhow::Result<()> {
                         e,
                         PhysicsLayerInfo {
                             tree_root: CollisionNode::new(
-                                collision::BoundingBox::new(Vec3::one() * 200.0, Position::zero()),
+                                collision::BoundingBox::new(Vec3::ONE * 200.0, Position::zero()),
                                 Default::default(),
                             ),
                             gravity: Gravity::default(),
-                            debug: true,
+                            debug: false,
                         },
                     )?,
                     LogicLayer::new(w, r, e)?,
@@ -252,7 +252,7 @@ impl RenderGraphNodes {
                 }],
                 &[],
                 PBRInfo {
-                    ambient_radience: Vec3::one() * 0.05,
+                    ambient_radience: Vec3::ONE * 0.05,
                     max_lights: 10,
                 },
             )?);
@@ -657,7 +657,7 @@ impl LogicLayer {
 
         Ok(Self {
             input,
-            camera_euler: Vec3::zero(),
+            camera_euler: Vec3::ZERO,
             entities,
             assets,
             window_events,
@@ -724,12 +724,13 @@ impl Layer for LogicLayer {
             window.set_cursor_mode(CursorMode::Disabled);
             let mouse_movement = self.input.cursor_movement() / window.extent().as_vec();
 
-            self.camera_euler += mouse_movement.xyz();
+            self.camera_euler += mouse_movement.extend(0.0);
         } else {
             window.set_cursor_mode(CursorMode::Normal);
         }
 
-        *camera_rot = Rotor3::from_euler_angles(
+        *camera_rot = Quat::from_euler(
+            EulerRot::ZXY,
             self.camera_euler.z,
             -self.camera_euler.y,
             -self.camera_euler.x,
@@ -767,10 +768,10 @@ impl Layer for LogicLayer {
                 let dampening = sideways_movement * -50.0;
                 let target = *ray.origin() + ray.dir() * 5.0;
                 let towards = target - *point;
-                let towards_vel = (ray.dir() * ray.dir().dot(**vel)).dot(towards.normalized());
-                let max_vel = (5.0 * towards.mag_sq()).max(0.1);
+                let towards_vel = (ray.dir() * ray.dir().dot(**vel)).dot(towards.normalize());
+                let max_vel = (5.0 * towards.length_squared()).max(0.1);
 
-                let towards = towards.normalized() * 50.0 * (max_vel - towards_vel) / max_vel;
+                let towards = towards.normalize() * 50.0 * (max_vel - towards_vel) / max_vel;
 
                 effector.apply_force(dampening + towards + centering);
 

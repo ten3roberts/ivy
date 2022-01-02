@@ -1,6 +1,6 @@
+use glam::Mat4;
 use hecs::World;
 use ivy_base::{Position, Rotation, DEG_180};
-use ultraviolet::Mat4;
 
 use crate::Camera;
 
@@ -12,9 +12,9 @@ pub fn update_view_matrices(world: &World) {
         .for_each(|(_, (camera, position, rotation))| {
             let view = match rotation {
                 Some(rotation) => (Mat4::from_translation(**position)
-                    * rotation.into_matrix().into_homogeneous()
+                    * rotation.into_matrix()
                     * Mat4::from_rotation_y(DEG_180))
-                .inversed(),
+                .inverse(),
 
                 None => Mat4::from_translation(-**position) * Mat4::from_rotation_y(DEG_180),
             };

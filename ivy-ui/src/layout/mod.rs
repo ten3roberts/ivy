@@ -4,7 +4,7 @@ use hecs::Entity;
 use hecs_hierarchy::Hierarchy;
 use hecs_schedule::GenericWorld;
 use ivy_base::{Position2D, Size2D};
-use ultraviolet::Vec2;
+use glam::Vec2;
 
 /// UI component for automatically managing placing of children.
 /// Immediate children of a widget with a layout will be placed automatically

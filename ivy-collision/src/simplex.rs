@@ -1,6 +1,6 @@
 use std::ops::Index;
 
-use ultraviolet::Vec3;
+use glam::Vec3;
 
 use crate::util::{project_plane, triple_prod, SupportPoint};
 
@@ -121,7 +121,7 @@ impl Simplex {
 
                 if perp.dot(a0) > 0.0 {
                     *self = Simplex::Line([a, c]);
-                    return Some(perp.normalized());
+                    return Some(perp.normalize());
                 }
 
                 None

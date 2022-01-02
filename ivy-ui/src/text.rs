@@ -4,9 +4,9 @@ use crate::Alignment;
 use crate::Result;
 use crate::WrapStyle;
 use fontdue::layout::{self, GlyphPosition, Layout, TextStyle};
+use glam::{Vec2, Vec3};
 use ivy_base::Size2D;
 use ivy_graphics::NormalizedRect;
-use ultraviolet::{Vec2, Vec3};
 
 use crate::{Font, UIVertex};
 
@@ -44,7 +44,7 @@ impl Text {
             str: str.into(),
             layout,
             dirty: true,
-            old_bounds: Size2D(Vec2::zero()),
+            old_bounds: Size2D(Vec2::ZERO),
             old_wrap: WrapStyle::Word,
         }
     }

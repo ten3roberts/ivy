@@ -8,7 +8,7 @@ use glfw::{Action, Key, Modifiers, MouseButton, Scancode};
 use hecs::Entity;
 use ivy_base::Position2D;
 use ivy_input::InputEvent;
-use ultraviolet::Vec2;
+use glam::Vec2;
 
 /// Event for a clicked ui widget
 #[derive(Debug, Clone, PartialEq)]

@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use ash::vk::{DescriptorSet, IndexType, ShaderStageFlags};
+use glam::{Mat4, Vec3, Vec4};
 use ivy_base::Gizmos;
 use ivy_vulkan::{shaderpass::ShaderPass, VulkanContext};
-use ultraviolet::{Mat4, Vec3, Vec4};
 
 use crate::{Mesh, Renderer, Result};
 
@@ -65,9 +65,10 @@ impl Renderer for GizmoRenderer {
                         ShaderStageFlags::VERTEX,
                         0,
                         &PushConstantData {
-                            model: Mat4::from_translation(**origin) * Mat4::from_scale(*radius),
+                            model: Mat4::from_translation(**origin)
+                                * Mat4::from_scale(Vec3::splat(*radius)),
                             color: color.into(),
-                            billboard_axis: Vec3::zero(),
+                            billboard_axis: Vec3::ZERO,
                             corner_radius: 1.0,
                         },
                     );
@@ -87,13 +88,9 @@ impl Renderer for GizmoRenderer {
                         0,
                         &PushConstantData {
                             model: Mat4::from_translation(**origin + *dir * 0.5)
-                                * Mat4::from_nonuniform_scale(Vec3::new(
-                                    *radius,
-                                    dir.mag() * 0.5,
-                                    *radius,
-                                )),
+                                * Mat4::from_scale(Vec3::new(*radius, dir.length() * 0.5, *radius)),
                             color: color.into(),
-                            billboard_axis: dir.normalized(),
+                            billboard_axis: dir.normalize(),
                             corner_radius: *corner_radius,
                         },
                     );
@@ -106,11 +103,7 @@ impl Renderer for GizmoRenderer {
                     half_extents,
                     radius,
                 } => {
-                    for (v, dir) in [
-                        (Vec3::unit_x(), Vec3::unit_z()),
-                        (Vec3::unit_y(), Vec3::unit_x()),
-                        (Vec3::unit_z(), Vec3::unit_y()),
-                    ] {
+                    for (v, dir) in [(Vec3::X, Vec3::Z), (Vec3::Y, Vec3::X), (Vec3::Z, Vec3::Y)] {
                         for (a, b) in [(1.0, 1.0), (-1.0, -1.0), (-1.0, 1.0), (1.0, -1.0)] {
                             cmd.push_constants(
                                 layout,
@@ -119,14 +112,14 @@ impl Renderer for GizmoRenderer {
                                 &PushConstantData {
                                     model: Mat4::from_translation(
                                         **origin
-                                            + b * (Vec3::one() - (dir + v) + a * v) * *half_extents,
-                                    ) * Mat4::from_nonuniform_scale(Vec3::new(
+                                            + b * (Vec3::ONE - (dir + v) + a * v) * *half_extents,
+                                    ) * Mat4::from_scale(Vec3::new(
                                         *radius,
-                                        (dir * (*half_extents)).mag() + radius * 1.0,
+                                        (dir * (*half_extents)).length() + radius * 1.0,
                                         *radius,
                                     )),
                                     color: color.into(),
-                                    billboard_axis: dir.normalized(),
+                                    billboard_axis: dir.normalize(),
                                     corner_radius: 1.0,
                                 },
                             );
@@ -149,13 +142,13 @@ impl Renderer for GizmoRenderer {
                             0,
                             &PushConstantData {
                                 model: Mat4::from_translation(p1 + dir * 0.5)
-                                    * Mat4::from_nonuniform_scale(Vec3::new(
+                                    * Mat4::from_scale(Vec3::new(
                                         *radius,
-                                        dir.mag() * 0.5,
+                                        dir.length() * 0.5,
                                         *radius,
                                     )),
                                 color: color.into(),
-                                billboard_axis: dir.normalized(),
+                                billboard_axis: dir.normalize(),
                                 corner_radius: 1.0,
                             },
                         );

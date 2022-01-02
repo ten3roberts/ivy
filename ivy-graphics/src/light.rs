@@ -1,5 +1,6 @@
 use crate::Result;
 use ash::vk::{DescriptorSet, ShaderStageFlags};
+use glam::Vec3;
 use hecs::World;
 use ivy_base::Position;
 use ivy_vulkan::{
@@ -8,7 +9,6 @@ use ivy_vulkan::{
 };
 use ordered_float::OrderedFloat;
 use std::sync::Arc;
-use ultraviolet::Vec3;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PointLight {
@@ -116,8 +116,8 @@ impl LightManager {
                 .map(|(_, (light, position))| LightData {
                     position: *position,
                     radiance: light.radiance,
-                    reference_illuminance: (light.radiance.mag_sq()
-                        / (center - *position).mag_sq()),
+                    reference_illuminance: (light.radiance.length_squared()
+                        / (center - *position).length_squared()),
                     radius: light.radius,
                     ..Default::default()
                 })

@@ -10,7 +10,7 @@ use std::{
     borrow::Cow,
     sync::{mpsc::Receiver, Arc},
 };
-use ultraviolet::Vec2;
+use glam::Vec2;
 
 use crate::Error;
 

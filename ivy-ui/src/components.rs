@@ -9,7 +9,7 @@ use ivy_resources::Handle;
 #[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
-use ultraviolet::Vec2;
+use glam::Vec2;
 
 derive_for!(
     (

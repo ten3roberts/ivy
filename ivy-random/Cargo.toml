@@ -8,4 +8,4 @@ description = "Provides random utility functions to the ivy framework"
 
 [dependencies]
 rand = "0.8.4"
-ultraviolet = "0.8.1"
+glam = "0.20"

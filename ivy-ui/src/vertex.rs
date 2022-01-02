@@ -1,7 +1,7 @@
 use std::mem;
 
 use ivy_vulkan::{vk, VertexDesc};
-use ultraviolet::{Vec2, Vec3};
+use glam::{Vec2, Vec3};
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq)]

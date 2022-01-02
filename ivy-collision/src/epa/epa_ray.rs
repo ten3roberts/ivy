@@ -3,7 +3,7 @@ use crate::{
     Contact, ContactPoints, Face, Polytype, Ray, Simplex,
 };
 
-use ultraviolet::Vec3;
+use glam::Vec3;
 
 pub fn epa_ray<F: Fn(Vec3) -> SupportPoint>(
     support_func: F,
@@ -11,7 +11,7 @@ pub fn epa_ray<F: Fn(Vec3) -> SupportPoint>(
     ray: &Ray,
 ) -> Contact {
     let mut polytype =
-        Polytype::from_simplex(&simplex, |a, b| Face::new_ray(a, b, ray, Vec3::zero()));
+        Polytype::from_simplex(&simplex, |a, b| Face::new_ray(a, b, ray, Vec3::ZERO));
 
     let mut iterations = 0;
     loop {
@@ -50,7 +50,7 @@ pub fn epa_ray<F: Fn(Vec3) -> SupportPoint>(
             return Contact {
                 // points: ContactPoints::new(&[polytype[min_face.indices[0]].a]),
                 points: ContactPoints::single(point),
-                depth: (point - ray.origin).mag(),
+                depth: (point - ray.origin).length(),
                 normal: dir,
             };
         }

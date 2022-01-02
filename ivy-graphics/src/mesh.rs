@@ -2,13 +2,13 @@ use crate::{Error, Material, Result};
 use ash::vk::{
     self, VertexInputAttributeDescription, VertexInputBindingDescription, VertexInputRate,
 };
+use glam::{IVec4, Vec2, Vec3, Vec4};
 use gltf::buffer;
 use itertools::izip;
 use ivy_resources::Handle;
 use std::marker::PhantomData;
 use std::mem::size_of;
 use std::sync::Arc;
-use ultraviolet::{IVec4, Vec2, Vec3, Vec4};
 
 use ivy_vulkan as vulkan;
 use vulkan::{Buffer, BufferAccess, BufferUsage, VertexDesc, VulkanContext};
@@ -263,14 +263,10 @@ impl Mesh<Vertex> {
 
         // Simple quad
         let vertices = [
-            Vertex::new(
-                Vec3::new(-hw, -hh, 0.0),
-                Vec3::unit_x(),
-                Vec2::new(0.0, 1.0),
-            ),
-            Vertex::new(Vec3::new(hw, -hh, 0.0), Vec3::unit_x(), Vec2::new(1.0, 1.0)),
-            Vertex::new(Vec3::new(hw, hh, 0.0), Vec3::unit_x(), Vec2::new(1.0, 0.0)),
-            Vertex::new(Vec3::new(-hw, hh, 0.0), Vec3::unit_x(), Vec2::new(0.0, 0.0)),
+            Vertex::new(Vec3::new(-hw, -hh, 0.0), Vec3::X, Vec2::new(0.0, 1.0)),
+            Vertex::new(Vec3::new(hw, -hh, 0.0), Vec3::X, Vec2::new(1.0, 1.0)),
+            Vertex::new(Vec3::new(hw, hh, 0.0), Vec3::X, Vec2::new(1.0, 0.0)),
+            Vertex::new(Vec3::new(-hw, hh, 0.0), Vec3::X, Vec2::new(0.0, 0.0)),
         ];
 
         let indices: [u32; 6] = [0, 1, 2, 2, 3, 0];

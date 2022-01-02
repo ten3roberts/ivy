@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use glfw::{Action, Key, Modifiers, MouseButton, Scancode, WindowEvent};
 use ivy_base::{Extent, Position2D};
-use ultraviolet::{IVec2, Vec2};
+use glam::{IVec2, Vec2};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum InputEvent {

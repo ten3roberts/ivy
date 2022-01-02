@@ -1,7 +1,7 @@
 use std::ops::Index;
 
+use glam::{Mat4, Vec3};
 use ivy_base::Position;
-use ultraviolet::{Mat4, Vec3};
 
 use crate::{epa, gjk, util::minkowski_diff, CollisionPrimitive, EntityPayload};
 
@@ -93,8 +93,8 @@ pub fn intersect<A: CollisionPrimitive, B: CollisionPrimitive>(
     a: &A,
     b: &B,
 ) -> Option<Contact> {
-    let a_transform_inv = a_transform.inversed();
-    let b_transform_inv = b_transform.inversed();
+    let a_transform_inv = a_transform.inverse();
+    let b_transform_inv = b_transform.inverse();
 
     let (intersect, simplex) = gjk(
         a_transform,

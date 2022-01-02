@@ -1,4 +1,5 @@
 use crate::*;
+use glam::{Mat4, Vec2, Vec3, Vec4};
 use hecs::{Query, World};
 use ivy_base::{Color, Position2D, Size2D, Visible};
 use ivy_graphics::{BaseRenderer, BatchMarker, Mesh, Renderer};
@@ -7,7 +8,6 @@ use ivy_vulkan::{
     commands::CommandBuffer, descriptors::*, shaderpass::ShaderPass, vk::IndexType, VulkanContext,
 };
 use std::sync::Arc;
-use ultraviolet::{Mat4, Vec2, Vec3, Vec4};
 
 /// A mesh renderer using vkCmdDrawIndirectIndexed and efficient batching.
 pub struct ImageRenderer {
@@ -133,8 +133,8 @@ struct ObjectDataQuery<'a> {
 impl<'a> Into<ObjectData> for ObjectDataQuery<'a> {
     fn into(self) -> ObjectData {
         ObjectData {
-            mvp: Mat4::from_translation(self.position.xyz())
-                * Mat4::from_nonuniform_scale(self.size.into_homogeneous_point()),
+            mvp: Mat4::from_translation(self.position.extend(0.0))
+                * Mat4::from_scale(self.size.extend(1.0)),
             color: self.color.into(),
         }
     }

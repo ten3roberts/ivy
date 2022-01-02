@@ -4,15 +4,14 @@ use hecs::Bundle;
 use ivy_base::{Position, TransformBundle, TransformQueryMut, Velocity};
 
 mod systems;
+use glam::{EulerRot, Quat, Vec3};
 pub use systems::*;
-use ultraviolet::{Bivec3, Rotor3, Vec3};
 
 use crate::{bundles::*, util::point_vel, Effector};
 
 derive_for!(
     (
         Add,
-        AddAssign,
         AsRef,
         Clone,
         Copy,
@@ -22,17 +21,17 @@ derive_for!(
         Div,
         DivAssign,
         Sub,
-        SubAssign,
         From,
         Into,
         Mul,
         MulAssign,
         Default,
         PartialEq,
+        Display,
     );
     /// Describes the offset of the entity from the parent
     pub struct PositionOffset(pub Vec3);
-    pub struct RotationOffset(pub Rotor3);
+    pub struct RotationOffset(pub Quat);
 );
 
 impl PositionOffset {
@@ -43,15 +42,12 @@ impl PositionOffset {
 
 impl RotationOffset {
     pub fn euler_angles(roll: f32, pitch: f32, yaw: f32) -> Self {
-        Self(Rotor3::from_euler_angles(roll, pitch, yaw))
+        Self(Quat::from_euler(EulerRot::ZXY, roll, pitch, yaw))
     }
     /// Creates an angular velocity from an axis angle rotation. Note: Axis is
     /// assumed to be normalized.
-    pub fn axis_angle(angle: f32, axis: Vec3) -> Self {
-        Self(Rotor3::from_angle_plane(
-            angle,
-            Bivec3::from_normalized_axis(axis),
-        ))
+    pub fn axis_angle(axis: Vec3, angle: f32) -> Self {
+        Self(Quat::from_axis_angle(axis, angle))
     }
 }
 

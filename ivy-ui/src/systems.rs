@@ -1,6 +1,7 @@
 use std::convert::TryInto;
 
 use crate::{constraints::*, events::WidgetEvent, InteractiveState, Result};
+use glam::{Mat4, Vec2};
 use glfw::{Action, WindowEvent};
 use hecs::{Entity, World};
 use hecs_hierarchy::Hierarchy;
@@ -8,7 +9,6 @@ use hecs_schedule::{GenericWorld, Read, Write};
 use ivy_base::{Events, Position2D, Size2D, Visible};
 use ivy_graphics::Camera;
 use ivy_input::InputEvent;
-use ultraviolet::{Mat4, Vec2};
 
 use crate::{constraints::ConstraintQuery, *};
 
@@ -96,7 +96,7 @@ pub fn update_canvas(world: &World, canvas: Entity) -> Result<()> {
     let (camera, size, position) = camera_query.get()?;
 
     camera.set_orthographic(size.x * 2.0, size.y * 2.0, 0.0, 100.0);
-    camera.set_view(Mat4::from_translation(-position.xyz()));
+    camera.set_view(Mat4::from_translation(-position.extend(0.0)));
 
     Ok(())
 }

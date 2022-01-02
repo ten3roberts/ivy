@@ -4,7 +4,7 @@ use std::{
     fmt::Display,
     ops::{Add, Mul},
 };
-use ultraviolet::Vec2;
+use glam::Vec2;
 
 /// Represents a width and height.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]

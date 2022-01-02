@@ -1,12 +1,12 @@
 use std::collections::{btree_map::Iter, BTreeMap};
 
+use glam::{Quat, Vec3};
 use gltf::animation::util::{ReadOutputs, Rotations, Scales, Translations};
 use hecs_schedule::{Read, SubWorld};
 use itertools::Itertools;
 use ivy_base::{DeltaTime, Position, Rotation, Scale, TransformBundle, TransformMatrix};
 use ivy_resources::{Handle, ResourceCache, ResourceView};
 use ordered_float::OrderedFloat;
-use ultraviolet::{Lerp, Rotor3, Slerp, Vec3};
 
 use crate::{JointIndex, Result, Skin};
 
@@ -220,7 +220,7 @@ impl KeyFrameValues {
         Self::Rotations(
             outputs
                 .into_f32()
-                .map(|output| Rotor3::from_quaternion_array(output).into())
+                .map(|output| Quat::from_array(output).into())
                 .collect(),
         )
     }

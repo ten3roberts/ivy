@@ -4,10 +4,10 @@ use hecs::{Bundle, Component, EntityBuilder, EntityBuilderClone};
 use smallvec::SmallVec;
 use std::{borrow::Cow, path::Path, path::PathBuf, sync::Arc};
 
+use glam::*;
 use ivy_base::{Position, Rotation, Scale, Visible};
 use ivy_resources::{Handle, LoadResource, Resources};
 use ivy_vulkan::{Texture, VulkanContext};
-use ultraviolet::*;
 
 mod joint;
 pub(crate) mod scheme;
@@ -183,7 +183,7 @@ impl Document {
                     mesh: node.mesh().map(|mesh| meshes[mesh.index()]),
                     skinned_mesh: node.mesh().and_then(|mesh| skinned_meshes[mesh.index()]),
                     pos: Vec3::from(position).into(),
-                    rot: Rotor3::from_quaternion_array(rotation).into(),
+                    rot: Quat::from_array(rotation).into(),
                     scale: Vec3::from(scale).into(),
                     children: node.children().map(|val| val.index()).collect(),
                 }

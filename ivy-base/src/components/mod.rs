@@ -2,11 +2,11 @@ use std::{borrow::Cow, time::Duration};
 
 use derive_for::*;
 use derive_more::*;
+use glam::{Mat3, Mat4, Quat, Vec2, Vec3};
 use hecs::{Bundle, Query};
 use ivy_random::Random;
 #[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
-use ultraviolet::{Bivec3, Mat4, Rotor3, Vec2, Vec3};
 mod physics;
 pub use physics::*;
 
@@ -30,38 +30,57 @@ derive_for!(
     Sub,
     SubAssign,
     PartialEq,
+    Default,
+    Neg,
+    Display,
     );
     /// Describes a position in 3D space.
     #[repr(transparent)]
-    #[derive(Default, Neg)]
     #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
     pub struct Position(pub Vec3);
-    /// Describes a rotation in 3D space.
     #[repr(transparent)]
-    #[derive(Default)]
-    #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
-    pub struct Rotation(pub Rotor3);
-    /// Describes a scale in 3D space.
-    /// Default is overridden for an identity scale.
-    #[repr(transparent)]
-    #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
-    pub struct Scale(pub Vec3);
-    #[repr(transparent)]
-    #[derive(Default, Neg)]
     #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
     pub struct Position2D(pub Vec2);
     #[repr(transparent)]
-    #[derive(Default)]
     #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
     pub struct Size2D(pub Vec2);
 
     #[repr(transparent)]
-    #[derive(Default)]
     #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
     /// Wrapper for strongly typed floating point deltatime
     pub struct DeltaTime(pub f32);
 );
 
+/// Describes a rotation in 3D space.
+#[repr(transparent)]
+#[derive(
+    From, Into, Clone, Copy, DerefMut, Deref, Mul, MulAssign, PartialEq, Default, Debug, Display,
+)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+pub struct Rotation(pub Quat);
+/// Describes a scale in 3D space.
+/// Default is overridden for an identity scale.
+#[repr(transparent)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[derive(
+    From,
+    Into,
+    Clone,
+    Copy,
+    Deref,
+    DerefMut,
+    Div,
+    Add,
+    AddAssign,
+    Sub,
+    SubAssign,
+    Mul,
+    MulAssign,
+    PartialEq,
+    Debug,
+    Display,
+)]
+pub struct Scale(pub Vec3);
 impl From<Duration> for DeltaTime {
     fn from(val: Duration) -> Self {
         Self(val.as_secs_f32())
@@ -92,36 +111,39 @@ impl std::ops::MulAssign<Rotation> for Rotation {
 
 impl Default for Scale {
     fn default() -> Self {
-        Self(Vec3::one())
+        Self(Vec3::ONE)
     }
 }
 
 impl Position {
-    pub const fn new(x: f32, y: f32, z: f32) -> Self {
+    pub fn new(x: f32, y: f32, z: f32) -> Self {
         Self(Vec3::new(x, y, z))
     }
 
-    pub const fn zero() -> Self {
+    pub fn zero() -> Self {
         Self(Vec3::new(0.0, 0.0, 0.0))
     }
 }
 
 impl Rotation {
+    pub fn into_matrix3(&self) -> Mat3 {
+        Mat3::from_quat(**self)
+    }
+    pub fn into_matrix(&self) -> Mat4 {
+        Mat4::from_quat(**self)
+    }
     pub fn euler_angles(roll: f32, pitch: f32, yaw: f32) -> Self {
-        Self(Rotor3::from_euler_angles(roll, pitch, yaw))
+        Self(Quat::from_euler(glam::EulerRot::ZXY, roll, pitch, yaw))
     }
     /// Creates an angular velocity from an axis angle rotation. Note: Axis is
     /// assumed to be normalized.
-    pub fn axis_angle(angle: f32, axis: Vec3) -> Self {
-        Self(Rotor3::from_angle_plane(
-            angle,
-            Bivec3::from_normalized_axis(axis),
-        ))
+    pub fn axis_angle(axis: Vec3, angle: f32) -> Self {
+        Self(Quat::from_axis_angle(axis, angle))
     }
 }
 
 impl Scale {
-    pub const fn new(x: f32, y: f32, z: f32) -> Self {
+    pub fn new(x: f32, y: f32, z: f32) -> Self {
         Self(Vec3::new(x, y, z))
     }
 
@@ -135,13 +157,13 @@ impl Scale {
 }
 
 impl Position2D {
-    pub const fn new(x: f32, y: f32) -> Self {
+    pub fn new(x: f32, y: f32) -> Self {
         Self(Vec2::new(x, y))
     }
 }
 
 impl Size2D {
-    pub const fn new(x: f32, y: f32) -> Self {
+    pub fn new(x: f32, y: f32) -> Self {
         Self(Vec2::new(x, y))
     }
 }
@@ -168,19 +190,12 @@ impl std::ops::Mul<TransformMatrix> for TransformMatrix {
 
 impl TransformMatrix {
     pub fn new(pos: Position, rot: Rotation, scale: Scale) -> Self {
-        Self(
-            Mat4::from_translation(*pos)
-                * rot.into_matrix().into_homogeneous()
-                * Mat4::from_nonuniform_scale(*scale),
-        )
+        Self(Mat4::from_translation(*pos) * Mat4::from_quat(*rot) * Mat4::from_scale(*scale))
     }
 
-    pub fn extract_translation(&self) -> Position {
-        self.0.extract_translation().into()
-    }
-
-    pub fn extract_rotation(&self) -> Rotation {
-        self.0.extract_rotation().into()
+    pub fn decompose(&self) -> (Scale, Rotation, Position) {
+        let (scale, rot, pos) = self.to_scale_rotation_translation();
+        (scale.into(), rot.into(), pos.into())
     }
 }
 
@@ -215,17 +230,17 @@ impl<'a> TransformQuery<'a> {
 
     /// Returns the forward direction of the transform
     pub fn forward(&self) -> Vec3 {
-        self.rot.into_matrix() * Vec3::unit_z()
+        self.rot.mul_vec3(Vec3::Z)
     }
 
     /// Returns the right direction of the transform
     pub fn right(&self) -> Vec3 {
-        self.rot.into_matrix() * Vec3::unit_x()
+        self.rot.mul_vec3(Vec3::X)
     }
 
     /// Returns the up direction of the transform
     pub fn up(&self) -> Vec3 {
-        self.rot.into_matrix() * Vec3::unit_y()
+        self.rot.mul_vec3(Vec3::Y)
     }
 }
 

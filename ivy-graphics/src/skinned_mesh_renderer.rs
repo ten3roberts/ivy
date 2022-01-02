@@ -3,6 +3,7 @@ use crate::{
     Result, Skin, SkinnedMesh,
 };
 use ash::vk::{DescriptorSet, IndexType, ShaderStageFlags};
+use glam::{Mat4, Vec4};
 use hecs::{Query, World};
 use hecs_schedule::CommandBuffer;
 use ivy_base::{Color, Position, Rotation, Scale, TransformMatrix, Visible};
@@ -12,7 +13,6 @@ use ivy_vulkan::{
 };
 use smallvec::SmallVec;
 use std::{iter::repeat, sync::Arc};
-use ultraviolet::{Mat4, Vec4};
 
 /// A mesh renderer using vkCmdDrawIndirectIndexed and efficient batching.
 pub struct SkinnedMeshRenderer {
@@ -272,8 +272,8 @@ impl<'a> Into<ObjectData> for ObjectDataQuery<'a> {
     fn into(self) -> ObjectData {
         ObjectData {
             model: Mat4::from_translation(**self.position)
-                * self.rotation.into_matrix().into_homogeneous()
-                * Mat4::from_nonuniform_scale(**self.scale),
+                * self.rotation.into_matrix()
+                * Mat4::from_scale(**self.scale),
             color: self.color.cloned().unwrap_or(Color::white()).into(),
             offset: self.block.offset() as u32,
             len: self.block.len() as u32,

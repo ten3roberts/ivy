@@ -1,4 +1,4 @@
-use ultraviolet::Vec3;
+use glam::Vec3;
 
 use crate::{Capsule, CollisionPrimitive, Cube, Sphere};
 
