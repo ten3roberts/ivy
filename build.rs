@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use std::{
     error::Error,
+    ffi::OsString,
     fs,
     path::{Path, PathBuf},
     process::{Child, Command},
@@ -23,81 +24,103 @@ fn rerun_if_changed<P: AsRef<Path>>(path: P) {
     println!("cargo:rerun-if-changed={}", path.display());
 }
 
-fn compile_resource<P>(path: P) -> Result<Option<(PathBuf, Child)>>
-where
-    P: AsRef<Path> + ToOwned<Owned = PathBuf>,
-{
-    let path = path.as_ref();
-
-    println!("Compiling {}", path.display());
-
-    let extension = path
-        .extension()
-        .unwrap_or_default()
-        .to_str()
-        .unwrap_or_default();
-
-    let process = match extension {
-        "glsl" | "vert" | "frag" => Some(compile_glsl(path)?),
-        _ => None,
-    };
-
-    Ok(process.map(|p| {
-        rerun_if_changed(path);
-        (path.to_owned(), p)
-    }))
-}
-
-fn compile_glsl<P: AsRef<Path>>(path: P) -> Result<Child> {
-    let path = path.as_ref();
-    let path = path.to_string_lossy();
-
-    let ofile = format!("{}.spv", path,);
-
+fn compile_glsl(src: &Path, dst: &Path) -> Result<Child> {
     Command::new("glslc")
-        .args(&[&path, "-o", &ofile])
+        .arg(src)
+        .arg("-o")
+        .arg(dst)
         .spawn()
         .context("Failed to run glslc")
 }
 
-fn main() -> Result<()> {
-    let resdir = "./res";
-    let resdir = fs::canonicalize(resdir)
-        .with_context(|| format!("Failed to canonicalize path {:?}", resdir))?;
+struct CompilationProcess {
+    path: PathBuf,
+    child: Child,
+}
 
-    let processes = fs::read_dir(&resdir)
-        .with_context(|| format!("Failed to read path {}", resdir.display()))?
-        .filter_map(|dir| {
-            dir.ok()
-                .map(|dir| {
-                    if dir.metadata().unwrap().is_dir() {
-                        let path = dir.path();
+fn compile_dir<A, B, F, C>(
+    src: A,
+    dst: B,
+    rename_func: F,
+    compile_func: C,
+) -> Result<Vec<CompilationProcess>>
+where
+    A: AsRef<Path>,
+    B: AsRef<Path>,
+    F: Fn(&mut OsString),
+    C: Fn(&Path, &Path) -> Result<Child>,
+{
+    let src = src.as_ref();
+    let dst = dst.as_ref();
 
-                        // configure_rerun(&path);
-                        fs::read_dir(&path).ok()
-                    } else {
-                        None
-                    }
-                })
-                .flatten()
-        })
-        .flatten()
-        .map(|entry| {
-            let entry = entry?;
-            compile_resource(entry.path())
-        })
-        .collect::<Result<Vec<_>>>()?;
-
-    processes
+    walkdir::WalkDir::new(src)
+        .follow_links(true)
         .into_iter()
-        .flatten()
-        .try_for_each(|(resource, mut process)| -> Result<()> {
-            if !process.wait()?.success() {
-                Err(CompilationFailure(resource).into())
-            } else {
-                Ok(())
+        .flat_map(Result::ok)
+        .map(|entry| -> Result<Option<_>> {
+            let path = entry.path();
+
+            rerun_if_changed(path);
+
+            let metadata = entry.metadata()?;
+
+            if metadata.is_dir() {
+                return Ok(None);
             }
-        })?;
+
+            let mut fname = entry.file_name().to_os_string();
+            rename_func(&mut fname);
+
+            let base = path
+                .strip_prefix(src)?
+                .parent()
+                .context("No parent for path")?;
+
+            let mut dst_path = PathBuf::new();
+            dst_path.push(dst);
+            dst_path.push(base);
+
+            fs::create_dir_all(&dst_path)?;
+
+            dst_path.push(fname);
+
+            // Compare timestamps
+            let dst_metadata = dst_path.metadata().ok();
+
+            if let Some(dst_metadata) = dst_metadata {
+                if dst_metadata.modified()? >= metadata.modified()? {
+                    return Ok(None);
+                }
+            }
+
+            eprintln!("{:?} => {:?}", path, dst_path);
+
+            let child = compile_func(path, &dst_path)?;
+
+            Ok(Some(CompilationProcess {
+                child,
+                path: path.to_owned(),
+            }))
+        })
+        .flat_map(|val| val.transpose())
+        .collect()
+}
+
+fn main() -> Result<()> {
+    let children = compile_dir(
+        "./shaders/",
+        "./res/shaders",
+        |path| path.push(".spv"),
+        |src, dst| compile_glsl(src, dst),
+    )?;
+
+    children.into_iter().try_for_each(|mut val| -> Result<()> {
+        if !val.child.wait()?.success() {
+            Err(anyhow::anyhow!("Failed to compile: {:?}", val.path))
+        } else {
+            Ok(())
+        }
+    })?;
 
     Ok(())
 }
