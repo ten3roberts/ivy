@@ -17,9 +17,11 @@ mod renderer;
 mod allocator;
 mod animator;
 mod events;
+mod skinned_mesh_renderer;
+
 pub mod gizmos;
 pub mod layer;
-mod skinned_mesh_renderer;
+pub mod shaders;
 pub mod systems;
 pub mod window;
 

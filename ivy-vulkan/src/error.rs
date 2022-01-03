@@ -49,4 +49,7 @@ pub enum Error {
 
     #[error("Vulkan resource error")]
     ResourceError(#[from] ivy_resources::Error),
+
+    #[error("Failed to read spv")]
+    SpvRead(std::io::Error),
 }

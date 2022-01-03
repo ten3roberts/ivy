@@ -55,6 +55,7 @@ log = "0.4.14"
 
 [build-dependencies]
 anyhow = "1.0.52"
+walkdir = "2.3"
 
 [features]
 default = []

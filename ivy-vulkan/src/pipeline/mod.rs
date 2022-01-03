@@ -1,5 +1,5 @@
 use crate::traits::FromExtent;
-use crate::{descriptors::DescriptorLayoutInfo, Error, Result, VertexDesc, VulkanContext};
+use crate::{descriptors::DescriptorLayoutInfo, Result, VertexDesc, VulkanContext};
 use ash::vk::{
     BlendFactor, BlendOp, ColorComponentFlags, Extent2D, PipelineColorBlendAttachmentState,
     PipelineLayout, PrimitiveTopology, PushConstantRange,
@@ -7,22 +7,22 @@ use ash::vk::{
 use ivy_base::Extent;
 use smallvec::SmallVec;
 use std::{ffi::CString, sync::Arc};
-use std::{fs::File, path::PathBuf};
 
 use ash::vk;
 
 mod shader;
+pub use shader::ShaderModuleInfo;
 use shader::*;
 
 #[derive(Clone)]
 pub struct PipelineInfo<'a> {
+    pub vs: ShaderModuleInfo,
+    pub fs: ShaderModuleInfo,
     pub renderpass: vk::RenderPass,
     pub subpass: u32,
     // Enable alpha blending,
     pub blending: bool,
     pub topology: PrimitiveTopology,
-    pub vertexshader: PathBuf,
-    pub fragmentshader: PathBuf,
     pub samples: vk::SampleCountFlags,
     pub extent: Extent,
     pub polygon_mode: vk::PolygonMode,
@@ -40,8 +40,8 @@ impl<'a> Default for PipelineInfo<'a> {
             renderpass: vk::RenderPass::null(),
             blending: false,
             subpass: 0,
-            vertexshader: "".into(),
-            fragmentshader: "".into(),
+            vs: "".into(),
+            fs: "".into(),
             samples: vk::SampleCountFlags::TYPE_1,
             extent: (0, 0).into(),
             polygon_mode: vk::PolygonMode::FILL,
@@ -66,16 +66,10 @@ impl Pipeline {
     where
         V: VertexDesc,
     {
-        let mut vertexshader = File::open(&info.vertexshader)
-            .map_err(|e| Error::Io(e, Some(info.vertexshader.clone())))?;
-
-        let mut fragmentshader = File::open(&info.fragmentshader)
-            .map_err(|e| Error::Io(e, Some(info.fragmentshader.clone())))?;
-
         let device = context.device();
 
-        let vertexshader = ShaderModule::new(device, &mut vertexshader)?;
-        let fragmentshader = ShaderModule::new(device, &mut fragmentshader)?;
+        let vertexshader = ShaderModule::new(device, &info.vs)?;
+        let fragmentshader = ShaderModule::new(device, &info.fs)?;
 
         let layout = shader::reflect(
             &context,

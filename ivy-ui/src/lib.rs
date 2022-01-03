@@ -32,7 +32,6 @@
 //!
 mod canvas;
 mod components;
-pub mod constraints;
 mod error;
 mod events;
 mod font;
@@ -42,10 +41,13 @@ mod input_field;
 mod layer;
 mod layout;
 mod reactive;
-pub mod systems;
 mod text;
 mod text_renderer;
 mod vertex;
+
+pub mod constraints;
+pub mod shaders;
+pub mod systems;
 
 pub use canvas::*;
 pub use components::*;

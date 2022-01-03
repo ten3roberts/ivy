@@ -4,11 +4,15 @@ use std::{fmt::Display, sync::Arc, time::Duration};
 use anyhow::{anyhow, Context};
 use collision::{util::project_plane, BVHNode, Collider, CollisionTree, Cube, Ray, Sphere};
 use flume::Receiver;
-use glam::{EulerRot, Quat, Vec2, Vec2Swizzles, Vec3};
+use glam::{Vec2, Vec2Swizzles, Vec3};
 use glfw::{CursorMode, Key, MouseButton, WindowEvent};
 use graphics::{
     gizmos::GizmoRenderer,
     layer::{WindowLayer, WindowLayerInfo},
+    shaders::{
+        DEFAULT_FRAGMENT_SHADER, DEFAULT_VERTEX_SHADER, FULLSCREEN_SHADER, GIZMO_FRAGMENT_SHADER,
+        GIZMO_VERTEX_SHADER,
+    },
 };
 use hecs::*;
 use hecs_hierarchy::*;
@@ -22,6 +26,7 @@ use ivy::{
     vulkan::*,
     *,
 };
+use ivy_postprocessing::shaders::PBR_SHADER;
 use ivy_resources::Resources;
 use parking_lot::RwLock;
 use physics::{
@@ -38,6 +43,9 @@ use random::{rand::rngs::StdRng, Random};
 use rendergraph::GraphicsLayer;
 use slotmap::SecondaryMap;
 use std::fmt::Write;
+use ui::shaders::{
+    IMAGE_FRAGMENT_SHADER, IMAGE_VERTEX_SHADER, TEXT_FRAGMENT_SHADER, TEXT_VERTEX_SHADER,
+};
 use vulkan::vk::{CullModeFlags, PresentModeKHR};
 
 use log::*;
@@ -357,8 +365,8 @@ fn setup_graphics(
     let postprocessing_pipeline = Pipeline::new::<()>(
         context.clone(),
         &PipelineInfo {
-            vertexshader: "./res/shaders/fullscreen.vert.spv".into(),
-            fragmentshader: "./res/shaders/post_processing.frag.spv".into(),
+            vs: FULLSCREEN_SHADER,
+            fs: PBR_SHADER,
             cull_mode: CullModeFlags::NONE,
             ..rendergraph.pipeline_info(nodes.postprocessing)?
         },
@@ -367,9 +375,9 @@ fn setup_graphics(
     let gizmo_pipeline = Pipeline::new::<Vertex>(
         context.clone(),
         &PipelineInfo {
-            vertexshader: "./res/shaders/gizmos.vert.spv".into(),
+            vs: GIZMO_VERTEX_SHADER,
+            fs: GIZMO_FRAGMENT_SHADER,
             blending: true,
-            fragmentshader: "./res/shaders/gizmos.frag.spv".into(),
             cull_mode: CullModeFlags::NONE,
             ..rendergraph.pipeline_info(nodes.gizmo)?
         },
@@ -379,8 +387,8 @@ fn setup_graphics(
     let pipeline = Pipeline::new::<Vertex>(
         context.clone(),
         &PipelineInfo {
-            vertexshader: "./res/shaders/default.vert.spv".into(),
-            fragmentshader: "./res/shaders/default.frag.spv".into(),
+            vs: DEFAULT_VERTEX_SHADER,
+            fs: DEFAULT_FRAGMENT_SHADER,
             samples: SampleCountFlags::TYPE_1,
             ..rendergraph.pipeline_info(nodes.geometry)?
         },
@@ -399,8 +407,8 @@ fn setup_graphics(
         context.clone(),
         &PipelineInfo {
             blending: true,
-            vertexshader: "./res/shaders/ui.vert.spv".into(),
-            fragmentshader: "./res/shaders/ui.frag.spv".into(),
+            vs: IMAGE_VERTEX_SHADER,
+            fs: IMAGE_FRAGMENT_SHADER,
             ..rendergraph.pipeline_info(nodes.ui)?
         },
     )?;
@@ -410,8 +418,8 @@ fn setup_graphics(
         context.clone(),
         &PipelineInfo {
             blending: true,
-            vertexshader: "./res/shaders/text.vert.spv".into(),
-            fragmentshader: "./res/shaders/text.frag.spv".into(),
+            vs: TEXT_VERTEX_SHADER,
+            fs: TEXT_FRAGMENT_SHADER,
             ..rendergraph.pipeline_info(nodes.ui)?
         },
     )?;
@@ -728,7 +736,6 @@ impl Layer for LogicLayer {
         } else {
             window.set_cursor_mode(CursorMode::Normal);
         }
-        dbg!(self.input.normalized_cursor_pos());
 
         *camera_rot = Rotation::euler_angles(self.camera_euler);
 

@@ -1,7 +1,10 @@
 use crate::Pipeline;
 use crate::Result;
 use crate::VulkanContext;
-use std::io::{Read, Seek};
+use std::borrow::Cow;
+use std::fs::File;
+use std::io::BufReader;
+use std::io::Cursor;
 
 use crate::descriptors;
 use ash::vk;
@@ -15,6 +18,59 @@ use crate::Error;
 pub const MAX_SETS: usize = 4;
 pub const MAX_PUSH_CONSTANTS: usize = 4;
 
+/// Represents a shader module as a file or a slice of compiled code
+#[derive(Clone, Debug)]
+pub enum ShaderModuleInfo {
+    Path(Cow<'static, str>),
+    Bytes(Cow<'static, [u8]>),
+}
+
+impl<P: Into<Cow<'static, str>>> From<P> for ShaderModuleInfo {
+    fn from(val: P) -> Self {
+        Self::from_path(val)
+    }
+}
+
+impl ShaderModuleInfo {
+    pub fn from_path<S: Into<Cow<'static, str>>>(path: S) -> Self {
+        Self::Path(path.into())
+    }
+
+    pub fn from_bytes<S: Into<Cow<'static, [u8]>>>(bytes: S) -> Self {
+        Self::Bytes(bytes.into())
+    }
+
+    pub const fn from_const_bytes(bytes: &'static [u8]) -> Self {
+        Self::Bytes(Cow::Borrowed(bytes))
+    }
+}
+
+enum ShaderModuleReader<'a> {
+    File(BufReader<File>),
+    Slice(Cursor<&'a [u8]>),
+}
+
+impl<'a> ShaderModuleReader<'a> {
+    fn new(info: &'a ShaderModuleInfo) -> Result<Self> {
+        let reader = match info {
+            ShaderModuleInfo::Path(val) => Self::File(BufReader::new(
+                File::open(val.as_ref()).map_err(|e| Error::Io(e, Some(val.as_ref().into())))?,
+            )),
+            ShaderModuleInfo::Bytes(val) => Self::Slice(Cursor::new(val.as_ref())),
+        };
+
+        Ok(reader)
+    }
+
+    fn into_spv(self) -> Result<Vec<u32>> {
+        match self {
+            ShaderModuleReader::File(mut val) => ash::util::read_spv(&mut val),
+            ShaderModuleReader::Slice(mut val) => ash::util::read_spv(&mut val),
+        }
+        .map_err(|e| Error::SpvRead(e))
+    }
+}
+
 pub struct ShaderModule {
     pub reflect_module: spirv_reflect::ShaderModule,
     // pub stage: vk::ShaderStageFlags,
@@ -22,8 +78,8 @@ pub struct ShaderModule {
 }
 
 impl ShaderModule {
-    pub fn new<R: Read + Seek>(device: &Device, code: &mut R) -> Result<Self> {
-        let code = ash::util::read_spv(code).map_err(|e| Error::Io(e, None))?;
+    pub fn new(device: &Device, code: &ShaderModuleInfo) -> Result<Self> {
+        let code = ShaderModuleReader::new(&code)?.into_spv()?;
 
         let create_info = vk::ShaderModuleCreateInfo::builder().code(&code);
         let module = unsafe { device.create_shader_module(&create_info, None)? };
