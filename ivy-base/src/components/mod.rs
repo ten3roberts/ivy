@@ -132,8 +132,14 @@ impl Rotation {
     pub fn into_matrix(&self) -> Mat4 {
         Mat4::from_quat(**self)
     }
-    pub fn euler_angles(roll: f32, pitch: f32, yaw: f32) -> Self {
-        Self(Quat::from_euler(glam::EulerRot::ZXY, roll, pitch, yaw))
+    /// Creates an euler rotation from yxz (yaw pitch roll) order
+    pub fn euler_angles(angles: Vec3) -> Self {
+        Self(Quat::from_euler(
+            glam::EulerRot::YXZ,
+            angles.y,
+            angles.x,
+            angles.z,
+        ))
     }
     /// Creates an angular velocity from an axis angle rotation. Note: Axis is
     /// assumed to be normalized.
@@ -230,17 +236,17 @@ impl<'a> TransformQuery<'a> {
 
     /// Returns the forward direction of the transform
     pub fn forward(&self) -> Vec3 {
-        self.rot.mul_vec3(Vec3::Z)
+        **self.rot * Vec3::Z
     }
 
     /// Returns the right direction of the transform
     pub fn right(&self) -> Vec3 {
-        self.rot.mul_vec3(Vec3::X)
+        **self.rot * Vec3::X
     }
 
     /// Returns the up direction of the transform
     pub fn up(&self) -> Vec3 {
-        self.rot.mul_vec3(Vec3::Y)
+        **self.rot * Vec3::Y
     }
 }
 

@@ -135,7 +135,6 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
 
         // Trace up to the root of the rigid connection before solving
         // collisions
-        dbg!(&coll);
         let (a, a_mass) = get_rigid_root(&world, *coll.a)?;
         let (b, b_mass) = get_rigid_root(&world, *coll.b)?;
 

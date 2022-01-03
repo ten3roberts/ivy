@@ -4,7 +4,7 @@ use std::{fmt::Display, sync::Arc, time::Duration};
 use anyhow::{anyhow, Context};
 use collision::{util::project_plane, BVHNode, Collider, CollisionTree, Cube, Ray, Sphere};
 use flume::Receiver;
-use glam::{EulerRot, Quat, Vec2, Vec3};
+use glam::{EulerRot, Quat, Vec2, Vec2Swizzles, Vec3};
 use glfw::{CursorMode, Key, MouseButton, WindowEvent};
 use graphics::{
     gizmos::GizmoRenderer,
@@ -95,7 +95,7 @@ fn move_system(world: &mut World, input: &Input) {
         .for_each(|(_, (m, v, a, r))| {
             let movement = m.translate.get(&input);
             if m.local {
-                *v = Velocity(r.mul_vec3(movement)) * m.speed;
+                *v = Velocity(**r * movement) * m.speed;
             } else {
                 *v = Velocity(movement) * m.speed;
             }
@@ -722,20 +722,15 @@ impl Layer for LogicLayer {
         //  Only move camera if right mouse button is held
         if self.input.mouse_button(MouseButton::Button2) {
             window.set_cursor_mode(CursorMode::Disabled);
-            let mouse_movement = self.input.cursor_movement() / window.extent().as_vec();
+            let mouse_movement = self.input.normalized_cursor_movement() * Vec2::new(1.0, -1.0);
 
-            self.camera_euler += mouse_movement.extend(0.0);
+            self.camera_euler += mouse_movement.yx().extend(0.0);
         } else {
             window.set_cursor_mode(CursorMode::Normal);
         }
+        dbg!(self.input.normalized_cursor_pos());
 
-        *camera_rot = Quat::from_euler(
-            EulerRot::ZXY,
-            self.camera_euler.z,
-            -self.camera_euler.y,
-            -self.camera_euler.x,
-        )
-        .into();
+        *camera_rot = Rotation::euler_angles(self.camera_euler);
 
         // Calculate cursor to world ray
         let cursor_pos = self.input.normalized_cursor_pos();

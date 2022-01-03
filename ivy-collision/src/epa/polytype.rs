@@ -233,7 +233,7 @@ impl Index<u16> for Polytype {
 
 fn remove_or_add_edge<T: Array<Item = Edge>>(edges: &mut SmallVec<T>, edge: Edge) {
     if let Some((index, _)) = edges.iter().enumerate().find(|(_, val)| {
-        assert_ne!(**val, edge);
+        // assert_ne!(**val, edge);
         (val.0, val.1) == (edge.1, edge.0)
     }) {
         edges.remove(index);

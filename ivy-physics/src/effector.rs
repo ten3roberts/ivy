@@ -98,7 +98,7 @@ impl Effector {
     }
 
     pub fn net_translation(&self, rotation: &Rotation) -> Position {
-        Position(self.translate + rotation.mul_vec3(self.local_translate))
+        Position(self.translate + **rotation * self.local_translate)
     }
 }
 
