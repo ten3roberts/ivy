@@ -1,110 +1,42 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use glam::Vec3;
-use hecs::{Entity, World};
+use hecs::{Component, Entity, World};
 use ivy_base::Extent;
-use ivy_graphics::{DepthAttachment, GpuCameraData, LightManager, Renderer};
+use ivy_graphics::{DepthAttachment, EnvironmentManager, GpuCameraData, LightManager, Renderer};
 use ivy_rendergraph::{AttachmentInfo, CameraNode, Node};
 use ivy_resources::{Handle, Resources, Storage};
 use ivy_vulkan::{
     descriptors::MultiDescriptorBindable, shaderpass::ShaderPass, vk::ClearValue, ClearValueExt,
-    Format, ImageLayout, ImageUsage, LoadOp, SampleCountFlags, StoreOp, Texture, TextureInfo,
-    VulkanContext,
+    ImageLayout, LoadOp, StoreOp, Texture, VulkanContext,
 };
+
+mod attachments;
 
 use crate::node::PostProcessingNode;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PBRAttachments {
-    pub albedo: Handle<Texture>,
-    pub position: Handle<Texture>,
-    pub normal: Handle<Texture>,
-    pub roughness_metallic: Handle<Texture>,
-}
-
-impl PBRAttachments {
-    pub fn new(context: Arc<VulkanContext>, resources: &Resources, extent: Extent) -> Result<Self> {
-        let albedo = resources.insert(Texture::new(
-            context.clone(),
-            &TextureInfo {
-                extent,
-                mip_levels: 1,
-                usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::INPUT_ATTACHMENT,
-                format: Format::R8G8B8A8_SRGB,
-                samples: SampleCountFlags::TYPE_1,
-            },
-        )?)?;
-
-        let position = resources.insert(Texture::new(
-            context.clone(),
-            &TextureInfo {
-                extent,
-                mip_levels: 1,
-                usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::INPUT_ATTACHMENT,
-                format: Format::R32G32B32A32_SFLOAT,
-                samples: SampleCountFlags::TYPE_1,
-            },
-        )?)?;
-
-        let normal = resources.insert(Texture::new(
-            context.clone(),
-            &TextureInfo {
-                extent,
-                mip_levels: 1,
-                usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::INPUT_ATTACHMENT,
-                format: Format::R32G32B32A32_SFLOAT,
-                samples: SampleCountFlags::TYPE_1,
-            },
-        )?)?;
-
-        let roughness_metallic = resources.insert(Texture::new(
-            context.clone(),
-            &TextureInfo {
-                extent,
-                mip_levels: 1,
-                usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::INPUT_ATTACHMENT,
-                format: Format::R8G8_UNORM,
-                samples: SampleCountFlags::TYPE_1,
-            },
-        )?)?;
-
-        Ok(Self {
-            albedo,
-            position,
-            normal,
-            roughness_metallic,
-        })
-    }
-
-    pub fn as_slice(&self) -> [Handle<Texture>; 4] {
-        [
-            self.albedo,
-            self.position,
-            self.normal,
-            self.roughness_metallic,
-        ]
-    }
-}
+use self::attachments::PBRAttachments;
 
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
-pub struct PBRInfo {
-    pub ambient_radience: Vec3,
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PBRInfo<EnvData> {
     pub max_lights: u64,
+    pub env_data: EnvData,
 }
 
-impl Default for PBRInfo {
+impl<EnvData: Default> Default for PBRInfo<EnvData> {
     fn default() -> Self {
         Self {
-            ambient_radience: Vec3::ONE * 0.1,
-            max_lights: 10,
+            max_lights: 5,
+            env_data: EnvData::default(),
         }
     }
 }
 
 /// Installs PBR rendering for the specified camera. Returns a list of nodes suitable for
-/// rendergraph insertions. Configures gpu camera data and light management.
-pub fn create_pbr_pipeline<GeometryPass, PostProcessingPass, R>(
+/// rendergraph insertions. Configures gpu camera data, light management and
+/// environment manager and attaches them to the camera.
+pub fn create_pbr_pipeline<GeometryPass, PostProcessingPass, EnvData, R>(
     context: Arc<VulkanContext>,
     world: &mut World,
     resources: &Resources,
@@ -115,13 +47,14 @@ pub fn create_pbr_pipeline<GeometryPass, PostProcessingPass, R>(
     read_attachments: &[Handle<Texture>],
     color_attachments: &[AttachmentInfo],
     bindables: &[&dyn MultiDescriptorBindable],
-    info: PBRInfo,
+    info: PBRInfo<EnvData>,
 ) -> Result<[Box<dyn Node>; 2]>
 where
     GeometryPass: ShaderPass,
     PostProcessingPass: ShaderPass,
     R: Renderer + Storage,
     R::Error: Storage + Into<anyhow::Error>,
+    EnvData: Copy + Component,
 {
     let pbr_attachments = PBRAttachments::new(context.clone(), resources, extent)?;
 
@@ -165,18 +98,15 @@ where
         frames_in_flight,
     )?);
 
-    let light_manager = LightManager::new(
-        context.clone(),
-        info.max_lights,
-        info.ambient_radience,
-        frames_in_flight,
-    )?;
-
+    let light_manager = LightManager::new(context.clone(), info.max_lights, frames_in_flight)?;
+    let env_manager = EnvironmentManager::new(context.clone(), info.env_data, frames_in_flight)?;
     let camera_data = GpuCameraData::new(context.clone(), frames_in_flight)?;
+
     let data = [
         camera_data.buffers(),
         light_manager.scene_buffers(),
         light_manager.light_buffers(),
+        env_manager.buffers(),
     ];
 
     let bindables = data
@@ -211,6 +141,7 @@ where
             camera_data,
             pbr_attachments,
             depth_attachment,
+            env_manager,
         ),
     )?;
 

@@ -27,13 +27,18 @@ layout(binding = 5) uniform CameraData {
 } cameraData;
 
 layout(binding = 6) uniform LightSceneData {
-	vec3 ambient;
 	uint num_lights;
 } lightSceneData;
 
 layout(binding = 7) readonly buffer LightBufferData {
 	LightData lights[];
 } lightBuffer;
+
+layout(binding = 8) uniform EnvData {
+	vec3 ambient;
+	float fog_density;
+	vec3 fog_color;
+} env;
 
 
 const float DIELECTRIC_F0 = 0.04;
@@ -129,6 +134,9 @@ vec3 PBR(vec3 albedo, vec3 pos, vec3 normal, float roughness, float metallic) {
 
 		vec3 radiance = light.radiance * dot(lightDir, normal) / (dist * dist);
 
+		/* if (dot(radiance, radiance) < 0.1) { */
+		/* 	continue; */
+		/* } */
 
 		vec3 fresnel = FresnelSchlick(max(dot(halfway, cameraDir), 0.0), F0);
 
@@ -150,7 +158,14 @@ vec3 PBR(vec3 albedo, vec3 pos, vec3 normal, float roughness, float metallic) {
 		Lo += (kD * albedo / PI + specular) * radiance * ndotL;
 	}
 
-	return Lo + lightSceneData.ambient * albedo;
+	return Lo + env.ambient * albedo;
+}
+
+vec4 applyFog(vec4 color, float  distance) {
+	float amount = 1 - exp(-distance * env.fog_density);
+	/* float amount = 1 - exp(-distance * 0.1); */
+
+	return mix(color, vec4(env.fog_color, 1), amount);
 }
 
 void main() {
@@ -180,7 +195,10 @@ void main() {
 	color += DirectLightRadiances(depth);
 
 	if(color.x > 1 || color.y > 1 || color.z > 1)
-		color = normalize(color);
+	color = normalize(color);
+
+	float distance = length(cameraData.pos.xyz - pos);
 
 	outColor = vec4(color, 1);
+	outColor = applyFog(outColor, distance);
 }

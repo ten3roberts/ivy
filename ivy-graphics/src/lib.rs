@@ -16,6 +16,7 @@ mod renderer;
 
 mod allocator;
 mod animator;
+mod environment;
 mod events;
 mod skinned_mesh_renderer;
 
@@ -32,6 +33,7 @@ pub use base_renderer::*;
 pub use bundle::*;
 pub use camera::*;
 pub use document::*;
+pub use environment::*;
 pub use error::*;
 pub use events::*;
 pub use fullscreen_renderer::*;

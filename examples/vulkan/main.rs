@@ -242,28 +242,34 @@ impl RenderGraphNodes {
         let text_renderer = resources.default::<TextRenderer>()?;
 
         let pbr_nodes =
-            rendergraph.add_nodes(create_pbr_pipeline::<GeometryPass, PostProcessingPass, _>(
-                context.clone(),
-                world,
-                &resources,
-                main_camera,
-                resources.default::<MeshRenderer>()?,
-                extent,
-                FRAMES_IN_FLIGHT,
-                &[],
-                &[AttachmentInfo {
-                    store_op: StoreOp::STORE,
-                    load_op: LoadOp::DONT_CARE,
-                    initial_layout: ImageLayout::UNDEFINED,
-                    final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                    resource: final_lit,
-                }],
-                &[],
-                PBRInfo {
-                    ambient_radience: Vec3::ONE * 0.05,
-                    max_lights: 10,
-                },
-            )?);
+            rendergraph.add_nodes(
+                create_pbr_pipeline::<GeometryPass, PostProcessingPass, _, _>(
+                    context.clone(),
+                    world,
+                    &resources,
+                    main_camera,
+                    resources.default::<MeshRenderer>()?,
+                    extent,
+                    FRAMES_IN_FLIGHT,
+                    &[],
+                    &[AttachmentInfo {
+                        store_op: StoreOp::STORE,
+                        load_op: LoadOp::DONT_CARE,
+                        initial_layout: ImageLayout::UNDEFINED,
+                        final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                        resource: final_lit,
+                    }],
+                    &[],
+                    PBRInfo {
+                        env_data: DefaultEnvData {
+                            ambient_radiance: Vec3::ONE * 0.01,
+                            fog_density: 0.1,
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    },
+                )?,
+            );
         let geometry = pbr_nodes[0];
         let postprocessing = pbr_nodes[1];
 

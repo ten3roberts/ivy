@@ -41,14 +41,12 @@ pub struct LightManager {
 
     max_lights: u64,
     num_lights: u64,
-    ambient_radience: Vec3,
 }
 
 impl LightManager {
     pub fn new(
         context: Arc<VulkanContext>,
         max_lights: u64,
-        ambient_radience: Vec3,
         frames_in_flight: usize,
     ) -> Result<Self> {
         let scene_buffers = (0..frames_in_flight)
@@ -94,7 +92,6 @@ impl LightManager {
             lights: Vec::new(),
             num_lights: 0,
             max_lights,
-            ambient_radience,
         })
     }
 
@@ -136,7 +133,6 @@ impl LightManager {
             0,
             &[LightSceneData {
                 num_lights: self.num_lights as u32,
-                ambient_radience: self.ambient_radience,
             }],
         )?;
 
@@ -193,6 +189,5 @@ impl std::cmp::Eq for LightData {}
 
 #[repr(C)]
 struct LightSceneData {
-    ambient_radience: Vec3,
     num_lights: u32,
 }
