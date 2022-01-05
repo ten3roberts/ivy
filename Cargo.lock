@@ -543,6 +543,7 @@ dependencies = [
  "ivy-input",
  "ivy-physics",
  "ivy-postprocessing",
+ "ivy-presets",
  "ivy-random",
  "ivy-rendergraph",
  "ivy-resources",
@@ -684,6 +685,23 @@ dependencies = [
  "ivy-rendergraph",
  "ivy-resources",
  "ivy-vulkan",
+]
+
+[[package]]
+name = "ivy-presets"
+version = "0.1.0"
+dependencies = [
+ "hecs",
+ "ivy-base",
+ "ivy-graphics",
+ "ivy-postprocessing",
+ "ivy-rendergraph",
+ "ivy-resources",
+ "ivy-ui",
+ "ivy-vulkan",
+ "records",
+ "slotmap",
+ "thiserror",
 ]
 
 [[package]]

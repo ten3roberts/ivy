@@ -21,7 +21,10 @@ impl std::fmt::Display for CompilationFailure {
 fn rerun_if_changed<P: AsRef<Path>>(path: P) {
     let path = path.as_ref();
 
-    println!("cargo:rerun-if-changed={}", path.display());
+    println!(
+        "cargo:rerun-if-changed={}",
+        path.canonicalize().unwrap().display()
+    );
 }
 
 fn compile_glsl(src: &Path, dst: &Path) -> Result<Child> {
@@ -88,7 +91,7 @@ where
             let dst_metadata = dst_path.metadata().ok();
 
             if let Some(dst_metadata) = dst_metadata {
-                if dst_metadata.modified()? >= metadata.modified()? {
+                if dst_metadata.modified()? > metadata.modified()? {
                     return Ok(None);
                 }
             }

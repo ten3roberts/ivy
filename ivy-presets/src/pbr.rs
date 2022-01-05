@@ -1,0 +1,308 @@
+use hecs::World;
+use ivy_base::WorldExt;
+use ivy_graphics::{
+    gizmos::GizmoRenderer,
+    shaders::{
+        DEFAULT_FRAGMENT_SHADER, DEFAULT_VERTEX_SHADER, FULLSCREEN_SHADER, GIZMO_FRAGMENT_SHADER,
+        GIZMO_VERTEX_SHADER, SKINNED_VERTEX_SHADER,
+    },
+    DepthAttachment, FullscreenRenderer, MainCamera, MeshRenderer, SkinnedMeshRenderer,
+    SkinnedVertex, Vertex, WithPass,
+};
+use ivy_postprocessing::{
+    pbr::{create_pbr_pipeline, PBRInfo},
+    shaders::PBR_SHADER,
+};
+use ivy_rendergraph::{AttachmentInfo, CameraNode, NodeIndex, RenderGraph, SwapchainNode};
+use ivy_resources::Resources;
+use ivy_ui::{
+    shaders::{
+        IMAGE_FRAGMENT_SHADER, IMAGE_VERTEX_SHADER, TEXT_FRAGMENT_SHADER, TEXT_VERTEX_SHADER,
+    },
+    Canvas, ImageRenderer, TextRenderer, TextUpdateNode, UIVertex,
+};
+use ivy_vulkan::{
+    vk::{CullModeFlags, PolygonMode},
+    ImageLayout, ImageUsage, LoadOp, Pipeline, PipelineInfo, StoreOp, Swapchain, Texture,
+    TextureInfo, VulkanContext,
+};
+use std::sync::Arc;
+
+use crate::{
+    Error, GeometryPass, GizmoPass, ImagePass, PostProcessingPass, Result, SkinnedPass, TextPass,
+};
+
+/// Create a pbr rendergraph with UI and gizmos
+/// This is the most common setup and works well for many use cases.
+
+#[records::record]
+/// Preset for common PBR rendering setup with UI and gizmos
+pub struct PBRRendering {
+    geometry: NodeIndex,
+    ui: NodeIndex,
+    pbr: NodeIndex,
+    gizmo: NodeIndex,
+}
+
+impl PBRRendering {
+    /// Setup a PBR rendergraph consisting of
+    /// - Geometry rendering
+    /// - Deferred PBR shading
+    /// - UI image and text rendering
+    /// - Composition and swapchain presentation
+    ///
+    /// Requires the existence of [ Swapchain ](ivy_vulkan::Swapchain), [Canvas](ivy_ui::Canvas),
+    /// [MainCamera](ivy_graphics::MainCamera).
+    pub fn setup<Env: 'static + Copy + Send + Sync>(
+        world: &mut World,
+        resources: &Resources,
+        pbr_info: PBRInfo<Env>,
+        frames_in_flight: usize,
+    ) -> Result<Self> {
+        let camera = world
+            .by_tag::<MainCamera>()
+            .ok_or(Error::MissingMainCamera)?
+            .entity();
+
+        let canvas = world
+            .by_tag::<Canvas>()
+            .ok_or(Error::MissingCanvas)?
+            .entity();
+
+        let context = resources.get_default::<Arc<VulkanContext>>()?;
+        context.wait_idle()?;
+
+        let mut rendergraph = RenderGraph::new(context.clone(), frames_in_flight)?;
+
+        // Setup renderers
+        resources
+            .default_entry()?
+            .or_insert_with(|| FullscreenRenderer);
+
+        let gizmo_renderer = resources
+            .default_entry()?
+            .or_try_insert_with(|| GizmoRenderer::new(context.clone()))?
+            .handle;
+
+        let mesh_renderer = resources
+            .default_entry()?
+            .or_try_insert_with(|| MeshRenderer::new(context.clone(), 16, frames_in_flight))?
+            .handle;
+
+        let skinned_renderer = resources
+            .default_entry()?
+            .or_try_insert_with(|| {
+                SkinnedMeshRenderer::new(context.clone(), 16, 128, frames_in_flight)
+            })?
+            .handle;
+
+        let swapchain = resources.get_default::<Swapchain>()?;
+
+        let extent = swapchain.extent();
+
+        let final_lit = resources.insert(Texture::new(
+            context.clone(),
+            &TextureInfo {
+                extent,
+                mip_levels: 1,
+                usage: ImageUsage::COLOR_ATTACHMENT
+                    | ImageUsage::SAMPLED
+                    | ImageUsage::TRANSFER_SRC,
+                ..Default::default()
+            },
+        )?)?;
+
+        let pbr_nodes =
+            rendergraph.add_nodes(
+                create_pbr_pipeline::<GeometryPass, PostProcessingPass, _, _>(
+                    context.clone(),
+                    world,
+                    &resources,
+                    camera,
+                    (
+                        mesh_renderer,
+                        WithPass::<SkinnedPass, _>::new(skinned_renderer),
+                    ),
+                    extent,
+                    frames_in_flight,
+                    &[],
+                    &[AttachmentInfo {
+                        store_op: StoreOp::STORE,
+                        load_op: LoadOp::DONT_CARE,
+                        initial_layout: ImageLayout::UNDEFINED,
+                        final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                        resource: final_lit,
+                    }],
+                    &[],
+                    pbr_info,
+                )?,
+            );
+
+        let geometry = pbr_nodes[0];
+        let pbr = pbr_nodes[1];
+
+        let gizmo = rendergraph.add_node(CameraNode::<GizmoPass, _>::new(
+            "Gizmos Node",
+            context.clone(),
+            resources,
+            camera,
+            gizmo_renderer,
+            &[AttachmentInfo {
+                store_op: StoreOp::STORE,
+                load_op: LoadOp::LOAD,
+                initial_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                resource: final_lit,
+            }],
+            &[],
+            &[world.get::<DepthAttachment>(camera)?.0],
+            None,
+            &[],
+            &[],
+            &[],
+            frames_in_flight,
+        )?);
+
+        let image_renderer = resources
+            .default_entry()?
+            .or_try_insert_with(|| ImageRenderer::new(context.clone(), 16, frames_in_flight))?
+            .handle;
+
+        let text_renderer = resources
+            .default_entry()?
+            .or_try_insert_with(|| TextRenderer::new(context.clone(), 16, 512, frames_in_flight))?
+            .handle;
+
+        let ui = rendergraph.add_node(CameraNode::<ImagePass, _>::new(
+            "UI Node",
+            context.clone(),
+            resources,
+            canvas,
+            (image_renderer, WithPass::<TextPass, _>::new(text_renderer)),
+            &[AttachmentInfo {
+                store_op: StoreOp::STORE,
+                load_op: LoadOp::LOAD,
+                initial_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                resource: final_lit,
+            }],
+            &[],
+            &[],
+            None,
+            &[resources.get(text_renderer)?.vertex_buffer()],
+            &[],
+            &[],
+            frames_in_flight,
+        )?);
+
+        rendergraph.add_node(TextUpdateNode::new(resources, text_renderer)?);
+
+        rendergraph.add_node(SwapchainNode::new(
+            context.clone(),
+            resources.default()?,
+            final_lit,
+            vec![],
+            &resources,
+        )?);
+
+        // Build renderpasses
+        rendergraph.build(resources.fetch()?, extent)?;
+
+        resources.insert_default(rendergraph)?;
+
+        Ok(Self {
+            geometry,
+            ui,
+            pbr,
+            gizmo,
+        })
+    }
+
+    /// Setups basic pipelines and inserts them into the resource store
+    pub fn setup_pipelines(&self, resources: &Resources) -> Result<()> {
+        let rendergraph = resources.get_default::<RenderGraph>()?;
+        let context = resources.get_default::<Arc<VulkanContext>>()?;
+
+        let geometry = rendergraph.pipeline_info(self.geometry)?;
+        let gizmo = rendergraph.pipeline_info(self.gizmo)?;
+        let pbr = rendergraph.pipeline_info(self.pbr)?;
+
+        // Create pipelines
+        resources.insert(GeometryPass(Pipeline::new::<Vertex>(
+            context.clone(),
+            &PipelineInfo {
+                vs: DEFAULT_VERTEX_SHADER,
+                fs: DEFAULT_FRAGMENT_SHADER,
+                cull_mode: CullModeFlags::NONE,
+                ..geometry
+            },
+        )?))?;
+
+        resources.insert(SkinnedPass(Pipeline::new::<SkinnedVertex>(
+            context.clone(),
+            &PipelineInfo {
+                vs: SKINNED_VERTEX_SHADER,
+                fs: DEFAULT_FRAGMENT_SHADER,
+                cull_mode: CullModeFlags::BACK,
+                ..geometry
+            },
+        )?))?;
+
+        resources.insert(GeometryPass(Pipeline::new::<Vertex>(
+            context.clone(),
+            &PipelineInfo {
+                vs: DEFAULT_VERTEX_SHADER,
+                fs: DEFAULT_FRAGMENT_SHADER,
+                polygon_mode: PolygonMode::LINE,
+                cull_mode: CullModeFlags::NONE,
+                ..geometry
+            },
+        )?))?;
+
+        resources.insert(PostProcessingPass(Pipeline::new::<()>(
+            context.clone(),
+            &PipelineInfo {
+                vs: FULLSCREEN_SHADER,
+                fs: PBR_SHADER,
+                cull_mode: CullModeFlags::NONE,
+                ..pbr
+            },
+        )?))?;
+
+        let ui = rendergraph.pipeline_info(self.ui)?;
+        resources.insert(ImagePass(Pipeline::new::<UIVertex>(
+            context.clone(),
+            &PipelineInfo {
+                vs: IMAGE_VERTEX_SHADER,
+                fs: IMAGE_FRAGMENT_SHADER,
+                blending: true,
+                cull_mode: CullModeFlags::BACK,
+                ..ui
+            },
+        )?))?;
+
+        resources.insert(TextPass(Pipeline::new::<UIVertex>(
+            context.clone(),
+            &PipelineInfo {
+                vs: TEXT_VERTEX_SHADER,
+                fs: TEXT_FRAGMENT_SHADER,
+                cull_mode: CullModeFlags::BACK,
+                blending: true,
+                ..ui
+            },
+        )?))?;
+
+        resources.insert(GizmoPass(Pipeline::new::<Vertex>(
+            context.clone(),
+            &PipelineInfo {
+                vs: GIZMO_VERTEX_SHADER,
+                fs: GIZMO_FRAGMENT_SHADER,
+                cull_mode: CullModeFlags::NONE,
+                blending: true,
+                ..gizmo
+            },
+        )?))?;
+
+        Ok(())
+    }
+}

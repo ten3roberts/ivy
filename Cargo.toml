@@ -35,6 +35,7 @@ ivy-rendergraph = { path = "./ivy-rendergraph" }
 ivy-resources = { path = "./ivy-resources" }
 ivy-ui = { path = "./ivy-ui" }
 ivy-vulkan = { path = "./ivy-vulkan" }
+ivy-presets = { path = "./ivy-presets", version = "0.1" }
 hecs = "0.7.3"
 hecs-schedule = "0.3.21"
 derive_more = "0.99.17"

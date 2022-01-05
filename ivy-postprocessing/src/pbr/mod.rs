@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use anyhow::Result;
 use hecs::{Component, Entity, World};
 use ivy_base::Extent;
 use ivy_graphics::{DepthAttachment, EnvironmentManager, GpuCameraData, LightManager, Renderer};
@@ -48,7 +47,7 @@ pub fn create_pbr_pipeline<GeometryPass, PostProcessingPass, EnvData, R>(
     color_attachments: &[AttachmentInfo],
     bindables: &[&dyn MultiDescriptorBindable],
     info: PBRInfo<EnvData>,
-) -> Result<[Box<dyn Node>; 2]>
+) -> ivy_rendergraph::Result<[Box<dyn Node>; 2]>
 where
     GeometryPass: ShaderPass,
     PostProcessingPass: ShaderPass,
@@ -134,16 +133,18 @@ where
     )?);
 
     // Store data in camera
-    world.insert(
-        camera,
-        (
-            light_manager,
-            camera_data,
-            pbr_attachments,
-            depth_attachment,
-            env_manager,
-        ),
-    )?;
+    world
+        .insert(
+            camera,
+            (
+                light_manager,
+                camera_data,
+                pbr_attachments,
+                depth_attachment,
+                env_manager,
+            ),
+        )
+        .expect("Entity is valid");
 
     Ok([camera_node, post_processing_node])
 }

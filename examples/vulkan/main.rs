@@ -1,4 +1,6 @@
 #![allow(dead_code)]
+mod movement;
+
 use std::{fmt::Display, sync::Arc, time::Duration};
 
 use anyhow::{anyhow, Context};
@@ -6,14 +8,7 @@ use collision::{util::project_plane, BVHNode, Collider, CollisionTree, Cube, Ray
 use flume::Receiver;
 use glam::{Vec2, Vec2Swizzles, Vec3};
 use glfw::{CursorMode, Key, MouseButton, WindowEvent};
-use graphics::{
-    gizmos::GizmoRenderer,
-    layer::{WindowLayer, WindowLayerInfo},
-    shaders::{
-        DEFAULT_FRAGMENT_SHADER, DEFAULT_VERTEX_SHADER, FULLSCREEN_SHADER, GIZMO_FRAGMENT_SHADER,
-        GIZMO_VERTEX_SHADER,
-    },
-};
+use graphics::layer::{WindowLayer, WindowLayerInfo};
 use hecs::*;
 use hecs_hierarchy::*;
 use ivy::{
@@ -26,8 +21,8 @@ use ivy::{
     vulkan::*,
     *,
 };
-use ivy_postprocessing::shaders::PBR_SHADER;
 use ivy_resources::Resources;
+use movement::{move_system, Mover, WithTime};
 use parking_lot::RwLock;
 use physics::{
     bundles::*,
@@ -37,115 +32,20 @@ use physics::{
     },
     Effector, PhysicsLayer, PhysicsLayerInfo,
 };
-use postprocessing::pbr::{create_pbr_pipeline, PBRInfo};
+use postprocessing::pbr::PBRInfo;
+use presets::{GeometryPass, ImagePass, TextPass};
 use random::rand::SeedableRng;
 use random::{rand::rngs::StdRng, Random};
 use rendergraph::GraphicsLayer;
 use slotmap::SecondaryMap;
 use std::fmt::Write;
-use ui::shaders::{
-    IMAGE_FRAGMENT_SHADER, IMAGE_VERTEX_SHADER, TEXT_FRAGMENT_SHADER, TEXT_VERTEX_SHADER,
-};
-use vulkan::vk::{CullModeFlags, PresentModeKHR};
+use vulkan::vk::PresentModeKHR;
 
 use log::*;
 
 const FRAMES_IN_FLIGHT: usize = 2;
 
 type CollisionNode = BVHNode;
-
-struct WithTime<T> {
-    func: Box<dyn Fn(Entity, &mut T, f32, f32) + Send + Sync>,
-    elapsed: f32,
-}
-
-impl<T> WithTime<T>
-where
-    T: Component,
-{
-    fn new(func: Box<dyn Fn(Entity, &mut T, f32, f32) + Send + Sync>) -> Self {
-        Self { func, elapsed: 0.0 }
-    }
-
-    fn update(world: &mut World, dt: f32) {
-        world
-            .query::<(&mut Self, &mut T)>()
-            .iter()
-            .for_each(|(e, (s, val))| {
-                s.elapsed += dt;
-                (s.func)(e, val, s.elapsed, dt);
-            });
-    }
-}
-
-struct Mover {
-    translate: InputVector,
-    rotate: InputVector,
-    local: bool,
-    speed: f32,
-}
-
-impl Mover {
-    fn new(translate: InputVector, rotate: InputVector, speed: f32, local: bool) -> Self {
-        Self {
-            local,
-            translate,
-            rotate,
-            speed,
-        }
-    }
-}
-
-fn move_system(world: &mut World, input: &Input) {
-    world
-        .query::<(&Mover, &mut Velocity, &mut AngularVelocity, &Rotation)>()
-        .iter()
-        .for_each(|(_, (m, v, a, r))| {
-            let movement = m.translate.get(&input);
-            if m.local {
-                *v = Velocity(**r * movement) * m.speed;
-            } else {
-                *v = Velocity(movement) * m.speed;
-            }
-
-            let ang = m.rotate.get(&input);
-            *a = ang.into();
-        })
-}
-
-struct Periodic<T> {
-    func: Box<dyn Fn(Entity, &mut T, usize) + Send + Sync>,
-    clock: Clock,
-    period: Duration,
-    count: usize,
-}
-
-impl<T> Periodic<T>
-where
-    T: Component,
-{
-    fn _new(period: Duration, func: Box<dyn Fn(Entity, &mut T, usize) + Send + Sync>) -> Self {
-        Self {
-            func,
-            period,
-            clock: Clock::new(),
-            count: 0,
-        }
-    }
-
-    fn update(world: &mut World) {
-        world
-            .query::<(&mut Self, &mut T)>()
-            .iter()
-            .for_each(|(e, (s, val))| {
-                if s.clock.elapsed() >= s.period {
-                    s.clock.reset();
-                    (s.func)(e, val, s.count);
-                    s.count += 1;
-                }
-            });
-    }
-}
 
 fn main() -> anyhow::Result<()> {
     Logger {
@@ -203,240 +103,28 @@ fn main() -> anyhow::Result<()> {
     app.run().context("Failed to run application")
 }
 
-pub struct RenderGraphNodes {
-    pub geometry: NodeIndex,
-    pub gizmo: NodeIndex,
-    pub ui: NodeIndex,
-    pub postprocessing: NodeIndex,
-}
-
-impl RenderGraphNodes {
-    pub fn new(
-        world: &mut World,
-        main_camera: Entity,
-        canvas: Entity,
-        resources: &Resources,
-    ) -> anyhow::Result<Self> {
-        let context = resources.get_default::<Arc<VulkanContext>>()?;
-
-        let mut rendergraph = RenderGraph::new(context.clone(), FRAMES_IN_FLIGHT)
-            .context("Failed to create rendergraph")?;
-
-        let swapchain = resources.get_default::<Swapchain>()?;
-
-        let extent = swapchain.extent();
-
-        let final_lit = resources.insert(Texture::new(
-            context.clone(),
-            &TextureInfo {
-                extent,
-                mip_levels: 1,
-                usage: ImageUsage::COLOR_ATTACHMENT
-                    | ImageUsage::SAMPLED
-                    | ImageUsage::TRANSFER_SRC,
-                ..Default::default()
+fn setup_graphics(world: &mut World, resources: &Resources) -> anyhow::Result<Assets> {
+    let pbr = presets::PBRRendering::setup(
+        world,
+        resources,
+        PBRInfo {
+            max_lights: 5,
+            env_data: DefaultEnvData {
+                ambient_radiance: Vec3::ONE * 0.01,
+                fog_density: 0.05,
+                fog_color: Vec3::new(0.0, 0.0, 0.0),
+                fog_gradient: 2.0,
             },
-        )?)?;
-
-        let image_renderer = resources.default::<ImageRenderer>()?;
-        let text_renderer = resources.default::<TextRenderer>()?;
-
-        let pbr_nodes =
-            rendergraph.add_nodes(
-                create_pbr_pipeline::<GeometryPass, PostProcessingPass, _, _>(
-                    context.clone(),
-                    world,
-                    &resources,
-                    main_camera,
-                    resources.default::<MeshRenderer>()?,
-                    extent,
-                    FRAMES_IN_FLIGHT,
-                    &[],
-                    &[AttachmentInfo {
-                        store_op: StoreOp::STORE,
-                        load_op: LoadOp::DONT_CARE,
-                        initial_layout: ImageLayout::UNDEFINED,
-                        final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                        resource: final_lit,
-                    }],
-                    &[],
-                    PBRInfo {
-                        env_data: DefaultEnvData {
-                            ambient_radiance: Vec3::ONE * 0.01,
-                            fog_density: 0.1,
-                            ..Default::default()
-                        },
-                        ..Default::default()
-                    },
-                )?,
-            );
-        let geometry = pbr_nodes[0];
-        let postprocessing = pbr_nodes[1];
-
-        let gizmo = rendergraph.add_node(CameraNode::<GizmoPass, _>::new(
-            "Gizmos Node",
-            context.clone(),
-            resources,
-            main_camera,
-            resources.default::<GizmoRenderer>()?,
-            &[AttachmentInfo {
-                store_op: StoreOp::STORE,
-                load_op: LoadOp::LOAD,
-                initial_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                resource: final_lit,
-            }],
-            &[],
-            &[world.get::<DepthAttachment>(main_camera)?.0],
-            None,
-            &[],
-            &[],
-            &[],
-            FRAMES_IN_FLIGHT,
-        )?);
-
-        let ui = rendergraph.add_node(CameraNode::<UIPass, _>::new(
-            "UI Node",
-            context.clone(),
-            resources,
-            canvas,
-            (image_renderer, text_renderer),
-            &[AttachmentInfo {
-                store_op: StoreOp::STORE,
-                load_op: LoadOp::LOAD,
-                initial_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                resource: final_lit,
-            }],
-            &[],
-            &[],
-            None,
-            &[resources.get(text_renderer)?.vertex_buffer()],
-            &[],
-            &[],
-            FRAMES_IN_FLIGHT,
-        )?);
-
-        rendergraph.add_node(TextUpdateNode::new(resources, text_renderer)?);
-
-        rendergraph.add_node(SwapchainNode::new(
-            context.clone(),
-            resources.default()?,
-            final_lit,
-            vec![],
-            &resources,
-        )?);
-
-        // Build renderpasses
-        rendergraph.build(resources.fetch()?, extent)?;
-
-        resources.insert_default(rendergraph)?;
-
-        Ok(Self {
-            geometry,
-            gizmo,
-            ui,
-            postprocessing,
-        })
-    }
-}
-fn setup_graphics(
-    world: &mut World,
-    resources: &Resources,
-    camera: Entity,
-    canvas: Entity,
-) -> anyhow::Result<Assets> {
-    let context = resources.get_default::<Arc<VulkanContext>>()?;
-
-    // Setup renderers
-
-    resources.insert(FullscreenRenderer)?;
-    resources.insert(GizmoRenderer::new(context.clone())?)?;
-
-    resources.insert(MeshRenderer::new(context.clone(), 16, FRAMES_IN_FLIGHT)?)?;
-
-    resources.insert(ImageRenderer::new(context.clone(), 16, FRAMES_IN_FLIGHT)?)?;
-
-    resources.insert(TextRenderer::new(
-        context.clone(),
-        16,
-        512,
+        },
         FRAMES_IN_FLIGHT,
-    )?)?;
-
-    let nodes = RenderGraphNodes::new(world, camera, canvas, resources)?;
-
-    let rendergraph = resources.get_default::<RenderGraph>()?;
-
-    let postprocessing_pipeline = Pipeline::new::<()>(
-        context.clone(),
-        &PipelineInfo {
-            vs: FULLSCREEN_SHADER,
-            fs: PBR_SHADER,
-            cull_mode: CullModeFlags::NONE,
-            ..rendergraph.pipeline_info(nodes.postprocessing)?
-        },
     )?;
 
-    let gizmo_pipeline = Pipeline::new::<Vertex>(
-        context.clone(),
-        &PipelineInfo {
-            vs: GIZMO_VERTEX_SHADER,
-            fs: GIZMO_FRAGMENT_SHADER,
-            blending: true,
-            cull_mode: CullModeFlags::NONE,
-            ..rendergraph.pipeline_info(nodes.gizmo)?
-        },
-    )?;
-
-    // Create a pipeline from the shaders
-    let pipeline = Pipeline::new::<Vertex>(
-        context.clone(),
-        &PipelineInfo {
-            vs: DEFAULT_VERTEX_SHADER,
-            fs: DEFAULT_FRAGMENT_SHADER,
-            samples: SampleCountFlags::TYPE_1,
-            ..rendergraph.pipeline_info(nodes.geometry)?
-        },
-    )?;
-
-    let geometry_pass = resources.insert(GeometryPass(pipeline))?;
-
-    // Insert one default post processing pass
-    resources.insert_default(PostProcessingPass(postprocessing_pipeline))?;
-    resources.insert_default(GizmoPass(gizmo_pipeline))?;
-
-    let context = resources.get_default::<Arc<VulkanContext>>()?;
-
-    // Create a pipeline from the shaders
-    let ui_pipeline = Pipeline::new::<UIVertex>(
-        context.clone(),
-        &PipelineInfo {
-            blending: true,
-            vs: IMAGE_VERTEX_SHADER,
-            fs: IMAGE_FRAGMENT_SHADER,
-            ..rendergraph.pipeline_info(nodes.ui)?
-        },
-    )?;
-
-    // Create a pipeline from the shaders
-    let text_pipeline = Pipeline::new::<UIVertex>(
-        context.clone(),
-        &PipelineInfo {
-            blending: true,
-            vs: TEXT_VERTEX_SHADER,
-            fs: TEXT_FRAGMENT_SHADER,
-            ..rendergraph.pipeline_info(nodes.ui)?
-        },
-    )?;
-
-    let ui_pass = resources.insert(UIPass(ui_pipeline))?;
-    let text_pass = resources.insert(UIPass(text_pipeline))?;
+    pbr.setup_pipelines(resources)?;
 
     Ok(Assets {
-        geometry_pass,
-        text_pass,
-        ui_pass,
+        geometry_pass: resources.default()?,
+        text_pass: resources.default()?,
+        ui_pass: resources.default()?,
     })
 }
 
@@ -597,8 +285,8 @@ fn setup_objects(
 
 struct Assets {
     geometry_pass: Handle<GeometryPass>,
-    text_pass: Handle<UIPass>,
-    ui_pass: Handle<UIPass>,
+    text_pass: Handle<ImagePass>,
+    ui_pass: Handle<TextPass>,
 }
 
 struct Entities {
@@ -656,8 +344,7 @@ impl LogicLayer {
 
         let canvas = world.spawn(builder.build());
 
-        let assets =
-            setup_graphics(world, resources, camera, canvas).context("Failed to setup graphics")?;
+        let assets = setup_graphics(world, resources).context("Failed to setup graphics")?;
 
         let entities = setup_objects(world, resources, &assets, camera, canvas)?;
 
@@ -700,7 +387,7 @@ impl LogicLayer {
         for event in self.graphics_events.try_iter() {
             match event {
                 GraphicsEvent::SwapchainRecreation => {
-                    setup_graphics(world, resources, self.entities.camera, self.entities.canvas)?;
+                    setup_graphics(world, resources)?;
                 }
             }
         }
@@ -794,7 +481,6 @@ impl Layer for LogicLayer {
         }
 
         WithTime::<RelativeOffset>::update(world, dt);
-        Periodic::<Text>::update(world);
 
         move_system(world, &self.input);
 
@@ -804,14 +490,6 @@ impl Layer for LogicLayer {
 
         Ok(())
     }
-}
-
-new_shaderpass! {
-    pub struct GeometryPass;
-    pub struct WireframePass;
-    pub struct UIPass;
-    pub struct GizmoPass;
-    pub struct PostProcessingPass;
 }
 
 struct DisplayDebugReport;

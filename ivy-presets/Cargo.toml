@@ -1,0 +1,20 @@
+[package]
+name = "ivy-presets"
+version = "0.1.0"
+edition = "2021"
+description = "Contains common presets for quickly setting up an application"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ivy-vulkan = { path = "../ivy-vulkan", version = "0.9" }
+ivy-ui = { path = "../ivy-ui", version = "0.9" }
+ivy-base = { path = "../ivy-base", version = "0.9" }
+ivy-graphics = { path = "../ivy-graphics", version = "0.9" }
+ivy-rendergraph = { path = "../ivy-rendergraph", version = "0.9" }
+ivy-resources = { path = "../ivy-resources", version = "0.9" }
+ivy-postprocessing = { path = "../ivy-postprocessing", version = "0.9" }
+thiserror = "1.0.30"
+records = "0.1.1"
+hecs = "0.7.3"
+slotmap = "1.0.6"

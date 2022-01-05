@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use anyhow::Result;
 use ivy_base::Extent;
+use ivy_graphics::Result;
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{Format, ImageUsage, SampleCountFlags, Texture, TextureInfo, VulkanContext};
 

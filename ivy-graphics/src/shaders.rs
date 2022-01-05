@@ -10,6 +10,9 @@ pub const DEFAULT_VERTEX_SHADER: ShaderModuleInfo =
 pub const DEFAULT_FRAGMENT_SHADER: ShaderModuleInfo =
     ShaderModuleInfo::from_const_bytes(include_bytes!("../../res/shaders/default.frag.spv"));
 
+pub const SKINNED_VERTEX_SHADER: ShaderModuleInfo =
+    ShaderModuleInfo::from_const_bytes(include_bytes!("../../res/shaders/skinned.vert.spv"));
+
 pub const GIZMO_VERTEX_SHADER: ShaderModuleInfo =
     ShaderModuleInfo::from_const_bytes(include_bytes!("../../res/shaders/gizmos.vert.spv"));
 pub const GIZMO_FRAGMENT_SHADER: ShaderModuleInfo =

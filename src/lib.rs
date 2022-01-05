@@ -42,6 +42,7 @@ pub use ivy_image as image;
 pub use ivy_input as input;
 pub use ivy_physics as physics;
 pub use ivy_postprocessing as postprocessing;
+pub use ivy_presets as presets;
 pub use ivy_random as random;
 pub use ivy_rendergraph as rendergraph;
 pub use ivy_resources as resources;

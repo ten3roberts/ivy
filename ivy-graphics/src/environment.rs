@@ -6,12 +6,16 @@ use ivy_vulkan::{Buffer, BufferAccess::Mapped, BufferUsage, VulkanContext};
 use crate::Result;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-#[repr(C, align(16))]
+#[repr(C)]
 /// The environment data for the built in pbr shader
 pub struct DefaultEnvData {
     pub ambient_radiance: Vec3,
     pub fog_density: f32,
+    /// The color of the fog
     pub fog_color: Vec3,
+    /// The rate at which the fog fades. A higher value makes visiblity plateu
+    /// longer and then steeply fall.
+    pub fog_gradient: f32,
 }
 
 impl Default for DefaultEnvData {
@@ -19,7 +23,8 @@ impl Default for DefaultEnvData {
         Self {
             ambient_radiance: Vec3::ONE * 0.01,
             fog_color: Vec3::ZERO,
-            fog_density: 0.1,
+            fog_density: 0.01,
+            fog_gradient: 2.0,
         }
     }
 }
