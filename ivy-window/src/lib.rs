@@ -1,5 +1,8 @@
-use crate::Result;
+pub mod error;
+use error::*;
+
 use ash::vk::{Handle, SurfaceKHR};
+use glam::Vec2;
 use glfw::{ClientApiHint, CursorMode, Glfw, WindowEvent, WindowHint};
 use ivy_base::Extent;
 use ivy_vulkan::traits::Backend;
@@ -10,7 +13,6 @@ use std::{
     borrow::Cow,
     sync::{mpsc::Receiver, Arc},
 };
-use glam::Vec2;
 
 use crate::Error;
 
@@ -36,28 +38,20 @@ impl Window {
 
         glfw_mut.window_hint(WindowHint::Resizable(info.resizable));
 
-        let extent = info
-            .extent
-            .or_else(|| {
-                glfw_mut.with_primary_monitor(|_, monitor| {
-                    let mode = monitor?.get_video_mode()?;
-                    Some(Extent::new(mode.width, mode.height))
-                })
-            })
-            .ok_or(Error::WindowCreation)?;
-
         let (mut window, events) = match info.mode {
-            WindowMode::Windowed => glfw_mut.create_window(
-                extent.width,
-                extent.height,
-                info.title.as_ref(),
-                glfw::WindowMode::Windowed,
-            ),
-            WindowMode::Borderless => glfw_mut.with_primary_monitor(|glfw, monitor| {
-                let monitor = monitor?;
+            WindowMode::Windowed(extent) => glfw_mut
+                .create_window(
+                    extent.width,
+                    extent.height,
+                    info.title.as_ref(),
+                    glfw::WindowMode::Windowed,
+                )
+                .ok_or(Error::WindowCreation),
+            WindowMode::Borderless(extent) => glfw_mut.with_primary_monitor(|glfw, monitor| {
+                let monitor = monitor.ok_or(Error::MissingMonitor)?;
                 glfw.window_hint(WindowHint::Decorated(false));
 
-                let mode = monitor.get_video_mode()?;
+                let mode = monitor.get_video_mode().ok_or(Error::MissingMonitor)?;
 
                 glfw.window_hint(glfw::WindowHint::RedBits(Some(mode.red_bits)));
                 glfw.window_hint(glfw::WindowHint::GreenBits(Some(mode.green_bits)));
@@ -70,10 +64,14 @@ impl Window {
                     info.title.as_ref(),
                     glfw::WindowMode::Windowed,
                 )
+                .ok_or(Error::WindowCreation)
             }),
-            WindowMode::Fullscreen => glfw_mut.with_primary_monitor(|glfw, monitor| {
-                let monitor = monitor?;
-                let mode = monitor.get_video_mode()?;
+
+            WindowMode::BorderlessFullscreen => glfw_mut.with_primary_monitor(|glfw, monitor| {
+                let monitor = monitor.ok_or(Error::MissingMonitor)?;
+                glfw.window_hint(WindowHint::Decorated(false));
+
+                let mode = monitor.get_video_mode().ok_or(Error::MissingMonitor)?;
 
                 glfw.window_hint(glfw::WindowHint::RedBits(Some(mode.red_bits)));
                 glfw.window_hint(glfw::WindowHint::GreenBits(Some(mode.green_bits)));
@@ -81,14 +79,32 @@ impl Window {
                 glfw.window_hint(glfw::WindowHint::RefreshRate(Some(mode.refresh_rate)));
 
                 glfw.create_window(
-                    extent.width,
-                    extent.height,
+                    mode.width,
+                    mode.height,
+                    info.title.as_ref(),
+                    glfw::WindowMode::Windowed,
+                )
+                .ok_or(Error::WindowCreation)
+            }),
+
+            WindowMode::Fullscreen => glfw_mut.with_primary_monitor(|glfw, monitor| {
+                let monitor = monitor.ok_or(Error::MissingMonitor)?;
+                let mode = monitor.get_video_mode().ok_or(Error::MissingMonitor)?;
+
+                glfw.window_hint(glfw::WindowHint::RedBits(Some(mode.red_bits)));
+                glfw.window_hint(glfw::WindowHint::GreenBits(Some(mode.green_bits)));
+                glfw.window_hint(glfw::WindowHint::BlueBits(Some(mode.blue_bits)));
+                glfw.window_hint(glfw::WindowHint::RefreshRate(Some(mode.refresh_rate)));
+
+                glfw.create_window(
+                    mode.width,
+                    mode.height,
                     info.title.as_ref(),
                     glfw::WindowMode::FullScreen(monitor),
                 )
+                .ok_or(Error::WindowCreation)
             }),
-        }
-        .ok_or(Error::WindowCreation)?;
+        }?;
 
         window.set_all_polling(true);
 
@@ -165,18 +181,18 @@ impl Backend for Window {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub enum WindowMode {
-    Windowed,
-    Borderless,
+    Windowed(Extent),
+    Borderless(Extent),
+    BorderlessFullscreen,
     Fullscreen,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct WindowInfo {
-    /// The windows size. Set to none to use the monitors size.
-    pub extent: Option<Extent>,
     /// If window should be resizable
     pub resizable: bool,
+    /// The window mode and size
     pub mode: WindowMode,
     pub title: Cow<'static, str>,
 }
@@ -184,9 +200,8 @@ pub struct WindowInfo {
 impl Default for WindowInfo {
     fn default() -> Self {
         WindowInfo {
-            extent: Some(Extent::new(800, 600)),
             resizable: true,
-            mode: WindowMode::Windowed,
+            mode: WindowMode::Windowed(Extent::new(1280, 720)),
             title: "Ivy".into(),
         }
     }

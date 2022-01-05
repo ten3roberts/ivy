@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 mod movement;
 
-use std::{fmt::Display, sync::Arc, time::Duration};
+use std::{fmt::Display, time::Duration};
 
 use anyhow::{anyhow, Context};
 use collision::{util::project_plane, BVHNode, Collider, CollisionTree, Cube, Ray, Sphere};
@@ -23,7 +23,6 @@ use ivy::{
 };
 use ivy_resources::Resources;
 use movement::{move_system, Mover, WithTime};
-use parking_lot::RwLock;
 use physics::{
     bundles::*,
     connections::{
@@ -57,10 +56,7 @@ fn main() -> anyhow::Result<()> {
     // Go up three levels
     ivy_base::normalize_dir(3)?;
 
-    let glfw = Arc::new(RwLock::new(glfw::init(glfw::FAIL_ON_ERRORS)?));
-
     let window = WindowInfo {
-        extent: None,
         resizable: false,
         mode: WindowMode::Fullscreen,
         ..Default::default()
@@ -73,7 +69,7 @@ fn main() -> anyhow::Result<()> {
     };
 
     let mut app = App::builder()
-        .try_push_layer(|_, r, _| WindowLayer::new(glfw, r, WindowLayerInfo { window, swapchain }))?
+        .try_push_layer(|_, r, _| WindowLayer::new(r, WindowLayerInfo { window, swapchain }))?
         .push_layer(|w, r, e| (UILayer::new(w, r, e), ReactiveLayer::<Color>::new(w, r, e)))
         .try_push_layer(|w, r, e| -> anyhow::Result<_> {
             Ok(FixedTimeStep::new(
@@ -313,9 +309,7 @@ impl LogicLayer {
         resources: &mut Resources,
         events: &mut Events,
     ) -> anyhow::Result<Self> {
-        let window = resources.get_default::<Window>()?;
-
-        let input = Input::new(window, events);
+        let input = Input::new(resources, events)?;
 
         let input_vec = InputVector::new(
             InputAxis::keyboard(Key::A, Key::D),
@@ -350,11 +344,8 @@ impl LogicLayer {
 
         setup_ui(world, resources, &assets)?;
 
-        let (tx, window_events) = flume::unbounded();
-        events.subscribe(tx);
-
-        let (tx, graphics_events) = flume::unbounded();
-        events.subscribe(tx);
+        let window_events = events.subscribe();
+        let graphics_events = events.subscribe();
 
         Ok(Self {
             input,

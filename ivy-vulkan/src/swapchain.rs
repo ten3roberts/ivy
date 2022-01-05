@@ -27,7 +27,7 @@ pub struct SwapchainInfo {
 impl Default for SwapchainInfo {
     fn default() -> Self {
         Self {
-            present_mode: vk::PresentModeKHR::IMMEDIATE,
+            present_mode: vk::PresentModeKHR::MAILBOX,
             format: vk::SurfaceFormatKHR {
                 format: vk::Format::B8G8R8A8_SRGB,
                 color_space: vk::ColorSpaceKHR::SRGB_NONLINEAR,

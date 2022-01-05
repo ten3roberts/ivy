@@ -24,7 +24,6 @@ pub mod gizmos;
 pub mod layer;
 pub mod shaders;
 pub mod systems;
-pub mod window;
 
 pub use allocator::*;
 pub use animator::*;
@@ -44,4 +43,3 @@ pub use mesh::*;
 pub use mesh_renderer::*;
 pub use renderer::*;
 pub use skinned_mesh_renderer::*;
-pub use window::*;

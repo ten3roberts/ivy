@@ -1,10 +1,9 @@
-use std::ops::Deref;
-
 use flume::Receiver;
 use glam::Vec2;
 use glfw::{Action, Key, MouseButton};
 use ivy_base::{Events, Extent, Position2D};
-use ivy_graphics::Window;
+use ivy_resources::Resources;
+use ivy_window::Window;
 
 use crate::events::InputEvent;
 
@@ -28,18 +27,19 @@ pub struct Input {
 }
 
 impl Input {
-    /// Creates a new Input state handler
-    pub fn new<W: Deref<Target = Window>>(window: W, events: &mut Events) -> Self {
-        let (tx, rx) = flume::unbounded();
+    /// Creates a new Input state handler. Queries the default window for size
+    /// and cursor position.
+    pub fn new(resources: &Resources, events: &mut Events) -> ivy_resources::Result<Self> {
         let keys = [false; MAX_KEYS];
         let mouse_buttons = [false; MAX_MOUSE_BUTTONS];
 
-        events.subscribe(tx);
+        let rx = events.subscribe();
+        let window = resources.get_default::<Window>()?;
 
         let window_size = window.extent();
         let cursor_pos = window.cursor_pos().into();
 
-        Self {
+        Ok(Self {
             release_unfocus: true,
             rx,
             keys,
@@ -48,7 +48,7 @@ impl Input {
             window_extent: window_size,
             old_cursor_pos: cursor_pos,
             scroll: Vec2::ZERO,
-        }
+        })
     }
 
     /// Resets the relative scroll and mouse movements and handles incoming window events. Call

@@ -6,11 +6,11 @@ use std::{
 use glfw::{Glfw, WindowEvent};
 use hecs::World;
 use ivy_base::{AppEvent, Events, Layer};
+use ivy_input::InputEvent;
 use ivy_resources::Resources;
 use ivy_vulkan::{Swapchain, SwapchainInfo, VulkanContext};
+use ivy_window::{Window, WindowInfo};
 use parking_lot::RwLock;
-
-use crate::{Window, WindowInfo};
 
 /// Customize behaviour of the window layer
 #[derive(Debug, Clone, PartialEq)]
@@ -38,11 +38,8 @@ pub struct WindowLayer {
 }
 
 impl WindowLayer {
-    pub fn new(
-        glfw: Arc<RwLock<Glfw>>,
-        resources: &Resources,
-        info: WindowLayerInfo,
-    ) -> anyhow::Result<Self> {
+    pub fn new(resources: &Resources, info: WindowLayerInfo) -> anyhow::Result<Self> {
+        let glfw = Arc::new(RwLock::new(glfw::init(glfw::FAIL_ON_ERRORS)?));
         let (window, events) = Window::new(glfw.clone(), info.window)?;
 
         let context = Arc::new(VulkanContext::new(&window)?);
@@ -72,7 +69,8 @@ impl Layer for WindowLayer {
                 events.send(AppEvent::Exit);
             }
 
-            events.send(event);
+            let input_event = InputEvent::from(event);
+            events.send(input_event);
         }
 
         Ok(())

@@ -23,6 +23,7 @@ ivy-rendergraph = { path = "../ivy-rendergraph", version = "0.9" }
 ivy-resources = { path = "../ivy-resources", version = "0.9" }
 ivy-vulkan = { path = "../ivy-vulkan", version = "0.9" }
 ivy-input = { path = "../ivy-input", version = "0.9" }
+ivy-window = { path = "../ivy-window", version = "0.1" }
 thiserror = "1.0.30"
 glam = "0.20"
 flume = "0.10.9"

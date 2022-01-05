@@ -3,8 +3,8 @@ use anyhow::Context;
 use hecs::World;
 use hecs_schedule::{Read, Schedule, SubWorld, Write};
 use ivy_base::{Events, Layer, Position2D, Size2D};
-use ivy_graphics::Window;
 use ivy_resources::Resources;
+use ivy_window::Window;
 
 use crate::{handle_events, input_field_system, systems, Canvas};
 mod event_handling;
@@ -20,9 +20,9 @@ pub struct UILayer {
 
 impl UILayer {
     pub fn new(_world: &mut World, _resources: &mut Resources, events: &mut Events) -> Self {
-        let window_rx = events.subscribe_flume();
-        let control_rx = events.subscribe_flume();
-        let input_field_rx = events.subscribe_flume();
+        let window_rx = events.subscribe();
+        let control_rx = events.subscribe();
+        let input_field_rx = events.subscribe();
 
         let schedule = Schedule::builder()
             .add_system(

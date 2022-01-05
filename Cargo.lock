@@ -550,6 +550,7 @@ dependencies = [
  "ivy-templates",
  "ivy-ui",
  "ivy-vulkan",
+ "ivy-window",
  "log",
  "parking_lot",
  "slotmap",
@@ -616,8 +617,10 @@ dependencies = [
  "itertools",
  "ivy-base",
  "ivy-image",
+ "ivy-input",
  "ivy-resources",
  "ivy-vulkan",
+ "ivy-window",
  "ordered-float",
  "parking_lot",
  "records",
@@ -645,7 +648,8 @@ dependencies = [
  "glam",
  "glfw",
  "ivy-base",
- "ivy-graphics",
+ "ivy-resources",
+ "ivy-window",
 ]
 
 [[package]]
@@ -723,6 +727,7 @@ dependencies = [
  "ivy-graphics",
  "ivy-resources",
  "ivy-vulkan",
+ "ivy-window",
  "slotmap",
  "thiserror",
 ]
@@ -777,6 +782,7 @@ dependencies = [
  "ivy-rendergraph",
  "ivy-resources",
  "ivy-vulkan",
+ "ivy-window",
  "records",
  "serde",
  "thiserror",
@@ -799,6 +805,19 @@ dependencies = [
  "serde",
  "smallvec",
  "spirv-reflect",
+ "thiserror",
+]
+
+[[package]]
+name = "ivy-window"
+version = "0.1.0"
+dependencies = [
+ "ash",
+ "glam",
+ "glfw",
+ "ivy-base",
+ "ivy-vulkan",
+ "parking_lot",
  "thiserror",
 ]
 

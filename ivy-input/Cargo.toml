@@ -10,5 +10,6 @@ edition = "2018"
 flume = "0.10.9"
 glfw = { version = "0.43.0", features = [ "vulkan" ] }
 ivy-base = { path = "../ivy-base", version = "0.9.0" }
-ivy-graphics = { path = "../ivy-graphics", version = "0.9.0" }
+ivy-resources = { path = "../ivy-resources", version = "0.9.0" }
+ivy-window = { path = "../ivy-window", version = "0.1.0" }
 glam = "0.20"

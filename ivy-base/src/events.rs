@@ -69,7 +69,7 @@ impl Events {
     }
 
     /// Shorthand to subscribe using a flume channel.
-    pub fn subscribe_flume<T: Event>(&mut self) -> flume::Receiver<T> {
+    pub fn subscribe<T: Event>(&mut self) -> flume::Receiver<T> {
         let (tx, rx) = flume::unbounded();
 
         self.dispatcher_mut().subscribe(tx, |_| true);
@@ -79,7 +79,7 @@ impl Events {
 
     /// Subscribes to an event of type T by sending events to teh provided
     /// channel
-    pub fn subscribe<S, T: Event>(&mut self, sender: S)
+    pub fn subscribe_custom<S, T: Event>(&mut self, sender: S)
     where
         S: 'static + EventSender<T> + Send,
     {
@@ -231,10 +231,10 @@ mod tests {
         let mut events = Events::new();
 
         let (tx1, rx1) = mpsc::channel::<&'static str>();
-        events.subscribe(tx1);
+        events.subscribe_custom(tx1);
 
         let (tx2, rx2) = mpsc::channel::<&'static str>();
-        events.subscribe(tx2);
+        events.subscribe_custom(tx2);
 
         events.send("Hello");
 

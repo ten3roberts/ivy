@@ -81,7 +81,7 @@ pub struct ReactiveLayer<T> {
 impl<T> ReactiveLayer<T> {
     pub fn new(_world: &mut World, _resources: &mut Resources, events: &mut Events) -> Self {
         let (tx, rx) = flume::unbounded();
-        events.subscribe(tx);
+        events.subscribe_custom(tx);
         Self {
             rx,
             marker: PhantomData,

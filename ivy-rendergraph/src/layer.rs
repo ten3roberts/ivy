@@ -3,9 +3,10 @@ use std::sync::Arc;
 use anyhow::Context;
 use hecs::World;
 use ivy_base::{Events, Layer};
-use ivy_graphics::{GpuCameraData, GraphicsEvent, LightManager, Window};
+use ivy_graphics::{GpuCameraData, GraphicsEvent, LightManager};
 use ivy_resources::Resources;
 use ivy_vulkan::{device, traits::Backend, Swapchain, VulkanContext};
+use ivy_window::Window;
 
 use crate::{RenderGraph, Result};
 

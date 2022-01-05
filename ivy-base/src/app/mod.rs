@@ -33,7 +33,7 @@ impl App {
         let mut events = Events::new();
 
         let (tx, rx) = flume::unbounded();
-        events.subscribe(tx);
+        events.subscribe_custom(tx);
         let resources = Resources::new();
 
         // Will never fail

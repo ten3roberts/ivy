@@ -49,6 +49,7 @@ pub use ivy_resources as resources;
 pub use ivy_templates as templates;
 pub use ivy_ui as ui;
 pub use ivy_vulkan as vulkan;
+pub use ivy_window as window;
 
 pub use ivy_base::{
     components::*, App, Extent, FromDuration, Gizmos, IntoDuration, Layer, Logger, Name, Position,
@@ -56,7 +57,7 @@ pub use ivy_base::{
 };
 pub use ivy_collision::{Collider, CollisionTree, Contact, Cube, RayIntersect, Sphere};
 pub use ivy_graphics::{
-    Camera, Document, MainCamera, Mesh, MeshRenderer, PointLight, TextureAtlas, Window,
+    Camera, Document, MainCamera, Mesh, MeshRenderer, PointLight, TextureAtlas,
 };
 pub use ivy_input::{Input, InputAxis, InputVector, Key};
 pub use ivy_physics::RbBundle;
@@ -69,3 +70,4 @@ pub use ivy_ui::{
     constraints::*, Canvas, CanvasBundle, ImageBundle, ImageInfo, TextBundle, Widget, WidgetBundle,
 };
 pub use ivy_vulkan::{ImageLayout, ImageUsage, ShaderPass, Texture};
+pub use ivy_window::*;

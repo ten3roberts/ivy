@@ -38,7 +38,7 @@ impl<N: CollisionTreeNode + Storage> PhysicsLayer<N> {
         events: &mut Events,
         info: PhysicsLayerInfo<N>,
     ) -> anyhow::Result<Self> {
-        let rx = events.subscribe_flume();
+        let rx = events.subscribe();
 
         let tree_root = info.tree_root;
 
