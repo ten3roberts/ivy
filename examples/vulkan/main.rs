@@ -70,7 +70,9 @@ fn main() -> anyhow::Result<()> {
 
     let mut app = App::builder()
         .try_push_layer(|_, r, _| WindowLayer::new(r, WindowLayerInfo { window, swapchain }))?
-        .push_layer(|w, r, e| (UILayer::new(w, r, e), ReactiveLayer::<Color>::new(w, r, e)))
+        .try_push_layer(|w, r, e| -> anyhow::Result<_> {
+            Ok((UILayer::new(w, r, e)?, ReactiveLayer::<Color>::new(w, r, e)))
+        })?
         .try_push_layer(|w, r, e| -> anyhow::Result<_> {
             Ok(FixedTimeStep::new(
                 20.ms(),
@@ -281,8 +283,8 @@ fn setup_objects(
 
 struct Assets {
     geometry_pass: Handle<GeometryPass>,
-    text_pass: Handle<ImagePass>,
-    ui_pass: Handle<TextPass>,
+    text_pass: Handle<TextPass>,
+    ui_pass: Handle<ImagePass>,
 }
 
 struct Entities {

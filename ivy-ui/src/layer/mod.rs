@@ -19,8 +19,15 @@ pub struct UILayer {
 }
 
 impl UILayer {
-    pub fn new(_world: &mut World, _resources: &mut Resources, events: &mut Events) -> Self {
-        let window_rx = events.subscribe();
+    pub fn new(
+        _world: &mut World,
+        _resources: &mut Resources,
+        events: &mut Events,
+    ) -> anyhow::Result<Self> {
+        let (tx, window_rx) = flume::unbounded();
+        events
+            .intercept(tx)
+            .context("Failed to intercept InputEvent for UI")?;
         let control_rx = events.subscribe();
         let input_field_rx = events.subscribe();
 
@@ -44,10 +51,10 @@ impl UILayer {
 
         eprintln!("UI Layer: {}", schedule.batch_info());
 
-        Self {
+        Ok(Self {
             state: InteractiveState::default(),
             schedule,
-        }
+        })
     }
 }
 

@@ -2,7 +2,7 @@ use std::convert::TryInto;
 
 use crate::{constraints::*, events::WidgetEvent, InteractiveState, Result};
 use glam::{Mat4, Vec2};
-use glfw::{Action, WindowEvent};
+use glfw::Action;
 use hecs::{Entity, World};
 use hecs_hierarchy::Hierarchy;
 use hecs_schedule::{GenericWorld, Read, Write};
@@ -122,7 +122,7 @@ pub fn handle_events(
     mut events: Write<Events>,
     mut state: Write<InteractiveState>,
     cursor_pos: Read<Position2D>,
-    window_events: impl Iterator<Item = WindowEvent>,
+    intercepted_events: impl Iterator<Item = InputEvent>,
     control_events: impl Iterator<Item = UIControl>,
 ) {
     control_events.for_each(|event| match event {
@@ -135,7 +135,7 @@ pub fn handle_events(
         .map(|val| world.get::<Sticky>(val).is_ok())
         .unwrap_or_default();
 
-    window_events.for_each(|event| {
+    for event in intercepted_events {
         let event = InputEvent::from(event);
 
         state.set_hovered(hovered, &mut events);
@@ -215,9 +215,9 @@ pub fn handle_events(
         };
 
         if let Some(event) = event {
-            events.send(event);
+            events.intercepted_send(event);
         }
-    })
+    }
 }
 
 /// Returns the first widget that intersects the postiion

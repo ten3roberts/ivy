@@ -1,8 +1,35 @@
-use std::{any::TypeId, collections::HashMap, sync::mpsc};
+mod dispatcher;
+pub use dispatcher::EventSender;
 
-use downcast_rs::{impl_downcast, Downcast};
+use std::{
+    any::{type_name, TypeId},
+    collections::HashMap,
+    error::Error,
+    fmt::Display,
+};
+
 use hecs::Component;
-use parking_lot::Mutex;
+
+use self::dispatcher::{
+    new_event_dispatcher, AnyEventDispatcher, AnyEventSender, ConcreteSender, EventDispatcher,
+};
+
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
+pub struct AlreadyIntercepted {
+    ty: &'static str,
+}
+
+impl Display for AlreadyIntercepted {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Events of type {:?} have already been intercepted",
+            self.ty
+        )
+    }
+}
+
+impl Error for AlreadyIntercepted {}
 
 /// Manages event broadcasting for different types of events.
 /// Sending an event will send a clone of the event to all subscribed listeners.
@@ -34,12 +61,15 @@ use parking_lot::Mutex;
 /// ```
 pub struct Events {
     dispatchers: HashMap<TypeId, Box<dyn AnyEventDispatcher>>,
+    // A single receiver to intercept events
+    intercepts: HashMap<TypeId, Box<dyn AnyEventSender>>,
 }
 
 impl Events {
     pub fn new() -> Events {
         Self {
             dispatchers: HashMap::new(),
+            intercepts: HashMap::new(),
         }
     }
 
@@ -63,8 +93,38 @@ impl Events {
     /// Sends an event of type `T` to all subscribed listeners.
     /// If no dispatcher exists for event `T`, a new one will be created.
     pub fn send<T: Event>(&self, event: T) {
+        if let Some(intercept) = self.intercepts.get(&TypeId::of::<T>()) {
+            intercept
+                .downcast_ref::<ConcreteSender<T>>()
+                .unwrap()
+                .send(event);
+        } else if let Some(dispatcher) = self.dispatcher() {
+            dispatcher.send(event)
+        }
+    }
+
+    /// Send an event after intercept, this function avoids intercepts.
+    /// It can also be useful if the message is not supposed to be intercepted
+    pub fn intercepted_send<T: Event>(&self, event: T) {
         if let Some(dispatcher) = self.dispatcher() {
             dispatcher.send(event)
+        }
+    }
+
+    /// Intercept an event before it is broadcasted. Use
+    /// `Events::intercepted_send` to send.
+    pub fn intercept<T: Event, S: EventSender<T>>(
+        &mut self,
+        sender: S,
+    ) -> Result<(), AlreadyIntercepted> {
+        match self.intercepts.entry(TypeId::of::<T>()) {
+            std::collections::hash_map::Entry::Occupied(_) => Err(AlreadyIntercepted {
+                ty: type_name::<T>(),
+            }),
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                entry.insert(Box::new(ConcreteSender::new(sender)));
+                Ok(())
+            }
         }
     }
 
@@ -76,7 +136,6 @@ impl Events {
 
         rx
     }
-
     /// Subscribes to an event of type T by sending events to teh provided
     /// channel
     pub fn subscribe_custom<S, T: Event>(&mut self, sender: S)
@@ -90,7 +149,7 @@ impl Events {
     /// channel
     pub fn subscribe_filter<S, T: Event>(&mut self, sender: S, filter: fn(&T) -> bool)
     where
-        S: 'static + EventSender<T> + Send,
+        S: EventSender<T>,
     {
         self.dispatcher_mut().subscribe(sender, filter)
     }
@@ -116,110 +175,6 @@ impl Default for Events {
 // Blanket type for events.
 pub trait Event: Component + Clone {}
 impl<T: Component + Clone> Event for T {}
-
-trait AnyEventDispatcher: 'static + Send + Sync + Downcast {}
-impl_downcast!(AnyEventDispatcher);
-
-/// Handles event dispatching for a single type of event
-pub struct EventDispatcher<T: Event> {
-    subscribers: Mutex<Vec<Subscriber<T>>>,
-    blocked: bool,
-}
-
-impl<T> EventDispatcher<T>
-where
-    T: Event,
-{
-    pub fn new() -> Self {
-        Self {
-            subscribers: Mutex::new(Vec::new()),
-            blocked: false,
-        }
-    }
-
-    /// Sends an event to all subscribed subscriber. Event is cloned for each registered subscriber. Requires mutable access to cleanup no longer active subscribers.
-    pub fn send(&self, event: T) {
-        if self.blocked {
-            return;
-        }
-
-        let mut subscribers = self.subscribers.lock();
-        if subscribers.len() == 1 {
-            subscribers[0].send(event);
-        } else {
-            subscribers.retain(|subscriber| {
-                if (subscriber.filter)(&event) {
-                    subscriber.send(event.clone())
-                } else {
-                    true
-                }
-            });
-        }
-    }
-
-    /// Subscribes to events using sender to send events. The subscriber is automatically cleaned
-    /// up when the receiving end is dropped.
-    pub fn subscribe<S>(&self, sender: S, filter: fn(&T) -> bool)
-    where
-        S: 'static + EventSender<T> + Send,
-    {
-        self.subscribers
-            .lock()
-            .push(Subscriber::new(sender, filter));
-    }
-}
-
-impl<T: Event> AnyEventDispatcher for EventDispatcher<T> {}
-
-struct Subscriber<T> {
-    sender: Box<dyn EventSender<T> + Send>,
-    filter: fn(&T) -> bool,
-}
-
-impl<T> Subscriber<T> {
-    pub fn new<S>(sender: S, filter: fn(&T) -> bool) -> Self
-    where
-        S: 'static + EventSender<T> + Send,
-    {
-        Self {
-            sender: Box::new(sender),
-            filter,
-        }
-    }
-    pub fn send(&self, event: T) -> bool {
-        self.sender.send(event)
-    }
-}
-
-/// Describes a type which can send events. Implemented for mpsc::channel and crossbeam channel.
-pub trait EventSender<T> {
-    /// Send an event. Returns true if receiver is still alive.
-    fn send(&self, event: T) -> bool;
-}
-
-impl<T> EventSender<T> for mpsc::Sender<T> {
-    fn send(&self, event: T) -> bool {
-        self.send(event).is_ok()
-    }
-}
-
-#[cfg(feature = "crossbeam-channel")]
-impl<T> EventSender<T> for crossbeam_channel::Sender<T> {
-    fn send(&self, event: T) -> bool {
-        self.send(event).is_ok()
-    }
-}
-
-impl<T> EventSender<T> for flume::Sender<T> {
-    fn send(&self, event: T) -> bool {
-        self.send(event).is_ok()
-    }
-}
-
-fn new_event_dispatcher<T: Event>() -> Box<dyn AnyEventDispatcher> {
-    let dispatcher: EventDispatcher<T> = EventDispatcher::new();
-    Box::new(dispatcher)
-}
 
 #[cfg(test)]
 mod tests {
