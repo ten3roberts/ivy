@@ -1,7 +1,7 @@
-use std::{marker::PhantomData, sync::Arc};
+use std::marker::PhantomData;
 
 use glam::Vec3;
-use ivy_vulkan::{Buffer, BufferAccess::Mapped, BufferUsage, VulkanContext};
+use ivy_vulkan::{context::SharedVulkanContext, Buffer, BufferAccess::Mapped, BufferUsage};
 
 use crate::Result;
 
@@ -37,7 +37,7 @@ pub struct EnvironmentManager<Kind = DefaultEnvData> {
 
 impl<EnvData: Copy + Send + Sync> EnvironmentManager<EnvData> {
     pub fn new(
-        context: Arc<VulkanContext>,
+        context: SharedVulkanContext,
         env_data: EnvData,
         frames_in_flight: usize,
     ) -> Result<Self> {

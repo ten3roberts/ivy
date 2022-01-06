@@ -22,7 +22,7 @@ impl UIImage {
         texture: Handle<Texture>,
         sampler: Handle<Sampler>,
     ) -> Result<Self> {
-        let context = resources.get_default::<Arc<VulkanContext>>()?;
+        let context = resources.get_default::<SharedVulkanContext>()?;
 
         let set = DescriptorBuilder::new()
             .bind_combined_image_sampler(

@@ -3,14 +3,13 @@ use ash::vk;
 use ivy_base::Extent;
 use ivy_image::Image;
 use ivy_resources::{Handle, Resources};
-use ivy_vulkan::{Texture, TextureInfo, VulkanContext};
+use ivy_vulkan::{context::SharedVulkanContext, Texture, TextureInfo};
 use rectangle_pack::{
     contains_smallest_box, volume_heuristic, GroupedRectsToPlace, PackedLocation, RectToInsert,
     RectanglePackOk, TargetBin,
 };
 use std::collections::BTreeMap;
 use std::hash::Hash;
-use std::sync::Arc;
 
 #[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
@@ -104,7 +103,7 @@ where
     /// Creates a new texture atlas of `extent`. All images will attempt to be
     /// packed. All images are expected to have the same number of channels.
     pub fn new(
-        context: Arc<VulkanContext>,
+        context: SharedVulkanContext,
         resources: &Resources,
         texture_info: &TextureInfo,
         channels: u32,

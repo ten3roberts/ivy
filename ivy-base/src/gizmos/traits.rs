@@ -48,3 +48,7 @@ impl DrawGizmos for [Vec3; 2] {
         })
     }
 }
+
+impl DrawGizmos for () {
+    fn draw_gizmos<T: DerefMut<Target = Gizmos>>(&self, _: T, _: Color) {}
+}

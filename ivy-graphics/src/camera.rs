@@ -5,10 +5,10 @@ use hecs::World;
 use ivy_base::Extent;
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
+    context::SharedVulkanContext,
     descriptors::{DescriptorBuilder, IntoSet},
-    Buffer, Format, ImageUsage, SampleCountFlags, Texture, TextureInfo, VulkanContext,
+    Buffer, Texture, TextureInfo,
 };
-use std::sync::Arc;
 
 #[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
@@ -125,18 +125,14 @@ impl ColorAttachment {
 pub struct DepthAttachment(pub Handle<Texture>);
 
 impl DepthAttachment {
-    pub fn new(context: Arc<VulkanContext>, resources: &Resources, extent: Extent) -> Result<Self> {
+    pub fn new(
+        context: SharedVulkanContext,
+        resources: &Resources,
+        extent: Extent,
+    ) -> Result<Self> {
         Ok(Self(resources.insert(Texture::new(
             context.clone(),
-            &TextureInfo {
-                extent,
-                mip_levels: 1,
-                usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT
-                    | ImageUsage::SAMPLED
-                    | ImageUsage::INPUT_ATTACHMENT,
-                format: Format::D32_SFLOAT,
-                samples: SampleCountFlags::TYPE_1,
-            },
+            &TextureInfo::depth(extent),
         )?)?))
     }
 
@@ -151,7 +147,7 @@ pub struct GpuCameraData {
 }
 
 impl GpuCameraData {
-    pub fn new(context: Arc<VulkanContext>, frames_in_flight: usize) -> Result<Self> {
+    pub fn new(context: SharedVulkanContext, frames_in_flight: usize) -> Result<Self> {
         let uniformbuffers = (0..frames_in_flight)
             .map(|_| {
                 Buffer::new(
@@ -218,7 +214,7 @@ impl GpuCameraData {
 
     // Creates gpu side data for all camera which do not already have any.
     pub fn create_gpu_cameras(
-        context: &Arc<VulkanContext>,
+        context: &SharedVulkanContext,
         world: &mut World,
         frames_in_flight: usize,
     ) -> Result<()> {

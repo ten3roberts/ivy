@@ -9,12 +9,13 @@ use ivy_base::Extent;
 use ivy_resources::{Handle, ResourceCache, Resources};
 use ivy_vulkan::{
     commands::{CommandBuffer, CommandPool},
+    context::SharedVulkanContext,
     fence, semaphore,
     vk::{self, CommandBufferUsageFlags, PipelineStageFlags, Semaphore},
-    Fence, ImageLayout, PipelineInfo, RenderPass, Texture, VulkanContext,
+    Fence, ImageLayout, PipelineInfo, RenderPass, Texture,
 };
 use slotmap::{new_key_type, SecondaryMap, SlotMap};
-use std::{hash, ops::Deref, sync::Arc, time::Duration};
+use std::{hash, ops::Deref, time::Duration};
 
 new_key_type! {
     pub struct NodeIndex;
@@ -23,7 +24,7 @@ new_key_type! {
 
 /// Direct acyclic graph abstraction for renderpasses, barriers and subpass dependencies.
 pub struct RenderGraph {
-    context: Arc<VulkanContext>,
+    context: SharedVulkanContext,
     /// The unordered nodes in the arena.
     nodes: SlotMap<NodeIndex, Box<dyn Node>>,
     edges: SecondaryMap<NodeIndex, Vec<Edge>>,
@@ -43,7 +44,7 @@ pub struct RenderGraph {
 
 impl RenderGraph {
     /// Creates a new empty rendergraph.
-    pub fn new(context: Arc<VulkanContext>, frames_in_flight: usize) -> Result<Self> {
+    pub fn new(context: SharedVulkanContext, frames_in_flight: usize) -> Result<Self> {
         let frames = (0..frames_in_flight)
             .map(|_| FrameData::new(context.clone()).map_err(|e| e.into()))
             .collect::<Result<Vec<_>>>()?;
@@ -495,7 +496,7 @@ impl Default for EdgeKind {
 }
 
 struct FrameData {
-    context: Arc<VulkanContext>,
+    context: SharedVulkanContext,
     fence: Fence,
     commandpool: CommandPool,
     commandbuffer: CommandBuffer,
@@ -504,7 +505,7 @@ struct FrameData {
 }
 
 impl FrameData {
-    pub fn new(context: Arc<VulkanContext>) -> Result<Self> {
+    pub fn new(context: SharedVulkanContext) -> Result<Self> {
         let commandpool = CommandPool::new(
             context.device().clone(),
             context.queue_families().graphics().unwrap(),

@@ -5,9 +5,9 @@ use hecs::{Query, World};
 use ivy_base::{Color, Position, Rotation, Scale, Visible};
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
-    commands::CommandBuffer, descriptors::IntoSet, shaderpass::ShaderPass, VulkanContext,
+    commands::CommandBuffer, context::SharedVulkanContext, descriptors::IntoSet,
+    shaderpass::ShaderPass,
 };
-use std::sync::Arc;
 
 /// A mesh renderer using vkCmdDrawIndirectIndexed and efficient batching.
 pub struct MeshRenderer {
@@ -16,7 +16,7 @@ pub struct MeshRenderer {
 
 impl MeshRenderer {
     pub fn new(
-        context: Arc<VulkanContext>,
+        context: SharedVulkanContext,
         capacity: u32,
         frames_in_flight: usize,
     ) -> Result<Self> {

@@ -1,9 +1,9 @@
-use std::sync::Arc;
-
 use ivy_base::Extent;
 use ivy_graphics::Result;
 use ivy_resources::{Handle, Resources};
-use ivy_vulkan::{Format, ImageUsage, SampleCountFlags, Texture, TextureInfo, VulkanContext};
+use ivy_vulkan::{
+    context::SharedVulkanContext, Format, ImageUsage, SampleCountFlags, Texture, TextureInfo,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PBRAttachments {
@@ -14,7 +14,11 @@ pub struct PBRAttachments {
 }
 
 impl PBRAttachments {
-    pub fn new(context: Arc<VulkanContext>, resources: &Resources, extent: Extent) -> Result<Self> {
+    pub fn new(
+        context: SharedVulkanContext,
+        resources: &Resources,
+        extent: Extent,
+    ) -> Result<Self> {
         let albedo = resources.insert(Texture::new(
             context.clone(),
             &TextureInfo {

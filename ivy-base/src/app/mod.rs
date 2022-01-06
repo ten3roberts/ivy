@@ -138,6 +138,36 @@ impl App {
         self.layers.insert(index, layer);
         Ok(())
     }
+
+    /// Get a mutable reference to the app's world.
+    pub fn world_mut(&mut self) -> &mut World {
+        &mut self.world
+    }
+
+    /// Get a mutable reference to the app's events.
+    pub fn events_mut(&mut self) -> &mut Events {
+        &mut self.events
+    }
+
+    /// Get a mutable reference to the app's resources.
+    pub fn resources_mut(&mut self) -> &mut Resources {
+        &mut self.resources
+    }
+
+    /// Get a reference to the app's world.
+    pub fn world(&self) -> &World {
+        &self.world
+    }
+
+    /// Get a reference to the app's events.
+    pub fn events(&self) -> &Events {
+        &self.events
+    }
+
+    /// Get a reference to the app's resources.
+    pub fn resources(&self) -> &Resources {
+        &self.resources
+    }
 }
 
 impl Default for App {

@@ -728,6 +728,7 @@ dependencies = [
  "ivy-resources",
  "ivy-vulkan",
  "ivy-window",
+ "records",
  "slotmap",
  "thiserror",
 ]

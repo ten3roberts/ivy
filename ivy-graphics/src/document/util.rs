@@ -1,8 +1,8 @@
-use std::{path::Path, sync::Arc};
+use std::path::Path;
 
 use gltf::{buffer, image};
 use ivy_resources::{Handle, Resources};
-use ivy_vulkan::{Texture, VulkanContext};
+use ivy_vulkan::{context::SharedVulkanContext, Texture};
 
 use crate::{Error, Result, Scheme};
 
@@ -47,7 +47,7 @@ pub fn import_image_data(
     buffer_data: &[buffer::Data],
     resources: &Resources,
 ) -> Result<Vec<Handle<Texture>>> {
-    let context = resources.get_default::<Arc<VulkanContext>>()?;
+    let context = resources.get_default::<SharedVulkanContext>()?;
 
     document
         .textures()

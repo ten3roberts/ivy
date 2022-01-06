@@ -1,11 +1,12 @@
-use std::{borrow::Cow, slice, sync::Arc};
+use std::{borrow::Cow, slice};
 
 use crate::{Error, Result};
 use ivy_resources::{Handle, LoadResource, Resources};
 use ivy_vulkan::{
+    context::SharedVulkanContext,
     descriptors::{DescriptorBuilder, DescriptorSet, IntoSet},
     vk::ShaderStageFlags,
-    Sampler, SamplerInfo, Texture, VulkanContext,
+    Sampler, SamplerInfo, Texture,
 };
 
 #[cfg(feature = "serialize")]
@@ -25,7 +26,7 @@ impl Image {
         texture: Handle<Texture>,
         sampler: Handle<Sampler>,
     ) -> Result<Self> {
-        let context = resources.get_default::<Arc<VulkanContext>>()?;
+        let context = resources.get_default::<SharedVulkanContext>()?;
 
         let set = DescriptorBuilder::new()
             .bind_combined_image_sampler(

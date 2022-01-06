@@ -14,7 +14,7 @@ use ivy_vulkan::{
 
 /// Renderer rendering to a glfw window
 pub struct WindowRenderer {
-    context: Arc<VulkanContext>,
+    context: SharedVulkanContext,
     swapchain: Swapchain,
     _window: Arc<AtomicRefCell<Window>>,
 
@@ -31,7 +31,7 @@ pub struct WindowRenderer {
 
 impl WindowRenderer {
     pub fn new(
-        context: Arc<VulkanContext>,
+        context: SharedVulkanContext,
         window: Arc<AtomicRefCell<Window>>,
         swapchain_info: SwapchainInfo,
     ) -> Result<Self> {

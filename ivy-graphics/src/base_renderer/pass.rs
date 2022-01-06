@@ -1,4 +1,4 @@
-use std::{collections::HashMap, marker::PhantomData, ops::Deref, sync::Arc};
+use std::{collections::HashMap, marker::PhantomData, ops::Deref};
 
 use crate::{KeyQuery, RendererKey};
 
@@ -8,6 +8,7 @@ use ash::vk::{DescriptorSet, ShaderStageFlags};
 use hecs::{Entity, Fetch, Query, World};
 use ivy_resources::{Handle, HandleUntyped, ResourceCache};
 use ivy_vulkan::{
+    context::SharedVulkanContext,
     descriptors::{DescriptorBuilder, IntoSet},
     device, Buffer, BufferAccess, BufferUsage, VulkanContext,
 };
@@ -15,7 +16,7 @@ use ivy_vulkan::{
 /// Represents a single typed shaderpass. Each object belonging to the pass is
 /// grouped into batches
 pub struct PassData<K, Obj> {
-    context: Arc<VulkanContext>,
+    context: SharedVulkanContext,
     batches: Vec<BatchData<K>>,
     /// Ordered access of batches
     ordered_batches: Vec<BatchId>,
@@ -38,7 +39,7 @@ pub struct PassData<K, Obj> {
 
 impl<K: RendererKey, Obj: 'static> PassData<K, Obj> {
     pub fn new(
-        context: Arc<VulkanContext>,
+        context: SharedVulkanContext,
         capacity: u32,
         frames_in_flight: usize,
     ) -> Result<Self> {
@@ -64,7 +65,7 @@ impl<K: RendererKey, Obj: 'static> PassData<K, Obj> {
     }
 
     fn create_object_buffers(
-        context: Arc<VulkanContext>,
+        context: SharedVulkanContext,
         capacity: u32,
         frames_in_flight: usize,
     ) -> Result<Vec<Buffer>> {

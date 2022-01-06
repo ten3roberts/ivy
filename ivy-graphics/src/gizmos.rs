@@ -1,9 +1,7 @@
-use std::sync::Arc;
-
 use ash::vk::{DescriptorSet, IndexType, ShaderStageFlags};
 use glam::{Mat4, Vec3, Vec4};
 use ivy_base::Gizmos;
-use ivy_vulkan::{shaderpass::ShaderPass, VulkanContext};
+use ivy_vulkan::{context::SharedVulkanContext, shaderpass::ShaderPass};
 
 use crate::{Mesh, Renderer, Result};
 
@@ -12,7 +10,7 @@ pub struct GizmoRenderer {
 }
 
 impl GizmoRenderer {
-    pub fn new(context: Arc<VulkanContext>) -> Result<Self> {
+    pub fn new(context: SharedVulkanContext) -> Result<Self> {
         let mesh = Mesh::new_square(context, 2.0, 2.0)?;
 
         Ok(Self { mesh })

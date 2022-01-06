@@ -1,11 +1,12 @@
-use std::{borrow::Cow, slice, sync::Arc};
+use std::{borrow::Cow, slice};
 
 use crate::{Error, Result};
 use ash::vk::{DescriptorSet, ShaderStageFlags};
 use ivy_resources::{Handle, LoadResource, Resources};
 use ivy_vulkan::{
+    context::SharedVulkanContext,
     descriptors::{DescriptorBuilder, IntoSet},
-    Buffer, Sampler, SamplerInfo, Texture, VulkanContext,
+    Buffer, Sampler, SamplerInfo, Texture,
 };
 
 #[cfg(feature = "serialize")]
@@ -47,7 +48,7 @@ pub struct Material {
 impl Material {
     /// Creates a new material with albedo using the provided sampler
     pub fn new(
-        context: Arc<VulkanContext>,
+        context: SharedVulkanContext,
         resources: &Resources,
         albedo: Handle<Texture>,
         sampler: Handle<Sampler>,
@@ -113,7 +114,7 @@ impl Material {
     }
 
     pub fn from_gltf(
-        context: Arc<VulkanContext>,
+        context: SharedVulkanContext,
         material: gltf::Material,
         textures: &[Handle<Texture>],
         resources: &Resources,
@@ -161,7 +162,7 @@ impl LoadResource for Material {
     type Error = Error;
 
     fn load(resources: &Resources, info: &Self::Info) -> Result<Self> {
-        let context = resources.get_default::<Arc<VulkanContext>>()?;
+        let context = resources.get_default::<SharedVulkanContext>()?;
         let sampler: Handle<Sampler> = resources.load(info.sampler)??;
         let albedo = resources.load(info.albedo.clone())??;
 

@@ -1,11 +1,9 @@
-use std::sync::Arc;
-
 use anyhow::Context;
 use hecs::World;
 use ivy_base::{Events, Layer};
 use ivy_graphics::{GpuCameraData, GraphicsEvent, LightManager};
 use ivy_resources::Resources;
-use ivy_vulkan::{device, traits::Backend, Swapchain, VulkanContext};
+use ivy_vulkan::{context::SharedVulkanContext, device, traits::Backend, Swapchain};
 use ivy_window::Window;
 
 use crate::{RenderGraph, Result};
@@ -18,7 +16,7 @@ use crate::{RenderGraph, Result};
 /// card is kept busy and frames are produced more
 /// consequtively. However, latency is increased.
 pub struct GraphicsLayer {
-    context: Arc<VulkanContext>,
+    context: SharedVulkanContext,
     frames_in_flight: usize,
 }
 
@@ -29,7 +27,7 @@ impl GraphicsLayer {
         _: &mut Events,
         frames_in_flight: usize,
     ) -> anyhow::Result<Self> {
-        let context = resources.get_default::<Arc<VulkanContext>>()?.clone();
+        let context = resources.get_default::<SharedVulkanContext>()?.clone();
 
         Ok(Self {
             context,

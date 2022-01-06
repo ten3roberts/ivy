@@ -1,13 +1,11 @@
-use std::sync::Arc;
-
 use hecs::{Component, Entity, World};
 use ivy_base::Extent;
 use ivy_graphics::{DepthAttachment, EnvironmentManager, GpuCameraData, LightManager, Renderer};
-use ivy_rendergraph::{AttachmentInfo, CameraNode, Node};
+use ivy_rendergraph::{AttachmentInfo, CameraNode, CameraNodeInfo, Node};
 use ivy_resources::{Handle, Resources, Storage};
 use ivy_vulkan::{
-    descriptors::MultiDescriptorBindable, shaderpass::ShaderPass, vk::ClearValue, ClearValueExt,
-    ImageLayout, LoadOp, StoreOp, Texture, VulkanContext,
+    context::SharedVulkanContext, descriptors::MultiDescriptorBindable, shaderpass::ShaderPass,
+    vk::ClearValue, ClearValueExt, ImageLayout, LoadOp, StoreOp, Texture,
 };
 
 mod attachments;
@@ -36,7 +34,7 @@ impl<EnvData: Default> Default for PBRInfo<EnvData> {
 /// rendergraph insertions. Configures gpu camera data, light management and
 /// environment manager and attaches them to the camera.
 pub fn create_pbr_pipeline<GeometryPass, PostProcessingPass, EnvData, R>(
-    context: Arc<VulkanContext>,
+    context: SharedVulkanContext,
     world: &mut World,
     resources: &Resources,
     camera: Entity,
@@ -60,41 +58,42 @@ where
     let depth_attachment = DepthAttachment::new(context.clone(), resources, extent)?;
 
     let camera_node = Box::new(CameraNode::<GeometryPass, R>::new(
-        "PBR Camera Node",
         context.clone(),
         resources,
         camera,
         renderer,
-        &pbr_attachments
-            .as_slice()
-            .iter()
-            .map(|resource| AttachmentInfo {
+        CameraNodeInfo {
+            name: "PBR Camera Node",
+            color_attachments: pbr_attachments
+                .as_slice()
+                .iter()
+                .map(|resource| AttachmentInfo {
+                    store_op: StoreOp::STORE,
+                    load_op: LoadOp::CLEAR,
+                    initial_layout: ImageLayout::UNDEFINED,
+                    final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                    resource: *resource,
+                    clear_value: ClearValue::color(0.0, 0.0, 0.0, 1.0),
+                })
+                .collect::<Vec<_>>(),
+            depth_attachment: Some(AttachmentInfo {
                 store_op: StoreOp::STORE,
                 load_op: LoadOp::CLEAR,
                 initial_layout: ImageLayout::UNDEFINED,
                 final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-                resource: *resource,
-            })
-            .collect::<Vec<_>>(),
-        &[],
-        &[],
-        Some(AttachmentInfo {
-            store_op: StoreOp::STORE,
-            load_op: LoadOp::CLEAR,
-            initial_layout: ImageLayout::UNDEFINED,
-            final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-            resource: *depth_attachment,
-        }),
-        &[],
-        &[],
-        &[
-            ClearValue::color(0.0, 0.0, 0.0, 1.0),
-            ClearValue::color(0.0, 0.0, 0.0, 1.0),
-            ClearValue::color(0.0, 0.0, 0.0, 1.0),
-            ClearValue::color(0.0, 0.0, 0.0, 1.0),
-            ClearValue::depth_stencil(1.0, 0),
-        ],
-        frames_in_flight,
+                resource: *depth_attachment,
+                clear_value: ClearValue::depth_stencil(1.0, 0),
+            }),
+            clear_values: vec![
+                ClearValue::color(0.0, 0.0, 0.0, 1.0),
+                ClearValue::color(0.0, 0.0, 0.0, 1.0),
+                ClearValue::color(0.0, 0.0, 0.0, 1.0),
+                ClearValue::color(0.0, 0.0, 0.0, 1.0),
+                ClearValue::depth_stencil(1.0, 0),
+            ],
+            frames_in_flight,
+            ..Default::default()
+        },
     )?);
 
     let light_manager = LightManager::new(context.clone(), info.max_lights, frames_in_flight)?;

@@ -1,5 +1,6 @@
+use glam::Vec3;
 use hecs::Column;
-use ivy_base::Events;
+use ivy_base::{Events, Position};
 use slotmap::SlotMap;
 
 use crate::{BoundingBox, Collider, Nodes, Object, ObjectData, ObjectIndex};
@@ -68,4 +69,42 @@ pub trait CollisionTreeNode: 'static + Sized + Send + Sync {
         nodes: &Nodes<Self>,
         data: &SlotMap<ObjectIndex, ObjectData>,
     );
+}
+
+/// Dummy collision tree which does nothing
+impl CollisionTreeNode for () {
+    fn objects(&self) -> &[Object] {
+        &[]
+    }
+
+    fn insert(_: NodeIndex, _: &mut Nodes<Self>, _: Object, _: &SlotMap<ObjectIndex, ObjectData>) {}
+
+    fn remove(&mut self, _: Object) -> Option<Object> {
+        None
+    }
+
+    fn bounds(&self) -> BoundingBox {
+        BoundingBox::new(Vec3::ZERO, Position::zero())
+    }
+
+    fn children(&self) -> &[NodeIndex] {
+        todo!()
+    }
+
+    fn update(
+        _: NodeIndex,
+        _: &mut Nodes<Self>,
+        _: &SlotMap<ObjectIndex, ObjectData>,
+        _: &mut Vec<Object>,
+    ) {
+    }
+
+    fn check_collisions(
+        _: &Column<Collider>,
+        _: &Events,
+        _: NodeIndex,
+        _: &Nodes<Self>,
+        _: &SlotMap<ObjectIndex, ObjectData>,
+    ) {
+    }
 }

@@ -24,7 +24,7 @@ pub struct UIRenderer {
 
 impl UIRenderer {
     pub fn new(
-        context: Arc<VulkanContext>,
+        context: SharedVulkanContext,
         frames_in_flight: usize,
     ) -> Result<Self> {
         let mut descriptor_allocator =
@@ -79,7 +79,7 @@ struct FrameData {
 
 impl FrameData {
     pub fn new(
-        context: Arc<VulkanContext>,
+        context: SharedVulkanContext,
     ) -> Result<Self> {
         let uniformbuffer = Buffer::new(
             context.clone(),

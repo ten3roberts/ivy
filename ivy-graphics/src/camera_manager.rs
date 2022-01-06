@@ -21,7 +21,7 @@ pub struct CameraManager {
 impl CameraManager {
     /// Creates a new camera manager.
     pub fn new(
-        context: Arc<VulkanContext>,
+        context: SharedVulkanContext,
         max_capacity: u32,
         frames_in_flight: usize,
     ) -> Result<Self> {

@@ -4,15 +4,15 @@ use ivy_base::Extent;
 use ivy_resources::{ResourceCache, Resources};
 use ivy_vulkan::{
     commands::CommandBuffer,
+    context::SharedVulkanContext,
     vk::{self, ClearValue, ImageMemoryBarrier},
     AttachmentDescription, AttachmentReference, Framebuffer, ImageLayout, LoadOp, RenderPass,
-    RenderPassInfo, StoreOp, SubpassDependency, SubpassInfo, Texture, VulkanContext,
+    RenderPassInfo, StoreOp, SubpassDependency, SubpassInfo, Texture,
 };
 use slotmap::{SecondaryMap, SlotMap};
 use std::{
     iter::repeat,
     ops::Deref,
-    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -28,7 +28,7 @@ impl Pass {
     // * Belong to the same kind and queue.
     // * Have the same dependency level.
     pub fn new<T>(
-        context: &Arc<VulkanContext>,
+        context: &SharedVulkanContext,
         nodes: &SlotMap<NodeIndex, Box<dyn Node>>,
         textures: &T,
         dependencies: &SecondaryMap<NodeIndex, Vec<Edge>>,
@@ -162,7 +162,7 @@ unsafe impl Sync for PassKind {}
 
 impl PassKind {
     fn graphics<T>(
-        context: &Arc<VulkanContext>,
+        context: &SharedVulkanContext,
         nodes: &SlotMap<NodeIndex, Box<dyn Node>>,
         textures: &T,
         dependencies: &SecondaryMap<NodeIndex, Vec<Edge>>,
@@ -342,7 +342,7 @@ impl PassKind {
     }
 
     fn transfer<T>(
-        _context: &Arc<VulkanContext>,
+        _context: &SharedVulkanContext,
         _nodes: &SlotMap<NodeIndex, Box<dyn Node>>,
         textures: &T,
         dependencies: &SecondaryMap<NodeIndex, Vec<Edge>>,

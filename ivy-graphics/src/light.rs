@@ -4,11 +4,11 @@ use glam::Vec3;
 use hecs::World;
 use ivy_base::Position;
 use ivy_vulkan::{
+    context::SharedVulkanContext,
     descriptors::{DescriptorBuilder, IntoSet},
-    Buffer, VulkanContext,
+    Buffer,
 };
 use ordered_float::OrderedFloat;
-use std::sync::Arc;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PointLight {
@@ -45,7 +45,7 @@ pub struct LightManager {
 
 impl LightManager {
     pub fn new(
-        context: Arc<VulkanContext>,
+        context: SharedVulkanContext,
         max_lights: u64,
         frames_in_flight: usize,
     ) -> Result<Self> {

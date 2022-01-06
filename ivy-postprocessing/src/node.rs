@@ -1,14 +1,14 @@
-use std::{marker::PhantomData, ops::Deref, sync::Arc};
+use std::{marker::PhantomData, ops::Deref};
 
 use ivy_graphics::Result;
 use ivy_rendergraph::{AttachmentInfo, Node, NodeKind};
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
+    context::SharedVulkanContext,
     descriptors::{DescriptorBuilder, DescriptorSet, MultiDescriptorBindable},
     shaderpass::ShaderPass,
     vk::ShaderStageFlags,
     AddressMode, CombinedImageSampler, FilterMode, InputAttachment, Sampler, SamplerInfo, Texture,
-    VulkanContext,
 };
 
 pub struct PostProcessingNode<Pass> {
@@ -27,7 +27,7 @@ pub struct PostProcessingNode<Pass> {
 /// = 0;
 impl<Pass: 'static + ShaderPass> PostProcessingNode<Pass> {
     pub fn new(
-        context: Arc<VulkanContext>,
+        context: SharedVulkanContext,
         resources: &Resources,
         read_attachments: &[Handle<Texture>],
         input_attachments: &[Handle<Texture>],

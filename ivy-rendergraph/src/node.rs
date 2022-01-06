@@ -3,8 +3,8 @@ use hecs::World;
 use ivy_graphics::Renderer;
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
-    commands::CommandBuffer, shaderpass::ShaderPass, vk::Buffer, vk::ClearValue, ImageLayout,
-    LoadOp, StoreOp, Texture,
+    commands::CommandBuffer, shaderpass::ShaderPass, vk::Buffer, vk::ClearValue, ClearValueExt,
+    ImageLayout, LoadOp, StoreOp, Texture,
 };
 use std::{any::type_name, marker::PhantomData};
 
@@ -66,7 +66,7 @@ pub enum NodeKind {
     // Compute,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct AttachmentInfo {
     // TODO, derive from edges
@@ -75,6 +75,7 @@ pub struct AttachmentInfo {
     pub initial_layout: ImageLayout,
     pub final_layout: ImageLayout,
     pub resource: Handle<Texture>,
+    pub clear_value: ClearValue,
 }
 
 impl Default for AttachmentInfo {
@@ -85,6 +86,41 @@ impl Default for AttachmentInfo {
             initial_layout: ImageLayout::UNDEFINED,
             final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
             resource: Handle::null(),
+            clear_value: ClearValue::default(),
+        }
+    }
+}
+
+impl AttachmentInfo {
+    pub fn color(resource: Handle<Texture>) -> Self {
+        Self {
+            store_op: StoreOp::STORE,
+            load_op: LoadOp::CLEAR,
+            initial_layout: ImageLayout::UNDEFINED,
+            final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+            clear_value: ClearValue::color(0.0, 0.0, 0.0, 0.0),
+            resource,
+        }
+    }
+
+    pub fn depth_discard(resource: Handle<Texture>) -> Self {
+        Self {
+            store_op: StoreOp::DONT_CARE,
+            load_op: LoadOp::CLEAR,
+            initial_layout: ImageLayout::UNDEFINED,
+            final_layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            clear_value: ClearValue::depth_stencil(1.0, 0),
+            resource,
+        }
+    }
+    pub fn depth_store(resource: Handle<Texture>) -> Self {
+        Self {
+            store_op: StoreOp::STORE,
+            load_op: LoadOp::CLEAR,
+            initial_layout: ImageLayout::UNDEFINED,
+            final_layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            clear_value: ClearValue::depth_stencil(1.0, 0),
+            resource,
         }
     }
 }

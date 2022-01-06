@@ -1,5 +1,5 @@
 use crate::Result;
-use std::{any::type_name, marker::PhantomData, ops::Deref, sync::Arc};
+use std::{any::type_name, marker::PhantomData, ops::Deref};
 
 use anyhow::Context;
 use hecs::Entity;
@@ -7,13 +7,42 @@ use itertools::Itertools;
 use ivy_graphics::{GpuCameraData, Renderer};
 use ivy_resources::{Handle, Resources, Storage};
 use ivy_vulkan::{
+    context::SharedVulkanContext,
     descriptors::{DescriptorBuilder, DescriptorSet, IntoSet, MultiDescriptorBindable},
     shaderpass::ShaderPass,
     vk::{self, ClearValue, ShaderStageFlags},
-    CombinedImageSampler, InputAttachment, Sampler, Texture, VulkanContext,
+    CombinedImageSampler, InputAttachment, Sampler, Texture,
 };
 
 use crate::{AttachmentInfo, Node, NodeKind};
+
+pub struct CameraNodeInfo<'a> {
+    pub name: &'static str,
+    pub color_attachments: Vec<AttachmentInfo>,
+    pub read_attachments: &'a [(Handle<Texture>, Handle<Sampler>)],
+    pub input_attachments: Vec<Handle<Texture>>,
+    pub depth_attachment: Option<AttachmentInfo>,
+    pub buffer_reads: Vec<vk::Buffer>,
+    pub bindables: &'a [&'a dyn MultiDescriptorBindable],
+    pub clear_values: Vec<ClearValue>,
+    pub frames_in_flight: usize,
+}
+
+impl<'a> Default for CameraNodeInfo<'a> {
+    fn default() -> Self {
+        Self {
+            name: "CameraNode",
+            color_attachments: Default::default(),
+            read_attachments: Default::default(),
+            input_attachments: Default::default(),
+            depth_attachment: Default::default(),
+            buffer_reads: Default::default(),
+            bindables: Default::default(),
+            clear_values: Default::default(),
+            frames_in_flight: Default::default(),
+        }
+    }
+}
 
 /// A rendergraph node rendering the scene using the provided camera.
 pub struct CameraNode<Pass, R: Renderer> {
@@ -36,22 +65,15 @@ where
     R: Renderer + Storage,
     R::Error: Into<anyhow::Error>,
 {
-    pub fn new(
-        name: &'static str,
-        context: Arc<VulkanContext>,
+    pub fn new<'a>(
+        context: SharedVulkanContext,
         resources: &Resources,
         camera: Entity,
         renderer: R,
-        color_attachments: &[AttachmentInfo],
-        read_attachments: &[(Handle<Texture>, Handle<Sampler>)],
-        input_attachments: &[Handle<Texture>],
-        depth_attachment: Option<AttachmentInfo>,
-        buffer_reads: &[vk::Buffer],
-        bindables: &[&dyn MultiDescriptorBindable],
-        clear_values: &[ClearValue],
-        frames_in_flight: usize,
+        info: CameraNodeInfo<'a>,
     ) -> Result<Self> {
-        let combined_image_samplers = read_attachments
+        let combined_image_samplers = info
+            .read_attachments
             .iter()
             .map(|val| -> Result<_> {
                 Ok(CombinedImageSampler::new(
@@ -61,7 +83,8 @@ where
             })
             .collect::<Result<Vec<_>>>()?;
 
-        let input_bindabled = input_attachments
+        let input_bindabled = info
+            .input_attachments
             .iter()
             .map(|val| -> Result<_> { Ok(InputAttachment::new(resources.get(*val)?.deref())) })
             .collect::<Result<Vec<_>>>()?;
@@ -74,7 +97,7 @@ where
                     .iter()
                     .map(|val| val as &dyn MultiDescriptorBindable),
             )
-            .chain(bindables.into_iter().cloned())
+            .chain(info.bindables.into_iter().cloned())
             .map(|val| (val, ShaderStageFlags::FRAGMENT))
             .collect::<Vec<_>>();
 
@@ -82,24 +105,24 @@ where
             Some(DescriptorBuilder::from_mutliple_resources(
                 &context,
                 &bindables,
-                frames_in_flight,
+                info.frames_in_flight,
             )?)
         } else {
             None
         };
 
         Ok(Self {
-            name,
+            name: info.name,
             camera,
             sets,
             renderer,
             marker: PhantomData,
-            color_attachments: color_attachments.to_owned(),
-            read_attachments: read_attachments.iter().map(|(a, _)| *a).collect_vec(),
-            input_attachments: input_attachments.to_owned(),
-            depth_attachment,
-            buffer_reads: buffer_reads.to_owned(),
-            clear_values: clear_values.to_owned(),
+            color_attachments: info.color_attachments,
+            read_attachments: info.read_attachments.iter().map(|val| val.0).collect_vec(),
+            input_attachments: info.input_attachments,
+            depth_attachment: info.depth_attachment,
+            buffer_reads: info.buffer_reads,
+            clear_values: info.clear_values,
         })
     }
 }

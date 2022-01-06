@@ -9,10 +9,11 @@ use hecs_schedule::CommandBuffer;
 use ivy_base::{Color, Position, Rotation, Scale, TransformMatrix, Visible};
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
-    descriptors::IntoSet, device, shaderpass::ShaderPass, Buffer, BufferUsage, VulkanContext,
+    context::SharedVulkanContext, descriptors::IntoSet, device, shaderpass::ShaderPass, Buffer,
+    BufferUsage,
 };
 use smallvec::SmallVec;
-use std::{iter::repeat, sync::Arc};
+use std::iter::repeat;
 
 /// A mesh renderer using vkCmdDrawIndirectIndexed and efficient batching.
 pub struct SkinnedMeshRenderer {
@@ -26,7 +27,7 @@ pub struct SkinnedMeshRenderer {
 
 impl SkinnedMeshRenderer {
     pub fn new(
-        context: Arc<VulkanContext>,
+        context: SharedVulkanContext,
         capacity: u32,
         joint_capacity: u32,
         frames_in_flight: usize,
@@ -46,7 +47,7 @@ impl SkinnedMeshRenderer {
     }
 
     fn create_joint_buffers(
-        context: Arc<VulkanContext>,
+        context: SharedVulkanContext,
         joint_capacity: u32,
         frames_in_flight: usize,
     ) -> Result<SmallVec<[(Buffer, DescriptorSet); 3]>> {

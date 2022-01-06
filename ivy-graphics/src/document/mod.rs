@@ -2,12 +2,12 @@ use crate::{Animation, Error, Material, Mesh, PointLight, Result, SkinnedMesh};
 use gltf::Gltf;
 use hecs::{Bundle, Component, EntityBuilder, EntityBuilderClone};
 use smallvec::SmallVec;
-use std::{borrow::Cow, path::Path, path::PathBuf, sync::Arc};
+use std::{borrow::Cow, path::Path, path::PathBuf};
 
 use glam::*;
-use ivy_base::{Position, Rotation, Scale, Visible};
+use ivy_base::{Color, Position, Rotation, Scale, Visible};
 use ivy_resources::{Handle, LoadResource, Resources};
-use ivy_vulkan::{Texture, VulkanContext};
+use ivy_vulkan::{context::SharedVulkanContext, Texture};
 
 mod joint;
 pub(crate) mod scheme;
@@ -90,7 +90,7 @@ pub struct Document {
 impl Document {
     /// Loads a gltf document/asset from path
     pub fn from_file<P, O>(
-        context: Arc<VulkanContext>,
+        context: SharedVulkanContext,
         resources: &Resources,
         path: P,
     ) -> Result<Self>
@@ -112,7 +112,7 @@ impl Document {
     /// Loads a gltf import document's meshes and scene data. Will insert the meshes into the
     /// provided resource cache.
     pub fn from_gltf(
-        context: Arc<VulkanContext>,
+        context: SharedVulkanContext,
         resources: &Resources,
         document: gltf::Document,
         buffers: &[gltf::buffer::Data],
@@ -302,6 +302,7 @@ impl Document {
         builder.add(node.pos);
         builder.add(node.rot);
         builder.add(node.scale);
+        builder.add(Color::default());
         builder.add(Visible::default());
 
         builder
@@ -322,7 +323,7 @@ impl LoadResource for Document {
     type Error = Error;
 
     fn load(resources: &ivy_resources::Resources, path: &Self::Info) -> Result<Self> {
-        let context = resources.get_default::<Arc<VulkanContext>>()?;
+        let context = resources.get_default::<SharedVulkanContext>()?;
         Self::from_file(context.clone(), resources, path.as_ref())
     }
 }

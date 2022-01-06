@@ -14,5 +14,6 @@ ivy-graphics = { path = "../ivy-graphics", version = "0.9" }
 ivy-resources = { path = "../ivy-resources", version = "0.9" }
 ivy-vulkan = { path = "../ivy-vulkan", version = "0.9" }
 ivy-window = { path = "../ivy-window", version = "0.1" }
+records = "0.1.1"
 slotmap = "1.0.6"
 thiserror = "1.0.30"

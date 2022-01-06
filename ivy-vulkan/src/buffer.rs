@@ -1,6 +1,8 @@
 //! A buffer represents a piece of memory that can be accessed by the GPU and used to store and
 //! write data. Buffers
-use crate::{commands::*, context::VulkanContext, descriptors::DescriptorBindable, Error, Result};
+use crate::{
+    commands::*, context::SharedVulkanContext, descriptors::DescriptorBindable, Error, Result,
+};
 
 use gpu_allocator::{
     vulkan::{self, *},
@@ -11,7 +13,6 @@ use std::{
     ffi::c_void,
     mem::{self, size_of},
     ptr::{copy_nonoverlapping, NonNull},
-    sync::Arc,
 };
 
 use ash::vk;
@@ -36,7 +37,7 @@ pub enum BufferAccess {
 /// vertex and uniform use
 /// buffer access
 pub struct Buffer {
-    context: Arc<VulkanContext>,
+    context: SharedVulkanContext,
     buffer: vk::Buffer,
     allocation: Option<vulkan::Allocation>,
 
@@ -48,7 +49,7 @@ pub struct Buffer {
 impl Buffer {
     /// Creates a new buffer with size and uninitialized contents.
     pub fn new_uninit<T: Sized>(
-        context: Arc<VulkanContext>,
+        context: SharedVulkanContext,
         usage: BufferUsage,
         access: BufferAccess,
         len: DeviceSize,
@@ -102,7 +103,7 @@ impl Buffer {
     /// Creates a new buffer and fills it with vertex data using staging
     /// buffer. Buffer will be the same size as provided data.
     pub fn new<T>(
-        context: Arc<VulkanContext>,
+        context: SharedVulkanContext,
         usage: BufferUsage,
         access: BufferAccess,
         data: &[T],
@@ -118,7 +119,7 @@ impl Buffer {
     /// Creates a new buffer and fills it with vertex data using staging
     /// buffer. Buffer will be the same size as provided data.
     pub fn new_iter<T>(
-        context: Arc<VulkanContext>,
+        context: SharedVulkanContext,
         usage: BufferUsage,
         access: BufferAccess,
         len: DeviceSize,

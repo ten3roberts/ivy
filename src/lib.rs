@@ -57,7 +57,7 @@ pub use ivy_base::{
 };
 pub use ivy_collision::{Collider, CollisionTree, Contact, Cube, RayIntersect, Sphere};
 pub use ivy_graphics::{
-    Camera, Document, MainCamera, Mesh, MeshRenderer, PointLight, TextureAtlas,
+    layer::*, Camera, Document, MainCamera, Mesh, MeshRenderer, PointLight, TextureAtlas,
 };
 pub use ivy_input::{Input, InputAxis, InputVector, Key};
 pub use ivy_physics::RbBundle;

@@ -1,4 +1,4 @@
-use std::{any::TypeId, collections::HashMap, sync::Arc};
+use std::{any::TypeId, collections::HashMap};
 
 use crate::Result;
 
@@ -6,7 +6,7 @@ mod batch;
 mod pass;
 pub use batch::*;
 use hecs::Query;
-use ivy_vulkan::{shaderpass::ShaderPass, VulkanContext};
+use ivy_vulkan::{context::SharedVulkanContext, shaderpass::ShaderPass};
 pub use pass::*;
 
 pub trait KeyQuery: Send + Sync + Query {
@@ -27,7 +27,7 @@ type ObjectId = u32;
 /// This means that if the key is made of a Material and Mesh, all objects with
 /// the same pipeline, material, and mesh will be placed in the same batch.
 pub struct BaseRenderer<K, Obj> {
-    context: Arc<VulkanContext>,
+    context: SharedVulkanContext,
     passes: HashMap<TypeId, PassData<K, Obj>>,
     frames_in_flight: usize,
     capacity: u32,
@@ -39,7 +39,7 @@ where
     Obj: 'static,
 {
     pub fn new(
-        context: Arc<VulkanContext>,
+        context: SharedVulkanContext,
         capacity: ObjectId,
         frames_in_flight: usize,
     ) -> Result<Self> {
@@ -73,7 +73,7 @@ where
     }
 
     /// Get a reference to the base renderer's context.
-    pub fn context(&self) -> &Arc<VulkanContext> {
+    pub fn context(&self) -> &SharedVulkanContext {
         &self.context
     }
 }

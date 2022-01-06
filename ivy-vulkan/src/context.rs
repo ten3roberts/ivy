@@ -9,6 +9,8 @@ use gpu_allocator::vulkan::{Allocator, AllocatorCreateDesc};
 use parking_lot::RwLock;
 use std::sync::Arc;
 
+pub type SharedVulkanContext = Arc<VulkanContext>;
+
 pub struct VulkanContext {
     _entry: ash::Entry,
     instance: ash::Instance,

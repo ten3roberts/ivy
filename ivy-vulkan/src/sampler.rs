@@ -1,10 +1,10 @@
+use crate::context::SharedVulkanContext;
 use crate::descriptors::DescriptorBindable;
-use crate::{Error, Result, Texture, VulkanContext};
+use crate::{Error, Result, Texture};
 use ash::vk;
 use ivy_resources::LoadResource;
 #[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 
 #[derive(Hash, Eq, Default, Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
@@ -95,13 +95,13 @@ impl Default for SamplerInfo {
 }
 
 pub struct Sampler {
-    context: Arc<VulkanContext>,
+    context: SharedVulkanContext,
     sampler: vk::Sampler,
 }
 
 impl Sampler {
     // Creates a new sampler from the specified sampling options
-    pub fn new(context: Arc<VulkanContext>, info: &SamplerInfo) -> Result<Self> {
+    pub fn new(context: SharedVulkanContext, info: &SamplerInfo) -> Result<Self> {
         let anisotropy_enable = if info.anisotropy != 1 {
             vk::TRUE
         } else {
@@ -188,7 +188,7 @@ impl LoadResource for Sampler {
     type Error = Error;
 
     fn load(resources: &ivy_resources::Resources, info: &Self::Info) -> Result<Self> {
-        let context = resources.get_default::<Arc<VulkanContext>>()?;
+        let context = resources.get_default::<SharedVulkanContext>()?;
         Self::new(context.clone(), info)
     }
 }

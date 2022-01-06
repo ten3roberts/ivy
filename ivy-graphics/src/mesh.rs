@@ -8,10 +8,9 @@ use itertools::izip;
 use ivy_resources::Handle;
 use std::marker::PhantomData;
 use std::mem::size_of;
-use std::sync::Arc;
 
 use ivy_vulkan as vulkan;
-use vulkan::{Buffer, BufferAccess, BufferUsage, VertexDesc, VulkanContext};
+use vulkan::{context::SharedVulkanContext, Buffer, BufferAccess, BufferUsage, VertexDesc};
 
 /// A simple vertex type with position, normal and texcoord.
 #[records::record]
@@ -156,7 +155,7 @@ pub struct Mesh<V = Vertex> {
 impl<V: VertexDesc> Mesh<V> {
     /// Creates a new mesh from provided vertices and indices.
     pub fn new(
-        context: Arc<VulkanContext>,
+        context: SharedVulkanContext,
         vertices: &[V],
         indices: &[u32],
         primitives: Vec<Primitive>,
@@ -191,7 +190,7 @@ impl<V: VertexDesc> Mesh<V> {
 
     /// Creates a new mesh from provided vertices and indices.
     pub fn new_uninit(
-        context: Arc<VulkanContext>,
+        context: SharedVulkanContext,
         vertex_count: u32,
         index_count: u32,
         primitives: Vec<Primitive>,
@@ -257,7 +256,7 @@ impl<V: VertexDesc> Mesh<V> {
 
 impl Mesh<Vertex> {
     /// Creates a new square or rectangle mesh.
-    pub fn new_square(context: Arc<VulkanContext>, width: f32, height: f32) -> Result<Self> {
+    pub fn new_square(context: SharedVulkanContext, width: f32, height: f32) -> Result<Self> {
         let hw = width / 2.0;
         let hh = height / 2.0;
 
@@ -275,7 +274,7 @@ impl Mesh<Vertex> {
 
     /// Loads a mesh from gltf asset. Loads positions, normals, and texture coordinates.
     pub fn from_gltf(
-        context: Arc<VulkanContext>,
+        context: SharedVulkanContext,
         mesh: gltf::Mesh,
         buffers: &[buffer::Data],
         materials: &[Handle<Material>],
@@ -332,7 +331,7 @@ impl Mesh<Vertex> {
 impl Mesh<SkinnedVertex> {
     /// Loads a mesh from gltf asset. Loads positions, normals, and texture coordinates.
     pub fn from_gltf_skinned(
-        context: Arc<VulkanContext>,
+        context: SharedVulkanContext,
         mesh: gltf::Mesh,
         buffers: &[buffer::Data],
         materials: &[Handle<Material>],

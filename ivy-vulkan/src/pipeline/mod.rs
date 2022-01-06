@@ -1,3 +1,4 @@
+use crate::context::SharedVulkanContext;
 use crate::traits::FromExtent;
 use crate::{descriptors::DescriptorLayoutInfo, Result, VertexDesc, VulkanContext};
 use ash::vk::{
@@ -6,7 +7,7 @@ use ash::vk::{
 };
 use ivy_base::Extent;
 use smallvec::SmallVec;
-use std::{ffi::CString, sync::Arc};
+use std::ffi::CString;
 
 use ash::vk;
 
@@ -56,13 +57,13 @@ impl<'a> Default for PipelineInfo<'a> {
 }
 
 pub struct Pipeline {
-    context: Arc<VulkanContext>,
+    context: SharedVulkanContext,
     pipeline: vk::Pipeline,
     layout: vk::PipelineLayout,
 }
 
 impl Pipeline {
-    pub fn new<V>(context: Arc<VulkanContext>, info: &PipelineInfo) -> Result<Self>
+    pub fn new<V>(context: SharedVulkanContext, info: &PipelineInfo) -> Result<Self>
     where
         V: VertexDesc,
     {

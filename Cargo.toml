@@ -61,6 +61,7 @@ walkdir = "2.3"
 
 [features]
 default = []
+crossbeam-channel = ["ivy-base/crossbeam-channel"]
 serialize = [
   "ivy-base/serialize",
   "ivy-ui/serialize",
@@ -70,3 +71,6 @@ serialize = [
   "ivy-templates/serialize",
   "ivy-graphics/serialize"
 ]
+
+[profile.release]
+debug = true

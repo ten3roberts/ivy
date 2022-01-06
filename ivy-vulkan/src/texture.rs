@@ -1,6 +1,7 @@
+use crate::context::SharedVulkanContext;
 use crate::descriptors::DescriptorBindable;
 use crate::traits::FromExtent;
-use crate::{buffer, commands::*, context::VulkanContext, Error, Result};
+use crate::{buffer, commands::*, Error, Result};
 use crate::{Buffer, BufferAccess};
 use ash::vk::{Extent3D, ImageAspectFlags, ImageView, SharingMode};
 use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc};
@@ -9,7 +10,7 @@ use ivy_base::Extent;
 use ivy_resources::LoadResource;
 use std::borrow::Cow;
 use std::ops::Deref;
-use std::{path::Path, sync::Arc};
+use std::path::Path;
 
 use ash::vk;
 
@@ -45,6 +46,19 @@ impl TextureInfo {
             ..Default::default()
         }
     }
+
+    /// Creates a texture suitable for depth attachment
+    pub fn depth(extent: Extent) -> Self {
+        TextureInfo {
+            extent,
+            mip_levels: 1,
+            usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT
+                | ImageUsage::SAMPLED
+                | ImageUsage::INPUT_ATTACHMENT,
+            format: Format::D32_SFLOAT,
+            samples: SampleCountFlags::TYPE_1,
+        }
+    }
 }
 
 impl Default for TextureInfo {
@@ -63,7 +77,7 @@ impl Default for TextureInfo {
 // height, format, mipmapping levels and samples. Manages the deallocation of image memory unless
 // created manually without provided allocation using `from_image`.
 pub struct Texture {
-    context: Arc<VulkanContext>,
+    context: SharedVulkanContext,
     image: vk::Image,
     image_view: vk::ImageView,
     format: vk::Format,
@@ -79,7 +93,7 @@ impl Texture {
     /// Loads a color texture from an image in memory.
     /// Uses the width and height of the loaded image, no resizing.
     /// Uses mipmapping.
-    pub fn from_memory(context: Arc<VulkanContext>, data: &[u8]) -> Result<Self> {
+    pub fn from_memory(context: SharedVulkanContext, data: &[u8]) -> Result<Self> {
         let image = ivy_image::Image::load_from_memory(data, 4)?;
 
         let extent = (image.width(), image.height()).into();
@@ -96,7 +110,7 @@ impl Texture {
     /// Loads a color texture from an image file.
     /// Uses the width and height of the loaded image, no resizing.
     /// Uses mipmapping.
-    pub fn load<P: AsRef<Path>>(context: Arc<VulkanContext>, path: P) -> Result<Self> {
+    pub fn load<P: AsRef<Path>>(context: SharedVulkanContext, path: P) -> Result<Self> {
         let image = ivy_image::Image::load(&path, 4)?;
 
         let extent = (image.width(), image.height()).into();
@@ -113,7 +127,7 @@ impl Texture {
 
     /// Creates a texture from provided raw pixels
     /// Note, raw pixels must match format, width, and height
-    pub fn new(context: Arc<VulkanContext>, info: &TextureInfo) -> Result<Self> {
+    pub fn new(context: SharedVulkanContext, info: &TextureInfo) -> Result<Self> {
         let mut mip_levels = calculate_mip_levels(info.extent);
 
         // Don't use more mip_levels than info
@@ -159,7 +173,7 @@ impl Texture {
     /// Creates a texture from an already existing VkImage
     /// If allocation is provided, the image will be destroyed along with self
     pub fn from_image(
-        context: Arc<VulkanContext>,
+        context: SharedVulkanContext,
         info: &TextureInfo,
         image: vk::Image,
         allocation: Option<Allocation>,
@@ -563,6 +577,16 @@ impl CombinedImageSampler {
             sampler: *sampler.as_ref(),
         }
     }
+
+    /// Get the combined image sampler's image.
+    pub fn image(&self) -> ImageView {
+        self.image
+    }
+
+    /// Get the combined image sampler's sampler.
+    pub fn sampler(&self) -> vk::Sampler {
+        self.sampler
+    }
 }
 impl DescriptorBindable for CombinedImageSampler {
     fn bind_resource<'a>(
@@ -581,7 +605,7 @@ impl LoadResource for Texture {
     type Error = Error;
 
     fn load(resources: &ivy_resources::Resources, path: &Self::Info) -> Result<Self> {
-        let context = resources.get_default::<Arc<VulkanContext>>()?;
+        let context = resources.get_default::<SharedVulkanContext>()?;
         Self::load(context.clone(), path.as_ref())
     }
 }

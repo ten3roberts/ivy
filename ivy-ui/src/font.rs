@@ -3,12 +3,13 @@ use ivy_base::Extent;
 use ivy_graphics::{NormalizedRect, Rect, TextureAtlas};
 use ivy_resources::{Handle, LoadResource, Resources};
 use ivy_vulkan::{
+    context::SharedVulkanContext,
     descriptors::{DescriptorBuilder, DescriptorSet, IntoSet},
     vk::ShaderStageFlags,
     AddressMode, FilterMode, Format, ImageUsage, SampleCountFlags, Sampler, SamplerInfo,
-    TextureInfo, VulkanContext,
+    TextureInfo,
 };
-use std::{borrow::Cow, ops::Range, sync::Arc};
+use std::{borrow::Cow, ops::Range};
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct FontInfo {
@@ -53,7 +54,7 @@ pub struct Font {
 impl Font {
     /// Loads and rasterizes a font from file
     pub fn new(
-        context: Arc<VulkanContext>,
+        context: SharedVulkanContext,
         resources: &Resources,
         sampler: Handle<Sampler>,
         info: &FontInfo,
@@ -183,7 +184,7 @@ impl LoadResource for Font {
     type Error = Error;
 
     fn load(resources: &Resources, info: &Self::Info) -> Result<Self> {
-        let context = resources.get_default::<Arc<VulkanContext>>()?;
+        let context = resources.get_default::<SharedVulkanContext>()?;
 
         let sampler = resources.load(SamplerInfo {
             address_mode: AddressMode::CLAMP_TO_BORDER,

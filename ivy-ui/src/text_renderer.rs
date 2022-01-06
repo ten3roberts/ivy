@@ -6,13 +6,14 @@ use ivy_rendergraph::Node;
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
     commands::CommandBuffer,
+    context::SharedVulkanContext,
     descriptors::IntoSet,
     shaderpass::ShaderPass,
     vk::{self, AccessFlags, BufferCopy, BufferMemoryBarrier, IndexType},
-    BufferAccess, BufferUsage, VulkanContext,
+    BufferAccess, BufferUsage,
 };
 use ivy_vulkan::{device, Buffer};
-use std::{mem::size_of, sync::Arc};
+use std::mem::size_of;
 
 use crate::Text;
 use crate::UIVertex;
@@ -46,7 +47,7 @@ pub struct TextRenderer {
 
 impl TextRenderer {
     pub fn new(
-        context: Arc<VulkanContext>,
+        context: SharedVulkanContext,
         capacity: u32,
         glyph_capacity: u32,
         frames_in_flight: usize,
@@ -73,7 +74,10 @@ impl TextRenderer {
     }
 
     // Creates a mesh able to store `capacity` characters
-    pub fn create_mesh(context: Arc<VulkanContext>, glyph_capacity: u32) -> Result<Mesh<UIVertex>> {
+    pub fn create_mesh(
+        context: SharedVulkanContext,
+        glyph_capacity: u32,
+    ) -> Result<Mesh<UIVertex>> {
         let mut mesh = Mesh::new_uninit(context, glyph_capacity * 4, glyph_capacity * 6, vec![])?;
 
         // Pre fill indices
@@ -89,7 +93,7 @@ impl TextRenderer {
 
     // Creates a mesh able to store `capacity` characters
     pub fn create_staging_buffers(
-        context: Arc<VulkanContext>,
+        context: SharedVulkanContext,
         glyph_capacity: u32,
         frames_in_flight: usize,
     ) -> Result<Vec<Buffer>> {

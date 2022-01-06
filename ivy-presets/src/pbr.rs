@@ -13,7 +13,9 @@ use ivy_postprocessing::{
     pbr::{create_pbr_pipeline, PBRInfo},
     shaders::PBR_SHADER,
 };
-use ivy_rendergraph::{AttachmentInfo, CameraNode, NodeIndex, RenderGraph, SwapchainNode};
+use ivy_rendergraph::{
+    AttachmentInfo, CameraNode, CameraNodeInfo, NodeIndex, RenderGraph, SwapchainNode,
+};
 use ivy_resources::Resources;
 use ivy_ui::{
     shaders::{
@@ -22,11 +24,11 @@ use ivy_ui::{
     Canvas, ImageRenderer, TextRenderer, TextUpdateNode, UIVertex,
 };
 use ivy_vulkan::{
-    vk::{CullModeFlags, PolygonMode},
+    context::SharedVulkanContext,
+    vk::{ClearValue, CullModeFlags, PolygonMode},
     ImageLayout, ImageUsage, LoadOp, Pipeline, PipelineInfo, StoreOp, Swapchain, Texture,
-    TextureInfo, VulkanContext,
+    TextureInfo,
 };
-use std::sync::Arc;
 
 use crate::{
     Error, GeometryPass, GizmoPass, ImagePass, PostProcessingPass, Result, SkinnedPass, TextPass,
@@ -69,7 +71,7 @@ impl PBRRendering {
             .ok_or(Error::MissingCanvas)?
             .entity();
 
-        let context = resources.get_default::<Arc<VulkanContext>>()?;
+        let context = resources.get_default::<SharedVulkanContext>()?;
         context.wait_idle()?;
 
         let mut rendergraph = RenderGraph::new(context.clone(), frames_in_flight)?;
@@ -132,6 +134,7 @@ impl PBRRendering {
                         initial_layout: ImageLayout::UNDEFINED,
                         final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
                         resource: final_lit,
+                        clear_value: ClearValue::default(),
                     }],
                     &[],
                     pbr_info,
@@ -142,25 +145,24 @@ impl PBRRendering {
         let pbr = pbr_nodes[1];
 
         let gizmo = rendergraph.add_node(CameraNode::<GizmoPass, _>::new(
-            "Gizmos Node",
             context.clone(),
             resources,
             camera,
             gizmo_renderer,
-            &[AttachmentInfo {
-                store_op: StoreOp::STORE,
-                load_op: LoadOp::LOAD,
-                initial_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                resource: final_lit,
-            }],
-            &[],
-            &[world.get::<DepthAttachment>(camera)?.0],
-            None,
-            &[],
-            &[],
-            &[],
-            frames_in_flight,
+            CameraNodeInfo {
+                name: "Gizmos Node",
+                color_attachments: vec![AttachmentInfo {
+                    store_op: StoreOp::STORE,
+                    load_op: LoadOp::LOAD,
+                    initial_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                    final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                    resource: final_lit,
+                    clear_value: ClearValue::default(),
+                }],
+                input_attachments: vec![world.get::<DepthAttachment>(camera)?.0],
+                frames_in_flight,
+                ..Default::default()
+            },
         )?);
 
         let image_renderer = resources
@@ -174,35 +176,33 @@ impl PBRRendering {
             .handle;
 
         let ui = rendergraph.add_node(CameraNode::<ImagePass, _>::new(
-            "UI Node",
             context.clone(),
             resources,
             canvas,
             (image_renderer, WithPass::<TextPass, _>::new(text_renderer)),
-            &[AttachmentInfo {
-                store_op: StoreOp::STORE,
-                load_op: LoadOp::LOAD,
-                initial_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                resource: final_lit,
-            }],
-            &[],
-            &[],
-            None,
-            &[resources.get(text_renderer)?.vertex_buffer()],
-            &[],
-            &[],
-            frames_in_flight,
+            CameraNodeInfo {
+                name: "UI Node",
+                color_attachments: vec![AttachmentInfo {
+                    store_op: StoreOp::STORE,
+                    load_op: LoadOp::LOAD,
+                    initial_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                    final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                    resource: final_lit,
+                    clear_value: ClearValue::default(),
+                }],
+                buffer_reads: vec![resources.get(text_renderer)?.vertex_buffer()],
+                frames_in_flight,
+                ..Default::default()
+            },
         )?);
 
         rendergraph.add_node(TextUpdateNode::new(resources, text_renderer)?);
 
         rendergraph.add_node(SwapchainNode::new(
             context.clone(),
+            &resources,
             resources.default()?,
             final_lit,
-            vec![],
-            &resources,
         )?);
 
         // Build renderpasses
@@ -221,7 +221,7 @@ impl PBRRendering {
     /// Setups basic pipelines and inserts them into the resource store
     pub fn setup_pipelines(&self, resources: &Resources) -> Result<()> {
         let rendergraph = resources.get_default::<RenderGraph>()?;
-        let context = resources.get_default::<Arc<VulkanContext>>()?;
+        let context = resources.get_default::<SharedVulkanContext>()?;
 
         let geometry = rendergraph.pipeline_info(self.geometry)?;
         let gizmo = rendergraph.pipeline_info(self.gizmo)?;

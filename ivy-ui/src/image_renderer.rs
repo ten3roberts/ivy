@@ -5,9 +5,9 @@ use ivy_base::{Color, Position2D, Size2D, Visible};
 use ivy_graphics::{BaseRenderer, BatchMarker, Mesh, Renderer};
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
-    commands::CommandBuffer, descriptors::*, shaderpass::ShaderPass, vk::IndexType, VulkanContext,
+    commands::CommandBuffer, context::SharedVulkanContext, descriptors::*, shaderpass::ShaderPass,
+    vk::IndexType,
 };
-use std::sync::Arc;
 
 /// A mesh renderer using vkCmdDrawIndirectIndexed and efficient batching.
 pub struct ImageRenderer {
@@ -17,7 +17,7 @@ pub struct ImageRenderer {
 
 impl ImageRenderer {
     pub fn new(
-        context: Arc<VulkanContext>,
+        context: SharedVulkanContext,
         capacity: u32,
         frames_in_flight: usize,
     ) -> Result<Self> {

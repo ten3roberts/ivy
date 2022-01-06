@@ -1,6 +1,7 @@
+use crate::context::SharedVulkanContext;
 use crate::traits::*;
 use crate::ImageUsage;
-use crate::{Error, Result, VulkanContext};
+use crate::{Error, Result};
 use ash::extensions::khr::Surface;
 pub use ash::extensions::khr::Swapchain as SwapchainLoader;
 use ash::vk::Extent2D;
@@ -8,7 +9,7 @@ use ash::vk::{self, Image, SurfaceKHR};
 use ash::Device;
 use ash::Instance;
 use ivy_base::Extent;
-use std::{cmp, sync::Arc};
+use std::cmp;
 
 /// The maximum number of images in the swapchain. Actual image count may be less but never more.
 /// This is to allow inline allocation of per swapchain image resources through `ArrayVec`.
@@ -128,7 +129,7 @@ fn pick_extent(desired_extent: Extent, capabilities: &vk::SurfaceCapabilitiesKHR
 /// system window.
 pub struct Swapchain {
     support: SwapchainSupport,
-    context: Arc<VulkanContext>,
+    context: SharedVulkanContext,
     swapchain: vk::SwapchainKHR,
     images: Vec<Image>,
     extent: Extent,
@@ -140,7 +141,7 @@ pub struct Swapchain {
 
 impl Swapchain {
     pub fn new<T: Backend>(
-        context: Arc<VulkanContext>,
+        context: SharedVulkanContext,
         window: &T,
         info: SwapchainInfo,
     ) -> Result<Self> {
@@ -342,7 +343,7 @@ impl Swapchain {
     }
 
     /// Get a reference to the swapchain's context.
-    pub fn context(&self) -> &Arc<VulkanContext> {
+    pub fn context(&self) -> &SharedVulkanContext {
         &self.context
     }
 }

@@ -7,6 +7,12 @@ pub const FULLSCREEN_SHADER: ShaderModuleInfo =
 pub const DEFAULT_VERTEX_SHADER: ShaderModuleInfo =
     ShaderModuleInfo::from_const_bytes(include_bytes!("../../res/shaders/default.vert.spv"));
 
+pub const FORWARD_VERTEX_SHADER: ShaderModuleInfo =
+    ShaderModuleInfo::from_const_bytes(include_bytes!("../../res/shaders/forward.vert.spv"));
+
+pub const FORWARD_FRAGMENT_SHADER: ShaderModuleInfo =
+    ShaderModuleInfo::from_const_bytes(include_bytes!("../../res/shaders/forward.frag.spv"));
+
 pub const DEFAULT_FRAGMENT_SHADER: ShaderModuleInfo =
     ShaderModuleInfo::from_const_bytes(include_bytes!("../../res/shaders/default.frag.spv"));
 

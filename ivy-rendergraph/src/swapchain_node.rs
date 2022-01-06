@@ -1,20 +1,19 @@
-use std::{ops::Deref, slice, sync::Arc};
-
 use crate::{NodeKind, Result};
 use anyhow::Context;
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
+    context::SharedVulkanContext,
     traits::FromExtent,
-    vk::{self, ClearValue, ImageBlit, ImageSubresourceLayers, Offset3D, PipelineStageFlags},
-    ImageLayout, ImageUsage, SampleCountFlags, Swapchain, Texture, TextureInfo, VulkanContext,
+    vk::{self, ImageBlit, ImageSubresourceLayers, Offset3D, PipelineStageFlags},
+    ImageLayout, ImageUsage, SampleCountFlags, Swapchain, Texture, TextureInfo,
 };
+use std::{ops::Deref, slice};
 
 use crate::{AttachmentInfo, Node};
 
 pub struct SwapchainNode {
     swapchain: Handle<Swapchain>,
     read_attachment: Handle<Texture>,
-    clear_values: Vec<ClearValue>,
     swapchain_images: Vec<Handle<Texture>>,
     // Barrier from renderpass to transfer
     dst_barrier: vk::ImageMemoryBarrier,
@@ -27,11 +26,10 @@ unsafe impl Sync for SwapchainNode {}
 
 impl SwapchainNode {
     pub fn new(
-        context: Arc<VulkanContext>,
+        context: SharedVulkanContext,
+        resources: &Resources,
         swapchain: Handle<Swapchain>,
         read_attachment: Handle<Texture>,
-        clear_values: Vec<ClearValue>,
-        resources: &Resources,
     ) -> Result<Self> {
         let swapchain_ref = resources.get(swapchain)?;
 
@@ -91,7 +89,6 @@ impl SwapchainNode {
         Ok(Self {
             swapchain,
             read_attachment,
-            clear_values,
             swapchain_images,
             dst_barrier,
             output_barrier,
@@ -117,7 +114,7 @@ impl Node for SwapchainNode {
     }
 
     fn clear_values(&self) -> &[ivy_vulkan::vk::ClearValue] {
-        &self.clear_values
+        &[]
     }
 
     fn node_kind(&self) -> NodeKind {
