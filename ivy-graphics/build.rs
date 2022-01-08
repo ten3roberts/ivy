@@ -114,7 +114,7 @@ fn main() -> Result<()> {
     let out_dir = env::var("OUT_DIR")?;
     let mut dst = PathBuf::new();
     dst.push(out_dir);
-    dst.push("shader");
+    dst.push("shaders");
 
     let children = compile_dir(
         "./shaders/",
