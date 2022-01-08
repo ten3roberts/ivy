@@ -5,7 +5,7 @@ use ivy_vulkan::{
     context::SharedVulkanContext,
     traits::FromExtent,
     vk::{self, ImageBlit, ImageSubresourceLayers, Offset3D, PipelineStageFlags},
-    ImageLayout, ImageUsage, SampleCountFlags, Swapchain, Texture, TextureInfo,
+    ImageLayout, ImageUsage, PassInfo, SampleCountFlags, Swapchain, Texture, TextureInfo,
 };
 use std::{ops::Deref, slice};
 
@@ -130,6 +130,7 @@ impl Node for SwapchainNode {
         _world: &mut hecs::World,
         resources: &ivy_resources::Resources,
         cmd: &ivy_vulkan::commands::CommandBuffer,
+        _: &PassInfo,
         _current_frame: usize,
     ) -> anyhow::Result<()> {
         let swapchain = resources.get(self.swapchain)?;

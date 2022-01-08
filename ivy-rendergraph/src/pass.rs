@@ -6,15 +6,11 @@ use ivy_vulkan::{
     commands::CommandBuffer,
     context::SharedVulkanContext,
     vk::{self, ClearValue, ImageMemoryBarrier},
-    AttachmentDescription, AttachmentReference, Framebuffer, ImageLayout, LoadOp, RenderPass,
-    RenderPassInfo, StoreOp, SubpassDependency, SubpassInfo, Texture,
+    AttachmentDescription, AttachmentReference, Framebuffer, ImageLayout, LoadOp, PassInfo,
+    RenderPass, RenderPassInfo, StoreOp, SubpassDependency, SubpassInfo, Texture,
 };
 use slotmap::{SecondaryMap, SlotMap};
-use std::{
-    iter::repeat,
-    ops::Deref,
-    time::{Duration, Instant},
-};
+use std::{iter::repeat, ops::Deref};
 
 pub struct Pass {
     kind: PassKind,
@@ -62,7 +58,6 @@ impl Pass {
         current_frame: usize,
         resources: &Resources,
         extent: Extent,
-        execution_times: &mut SecondaryMap<NodeIndex, (&'static str, Duration)>,
     ) -> Result<()> {
         match &self.kind {
             PassKind::Graphics {
@@ -72,33 +67,29 @@ impl Pass {
             } => {
                 cmd.begin_renderpass(&renderpass, &framebuffer, extent, clear_values);
 
-                self.nodes()
-                    .first()
+                self.nodes
                     .iter()
-                    .try_for_each(|idx| -> Result<_> {
-                        execute_and_time(
+                    .enumerate()
+                    .try_for_each(|(subpass, index)| -> Result<_> {
+                        if subpass > 0 {
+                            cmd.next_subpass(vk::SubpassContents::INLINE);
+                        }
+                        let node = &mut nodes[*index];
+                        node.execute(
                             world,
                             resources,
                             cmd,
+                            &PassInfo {
+                                renderpass: renderpass.renderpass(),
+                                subpass: subpass as u32,
+                                extent,
+                                color_attachment_count: node.color_attachments().len() as u32,
+                                depth_attachment: node.depth_attachment().is_some(),
+                            },
                             current_frame,
-                            **idx,
-                            &mut nodes[**idx],
-                            execution_times,
-                        )
+                        )?;
+                        Ok(())
                     })?;
-
-                self.nodes[1..].iter().try_for_each(|idx| -> Result<_> {
-                    cmd.next_subpass(vk::SubpassContents::INLINE);
-                    execute_and_time(
-                        world,
-                        resources,
-                        cmd,
-                        current_frame,
-                        *idx,
-                        &mut nodes[*idx],
-                        execution_times,
-                    )
-                })?;
 
                 cmd.end_renderpass();
             }
@@ -115,16 +106,10 @@ impl Pass {
                     );
                 }
 
-                self.nodes.iter().try_for_each(|idx| -> Result<_> {
-                    execute_and_time(
-                        world,
-                        resources,
-                        cmd,
-                        current_frame,
-                        *idx,
-                        &mut nodes[*idx],
-                        execution_times,
-                    )
+                self.nodes.iter().try_for_each(|index| -> Result<_> {
+                    nodes[*index]
+                        .execute(world, resources, cmd, &PassInfo::default(), current_frame)
+                        .map_err(|e| e.into())
                 })?;
             }
         }
@@ -355,48 +340,6 @@ impl PassKind {
         // Get the dependencies of node.
         let mut src_stage = vk::PipelineStageFlags::default();
 
-        // let buffer_barriers = dependencies
-        //     .get(pass_nodes[0])
-        //     .into_iter()
-        //     .flat_map(|val| val.iter())
-        //     .filter_map(|val| {
-        //         if let ResourceKind::Buffer(buf) = val.resource {
-        //             Some((val, buf))
-        //         } else {
-        //             None
-        //         }
-        //     })
-        //     .map(|(edge, buf)| -> Result<_> {
-        //         let src = buffers.get(buf)?;
-
-        //         let aspect_mask =
-        //             if edge.read_access == vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE {
-        //                 vk::ImageAspectFlags::DEPTH
-        //             } else {
-        //                 vk::ImageAspectFlags::COLOR
-        //             };
-        //         src_stage = edge.write_stage.max(src_stage);
-
-        //         Ok(BufferM {
-        //             src_access_mask: edge.write_access,
-        //             dst_access_mask: vk::AccessFlags::TRANSFER_READ,
-        //             old_layout: edge.layout,
-        //             new_layout: ImageLayout::TRANSFER_SRC_OPTIMAL,
-        //             src_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
-        //             dst_queue_family_index: vk::QUEUE_FAMILY_IGNORED,
-        //             image: src.image(),
-        //             subresource_range: vk::ImageSubresourceRange {
-        //                 aspect_mask,
-        //                 base_mip_level: 0,
-        //                 level_count: src.mip_levels(),
-        //                 base_array_layer: 0,
-        //                 layer_count: 1,
-        //             },
-        //             ..Default::default()
-        //         })
-        //     })
-        //     .collect::<Result<Vec<_>>>()?;
-
         let image_barriers = dependencies
             .get(pass_nodes[0])
             .into_iter()
@@ -444,27 +387,4 @@ impl PassKind {
             image_barriers,
         })
     }
-}
-
-fn execute_and_time(
-    world: &mut World,
-    resources: &Resources,
-    cmd: &CommandBuffer,
-    current_frame: usize,
-    idx: NodeIndex,
-    node: &mut Box<dyn Node>,
-    execution_times: &mut SecondaryMap<NodeIndex, (&'static str, Duration)>,
-) -> Result<()> {
-    let now = Instant::now();
-
-    node.execute(world, resources, cmd, current_frame)?;
-
-    let elapsed = Instant::now() - now;
-
-    execution_times.entry(idx).map(|val| {
-        val.and_modify(|val| val.1 = elapsed)
-            .or_insert_with(|| (node.debug_name(), elapsed))
-    });
-
-    Ok(())
 }

@@ -1,19 +1,26 @@
 use ash::vk::{DescriptorSet, IndexType, ShaderStageFlags};
 use glam::{Mat4, Vec3, Vec4};
+use hecs::World;
 use ivy_base::Gizmos;
-use ivy_vulkan::{context::SharedVulkanContext, shaderpass::ShaderPass};
+use ivy_resources::Resources;
+use ivy_vulkan::{context::SharedVulkanContext, shaderpass::ShaderPass, PassInfo, Pipeline};
+use once_cell::sync::OnceCell;
 
-use crate::{Mesh, Renderer, Result};
+use crate::{Mesh, Renderer, Result, Vertex};
 
 pub struct GizmoRenderer {
     mesh: crate::Mesh,
+    pipeline: OnceCell<Pipeline>,
 }
 
 impl GizmoRenderer {
     pub fn new(context: SharedVulkanContext) -> Result<Self> {
         let mesh = Mesh::new_square(context, 2.0, 2.0)?;
 
-        Ok(Self { mesh })
+        Ok(Self {
+            mesh,
+            pipeline: OnceCell::new(),
+        })
     }
 }
 
@@ -22,30 +29,30 @@ impl Renderer for GizmoRenderer {
 
     fn draw<Pass: ShaderPass>(
         &mut self,
-        // The ecs world
-        _: &mut hecs::World,
-        // The commandbuffer to record into
-        cmd: &ivy_vulkan::commands::CommandBuffer,
-        // The current swapchain image or backbuffer index
-        _: usize,
-        // Descriptor sets to bind before renderer specific sets
+        _: &mut World,
+        resources: &Resources,
+        cmd: &ivy_vulkan::CommandBuffer,
         sets: &[DescriptorSet],
-        // Dynamic offsets for supplied sets
+        pass_info: &PassInfo,
         offsets: &[u32],
-        // Graphics resources like textures and materials
-        resources: &ivy_resources::Resources,
+        _: usize,
     ) -> Result<()> {
+        let pipeline = self.pipeline.get_or_try_init(|| {
+            let context = resources.get_default::<SharedVulkanContext>()?;
+            let pass = resources.get_default::<Pass>()?;
+            Pipeline::new::<Vertex>(context.clone(), pass.pipeline(), pass_info)
+        })?;
+
         cmd.bind_vertexbuffer(0, self.mesh.vertex_buffer());
         cmd.bind_indexbuffer(self.mesh.index_buffer(), IndexType::UINT32, 0);
 
-        let shaderpass = resources.get_default::<Pass>()?;
-        let layout = shaderpass.pipeline_layout();
+        let layout = pipeline.layout();
 
         let gizmos = resources
             .default_entry::<Gizmos>()?
             .or_insert_with(|| Gizmos::default());
 
-        cmd.bind_pipeline(shaderpass.pipeline());
+        cmd.bind_pipeline(pipeline);
 
         if !sets.is_empty() {
             cmd.bind_descriptor_sets(layout, 0, sets, offsets);

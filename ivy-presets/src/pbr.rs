@@ -6,8 +6,7 @@ use ivy_graphics::{
         DEFAULT_FRAGMENT_SHADER, DEFAULT_VERTEX_SHADER, FULLSCREEN_SHADER, GIZMO_FRAGMENT_SHADER,
         GIZMO_VERTEX_SHADER, SKINNED_VERTEX_SHADER,
     },
-    DepthAttachment, FullscreenRenderer, MainCamera, MeshRenderer, SkinnedMeshRenderer,
-    SkinnedVertex, Vertex, WithPass,
+    DepthAttachment, FullscreenRenderer, MainCamera, MeshRenderer, SkinnedMeshRenderer, WithPass,
 };
 use ivy_postprocessing::{
     pbr::{create_pbr_pipeline, PBRInfo},
@@ -21,13 +20,12 @@ use ivy_ui::{
     shaders::{
         IMAGE_FRAGMENT_SHADER, IMAGE_VERTEX_SHADER, TEXT_FRAGMENT_SHADER, TEXT_VERTEX_SHADER,
     },
-    Canvas, ImageRenderer, TextRenderer, TextUpdateNode, UIVertex,
+    Canvas, ImageRenderer, TextRenderer, TextUpdateNode,
 };
 use ivy_vulkan::{
     context::SharedVulkanContext,
     vk::{ClearValue, CullModeFlags, PolygonMode},
-    ImageLayout, ImageUsage, LoadOp, Pipeline, PipelineInfo, StoreOp, Swapchain, Texture,
-    TextureInfo,
+    ImageLayout, ImageUsage, LoadOp, PipelineInfo, StoreOp, Swapchain, Texture, TextureInfo,
 };
 
 use crate::{
@@ -79,7 +77,7 @@ impl PBRRendering {
         // Setup renderers
         resources
             .default_entry()?
-            .or_insert_with(|| FullscreenRenderer);
+            .or_insert_with(|| FullscreenRenderer::new());
 
         let gizmo_renderer = resources
             .default_entry()?
@@ -220,88 +218,59 @@ impl PBRRendering {
 
     /// Setups basic pipelines and inserts them into the resource store
     pub fn setup_pipelines(&self, resources: &Resources) -> Result<()> {
-        let rendergraph = resources.get_default::<RenderGraph>()?;
-        let context = resources.get_default::<SharedVulkanContext>()?;
-
-        let geometry = rendergraph.pipeline_info(self.geometry)?;
-        let gizmo = rendergraph.pipeline_info(self.gizmo)?;
-        let pbr = rendergraph.pipeline_info(self.pbr)?;
-
         // Create pipelines
-        resources.insert(GeometryPass(Pipeline::new::<Vertex>(
-            context.clone(),
-            &PipelineInfo {
-                vs: DEFAULT_VERTEX_SHADER,
-                fs: DEFAULT_FRAGMENT_SHADER,
-                cull_mode: CullModeFlags::NONE,
-                ..geometry
-            },
-        )?))?;
+        resources.insert(GeometryPass(PipelineInfo {
+            vs: DEFAULT_VERTEX_SHADER,
+            fs: DEFAULT_FRAGMENT_SHADER,
+            cull_mode: CullModeFlags::NONE,
+            ..Default::default()
+        }))?;
 
-        resources.insert(SkinnedPass(Pipeline::new::<SkinnedVertex>(
-            context.clone(),
-            &PipelineInfo {
-                vs: SKINNED_VERTEX_SHADER,
-                fs: DEFAULT_FRAGMENT_SHADER,
-                cull_mode: CullModeFlags::BACK,
-                ..geometry
-            },
-        )?))?;
+        resources.insert(SkinnedPass(PipelineInfo {
+            vs: SKINNED_VERTEX_SHADER,
+            fs: DEFAULT_FRAGMENT_SHADER,
+            cull_mode: CullModeFlags::BACK,
+            ..Default::default()
+        }))?;
 
-        resources.insert(GeometryPass(Pipeline::new::<Vertex>(
-            context.clone(),
-            &PipelineInfo {
-                vs: DEFAULT_VERTEX_SHADER,
-                fs: DEFAULT_FRAGMENT_SHADER,
-                polygon_mode: PolygonMode::LINE,
-                cull_mode: CullModeFlags::NONE,
-                ..geometry
-            },
-        )?))?;
+        resources.insert(GeometryPass(PipelineInfo {
+            vs: DEFAULT_VERTEX_SHADER,
+            fs: DEFAULT_FRAGMENT_SHADER,
+            polygon_mode: PolygonMode::LINE,
+            cull_mode: CullModeFlags::NONE,
+            ..Default::default()
+        }))?;
 
-        resources.insert(PostProcessingPass(Pipeline::new::<()>(
-            context.clone(),
-            &PipelineInfo {
-                vs: FULLSCREEN_SHADER,
-                fs: PBR_SHADER,
-                cull_mode: CullModeFlags::NONE,
-                ..pbr
-            },
-        )?))?;
+        resources.insert(PostProcessingPass(PipelineInfo {
+            vs: FULLSCREEN_SHADER,
+            fs: PBR_SHADER,
+            cull_mode: CullModeFlags::NONE,
+            ..Default::default()
+        }))?;
 
-        let ui = rendergraph.pipeline_info(self.ui)?;
-        resources.insert(ImagePass(Pipeline::new::<UIVertex>(
-            context.clone(),
-            &PipelineInfo {
-                vs: IMAGE_VERTEX_SHADER,
-                fs: IMAGE_FRAGMENT_SHADER,
-                blending: true,
-                cull_mode: CullModeFlags::BACK,
-                ..ui
-            },
-        )?))?;
+        resources.insert(ImagePass(PipelineInfo {
+            vs: IMAGE_VERTEX_SHADER,
+            fs: IMAGE_FRAGMENT_SHADER,
+            blending: true,
+            cull_mode: CullModeFlags::BACK,
+            ..Default::default()
+        }))?;
 
-        resources.insert(TextPass(Pipeline::new::<UIVertex>(
-            context.clone(),
-            &PipelineInfo {
-                vs: TEXT_VERTEX_SHADER,
-                fs: TEXT_FRAGMENT_SHADER,
-                cull_mode: CullModeFlags::BACK,
-                blending: true,
-                ..ui
-            },
-        )?))?;
+        resources.insert(TextPass(PipelineInfo {
+            vs: TEXT_VERTEX_SHADER,
+            fs: TEXT_FRAGMENT_SHADER,
+            cull_mode: CullModeFlags::BACK,
+            blending: true,
+            ..Default::default()
+        }))?;
 
-        resources.insert(GizmoPass(Pipeline::new::<Vertex>(
-            context.clone(),
-            &PipelineInfo {
-                vs: GIZMO_VERTEX_SHADER,
-                fs: GIZMO_FRAGMENT_SHADER,
-                cull_mode: CullModeFlags::NONE,
-                blending: true,
-                ..gizmo
-            },
-        )?))?;
+        resources.insert(GizmoPass(PipelineInfo {
+            vs: GIZMO_VERTEX_SHADER,
+            fs: GIZMO_FRAGMENT_SHADER,
+            cull_mode: CullModeFlags::NONE,
+            blending: true,
+            ..Default::default()
+        }))?;
 
         Ok(())
     }

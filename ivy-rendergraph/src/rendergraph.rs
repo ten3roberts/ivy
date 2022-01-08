@@ -12,10 +12,10 @@ use ivy_vulkan::{
     context::SharedVulkanContext,
     fence, semaphore,
     vk::{self, CommandBufferUsageFlags, PipelineStageFlags, Semaphore},
-    Fence, ImageLayout, PipelineInfo, RenderPass, Texture,
+    Fence, ImageLayout, RenderPass, Texture,
 };
 use slotmap::{new_key_type, SecondaryMap, SlotMap};
-use std::{hash, ops::Deref, time::Duration};
+use std::{hash, ops::Deref};
 
 new_key_type! {
     pub struct NodeIndex;
@@ -38,8 +38,6 @@ pub struct RenderGraph {
     extent: Extent,
     frames_in_flight: usize,
     current_frame: usize,
-
-    execution_times: SecondaryMap<NodeIndex, (&'static str, Duration)>,
 }
 
 impl RenderGraph {
@@ -60,7 +58,6 @@ impl RenderGraph {
             extent: Extent::new(0, 0),
             frames_in_flight,
             current_frame: 0,
-            execution_times: SecondaryMap::new(),
         })
     }
 
@@ -181,21 +178,6 @@ impl RenderGraph {
         }
     }
 
-    /// Returns a pipeline info compatible with the specified node
-    pub fn pipeline_info(&self, node: NodeIndex) -> Result<PipelineInfo> {
-        let (pass, subpass) = self.node_renderpass(node)?;
-        let node = self.node(node)?;
-
-        Ok(PipelineInfo {
-            renderpass: pass.renderpass(),
-            subpass,
-            extent: self.extent,
-            color_attachment_count: node.color_attachments().len() as u32,
-            depth_attachment: node.depth_attachment().is_some(),
-            ..Default::default()
-        })
-    }
-
     /// Builds or rebuilds the rendergraph and creates appropriate renderpasses and framebuffers.
     pub fn build<T>(&mut self, textures: T, extent: Extent) -> Result<()>
     where
@@ -281,7 +263,6 @@ impl RenderGraph {
         let frame = &mut self.frames[self.current_frame];
 
         let nodes = &mut self.nodes;
-        let execution_times = &mut self.execution_times;
         let passes = &self.passes;
         let extent = self.extent;
         let current_frame = self.current_frame;
@@ -292,15 +273,7 @@ impl RenderGraph {
         passes
             .iter()
             .try_for_each(|(_pass_index, pass)| -> Result<()> {
-                pass.execute(
-                    world,
-                    &cmd,
-                    nodes,
-                    current_frame,
-                    resources,
-                    extent,
-                    execution_times,
-                )
+                pass.execute(world, &cmd, nodes, current_frame, resources, extent)
             })?;
 
         Ok(())
@@ -326,10 +299,6 @@ impl RenderGraph {
         self.current_frame = (self.current_frame + 1) % self.frames_in_flight;
 
         Ok(())
-    }
-
-    pub fn execution_times(&self) -> &SecondaryMap<NodeIndex, (&'static str, Duration)> {
-        &self.execution_times
     }
 
     /// Get a reference to the current signal semaphore for the specified frame

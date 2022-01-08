@@ -1,17 +1,16 @@
-use crate::{BaseRenderer, BatchMarker, Error, Material, Mesh, Renderer, Result};
+use crate::{BaseRenderer, BatchMarker, Error, Material, Mesh, Renderer, Result, Vertex};
 use ash::vk::{DescriptorSet, IndexType};
 use glam::{Mat4, Vec4};
 use hecs::{Query, World};
 use ivy_base::{Color, Position, Rotation, Scale, Visible};
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
-    commands::CommandBuffer, context::SharedVulkanContext, descriptors::IntoSet,
-    shaderpass::ShaderPass,
+    context::SharedVulkanContext, descriptors::IntoSet, shaderpass::ShaderPass, PassInfo,
 };
 
 /// A mesh renderer using vkCmdDrawIndirectIndexed and efficient batching.
 pub struct MeshRenderer {
-    base_renderer: BaseRenderer<Key, ObjectData>,
+    base_renderer: BaseRenderer<Key, ObjectData, Vertex>,
 }
 
 impl MeshRenderer {
@@ -31,27 +30,21 @@ impl Renderer for MeshRenderer {
     /// Will draw all entities with a Handle<Material>, Handle<Mesh>, Modelmatrix and Shaderpass `Handle<T>`
     fn draw<Pass: ShaderPass>(
         &mut self,
-        // The ecs world
         world: &mut World,
-        // The commandbuffer to record into
-        cmd: &CommandBuffer,
-        // The current swapchain image or backbuffer index
-        current_frame: usize,
-        // Descriptor sets to bind before renderer specific sets
-        sets: &[DescriptorSet],
-        // Dynamic offsets for supplied sets
-        offsets: &[u32],
-        // Graphics resources like textures and materials
         resources: &Resources,
+        cmd: &ivy_vulkan::CommandBuffer,
+        sets: &[DescriptorSet],
+        pass_info: &PassInfo,
+        offsets: &[u32],
+        current_frame: usize,
     ) -> Result<()> {
-        let passes = resources.fetch::<Pass>()?;
         let meshes = resources.fetch::<Mesh>()?;
         let materials = resources.fetch::<Material>()?;
 
         let pass = self.base_renderer.pass_mut::<Pass>()?;
 
-        pass.get_unbatched::<Pass, KeyQuery, ObjectDataQuery>(world);
-        pass.build_batches::<Pass, KeyQuery>(world, &*passes)?;
+        pass.register::<Pass, KeyQuery, ObjectDataQuery>(world);
+        pass.build_batches::<Pass, KeyQuery>(world, resources, pass_info)?;
         let iter = world
             .query_mut::<(&BatchMarker<ObjectData, Pass>, ObjectDataQuery, &Visible)>()
             .into_iter()
@@ -67,7 +60,7 @@ impl Renderer for MeshRenderer {
 
         let frame_set = pass.set(current_frame);
 
-        for batch in pass.batches() {
+        for batch in pass.batches().iter() {
             let key = batch.key();
 
             let mesh = meshes.get(key.mesh)?;

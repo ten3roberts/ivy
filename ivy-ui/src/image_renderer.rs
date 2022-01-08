@@ -5,14 +5,13 @@ use ivy_base::{Color, Position2D, Size2D, Visible};
 use ivy_graphics::{BaseRenderer, BatchMarker, Mesh, Renderer};
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
-    commands::CommandBuffer, context::SharedVulkanContext, descriptors::*, shaderpass::ShaderPass,
-    vk::IndexType,
+    context::SharedVulkanContext, descriptors::*, shaderpass::ShaderPass, vk::IndexType, PassInfo,
 };
 
 /// A mesh renderer using vkCmdDrawIndirectIndexed and efficient batching.
 pub struct ImageRenderer {
     square: Mesh<UIVertex>,
-    base_renderer: BaseRenderer<Key, ObjectData>,
+    base_renderer: BaseRenderer<Key, ObjectData, UIVertex>,
 }
 
 impl ImageRenderer {
@@ -51,29 +50,24 @@ impl Renderer for ImageRenderer {
     /// Will draw all entities with a Handle<Material>, Handle<Mesh>, Modelmatrix and Shaderpass `Handle<T>`
     fn draw<Pass: ShaderPass>(
         &mut self,
-        // The ecs world
         world: &mut World,
-        // The commandbuffer to record into
-        cmd: &CommandBuffer,
-        // The current swapchain image or backbuffer index
-        current_frame: usize,
-        // Descriptor sets to bind before renderer specific sets
-        sets: &[DescriptorSet],
-        // Dynamic offsets for supplied sets
-        offsets: &[u32],
-        // Graphics resources like textures and materials
         resources: &Resources,
+        cmd: &ivy_vulkan::CommandBuffer,
+        sets: &[DescriptorSet],
+        pass_info: &PassInfo,
+        offsets: &[u32],
+        current_frame: usize,
     ) -> Result<()> {
         cmd.bind_vertexbuffer(0, self.square.vertex_buffer());
         cmd.bind_indexbuffer(self.square.index_buffer(), IndexType::UINT32, 0);
 
-        let passes = resources.fetch::<Pass>()?;
         let images = resources.fetch::<Image>()?;
 
         let pass = self.base_renderer.pass_mut::<Pass>()?;
 
-        pass.get_unbatched::<Pass, KeyQuery, ObjectDataQuery>(world);
-        pass.build_batches::<Pass, KeyQuery>(world, &passes)?;
+        pass.register::<Pass, KeyQuery, ObjectDataQuery>(world);
+        pass.build_batches::<Pass, KeyQuery>(world, resources, pass_info)?;
+
         let iter = world
             .query_mut::<(&BatchMarker<ObjectData, Pass>, ObjectDataQuery, &Visible)>()
             .into_iter()

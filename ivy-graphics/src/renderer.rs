@@ -5,7 +5,7 @@ use anyhow::Context;
 use ash::vk::DescriptorSet;
 use hecs::World;
 use ivy_resources::{Handle, Resources, Storage};
-use ivy_vulkan::{commands::CommandBuffer, shaderpass::ShaderPass};
+use ivy_vulkan::{commands::CommandBuffer, shaderpass::ShaderPass, PassInfo};
 
 // Generic interface for a renderer.
 pub trait Renderer {
@@ -16,16 +16,18 @@ pub trait Renderer {
         &mut self,
         // The ecs world
         world: &mut World,
-        // The commandbuffer to record into
-        cmd: &CommandBuffer,
-        // The current swapchain image or backbuffer index
-        current_frame: usize,
-        // Descriptor sets to bind before renderer specific sets
-        sets: &[DescriptorSet],
-        // Dynamic offsets for supplied sets
-        offsets: &[u32],
         // Graphics resources like textures and materials
         resources: &Resources,
+        // The commandbuffer to record into
+        cmd: &CommandBuffer,
+        // Descriptor sets to bind before renderer specific sets
+        sets: &[DescriptorSet],
+        // Information about the current pass
+        pass_info: &PassInfo,
+        // Dynamic offsets for supplied sets
+        offsets: &[u32],
+        // The current swapchain image or backbuffer index
+        current_frame: usize,
     ) -> Result<(), Self::Error>;
 }
 
@@ -56,21 +58,23 @@ where
 
     fn draw<Ignored: ShaderPass>(
         &mut self,
-        // The ecs world
         world: &mut World,
-        // The commandbuffer to record into
-        cmd: &CommandBuffer,
-        // The current swapchain image or backbuffer index
-        current_frame: usize,
-        // Descriptor sets to bind before renderer specific sets
-        sets: &[DescriptorSet],
-        // Dynamic offsets for supplied sets
-        offsets: &[u32],
-        // Graphics resources like textures and materials
         resources: &Resources,
+        cmd: &CommandBuffer,
+        sets: &[DescriptorSet],
+        pass_info: &PassInfo,
+        offsets: &[u32],
+        current_frame: usize,
     ) -> Result<(), Self::Error> {
-        self.renderer
-            .draw::<Pass>(world, cmd, current_frame, sets, offsets, resources)
+        self.renderer.draw::<Pass>(
+            world,
+            resources,
+            cmd,
+            sets,
+            pass_info,
+            offsets,
+            current_frame,
+        )
     }
 }
 
@@ -83,18 +87,13 @@ where
 
     fn draw<Pass: ShaderPass>(
         &mut self,
-        // The ecs world
         world: &mut World,
-        // The commandbuffer to record into
-        cmd: &CommandBuffer,
-        // The current swapchain image or backbuffer index
-        current_frame: usize,
-        // Descriptor sets to bind before renderer specific sets
-        sets: &[DescriptorSet],
-        // Dynamic offsets for supplied sets
-        offsets: &[u32],
-        // Graphics resources like textures and materials
         resources: &Resources,
+        cmd: &CommandBuffer,
+        sets: &[DescriptorSet],
+        pass_info: &PassInfo,
+        offsets: &[u32],
+        current_frame: usize,
     ) -> Result<(), Self::Error> {
         resources
             .get_mut(*self)
@@ -104,7 +103,15 @@ where
                     std::any::type_name::<T>()
                 )
             })?
-            .draw::<Pass>(world, cmd, current_frame, sets, offsets, resources)
+            .draw::<Pass>(
+                world,
+                resources,
+                cmd,
+                sets,
+                pass_info,
+                offsets,
+                current_frame,
+            )
             .map_err(|e| e.into())
             .with_context(|| {
                 format!(
@@ -123,23 +130,18 @@ macro_rules! tuple_impl {
             // Note: camera must have gpu side data.
             fn draw<Pass: ShaderPass>(
                 &mut self,
-                // The ecs world
                 world: &mut World,
-                // The commandbuffer to record into
-                cmd: &CommandBuffer,
-                // The current swapchain image or backbuffer index
-                current_frame: usize,
-                // Descriptor sets to bind before renderer specific sets
-                sets: &[DescriptorSet],
-                // Dynamic offsets for supplied sets
-                offsets: &[u32],
-                // Graphics resources like textures and materials
                 resources: &Resources,
+                cmd: &CommandBuffer,
+                sets: &[DescriptorSet],
+                pass_info: &PassInfo,
+                offsets: &[u32],
+                current_frame: usize,
             ) -> Result<(), Self::Error> {
                 #[allow(non_snake_case)]
                 let ($($name,)+) = self;
                 ($($name
-                    .draw::<Pass>(world, cmd, current_frame, sets, offsets, resources)
+                    .draw::<Pass>(world, resources, cmd, sets, pass_info, offsets, current_frame)
                     .map_err(|e| e.into())
                     .with_context(|| {
                         format!(

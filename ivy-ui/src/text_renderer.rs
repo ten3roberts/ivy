@@ -7,10 +7,10 @@ use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
     commands::CommandBuffer,
     context::SharedVulkanContext,
-    descriptors::IntoSet,
+    descriptors::{DescriptorSet, IntoSet},
     shaderpass::ShaderPass,
     vk::{self, AccessFlags, BufferCopy, BufferMemoryBarrier, IndexType},
-    BufferAccess, BufferUsage,
+    BufferAccess, BufferUsage, PassInfo,
 };
 use ivy_vulkan::{device, Buffer};
 use std::mem::size_of;
@@ -39,7 +39,7 @@ pub struct TextRenderer {
     mesh: Mesh<UIVertex>,
     staging_buffers: Vec<Buffer>,
     allocator: Allocator<Marker>,
-    base_renderer: BaseRenderer<Key, ObjectData>,
+    base_renderer: BaseRenderer<Key, ObjectData, UIVertex>,
     /// The total number of glyphs
     glyph_count: u32,
     frames_in_flight: usize,
@@ -280,28 +280,21 @@ impl Renderer for TextRenderer {
     type Error = Error;
     fn draw<Pass: ShaderPass>(
         &mut self,
-        // The ecs world
-        world: &mut hecs::World,
-        // The commandbuffer to record into
-        cmd: &ivy_vulkan::commands::CommandBuffer,
-        // The current swapchain image or backbuffer index
-        current_frame: usize,
-        // Descriptor sets to bind before renderer specific sets
-        sets: &[ivy_vulkan::descriptors::DescriptorSet],
-        // Dynamic offsets for supplied sets
+        world: &mut World,
+        resources: &Resources,
+        cmd: &ivy_vulkan::CommandBuffer,
+        sets: &[DescriptorSet],
+        pass_info: &PassInfo,
         offsets: &[u32],
-        // Graphics resources like textures and materials
-        resources: &ivy_resources::Resources,
+        current_frame: usize,
     ) -> Result<()> {
         cmd.bind_vertexbuffer(0, self.mesh.vertex_buffer());
         cmd.bind_indexbuffer(self.mesh.index_buffer(), IndexType::UINT32, 0);
 
-        let passes = resources.fetch::<Pass>()?;
-
         {
             let pass = self.base_renderer.pass_mut::<Pass>()?;
-            pass.get_unbatched::<Pass, KeyQuery, ObjectDataQuery>(world);
-            pass.build_batches::<Pass, KeyQuery>(world, &passes)?;
+            pass.register::<Pass, KeyQuery, ObjectDataQuery>(world);
+            pass.build_batches::<Pass, KeyQuery>(world, resources, pass_info)?;
             let iter = world
                 .query_mut::<(&BatchMarker<ObjectData, Pass>, ObjectDataQuery, &Visible)>()
                 .into_iter()
@@ -325,7 +318,7 @@ impl Renderer for TextRenderer {
             .mapped_slice::<ObjectData>()
             .expect("Non mappable object data buffer");
 
-        for batch in pass.batches() {
+        for batch in pass.batches().iter() {
             let key = batch.key();
 
             let font = resources.get(key.font)?;
@@ -432,6 +425,7 @@ impl Node for TextUpdateNode {
         world: &mut World,
         resources: &Resources,
         cmd: &CommandBuffer,
+        _: &PassInfo,
         current_frame: usize,
     ) -> anyhow::Result<()> {
         resources

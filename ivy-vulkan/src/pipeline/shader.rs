@@ -19,7 +19,7 @@ pub const MAX_SETS: usize = 4;
 pub const MAX_PUSH_CONSTANTS: usize = 4;
 
 /// Represents a shader module as a file or a slice of compiled code
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ShaderModuleInfo {
     Path(Cow<'static, str>),
     Bytes(Cow<'static, [u8]>),

@@ -3,10 +3,12 @@ use std::{any::TypeId, collections::HashMap};
 use crate::Result;
 
 mod batch;
+mod batches;
 mod pass;
 pub use batch::*;
+pub use batches::*;
 use hecs::Query;
-use ivy_vulkan::{context::SharedVulkanContext, shaderpass::ShaderPass};
+use ivy_vulkan::{context::SharedVulkanContext, shaderpass::ShaderPass, VertexDesc};
 pub use pass::*;
 
 pub trait KeyQuery: Send + Sync + Query {
@@ -26,14 +28,14 @@ type ObjectId = u32;
 /// placed into the correct batch according to their shaderpass and key hash.
 /// This means that if the key is made of a Material and Mesh, all objects with
 /// the same pipeline, material, and mesh will be placed in the same batch.
-pub struct BaseRenderer<K, Obj> {
+pub struct BaseRenderer<K, Obj, V> {
     context: SharedVulkanContext,
-    passes: HashMap<TypeId, PassData<K, Obj>>,
+    passes: HashMap<TypeId, PassData<K, Obj, V>>,
     frames_in_flight: usize,
     capacity: u32,
 }
 
-impl<Obj, K: 'static> BaseRenderer<K, Obj>
+impl<Obj, K: 'static, V: VertexDesc> BaseRenderer<K, Obj, V>
 where
     K: RendererKey,
     Obj: 'static,
@@ -54,7 +56,7 @@ where
     }
 
     /// Returns the pass data for the shaderpass.
-    pub fn pass_mut<Pass: ShaderPass>(&mut self) -> Result<&mut PassData<K, Obj>> {
+    pub fn pass_mut<Pass: ShaderPass>(&mut self) -> Result<&mut PassData<K, Obj, V>> {
         match self.passes.entry(TypeId::of::<Pass>()) {
             std::collections::hash_map::Entry::Occupied(entry) => Ok(entry.into_mut()),
             std::collections::hash_map::Entry::Vacant(entry) => Ok(entry.insert(PassData::new(
@@ -66,7 +68,7 @@ where
     }
 
     /// Returns the pass data for the shaderpass.
-    pub fn pass<Pass: ShaderPass>(&self) -> &PassData<K, Obj> {
+    pub fn pass<Pass: ShaderPass>(&self) -> &PassData<K, Obj, V> {
         self.passes
             .get(&TypeId::of::<Pass>())
             .expect("Pass does not exist")

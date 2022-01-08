@@ -3,13 +3,8 @@ use std::{marker::PhantomData, ops::Deref};
 use ivy_graphics::Result;
 use ivy_rendergraph::{AttachmentInfo, Node, NodeKind};
 use ivy_resources::{Handle, Resources};
-use ivy_vulkan::{
-    context::SharedVulkanContext,
-    descriptors::{DescriptorBuilder, DescriptorSet, MultiDescriptorBindable},
-    shaderpass::ShaderPass,
-    vk::ShaderStageFlags,
-    AddressMode, CombinedImageSampler, FilterMode, InputAttachment, Sampler, SamplerInfo, Texture,
-};
+use ivy_vulkan::{context::SharedVulkanContext, descriptors::*, vk::ShaderStageFlags, *};
+use once_cell::sync::OnceCell;
 
 pub struct PostProcessingNode<Pass> {
     sets: Option<Vec<DescriptorSet>>,
@@ -18,6 +13,7 @@ pub struct PostProcessingNode<Pass> {
     color_attachments: Vec<AttachmentInfo>,
     sampler: Sampler,
     marker: PhantomData<Pass>,
+    pipeline: OnceCell<Pipeline>,
 }
 
 /// Creates a post processing node that will execute using the default shaderpass of the provided
@@ -85,6 +81,7 @@ impl<Pass: 'static + ShaderPass> PostProcessingNode<Pass> {
         };
 
         Ok(Self {
+            pipeline: OnceCell::new(),
             sets,
             read_attachments: read_attachments.to_owned(),
             input_attachments: input_attachments.to_owned(),
@@ -130,14 +127,19 @@ impl<Pass: ShaderPass> Node for PostProcessingNode<Pass> {
         _: &mut hecs::World,
         resources: &Resources,
         cmd: &ivy_vulkan::commands::CommandBuffer,
+        pass_info: &PassInfo,
         current_frame: usize,
     ) -> anyhow::Result<()> {
-        let pass = resources.get_default::<Pass>()?;
+        let pipeline = self.pipeline.get_or_try_init(|| {
+            let context = resources.get_default::<SharedVulkanContext>()?;
+            let pass = resources.get_default::<Pass>()?;
+            Pipeline::new::<()>(context.clone(), pass.pipeline(), pass_info)
+        })?;
 
-        cmd.bind_pipeline(pass.pipeline());
+        cmd.bind_pipeline(pipeline);
 
         if let Some(sets) = &self.sets {
-            cmd.bind_descriptor_sets(pass.pipeline_layout(), 0, &[sets[current_frame]], &[]);
+            cmd.bind_descriptor_sets(pipeline.layout(), 0, &[sets[current_frame]], &[]);
         }
 
         cmd.draw(3, 1, 0, 0);

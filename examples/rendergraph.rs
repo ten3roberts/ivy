@@ -2,7 +2,7 @@ use base::{BuilderExt, Events};
 use glam::Vec3;
 use graphics::{
     shaders::{FORWARD_FRAGMENT_SHADER, FORWARD_VERTEX_SHADER},
-    NodeBuildInfo, Vertex,
+    NodeBuildInfo,
 };
 use hecs::{EntityBuilder, World};
 use ivy::*;
@@ -13,7 +13,7 @@ use resources::LoadResource;
 use vulkan::{
     context::SharedVulkanContext,
     vk::{ClearValue, PresentModeKHR},
-    ClearValueExt, Pipeline, PipelineInfo, SwapchainInfo, TextureInfo,
+    ClearValueExt, PipelineInfo, SwapchainInfo, TextureInfo,
 };
 pub struct GameLayer {}
 
@@ -75,7 +75,7 @@ impl GameLayer {
             .handle;
 
         // Add a node rendering the scene from the camera
-        let node = rendergraph.add_node(CameraNode::<GeometryPass, _>::new(
+        rendergraph.add_node(CameraNode::<GeometryPass, _>::new(
             context.clone(),
             resources,
             camera,
@@ -102,14 +102,11 @@ impl GameLayer {
         rendergraph.build(resources.fetch()?, window.extent())?;
 
         // Create a simple pipeline
-        let pipeline = GeometryPass(Pipeline::new::<Vertex>(
-            context.clone(),
-            &PipelineInfo {
-                vs: FORWARD_VERTEX_SHADER,
-                fs: FORWARD_FRAGMENT_SHADER,
-                ..rendergraph.pipeline_info(node)?
-            },
-        )?);
+        let pipeline = GeometryPass(PipelineInfo {
+            vs: FORWARD_VERTEX_SHADER,
+            fs: FORWARD_FRAGMENT_SHADER,
+            ..Default::default()
+        });
 
         let pass = resources.insert(pipeline)?;
 

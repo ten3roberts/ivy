@@ -15,7 +15,6 @@ use ivy::{
     base::*,
     graphics::*,
     input::*,
-    rendergraph::*,
     resources::*,
     ui::{constraints::*, *},
     vulkan::*,
@@ -36,7 +35,6 @@ use presets::{GeometryPass, ImagePass, TextPass};
 use random::rand::SeedableRng;
 use random::{rand::rngs::StdRng, Random};
 use rendergraph::GraphicsLayer;
-use slotmap::SecondaryMap;
 use std::fmt::Write;
 use vulkan::vk::PresentModeKHR;
 
@@ -704,17 +702,16 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
 }
 
 #[derive(Debug, Clone)]
-struct DebugReport<'a> {
+struct DebugReport {
     framerate: f32,
     min_frametime: Duration,
     avg_frametime: Duration,
     max_frametime: Duration,
     elapsed: Duration,
     position: Position,
-    execution_times: Option<&'a SecondaryMap<NodeIndex, (&'static str, Duration)>>,
 }
 
-impl<'a> Default for DebugReport<'a> {
+impl Default for DebugReport {
     fn default() -> Self {
         Self {
             framerate: 0.0,
@@ -723,12 +720,11 @@ impl<'a> Default for DebugReport<'a> {
             max_frametime: Duration::from_secs(u64::MIN),
             elapsed: Duration::from_secs(0),
             position: Default::default(),
-            execution_times: None,
         }
     }
 }
 
-impl<'a> Display for DebugReport<'a> {
+impl Display for DebugReport {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -740,13 +736,6 @@ impl<'a> Display for DebugReport<'a> {
             self.elapsed,
             self.position,
         )?;
-
-        self.execution_times
-            .map(|val| {
-                val.iter()
-                    .try_for_each(|(_, val)| write!(f, "{:?}: {}ms\n", val.0, val.1.ms()))
-            })
-            .transpose()?;
 
         Ok(())
     }
@@ -786,7 +775,7 @@ impl Layer for DebugLayer {
     fn on_update(
         &mut self,
         world: &mut World,
-        resources: &mut Resources,
+        _: &mut Resources,
         _: &mut Events,
         frametime: Duration,
     ) -> anyhow::Result<()> {
@@ -805,8 +794,6 @@ impl Layer for DebugLayer {
 
             self.last_status.reset();
 
-            let rendergraph = resources.get_default::<RenderGraph>()?;
-
             let report = DebugReport {
                 framerate: 1.0 / avg.secs(),
                 min_frametime: self.min,
@@ -819,8 +806,6 @@ impl Layer for DebugLayer {
                     .next()
                     .map(|(_, (p, _))| *p)
                     .unwrap_or_default(),
-
-                execution_times: Some(rendergraph.execution_times()),
             };
 
             world

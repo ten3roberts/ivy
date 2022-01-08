@@ -7,6 +7,7 @@ use ash::vk::{
 };
 use ivy_base::Extent;
 use smallvec::SmallVec;
+use std::borrow::Cow;
 use std::ffi::CString;
 
 use ash::vk;
@@ -15,42 +16,32 @@ mod shader;
 pub use shader::ShaderModuleInfo;
 use shader::*;
 
-#[derive(Clone)]
-pub struct PipelineInfo<'a> {
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct PipelineInfo {
     pub vs: ShaderModuleInfo,
     pub fs: ShaderModuleInfo,
-    pub renderpass: vk::RenderPass,
-    pub subpass: u32,
     // Enable alpha blending,
     pub blending: bool,
     pub topology: PrimitiveTopology,
     pub samples: vk::SampleCountFlags,
-    pub extent: Extent,
     pub polygon_mode: vk::PolygonMode,
     pub cull_mode: vk::CullModeFlags,
     pub front_face: vk::FrontFace,
     /// The bindings specified
-    pub set_layouts: &'a [DescriptorLayoutInfo],
-    pub color_attachment_count: u32,
-    pub depth_attachment: bool,
+    pub set_layouts: Cow<'static, [DescriptorLayoutInfo]>,
 }
 
-impl<'a> Default for PipelineInfo<'a> {
+impl Default for PipelineInfo {
     fn default() -> Self {
         Self {
-            renderpass: vk::RenderPass::null(),
             blending: false,
-            subpass: 0,
             vs: "".into(),
             fs: "".into(),
             samples: vk::SampleCountFlags::TYPE_1,
-            extent: (0, 0).into(),
             polygon_mode: vk::PolygonMode::FILL,
             cull_mode: vk::CullModeFlags::BACK,
             front_face: vk::FrontFace::COUNTER_CLOCKWISE,
-            set_layouts: &[],
-            color_attachment_count: 1,
-            depth_attachment: true,
+            set_layouts: Cow::Borrowed(&[]),
             topology: PrimitiveTopology::TRIANGLE_LIST,
         }
     }
@@ -63,7 +54,11 @@ pub struct Pipeline {
 }
 
 impl Pipeline {
-    pub fn new<V>(context: SharedVulkanContext, info: &PipelineInfo) -> Result<Self>
+    pub fn new<V>(
+        context: SharedVulkanContext,
+        info: &PipelineInfo,
+        pass_info: &PassInfo,
+    ) -> Result<Self>
     where
         V: VertexDesc,
     {
@@ -75,7 +70,7 @@ impl Pipeline {
         let layout = shader::reflect(
             &context,
             &[&vertexshader, &fragmentshader],
-            info.set_layouts,
+            info.set_layouts.as_ref(),
         )?;
 
         let entrypoint = CString::new("main").unwrap();
@@ -105,15 +100,15 @@ impl Pipeline {
         let viewports = [vk::Viewport {
             x: 0.0f32,
             y: 0.0f32,
-            width: info.extent.width as _,
-            height: info.extent.height as _,
+            width: pass_info.extent.width as _,
+            height: pass_info.extent.height as _,
             min_depth: 0.0f32,
             max_depth: 1.0f32,
         }];
 
         let scissors = [vk::Rect2D {
             offset: vk::Offset2D { x: 0, y: 0 },
-            extent: Extent2D::from_extent(info.extent),
+            extent: Extent2D::from_extent(pass_info.extent),
         }];
 
         let viewport_state = vk::PipelineViewportStateCreateInfo::builder()
@@ -141,7 +136,7 @@ impl Pipeline {
             .alpha_to_coverage_enable(false)
             .alpha_to_one_enable(false);
 
-        let color_blend_attachments = (0..info.color_attachment_count)
+        let color_blend_attachments = (0..pass_info.color_attachment_count)
             .map(|_| {
                 if info.blending {
                     PipelineColorBlendAttachmentState {
@@ -201,10 +196,10 @@ impl Pipeline {
             .multisample_state(&multisampling)
             .color_blend_state(&color_blending)
             .layout(layout)
-            .render_pass(info.renderpass)
-            .subpass(info.subpass);
+            .render_pass(pass_info.renderpass)
+            .subpass(pass_info.subpass);
 
-        let create_info = if info.depth_attachment {
+        let create_info = if pass_info.depth_attachment {
             create_info.depth_stencil_state(&depth_stencil)
         } else {
             create_info
@@ -303,4 +298,14 @@ impl Drop for Pipeline {
                 .destroy_pipeline_layout(self.layout, None)
         }
     }
+}
+
+#[derive(Default)]
+#[records::record]
+pub struct PassInfo {
+    renderpass: vk::RenderPass,
+    subpass: u32,
+    extent: Extent,
+    color_attachment_count: u32,
+    depth_attachment: bool,
 }

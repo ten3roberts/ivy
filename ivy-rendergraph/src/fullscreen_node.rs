@@ -5,7 +5,7 @@ use ivy_vulkan::{
     descriptors::{DescriptorSet, IntoSet},
     shaderpass::ShaderPass,
     vk::ClearValue,
-    Texture,
+    PassInfo, Texture,
 };
 use std::marker::PhantomData;
 
@@ -100,6 +100,7 @@ where
         world: &mut hecs::World,
         resources: &ivy_resources::Resources,
         cmd: &ivy_vulkan::commands::CommandBuffer,
+        pass_info: &PassInfo,
         current_frame: usize,
     ) -> anyhow::Result<()> {
         let offset = self.set_count * current_frame;
@@ -107,11 +108,12 @@ where
             .get_mut(self.renderer)?
             .draw::<Pass>(
                 world,
-                cmd,
-                current_frame,
-                &self.sets[offset..offset + self.set_count],
-                &[],
                 resources,
+                cmd,
+                &self.sets[offset..offset + self.set_count],
+                pass_info,
+                &[],
+                current_frame,
             )
             .context("FullscreenNode failed to draw using supplied renderer")?;
 

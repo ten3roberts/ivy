@@ -11,7 +11,7 @@ use ivy_vulkan::{
     descriptors::{DescriptorBuilder, DescriptorSet, IntoSet, MultiDescriptorBindable},
     shaderpass::ShaderPass,
     vk::{self, ClearValue, ShaderStageFlags},
-    CombinedImageSampler, InputAttachment, Sampler, Texture,
+    CombinedImageSampler, InputAttachment, PassInfo, Sampler, Texture,
 };
 
 use crate::{AttachmentInfo, Node, NodeKind};
@@ -170,6 +170,7 @@ where
         world: &mut hecs::World,
         resources: &ivy_resources::Resources,
         cmd: &ivy_vulkan::commands::CommandBuffer,
+        pass_info: &PassInfo,
         current_frame: usize,
     ) -> anyhow::Result<()> {
         let camera_set = world
@@ -180,11 +181,12 @@ where
             self.renderer
                 .draw::<Pass>(
                     world,
-                    cmd,
-                    current_frame,
-                    &[camera_set, sets[current_frame]],
-                    &[],
                     resources,
+                    cmd,
+                    &[camera_set, sets[current_frame]],
+                    pass_info,
+                    &[],
+                    current_frame,
                 )
                 .map_err(|e| e.into())
                 .context(format!(
@@ -193,7 +195,15 @@ where
                 ))?;
         } else {
             self.renderer
-                .draw::<Pass>(world, cmd, current_frame, &[camera_set], &[], resources)
+                .draw::<Pass>(
+                    world,
+                    resources,
+                    cmd,
+                    &[camera_set],
+                    pass_info,
+                    &[],
+                    current_frame,
+                )
                 .map_err(|e| e.into())
                 .context(format!(
                     "CameraNode failed to draw using supplied renderer: {:?}",

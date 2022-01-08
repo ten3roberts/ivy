@@ -4,7 +4,7 @@ use ivy_graphics::Renderer;
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
     commands::CommandBuffer, shaderpass::ShaderPass, vk::Buffer, vk::ClearValue, ClearValueExt,
-    ImageLayout, LoadOp, StoreOp, Texture,
+    ImageLayout, LoadOp, PassInfo, StoreOp, Texture,
 };
 use std::{any::type_name, marker::PhantomData};
 
@@ -51,6 +51,7 @@ pub trait Node: 'static + Send {
         world: &mut World,
         resources: &Resources,
         cmd: &CommandBuffer,
+        pass_info: &PassInfo,
         current_frame: usize,
     ) -> anyhow::Result<()>;
 }
@@ -155,12 +156,13 @@ where
         world: &mut World,
         resources: &Resources,
         cmd: &CommandBuffer,
+        pass_info: &PassInfo,
         current_frame: usize,
     ) -> anyhow::Result<()> {
         resources
             .get_mut(self.renderer)
             .with_context(|| format!("Failed to borrow {:?} mutably", type_name::<T>()))?
-            .draw::<Pass>(world, cmd, current_frame, &[], &[], resources)
+            .draw::<Pass>(world, resources, cmd, &[], pass_info, &[], current_frame)
             .map_err(|e| e.into())
             .with_context(|| format!("Failed to draw using {:?}", type_name::<T>()))
     }

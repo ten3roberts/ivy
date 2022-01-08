@@ -621,6 +621,7 @@ dependencies = [
  "ivy-resources",
  "ivy-vulkan",
  "ivy-window",
+ "once_cell",
  "ordered-float",
  "parking_lot",
  "records",
@@ -689,6 +690,7 @@ dependencies = [
  "ivy-rendergraph",
  "ivy-resources",
  "ivy-vulkan",
+ "once_cell",
 ]
 
 [[package]]
@@ -803,6 +805,7 @@ dependencies = [
  "ivy-resources",
  "log",
  "parking_lot",
+ "records",
  "serde",
  "smallvec",
  "spirv-reflect",

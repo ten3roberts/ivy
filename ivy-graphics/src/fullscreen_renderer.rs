@@ -1,34 +1,44 @@
 use crate::{Error, Renderer, Result};
 use ash::vk::DescriptorSet;
 use ivy_resources::Resources;
-use ivy_vulkan::shaderpass::ShaderPass;
+use ivy_vulkan::{context::SharedVulkanContext, shaderpass::ShaderPass, PassInfo, Pipeline};
+use once_cell::sync::OnceCell;
 
 // Renders a fullscreen quad using the supplied shader pass and descriptors
-pub struct FullscreenRenderer;
+pub struct FullscreenRenderer {
+    pipeline: OnceCell<Pipeline>,
+}
+
+impl FullscreenRenderer {
+    pub fn new() -> Self {
+        Self {
+            pipeline: OnceCell::new(),
+        }
+    }
+}
 
 impl Renderer for FullscreenRenderer {
     type Error = Error;
     fn draw<Pass: ShaderPass>(
         &mut self,
-        // The ecs world
         _world: &mut hecs::World,
-        // The commandbuffer to record into
-        cmd: &ivy_vulkan::commands::CommandBuffer,
-        // The current swapchain image or backbuffer index
-        _current_frame: usize,
-        // Descriptor sets to bind before renderer specific sets
-        sets: &[DescriptorSet],
-        // Dynamic offsets for supplied sets
-        offsets: &[u32],
-        // Graphics resources like textures and materials
         resources: &Resources,
+        cmd: &ivy_vulkan::commands::CommandBuffer,
+        sets: &[DescriptorSet],
+        pass_info: &PassInfo,
+        offsets: &[u32],
+        _current_frame: usize,
     ) -> Result<()> {
-        let pass = resources.get_default::<Pass>()?;
+        let pipeline = self.pipeline.get_or_try_init(|| {
+            let context = resources.get_default::<SharedVulkanContext>()?;
+            let pass = resources.get_default::<Pass>()?;
+            Pipeline::new::<()>(context.clone(), pass.pipeline(), pass_info)
+        })?;
 
-        cmd.bind_pipeline(pass.pipeline());
+        cmd.bind_pipeline(pipeline);
 
         if !sets.is_empty() {
-            cmd.bind_descriptor_sets(pass.pipeline_layout(), 0, sets, offsets);
+            cmd.bind_descriptor_sets(pipeline.layout(), 0, sets, offsets);
         }
 
         cmd.draw(3, 1, 0, 0);
