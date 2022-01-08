@@ -1,9 +1,15 @@
 [package]
 name = "ivy"
-version = "0.9.0"
+version = "0.10.0"
 authors = ["Tim Roberts <ten3roberts@gmail.com>"]
 edition = "2018"
 description = "Application and game framework for Rust"
+
+license-file = "./LICENSE"
+keywords = [ "graphics", "physics", "game engine", "game", "vulkan" ]
+documentation = "https://lib.rs/ivy"
+repository = "https://github.com/ten3roberts/ivy"
+readme = "./README.md"
 
 [workspace]
 members = [
@@ -35,8 +41,8 @@ ivy-rendergraph = { path = "./ivy-rendergraph" }
 ivy-resources = { path = "./ivy-resources" }
 ivy-ui = { path = "./ivy-ui" }
 ivy-vulkan = { path = "./ivy-vulkan" }
-ivy-presets = { path = "./ivy-presets", version = "0.1" }
-ivy-window = { path = "./ivy-window", version = "0.1" }
+ivy-presets = { path = "./ivy-presets", version = "0.10.0" }
+ivy-window = { path = "./ivy-window", version = "0.10.0" }
 hecs = "0.7.3"
 hecs-schedule = "0.3.21"
 derive_more = "0.99.17"

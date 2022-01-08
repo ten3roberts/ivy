@@ -1,9 +1,14 @@
 [package]
 name = "ivy-physics"
-version = "0.9.0"
+version = "0.10.0"
 edition = "2018"
 description = "Provides physics for the Ivy framework"
 
+license-file = "../LICENSE"
+keywords = [ "physics", "collisions", "rigidbody", "game" ]
+documentation = "https://lib.rs/ivy-physics"
+repository = "https://github.com/ten3roberts/ivy"
+readme = "../README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -12,11 +17,11 @@ derive-for = "1.2.2"
 derive_more = "0.99.17"
 flume = "0.10.9"
 hecs = "0.7.3"
-ivy-collision = { path = "../ivy-collision", version = "0.9.0" }
-ivy-base = { path = "../ivy-base", version = "0.9" }
-ivy-random = { path = "../ivy-random", version = "0.9" }
-ivy-graphics = { path = "../ivy-graphics", version = "0.9" }
-ivy-resources = { path = "../ivy-resources", version = "0.9.0" }
+ivy-collision = { path = "../ivy-collision", version = "0.10.0" }
+ivy-base = { path = "../ivy-base", version = "0.10.0" }
+ivy-random = { path = "../ivy-random", version = "0.10.0" }
+ivy-graphics = { path = "../ivy-graphics", version = "0.10.0" }
+ivy-resources = { path = "../ivy-resources", version = "0.10.0" }
 smallvec = "1.7.0"
 thiserror = "1.0.30"
 glam = "0.20"

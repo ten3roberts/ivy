@@ -1,9 +1,15 @@
 [package]
 name = "ivy-base"
-version = "0.9.0"
+version = "0.10.0"
 authors = ["Tim Roberts <ten3roberts@gmail.com>"]
 edition = "2018"
 description = "Base crate for the Ivy game engine"
+
+license-file = "../LICENSE"
+keywords = [ "graphics", "physics", "game engine", "game", "vulkan" ]
+documentation = "https://lib.rs/ivy-base"
+repository = "https://github.com/ten3roberts/ivy"
+readme = "./README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -15,8 +21,8 @@ derive_more = "0.99.17"
 downcast-rs = "1.2.0"
 flume = "0.10.9"
 hecs = "0.7.3"
-ivy-resources = { path = "../ivy-resources", version = "0.9.0" }
-ivy-random = { path = "../ivy-random", version = "0.9.0" }
+ivy-resources = { path = "../ivy-resources", version = "0.10.0" }
+ivy-random = { path = "../ivy-random", version = "0.10.0" }
 log = { version = "0.4.14", features = ["std"] }
 palette = "0.6.0"
 thiserror = "1.0.30"

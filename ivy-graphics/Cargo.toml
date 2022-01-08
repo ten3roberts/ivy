@@ -1,9 +1,15 @@
 [package]
 name = "ivy-graphics"
-version = "0.9.0"
+version = "0.10.0"
 authors = ["Tim Roberts <ten3roberts@gmail.com>"]
 edition = "2018"
 description = "Provides high level graphics abstractions like Meshes, Materials, etc. Builds on top of ivy-vulkan"
+
+license-file = "../LICENSE"
+keywords = [ "high-level", "graphics", "windowing", "game", "vulkan" ]
+documentation = "https://lib.rs/ivy-window"
+repository = "https://github.com/ten3roberts/ivy"
+readme = "../README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -20,12 +26,12 @@ gltf =  { version = "0.16.0", features = [ "KHR_lights_punctual" ] }
 hecs = "0.7.3"
 hecs-schedule = "0.3.21"
 itertools = "0.10.3"
-ivy-base = { path = "../ivy-base", version = "0.9" }
-ivy-image = { path = "../ivy-image", version = "0.1" }
-ivy-input = { path = "../ivy-input", version = "0.9" }
-ivy-resources = { path = "../ivy-resources", version = "0.9.0" }
-ivy-vulkan = { path = "../ivy-vulkan", version = "0.9" }
-ivy-window = { path = "../ivy-window", version = "0.1" }
+ivy-base = { path = "../ivy-base", version = "0.10.0" }
+ivy-image = { path = "../ivy-image", version = "0.10.0" }
+ivy-input = { path = "../ivy-input", version = "0.10.0" }
+ivy-resources = { path = "../ivy-resources", version = "0.10.0" }
+ivy-vulkan = { path = "../ivy-vulkan", version = "0.10.0" }
+ivy-window = { path = "../ivy-window", version = "0.10.0" }
 once_cell = "1.9.0"
 ordered-float = "2.8.0"
 parking_lot = "0.11.2"

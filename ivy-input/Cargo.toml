@@ -1,15 +1,20 @@
 [package]
 name = "ivy-input"
-version = "0.9.0"
+version = "0.10.0"
 authors = ["Tim Roberts <ten3roberts@gmail.com>"]
 edition = "2018"
 
+license-file = "../LICENSE"
+keywords = [ "graphics", "input", "keyboard", "game engine", "game", "vulkan" ]
+documentation = "https://lib.rs/ivy-input"
+repository = "https://github.com/ten3roberts/ivy"
+readme = "../README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 flume = "0.10.9"
 glfw = { version = "0.43.0", features = [ "vulkan" ] }
-ivy-base = { path = "../ivy-base", version = "0.9.0" }
-ivy-resources = { path = "../ivy-resources", version = "0.9.0" }
-ivy-window = { path = "../ivy-window", version = "0.1.0" }
+ivy-base = { path = "../ivy-base", version = "0.10.0" }
+ivy-resources = { path = "../ivy-resources", version = "0.10.0" }
+ivy-window = { path = "../ivy-window", version = "0.10.0" }
 glam = "0.20"
