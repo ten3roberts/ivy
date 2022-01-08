@@ -1,2 +1,4 @@
 /target
 *.spv
+flamegraph.svg
+perf.data
