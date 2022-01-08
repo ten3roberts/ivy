@@ -728,7 +728,7 @@ impl Display for DebugReport {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{:.2?}, {:.2?}, {:.2?}; {:.0?} fps\n{:.2?}\n{:#.2?}\n",
+            "{:.2?}, {:.2?}, {:.2?}; {:.0?} fps\n{:.2?}\nPosition: {:.2}\n",
             self.min_frametime,
             self.avg_frametime,
             self.max_frametime,

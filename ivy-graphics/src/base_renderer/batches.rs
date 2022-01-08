@@ -71,6 +71,7 @@ impl<K: RendererKey> Batches<K> {
                 let idx = self.batches.len();
                 self.batches.push(batch);
                 self.dirty = true;
+                self.ordered.push(idx);
                 *entry.insert(idx)
             }
         };

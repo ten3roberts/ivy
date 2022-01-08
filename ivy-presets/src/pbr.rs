@@ -222,7 +222,7 @@ impl PBRRendering {
         resources.insert(GeometryPass(PipelineInfo {
             vs: DEFAULT_VERTEX_SHADER,
             fs: DEFAULT_FRAGMENT_SHADER,
-            cull_mode: CullModeFlags::NONE,
+            cull_mode: CullModeFlags::BACK,
             ..Default::default()
         }))?;
 

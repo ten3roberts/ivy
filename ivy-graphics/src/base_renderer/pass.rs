@@ -9,7 +9,7 @@ use ivy_resources::{Handle, HandleUntyped, Resources};
 use ivy_vulkan::{
     context::SharedVulkanContext,
     descriptors::{DescriptorBuilder, IntoSet},
-    device, Buffer, BufferAccess, BufferUsage, VertexDesc, VulkanContext, PassInfo,
+    device, Buffer, BufferAccess, BufferUsage, PassInfo, VertexDesc, VulkanContext,
 };
 
 /// Represents a single typed shaderpass. Each object belonging to the pass is
@@ -141,8 +141,9 @@ impl<V: VertexDesc, K: RendererKey, Obj: 'static> PassData<K, Obj, V> {
         self.unbatched
             .drain(0..)
             .try_for_each(|(e, pass, key)| -> Result<_> {
-                let marker = batches.insert_entity::<Obj, Pass, V>(resources, pass, key,pass_info)?;
-                *object_count+=1;
+                let marker =
+                    batches.insert_entity::<Obj, Pass, V>(resources, pass, key, pass_info)?;
+                *object_count += 1;
                 world.insert_one(e, marker)?;
 
                 Ok(())
@@ -193,107 +194,6 @@ impl<V: VertexDesc, K: RendererKey, Obj: 'static> PassData<K, Obj, V> {
 
         Ok(())
     }
-
-    //     /// Inserts a new entity into the correct batch. Note: The entity should not already exist in pass,
-    //     /// behaviour is undefined. Marks the batch as dirty.
-    //     fn insert_entity<Pass: ShaderPass>(
-    //         batches: &mut Vec<BatchData<K>>,
-    //         ordered_batches: &mut Vec<BatchId>,
-    //         batch_map: &mut HashMap<(HandleUntyped, K), usize>,
-    //         dirty: &mut bool,
-    //         object_count: &mut ObjectId,
-    //         pass: HandleUntyped,
-    //         key: K,
-    //         passes: &ResourceCache<Pass>,
-    //         frames_in_flight: usize,
-    //     ) -> Result<BatchMarker<Pass>> {
-    //         let frames_in_flight = frames_in_flight;
-
-    //         let (batch_id, batch) = Self::get_batch_internal(
-    //             batches,
-    //             ordered_batches,
-    //             batch_map,
-    //             dirty,
-    //             passes,
-    //             pass,
-    //             key,
-    //         )?;
-
-    //         batch.instance_count += 1;
-    //         batch.set_dirty(frames_in_flight);
-    //         *object_count += 1;
-
-    //         Ok(BatchMarker {
-    //             batch_id,
-    //             marker: PhantomData,
-    //         })
-    //     }
-
-    ///// Returns or creates the appropriate batch for the combined shaderpass and
-    ///// key
-    //pub fn get_batch<Pass>(
-    //    &mut self,
-    //    passes: &ResourceCache<Pass>,
-    //    pass: Handle<Pass>,
-    //    key: K,
-    //) -> Result<&mut BatchData<K>>
-    //where
-    //    Pass: ShaderPass,
-    //{
-    //    Self::get_batch_internal(
-    //        &mut self.batches,
-    //        &mut self.ordered_batches,
-    //        &mut self.batch_map,
-    //        &mut self.dirty,
-    //        passes,
-    //        pass.into_untyped(),
-    //        key,
-    //    )
-    //    .map(|val| val.1)
-    //}
-    /////
-    //fn get_batch_internal<'b, U, Pass>(
-    //    batches: &'b mut Vec<BatchData<K>>,
-    //    ordered_batches: &mut Vec<BatchId>,
-    //    batch_map: &mut HashMap<(HandleUntyped, K), usize>,
-    //    dirty: &mut bool,
-    //    passes: U,
-    //    pass: HandleUntyped,
-    //    key: K,
-    //) -> Result<(usize, &'b mut BatchData<K>)>
-    //where
-    //    U: Deref<Target = ResourceCache<Pass>>,
-    //    Pass: ShaderPass,
-    //{
-    //    let combined_key = (pass, key);
-
-    //    let idx = match batch_map.get(&combined_key) {
-    //        Some(val) => *val,
-    //        None => {
-    //            let shaderpass = passes.get(Handle::from_untyped(pass))?;
-
-    //            let pipeline = shaderpass.pipeline();
-    //            batches.push(BatchData::new(
-    //                pipeline.into(),
-    //                pipeline.layout().into(),
-    //                pass,
-    //                key,
-    //            ));
-    //            let last = batches.len() - 1;
-    //            batch_map.insert(combined_key, last);
-    //            ordered_batches.push(last);
-    //            *dirty = true;
-    //            last
-    //        }
-    //    };
-
-    //    Ok((idx, &mut batches[idx]))
-    //}
-
-    // /// Get a reference to the pass data's batches.
-    // pub fn batches(&self) -> &[BatchData<K>] {
-    //     &self.batches.
-    // }
 
     /// Get a reference to the pass data's object count.
     pub fn object_count(&self) -> ObjectId {
