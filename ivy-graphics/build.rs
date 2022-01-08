@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use std::{
+    env,
     error::Error,
     ffi::OsString,
     fs,
@@ -110,9 +111,14 @@ where
 }
 
 fn main() -> Result<()> {
+    let out_dir = env::var("OUT_DIR")?;
+    let mut dst = PathBuf::new();
+    dst.push(out_dir);
+    dst.push("shader");
+
     let children = compile_dir(
         "./shaders/",
-        "./res/shaders",
+        &dst,
         |path| path.push(".spv"),
         |src, dst| compile_glsl(src, dst),
     )?;

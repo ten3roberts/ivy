@@ -1,6 +1,6 @@
 [package]
 name = "ivy-presets"
-version = "0.10.0"
+version = "0.10.1"
 edition = "2021"
 description = "Contains common presets for quickly setting up an application"
 
