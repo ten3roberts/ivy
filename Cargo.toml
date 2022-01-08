@@ -1,6 +1,6 @@
 [package]
 name = "ivy"
-version = "0.10.0"
+version = "0.10.1"
 authors = ["Tim Roberts <ten3roberts@gmail.com>"]
 edition = "2018"
 description = "Application and game framework for Rust"
@@ -59,11 +59,6 @@ glfw = { version = "0.43.0", features = [ "vulkan" ] }
 hecs-hierarchy = "0.8.1"
 glam = "0.20"
 log = "0.4.14"
-
-
-[build-dependencies]
-anyhow = "1.0.52"
-walkdir = "2.3"
 
 [features]
 default = []

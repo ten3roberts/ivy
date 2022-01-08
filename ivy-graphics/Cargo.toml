@@ -1,6 +1,6 @@
 [package]
 name = "ivy-graphics"
-version = "0.10.0"
+version = "0.10.1"
 authors = ["Tim Roberts <ten3roberts@gmail.com>"]
 edition = "2018"
 description = "Provides high level graphics abstractions like Meshes, Materials, etc. Builds on top of ivy-vulkan"
@@ -45,3 +45,7 @@ thiserror = "1.0.30"
 [features]
 default = []
 serialize = [ "serde", "glam/serde" ]
+
+[build-dependencies]
+anyhow = "1.0.52"
+walkdir = "2.3"

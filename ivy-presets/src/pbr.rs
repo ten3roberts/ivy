@@ -1,27 +1,15 @@
 use hecs::World;
 use ivy_base::WorldExt;
 use ivy_graphics::{
-    gizmos::GizmoRenderer,
-    shaders::{
-        DEFAULT_FRAGMENT_SHADER, DEFAULT_VERTEX_SHADER, FULLSCREEN_SHADER, GIZMO_FRAGMENT_SHADER,
-        GIZMO_VERTEX_SHADER, SKINNED_VERTEX_SHADER,
-    },
-    DepthAttachment, FullscreenRenderer, MainCamera, MeshRenderer, SkinnedMeshRenderer, WithPass,
+    gizmos::GizmoRenderer, shaders::*, DepthAttachment, FullscreenRenderer, MainCamera,
+    MeshRenderer, SkinnedMeshRenderer, WithPass,
 };
-use ivy_postprocessing::{
-    pbr::{create_pbr_pipeline, PBRInfo},
-    shaders::PBR_SHADER,
-};
+use ivy_postprocessing::pbr::{create_pbr_pipeline, PBRInfo};
 use ivy_rendergraph::{
     AttachmentInfo, CameraNode, CameraNodeInfo, NodeIndex, RenderGraph, SwapchainNode,
 };
 use ivy_resources::Resources;
-use ivy_ui::{
-    shaders::{
-        IMAGE_FRAGMENT_SHADER, IMAGE_VERTEX_SHADER, TEXT_FRAGMENT_SHADER, TEXT_VERTEX_SHADER,
-    },
-    Canvas, ImageRenderer, TextRenderer, TextUpdateNode,
-};
+use ivy_ui::{Canvas, ImageRenderer, TextRenderer, TextUpdateNode};
 use ivy_vulkan::{
     context::SharedVulkanContext,
     vk::{ClearValue, CullModeFlags, PolygonMode},

@@ -46,7 +46,6 @@ mod text_renderer;
 mod vertex;
 
 pub mod constraints;
-pub mod shaders;
 pub mod systems;
 
 pub use canvas::*;
