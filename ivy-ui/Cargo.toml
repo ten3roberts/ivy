@@ -7,7 +7,7 @@ description = "GUI library for Ivy"
 readme = "README.md"
 
 license-file = "../LICENSE"
-keywords = [ "graphics", "ui", "game engine", "game", "vulkan" ]
+keywords = [ "graphics", "ui", "game-engine", "game", "vulkan" ]
 documentation = "https://lib.rs/ivy-ui"
 repository = "https://github.com/ten3roberts/ivy"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
