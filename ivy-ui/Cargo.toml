@@ -1,6 +1,6 @@
 [package]
 name = "ivy-ui"
-version = "0.10.1"
+version = "0.10.2"
 authors = ["Tim Roberts <ten3roberts@gmail.com>"]
 edition = "2018"
 description = "GUI library for Ivy"

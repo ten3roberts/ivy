@@ -1,6 +1,6 @@
 [package]
 name = "ivy-physics"
-version = "0.10.1"
+version = "0.10.2"
 edition = "2018"
 description = "Provides physics for the Ivy framework"
 
