@@ -1,9 +1,14 @@
 [package]
 name = "ivy-templates"
-version = "0.1.0"
+version = "0.10.0"
 edition = "2021"
 description = "Provides "
 
+license-file = "../LICENSE"
+keywords = [ "reuse", "template", "spawning" ]
+documentation = "https://lib.rs/ivy-templates"
+repository = "https://github.com/ten3roberts/ivy"
+readme = "../README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]

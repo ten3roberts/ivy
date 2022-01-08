@@ -1,9 +1,14 @@
 [package]
 name = "ivy-collision"
-version = "0.9.0"
+version = "0.10.0"
 edition = "2018"
 description = "3D collision crate for Ivy"
 
+license-file = "../LICENSE"
+keywords = [ "physics", "collisions", "rigidbody", "game" ]
+documentation = "https://lib.rs/ivy-collision"
+repository = "https://github.com/ten3roberts/ivy"
+readme = "../README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -13,8 +18,8 @@ derive_more = "0.99.17"
 flume = "0.10.9"
 hecs = "0.7.3"
 hecs-schedule = "0.3.21"
-ivy-base = { path = "../ivy-base", version = "0.9" }
-ivy-resources = { path = "../ivy-resources", version = "0.9" }
+ivy-base = { path = "../ivy-base", version = "0.10.0" }
+ivy-resources = { path = "../ivy-resources", version = "0.10.0" }
 ordered-float = "2.8.0"
 palette = "0.6.0"
 rayon = "1.5.1"
