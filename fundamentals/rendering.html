@@ -1,0 +1,394 @@
+<!DOCTYPE HTML>
+<html lang="en" class="sidebar-visible no-js light">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Rendering and Passes - Ivy User&#x27;s Guide</title>
+        <!-- Custom HTML head -->
+        <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff" />
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+    </head>
+    <body>
+        <!-- Provide site root to javascript -->
+        <script type="text/javascript">
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script type="text/javascript">
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script type="text/javascript">
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('no-js')
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add('js');
+        </script>
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script type="text/javascript">
+            var html = document.querySelector('html');
+            var sidebar = 'hidden';
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            }
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="../compiling.html"><strong aria-hidden="true">1.</strong> Compiling</a></li><li class="chapter-item expanded "><a href="../fundamentals.html"><strong aria-hidden="true">2.</strong> Fundamentals</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../fundamentals/layers.html"><strong aria-hidden="true">2.1.</strong> Layers</a></li><li class="chapter-item expanded "><a href="../fundamentals/events.html"><strong aria-hidden="true">2.2.</strong> Events</a></li><li class="chapter-item expanded "><a href="../fundamentals/resources.html"><strong aria-hidden="true">2.3.</strong> Resources</a></li><li class="chapter-item expanded "><a href="../fundamentals/ecs.html"><strong aria-hidden="true">2.4.</strong> Entity Component System</a></li><li class="chapter-item expanded "><a href="../fundamentals/bundles.html"><strong aria-hidden="true">2.5.</strong> Bundles</a></li><li class="chapter-item expanded "><a href="../fundamentals/rendering.html" class="active"><strong aria-hidden="true">2.6.</strong> Rendering and Passes</a></li></ol></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky bordered">
+                    <div class="left-buttons">
+                        <button id="sidebar-toggle" class="icon-button" type="button" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </button>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light (default)</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Ivy User&#x27;s Guide</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script type="text/javascript">
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="rendering-and-passes"><a class="header" href="#rendering-and-passes">Rendering and Passes</a></h1>
+<h2 id="shaderpass"><a class="header" href="#shaderpass">Shaderpass</a></h2>
+<p>Compared to other game engines, Ivy uses a slightly more complicated, though more
+flexible approach to rendering.</p>
+<p>All rendereable entities, hereby referred to as <em>objects</em> have an associated
+shaderpass. A shaderpass holds a shader and describes at which point it will be rendered
+in the rendering pipelines.</p>
+<p>Each node in the rendering shaderpass has an associated type of shaderpass which it will
+render. For example, the <code>ImageRenderer</code> will usually be set up to render
+objects which have a <code>Handle&lt;ImagePass&gt;</code>. The <code>ImagePass</code>, wrapped in an opaque
+resource handle, will describe the vulkan pipeline and layout used.</p>
+<p><strong>Note</strong>: The renderer usually expect the different shaderpasses to conform to
+a single pipeline layout due to descriptor binding.</p>
+<p>Objects with meshes usually have a <code>GeometryPass</code> attached to them, with the
+mesh and/or material describing the specific properties like texture and
+roughness.</p>
+<p>Different objects which belong to the same shaderpass can have different values, I.e;
+different shaders, which for example can be used for wind affected foliage to be
+rendered along other objects in the same shaderpass, but different shaders.</p>
+<p>The system also allows for multiple shaderpasses to be attached to the same entity,
+allowing the entity to use different shaders for different shaderpasses. This high
+customizability allows the same entity to use a textured albedo shader for
+<code>GeometryPass</code>, and a solid color for a hypothetical <code>MinimapPass</code>. This can be
+very useful in games where the same object may be required to be rendered
+multiple times from different viewpoints.</p>
+<p>A <code>ShaderPass</code> is a type which wraps a <code>Pipeline</code> and a <code>PipelineLayout</code>, though
+they can contain other info. The Rust type system is used for differentiating
+between different kinds of passes.</p>
+<p>For reducing boilerplate a convenience macro <code>new_shaderpass</code> is provided for
+easily creating one or more stronly typed shaderpass types.</p>
+<p>Example:</p>
+<pre><pre class="playground"><code class="language-rust">
+<span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use ivy::new_shaderpass;
+
+
+new_shaderpass! {
+  pub struct MinimapPass;
+  pub struct SolidPass;
+}
+<span class="boring">}
+</span></code></pre></pre>
+<p>In many cases though, the usage of the included <code>GeometryPass</code>, <code>ImagePass</code>,
+<code>TextPass</code>, and different post processing passes are enough.</p>
+<h2 id="rendergraph"><a class="header" href="#rendergraph">Rendergraph</a></h2>
+<p>The rendering graph describes an acyclic graph of rendering nodes, which
+describe how the scene will be rendered. Each node describes its inputs and
+outputs, and dependencies will automatically be generated to ensure proper
+ordering and syncronization with paralellization using Vulkan.</p>
+<p><code>ivy-presets</code> contain common rendergraph setups, such as for PBR rendering. It
+is also possible to create your own rendergraph to tailor the rendering for your
+game or application.</p>
+<p>The following example shows the raw, unaided setup of a rendergraph rendering a
+simple unlit model to the screen.</p>
+<pre><pre class="playground"><code class="language-rust">use base::{BuilderExt, Events};
+use glam::Vec3;
+use graphics::{
+    shaders::{FORWARD_FRAGMENT_SHADER, FORWARD_VERTEX_SHADER},
+    NodeBuildInfo,
+};
+use hecs::{EntityBuilder, World};
+use ivy::*;
+use physics::PhysicsLayer;
+use presets::GeometryPass;
+use rendergraph::{AttachmentInfo, CameraNode, CameraNodeInfo, GraphicsLayer, SwapchainNode};
+use resources::LoadResource;
+use vulkan::{
+    context::SharedVulkanContext,
+    vk::{ClearValue, PresentModeKHR},
+    ClearValueExt, PipelineInfo, SwapchainInfo, TextureInfo,
+};
+pub struct GameLayer {}
+
+const FRAMES_IN_FLIGHT: usize = 2;
+impl GameLayer {
+    pub fn new(
+        world: &amp;mut World,
+        resources: &amp;mut Resources,
+        _: &amp;mut Events,
+    ) -&gt; anyhow::Result&lt;Self&gt; {
+        Self::setup(world, resources)?;
+        Ok(Self {})
+    }
+
+    pub fn setup(world: &amp;mut World, resources: &amp;mut Resources) -&gt; anyhow::Result&lt;()&gt; {
+        let window = resources.get_default::&lt;Window&gt;()?;
+
+        // Create a camera
+        let camera = EntityBuilder::new()
+            .add_bundle((
+                Camera::perspective(1.0, window.aspect(), 0.1, 100.0),
+                MainCamera,
+            ))
+            .add_bundle(TransformBundle {
+                pos: Position::new(0.0, 0.0, -3.0),
+                ..Default::default()
+            })
+            .spawn(world);
+
+        let context = resources.get_default::&lt;SharedVulkanContext&gt;()?;
+
+        // Create or get existing rendergraph
+        let mut rendergraph = resources
+            .default_entry()?
+            .or_try_insert_with(|| RenderGraph::new(context.clone(), FRAMES_IN_FLIGHT))?;
+
+        // Create a texture to render into
+        let color = resources.insert(Texture::new(
+            context.clone(),
+            &amp;TextureInfo {
+                extent: window.extent(),
+                usage: ImageUsage::COLOR_ATTACHMENT
+                    | ImageUsage::TRANSFER_SRC
+                    | ImageUsage::SAMPLED,
+                ..Default::default()
+            },
+        )?)?;
+
+        // Create a depth buffer to ensure proper ordering
+        let depth = resources.insert(Texture::new(
+            context.clone(),
+            &amp;TextureInfo::depth(window.extent()),
+        )?)?;
+
+        // Get or create a mesh renderer
+        let renderer = resources
+            .default_entry::&lt;MeshRenderer&gt;()?
+            .or_try_insert_with(|| MeshRenderer::new(context.clone(), 128, FRAMES_IN_FLIGHT))?
+            .handle;
+
+        // Add a node rendering the scene from the camera
+        rendergraph.add_node(CameraNode::&lt;GeometryPass, _&gt;::new(
+            context.clone(),
+            resources,
+            camera,
+            renderer,
+            CameraNodeInfo {
+                color_attachments: vec![AttachmentInfo::color(color)],
+                depth_attachment: Some(AttachmentInfo::depth_discard(depth)),
+                clear_values: vec![
+                    ClearValue::color(0.0, 0.0, 0.0, 0.0),
+                    ClearValue::depth_stencil(1.0, 0),
+                ],
+                ..Default::default()
+            },
+        )?);
+
+        // Add a node to present the texture to the swapchain and window
+        rendergraph.add_node(SwapchainNode::new(
+            context.clone(),
+            &amp;resources,
+            resources.default()?,
+            color,
+        )?);
+
+        rendergraph.build(resources.fetch()?, window.extent())?;
+
+        // Create a simple pipeline
+        let pipeline = GeometryPass(PipelineInfo {
+            vs: FORWARD_VERTEX_SHADER,
+            fs: FORWARD_FRAGMENT_SHADER,
+            ..Default::default()
+        });
+
+        let pass = resources.insert(pipeline)?;
+
+        let document = Document::load(resources, &amp;&quot;./res/models/monkey.gltf&quot;.into())?;
+
+        let mut builder = EntityBuilder::new();
+        document
+            .build_node_by_name(&quot;Suzanne&quot;, &amp;mut builder, &amp;NodeBuildInfo { skinned: false })?
+            .add(pass)
+            .add_bundle(RbBundle {
+                ang_vel: AngularVelocity::new(0.0, 1.0, 0.0),
+                ..Default::default()
+            })
+            .spawn(world);
+
+        Ok(())
+    }
+}
+
+impl Layer for GameLayer {
+    fn on_update(
+        &amp;mut self,
+        _: &amp;mut hecs::World,
+        _: &amp;mut Resources,
+        _: &amp;mut base::Events,
+        _: std::time::Duration,
+    ) -&gt; anyhow::Result&lt;()&gt; {
+        Ok(())
+    }
+}
+
+fn main() -&gt; anyhow::Result&lt;()&gt; {
+    let window = WindowLayerInfo {
+        swapchain: SwapchainInfo {
+            present_mode: PresentModeKHR::FIFO,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    App::builder()
+        .try_push_layer(|_, r, _| WindowLayer::new(r, window))?
+        .try_push_layer(GameLayer::new)?
+        .try_push_layer(|w, r, e| GraphicsLayer::new(w, r, e, FRAMES_IN_FLIGHT))?
+        .try_push_layer(|w, r, e| {
+            PhysicsLayer::new(
+                w,
+                r,
+                e,
+                physics::PhysicsLayerInfo {
+                    gravity: Vec3::ZERO.into(),
+                    tree_root: (), // Disable collisions
+                    debug: false,
+                },
+            )
+        })?
+        .build()
+        .run()
+}
+</code></pre></pre>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../fundamentals/bundles.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../fundamentals/bundles.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+        <script type="text/javascript">
+            window.playground_copyable = true;
+        </script>
+        <script src="../elasticlunr.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="../mark.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="../searcher.js" type="text/javascript" charset="utf-8"></script>
+        <script src="../clipboard.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="../highlight.js" type="text/javascript" charset="utf-8"></script>
+        <script src="../book.js" type="text/javascript" charset="utf-8"></script>
+
+        <!-- Custom JS scripts -->
+    </body>
+</html>
