@@ -8,6 +8,11 @@ Ivy is a modular application and game framework for Rust.
 This crate provides an amalgamation and rexport as well as aliasing for the
 multiple `ivy` crates.
 
+## [Guide](https://ten3roberts.github.io/ivy)
+
+A user guide is provided to quickly familiarize the user with the basic usage of
+the engine.
+
 ## Features
   - Vulkan high level rendering
   - PBR rendering and post processing
