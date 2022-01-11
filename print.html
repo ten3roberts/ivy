@@ -135,7 +135,54 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
+                        <h1 id="ivy"><a class="header" href="#ivy">Ivy</a></h1>
+<h2 id="what-it-is"><a class="header" href="#what-it-is">What it is</a></h2>
+<p>Ivy is a modular application and game framework for Rust.</p>
+<p>This crate provides an amalgamation and rexport as well as aliasing for the
+multiple <code>ivy</code> crates.</p>
+<h2 id="guide"><a class="header" href="#guide"><a href="https://ten3roberts.github.io/ivy">Guide</a></a></h2>
+<p>A user guide is provided to quickly familiarize the user with the basic usage of
+the engine.</p>
+<h2 id="features"><a class="header" href="#features">Features</a></h2>
+<ul>
+<li>Vulkan high level rendering</li>
+<li>PBR rendering and post processing</li>
+<li>Rendergraph abstractions</li>
+<li>Collision detection and realistic physics response</li>
+<li>ECS driven architecture</li>
+<li>Deferred dynamic events using observer pattern</li>
+<li>Ray casting for arbitrary convex shapes</li>
+<li>Handle based dynamic storage</li>
+<li>Input system with composeable vector generation</li>
+<li>UI system with configurable widget and positioning system</li>
+<li>... And more</li>
+</ul>
+<h2 id="how-it-works"><a class="header" href="#how-it-works">How it works</a></h2>
+<h3 id="layers"><a class="header" href="#layers">Layers</a></h3>
+<p>The core of the program is an application. [<code>core::App</code>]. It defines the
+update loop, and event handling.</p>
+<p>From there, logic is extracted into layers which are run for each iteration.
+Within a layer, the user is free to do whatever they want, from reading from
+sockets, rendering using vulkan, or dispatching ECS workloads.</p>
+<p>Due to the layered design, several high level concepts can work together and
+not interfere, aswell as being inserted based on different configurations.</p>
+<p>Layers can be thought of as plugin in high level containers of behaviour.</p>
+<p>The existance of layer allow importing of behaviour from other crates without
+concern of implementation details.</p>
+<h3 id="inter-layer-communication"><a class="header" href="#inter-layer-communication">Inter-layer communication</a></h3>
+<p>The application exposes different ways in which two layers can influence
+each other.</p>
+<ul>
+<li><code>world</code> contains the ECS world with all entities and components.</li>
+<li><code>resources</code> is a typed storage accessed by handles. This is useful for
+storing textures, models, or singletons that are to be shared between layers
+and inside layers with dynamic borrow checking.</li>
+<li><code>events</code> facilitates a broadcasting channel in which events can be sent
+and listened to. Each layer can set up a receiver and iterate the sent events
+of a specific type. This is best used for low frequency data to avoid busy
+checking, like user input, state changes, or alike.</li>
+</ul>
+<p>See the documentation for [<code>core::Layer</code>]</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="compiling"><a class="header" href="#compiling">Compiling</a></h1>
 <p>The best method of incorporating Ivy into a project is either by [crates.io] or
 as a submodule.</p>
@@ -163,13 +210,13 @@ libX11-devel mesa-vulkan-devel vulkan-validation-layers glslc
 </code></pre>
 <h3 id="debian"><a class="header" href="#debian">Debian</a></h3>
 <pre><code class="language-sh">sudo apt install libxi-dev libxcursor-dev libxinerama-dev libXrandr-devel
-libx11-dev  libvulkan-dev
+libx11-dev libvulkan-dev
 </code></pre>
 <p><code>glsc</code> needs to be installed manually [https://github.com/google/shaderc#downloads]</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="fundamentals"><a class="header" href="#fundamentals">Fundamentals</a></h1>
 <p>This chapter will familiarize the reader with the fundamentals of the engine and
 what is needed to create a game and start your journey.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="layers"><a class="header" href="#layers">Layers</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="layers-1"><a class="header" href="#layers-1">Layers</a></h1>
 <p>The core of the program is an application, which defines the update loop.</p>
 <p>The update loop dispatches to several layers, which which are <em>mostly</em> self
 contained units of logic. The layers get exlusive access to the world,
