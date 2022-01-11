@@ -1,11 +1,12 @@
 use anyhow::{Context, Result};
+use shaderc::ShaderKind;
 use std::{
     env,
     error::Error,
     ffi::OsString,
     fs,
     path::{Path, PathBuf},
-    process::{Child, Command},
+    slice,
 };
 
 #[derive(Debug)]
@@ -28,31 +29,17 @@ fn rerun_if_changed<P: AsRef<Path>>(path: P) {
     );
 }
 
-fn compile_glsl(src: &Path, dst: &Path) -> Result<Child> {
-    Command::new("glslc")
-        .arg(src)
-        .arg("-o")
-        .arg(dst)
-        .spawn()
-        .context("Failed to run glslc")
-}
+// struct CompilationProcess {
+//     path: PathBuf,
+//     child: Child,
+// }
 
-struct CompilationProcess {
-    path: PathBuf,
-    child: Child,
-}
-
-fn compile_dir<A, B, F, C>(
-    src: A,
-    dst: B,
-    rename_func: F,
-    compile_func: C,
-) -> Result<Vec<CompilationProcess>>
+fn compile_dir<A, B, F, C>(src: A, dst: B, rename_func: F, compile_func: C) -> Result<()>
 where
     A: AsRef<Path>,
     B: AsRef<Path>,
     F: Fn(&mut OsString),
-    C: Fn(&Path, &Path) -> Result<Child>,
+    C: Fn(&Path, &Path) -> Result<()>,
 {
     let src = src.as_ref();
     let dst = dst.as_ref();
@@ -99,15 +86,49 @@ where
 
             eprintln!("{:?} => {:?}", path, dst_path);
 
-            let child = compile_func(path, &dst_path)?;
+            compile_func(path, &dst_path)
+                .with_context(|| format!("Failed to compile {:?}", path))?;
 
-            Ok(Some(CompilationProcess {
-                child,
-                path: path.to_owned(),
-            }))
+            Ok(Some(()))
         })
         .flat_map(|val| val.transpose())
         .collect()
+}
+
+fn glslc(src: &Path, dst: &Path) -> Result<()> {
+    let mut compiler = shaderc::Compiler::new().unwrap();
+    let mut options = shaderc::CompileOptions::new().unwrap();
+    let source = fs::read_to_string(src)?;
+
+    let ext = src.extension().unwrap_or_default();
+    let kind = match ext.to_string_lossy().as_ref() {
+        "vert" => ShaderKind::Vertex,
+        "frag" => ShaderKind::Fragment,
+        "geom" => ShaderKind::Geometry,
+        "comp" => ShaderKind::Compute,
+        _ => ShaderKind::InferFromSource,
+    };
+
+    options.add_macro_definition("EP", Some("main"));
+    let binary_result = compiler
+        .compile_into_spirv(
+            &source,
+            kind,
+            &src.to_string_lossy(),
+            "main",
+            Some(&options),
+        )
+        .unwrap();
+
+    assert_eq!(Some(&0x07230203), binary_result.as_binary().first());
+
+    // Write to dst
+    let bin = binary_result.as_binary();
+
+    let data = bin.as_ptr() as *const u8;
+    let bin = unsafe { slice::from_raw_parts(data, bin.len() * 4) };
+    fs::write(dst, bin)?;
+    Ok(())
 }
 
 fn main() -> Result<()> {
@@ -116,20 +137,12 @@ fn main() -> Result<()> {
     dst.push(out_dir);
     dst.push("shaders");
 
-    let children = compile_dir(
+    compile_dir(
         "./shaders/",
         &dst,
         |path| path.push(".spv"),
-        |src, dst| compile_glsl(src, dst),
+        |src, dst| glslc(src, dst),
     )?;
-
-    children.into_iter().try_for_each(|mut val| -> Result<()> {
-        if !val.child.wait()?.success() {
-            Err(anyhow::anyhow!("Failed to compile: {:?}", val.path))
-        } else {
-            Ok(())
-        }
-    })?;
 
     Ok(())
 }

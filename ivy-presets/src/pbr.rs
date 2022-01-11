@@ -12,7 +12,7 @@ use ivy_resources::Resources;
 use ivy_ui::{Canvas, ImageRenderer, TextRenderer, TextUpdateNode};
 use ivy_vulkan::{
     context::SharedVulkanContext,
-    vk::{ClearValue, CullModeFlags, PolygonMode},
+    vk::{ClearValue, CullModeFlags},
     ImageLayout, ImageUsage, LoadOp, PipelineInfo, StoreOp, Swapchain, Texture, TextureInfo,
 };
 
@@ -205,27 +205,19 @@ impl PBRRendering {
     }
 
     /// Setups basic pipelines and inserts them into the resource store
-    pub fn setup_pipelines(&self, resources: &Resources) -> Result<()> {
+    pub fn setup_pipelines(&self, resources: &Resources, info: PipelinesInfo) -> Result<()> {
         // Create pipelines
         resources.insert(GeometryPass(PipelineInfo {
             vs: DEFAULT_VERTEX_SHADER,
             fs: DEFAULT_FRAGMENT_SHADER,
-            cull_mode: CullModeFlags::BACK,
+            cull_mode: info.cull_mode,
             ..Default::default()
         }))?;
 
         resources.insert(SkinnedPass(PipelineInfo {
             vs: SKINNED_VERTEX_SHADER,
             fs: DEFAULT_FRAGMENT_SHADER,
-            cull_mode: CullModeFlags::BACK,
-            ..Default::default()
-        }))?;
-
-        resources.insert(GeometryPass(PipelineInfo {
-            vs: DEFAULT_VERTEX_SHADER,
-            fs: DEFAULT_FRAGMENT_SHADER,
-            polygon_mode: PolygonMode::LINE,
-            cull_mode: CullModeFlags::NONE,
+            cull_mode: info.cull_mode,
             ..Default::default()
         }))?;
 
@@ -261,5 +253,19 @@ impl PBRRendering {
         }))?;
 
         Ok(())
+    }
+}
+
+#[records::record]
+pub struct PipelinesInfo {
+    /// The cull mode to use where it makes sense
+    cull_mode: CullModeFlags,
+}
+
+impl Default for PipelinesInfo {
+    fn default() -> Self {
+        Self {
+            cull_mode: CullModeFlags::BACK,
+        }
     }
 }

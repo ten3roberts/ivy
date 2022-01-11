@@ -34,5 +34,3 @@ libX11-devel mesa-vulkan-devel vulkan-validation-layers glslc
 sudo apt install libxi-dev libxcursor-dev libxinerama-dev libXrandr-devel
 libx11-dev libvulkan-dev
 ```
-
-`glsc` needs to be installed manually [https://github.com/google/shaderc#downloads]

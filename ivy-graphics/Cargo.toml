@@ -48,4 +48,5 @@ serialize = [ "serde", "glam/serde" ]
 
 [build-dependencies]
 anyhow = "1.0.52"
+shaderc = "0.7"
 walkdir = "2.3"

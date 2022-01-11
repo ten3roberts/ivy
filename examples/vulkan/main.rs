@@ -115,7 +115,7 @@ fn setup_graphics(world: &mut World, resources: &Resources) -> anyhow::Result<As
         FRAMES_IN_FLIGHT,
     )?;
 
-    pbr.setup_pipelines(resources)?;
+    pbr.setup_pipelines(resources, presets::PipelinesInfo::default())?;
 
     Ok(Assets {
         geometry_pass: resources.default()?,
