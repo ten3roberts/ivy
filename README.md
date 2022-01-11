@@ -26,6 +26,10 @@ the engine.
   - UI system with configurable widget and positioning system
   - ... And more
 
+# Gallery
+
+![Cubes and Collision](./img/cubes.png)
+
 ## How it works
 
 ### Layers
