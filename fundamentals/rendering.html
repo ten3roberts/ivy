@@ -305,7 +305,8 @@ impl GameLayer {
 
         let mut builder = EntityBuilder::new();
         document
-            .build_node_by_name(&quot;Suzanne&quot;, &amp;mut builder, &amp;NodeBuildInfo { skinned: false })?
+            .find(&quot;Suzanne&quot;)?
+            .build(&amp;mut builder, &amp;NodeBuildInfo { skinned: false })
             .add(pass)
             .add_bundle(RbBundle {
                 ang_vel: AngularVelocity::new(0.0, 1.0, 0.0),
