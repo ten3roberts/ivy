@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 derive_for!(
     (
         Add, AddAssign, AsRef, Clone, Copy, Debug, Default, Deref, DerefMut, Div, DivAssign, From,
-        Into, Mul, MulAssign, Sub, SubAssign,
+        Into, Mul, MulAssign, Sub, SubAssign,PartialEq,
     );
     /// Constrains the position to an offset in pixels from parent origin.
     #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
@@ -36,6 +36,10 @@ derive_for!(
     /// The offset of the origin from the center of the sprite.
     #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
     pub struct Origin2D(pub Vec2);
+
+    /// Margin for some widgets, like Text
+    #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+    pub struct Margin(pub Vec2);
 );
 
 impl From<AbsoluteOffset> for Position2D {
@@ -93,6 +97,28 @@ impl Aspect {
 }
 
 impl Origin2D {
+    pub fn new(x: f32, y: f32) -> Self {
+        Self(Vec2::new(x, y))
+    }
+
+    pub fn lower_left() -> Self {
+        Self::new(-1.0, -1.0)
+    }
+
+    pub fn lower_right() -> Self {
+        Self::new(1.0, -1.0)
+    }
+
+    pub fn upper_right() -> Self {
+        Self::new(1.0, 1.0)
+    }
+
+    pub fn upper_left() -> Self {
+        Self::new(-1.0, 1.0)
+    }
+}
+
+impl Margin {
     pub fn new(x: f32, y: f32) -> Self {
         Self(Vec2::new(x, y))
     }

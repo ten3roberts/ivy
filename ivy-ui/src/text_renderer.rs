@@ -15,9 +15,9 @@ use ivy_vulkan::{
 use ivy_vulkan::{device, Buffer};
 use std::mem::size_of;
 
-use crate::Text;
 use crate::UIVertex;
 use crate::WrapStyle;
+use crate::{constraints::Margin, Text};
 use crate::{Alignment, Font};
 use crate::{Error, Result};
 use ivy_base::{Color, Position2D, Size2D, Visible};
@@ -28,8 +28,9 @@ struct TextQuery<'a> {
     font: &'a Handle<Font>,
     block: &'a mut BufferAllocation<Marker>,
     bounds: &'a Size2D,
-    alignment: Option<&'a Alignment>,
-    wrap: Option<&'a WrapStyle>,
+    alignment: &'a Alignment,
+    wrap: &'a WrapStyle,
+    margin: &'a Margin,
 }
 
 /// Renders arbitrary text using associated font and text objects attached to
@@ -211,7 +212,8 @@ impl TextRenderer {
                 query.text.len() > 0
                     && (query.text.dirty()
                         || query.text.old_bounds() != *query.bounds
-                        || Some(&query.text.old_wrap()) != query.wrap)
+                        || query.text.old_margin() != *query.margin
+                        || &query.text.old_wrap() != query.wrap)
             })
             .flat_map(|(_, query)| {
                 query.text.set_dirty(false);
@@ -234,8 +236,9 @@ impl TextRenderer {
                     .layout(
                         font,
                         *query.bounds,
-                        query.wrap.cloned().unwrap_or_default(),
-                        query.alignment.cloned().unwrap_or_default(),
+                        *query.wrap,
+                        *query.alignment,
+                        *query.margin,
                     )
                     .unwrap()
             });

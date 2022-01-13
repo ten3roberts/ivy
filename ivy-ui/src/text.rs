@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 
+use crate::constraints::Margin;
 use crate::Alignment;
 use crate::Result;
 use crate::WrapStyle;
@@ -16,6 +17,7 @@ pub struct Text {
     dirty: bool,
     old_bounds: Size2D,
     old_wrap: WrapStyle,
+    old_margin: Margin,
 }
 
 impl Clone for Text {
@@ -44,8 +46,9 @@ impl Text {
             str: str.into(),
             layout,
             dirty: true,
-            old_bounds: Size2D(Vec2::ZERO),
+            old_bounds: Size2D::default(),
             old_wrap: WrapStyle::Word,
+            old_margin: Margin::default(),
         }
     }
 
@@ -85,13 +88,18 @@ impl Text {
     }
 
     /// Gets the last laid out bounds.
-    pub fn old_bounds(&self) -> Size2D {
+    pub(crate) fn old_bounds(&self) -> Size2D {
         self.old_bounds
     }
 
     /// Gets the last laid out bounds.
-    pub fn old_wrap(&self) -> WrapStyle {
+    pub(crate) fn old_wrap(&self) -> WrapStyle {
         self.old_wrap
+    }
+
+    /// Get the text's old margin.
+    pub(crate) fn old_margin(&self) -> Margin {
+        self.old_margin
     }
 
     /// Returns an iterator for layout out the text in quads
@@ -101,19 +109,20 @@ impl Text {
         bounds: Size2D,
         wrap: WrapStyle,
         alignment: Alignment,
+        margin: Margin,
     ) -> Result<TextLayout<'a, std::slice::Iter<GlyphPosition>>> {
         self.old_bounds = bounds;
         self.old_wrap = wrap;
 
         self.layout.reset(&fontdue::layout::LayoutSettings {
-            x: -bounds.x,
-            y: bounds.y,
+            x: -bounds.x + margin.x,
+            y: bounds.y + margin.y,
             max_width: if wrap == WrapStyle::Overflow {
                 None
             } else {
-                Some(bounds.x * 2.0)
+                Some(bounds.x * 2.0 - margin.x)
             },
-            max_height: Some(bounds.y * 2.0),
+            max_height: Some(bounds.y * 2.0 - margin.y),
             horizontal_align: alignment.horizontal,
             vertical_align: alignment.vertical,
             wrap_style: match wrap {
@@ -184,8 +193,6 @@ impl<'a, I: Iterator<Item = &'a GlyphPosition>> Iterator for TextLayout<'a, I> {
             Ok(val) => val,
             Err(_) => (NormalizedRect::default()),
         };
-
-        // let size = self.font.size();
 
         let width = (glyph.width as i32) as f32;
 

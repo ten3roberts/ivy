@@ -2,14 +2,14 @@ use crate::{constraints::*, Canvas, Font, Image, Text};
 use derive_for::*;
 use derive_more::*;
 pub use fontdue::layout::{HorizontalAlign, VerticalAlign};
-use hecs::{Bundle, Entity, EntityRef, World};
+use glam::Vec2;
+use hecs::{Bundle, DynamicBundleClone, DynamicClone, Entity, EntityRef, World};
 use ivy_base::{Color, Events, Position2D, Size2D, Visible};
 use ivy_graphics::Camera;
 use ivy_resources::Handle;
 #[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
-use glam::Vec2;
 
 derive_for!(
     (
@@ -44,7 +44,7 @@ derive_for!(
 
 /// Bundle for widgets.
 /// Use further bundles for images and texts
-#[derive(Bundle, Clone, Debug, Default)]
+#[derive(Bundle, Clone, Debug, Default, DynamicBundleClone)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct WidgetBundle {
     pub widget: Widget,
@@ -112,73 +112,32 @@ impl CanvasBundle {
     }
 }
 
-#[derive(Bundle, Clone, Debug)]
+#[derive(Default, Bundle, Debug, Clone, DynamicBundleClone)]
 /// Specialize widget into an image
-pub struct ImageBundle<T> {
+pub struct ImageBundle {
     pub image: Handle<Image>,
     pub color: Color,
-    pub pass: Handle<T>,
 }
 
-impl<T> Default for ImageBundle<T> {
-    fn default() -> Self {
-        Self {
-            image: Default::default(),
-            color: Default::default(),
-            pass: Default::default(),
-        }
+impl ImageBundle {
+    pub fn new(image: Handle<Image>, color: Color) -> Self {
+        Self { image, color }
     }
 }
 
-impl<T> ImageBundle<T> {
-    pub fn new(image: Handle<Image>, color: Color, pass: Handle<T>) -> Self {
-        Self { image, color, pass }
-    }
-}
-
-#[derive(Bundle, Debug)]
+#[derive(Default, Bundle, Debug, Clone, DynamicBundleClone)]
 /// Specialize widget into text
-pub struct TextBundle<T> {
+#[records::record]
+pub struct TextBundle {
     pub text: Text,
     pub font: Handle<Font>,
     pub color: Color,
     pub wrap: WrapStyle,
     pub align: Alignment,
-    pub pass: Handle<T>,
+    pub margin: Margin,
 }
 
-impl<T> Default for TextBundle<T> {
-    fn default() -> Self {
-        Self {
-            text: Default::default(),
-            font: Default::default(),
-            color: Default::default(),
-            wrap: Default::default(),
-            align: Default::default(),
-            pass: Default::default(),
-        }
-    }
-}
-
-impl<T> TextBundle<T> {
-    pub fn new(
-        text: Text,
-        font: Handle<Font>,
-        color: Color,
-        wrap: WrapStyle,
-        align: Alignment,
-        pass: Handle<T>,
-    ) -> Self {
-        Self {
-            text,
-            font,
-            color,
-            wrap,
-            align,
-            pass,
-        }
-    }
-
+impl TextBundle {
     pub fn set_text<U: Into<Cow<'static, str>>>(&mut self, val: U) {
         self.text.set(val)
     }
@@ -190,6 +149,7 @@ impl<T> TextBundle<T> {
 /// The interactive widget doesn't neccessarily need to be a visible object,
 /// which allows for transparent blockers in menus.
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct Interactive;
 /// Marker type for UI and the UI hierarchy.
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
