@@ -13,9 +13,9 @@ description = "Input handling crate for Ivy"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-flume = "0.10.9"
+flume = "0.10.10"
 glfw = { version = "0.43.0", features = [ "vulkan" ] }
 ivy-base = { path = "../ivy-base", version = "0.10.0" }
 ivy-resources = { path = "../ivy-resources", version = "0.10.0" }
 ivy-window = { path = "../ivy-window", version = "0.10.0" }
-glam = "0.20"
+glam = "0.20.2"

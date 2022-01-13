@@ -13,4 +13,4 @@ readme = "../README.md"
 
 [dependencies]
 rand = "0.8.4"
-glam = "0.20"
+glam = "0.20.2"

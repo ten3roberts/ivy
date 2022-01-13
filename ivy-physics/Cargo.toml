@@ -15,7 +15,7 @@ readme = "../README.md"
 anyhow = "1.0.52"
 derive-for = "1.2.2"
 derive_more = "0.99.17"
-flume = "0.10.9"
+flume = "0.10.10"
 hecs = "0.7.3"
 ivy-collision = { path = "../ivy-collision", version = "0.10.0" }
 ivy-base = { path = "../ivy-base", version = "0.10.0" }
@@ -24,10 +24,10 @@ ivy-graphics = { path = "../ivy-graphics", version = "0.10.0" }
 ivy-resources = { path = "../ivy-resources", version = "0.10.0" }
 smallvec = "1.7.0"
 thiserror = "1.0.30"
-glam = "0.20"
-hecs-hierarchy = "0.8.1"
-hecs-schedule = "0.3.21"
-serde = { version = "1.0.132", features = [ "derive" ], optional = true }
+glam = "0.20.2"
+hecs-hierarchy = "0.10.1"
+hecs-schedule = "0.5.0"
+serde = { version = "1.0.133", features = [ "derive" ], optional = true }
 records = "0.1.1"
 
 [features]

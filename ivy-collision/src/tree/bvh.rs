@@ -1,5 +1,5 @@
 use glam::Vec3;
-use hecs::{Column, Component};
+use hecs::{Component, View};
 use ivy_base::{Color, DrawGizmos, Events};
 use ordered_float::OrderedFloat;
 use slotmap::SlotMap;
@@ -354,7 +354,7 @@ impl<O: Array<Item = Object> + Component> CollisionTreeNode for BVHNode<O> {
     }
 
     fn check_collisions(
-        colliders: &Column<Collider>,
+        colliders: &View<&Collider>,
         events: &Events,
         index: NodeIndex,
         nodes: &Nodes<Self>,
@@ -424,7 +424,7 @@ impl<O: Array<Item = Object> + Component> DrawGizmos for BVHNode<O> {
 }
 
 fn check_collision(
-    colliders: &Column<Collider>,
+    colliders: &View<&Collider>,
     a: Object,
     a_obj: &ObjectData,
     b: Object,

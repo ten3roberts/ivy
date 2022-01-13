@@ -15,7 +15,7 @@ readme = "../README.md"
 [dependencies]
 ash = "0.35.0"
 glfw = { version = "0.43.0", features = [ "vulkan" ] }
-gpu-allocator = "0.14.0"
+gpu-allocator = "0.15.1"
 ivy-image = { path = "../ivy-image", version = "0.10.0" }
 ivy-resources = { path = "../ivy-resources", version = "0.10.0" }
 ivy-base = { path = "../ivy-base", version = "0.10.0" }
@@ -24,8 +24,8 @@ parking_lot = "0.11.2"
 smallvec = "1.7.0"
 spirv-reflect = "0.2.3"
 thiserror = "1.0.30"
-glam = "0.20"
-serde = { version = "1.0.132", features = [ "derive" ], optional = true }
+glam = "0.20.2"
+serde = { version = "1.0.133", features = [ "derive" ], optional = true }
 bitflags = "1.3.2"
 records = "0.1.1"
 

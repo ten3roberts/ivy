@@ -2,7 +2,7 @@ use std::any;
 
 use flume::{Receiver, Sender};
 use hecs::{Entity, Query};
-use hecs_schedule::{CommandBuffer, GenericWorld, SubWorld, Write};
+use hecs_schedule::{CommandBuffer, SubWorld, Write};
 use ivy_base::components::Velocity;
 use ivy_base::{
     Color, DrawGizmos, Events, Gizmos, Static, TransformMatrix, TransformQuery, Trigger, Visible,
@@ -167,7 +167,8 @@ impl<N: CollisionTreeNode> CollisionTree<N> {
         world: SubWorld<&Collider>,
         events: &mut Events,
     ) -> hecs_schedule::error::Result<()> {
-        let colliders = world.try_get_column()?;
+        let mut colliders = world.query();
+        let colliders = colliders.view();
 
         N::check_collisions(&colliders, events, self.root, &self.nodes, &self.objects);
 

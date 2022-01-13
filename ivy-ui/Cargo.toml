@@ -18,7 +18,7 @@ derive-for = "1.2.2"
 derive_more = "0.99.17"
 fontdue = "0.6.2"
 hecs = "0.7.3"
-hecs-hierarchy = "0.8.1"
+hecs-hierarchy = "0.10.1"
 ivy-base = { path = "../ivy-base", version = "0.10.0" }
 glfw = "0.43.0"
 ivy-graphics = { path = "../ivy-graphics", version = "0.10.0" }
@@ -29,10 +29,10 @@ ivy-vulkan = { path = "../ivy-vulkan", version = "0.10.0" }
 ivy-input = { path = "../ivy-input", version = "0.10.0" }
 ivy-window = { path = "../ivy-window", version = "0.10.0" }
 thiserror = "1.0.30"
-glam = "0.20"
-flume = "0.10.9"
-hecs-schedule = "0.3.21"
-serde = { version = "1.0.132", features = [ "derive" ], optional = true }
+glam = "0.20.2"
+flume = "0.10.10"
+hecs-schedule = "0.5.0"
+serde = { version = "1.0.133", features = [ "derive" ], optional = true }
 records = "0.1.1"
 
 [features]

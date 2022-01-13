@@ -10,7 +10,6 @@ For a successful compilation the following dependencies need to be met:
 - Vulkan Development Files
 - Windowing libraries (X11/Wayland/WINAPI)
 - Vulkan validation layers for debug builds
-- glslc
 
 ## Linux
 

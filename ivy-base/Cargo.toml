@@ -15,20 +15,20 @@ readme = "./README.md"
 
 [dependencies]
 anyhow = "1.0.52"
-crossbeam-channel = { version = "0.5.1", optional = true }
+crossbeam-channel = { version = "0.5.2", optional = true }
 derive-for = "1.2.2"
 derive_more = "0.99.17"
 downcast-rs = "1.2.0"
-flume = "0.10.9"
+flume = "0.10.10"
 hecs = "0.7.3"
 ivy-resources = { path = "../ivy-resources", version = "0.10.0" }
 ivy-random = { path = "../ivy-random", version = "0.10.0" }
 log = { version = "0.4.14", features = ["std"] }
 palette = "0.6.0"
 thiserror = "1.0.30"
-glam = "0.20"
+glam = "0.20.2"
 parking_lot = "0.11.2"
-serde = { version = "1.0.132", features = [ "derive" ], optional = true }
+serde = { version = "1.0.133", features = [ "derive" ], optional = true }
 
 [features]
 default = []

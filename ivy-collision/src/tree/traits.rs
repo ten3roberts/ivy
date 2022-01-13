@@ -1,5 +1,5 @@
 use glam::Vec3;
-use hecs::Column;
+use hecs::View;
 use ivy_base::{Events, Position};
 use slotmap::SlotMap;
 
@@ -63,7 +63,7 @@ pub trait CollisionTreeNode: 'static + Sized + Send + Sync {
     );
 
     fn check_collisions(
-        colliders: &Column<Collider>,
+        colliders: &View<&Collider>,
         events: &Events,
         index: NodeIndex,
         nodes: &Nodes<Self>,
@@ -100,7 +100,7 @@ impl CollisionTreeNode for () {
     }
 
     fn check_collisions(
-        _: &Column<Collider>,
+        _: &View<&Collider>,
         _: &Events,
         _: NodeIndex,
         _: &Nodes<Self>,

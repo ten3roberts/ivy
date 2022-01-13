@@ -1,9 +1,9 @@
 use crate::{Error, Result, Template, TemplateKey};
 use std::collections::HashMap;
 
-use hecs::{Entity, EntityBuilderClone, World};
+use hecs::{DynamicBundleClone, Entity, EntityBuilderClone, World};
 
-use hecs_schedule::CommandBuffer;
+use hecs_schedule::{CommandBuffer, GenericWorld};
 
 //// Generic container for storing entity templates for later retrieval and
 ///spawning. Intended to be stored inside resources or standalone.
@@ -18,7 +18,8 @@ impl TemplateStore {
 
     /// Inserts a new template. A template is anything that is a closure or a
     /// built cloneable entity.
-    pub fn insert<T: Template>(&mut self, key: TemplateKey, template: T) {
+    pub fn insert<T: Template>(&mut self, key: TemplateKey, mut template: T) {
+        template.root_mut().add(key.clone());
         self.templates.insert(key, Box::new(template));
     }
 
@@ -39,21 +40,32 @@ impl TemplateStore {
     }
 
     /// Spawns a template by key into the world.
-    pub fn spawn(&self, world: &mut World, key: TemplateKey) -> Result<Entity> {
-        Ok(world.spawn(&self.builder(key)?.build()))
+    pub fn spawn(
+        &self,
+        world: &mut World,
+        key: &TemplateKey,
+        extra: impl DynamicBundleClone,
+    ) -> Result<Entity> {
+        let template = self.get(key)?;
+        let mut builder = EntityBuilderClone::new();
+        builder.add_bundle(extra);
+        Ok(template.build(world, builder))
     }
 
     /// Spawns a template by key into the world.
-    pub fn spawn_deferred(&self, cmd: &mut CommandBuffer, key: TemplateKey) -> Result<()> {
-        cmd.spawn(&self.builder(key)?.build());
-        Ok(())
-    }
+    pub fn spawn_deferred<'a>(
+        &self,
+        world: &impl GenericWorld,
+        cmd: &mut CommandBuffer,
+        key: &TemplateKey,
+        extra: impl DynamicBundleClone,
+    ) -> Result<Entity> {
+        let template = self.get(key)?;
 
-    /// Builds a template and returns it
-    pub fn builder(&self, key: TemplateKey) -> Result<EntityBuilderClone> {
-        let mut builder = self.get(&key)?.builder();
-        builder.add(key);
-        Ok(builder)
+        let mut builder = EntityBuilderClone::new();
+        builder.add_bundle(extra);
+        let e = template.build_cmd(&world.into_empty(), cmd, builder);
+        Ok(e)
     }
 }
 
