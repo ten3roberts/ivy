@@ -1,7 +1,6 @@
 use crate::{
     bundles::*,
     collision::{resolve_collision, resolve_static_collision},
-    connections::{Connection, ConnectionKind},
     Effector, Result,
 };
 use glam::{Quat, Vec3};
@@ -9,8 +8,8 @@ use hecs::Entity;
 use hecs_hierarchy::{Hierarchy, HierarchyQuery};
 use hecs_schedule::{GenericWorld, Read, SubWorld};
 use ivy_base::{
-    AngularVelocity, DeltaTime, Events, Gravity, GravityInfluence, Mass, Position, Resitution,
-    Rotation, Static, Velocity,
+    AngularVelocity, Connection, ConnectionKind, DeltaTime, Events, Gravity, GravityInfluence,
+    Mass, Position, Resitution, Rotation, Static, Velocity,
 };
 use ivy_collision::{util::TOLERANCE, Collision};
 

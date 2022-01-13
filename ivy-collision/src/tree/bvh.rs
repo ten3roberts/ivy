@@ -233,20 +233,22 @@ where
         nodes: &mut Nodes<Self>,
         data: &SlotMap<ObjectIndex, ObjectData>,
         to_refit: &mut Vec<Object>,
+        despawned: &mut usize,
     ) -> bool {
         let node = &mut nodes[index];
 
-        if node.is_static {
+        if node.is_static && *despawned == 0 {
             return true;
         }
 
+        // Traverse children
         if let Some([left, right]) = node.children {
             assert!(node.objects.is_empty());
-            let l = Self::update_impl(left, nodes, data, to_refit);
-            let r = Self::update_impl(right, nodes, data, to_refit);
+            let l = Self::update_impl(left, nodes, data, to_refit, despawned);
+            let r = Self::update_impl(right, nodes, data, to_refit, despawned);
             let is_static = l && r;
 
-            nodes[index].is_static = false;
+            nodes[index].is_static = is_static;
             is_static
         } else {
             let bounds = node.bounds;
@@ -255,7 +257,15 @@ where
             let mut is_static = true;
 
             node.objects.retain(|val| {
-                let obj = data[val.index];
+                let obj = match data.get(val.index) {
+                    Some(val) => val,
+                    // Entity was removed
+                    None => {
+                        removed += 1;
+                        *despawned -= 1;
+                        return false;
+                    }
+                };
 
                 is_static = is_static && obj.is_static;
 
@@ -349,8 +359,9 @@ impl<O: Array<Item = Object> + Component> CollisionTreeNode for BVHNode<O> {
         nodes: &mut Nodes<Self>,
         data: &SlotMap<ObjectIndex, ObjectData>,
         to_refit: &mut Vec<Object>,
+        despawned: &mut usize,
     ) {
-        Self::update_impl(index, nodes, data, to_refit);
+        Self::update_impl(index, nodes, data, to_refit, despawned);
     }
 
     fn check_collisions(

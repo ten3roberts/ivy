@@ -1,5 +1,5 @@
 use hecs::{Component, Entity, EntityBuilderClone, World};
-use hecs_hierarchy::DeferredTreeBuilder;
+use hecs_hierarchy::TreeBuilderClone;
 use hecs_schedule::{CommandBuffer, GenericWorld, SubWorldRef};
 
 pub trait Template: Component {
@@ -43,19 +43,19 @@ impl Template for EntityBuilderClone {
     }
 }
 
-impl<T: Component + Clone> Template for DeferredTreeBuilder<T> {
+impl<T: Component> Template for TreeBuilderClone<T> {
     fn root(&self) -> &EntityBuilderClone {
-        self.builder()
+        self.root()
     }
 
     fn root_mut(&mut self) -> &mut EntityBuilderClone {
-        self.builder_mut()
+        self.root_mut()
     }
 
     fn build(&self, world: &mut World, extra: EntityBuilderClone) -> Entity {
         let mut builder = self.clone();
 
-        builder.builder_mut().add_bundle(&extra.build());
+        builder.root_mut().add_bundle(&extra.build());
         builder.spawn(world)
     }
 
@@ -67,7 +67,7 @@ impl<T: Component + Clone> Template for DeferredTreeBuilder<T> {
     ) -> Entity {
         let mut builder = self.clone();
 
-        builder.builder_mut().add_bundle(&extra.build());
+        builder.root_mut().add_bundle(&extra.build());
         builder.spawn_deferred(world, cmd)
     }
 }

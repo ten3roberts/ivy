@@ -2,12 +2,14 @@ use std::{borrow::Cow, time::Duration};
 
 use derive_for::*;
 use derive_more::*;
-use glam::{Mat3, Mat4, Quat, Vec2, Vec3};
+use glam::{Mat3, Mat4, Quat, Vec2, Vec3, Vec4Swizzles};
 use hecs::{Bundle, Query};
 use ivy_random::Random;
 #[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
+mod connections;
 mod physics;
+pub use connections::*;
 pub use physics::*;
 
 derive_for!(
@@ -202,6 +204,10 @@ impl TransformMatrix {
     pub fn decompose(&self) -> (Scale, Rotation, Position) {
         let (scale, rot, pos) = self.to_scale_rotation_translation();
         (scale.into(), rot.into(), pos.into())
+    }
+
+    pub fn translation(&self) -> Position {
+        self.col(3).xyz().into()
     }
 }
 

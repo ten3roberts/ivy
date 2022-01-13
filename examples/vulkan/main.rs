@@ -23,12 +23,7 @@ use ivy::{
 use ivy_resources::Resources;
 use movement::{move_system, Mover, WithTime};
 use physics::{
-    bundles::*,
-    connections::{
-        draw_connections, Connection, ConnectionBundle, ConnectionKind, PositionOffset,
-        RotationOffset,
-    },
-    Effector, PhysicsLayer, PhysicsLayerInfo,
+    bundles::*, connections::draw_connections, Effector, PhysicsLayer, PhysicsLayerInfo,
 };
 use postprocessing::pbr::PBRInfo;
 use presets::{GeometryPass, ImagePass, TextPass};
@@ -525,45 +520,42 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
         })
         .add_bundle(ImageBundle {
             image: heart,
-            pass: assets.ui_pass,
             color: Color::white(),
         })
-        .add_bundle((Interactive, Reactive::new(Color::white(), Color::gray())));
+        .add_bundle((
+            assets.ui_pass,
+            Interactive,
+            Reactive::new(Color::white(), Color::gray()),
+        ));
 
     world.attach_new::<Widget, _>(canvas, builder.build())?;
 
-    let mut builder = EntityBuilder::new();
-    builder
-        .add_bundle(WidgetBundle {
-            rel_offset: RelativeOffset::new(1.0, -1.0),
-            abs_offset: AbsoluteOffset::new(-10.0, 10.0),
-            abs_size: AbsoluteSize::new(512.0, 60.0),
-            origin: Origin2D::new(1.0, -1.0),
-            aspect: Aspect(0.0),
-            ..Default::default()
-        })
-        .add_bundle(ImageBundle {
-            image: input_field,
-            color: Color::white(),
-            pass: assets.ui_pass,
-        })
-        .add(Reactive::new(Color::white(), Color::gray()));
-
-    InputField::spawn(
+    let field = InputField::spawn(
         world,
-        canvas,
         InputFieldInfo {
             text: TextBundle {
                 font,
-                pass: assets.text_pass,
                 align: Alignment::new(HorizontalAlign::Left, VerticalAlign::Middle),
+                margin: Margin::new(20.0, 0.0),
                 ..Default::default()
             },
-            field: builder,
-            placeholder: "Enter text:".into(),
-            text_padding: Vec2::new(10.0, 10.0),
+            text_pass: assets.text_pass,
+            background_pass: assets.ui_pass,
+            widget: WidgetBundle {
+                abs_size: AbsoluteSize::new(400.0, 60.0),
+                rel_offset: RelativeOffset::new(1.0, -1.0),
+                abs_offset: AbsoluteOffset::new(-20.0, 20.0),
+                origin: Origin2D::lower_right(),
+                ..Default::default()
+            },
+            background: ImageBundle {
+                image: input_field,
+                color: Color::white(),
+            },
         },
-    )?;
+    );
+
+    world.attach::<Widget>(field, canvas)?;
 
     let mut builder = EntityBuilder::new();
     builder
@@ -577,9 +569,9 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
             text: Text::new("Debug"),
             color: Color::white(),
             align: Alignment::new(HorizontalAlign::Left, VerticalAlign::Top),
-            pass: assets.text_pass,
             ..Default::default()
         })
+        .add(assets.text_pass)
         .add(DisplayDebugReport);
 
     world.attach_new::<Widget, _>(canvas, builder.build())?;
@@ -595,8 +587,8 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
         .add_bundle(ImageBundle {
             image: heart,
             color: Color::white(),
-            pass: assets.ui_pass,
         })
+        .add(assets.ui_pass)
         .add(WithTime::<RelativeOffset>::new(Box::new(
             |_, offset, elapsed, _| {
                 offset.x = (elapsed * 0.25).sin();
@@ -617,8 +609,8 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
         .add_bundle(ImageBundle {
             image: heart,
             color: Color::white(),
-            pass: assets.ui_pass,
-        });
+        })
+        .add(assets.ui_pass);
 
     world.attach_new::<Widget, _>(widget2, builder.build())?;
 
@@ -633,9 +625,9 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
             font,
             color: Color::purple(),
             align: Alignment::new(HorizontalAlign::Center, VerticalAlign::Top),
-            pass: assets.text_pass,
             ..Default::default()
-        });
+        })
+        .add(assets.text_pass);
 
     world.attach_new::<Widget, _>(widget2, builder.build())?;
 
@@ -652,9 +644,9 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
             text: Text::new("Ivy"),
             color: Color::dark_green(),
             align: Alignment::new(HorizontalAlign::Left, VerticalAlign::Bottom),
-            pass: assets.text_pass,
             ..Default::default()
-        });
+        })
+        .add(assets.text_pass);
 
     world.attach_new::<Widget, _>(widget2, builder.build())?;
 
@@ -668,8 +660,8 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
         .add_bundle(ImageBundle {
             image: heart,
             color: Color::white(),
-            pass: assets.ui_pass,
         })
+        .add(assets.ui_pass)
         .add(WithTime::<RelativeOffset>::new(Box::new(
             |_, offset, elapsed, _| {
                 *offset = RelativeOffset::new((elapsed).cos() * 4.0, elapsed.sin() * 2.0) * 0.5
@@ -688,8 +680,8 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
         .add_bundle(ImageBundle {
             image: heart,
             color: Color::white(),
-            pass: assets.ui_pass,
         })
+        .add(assets.ui_pass)
         .add(WithTime::<RelativeOffset>::new(Box::new(
             |_, offset, elapsed, _| {
                 *offset = RelativeOffset::new(-(elapsed * 5.0).cos(), -(elapsed * 5.0).sin()) * 0.5

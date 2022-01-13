@@ -125,18 +125,14 @@ impl<N: CollisionTreeNode> CollisionTree<N> {
         }
     }
 
-    fn handle_removed(&mut self) {
-        for object in self.rx.try_iter() {
-            let index = N::locate(
-                self.root,
-                &mut self.nodes,
-                object,
-                &self.objects.remove(object.index).unwrap(),
-            )
-            .expect("Object in tree");
-
-            self.nodes[index].remove(object);
-        }
+    fn handle_despawned(&mut self) -> usize {
+        let objects = &mut self.objects;
+        self.rx
+            .try_iter()
+            .map(|object| {
+                objects.remove(object.index);
+            })
+            .count()
     }
 
     pub fn update(
@@ -149,10 +145,18 @@ impl<N: CollisionTreeNode> CollisionTree<N> {
             self.objects[obj.index] = data;
         }
 
-        self.handle_removed();
+        let mut despawned = self.handle_despawned();
 
         // Update tree
-        N::update(self.root, &mut self.nodes, &self.objects, &mut self.popped);
+        N::update(
+            self.root,
+            &mut self.nodes,
+            &self.objects,
+            &mut self.popped,
+            &mut despawned,
+        );
+
+        assert_eq!(despawned, 0);
 
         for object in self.popped.drain(..) {
             N::insert(self.root, &mut self.nodes, object, &self.objects)

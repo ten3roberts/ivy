@@ -14,18 +14,10 @@ use serde::{Deserialize, Serialize};
 /// A struct specifying how a widget should react based on hover, press, and
 /// release. The struct holds the values which will be used for each state
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[derive(Clone, Copy, Debug)]
 pub struct Reactive<T> {
     pub unfocused: T,
     pub focused: T,
-}
-
-impl<T: std::fmt::Debug> std::fmt::Debug for Reactive<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Reactive")
-            .field("unfocused", &self.unfocused)
-            .field("focused", &self.focused)
-            .finish()
-    }
 }
 
 impl<T: Default> Default for Reactive<T> {

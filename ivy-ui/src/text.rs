@@ -116,13 +116,13 @@ impl Text {
 
         self.layout.reset(&fontdue::layout::LayoutSettings {
             x: -bounds.x + margin.x,
-            y: bounds.y + margin.y,
+            y: bounds.y - margin.y,
             max_width: if wrap == WrapStyle::Overflow {
                 None
             } else {
                 Some(bounds.x * 2.0 - margin.x)
             },
-            max_height: Some(bounds.y * 2.0 - margin.y),
+            max_height: Some(bounds.y * 2.0 + margin.y),
             horizontal_align: alignment.horizontal,
             vertical_align: alignment.vertical,
             wrap_style: match wrap {

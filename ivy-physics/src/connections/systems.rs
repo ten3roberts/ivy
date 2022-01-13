@@ -2,7 +2,7 @@ use crate::{Effector, Result};
 use hecs::*;
 use hecs_hierarchy::*;
 use hecs_schedule::{GenericWorld, SubWorld};
-use ivy_base::{Color, Gizmos, Position, TransformQuery};
+use ivy_base::{Color, Connection, Gizmos, Position, TransformQuery};
 
 use super::*;
 
@@ -24,61 +24,61 @@ pub fn update_connections(
 }
 
 fn update_subtree(world: &impl GenericWorld, root: Entity) -> Result<()> {
-    let mut query = world.try_query_one::<(TransformQuery, RbQuery)>(root)?;
+    let mut query = world.try_query_one::<(TransformQuery, Option<RbQuery>)>(root)?;
 
     if let Ok((parent_trans, rb)) = query.get() {
         let parent_trans = parent_trans.into_owned();
-        let mut parent_rb = RbBundle {
+        let mut parent_rb = rb.map(|val| RbBundle {
+            vel: *val.vel,
+            mass: *val.mass,
+            ang_mass: *val.ang_mass,
+            ang_vel: *val.ang_vel,
+            resitution: *val.resitution,
             effector: Effector::new(),
-            vel: *rb.vel,
-            mass: *rb.mass,
-            ang_mass: *rb.ang_mass,
-            ang_vel: *rb.ang_vel,
-            resitution: *rb.resitution,
-        };
+        });
 
         drop(query);
 
         world
             .children::<Connection>(root)
             .try_for_each(|child| -> Result<_> {
-                let mut query = world.try_query_one::<(
-                    &PositionOffset,
-                    &RotationOffset,
-                    TransformQueryMut,
-                    RbQueryMut,
-                    &ConnectionKind,
-                    &mut Effector,
-                )>(child)?;
+                let mut fixed = world
+                    .try_query_one::<(&PositionOffset, &RotationOffset, TransformQueryMut)>(
+                        child,
+                    )?;
 
-                if let Ok((
-                    offset_pos,
-                    offset_rot,
-                    child_trans,
-                    child_rb,
-                    connection_kind,
-                    effector,
-                )) = query.get()
+                let (offset_pos, offset_rot, child_trans) = fixed.get()?;
+
+                let mut dynamic =
+                    world.try_query_one::<(RbQueryMut, &ConnectionKind, &mut Effector)>(child)?;
+
+                if let (Some(parent_rb), Ok((child_rb, connection_kind, effector))) =
+                    (parent_rb.as_mut(), dynamic.get())
                 {
-                    connection_kind.update(
+                    update_connection(
+                        connection_kind,
                         offset_pos,
                         offset_rot,
                         child_trans,
                         child_rb,
                         &parent_trans,
-                        &mut parent_rb,
+                        parent_rb,
                         effector,
                     );
+                } else {
+                    update_fixed(offset_pos, offset_rot, &parent_trans, child_trans);
                 }
 
-                drop(query);
+                drop((fixed, dynamic));
                 update_subtree(world, child)?;
 
                 Ok(())
             })?;
 
-        let mut effector = world.try_get_mut::<Effector>(root)?;
-        *effector += parent_rb.effector;
+        if let Some(rb) = parent_rb {
+            let mut effector = world.try_get_mut::<Effector>(root)?;
+            *effector += rb.effector;
+        }
 
         Ok(())
     } else {

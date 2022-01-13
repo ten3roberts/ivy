@@ -1,15 +1,16 @@
 use crate::{apply_constraints, update_from, Alignment, Result, Widget};
 use fontdue::layout::{HorizontalAlign, VerticalAlign};
+use glam::Vec2;
 use hecs::Entity;
 use hecs_hierarchy::Hierarchy;
 use hecs_schedule::GenericWorld;
 use ivy_base::{Position2D, Size2D};
-use glam::Vec2;
 
 /// UI component for automatically managing placing of children.
 /// Immediate children of a widget with a layout will be placed automatically
 /// and have their position constraints ignored.
 #[records::record]
+#[derive(Clone, Copy)]
 pub struct WidgetLayout {
     kind: LayoutKind,
     align: Alignment,

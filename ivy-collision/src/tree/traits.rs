@@ -55,11 +55,17 @@ pub trait CollisionTreeNode: 'static + Sized + Send + Sync {
         self.children().is_empty()
     }
 
+    /// `despawned` is set to the number of entities despawned from the world
+    ///  Indicates that it has also been removed from data, and should be removed
+    ///  from the node.
+    ///  The count shall be decremented to account for the detection of removed
+    ///  entities.
     fn update(
         index: NodeIndex,
         nodes: &mut Nodes<Self>,
         data: &SlotMap<ObjectIndex, ObjectData>,
         to_refit: &mut Vec<Object>,
+        despawned: &mut usize,
     );
 
     fn check_collisions(
@@ -96,6 +102,7 @@ impl CollisionTreeNode for () {
         _: &mut Nodes<Self>,
         _: &SlotMap<ObjectIndex, ObjectData>,
         _: &mut Vec<Object>,
+        _: &mut usize,
     ) {
     }
 

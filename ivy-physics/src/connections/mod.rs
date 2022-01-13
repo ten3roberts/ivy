@@ -1,158 +1,73 @@
-use derive_for::*;
-use derive_more::*;
-use hecs::Bundle;
-use ivy_base::{Position, TransformBundle, TransformQueryMut, Velocity};
+use ivy_base::{
+    ConnectionKind, Position, PositionOffset, RotationOffset, TransformBundle, TransformQueryMut,
+    Velocity,
+};
 
 mod systems;
-use glam::{EulerRot, Quat, Vec3};
 pub use systems::*;
 
 use crate::{bundles::*, util::point_vel, Effector};
 
-derive_for!(
-    (
-        Add,
-        AsRef,
-        Clone,
-        Copy,
-        Debug,
-        Deref,
-        DerefMut,
-        Div,
-        DivAssign,
-        Sub,
-        From,
-        Into,
-        Mul,
-        MulAssign,
-        Default,
-        PartialEq,
-        Display,
-    );
-    /// Describes the offset of the entity from the parent
-    pub struct PositionOffset(pub Vec3);
-    pub struct RotationOffset(pub Quat);
-);
-
-impl PositionOffset {
-    pub fn new(x: f32, y: f32, z: f32) -> Self {
-        Self(Vec3::new(x, y, z))
-    }
+/// Updates a connection that has no rigidbody
+pub fn update_fixed(
+    offset_pos: &PositionOffset,
+    offset_rot: &RotationOffset,
+    parent: &TransformBundle,
+    child: TransformQueryMut,
+) {
+    let pos = Position(parent.into_matrix().transform_point3(**offset_pos));
+    *child.pos = pos;
+    *child.rot = parent.rot * **offset_rot;
 }
 
-impl RotationOffset {
-    pub fn euler_angles(roll: f32, pitch: f32, yaw: f32) -> Self {
-        Self(Quat::from_euler(EulerRot::ZXY, roll, pitch, yaw))
-    }
-    /// Creates an angular velocity from an axis angle rotation. Note: Axis is
-    /// assumed to be normalized.
-    pub fn axis_angle(axis: Vec3, angle: f32) -> Self {
-        Self(Quat::from_axis_angle(axis, angle))
-    }
-}
+pub fn update_connection(
+    kind: &ConnectionKind,
+    offset_pos: &PositionOffset,
+    offset_rot: &RotationOffset,
+    child_trans: TransformQueryMut,
+    rb: RbQueryMut,
+    parent: &TransformBundle,
+    parent_rb: &mut RbBundle,
+    effector: &mut Effector,
+) {
+    // The desired postion
+    let pos = Position(parent.into_matrix().transform_point3(**offset_pos));
+    let displacement = pos - *child_trans.pos;
+    match kind {
+        ConnectionKind::Rigid => {
+            // The desired velocity
+            let vel = Velocity(point_vel(pos - parent.pos, parent_rb.ang_vel) + *parent_rb.vel);
 
-/// Marker type for two physically connected objects.
-pub struct Connection;
+            let total_mass = *rb.mass + parent_rb.mass;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum ConnectionKind {
-    /// Connection will not budge
-    Rigid,
-    /// The connection will excert a force to return to the desired position
-    Spring { strength: f32, dampening: f32 },
-}
+            let vel_diff = vel - *rb.vel;
 
-impl Default for ConnectionKind {
-    fn default() -> Self {
-        Self::Rigid
-    }
-}
+            *rb.ang_vel = parent_rb.ang_vel;
+            // *child_trans.rot = parent_trans.rot * **offset_rot;
 
-impl ConnectionKind {
-    pub fn rigid() -> Self {
-        Self::Rigid
-    }
+            let child_inf = **rb.mass / *total_mass;
+            let parent_inf = *parent_rb.mass / *total_mass;
 
-    pub fn spring(strength: f32, dampening: f32) -> Self {
-        Self::Spring {
+            effector.translate(*displacement * parent_inf);
+            parent_rb.effector.translate(-*displacement * child_inf);
+
+            effector.apply_velocity_change(*vel_diff * parent_inf);
+            parent_rb
+                .effector
+                .apply_velocity_change(*-vel_diff * child_inf);
+
+            *child_trans.rot = parent.rot * **offset_rot;
+        }
+        ConnectionKind::Spring {
             strength,
             dampening,
-        }
-    }
-}
+        } => {
+            let force = *displacement * *strength + **rb.vel * -dampening;
+            effector.apply_force(force);
+            parent_rb.effector.apply_force(-force);
 
-impl ConnectionKind {
-    fn update(
-        &self,
-        offset_pos: &PositionOffset,
-        offset_rot: &RotationOffset,
-        child_trans: TransformQueryMut,
-        rb: RbQueryMut,
-        parent_trans: &TransformBundle,
-        parent_rb: &mut RbBundle,
-        effector: &mut Effector,
-    ) {
-        // The desired postion
-        let pos = Position(parent_trans.into_matrix().transform_point3(**offset_pos));
-        let displacement = pos - *child_trans.pos;
-        match self {
-            Self::Rigid => {
-                // The desired velocity
-                let vel =
-                    Velocity(point_vel(pos - parent_trans.pos, parent_rb.ang_vel) + *parent_rb.vel);
-
-                let total_mass = *rb.mass + parent_rb.mass;
-
-                let vel_diff = vel - *rb.vel;
-
-                *rb.ang_vel = parent_rb.ang_vel;
-                // *child_trans.rot = parent_trans.rot * **offset_rot;
-
-                let child_inf = **rb.mass / *total_mass;
-                let parent_inf = *parent_rb.mass / *total_mass;
-
-                effector.translate(*displacement * parent_inf);
-                parent_rb.effector.translate(-*displacement * child_inf);
-
-                effector.apply_velocity_change(*vel_diff * parent_inf);
-                parent_rb
-                    .effector
-                    .apply_velocity_change(*-vel_diff * child_inf);
-
-                *child_trans.rot = parent_trans.rot * **offset_rot;
-            }
-            Self::Spring {
-                strength,
-                dampening,
-            } => {
-                let force = *displacement * *strength + **rb.vel * -dampening;
-                effector.apply_force(force);
-                parent_rb.effector.apply_force(-force);
-
-                *rb.ang_vel = parent_rb.ang_vel;
-                *child_trans.rot = parent_trans.rot * **offset_rot;
-            }
-        }
-    }
-}
-
-#[derive(Default, Bundle, Clone, Copy, Debug, PartialEq)]
-pub struct ConnectionBundle {
-    pub kind: ConnectionKind,
-    pub offset: PositionOffset,
-    pub rotation_offset: RotationOffset,
-}
-
-impl ConnectionBundle {
-    pub fn new(
-        kind: ConnectionKind,
-        offset: PositionOffset,
-        rotation_offset: RotationOffset,
-    ) -> Self {
-        Self {
-            kind,
-            offset,
-            rotation_offset,
+            *rb.ang_vel = parent_rb.ang_vel;
+            *child_trans.rot = parent.rot * **offset_rot;
         }
     }
 }

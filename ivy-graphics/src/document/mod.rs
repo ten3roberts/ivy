@@ -1,11 +1,14 @@
 use crate::{Animation, Error, Material, Mesh, PointLight, Result, SkinnedMesh};
 use gltf::Gltf;
-use hecs::{Bundle, Component, EntityBuilder, EntityBuilderClone};
+use hecs::{Bundle, Component, DynamicBundleClone, EntityBuilder, EntityBuilderClone};
+use hecs_hierarchy::TreeBuilderClone;
 use smallvec::SmallVec;
-use std::{borrow::Cow, path::Path, path::PathBuf};
+use std::{borrow::Cow, ops::Deref, path::Path, path::PathBuf};
 
 use glam::*;
-use ivy_base::{Color, Position, Rotation, Scale, Visible};
+use ivy_base::{
+    Color, Connection, Position, PositionOffset, Rotation, RotationOffset, Scale, Visible,
+};
 use ivy_resources::{Handle, LoadResource, Resources};
 use ivy_vulkan::{context::SharedVulkanContext, Texture};
 
@@ -18,6 +21,7 @@ pub(crate) use scheme::*;
 pub(crate) use util::*;
 
 #[derive(Debug, Clone)]
+#[doc(hidden)]
 pub struct Node {
     /// The name of this node.
     name: String,
@@ -233,79 +237,29 @@ impl Document {
         self.meshes[index]
     }
 
-    /// Returns the nodes in the document
-    pub fn nodes(&self) -> &[Node] {
-        &self.nodes
-    }
-
     /// Returns a reference to the node at index.
-    pub fn node(&self, index: usize) -> &Node {
-        &self.nodes[index]
+    pub fn node(&self, index: usize) -> DocumentNode {
+        let node = &self.nodes[index];
+        DocumentNode {
+            node,
+            index,
+            document: self,
+        }
     }
 
     /// Searches for the node with name.
-    pub fn find_node<S>(&self, name: S) -> Result<&Node>
+    pub fn find<S>(&self, name: S) -> Result<DocumentNode>
     where
         S: AsRef<str>,
     {
         let name = name.as_ref();
-        self.nodes
+        let index = self
+            .nodes
             .iter()
-            .find(|node| node.name == name)
-            .ok_or_else(|| Error::UnknownDocumentNode(name.to_owned()))
-    }
+            .position(|node| node.name == name)
+            .ok_or_else(|| Error::UnknownDocumentNode(name.to_owned()))?;
 
-    pub fn build_node_by_name<'a, S: AsRef<str>, B: GenericBuilder>(
-        &self,
-        name: S,
-        builder: &'a mut B,
-        info: &NodeBuildInfo,
-    ) -> Result<&'a mut B> {
-        let node = self.find_node(name)?;
-        Ok(self.build_node(node, builder, info))
-    }
-
-    /// Spawns a node using the supplied builder into the world
-    pub fn build_node_by_index<'a, B: GenericBuilder>(
-        &self,
-        index: usize,
-        builder: &'a mut B,
-        info: &NodeBuildInfo,
-    ) -> &'a mut B {
-        self.build_node(self.node(index), builder, info)
-    }
-    /// Spawns a node using the supplied builder into the world
-    pub fn build_node<'a, B: GenericBuilder>(
-        &self,
-        node: &Node,
-        builder: &'a mut B,
-        info: &NodeBuildInfo,
-    ) -> &'a mut B {
-        if let Some(mesh) = node.mesh {
-            builder.add(mesh);
-        }
-
-        if let Some(light) = node.light {
-            builder.add(light);
-        }
-
-        // Add skinning info
-        if info.skinned {
-            if let Some(mesh) = node.skinned_mesh {
-                builder.add(mesh);
-            }
-            if let Some(skin) = node.skin {
-                builder.add(skin);
-            }
-        }
-
-        builder.add(node.pos);
-        builder.add(node.rot);
-        builder.add(node.scale);
-        builder.add(Color::default());
-        builder.add(Visible::default());
-
-        builder
+        Ok(self.node(index))
     }
 }
 
@@ -331,11 +285,16 @@ impl LoadResource for Document {
 // Generic interface for cloneable and non coneable entity builders.
 pub trait GenericBuilder {
     fn add<T: Component + Clone>(&mut self, component: T) -> &mut Self;
+    fn add_bundle<T: DynamicBundleClone>(&mut self, bundle: T) -> &mut Self;
 }
 
 impl GenericBuilder for EntityBuilder {
     fn add<T: Component + Clone>(&mut self, component: T) -> &mut Self {
         self.add(component)
+    }
+
+    fn add_bundle<T: DynamicBundleClone>(&mut self, bundle: T) -> &mut Self {
+        self.add_bundle(bundle)
     }
 }
 
@@ -343,10 +302,114 @@ impl GenericBuilder for EntityBuilderClone {
     fn add<T: Component + Clone>(&mut self, component: T) -> &mut Self {
         self.add(component)
     }
+
+    fn add_bundle<T: DynamicBundleClone>(&mut self, bundle: T) -> &mut Self {
+        self.add_bundle(bundle)
+    }
 }
 
 #[records::record]
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct NodeBuildInfo {
     skinned: bool,
+}
+
+#[derive(Clone)]
+pub struct DocumentNode<'a> {
+    node: &'a Node,
+    index: usize,
+    document: &'a Document,
+}
+
+impl<'a> Deref for DocumentNode<'a> {
+    type Target = Node;
+
+    fn deref(&self) -> &Self::Target {
+        self.node
+    }
+}
+
+impl<'a> std::fmt::Debug for DocumentNode<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DocumentNode")
+            .field("node", &self.node)
+            .field("index", &self.index)
+            .finish()
+    }
+}
+
+impl<'d> DocumentNode<'d> {
+    /// Spawns a node using the supplied builder into the world
+    pub fn build<'a, B: GenericBuilder>(
+        &self,
+        builder: &'a mut B,
+        info: &NodeBuildInfo,
+    ) -> &'a mut B {
+        if let Some(mesh) = self.mesh {
+            builder.add(mesh);
+        }
+
+        if let Some(light) = self.light {
+            builder.add(light);
+        }
+
+        // Add skinning info
+        if info.skinned {
+            if let Some(mesh) = self.skinned_mesh {
+                builder.add(mesh);
+            }
+            if let Some(skin) = self.skin {
+                builder.add(skin);
+            }
+        }
+
+        builder.add_bundle((
+            self.pos,
+            self.rot,
+            self.scale,
+            PositionOffset(*self.pos),
+            RotationOffset(*self.rot),
+            Color::default(),
+            Visible::default(),
+        ));
+
+        builder
+    }
+
+    /// Recursively build the whole tree with node as root.
+    ///
+    /// Requires access to the orignal document.
+    ///
+    /// Behavior is undefined if a different document is used
+    pub fn build_tree<'a>(
+        &self,
+        builder: &'a mut TreeBuilderClone<Connection>,
+        info: &NodeBuildInfo,
+    ) -> &'a mut TreeBuilderClone<Connection> {
+        self.build(builder.root_mut(), info);
+
+        for child in self.children() {
+            let mut subtree = TreeBuilderClone::new();
+            let child = self.document.node(*child);
+            child.build_tree(&mut subtree, info);
+            builder.attach(subtree);
+        }
+
+        builder
+    }
+
+    /// Get the document node's index.
+    pub fn index(&self) -> usize {
+        self.index
+    }
+
+    /// Get the original document
+    pub fn document(&self) -> &Document {
+        self.document
+    }
+
+    /// Get the document node's node.
+    pub fn node(&self) -> &Node {
+        self.node
+    }
 }

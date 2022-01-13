@@ -33,8 +33,8 @@ impl InputField {
 
     pub fn build_tree<T: Component, U: Component, W: DynamicBundleClone>(
         info: InputFieldInfo<T, U, W>,
-    ) -> DeferredTreeBuilder<Widget> {
-        let mut builder = DeferredTreeBuilder::<Widget>::new();
+    ) -> TreeBuilder<Widget> {
+        let mut builder = TreeBuilder::<Widget>::new();
 
         builder
             .add_bundle(info.widget)
@@ -42,7 +42,7 @@ impl InputField {
             .add(info.text_pass)
             .add_bundle((Interactive, Sticky, InputField));
 
-        builder.attach_new({
+        builder.attach({
             let mut builder = EntityBuilderClone::new();
             builder
                 .add_bundle(info.background)
@@ -51,7 +51,8 @@ impl InputField {
                     ..Default::default()
                 })
                 .add(info.background_pass);
-            builder
+
+            &builder.build()
         });
 
         builder

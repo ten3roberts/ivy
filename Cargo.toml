@@ -56,7 +56,7 @@ parking_lot = "0.11.2"
 slotmap = "1.0.6"
 hecs = "0.7.3"
 glfw = { version = "0.43.0", features = [ "vulkan" ] }
-hecs-hierarchy = "0.10.1"
+hecs-hierarchy = "0.11.0"
 glam = "0.20.2"
 log = "0.4.14"
 

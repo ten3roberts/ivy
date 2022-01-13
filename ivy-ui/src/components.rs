@@ -256,6 +256,7 @@ impl Default for WrapStyle {
 
 /// Provide a function to execute when a widget is clicked.
 /// This can be used to send extra events when a specific widget is clicked.
+#[derive(Clone)]
 pub struct OnClick(pub fn(entity: EntityRef, &mut Events));
 
 impl OnClick {
