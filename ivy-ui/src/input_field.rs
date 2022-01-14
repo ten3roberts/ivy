@@ -1,68 +1,49 @@
 use glfw::{Action, Key, Modifiers};
-use hecs::{Component, DynamicBundleClone, Entity, EntityBuilderClone, World};
-use hecs_hierarchy::*;
-use hecs_schedule::{Read, SubWorld};
+use hecs::{Bundle, DynamicBundleClone, DynamicClone, Entity};
+use hecs_schedule::{Read, SubWorld, Write};
 
-use ivy_resources::Handle;
+use ivy_base::Events;
 
 use crate::{
-    constraints::RelativeSize, events::WidgetEvent, ImageBundle, Interactive, InteractiveState,
-    Result, Sticky, Text, TextBundle, Widget, WidgetBundle, WidgetEventKind,
+    events::WidgetEvent, Interactive, InteractiveState, Result, Sticky, Text, WidgetEventKind,
 };
 
-/// A bundle for easily creating input fields with a reactive component
-pub struct InputFieldInfo<T: Component, U: Component, W> {
-    pub text: TextBundle,
-    pub text_pass: Handle<T>,
-    pub background_pass: Handle<U>,
-    pub widget: W,
-    pub background: ImageBundle,
+/// A bundle for spawning an input field.
+///
+/// It is recommended to also include a TextBundle and a ImageBundle, as well as
+/// appropriate passes.
+#[derive(Default, Bundle, Clone, DynamicBundleClone)]
+
+pub struct InputFieldBundle {
+    pub interactive: Interactive,
+    pub sticky: Sticky,
+    pub field: InputField,
 }
 
-#[derive(Default, Debug, Clone, Copy, PartialEq)]
-pub struct InputField;
+impl Default for InputField {
+    fn default() -> Self {
+        Self {
+            on_submit: |_, _, _| (),
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct InputField {
+    pub on_submit: fn(Entity, &mut Events, value: &str),
+}
 
 impl InputField {
-    /// Creates a new input field.
-    pub fn spawn<T: Component, U: Component, W: DynamicBundleClone>(
-        world: &mut World,
-        info: InputFieldInfo<T, U, W>,
-    ) -> Entity {
-        Self::build_tree(info).spawn(world)
-    }
-
-    pub fn build_tree<T: Component, U: Component, W: DynamicBundleClone>(
-        info: InputFieldInfo<T, U, W>,
-    ) -> TreeBuilder<Widget> {
-        let mut builder = TreeBuilder::<Widget>::new();
-
-        builder
-            .add_bundle(info.widget)
-            .add_bundle(info.text)
-            .add(info.text_pass)
-            .add_bundle((Interactive, Sticky, InputField));
-
-        builder.attach({
-            let mut builder = EntityBuilderClone::new();
-            builder
-                .add_bundle(info.background)
-                .add_bundle(WidgetBundle {
-                    rel_size: RelativeSize::new(1.0, 1.0),
-                    ..Default::default()
-                })
-                .add(info.background_pass);
-
-            &builder.build()
-        });
-
-        builder
+    pub fn new(on_submit: fn(Entity, &mut Events, value: &str)) -> Self {
+        Self { on_submit }
     }
 }
 
 pub fn input_field_system(
     world: SubWorld<(&mut InputField, &mut Text)>,
     state: Read<InteractiveState>,
-    events: impl Iterator<Item = WidgetEvent>,
+    reader: impl Iterator<Item = WidgetEvent>,
+    mut events: Write<Events>,
 ) -> Result<()> {
     let focused = match state.focused() {
         Some(val) => val,
@@ -70,12 +51,20 @@ pub fn input_field_system(
     };
 
     let mut query = world.query_one::<(&mut InputField, &mut Text)>(focused)?;
-    let (_, text) = match query.get().ok() {
+    let (field, text) = match query.get().ok() {
         Some(val) => val,
         None => return Ok(()),
     };
 
-    events.for_each(|event| match event.kind {
+    reader.for_each(|event| match event.kind {
+        WidgetEventKind::Focus(false)
+        | WidgetEventKind::Key {
+            key: Key::Enter,
+            action: Action::Press,
+            ..
+        } => {
+            (field.on_submit)(focused, &mut events, text.val());
+        }
         WidgetEventKind::CharTyped(c) => {
             text.append(c);
         }

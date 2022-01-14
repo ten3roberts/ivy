@@ -312,6 +312,7 @@ impl GenericBuilder for EntityBuilderClone {
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct NodeBuildInfo {
     skinned: bool,
+    light_radius: f32,
 }
 
 #[derive(Clone)]
@@ -349,7 +350,8 @@ impl<'d> DocumentNode<'d> {
             builder.add(mesh);
         }
 
-        if let Some(light) = self.light {
+        if let Some(mut light) = self.light {
+            light.radius = info.light_radius;
             builder.add(light);
         }
 

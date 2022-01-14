@@ -44,8 +44,8 @@ impl UILayer {
                     )
                 },
             )
-            .add_system(move |w: SubWorld<_>, state: Read<_>| {
-                input_field_system(w, state, input_field_rx.try_iter())
+            .add_system(move |w: SubWorld<_>, state: Read<_>, events: Write<_>| {
+                input_field_system(w, state, input_field_rx.try_iter(), events)
             })
             .build();
 

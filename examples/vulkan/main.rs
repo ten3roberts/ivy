@@ -511,6 +511,7 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
     })??;
 
     let mut builder = EntityBuilder::new();
+
     builder
         .add_bundle(WidgetBundle {
             rel_offset: RelativeOffset::new(-0.25, -0.5),
@@ -530,34 +531,32 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
 
     world.attach_new::<Widget, _>(canvas, builder.build())?;
 
-    let field = InputField::spawn(
-        world,
-        InputFieldInfo {
-            text: TextBundle {
-                font,
-                align: Alignment::new(HorizontalAlign::Left, VerticalAlign::Middle),
-                margin: Margin::new(20.0, 0.0),
-                ..Default::default()
-            },
-            text_pass: assets.text_pass,
-            background_pass: assets.ui_pass,
-            widget: WidgetBundle {
-                abs_size: AbsoluteSize::new(400.0, 60.0),
-                rel_offset: RelativeOffset::new(1.0, -1.0),
-                abs_offset: AbsoluteOffset::new(-20.0, 20.0),
-                origin: Origin2D::lower_right(),
-                ..Default::default()
-            },
-            background: ImageBundle {
-                image: input_field,
-                color: Color::white(),
-            },
-        },
-    );
+    builder
+        .add_bundle(InputFieldBundle {
+            field: InputField::new(|_, _, val| println!("Input: {:?}", val)),
+            ..Default::default()
+        })
+        .add_bundle(WidgetBundle {
+            abs_size: AbsoluteSize::new(100.0, 100.0),
+            rel_offset: RelativeOffset::new(1.0, -1.0),
+            abs_offset: AbsoluteOffset::new(-20.0, 20.0),
+            origin: Origin2D::lower_right(),
+            ..Default::default()
+        })
+        .add_bundle(TextBundle {
+            text: Text::new(""),
+            font,
+            margin: Margin::new(10.0, 10.0),
+            ..Default::default()
+        })
+        .add_bundle(ImageBundle {
+            image: input_field,
+            ..Default::default()
+        })
+        .add_bundle((assets.text_pass, assets.ui_pass));
 
-    world.attach::<Widget>(field, canvas)?;
+    world.attach_new::<Widget, _>(canvas, builder.build())?;
 
-    let mut builder = EntityBuilder::new();
     builder
         .add_bundle(WidgetBundle {
             abs_size: AbsoluteSize::new(-10.0, -10.0),
@@ -576,7 +575,6 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
 
     world.attach_new::<Widget, _>(canvas, builder.build())?;
 
-    let mut builder = EntityBuilder::new();
     builder
         .add_bundle(WidgetBundle {
             rel_offset: RelativeOffset::new(0.0, -0.5),
