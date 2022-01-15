@@ -4,7 +4,7 @@ use ash::vk::{
 };
 use glam::{IVec4, Vec2, Vec3, Vec4};
 use gltf::buffer;
-use itertools::izip;
+use itertools::{izip, Itertools};
 use ivy_resources::Handle;
 use std::marker::PhantomData;
 use std::mem::size_of;
@@ -20,6 +20,7 @@ pub struct Vertex {
     position: Vec3,
     normal: Vec3,
     texcoord: Vec2,
+    tangent: Vec3,
 }
 
 /// A skinned vertex type with position, normal, texcoord and skinning
@@ -31,6 +32,7 @@ pub struct SkinnedVertex {
     position: Vec3,
     normal: Vec3,
     texcoord: Vec2,
+    tangent: Vec3,
     /// Joint indices
     joints: IVec4,
     /// Corresponding weight
@@ -67,6 +69,12 @@ impl vulkan::VertexDesc for Vertex {
             format: vk::Format::R32G32_SFLOAT,
             offset: 12 + 12,
         },
+        VertexInputAttributeDescription {
+            binding: 0,
+            location: 3,
+            format: vk::Format::R32G32B32_SFLOAT,
+            offset: 12 + 12 + 8,
+        },
     ];
 }
 
@@ -100,17 +108,24 @@ impl vulkan::VertexDesc for SkinnedVertex {
             format: vk::Format::R32G32_SFLOAT,
             offset: 12 + 12,
         },
+        // vec3 3*4 bytes
         VertexInputAttributeDescription {
             binding: 0,
             location: 3,
-            format: vk::Format::R32G32B32A32_SINT,
+            format: vk::Format::R32G32B32_SFLOAT,
             offset: 12 + 12 + 8,
         },
         VertexInputAttributeDescription {
             binding: 0,
             location: 4,
+            format: vk::Format::R32G32B32A32_SINT,
+            offset: 12 + 12 + 8 + 12,
+        },
+        VertexInputAttributeDescription {
+            binding: 0,
+            location: 5,
             format: vk::Format::R32G32B32A32_SFLOAT,
-            offset: 12 + 12 + 8 + 16,
+            offset: 12 + 12 + 8 + 12 + 16,
         },
     ];
 }
@@ -262,10 +277,30 @@ impl Mesh<Vertex> {
 
         // Simple quad
         let vertices = [
-            Vertex::new(Vec3::new(-hw, -hh, 0.0), Vec3::X, Vec2::new(0.0, 1.0)),
-            Vertex::new(Vec3::new(hw, -hh, 0.0), Vec3::X, Vec2::new(1.0, 1.0)),
-            Vertex::new(Vec3::new(hw, hh, 0.0), Vec3::X, Vec2::new(1.0, 0.0)),
-            Vertex::new(Vec3::new(-hw, hh, 0.0), Vec3::X, Vec2::new(0.0, 0.0)),
+            Vertex::new(
+                Vec3::new(-hw, -hh, 0.0),
+                Vec3::X,
+                Vec2::new(0.0, 1.0),
+                Vec3::Z,
+            ),
+            Vertex::new(
+                Vec3::new(hw, -hh, 0.0),
+                Vec3::X,
+                Vec2::new(1.0, 1.0),
+                Vec3::Z,
+            ),
+            Vertex::new(
+                Vec3::new(hw, hh, 0.0),
+                Vec3::X,
+                Vec2::new(1.0, 0.0),
+                Vec3::Z,
+            ),
+            Vertex::new(
+                Vec3::new(-hw, hh, 0.0),
+                Vec3::X,
+                Vec2::new(0.0, 0.0),
+                Vec3::Z,
+            ),
         ];
 
         let indices: [u32; 6] = [0, 1, 2, 2, 3, 0];
@@ -302,7 +337,8 @@ impl Mesh<Vertex> {
                 .read_positions()
                 .into_iter()
                 .flatten()
-                .map(Vec3::from);
+                .map(Vec3::from)
+                .collect_vec();
 
             let norm = reader.read_normals().into_iter().flatten().map(Vec3::from);
 
@@ -310,9 +346,19 @@ impl Mesh<Vertex> {
                 .read_tex_coords(0)
                 .into_iter()
                 .flat_map(|val| val.into_f32())
-                .map(Vec2::from);
+                .map(Vec2::from)
+                .collect_vec();
 
-            vertices.extend(izip!(pos, norm, texcoord).map(Vertex::from));
+            let tangents = generate_tangents(
+                &pos,
+                &texcoord,
+                reader
+                    .read_indices()
+                    .into_iter()
+                    .flat_map(|val| val.into_u32()),
+            );
+
+            vertices.extend(izip!(pos, norm, texcoord, tangents).map(Vertex::from));
 
             // Keep track of which materials map to which part of the index buffer
             if let Some(material) = materials.get(primitive.material().index().unwrap_or(0)) {
@@ -359,7 +405,8 @@ impl Mesh<SkinnedVertex> {
                 .read_positions()
                 .into_iter()
                 .flatten()
-                .map(Vec3::from);
+                .map(Vec3::from)
+                .collect_vec();
 
             let norm = reader.read_normals().into_iter().flatten().map(Vec3::from);
 
@@ -367,7 +414,8 @@ impl Mesh<SkinnedVertex> {
                 .read_tex_coords(0)
                 .into_iter()
                 .flat_map(|val| val.into_f32())
-                .map(Vec2::from);
+                .map(Vec2::from)
+                .collect_vec();
 
             let weights = reader
                 .read_weights(0)
@@ -381,7 +429,18 @@ impl Mesh<SkinnedVertex> {
                 .flat_map(|val| val.into_u16())
                 .map(|val| IVec4::new(val[0] as i32, val[1] as i32, val[2] as i32, val[3] as i32));
 
-            vertices.extend(izip!(pos, norm, texcoord, joints, weights).map(SkinnedVertex::from));
+            let tangents = generate_tangents(
+                &pos,
+                &texcoord,
+                reader
+                    .read_indices()
+                    .into_iter()
+                    .flat_map(|val| val.into_u32()),
+            );
+
+            vertices.extend(
+                izip!(pos, norm, texcoord, tangents, joints, weights,).map(SkinnedVertex::from),
+            );
 
             // Keep track of which materials map to which part of the index buffer
             if let Some(material) = materials.get(primitive.material().index().unwrap_or(0)) {
@@ -395,4 +454,36 @@ impl Mesh<SkinnedVertex> {
 
         Self::new(context, &vertices, &indices, primitives)
     }
+}
+
+fn generate_tangents(
+    positions: &Vec<Vec3>,
+    uvs: &Vec<Vec2>,
+    indices: impl Iterator<Item = u32>,
+) -> Vec<Vec3> {
+    let mut tangents = vec![Vec3::X; positions.len()];
+    let chunks = indices.chunks(3);
+    chunks.into_iter().for_each(|mut chunk| {
+        let (a, b, c) = chunk.next_tuple::<(u32, u32, u32)>().unwrap();
+        let [v0, v1, v2] = [
+            positions[a as usize],
+            positions[b as usize],
+            positions[c as usize],
+        ];
+
+        let [t0, t1, t2] = [uvs[a as usize], uvs[b as usize], uvs[c as usize]];
+
+        let d1 = v1 - v0;
+        let d2 = v2 - v0;
+        let dt1 = t1 - t0;
+        let dt2 = t2 - t0;
+
+        let r = 1.0 / (dt1.x * dt2.y - dt1.y * dt2.x);
+        let tangent = ((d1 * dt2.y - d2 * dt1.y) * r).normalize();
+        tangents[a as usize] = tangent;
+        tangents[b as usize] = tangent;
+        tangents[c as usize] = tangent;
+    });
+
+    tangents
 }

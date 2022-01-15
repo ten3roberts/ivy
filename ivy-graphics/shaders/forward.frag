@@ -10,8 +10,9 @@ layout(location = 3) in vec2 fragTexCoord;
 layout(location = 0) out vec4 outDiffuse;
 
 layout(set = 2, binding = 0) uniform sampler2D albedo;
+layout(set = 2, binding = 1) uniform sampler2D normal;
 
-layout(set = 2, binding = 1) uniform MaterialData {
+layout(set = 2, binding = 2) uniform MaterialData {
   float roughness;
   float metallic;
 } materialData;

@@ -125,7 +125,7 @@ impl Texture {
         Ok(texture)
     }
 
-    /// Creates a texture from provided raw pixels
+    /// Creates a new unitialized texture
     /// Note, raw pixels must match format, width, and height
     pub fn new(context: SharedVulkanContext, info: &TextureInfo) -> Result<Self> {
         let mut mip_levels = calculate_mip_levels(info.extent);

@@ -4,6 +4,7 @@
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 normal;
 layout(location = 2) in vec2 texCoord;
+layout(location = 3) in vec3 tangent;
 
 layout(location = 0) out vec3 fragModelPosition;
 layout(location = 1) out vec2 fragTexCoord;
@@ -19,7 +20,7 @@ layout(binding = 0) uniform CameraData {
 } cameraData;
 
 layout ( push_constant ) uniform ObjectData {
-  mat4 model; 
+  mat4 model;
   vec4 color;
   vec3 billboard_axis;
   float cornerRadius;
@@ -65,18 +66,18 @@ void main() {
     mat4 modelView = cameraData.view * objectData.model;
 
     // First colunm.
-    modelView[0][0] = objectData.model[0][0]; 
-    modelView[0][1] = 0.0; 
-    modelView[0][2] = 0.0; 
+    modelView[0][0] = objectData.model[0][0];
+    modelView[0][1] = 0.0;
+    modelView[0][2] = 0.0;
 
     // Second colunm.
-    modelView[1][0] = 0.0; 
-    modelView[1][1] = objectData.model[1][1]; 
-    modelView[1][2] = 0.0; 
+    modelView[1][0] = 0.0;
+    modelView[1][1] = objectData.model[1][1];
+    modelView[1][2] = 0.0;
 
     // Third colunm.
-    modelView[2][0] = 0.0; 
-    modelView[2][1] = 0.0; 
+    modelView[2][0] = 0.0;
+    modelView[2][1] = 0.0;
     modelView[2][2] = objectData.model[2][2];
 
     vec4 pos = vec4(inPosition, 1);

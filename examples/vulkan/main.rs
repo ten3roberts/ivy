@@ -136,6 +136,7 @@ fn setup_objects(
     let cube_mesh = resources.get(cube_document)?.mesh(0);
     let material = resources.load::<Material, _, _, _>(MaterialInfo {
         albedo: "./res/textures/metal.png".into(),
+        normal: Some("./res/textures/metal_normal.png".into()),
         sampler: SamplerInfo::default(),
         roughness: 0.1,
         metallic: 1.0,

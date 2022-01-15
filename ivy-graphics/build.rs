@@ -110,15 +110,13 @@ fn glslc(src: &Path, dst: &Path) -> Result<()> {
     };
 
     options.add_macro_definition("EP", Some("main"));
-    let binary_result = compiler
-        .compile_into_spirv(
-            &source,
-            kind,
-            &src.to_string_lossy(),
-            "main",
-            Some(&options),
-        )
-        .unwrap();
+    let binary_result = compiler.compile_into_spirv(
+        &source,
+        kind,
+        &src.to_string_lossy(),
+        "main",
+        Some(&options),
+    )?;
 
     assert_eq!(Some(&0x07230203), binary_result.as_binary().first());
 

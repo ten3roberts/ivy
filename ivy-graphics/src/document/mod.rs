@@ -126,7 +126,7 @@ impl Document {
         let materials = document
             .materials()
             .map(|material| {
-                Material::from_gltf(context.clone(), material, &textures, resources)
+                Material::from_gltf(&context, material, &textures, resources)
                     .map(|material| material_cache.insert(material))
             })
             .collect::<Result<Vec<_>>>()?;
