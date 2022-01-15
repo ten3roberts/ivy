@@ -46,8 +46,9 @@ impl<N: CollisionTreeNode + Storage> PhysicsLayer<N> {
             .default_entry::<CollisionTree<N>>()?
             .or_insert_with(|| CollisionTree::new(tree_root));
 
-        let resolve_collisions =
-            move |w: SubWorld<_>, e: Read<_>| systems::resolve_collisions(w, rx.try_iter(), e);
+        let resolve_collisions = move |w: SubWorld<_>, e: Read<_>, dt: Read<_>| {
+            systems::resolve_collisions(w, rx.try_iter(), e, dt)
+        };
 
         let schedule = Schedule::builder()
             .add_system(systems::integrate_velocity)

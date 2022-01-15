@@ -1,6 +1,5 @@
 use ivy_base::{
     ConnectionKind, Position, PositionOffset, RotationOffset, TransformBundle, TransformQueryMut,
-    Velocity,
 };
 
 mod systems;
@@ -36,7 +35,7 @@ pub fn update_connection(
     match kind {
         ConnectionKind::Rigid => {
             // The desired velocity
-            let vel = Velocity(point_vel(pos - parent.pos, parent_rb.ang_vel) + *parent_rb.vel);
+            let vel = point_vel(pos - parent.pos, parent_rb.ang_vel) + parent_rb.vel;
 
             let total_mass = *rb.mass + parent_rb.mass;
 

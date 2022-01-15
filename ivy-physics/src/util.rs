@@ -1,13 +1,12 @@
 //! This module contains physics utiliy functions
 
-use glam::Vec3;
-use ivy_base::{components::AngularVelocity, Position};
+use ivy_base::{components::AngularVelocity, Position, Velocity};
 
 /// Calculates the perpendicular velocity of a point rotating around origin.
-pub fn point_vel(p: Position, w: AngularVelocity) -> Vec3 {
+pub fn point_vel(p: Position, w: AngularVelocity) -> Velocity {
     if w.length_squared() < std::f32::EPSILON {
-        Vec3::default()
+        Velocity::default()
     } else {
-        -p.cross(*w)
+        Velocity(-p.cross(*w))
     }
 }

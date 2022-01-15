@@ -1,6 +1,6 @@
 use crate::{
     bundles::*,
-    collision::{resolve_collision, resolve_static_collision},
+    collision::{resolve_collision, resolve_static_collision, ResolveObject},
     Effector, Result,
 };
 use glam::{Quat, Vec3};
@@ -100,6 +100,7 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
         &ConnectionKind,
     )>,
     mut collisions: I,
+    dt: Read<DeltaTime>,
     _events: Read<Events>, // Wait for events
 ) -> Result<()> {
     collisions.try_for_each(|coll| -> Result<()> {
@@ -116,6 +117,7 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
                 coll.contact.points[1],
                 coll.contact.normal,
                 coll.contact.depth,
+                *dt,
             );
         } else if coll.b.is_static {
             return resolve_static(
@@ -125,6 +127,7 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
                 coll.contact.points[0],
                 -coll.contact.normal,
                 coll.contact.depth,
+                *dt,
             );
         } else if coll.a.is_static && coll.b.is_static {
             return Ok(());
@@ -137,34 +140,49 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
         let (a, a_mass) = get_rigid_root(&world, *coll.a)?;
         let (b, b_mass) = get_rigid_root(&world, *coll.b)?;
 
-        let mut a_query = world.try_query_one::<(RbQuery, &Position)>(a)?;
-        let (mut a, a_pos) = a_query.get().unwrap();
-        let a_pos = *a_pos;
-
-        let mut b_query = world.try_query_one::<(RbQuery, &Position)>(b)?;
-
-        let (mut b, b_pos) = b_query.get().unwrap();
-        let b_pos = *b_pos;
+        let mut a_query = world.try_query_one::<(RbQuery, &Position, &Effector)>(a)?;
+        let (a, pos, eff) = a_query.get().unwrap();
 
         // Modify mass to include all children masses
-        a.mass = &a_mass;
-        b.mass = &b_mass;
-        let total_mass = a_mass + b_mass;
 
-        let impulse = resolve_collision(&coll.contact, &a, a_pos, &b, b_pos);
+        let a = ResolveObject {
+            pos: *pos,
+            vel: *a.vel + eff.net_velocity_change(*a.mass, **dt),
+            ang_vel: *a.ang_vel,
+            resitution: *a.resitution,
+            mass: a_mass,
+            ang_mass: *a.ang_mass,
+        };
+
+        let mut b_query = world.try_query_one::<(RbQuery, &Position, &Effector)>(b)?;
+
+        let (b, pos, eff) = b_query.get().unwrap();
+
+        let b = ResolveObject {
+            pos: *pos,
+            vel: *b.vel + eff.net_velocity_change(*b.mass, **dt),
+            ang_vel: *b.ang_vel,
+            resitution: *b.resitution,
+            mass: b_mass,
+            ang_mass: *b.ang_mass,
+        };
+
+        let total_mass = a.mass + b.mass;
+
+        let impulse = resolve_collision(&coll.contact, &a, &b);
 
         drop((a_query, b_query));
 
         let dir = coll.contact.normal * coll.contact.depth;
 
         let mut effector = world.get_mut::<Effector>(*coll.a)?;
-        effector.apply_impulse_at(impulse, coll.contact.points[0] - a_pos);
-        effector.translate(-dir * (*b_mass / *total_mass));
+        effector.apply_impulse_at(impulse, coll.contact.points[0] - a.pos);
+        effector.translate(-dir * (*b.mass / *total_mass));
         drop(effector);
 
         let mut effector = world.get_mut::<Effector>(*coll.b)?;
-        effector.apply_impulse_at(-impulse, coll.contact.points[1] - b_pos);
-        effector.translate(dir * (*a_mass / *total_mass));
+        effector.apply_impulse_at(-impulse, coll.contact.points[1] - b.pos);
+        effector.translate(dir * (*a.mass / *total_mass));
 
         Ok(())
     })
@@ -178,6 +196,7 @@ fn resolve_static(
     contact: Position,
     normal: Vec3,
     depth: f32,
+    dt: DeltaTime,
 ) -> Result<()> {
     let mut a_query = world.try_query_one::<Option<&Resitution>>(a)?;
     let a_res = a_query
@@ -186,18 +205,22 @@ fn resolve_static(
 
     let mut b_query = world.try_query_one::<(RbQuery, &Position, &mut Effector)>(b)?;
 
-    if let Ok((rb, b_pos, effector)) = b_query.get() {
-        let impulse = resolve_static_collision(
-            contact,
-            normal,
-            a_res.cloned().unwrap_or_default(),
-            &rb,
-            *b_pos,
-        );
+    if let Ok((rb, pos, effector)) = b_query.get() {
+        let b = ResolveObject {
+            pos: *pos,
+            vel: *rb.vel + effector.net_velocity_change(*rb.mass, *dt),
+            ang_vel: *rb.ang_vel,
+            resitution: *rb.resitution,
+            mass: *rb.mass,
+            ang_mass: *rb.ang_mass,
+        };
+
+        let impulse =
+            resolve_static_collision(contact, normal, a_res.cloned().unwrap_or_default(), &b);
 
         let dir = normal * depth;
 
-        effector.apply_impulse_at(-impulse, contact - *b_pos);
+        effector.apply_impulse_at(-impulse, contact - b.pos);
         effector.translate(dir);
     }
 

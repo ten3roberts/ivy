@@ -1,25 +1,35 @@
 use glam::Vec3;
-use ivy_base::{components::Resitution, math::Inverse, Position};
+use ivy_base::{
+    components::Resitution, math::Inverse, AngularMass, AngularVelocity, Mass, Position, Velocity,
+};
 use ivy_collision::Contact;
 
-use crate::{bundles::*, util::point_vel};
+use crate::util::point_vel;
+
+#[derive(Debug, Clone)]
+pub(crate) struct ResolveObject {
+    pub pos: Position,
+    pub vel: Velocity,
+    pub ang_vel: AngularVelocity,
+    pub resitution: Resitution,
+    pub mass: Mass,
+    pub ang_mass: AngularMass,
+}
 
 /// Generates an impulse for solving a collision.
-pub fn resolve_collision(
+pub(crate) fn resolve_collision(
     intersection: &Contact,
-    a: &RbQuery,
-    a_pos: Position,
-    b: &RbQuery,
-    b_pos: Position,
+    a: &ResolveObject,
+    b: &ResolveObject,
 ) -> Vec3 {
-    let ra = intersection.points[0] - a_pos;
-    let rb = intersection.points[1] - b_pos;
-    let aw = *a.ang_vel;
-    let bw = *b.ang_vel;
+    let ra = intersection.points[0] - a.pos;
+    let rb = intersection.points[1] - b.pos;
+    let aw = a.ang_vel;
+    let bw = b.ang_vel;
     let n = intersection.normal;
 
-    let a_vel = **a.vel + point_vel(ra, aw);
-    let b_vel = **b.vel + point_vel(rb, bw);
+    let a_vel = a.vel + point_vel(ra, aw);
+    let b_vel = b.vel + point_vel(rb, bw);
     let contact_rel = (a_vel - b_vel).dot(n);
 
     let resitution = a.resitution.min(b.resitution.0);
@@ -36,18 +46,17 @@ pub fn resolve_collision(
     impulse
 }
 
-pub fn resolve_static_collision(
+pub(crate) fn resolve_static_collision(
     contact: Position,
     normal: Vec3,
     a_resitution: Resitution,
-    b: &RbQuery,
-    b_pos: Position,
+    b: &ResolveObject,
 ) -> Vec3 {
-    let rb = contact - b_pos;
-    let bw = *b.ang_vel;
+    let rb = contact - b.pos;
+    let bw = b.ang_vel;
     let n = normal;
 
-    let b_vel = **b.vel + point_vel(rb, bw);
+    let b_vel = b.vel + point_vel(rb, bw);
     let contact_rel = (-b_vel).dot(n);
 
     let resitution = a_resitution.min(b.resitution.0);
@@ -56,7 +65,7 @@ pub fn resolve_static_collision(
         // eprintln!("Separating");
         return Vec3::ZERO;
     }
-    let j = -(1.0 + resitution) * contact_rel * **b.mass
+    let j = -(1.0 + resitution) * contact_rel * *b.mass
         + rb.cross(n).length_squared() * b.ang_mass.inv();
 
     let impulse = j * normal;
