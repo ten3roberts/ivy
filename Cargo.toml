@@ -1,6 +1,6 @@
 [package]
 name = "ivy-engine"
-version = "0.10.4"
+version = "0.10.5"
 authors = ["Tim Roberts <ten3roberts@gmail.com>"]
 edition = "2018"
 description = "Application and game framework for Rust"
