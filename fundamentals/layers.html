@@ -164,7 +164,7 @@ propogated.</p>
 <p>The layer is a trait which must define an <code>on_update</code> function</p>
 <p>The following examples shows the basic usage of a layer, as well how to create
 an application using the layer.</p>
-<pre><pre class="playground"><code class="language-rust">use ivy::{App, Layer, Logger};
+<pre><pre class="playground"><code class="language-rust">use ivy_engine::{App, Layer, Logger};
 use log::{error, info};
 
 /// Define the game layer
@@ -180,7 +180,7 @@ impl Layer for GameLayer {
     fn on_update(
         &amp;mut self,
         _: &amp;mut hecs::World,
-        _: &amp;mut ivy::Resources,
+        _: &amp;mut ivy_engine::Resources,
         _: &amp;mut ivy_base::Events,
         _: std::time::Duration,
     ) -&gt; anyhow::Result&lt;()&gt; {
