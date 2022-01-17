@@ -1,6 +1,6 @@
 [package]
 name = "ivy-graphics"
-version = "0.10.2"
+version = "0.10.3"
 authors = ["Tim Roberts <ten3roberts@gmail.com>"]
 edition = "2018"
 description = "Provides high level graphics abstractions like Meshes, Materials, etc. Builds on top of ivy-vulkan"

@@ -1,6 +1,6 @@
 [package]
 name = "ivy-base"
-version = "0.10.2"
+version = "0.10.3"
 authors = ["Tim Roberts <ten3roberts@gmail.com>"]
 edition = "2018"
 description = "Base crate for the Ivy game engine"

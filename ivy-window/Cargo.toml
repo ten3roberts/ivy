@@ -1,6 +1,6 @@
 [package]
 name = "ivy-window"
-version = "0.10.2"
+version = "0.10.3"
 edition = "2021"
 description = "GLFW window wrapper"
 
