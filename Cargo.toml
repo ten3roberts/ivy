@@ -6,7 +6,7 @@ edition = "2018"
 description = "Application and game framework for Rust"
 
 license-file = "./LICENSE"
-keywords = [ "graphics", "physics", "game engine", "game", "vulkan" ]
+keywords = [ "graphics", "physics", "game-engine", "game", "vulkan" ]
 documentation = "https://lib.rs/ivy"
 repository = "https://github.com/ten3roberts/ivy-engine"
 readme = "./README.md"
