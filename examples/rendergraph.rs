@@ -119,6 +119,7 @@ impl GameLayer {
                 &mut builder,
                 &NodeBuildInfo {
                     skinned: false,
+                    animated: false,
                     light_radius: 0.1,
                 },
             )

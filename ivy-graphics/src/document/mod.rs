@@ -1,4 +1,6 @@
-use crate::{Animation, Error, Material, Mesh, PointLight, Result, SkinnedMesh};
+use crate::{
+    Animation, AnimationStore, Animator, Error, Material, Mesh, PointLight, Result, SkinnedMesh,
+};
 use gltf::Gltf;
 use hecs::{Bundle, Component, DynamicBundleClone, EntityBuilder, EntityBuilderClone};
 use hecs_hierarchy::TreeBuilderClone;
@@ -28,6 +30,7 @@ pub struct Node {
     /// The mesh index references by this node.
     mesh: Option<Handle<Mesh>>,
     skinned_mesh: Option<Handle<SkinnedMesh>>,
+    animations: AnimationStore,
     light: Option<PointLight>,
     skin: Option<Handle<Skin>>,
     pos: Position,
@@ -81,12 +84,16 @@ impl Node {
     pub fn skinned_mesh(&self) -> Option<Handle<SkinnedMesh>> {
         self.skinned_mesh
     }
+
+    /// Get a reference to the node's animations.
+    pub fn animations(&self) -> &AnimationStore {
+        &self.animations
+    }
 }
 
 pub struct Document {
     meshes: Vec<Handle<Mesh>>,
     materials: Vec<Handle<Material>>,
-    animations: Vec<Handle<Animation>>,
     skins: Vec<Handle<Skin>>,
     nodes: Vec<Node>,
 }
@@ -155,20 +162,25 @@ impl Document {
                 }
             })
             .collect::<Result<Vec<_>>>()?;
+
+        let skins: Vec<_> = document
+            .skins()
+            .map(|skin| -> Result<_> { Skin::from_gltf(&document, skin, buffers) })
+            .collect::<Result<Vec<_>>>()?;
+
         let mut animations = resources.fetch_mut::<Animation>()?;
 
         let animations = document
             .animations()
-            .map(|anim| Animation::from_gltf(anim, buffers))
-            .map(|val| animations.insert(val))
+            .flat_map(|anim| Animation::from_gltf(anim, &skins, buffers))
+            .map(|val| (val.skin(), (val.name().to_string(), animations.insert(val))))
             .collect::<Vec<_>>();
 
-        let mut skins = resources.fetch_mut()?;
-
-        let skins: Vec<_> = document
-            .skins()
-            .map(|skin| Skin::from_gltf(&document, skin, buffers).map(|skin| skins.insert(skin)))
-            .collect::<Result<Vec<_>>>()?;
+        let mut skin_cache = resources.fetch_mut()?;
+        let skins: Vec<_> = skins
+            .into_iter()
+            .map(|val| skin_cache.insert(val))
+            .collect();
 
         drop(mesh_cache);
 
@@ -180,9 +192,26 @@ impl Document {
                     .light()
                     .map(|val| PointLight::new(0.1, Vec3::from(val.color()) * val.intensity()));
 
+                let skin = node.skin().map(|skin| skins[skin.index()]);
+                let animations = if let Some(skin) = node.skin() {
+                    let skin = skin.index();
+                    let animations = animations.iter().filter_map(|val| {
+                        if val.0 == skin {
+                            Some(val.1.clone())
+                        } else {
+                            None
+                        }
+                    });
+
+                    AnimationStore::from(animations)
+                } else {
+                    AnimationStore::new()
+                };
+
                 Node {
                     name: node.name().unwrap_or_default().to_owned(),
-                    skin: node.skin().map(|skin| skins[skin.index()]),
+                    skin,
+                    animations,
                     light,
                     mesh: node.mesh().map(|mesh| meshes[mesh.index()]),
                     skinned_mesh: node.mesh().and_then(|mesh| skinned_meshes[mesh.index()]),
@@ -196,16 +225,10 @@ impl Document {
 
         Ok(Self {
             meshes,
-            animations,
             skins,
             nodes,
             materials,
         })
-    }
-
-    /// Get a reference to the document's animations.
-    pub fn animations(&self) -> &[Handle<Animation>] {
-        self.animations.as_ref()
     }
 }
 
@@ -219,11 +242,6 @@ impl Document {
     /// Returns the skin at index
     pub fn skin(&self, index: usize) -> Handle<Skin> {
         self.skins[index]
-    }
-
-    /// Returns the animation at index
-    pub fn animation(&self, index: usize) -> Handle<Animation> {
-        self.animations[index]
     }
 
     /// Get a reference to the document's skins.
@@ -312,6 +330,8 @@ impl GenericBuilder for EntityBuilderClone {
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct NodeBuildInfo {
     skinned: bool,
+    /// Insert an animator
+    animated: bool,
     light_radius: f32,
 }
 
@@ -363,6 +383,10 @@ impl<'d> DocumentNode<'d> {
             if let Some(skin) = self.skin {
                 builder.add(skin);
             }
+        }
+
+        if info.animated {
+            builder.add(Animator::new(self.animations.clone()));
         }
 
         builder.add_bundle((

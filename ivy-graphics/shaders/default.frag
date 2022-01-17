@@ -17,21 +17,16 @@ layout(set = 2, binding = 0) uniform sampler2D albedo;
 layout(set = 2, binding = 1) uniform sampler2D normalMap;
 
 layout(set = 2, binding = 2) uniform MaterialData {
-  float roughness;
-  float metallic;
-  int normal;
+	float roughness;
+	float metallic;
+	int normal;
 } materialData;
 
 void main() {
-  outAlbedo = vec4(texture(albedo, fragTexCoord).rgb, 1) * fragColor;
-  outPosition = vec4(fragPosition, 0);
-  if (materialData.normal != 0) {
-    vec3 normal = texture(normalMap, fragTexCoord).rgb * 2 - 1;
-    outNormal = normalize(TBN * normal);
-  } else {
+	outAlbedo = vec4(texture(albedo, fragTexCoord).rgb, 1) * fragColor;
+	outPosition = vec4(fragPosition, 0);
+	vec3 normal = texture(normalMap, fragTexCoord).rgb * 2 - 1;
+	outNormal = normalize(mix(fragNormal, TBN * normal, materialData.normal));
 
-    outNormal = normalize(fragNormal);
-  }
-
-  metallicRoughness = vec2(materialData.roughness, materialData.metallic);
+	metallicRoughness = vec2(materialData.roughness, materialData.metallic);
 }

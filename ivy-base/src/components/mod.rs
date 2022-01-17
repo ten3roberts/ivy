@@ -177,7 +177,19 @@ impl Size2D {
 }
 
 #[derive(
-    AsRef, PartialEq, Clone, Copy, Debug, Default, Deref, DerefMut, From, Into, Mul, MulAssign,
+    AsRef,
+    PartialEq,
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Deref,
+    DerefMut,
+    From,
+    Into,
+    Mul,
+    MulAssign,
+    Display,
 )]
 #[repr(transparent)]
 /// A matrix transforming a point from local space to world space. This can

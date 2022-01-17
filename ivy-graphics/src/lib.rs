@@ -15,7 +15,7 @@ mod mesh_renderer;
 mod renderer;
 
 mod allocator;
-mod animator;
+mod animation;
 mod environment;
 mod events;
 mod skinned_mesh_renderer;
@@ -26,7 +26,7 @@ pub mod shaders;
 pub mod systems;
 
 pub use allocator::*;
-pub use animator::*;
+pub use animation::*;
 pub use atlas::*;
 pub use base_renderer::*;
 pub use bundle::*;

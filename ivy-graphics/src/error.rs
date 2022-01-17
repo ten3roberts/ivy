@@ -56,4 +56,9 @@ pub enum Error {
 
     #[error("Gltf scheme is not supported")]
     UnsupportedScheme,
+
+    #[error("Missing action {0:?} for animator")]
+    MissingAnimation(String),
+    #[error("The animation index was out of bounds.\nAttempt to index animation {0}")]
+    InvalidAnimation(usize),
 }

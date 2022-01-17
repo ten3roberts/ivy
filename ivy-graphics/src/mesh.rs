@@ -26,17 +26,17 @@ pub struct Vertex {
 /// A skinned vertex type with position, normal, texcoord and skinning
 /// information.
 #[records::record]
-#[repr(C)]
+#[repr(C, align(16))]
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct SkinnedVertex {
     position: Vec3,
     normal: Vec3,
     texcoord: Vec2,
-    tangent: Vec3,
     /// Joint indices
     joints: IVec4,
     /// Corresponding weight
     weights: Vec4,
+    tangent: Vec3,
 }
 
 impl vulkan::VertexDesc for Vertex {
@@ -108,24 +108,24 @@ impl vulkan::VertexDesc for SkinnedVertex {
             format: vk::Format::R32G32_SFLOAT,
             offset: 12 + 12,
         },
-        // vec3 3*4 bytes
         VertexInputAttributeDescription {
             binding: 0,
             location: 3,
-            format: vk::Format::R32G32B32_SFLOAT,
+            format: vk::Format::R32G32B32A32_SINT,
             offset: 12 + 12 + 8,
         },
         VertexInputAttributeDescription {
             binding: 0,
             location: 4,
-            format: vk::Format::R32G32B32A32_SINT,
-            offset: 12 + 12 + 8 + 12,
+            format: vk::Format::R32G32B32A32_SFLOAT,
+            offset: 12 + 12 + 8 + 16,
         },
+        // vec3 3*4 bytes
         VertexInputAttributeDescription {
             binding: 0,
             location: 5,
-            format: vk::Format::R32G32B32A32_SFLOAT,
-            offset: 12 + 12 + 8 + 12 + 16,
+            format: vk::Format::R32G32B32_SFLOAT,
+            offset: 12 + 12 + 8 + 16 + 16,
         },
     ];
 }
@@ -439,7 +439,7 @@ impl Mesh<SkinnedVertex> {
             );
 
             vertices.extend(
-                izip!(pos, norm, texcoord, tangents, joints, weights,).map(SkinnedVertex::from),
+                izip!(pos, norm, texcoord, joints, weights, tangents,).map(SkinnedVertex::from),
             );
 
             // Keep track of which materials map to which part of the index buffer

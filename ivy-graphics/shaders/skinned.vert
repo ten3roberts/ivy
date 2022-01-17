@@ -4,14 +4,15 @@
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 normal;
 layout(location = 2) in vec2 texCoord;
-layout(location = 3) in vec3 tangent;
-layout(location = 4) in ivec4 joints;
-layout(location = 5) in vec4 weights;
+layout(location = 3) in ivec4 joints;
+layout(location = 4) in vec4 weights;
+layout(location = 5) in vec3 tangent;
 
 layout(location = 0) out vec3 fragPosition;
 layout(location = 1) out vec3 fragNormal;
 layout(location = 2) out vec4 fragColor;
 layout(location = 3) out vec2 fragTexCoord;
+layout(location = 4) out mat3 TBN;
 
 layout(binding = 0) uniform CameraData {
   mat4 viewproj;
@@ -55,9 +56,18 @@ void main() {
     totalNormal += worldNormal * weights[i];
   }
 
-  vec4 pos = objectData.model * totalLocalPos;
+  mat4 model = objectData.model;
+
+  vec3 bitangent = cross(normal, tangent);
+  vec3 T = vec3(model * vec4(tangent,   0.0));
+  vec3 B = vec3(model * vec4(bitangent, 0.0));
+  vec3 N = vec3(model * vec4(normal,    0.0));
+
+  TBN = mat3(T, B, N);
+
+  vec4 pos = model * totalLocalPos;
   fragPosition = pos.xyz;
-  fragNormal = normalize((objectData.model * totalNormal).xyz);
+  fragNormal = normalize((model * totalNormal).xyz);
 
   gl_Position = cameraData.viewproj * pos;
 }

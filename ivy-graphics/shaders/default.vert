@@ -36,7 +36,7 @@ void main() {
 
   mat4 model = objectData.model;
 
-  vec4 pos = objectData.model * vec4(inPosition, 1);
+  vec4 pos = model * vec4(inPosition, 1);
 
   fragPosition = pos.xyz;
   fragNormal = normalize((model * vec4(normal, 0.0)).xyz);
