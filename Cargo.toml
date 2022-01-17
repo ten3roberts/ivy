@@ -28,21 +28,22 @@ members = [
 ]
 
 [dependencies]
-ivy-collision = { path = "./ivy-collision" }
-ivy-templates = { path = "./ivy-templates" }
-ivy-base = { path = "./ivy-base" }
-ivy-graphics = { path = "./ivy-graphics" }
-ivy-image = { path = "./ivy-image" }
-ivy-input = { path = "./ivy-input" }
-ivy-physics = { path = "./ivy-physics" }
-ivy-postprocessing = { path = "./ivy-postprocessing" }
-ivy-random = { path = "./ivy-random" }
-ivy-rendergraph = { path = "./ivy-rendergraph" }
-ivy-resources = { path = "./ivy-resources" }
-ivy-ui = { path = "./ivy-ui" }
-ivy-vulkan = { path = "./ivy-vulkan" }
-ivy-presets = { path = "./ivy-presets", version = "0.10.0" }
-ivy-window = { path = "./ivy-window", version = "0.10.0" }
+ivy-collision      = { path = "./ivy-collision",      version = "0.10" }
+ivy-templates      = { path = "./ivy-templates",      version = "0.10" }
+ivy-base           = { path = "./ivy-base",           version = "0.10" }
+ivy-graphics       = { path = "./ivy-graphics",       version = "0.10" }
+ivy-image          = { path = "./ivy-image",          version = "0.10" }
+ivy-input          = { path = "./ivy-input",          version = "0.10" }
+ivy-physics        = { path = "./ivy-physics",        version = "0.10" }
+ivy-postprocessing = { path = "./ivy-postprocessing", version = "0.10" }
+ivy-random         = { path = "./ivy-random",         version = "0.10" }
+ivy-rendergraph    = { path = "./ivy-rendergraph",    version = "0.10" }
+ivy-resources      = { path = "./ivy-resources",      version = "0.10" }
+ivy-ui             = { path = "./ivy-ui",             version = "0.10" }
+ivy-vulkan         = { path = "./ivy-vulkan",         version = "0.10" }
+ivy-presets        = { path = "./ivy-presets",        version = "0.10" }
+ivy-window         = { path = "./ivy-window",         version = "0.10" }
+
 hecs = "0.7.3"
 hecs-schedule = "0.5.0"
 derive_more = "0.99.17"
