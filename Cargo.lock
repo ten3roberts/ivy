@@ -567,7 +567,7 @@ dependencies = [
 
 [[package]]
 name = "ivy-engine"
-version = "0.10.3"
+version = "0.10.4"
 dependencies = [
  "anyhow",
  "atomic_refcell",
