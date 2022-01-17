@@ -11,7 +11,7 @@ use glfw::{CursorMode, Key, MouseButton, WindowEvent};
 use graphics::layer::{WindowLayer, WindowLayerInfo};
 use hecs::*;
 use hecs_hierarchy::*;
-use ivy::{
+use ivy_engine::{
     base::*,
     graphics::*,
     input::*,

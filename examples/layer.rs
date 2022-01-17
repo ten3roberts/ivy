@@ -1,4 +1,4 @@
-use ivy::{App, Layer, Logger};
+use ivy_engine::{App, Layer, Logger};
 use log::{error, info};
 
 /// Define the game layer
@@ -14,7 +14,7 @@ impl Layer for GameLayer {
     fn on_update(
         &mut self,
         _: &mut hecs::World,
-        _: &mut ivy::Resources,
+        _: &mut ivy_engine::Resources,
         _: &mut ivy_base::Events,
         _: std::time::Duration,
     ) -> anyhow::Result<()> {

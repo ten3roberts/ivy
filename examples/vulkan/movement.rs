@@ -1,5 +1,5 @@
 use hecs::{Component, Entity, World};
-use ivy::{AngularVelocity, Input, InputVector, Rotation, Velocity};
+use ivy_engine::{AngularVelocity, Input, InputVector, Rotation, Velocity};
 
 pub struct WithTime<T> {
     func: Box<dyn Fn(Entity, &mut T, f32, f32) + Send + Sync>,

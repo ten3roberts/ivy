@@ -524,39 +524,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1aab8fc367588b89dcee83ab0fd66b72b50b72fa1904d7095045ace2b0c81c35"
 
 [[package]]
-name = "ivy"
-version = "0.10.3"
-dependencies = [
- "anyhow",
- "atomic_refcell",
- "derive_more",
- "flume",
- "glam",
- "glfw",
- "hecs",
- "hecs-hierarchy",
- "hecs-schedule",
- "ivy-base",
- "ivy-collision",
- "ivy-graphics",
- "ivy-image",
- "ivy-input",
- "ivy-physics",
- "ivy-postprocessing",
- "ivy-presets",
- "ivy-random",
- "ivy-rendergraph",
- "ivy-resources",
- "ivy-templates",
- "ivy-ui",
- "ivy-vulkan",
- "ivy-window",
- "log",
- "parking_lot",
- "slotmap",
-]
-
-[[package]]
 name = "ivy-base"
 version = "0.10.3"
 dependencies = [
@@ -596,6 +563,39 @@ dependencies = [
  "records",
  "slotmap",
  "smallvec",
+]
+
+[[package]]
+name = "ivy-engine"
+version = "0.10.3"
+dependencies = [
+ "anyhow",
+ "atomic_refcell",
+ "derive_more",
+ "flume",
+ "glam",
+ "glfw",
+ "hecs",
+ "hecs-hierarchy",
+ "hecs-schedule",
+ "ivy-base",
+ "ivy-collision",
+ "ivy-graphics",
+ "ivy-image",
+ "ivy-input",
+ "ivy-physics",
+ "ivy-postprocessing",
+ "ivy-presets",
+ "ivy-random",
+ "ivy-rendergraph",
+ "ivy-resources",
+ "ivy-templates",
+ "ivy-ui",
+ "ivy-vulkan",
+ "ivy-window",
+ "log",
+ "parking_lot",
+ "slotmap",
 ]
 
 [[package]]

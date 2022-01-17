@@ -5,7 +5,7 @@ use graphics::{
     NodeBuildInfo,
 };
 use hecs::{EntityBuilder, World};
-use ivy::*;
+use ivy_engine::*;
 use physics::PhysicsLayer;
 use presets::GeometryPass;
 use rendergraph::{AttachmentInfo, CameraNode, CameraNodeInfo, GraphicsLayer, SwapchainNode};
