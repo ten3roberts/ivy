@@ -1,11 +1,11 @@
 use std::borrow::Cow;
 
-use derive_more::{From, Into};
+use derive_more::{Display, From, Into};
 
 #[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord, Default, Hash, Into, From)]
+#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord, Default, Hash, Into, From, Display)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct TemplateKey(Cow<'static, str>);
 

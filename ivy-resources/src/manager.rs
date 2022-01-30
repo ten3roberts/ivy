@@ -179,10 +179,7 @@ impl Resources {
         let info = info.into();
 
         let handle = match info_cache.0.entry(info) {
-            Entry::Occupied(entry) => {
-                println!("Deduplicated: {:?}", type_name::<T>());
-                Ok(Ok(*entry.get()))
-            }
+            Entry::Occupied(entry) => Ok(Ok(*entry.get())),
             Entry::Vacant(entry) => {
                 let val = match cache.load(self, entry.key()) {
                     Ok(val) => val,
@@ -213,10 +210,7 @@ impl Resources {
         let info = info.into();
 
         match info_cache.0.entry(info) {
-            Entry::Occupied(entry) => {
-                println!("Deduplicated: {:?}", type_name::<T>());
-                Ok(Ok(*entry.get()))
-            }
+            Entry::Occupied(entry) => Ok(Ok(*entry.get())),
             Entry::Vacant(entry) => {
                 let val = match self.fetch_mut::<T>()?.load(self, entry.key()) {
                     Ok(val) => val,
