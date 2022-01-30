@@ -1,6 +1,6 @@
 //! This module contains bundles and queries suitable for physics.
 use crate::Effector;
-use hecs::{Bundle, Query};
+use hecs::{Bundle, DynamicBundleClone, Query};
 use ivy_base::{AngularMass, AngularVelocity, Mass, Resitution, Velocity};
 use ivy_collision::Collider;
 
@@ -13,7 +13,7 @@ pub struct RbQuery<'a> {
     pub ang_mass: &'a AngularMass,
 }
 
-#[derive(Default, Bundle, Debug)]
+#[derive(Default, Bundle, Debug, DynamicBundleClone)]
 /// Bundle for all things neccessary for all things physics
 pub struct RbBundle {
     pub vel: Velocity,
@@ -49,7 +49,7 @@ impl RbBundle {
 }
 
 /// Same as [ `crate::RbBundle` ] but also contains a collider.
-#[derive(Default, Bundle, Debug)]
+#[derive(Default, Bundle, Debug, DynamicBundleClone)]
 pub struct RbColliderBundle {
     pub vel: Velocity,
     pub mass: Mass,

@@ -28,6 +28,18 @@ impl BoundingBox {
         Self::new(half_extents, origin.into())
     }
 
+    pub fn from_points(points: impl Iterator<Item = Vec3>) -> Self {
+        let mut l = Vec3::new(f32::MAX, f32::MAX, f32::MAX);
+        let mut r = Vec3::new(f32::MIN, f32::MIN, f32::MIN);
+
+        points.for_each(|val| {
+            l = l.min(val);
+            r = r.max(val);
+        });
+
+        BoundingBox::from_corners(l, r)
+    }
+
     pub fn into_corners(&self) -> (Vec3, Vec3) {
         let l = Vec3::new(self.neg_x(), self.neg_y(), self.neg_z());
         let r = Vec3::new(self.x(), self.y(), self.z());

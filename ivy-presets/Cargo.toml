@@ -20,6 +20,6 @@ ivy-rendergraph = { path = "../ivy-rendergraph", version = "0.10.0" }
 ivy-resources = { path = "../ivy-resources", version = "0.10.0" }
 ivy-postprocessing = { path = "../ivy-postprocessing", version = "0.10.0" }
 thiserror = "1.0.30"
-records = "0.1.1"
-hecs = "0.7.3"
+records = "0.2.0"
+hecs = "0.7.5"
 slotmap = "1.0.6"

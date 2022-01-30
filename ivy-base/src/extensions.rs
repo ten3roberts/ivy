@@ -1,7 +1,7 @@
 //! This module provides extension to various types including, but not limited
 //! to, hecs.
 
-use hecs::{Component, Entity, EntityBuilder, EntityRef, World};
+use hecs::{Component, Entity, EntityBuilder, World};
 
 use crate::Name;
 
@@ -50,23 +50,25 @@ impl<'w, T: Component> Iterator for WorldTagIterator<'w, T> {
 
 pub trait WorldExt {
     /// Finds an entity by name
-    fn by_name(&self, name: Name) -> Option<EntityRef>;
+    fn by_name(&self, name: Name) -> Option<Entity>;
     /// Finds an entity by tag
-    fn by_tag<T: Component>(&self) -> Option<EntityRef>;
+    fn by_tag<T: Component>(&self) -> Option<Entity>;
 }
 
-impl WorldExt for World {
-    fn by_name(&self, name: Name) -> Option<EntityRef> {
-        self.query::<&Name>()
+impl<W: hecs_schedule::GenericWorld> WorldExt for W {
+    fn by_name(&self, name: Name) -> Option<Entity> {
+        self.try_query::<&Name>()
+            .unwrap()
             .iter()
             .find(|(_, val)| **val == name)
-            .map(|(e, _)| self.entity(e).unwrap())
+            .map(|(e, _)| e)
     }
 
-    fn by_tag<T: Component>(&self) -> Option<EntityRef> {
-        self.query::<&T>()
+    fn by_tag<T: Component>(&self) -> Option<Entity> {
+        self.try_query::<&T>()
+            .unwrap()
             .iter()
             .next()
-            .map(|(e, _)| self.entity(e).unwrap())
+            .map(|(e, _)| e)
     }
 }

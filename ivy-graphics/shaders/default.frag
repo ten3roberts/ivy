@@ -26,6 +26,7 @@ void main() {
 	outAlbedo = vec4(texture(albedo, fragTexCoord).rgb, 1) * fragColor;
 	outPosition = vec4(fragPosition, 0);
 	vec3 normal = texture(normalMap, fragTexCoord).rgb * 2 - 1;
+
 	outNormal = normalize(mix(fragNormal, TBN * normal, materialData.normal));
 
 	metallicRoughness = vec2(materialData.roughness, materialData.metallic);

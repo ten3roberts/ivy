@@ -34,7 +34,7 @@ fn update_subtree(world: &impl GenericWorld, root: Entity) -> Result<()> {
             ang_mass: *val.ang_mass,
             ang_vel: *val.ang_vel,
             resitution: *val.resitution,
-            effector: Effector::new(),
+            effector: Effector::default(),
         });
 
         drop(query);
@@ -77,7 +77,7 @@ fn update_subtree(world: &impl GenericWorld, root: Entity) -> Result<()> {
 
         if let Some(rb) = parent_rb {
             let mut effector = world.try_get_mut::<Effector>(root)?;
-            *effector += rb.effector;
+            effector.apply_other(&rb.effector);
         }
 
         Ok(())

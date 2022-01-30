@@ -1,12 +1,31 @@
 use std::collections::{btree_map::Iter, BTreeMap};
 
 use hecs_schedule::{Read, SubWorld};
-use ivy_base::{DeltaTime, Position, Rotation, Scale, TransformBundle, TransformMatrix};
+use ivy_base::{DeltaTime, Rotation, TransformBundle, TransformMatrix};
 use ivy_resources::{Handle, ResourceCache, ResourceView};
 
 use crate::{Animation, AnimationStore, JointIndex, KeyFrameValues, Result, Skin};
 
 use super::{ChannelIndex, Frame};
+
+#[records::record]
+#[derive(Debug, Clone, Copy, PartialEq)]
+/// Information regarding a single animation's playback
+pub struct AnimationInfo {
+    influence: f32,
+    speed: f32,
+    repeat: bool,
+}
+
+impl Default for AnimationInfo {
+    fn default() -> Self {
+        Self {
+            influence: 1.0,
+            speed: 1.0,
+            repeat: true,
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Animator {
@@ -39,42 +58,53 @@ impl Animator {
         Ok(())
     }
 
-    /// Play an animation/action by name
-    pub fn play_animation(&mut self, animation: &str, repeat: bool, influence: f32) -> Result<()> {
+    pub fn stop_animation(&mut self, animation: &str) -> Result<()> {
         let animation = self.animations.find(animation)?;
 
-        self.play_animation_handle(animation, repeat, influence);
+        self.stop_animation_handle(animation);
+        Ok(())
+    }
+
+    /// Play an animation by index
+    pub fn stop_animation_index(&mut self, animation: usize) -> Result<()> {
+        let animation = self.animations.get(animation)?;
+
+        self.stop_animation_handle(animation);
+        Ok(())
+    }
+
+    pub fn stop_animation_handle(&mut self, animation: Handle<Animation>) {
+        self.states
+            .entry(animation)
+            .and_modify(|val| val.playing = false);
+    }
+
+    /// Play an animation/action by name
+    pub fn play_animation(&mut self, animation: &str, info: AnimationInfo) -> Result<()> {
+        let animation = self.animations.find(animation)?;
+
+        self.play_animation_handle(animation, info);
 
         Ok(())
     }
 
     /// Play an animation by handle
     /// **NOTE**: Behaviour is undefined if an animation for a different skin is used
-    fn play_animation_handle(
-        &mut self,
-        animation: Handle<Animation>,
-        repeat: bool,
-        influence: f32,
-    ) {
+    fn play_animation_handle(&mut self, animation: Handle<Animation>, info: AnimationInfo) {
         self.states
             .entry(animation)
             .and_modify(|val| {
                 val.reset();
-                val.repeat = repeat
+                val.info = info
             })
-            .or_insert_with(|| AnimationState::new(animation, repeat, influence));
+            .or_insert_with(|| AnimationState::new(animation, info));
     }
 
     /// Play an animation by index
-    pub fn play_animation_index(
-        &mut self,
-        animation: usize,
-        repeat: bool,
-        influence: f32,
-    ) -> Result<()> {
+    pub fn play_animation_index(&mut self, animation: usize, info: AnimationInfo) -> Result<()> {
         let animation = self.animations.get(animation)?;
 
-        self.play_animation_handle(animation, repeat, influence);
+        self.play_animation_handle(animation, info);
         Ok(())
     }
 
@@ -126,21 +156,19 @@ impl Animator {
 struct AnimationState {
     animation: Handle<Animation>,
     states: BTreeMap<ChannelIndex, Frame>,
-    repeat: bool,
     time: f32,
     playing: bool,
-    influence: f32,
+    info: AnimationInfo,
 }
 
 impl AnimationState {
-    pub fn new(animation: Handle<Animation>, repeat: bool, influence: f32) -> Self {
+    pub fn new(animation: Handle<Animation>, info: AnimationInfo) -> Self {
         Self {
             animation,
             states: BTreeMap::new(),
-            repeat,
             playing: true,
             time: 0.0,
-            influence,
+            info,
         }
     }
 
@@ -158,7 +186,7 @@ impl AnimationState {
         }
 
         // Loop through all states and check if the frame should be changed
-        self.time = self.time + dt;
+        self.time = self.time + dt * self.info.speed;
 
         if self.time > animation.duration() {
             self.time = self.time % animation.duration();
@@ -175,11 +203,7 @@ impl AnimationState {
 
                 let transform = joints
                     .entry(channel.joint)
-                    .or_insert_with(|| TransformBundle {
-                        pos: Position::zero(),
-                        rot: Rotation::default(),
-                        scale: Scale::zero(),
-                    });
+                    .or_insert_with(|| TransformBundle::default());
 
                 let next = (*current + 1) % channel.times.len();
 
@@ -196,14 +220,14 @@ impl AnimationState {
                 match &channel.values {
                     KeyFrameValues::Positions(val) => {
                         transform.pos =
-                            (val[*current].lerp(*val[next], progress) * self.influence).into()
+                            (val[*current].lerp(*val[next], progress) * self.info.influence).into()
                     }
                     KeyFrameValues::Rotations(val) => {
                         transform.rot = Rotation(val[*current].slerp(*val[next], progress))
                     }
                     KeyFrameValues::Scales(val) => {
-                        transform.scale +=
-                            (val[*current].lerp(*val[next], progress) * self.influence).into()
+                        transform.scale =
+                            (val[*current].lerp(*val[next], progress) * self.info.influence).into()
                     }
                 };
             });
@@ -213,7 +237,7 @@ impl AnimationState {
     fn reset(&mut self) {
         if !self.playing {
             self.playing = true;
-            self.time = 0.0;
+            // self.time = 0.0;
         }
     }
 }

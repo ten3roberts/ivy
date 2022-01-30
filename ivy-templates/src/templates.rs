@@ -64,7 +64,7 @@ impl TemplateStore {
 
         let mut builder = EntityBuilderClone::new();
         builder.add_bundle(extra);
-        let e = template.build_cmd(&world.into_empty(), cmd, builder);
+        let e = template.build_cmd(&world.to_empty(), cmd, builder);
         Ok(e)
     }
 }

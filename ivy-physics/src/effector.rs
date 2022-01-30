@@ -1,5 +1,5 @@
 use glam::Vec3;
-use ivy_base::{math::Inverse, AngularMass, AngularVelocity, Mass, Position, Rotation, Velocity};
+use ivy_base::{math::Inverse, AngularMass, AngularVelocity, Mass, Position, Velocity};
 
 /// Manages the forces applied to an entity.
 /// Stored in the entity and is a middle hand for manipulating velocity and
@@ -10,152 +10,127 @@ use ivy_base::{math::Inverse, AngularMass, AngularVelocity, Mass, Position, Rota
 /// It is also possible to create a dummy effector to "record" physics effects.
 #[derive(Default, Clone, Debug, PartialEq)]
 pub struct Effector {
-    force: Vec3,
-    impulse: Vec3,
-    delta_v: Vec3,
-
-    torque: Vec3,
-    angular_impulse: Vec3,
-    delta_w: Vec3,
-    translate: Vec3,
-    local_translate: Vec3,
+    dv: Vec3,
+    dw: Vec3,
+    instant_dv: Vec3,
+    instant_dw: Vec3,
+    inv_mass: f32,
+    inv_ang_mass: f32,
+    translation: Vec3,
 }
 
 impl Effector {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(mass: Mass, ang_mass: AngularMass) -> Self {
+        Self {
+            inv_mass: mass.inv(),
+            inv_ang_mass: ang_mass.inv(),
+            dv: Vec3::ZERO,
+            dw: Vec3::ZERO,
+            instant_dv: Vec3::ZERO,
+            instant_dw: Vec3::ZERO,
+            translation: Vec3::ZERO,
+        }
+    }
+
+    pub fn apply_other(&mut self, other: &Self) {
+        self.dv += other.dv;
+        self.instant_dv += other.instant_dv;
+        self.dw += other.dw;
+        self.instant_dw += other.instant_dw;
+    }
+
+    pub fn set_mass(&mut self, mass: Mass) {
+        self.inv_mass = mass.inv();
+    }
+
+    pub fn set_ang_mass(&mut self, ang_mass: AngularMass) {
+        self.inv_ang_mass = ang_mass.inv()
     }
 
     /// Clears all forces affecting the entity
     pub fn clear(&mut self) {
-        *self = Self::default()
+        *self = Self {
+            dv: Vec3::ZERO,
+            dw: Vec3::ZERO,
+            instant_dv: Vec3::ZERO,
+            instant_dw: Vec3::ZERO,
+            translation: Vec3::ZERO,
+            inv_mass: self.inv_mass,
+            inv_ang_mass: self.inv_ang_mass,
+        }
     }
 
     pub fn apply_torque(&mut self, torque: Vec3) {
-        self.torque += torque;
+        self.dw += torque * self.inv_ang_mass;
     }
 
     pub fn apply_angular_impulse(&mut self, j: Vec3) {
-        self.angular_impulse += j;
+        self.instant_dw += j * self.inv_ang_mass
     }
 
     pub fn apply_angular_velocity_change(&mut self, dw: Vec3) {
-        self.delta_w += dw;
+        self.instant_dw += dw
     }
 
+    pub fn apply_angular_acceleration(&mut self, dw: Vec3) {
+        self.dw += dw
+    }
+
+    /// Applies a continuos force using mass
     pub fn apply_force(&mut self, f: Vec3) {
-        self.force += f;
+        self.dv += f * self.inv_mass
     }
 
+    /// Applies an instantaneous force
     pub fn apply_impulse(&mut self, j: Vec3) {
-        self.impulse += j
+        self.instant_dv += j * self.inv_mass
     }
 
-    pub fn apply_velocity_change(&mut self, dv: Vec3) {
-        self.delta_v += dv;
+    /// Applies a continous acceleration independent of mass
+    pub fn apply_acceleration(&mut self, dv: Vec3) {
+        self.dv += dv;
     }
 
     /// Applies a force at the specified position from center of mass
     pub fn apply_force_at(&mut self, f: Vec3, at: Position) {
-        self.force += f;
-        self.torque += at.cross(f);
+        self.apply_force(f);
+        self.apply_torque(at.cross(f));
     }
 
     /// Applies an impulse at the specified position from center of mass
     pub fn apply_impulse_at(&mut self, impulse: Vec3, at: Position) {
-        self.impulse += impulse;
-        self.angular_impulse += at.cross(impulse);
+        self.apply_impulse(impulse);
+        self.apply_angular_impulse(at.cross(impulse));
+    }
+
+    pub fn apply_velocity_change(&mut self, dv: Vec3) {
+        self.instant_dv += dv
     }
 
     /// Applies a velocity change at the specified position from center of mass
     pub fn apply_velocity_change_at(&mut self, dv: Vec3, at: Position) {
-        self.delta_v += dv;
-        self.delta_w += at.cross(dv);
+        self.apply_velocity_change(dv);
+        self.apply_angular_velocity_change(at.cross(dv))
     }
 
     pub fn translate(&mut self, translate: Vec3) {
-        self.translate += translate;
-    }
-
-    pub fn translate_local(&mut self, translate: Vec3) {
-        self.local_translate += translate;
+        self.translation += translate;
     }
 
     /// Returns the total net effect of forces, impulses, and velocity changes
     /// during `dt`. Note, Effector should be clear afterwards.
-    pub fn net_velocity_change(&self, mass: Mass, dt: f32) -> Velocity {
-        Velocity(self.force * dt * mass.inv() + self.impulse * mass.inv() + self.delta_v)
+    pub fn net_velocity_change(&self, dt: f32) -> Velocity {
+        Velocity(self.dv * dt + self.instant_dv)
     }
     /// Returns the total net effect of torques, angular impulses, and angular
     /// velocity changes. Note: Effector should be cleared afterwards.
 
-    pub fn net_angular_velocity_change(&self, ang_mass: AngularMass, dt: f32) -> AngularVelocity {
-        AngularVelocity(
-            self.torque * dt * ang_mass.inv()
-                + self.angular_impulse * ang_mass.inv()
-                + self.delta_w,
-        )
+    pub fn net_angular_velocity_change(&self, dt: f32) -> AngularVelocity {
+        AngularVelocity(self.dw * dt + self.instant_dw)
     }
 
-    pub fn net_translation(&self, rotation: &Rotation) -> Position {
-        Position(self.translate + **rotation * self.local_translate)
-    }
-}
-
-impl std::ops::Add<Effector> for Effector {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        Self {
-            force: self.force + rhs.force,
-            impulse: self.impulse + rhs.impulse,
-            delta_v: self.delta_v + rhs.delta_v,
-            torque: self.torque + rhs.torque,
-            angular_impulse: self.angular_impulse + rhs.angular_impulse,
-            delta_w: self.delta_w + rhs.delta_w,
-            translate: self.translate + rhs.translate,
-            local_translate: self.local_translate + rhs.local_translate,
-        }
-    }
-}
-
-impl std::ops::AddAssign<Effector> for Effector {
-    fn add_assign(&mut self, rhs: Self) {
-        self.force += rhs.force;
-        self.impulse += rhs.impulse;
-        self.delta_v += rhs.delta_v;
-        self.torque += rhs.torque;
-        self.angular_impulse += rhs.angular_impulse;
-        self.delta_w += rhs.delta_w;
-        self.translate += rhs.translate;
-        self.local_translate += rhs.local_translate;
-    }
-}
-
-impl std::ops::Add<&Effector> for Effector {
-    type Output = Self;
-
-    fn add(self, rhs: &Self) -> Self::Output {
-        Self {
-            force: self.force + rhs.force,
-            impulse: self.impulse + rhs.impulse,
-            delta_v: self.delta_v + rhs.delta_v,
-            torque: self.torque + rhs.torque,
-            angular_impulse: self.angular_impulse + rhs.angular_impulse,
-            delta_w: self.delta_w + rhs.delta_w,
-            translate: self.translate + rhs.translate,
-            local_translate: self.local_translate + rhs.local_translate,
-        }
-    }
-}
-
-impl std::ops::AddAssign<&Effector> for Effector {
-    fn add_assign(&mut self, rhs: &Self) {
-        self.force += rhs.force;
-        self.impulse += rhs.impulse;
-        self.delta_v += rhs.delta_v;
-        self.torque += rhs.torque;
-        self.angular_impulse += rhs.angular_impulse;
-        self.delta_w += rhs.delta_w;
+    /// Get the effector's translation.
+    pub fn translation(&self) -> Position {
+        Position(self.translation)
     }
 }

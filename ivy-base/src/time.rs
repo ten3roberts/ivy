@@ -3,6 +3,7 @@
 use std::time::{Duration, Instant};
 
 /// Measures high precision time
+#[derive(Debug, Clone)]
 pub struct Clock {
     start: Instant,
 }

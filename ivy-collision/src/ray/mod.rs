@@ -22,6 +22,7 @@ pub struct Ray {
 
 impl Ray {
     pub fn new(origin: Position, dir: Vec3) -> Self {
+        assert!(dir.is_normalized());
         Self {
             origin,
             dir: dir.normalize(),
@@ -99,13 +100,12 @@ impl Ray {
     }
 
     /// Cast the ray into the world and returns the closest intersection
-    pub fn cast_one<'r, 'w, 't, W, T, N>(
+    pub fn cast_one<'r, 'w, 't, W, N>(
         &'r self,
         world: &'w W,
-        tree: &'t T,
+        tree: &'t CollisionTree<N>,
     ) -> Option<RayIntersection>
     where
-        T: Deref<Target = CollisionTree<N>>,
         N: 'static + CollisionTreeNode,
         W: GenericWorld,
     {
@@ -114,13 +114,12 @@ impl Ray {
             .min()
     }
 
-    pub fn cast<'r, 'w, 't, T, W, N>(
+    pub fn cast<'r, 'w, 't, W, N>(
         &'r self,
         world: &'w W,
-        tree: &'t T,
+        tree: &'t CollisionTree<N>,
     ) -> TreeQuery<'t, N, RayCaster<'r, 'w, W, ()>>
     where
-        T: Deref<Target = CollisionTree<N>>,
         N: CollisionTreeNode,
         W: GenericWorld,
     {

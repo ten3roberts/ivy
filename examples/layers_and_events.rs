@@ -55,7 +55,7 @@ impl Layer for GameLayer {
     fn on_update(
         &mut self,
         _: &mut hecs::World,
-        _: &mut ivy::Resources,
+        _: &mut ivy_engine::Resources,
         e: &mut ivy_base::Events,
         _: std::time::Duration,
     ) -> anyhow::Result<()> {

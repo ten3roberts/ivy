@@ -6,18 +6,20 @@ use crate::{
 use glam::{Quat, Vec3};
 use hecs::Entity;
 use hecs_hierarchy::{Hierarchy, HierarchyQuery};
-use hecs_schedule::{GenericWorld, Read, SubWorld};
+use hecs_schedule::{traits::QueryExt, GenericWorld, Read, SubWorld};
 use ivy_base::{
     AngularVelocity, Connection, ConnectionKind, DeltaTime, Events, Gravity, GravityInfluence,
     Mass, Position, Resitution, Rotation, Static, Velocity,
 };
 use ivy_collision::{util::TOLERANCE, Collision};
 
+const BATCH_SIZE: u32 = 64;
+
 pub fn integrate_velocity(world: SubWorld<(&mut Position, &Velocity)>, dt: Read<DeltaTime>) {
     world
         .native_query()
-        .iter()
-        .for_each(|(_, (pos, vel))| *pos += Position(**vel * **dt));
+        .without::<Static>()
+        .par_for_each(BATCH_SIZE, |(_, (pos, vel))| *pos += Position(**vel * **dt));
 }
 
 pub fn gravity(world: SubWorld<(&GravityInfluence, &Mass, &mut Effector)>, gravity: Read<Gravity>) {
@@ -27,8 +29,8 @@ pub fn gravity(world: SubWorld<(&GravityInfluence, &Mass, &mut Effector)>, gravi
 
     world
         .native_query()
-        .iter()
-        .for_each(|(_, (influence, mass, effector))| {
+        .without::<Static>()
+        .par_for_each(BATCH_SIZE, |(_, (influence, mass, effector))| {
             effector.apply_force(**gravity * **influence * **mass)
         })
 }
@@ -37,13 +39,17 @@ pub fn integrate_angular_velocity(
     world: SubWorld<(&mut Rotation, &AngularVelocity)>,
     dt: Read<DeltaTime>,
 ) {
-    world.native_query().into_iter().for_each(|(_, (rot, w))| {
-        let mag = w.length();
-        if mag > 0.0 {
-            let w = Quat::from_axis_angle(w.0 / mag, mag * **dt);
-            *rot = Rotation(w * rot.0);
-        }
-    });
+    world
+        .native_query()
+        .without::<Static>()
+        .into_iter()
+        .for_each(|(_, (rot, w))| {
+            let mag = w.length();
+            if mag > 0.0 {
+                let w = Quat::from_axis_angle(w.0 / mag, mag * **dt);
+                *rot = Rotation(w * rot.0);
+            }
+        });
 }
 
 pub fn gravity_system(world: SubWorld<&mut Velocity>, dt: Read<DeltaTime>) {
@@ -147,7 +153,7 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
 
         let a = ResolveObject {
             pos: *pos,
-            vel: *a.vel + eff.net_velocity_change(*a.mass, **dt),
+            vel: *a.vel + eff.net_velocity_change(**dt),
             ang_vel: *a.ang_vel,
             resitution: *a.resitution,
             mass: a_mass,
@@ -160,7 +166,7 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
 
         let b = ResolveObject {
             pos: *pos,
-            vel: *b.vel + eff.net_velocity_change(*b.mass, **dt),
+            vel: *b.vel + eff.net_velocity_change(**dt),
             ang_vel: *b.ang_vel,
             resitution: *b.resitution,
             mass: b_mass,
@@ -208,7 +214,7 @@ fn resolve_static(
     if let Ok((rb, pos, effector)) = b_query.get() {
         let b = ResolveObject {
             pos: *pos,
-            vel: *rb.vel + effector.net_velocity_change(*rb.mass, *dt),
+            vel: *rb.vel + effector.net_velocity_change(*dt),
             ang_vel: *rb.ang_vel,
             resitution: *rb.resitution,
             mass: *rb.mass,
@@ -229,18 +235,21 @@ fn resolve_static(
 
 /// Applies effectors to their respective entities and clears the effects.
 pub fn apply_effectors(
-    world: SubWorld<(RbQueryMut, &mut Position, &Rotation, &mut Effector)>,
+    world: SubWorld<(RbQueryMut, &mut Position, &mut Effector)>,
     dt: Read<DeltaTime>,
 ) {
     world
         .native_query()
         .without::<Static>()
         .iter()
-        .for_each(|(_, (rb, pos, rot, effector))| {
-            *rb.vel += effector.net_velocity_change(*rb.mass, **dt);
-            *pos += effector.net_translation(rot);
+        .for_each(|(_, (rb, pos, effector))| {
+            *rb.vel += effector.net_velocity_change(**dt);
+            *pos += effector.translation();
 
-            *rb.ang_vel += effector.net_angular_velocity_change(*rb.ang_mass, **dt);
+            *rb.ang_vel += effector.net_angular_velocity_change(**dt);
+
+            effector.set_mass(*rb.mass);
+            effector.set_ang_mass(*rb.ang_mass);
 
             effector.clear()
         })

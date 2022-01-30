@@ -3,7 +3,7 @@ use std::{borrow::Cow, time::Duration};
 use derive_for::*;
 use derive_more::*;
 use glam::{Mat3, Mat4, Quat, Vec2, Vec3, Vec4Swizzles};
-use hecs::{Bundle, Query};
+use hecs::{Bundle, DynamicBundleClone, Query};
 use ivy_random::Random;
 #[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
@@ -131,9 +131,11 @@ impl Rotation {
     pub fn into_matrix3(&self) -> Mat3 {
         Mat3::from_quat(**self)
     }
+
     pub fn into_matrix(&self) -> Mat4 {
         Mat4::from_quat(**self)
     }
+
     /// Creates an euler rotation from yxz (yaw pitch roll) order
     pub fn euler_angles(angles: Vec3) -> Self {
         Self(Quat::from_euler(
@@ -143,10 +145,28 @@ impl Rotation {
             angles.z,
         ))
     }
+
     /// Creates an angular velocity from an axis angle rotation. Note: Axis is
     /// assumed to be normalized.
     pub fn axis_angle(axis: Vec3, angle: f32) -> Self {
         Self(Quat::from_axis_angle(axis, angle))
+    }
+
+    /// Creates a quaternion looking at `forward` with a roll facing `up`
+    pub fn look_at(forward: Vec3, up: Vec3) -> Self {
+        let forward = forward.reject_from(up).normalize();
+        if forward.is_nan() || forward.dot(Vec3::Z) > 0.99 {
+            return Quat::IDENTITY.into();
+        }
+
+        let axis = Vec3::Z.cross(forward).normalize();
+
+        assert!(forward.is_normalized());
+        assert!(axis.is_normalized());
+
+        let angle = forward.dot(Vec3::Z).acos();
+
+        Self::axis_angle(axis, angle)
     }
 }
 
@@ -177,19 +197,7 @@ impl Size2D {
 }
 
 #[derive(
-    AsRef,
-    PartialEq,
-    Clone,
-    Copy,
-    Debug,
-    Default,
-    Deref,
-    DerefMut,
-    From,
-    Into,
-    Mul,
-    MulAssign,
-    Display,
+    AsRef, PartialEq, Clone, Copy, Debug, Default, Deref, DerefMut, From, Into, Mul, MulAssign,
 )]
 #[repr(transparent)]
 /// A matrix transforming a point from local space to world space. This can
@@ -268,7 +276,7 @@ impl<'a> TransformQuery<'a> {
     }
 }
 
-#[derive(Default, Bundle, AsRef, PartialEq, Debug, Copy, Clone)]
+#[derive(Default, Bundle, AsRef, PartialEq, Debug, Copy, Clone, DynamicBundleClone)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct TransformBundle {
     pub pos: Position,

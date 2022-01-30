@@ -4,10 +4,10 @@ use ash::vk::{
 };
 use glam::{IVec4, Vec2, Vec3, Vec4};
 use gltf::buffer;
-use itertools::{izip, Itertools};
+use itertools::izip;
 use ivy_resources::Handle;
-use std::marker::PhantomData;
 use std::mem::size_of;
+use std::{iter::repeat, marker::PhantomData};
 
 use ivy_vulkan as vulkan;
 use vulkan::{context::SharedVulkanContext, Buffer, BufferAccess, BufferUsage, VertexDesc};
@@ -337,28 +337,17 @@ impl Mesh<Vertex> {
                 .read_positions()
                 .into_iter()
                 .flatten()
-                .map(Vec3::from)
-                .collect_vec();
+                .map(Vec3::from);
 
-            let norm = reader.read_normals().into_iter().flatten().map(Vec3::from);
+            let normals = reader.read_normals().into_iter().flatten().map(Vec3::from);
 
             let texcoord = reader
                 .read_tex_coords(0)
                 .into_iter()
                 .flat_map(|val| val.into_f32())
-                .map(Vec2::from)
-                .collect_vec();
+                .map(Vec2::from);
 
-            let tangents = generate_tangents(
-                &pos,
-                &texcoord,
-                reader
-                    .read_indices()
-                    .into_iter()
-                    .flat_map(|val| val.into_u32()),
-            );
-
-            vertices.extend(izip!(pos, norm, texcoord, tangents).map(Vertex::from));
+            vertices.extend(izip!(pos, normals, texcoord, repeat(Vec3::ZERO)).map(Vertex::from));
 
             // Keep track of which materials map to which part of the index buffer
             if let Some(material) = materials.get(primitive.material().index().unwrap_or(0)) {
@@ -370,6 +359,7 @@ impl Mesh<Vertex> {
             }
         }
 
+        generate_tangents(&mut vertices, &indices);
         Self::new(context, &vertices, &indices, primitives)
     }
 }
@@ -405,17 +395,15 @@ impl Mesh<SkinnedVertex> {
                 .read_positions()
                 .into_iter()
                 .flatten()
-                .map(Vec3::from)
-                .collect_vec();
+                .map(Vec3::from);
 
-            let norm = reader.read_normals().into_iter().flatten().map(Vec3::from);
+            let normals = reader.read_normals().into_iter().flatten().map(Vec3::from);
 
             let texcoord = reader
                 .read_tex_coords(0)
                 .into_iter()
                 .flat_map(|val| val.into_f32())
-                .map(Vec2::from)
-                .collect_vec();
+                .map(Vec2::from);
 
             let weights = reader
                 .read_weights(0)
@@ -429,17 +417,9 @@ impl Mesh<SkinnedVertex> {
                 .flat_map(|val| val.into_u16())
                 .map(|val| IVec4::new(val[0] as i32, val[1] as i32, val[2] as i32, val[3] as i32));
 
-            let tangents = generate_tangents(
-                &pos,
-                &texcoord,
-                reader
-                    .read_indices()
-                    .into_iter()
-                    .flat_map(|val| val.into_u32()),
-            );
-
             vertices.extend(
-                izip!(pos, norm, texcoord, joints, weights, tangents,).map(SkinnedVertex::from),
+                izip!(pos, normals, texcoord, joints, weights, repeat(Vec3::ZERO),)
+                    .map(SkinnedVertex::from),
             );
 
             // Keep track of which materials map to which part of the index buffer
@@ -452,38 +432,50 @@ impl Mesh<SkinnedVertex> {
             }
         }
 
+        if !vertices.is_empty() {
+            generate_tangents_skinned(&mut vertices, &indices);
+        }
+
         Self::new(context, &vertices, &indices, primitives)
     }
 }
 
-fn generate_tangents(
-    positions: &Vec<Vec3>,
-    uvs: &Vec<Vec2>,
-    indices: impl Iterator<Item = u32>,
-) -> Vec<Vec3> {
-    let mut tangents = vec![Vec3::X; positions.len()];
-    let chunks = indices.chunks(3);
-    chunks.into_iter().for_each(|mut chunk| {
-        let (a, b, c) = chunk.next_tuple::<(u32, u32, u32)>().unwrap();
-        let [v0, v1, v2] = [
-            positions[a as usize],
-            positions[b as usize],
-            positions[c as usize],
-        ];
+fn generate_tangents(vertices: &mut [Vertex], indices: &[u32]) {
+    indices.chunks_exact(3).for_each(|chunk| {
+        let (a, b, c) = (chunk[0] as usize, chunk[1] as usize, chunk[2] as usize);
+        let [v0, v1, v2] = [vertices[a], vertices[b], vertices[c]];
 
-        let [t0, t1, t2] = [uvs[a as usize], uvs[b as usize], uvs[c as usize]];
-
-        let d1 = v1 - v0;
-        let d2 = v2 - v0;
-        let dt1 = t1 - t0;
-        let dt2 = t2 - t0;
+        let d1 = v1.position - v0.position;
+        let d2 = v2.position - v0.position;
+        let dt1 = v1.texcoord - v0.texcoord;
+        let dt2 = v2.texcoord - v0.texcoord;
 
         let r = 1.0 / (dt1.x * dt2.y - dt1.y * dt2.x);
-        let tangent = ((d1 * dt2.y - d2 * dt1.y) * r).normalize();
-        tangents[a as usize] = tangent;
-        tangents[b as usize] = tangent;
-        tangents[c as usize] = tangent;
+        let tangent = (d1 * dt2.y - d2 * dt1.y) * r;
+        vertices[a].tangent = v0.normal.cross(tangent).normalize();
+        vertices[b].tangent = v1.normal.cross(tangent).normalize();
+        vertices[c].tangent = v2.normal.cross(tangent).normalize();
     });
+}
 
-    tangents
+fn generate_tangents_skinned(vertices: &mut [SkinnedVertex], indices: &[u32]) {
+    indices.chunks_exact(3).for_each(|chunk| {
+        let (a, b, c) = (chunk[0] as usize, chunk[1] as usize, chunk[2] as usize);
+        let (a, b, c) = (a as usize, b as usize, c as usize);
+        let [v0, v1, v2] = [vertices[a], vertices[b], vertices[c]];
+
+        let d1 = v1.position - v0.position;
+        let d2 = v2.position - v0.position;
+        let dt1 = v1.texcoord - v0.texcoord;
+        let dt2 = v2.texcoord - v0.texcoord;
+
+        let r = -1.0 / (dt1.x * dt2.y - dt1.y * dt2.x);
+        let tangent = ((d1 * dt2.y - d2 * dt1.y) * r).normalize();
+        vertices[a].tangent = tangent;
+        vertices[b].tangent = tangent;
+        vertices[c].tangent = tangent;
+        // vertices[a].tangent = v0.normal.cross(tangent).normalize();
+        // vertices[b].tangent = v1.normal.cross(tangent).normalize();
+        // vertices[c].tangent = v2.normal.cross(tangent).normalize();
+    });
 }

@@ -12,9 +12,9 @@ readme = "../README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.52"
+anyhow = "1.0.53"
 derive_more = "0.99.17"
-hecs = { version = "0.7.3", features = [ "macros" ] }
+hecs = { version = "0.7.5", features = [ "macros" ] }
 itertools = "0.10.3"
 ivy-graphics = { path = "../ivy-graphics", version = "0.10.0" }
 ivy-base = { path = "../ivy-base", version = "0.10.0" }

@@ -3,7 +3,7 @@ use derive_for::*;
 use derive_more::*;
 pub use fontdue::layout::{HorizontalAlign, VerticalAlign};
 use glam::Vec2;
-use hecs::{Bundle, DynamicBundleClone, DynamicClone, Entity, EntityRef, World};
+use hecs::{Bundle, DynamicBundleClone, Entity, EntityRef, World};
 use ivy_base::{Color, Events, Position2D, Size2D, Visible};
 use ivy_graphics::Camera;
 use ivy_resources::Handle;

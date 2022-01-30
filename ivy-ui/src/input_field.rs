@@ -1,5 +1,5 @@
 use glfw::{Action, Key, Modifiers};
-use hecs::{Bundle, DynamicBundleClone, DynamicClone, Entity};
+use hecs::{Bundle, DynamicBundleClone, Entity};
 use hecs_schedule::{Read, SubWorld, Write};
 
 use ivy_base::Events;

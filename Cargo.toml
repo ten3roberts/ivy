@@ -44,18 +44,18 @@ ivy-vulkan         = { path = "./ivy-vulkan",         version = "0.10" }
 ivy-presets        = { path = "./ivy-presets",        version = "0.10" }
 ivy-window         = { path = "./ivy-window",         version = "0.10" }
 
-hecs = "0.7.3"
-hecs-schedule = "0.5.0"
+hecs = "0.7.5"
+hecs-schedule = "0.5.1"
 derive_more = "0.99.17"
 
 [dev-dependencies]
-anyhow = "1.0.52"
+anyhow = "1.0.53"
 atomic_refcell = "0.1.8"
 
 flume = "0.10.10"
-parking_lot = "0.11.2"
+parking_lot = "0.12.0"
 slotmap = "1.0.6"
-hecs = "0.7.3"
+hecs = "0.7.5"
 glfw = { version = "0.43.0", features = [ "vulkan" ] }
 hecs-hierarchy = "0.11.0"
 glam = "0.20.2"

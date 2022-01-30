@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use glam::Vec3;
 
@@ -8,7 +8,7 @@ mod traits;
 pub use traits::*;
 
 /// A default radius that looks good for small gizmos
-pub const DEFAULT_RADIUS: f32 = 0.2;
+pub const DEFAULT_RADIUS: f32 = 0.01;
 
 #[derive(Copy, Clone, PartialEq)]
 /// Represents a 3D world overlay for debugging purposes.
@@ -62,14 +62,14 @@ pub type Section = &'static str;
 #[derive(Default)]
 pub struct Gizmos {
     current: Option<Section>,
-    sections: HashMap<Section, Vec<Gizmo>>,
+    sections: BTreeMap<Section, Vec<Gizmo>>,
 }
 
 impl Gizmos {
     pub fn new() -> Self {
         Self {
             current: None,
-            sections: HashMap::new(),
+            sections: BTreeMap::new(),
         }
     }
 
@@ -105,7 +105,7 @@ impl Gizmos {
     }
 
     /// Get a reference to the gizmos's sections.
-    pub fn sections(&self) -> &HashMap<Section, Vec<Gizmo>> {
+    pub fn sections(&self) -> &BTreeMap<Section, Vec<Gizmo>> {
         &self.sections
     }
 }

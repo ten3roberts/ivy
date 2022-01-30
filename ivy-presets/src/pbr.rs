@@ -49,13 +49,9 @@ impl PBRRendering {
     ) -> Result<Self> {
         let camera = world
             .by_tag::<MainCamera>()
-            .ok_or(Error::MissingMainCamera)?
-            .entity();
+            .ok_or(Error::MissingMainCamera)?;
 
-        let canvas = world
-            .by_tag::<Canvas>()
-            .ok_or(Error::MissingCanvas)?
-            .entity();
+        let canvas = world.by_tag::<Canvas>().ok_or(Error::MissingCanvas)?;
 
         let context = resources.get_default::<SharedVulkanContext>()?;
         context.wait_idle()?;
