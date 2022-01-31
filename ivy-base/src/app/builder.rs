@@ -59,6 +59,11 @@ impl AppBuilder {
         self.app.try_insert_layer(index, func)?;
         Ok(self)
     }
+
+    pub fn set_event_cleanup_time(mut self, duration: Duration) -> Self {
+        self.app.event_cleanup_time = duration;
+        self
+    }
 }
 
 impl Default for AppBuilder {

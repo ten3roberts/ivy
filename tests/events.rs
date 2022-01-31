@@ -1,4 +1,5 @@
-use ivy::base::Events;
+use ivy_engine::base::Events;
+
 #[test]
 fn events() {
     #[derive(Debug, Clone, PartialEq, Eq)]

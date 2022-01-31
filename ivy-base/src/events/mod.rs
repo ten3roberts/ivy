@@ -1,5 +1,5 @@
 mod dispatcher;
-pub use dispatcher::EventSender;
+pub use dispatcher::{EventSender, MpscSender};
 
 use std::{
     any::{type_name, TypeId},
@@ -164,6 +164,13 @@ impl Events {
     pub fn is_blocked<T: Event>(&mut self) -> bool {
         self.dispatcher_mut::<T>().blocked
     }
+
+    /// Remove disconnected subscribers
+    pub fn cleanup(&mut self) {
+        for (_, dispatcher) in self.dispatchers.iter_mut() {
+            dispatcher.cleanup()
+        }
+    }
 }
 
 impl Default for Events {
@@ -179,16 +186,15 @@ impl<T: Component + Clone> Event for T {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::mpsc;
 
     #[test]
     fn event_broadcast() {
         let mut events = Events::new();
 
-        let (tx1, rx1) = mpsc::channel::<&'static str>();
+        let (tx1, rx1) = flume::unbounded::<&'static str>();
         events.subscribe_custom(tx1);
 
-        let (tx2, rx2) = mpsc::channel::<&'static str>();
+        let (tx2, rx2) = flume::unbounded::<&'static str>();
         events.subscribe_custom(tx2);
 
         events.send("Hello");

@@ -5,7 +5,10 @@ use parking_lot::Mutex;
 
 use super::Event;
 
-pub trait AnyEventDispatcher: 'static + Send + Sync + Downcast {}
+pub trait AnyEventDispatcher: 'static + Send + Sync + Downcast {
+    fn cleanup(&mut self);
+}
+
 impl_downcast!(AnyEventDispatcher);
 
 pub trait AnyEventSender: 'static + Send + Sync + Downcast {}
@@ -13,7 +16,7 @@ impl_downcast!(AnyEventSender);
 
 /// Handles event dispatching for a single type of event
 pub struct EventDispatcher<T: Event> {
-    subscribers: Mutex<Vec<Subscriber<T>>>,
+    subscribers: Vec<Subscriber<T>>,
     pub blocked: bool,
 }
 
@@ -23,7 +26,7 @@ where
 {
     pub fn new() -> Self {
         Self {
-            subscribers: Mutex::new(Vec::new()),
+            subscribers: Vec::new(),
             blocked: false,
         }
     }
@@ -34,33 +37,28 @@ where
             return;
         }
 
-        let mut subscribers = self.subscribers.lock();
-        if subscribers.len() == 1 {
-            subscribers[0].send(event);
-        } else {
-            subscribers.retain(|subscriber| {
-                if (subscriber.filter)(&event) {
-                    subscriber.send(event.clone())
-                } else {
-                    true
-                }
-            });
+        for subscriber in &self.subscribers {
+            if (subscriber.filter)(&event) {
+                subscriber.send(event.clone());
+            }
         }
     }
 
     /// Subscribes to events using sender to send events. The subscriber is automatically cleaned
     /// up when the receiving end is dropped.
-    pub fn subscribe<S>(&self, sender: S, filter: fn(&T) -> bool)
+    pub fn subscribe<S>(&mut self, sender: S, filter: fn(&T) -> bool)
     where
         S: 'static + EventSender<T> + Send,
     {
-        self.subscribers
-            .lock()
-            .push(Subscriber::new(sender, filter));
+        self.subscribers.push(Subscriber::new(sender, filter));
     }
 }
 
-impl<T: Event> AnyEventDispatcher for EventDispatcher<T> {}
+impl<T: Event> AnyEventDispatcher for EventDispatcher<T> {
+    fn cleanup(&mut self) {
+        self.subscribers.retain(|val| !val.sender.is_disconnected())
+    }
+}
 
 struct Subscriber<T> {
     sender: Box<dyn EventSender<T> + Send>,
@@ -77,33 +75,72 @@ impl<T: Event> Subscriber<T> {
             filter,
         }
     }
-    pub fn send(&self, event: T) -> bool {
+    pub fn send(&self, event: T) {
         self.sender.send(event)
     }
 }
 
 /// Describes a type which can send events. Implemented for mpsc::channel and crossbeam channel.
-pub trait EventSender<T>: 'static + Send {
-    /// Send an event. Returns true if receiver is still alive.
-    fn send(&self, event: T) -> bool;
+pub trait EventSender<T>: 'static + Send + Sync {
+    /// Send an event
+    fn send(&self, event: T);
+    /// Returns true if the sender has been disconnected
+    fn is_disconnected(&self) -> bool;
 }
 
-impl<T: Event> EventSender<T> for mpsc::Sender<T> {
-    fn send(&self, event: T) -> bool {
-        self.send(event).is_ok()
+/// Wrapper for thread safe sender
+pub struct MpscSender<T> {
+    inner: Mutex<(bool, mpsc::Sender<T>)>,
+}
+
+impl<T> From<mpsc::Sender<T>> for MpscSender<T> {
+    fn from(val: mpsc::Sender<T>) -> Self {
+        Self::new(val)
+    }
+}
+
+impl<T> MpscSender<T> {
+    pub fn new(inner: mpsc::Sender<T>) -> Self {
+        Self {
+            inner: Mutex::new((false, inner)),
+        }
+    }
+}
+
+impl<T: Event> EventSender<T> for MpscSender<T> {
+    fn send(&self, event: T) {
+        let mut inner = self.inner.lock();
+        match inner.1.send(event) {
+            Ok(_) => {}
+            Err(_) => inner.0 = true,
+        }
+    }
+
+    fn is_disconnected(&self) -> bool {
+        // TODO
+        self.inner.lock().0
+        // self.inner.is_disconnected()
     }
 }
 
 #[cfg(feature = "crossbeam-channel")]
 impl<T: Event> EventSender<T> for crossbeam_channel::Sender<T> {
     fn send(&self, event: T) -> bool {
-        self.send(event).is_ok()
+        let _ = self.send(event);
+    }
+
+    fn is_disconnected(&self) -> bool {
+        self.is_disconnected
     }
 }
 
 impl<T: Event> EventSender<T> for flume::Sender<T> {
-    fn send(&self, event: T) -> bool {
-        self.send(event).is_ok()
+    fn send(&self, event: T) {
+        let _ = self.send(event);
+    }
+
+    fn is_disconnected(&self) -> bool {
+        self.is_disconnected()
     }
 }
 
@@ -113,20 +150,24 @@ pub fn new_event_dispatcher<T: Event>() -> Box<dyn AnyEventDispatcher> {
 }
 
 pub struct ConcreteSender<T> {
-    inner: Mutex<Box<dyn EventSender<T>>>,
+    inner: Box<dyn EventSender<T>>,
 }
 
 impl<T> ConcreteSender<T> {
     pub fn new<S: EventSender<T>>(sender: S) -> Self {
         Self {
-            inner: Mutex::new(Box::new(sender)),
+            inner: Box::new(sender),
         }
     }
 }
 
 impl<T: Event> EventSender<T> for ConcreteSender<T> {
-    fn send(&self, event: T) -> bool {
-        self.inner.lock().send(event)
+    fn send(&self, event: T) {
+        self.inner.send(event)
+    }
+
+    fn is_disconnected(&self) -> bool {
+        self.inner.is_disconnected()
     }
 }
 

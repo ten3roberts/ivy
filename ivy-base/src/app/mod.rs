@@ -1,6 +1,8 @@
 mod builder;
 mod event;
 
+use std::time::Duration;
+
 pub use builder::*;
 pub use event::*;
 
@@ -9,7 +11,7 @@ use hecs::World;
 
 use crate::{
     layer::{Layer, LayerStack},
-    Clock, Events, Gizmos,
+    Clock, Events, Gizmos, IntoDuration,
 };
 
 use ivy_resources::Resources;
@@ -26,6 +28,8 @@ pub struct App {
     rx: Receiver<AppEvent>,
 
     running: bool,
+
+    event_cleanup_time: Duration,
 }
 
 impl App {
@@ -47,6 +51,7 @@ impl App {
             events,
             rx,
             running: false,
+            event_cleanup_time: 60.0.secs(),
         }
     }
 
@@ -61,8 +66,15 @@ impl App {
 
         let mut frame_clock = Clock::new();
 
+        let mut event_cleanup = Clock::new();
+
         // Update layers
         while self.running {
+            if event_cleanup.elapsed() > self.event_cleanup_time {
+                event_cleanup.reset();
+                self.events.cleanup();
+            }
+
             let frame_time = frame_clock.reset();
             let world = &mut self.world;
             let resources = &mut self.resources;

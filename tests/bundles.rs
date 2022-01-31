@@ -1,5 +1,5 @@
 use hecs::EntityBuilder;
-use ivy::{AngularMass, App, Mass, Name, RbBundle, Resitution, Velocity};
+use ivy_engine::{AngularMass, App, Mass, Name, RbBundle, Resitution, Velocity};
 use ivy_base::BuilderExt;
 
 #[test]

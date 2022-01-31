@@ -3,7 +3,7 @@ use crate::{
     LoadResource, RefEntry, Result,
 };
 use std::{
-    any::{type_name, TypeId},
+    any::TypeId,
     collections::{hash_map::Entry, HashMap},
 };
 
