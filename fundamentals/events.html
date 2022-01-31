@@ -150,7 +150,8 @@ by other means as the event will be cloned for every subscribed sender.</p>
 <pre><pre class="playground"><code class="language-rust">
 <span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>    #[derive(Debug, Clone, PartialEq, Eq)]
+</span>fn events() {
+    #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct MyEvent(String);
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct OtherEvent(String);
@@ -173,7 +174,6 @@ by other means as the event will be cloned for every subscribed sender.</p>
     assert!(other_events
         .try_iter()
         .map(|val| val.0)
-        .eq([&quot;HELLO, WORLD!&quot;]));
 <span class="boring">}
 </span></code></pre></pre>
 <h2 id="intercepting"><a class="header" href="#intercepting">Intercepting</a></h2>
@@ -188,7 +188,8 @@ be present and thus requiring a <em>mockup</em> intercepter that simply re-emits
 <pre><pre class="playground"><code class="language-rust">
 <span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>    #[derive(Debug, Clone, PartialEq, Eq)]
+</span>fn intercept_events() {
+    #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct MyEvent(String);
 
     // Normally, events will be supplied by App
@@ -210,7 +211,6 @@ be present and thus requiring a <em>mockup</em> intercepter that simply re-emits
     assert!(other_events
         .try_iter()
         .map(|val| val.0)
-        .eq([&quot;HELLO, WORLD!&quot;]));
 <span class="boring">}
 </span></code></pre></pre>
 
