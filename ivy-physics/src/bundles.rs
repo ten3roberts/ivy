@@ -1,7 +1,7 @@
 //! This module contains bundles and queries suitable for physics.
 use crate::Effector;
 use hecs::{Bundle, DynamicBundleClone, Query};
-use ivy_base::{AngularMass, AngularVelocity, Mass, Resitution, Velocity};
+use ivy_base::{AngularMass, AngularVelocity, Friction, Mass, Resitution, Velocity};
 use ivy_collision::Collider;
 
 #[derive(Query, Clone, Copy, Debug, PartialEq)]
@@ -11,6 +11,7 @@ pub struct RbQuery<'a> {
     pub ang_vel: &'a AngularVelocity,
     pub mass: &'a Mass,
     pub ang_mass: &'a AngularMass,
+    pub friction: &'a Friction,
 }
 
 #[derive(Default, Bundle, Debug, DynamicBundleClone)]
@@ -21,6 +22,7 @@ pub struct RbBundle {
     pub ang_mass: AngularMass,
     pub ang_vel: AngularVelocity,
     pub resitution: Resitution,
+    pub friction: Friction,
     pub effector: Effector,
 }
 
@@ -31,6 +33,7 @@ impl RbBundle {
         ang_vel: AngularVelocity,
         ang_mass: AngularMass,
         resitution: Resitution,
+        friction: Friction,
     ) -> Self {
         Self {
             vel,
@@ -39,6 +42,7 @@ impl RbBundle {
             ang_mass,
             resitution,
             effector: Default::default(),
+            friction,
         }
     }
 
@@ -58,6 +62,7 @@ pub struct RbColliderBundle {
     pub resitution: Resitution,
     pub effector: Effector,
     pub collider: Collider,
+    pub friction: Friction,
 }
 
 impl RbColliderBundle {
@@ -68,6 +73,7 @@ impl RbColliderBundle {
         ang_mass: AngularMass,
         resitution: Resitution,
         collider: Collider,
+        friction: Friction,
     ) -> Self {
         Self {
             vel,
@@ -77,6 +83,7 @@ impl RbColliderBundle {
             resitution,
             effector: Default::default(),
             collider: collider.into(),
+            friction,
         }
     }
 }
@@ -88,4 +95,5 @@ pub struct RbQueryMut<'a> {
     pub ang_vel: &'a mut AngularVelocity,
     pub mass: &'a mut Mass,
     pub ang_mass: &'a mut AngularMass,
+    pub friction: &'a mut Friction,
 }

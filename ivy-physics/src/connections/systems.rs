@@ -35,6 +35,7 @@ fn update_subtree(world: &impl GenericWorld, root: Entity) -> Result<()> {
             ang_vel: *val.ang_vel,
             resitution: *val.resitution,
             effector: Effector::default(),
+            friction: *val.friction,
         });
 
         drop(query);

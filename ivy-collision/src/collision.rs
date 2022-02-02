@@ -30,6 +30,13 @@ impl ContactPoints {
     pub fn iter(&self) -> std::slice::Iter<Position> {
         self.into_iter()
     }
+
+    pub fn reverse(&self) -> Self {
+        match *self {
+            Self::Single(p) => Self::Single(p),
+            Self::Double([a, b]) => Self::Double([b, a]),
+        }
+    }
 }
 
 impl From<Position> for ContactPoints {

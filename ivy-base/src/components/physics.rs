@@ -63,6 +63,10 @@ derive_for!(
     #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
     pub struct Resitution(pub f32);
 
+    /// Coefficient of friction
+    #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+    pub struct Friction(pub f32);
+
 );
 
 impl Velocity {

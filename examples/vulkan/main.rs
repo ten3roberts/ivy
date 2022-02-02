@@ -261,6 +261,7 @@ fn setup_objects(
                 vel,
                 mass: Mass(20.0),
                 ang_mass: AngularMass(5.0),
+                friction: Friction(1.0),
                 ..Default::default()
             })
             .add_bundle(ConnectionBundle::new(

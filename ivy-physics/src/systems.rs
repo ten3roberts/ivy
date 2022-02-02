@@ -1,17 +1,17 @@
 use crate::{
     bundles::*,
-    collision::{resolve_collision, resolve_static_collision, ResolveObject},
+    collision::{resolve_collision, ResolveObject},
     Effector, Result,
 };
-use glam::{Quat, Vec3};
+use glam::Quat;
 use hecs::Entity;
 use hecs_hierarchy::{Hierarchy, HierarchyQuery};
 use hecs_schedule::{traits::QueryExt, GenericWorld, Read, SubWorld};
 use ivy_base::{
-    AngularVelocity, Connection, ConnectionKind, DeltaTime, Events, Gravity, GravityInfluence,
-    Mass, Position, Resitution, Rotation, Static, Velocity,
+    AngularVelocity, Connection, ConnectionKind, DeltaTime, Events, Friction, Gravity,
+    GravityInfluence, Mass, Position, Resitution, Rotation, Static, Velocity,
 };
-use ivy_collision::{util::TOLERANCE, Collision};
+use ivy_collision::{util::TOLERANCE, Collision, Contact};
 
 const BATCH_SIZE: u32 = 64;
 
@@ -52,12 +52,13 @@ pub fn integrate_angular_velocity(
         });
 }
 
-pub fn gravity_system(world: SubWorld<&mut Velocity>, dt: Read<DeltaTime>) {
-    world
-        .native_query()
-        .iter()
-        .for_each(|(_, vel)| vel.y -= 1.0 * **dt)
-}
+// pub fn gravity_system(world: SubWorld<(&Velocity, &mut Effector)>) {
+//     world
+//         .native_query()
+//         .without::<Static>()
+//         .iter()
+//         .for_each(|(_, ( vel , effector))| effector.apply_acceleration(dv))
+// }
 
 pub fn wrap_around_system(world: SubWorld<&mut Position>) {
     world.native_query().iter().for_each(|(_, pos)| {
@@ -116,23 +117,17 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
         }
         // Check for static collision
         else if coll.a.is_static {
-            return resolve_static(
-                &world,
-                coll.a.entity,
-                coll.b.entity,
-                coll.contact.points[1],
-                coll.contact.normal,
-                coll.contact.depth,
-                *dt,
-            );
+            return resolve_static(&world, coll.a.entity, coll.b.entity, coll.contact, *dt);
         } else if coll.b.is_static {
             return resolve_static(
                 &world,
                 coll.b.entity,
                 coll.a.entity,
-                coll.contact.points[0],
-                -coll.contact.normal,
-                coll.contact.depth,
+                Contact {
+                    points: coll.contact.points.reverse(),
+                    depth: coll.contact.depth,
+                    normal: -coll.contact.normal,
+                },
                 *dt,
             );
         } else if coll.a.is_static && coll.b.is_static {
@@ -158,6 +153,7 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
             resitution: *a.resitution,
             mass: a_mass,
             ang_mass: *a.ang_mass,
+            friction: *a.friction,
         };
 
         let mut b_query = world.try_query_one::<(RbQuery, &Position, &Effector)>(b)?;
@@ -171,6 +167,7 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
             resitution: *b.resitution,
             mass: b_mass,
             ang_mass: *b.ang_mass,
+            friction: *b.friction,
         };
 
         let total_mass = a.mass + b.mass;
@@ -183,11 +180,13 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
 
         let mut effector = world.get_mut::<Effector>(*coll.a)?;
         effector.apply_impulse_at(impulse, coll.contact.points[0] - a.pos);
+        // effector.apply_force_at(a_f, coll.contact.points[0] - a.pos);
         effector.translate(-dir * (*b.mass / *total_mass));
         drop(effector);
 
         let mut effector = world.get_mut::<Effector>(*coll.b)?;
         effector.apply_impulse_at(-impulse, coll.contact.points[1] - b.pos);
+        // effector.apply_force_at(b_f, coll.contact.points[1] - b.pos);
         effector.translate(dir * (*a.mass / *total_mass));
 
         Ok(())
@@ -199,15 +198,22 @@ fn resolve_static(
     world: &impl GenericWorld,
     a: Entity,
     b: Entity,
-    contact: Position,
-    normal: Vec3,
-    depth: f32,
+    contact: Contact,
     dt: DeltaTime,
 ) -> Result<()> {
-    let mut a_query = world.try_query_one::<Option<&Resitution>>(a)?;
-    let a_res = a_query
+    let mut a_query =
+        world.try_query_one::<(Option<&Resitution>, Option<&Friction>, &Position)>(a)?;
+    let a = a_query
         .get()
         .expect("Static collider did not satisfy query");
+
+    let a = ResolveObject {
+        pos: *a.2,
+        resitution: a.0.cloned().unwrap_or_default(),
+
+        friction: a.1.cloned().unwrap_or_default(),
+        ..Default::default()
+    };
 
     let mut b_query = world.try_query_one::<(RbQuery, &Position, &mut Effector)>(b)?;
 
@@ -219,15 +225,15 @@ fn resolve_static(
             resitution: *rb.resitution,
             mass: *rb.mass,
             ang_mass: *rb.ang_mass,
+            friction: *rb.friction,
         };
 
-        let impulse =
-            resolve_static_collision(contact, normal, a_res.cloned().unwrap_or_default(), &b);
+        let impulse = resolve_collision(&contact, &a, &b);
 
-        let dir = normal * depth;
+        effector.apply_impulse_at(-impulse, contact.points[1] - b.pos);
+        // effector.apply_force_at(b_f, contact.points[1] - b.pos);
 
-        effector.apply_impulse_at(-impulse, contact - b.pos);
-        effector.translate(dir);
+        effector.translate(contact.normal * contact.depth);
     }
 
     Ok(())

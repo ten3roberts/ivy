@@ -54,6 +54,7 @@ impl<N: CollisionTreeNode + Storage> PhysicsLayer<N> {
             .add_system(systems::integrate_velocity)
             .add_system(systems::integrate_angular_velocity)
             .add_system(connections::update_connections)
+            .add_system(systems::gravity)
             .add_system(CollisionTree::<N>::register_system)
             .flush()
             .add_system(CollisionTree::<N>::update_system)
@@ -61,7 +62,6 @@ impl<N: CollisionTreeNode + Storage> PhysicsLayer<N> {
             .add_system(CollisionTree::<N>::check_collisions_system)
             .barrier() // Explicit channel dependency
             .add_system(resolve_collisions.named("Resolve Collisions"))
-            .add_system(systems::gravity)
             .add_system(systems::apply_effectors)
             .build();
 

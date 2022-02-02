@@ -1,11 +1,11 @@
 use std::{marker::PhantomData, slice::Iter};
 
+use glam::{f32, Vec3};
 use hecs::{Entity, Query};
 use hecs_schedule::GenericWorld;
 use ivy_base::{Position, Visible};
 use ordered_float::OrderedFloat;
 use slotmap::SlotMap;
-use glam::Vec3;
 
 use super::Ray;
 use crate::{Collider, CollisionTreeNode, Contact, Object, ObjectData, ObjectIndex, Visitor};
@@ -45,6 +45,11 @@ impl RayIntersection {
     /// Returns the single ray contact point
     pub fn normal(&self) -> Vec3 {
         self.contact.normal
+    }
+
+    /// Returns the intersection distance
+    pub fn distance(&self) -> f32 {
+        self.contact.depth
     }
 }
 
