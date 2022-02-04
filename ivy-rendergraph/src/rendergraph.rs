@@ -1,6 +1,6 @@
 use crate::{
     pass::{Pass, PassKind},
-    Error, Node, NodeKind, Result,
+    Error, Node, NodeKind,
 };
 use hash::Hash;
 use hecs::World;
@@ -42,10 +42,10 @@ pub struct RenderGraph {
 
 impl RenderGraph {
     /// Creates a new empty rendergraph.
-    pub fn new(context: SharedVulkanContext, frames_in_flight: usize) -> Result<Self> {
+    pub fn new(context: SharedVulkanContext, frames_in_flight: usize) -> crate::Result<Self> {
         let frames = (0..frames_in_flight)
             .map(|_| FrameData::new(context.clone()).map_err(|e| e.into()))
-            .collect::<Result<Vec<_>>>()?;
+            .collect::<crate::Result<Vec<_>>>()?;
 
         Ok(Self {
             context,
@@ -77,7 +77,7 @@ impl RenderGraph {
             .collect_vec()
     }
 
-    pub fn build_edges(&mut self) -> Result<()> {
+    pub fn build_edges(&mut self) -> crate::Result<()> {
         // Clear edges
         self.edges.clear();
 
@@ -121,7 +121,7 @@ impl RenderGraph {
                 })
                 .filter(|val| !matches!(*val, Err(Error::MissingWrite(_, _, _))))
             })
-            .try_for_each(|edge: Result<Edge>| -> Result<_> {
+            .try_for_each(|edge: crate::Result<Edge>| -> crate::Result<_> {
                 let edge = edge?;
                 edges
                     .entry(edge.src)
@@ -150,14 +150,14 @@ impl RenderGraph {
             .push(edge);
     }
 
-    pub fn node(&self, node: NodeIndex) -> Result<&dyn Node> {
+    pub fn node(&self, node: NodeIndex) -> crate::Result<&dyn Node> {
         self.nodes
             .get(node)
             .ok_or_else(|| Error::InvalidNodeIndex(node))
             .map(|val| val.as_ref())
     }
 
-    pub fn node_renderpass<'a>(&'a self, node: NodeIndex) -> Result<(&'a RenderPass, u32)> {
+    pub fn node_renderpass<'a>(&'a self, node: NodeIndex) -> crate::Result<(&'a RenderPass, u32)> {
         let (pass, index) = self
             .node_pass_map
             .get(node)
@@ -179,7 +179,7 @@ impl RenderGraph {
     }
 
     /// Builds or rebuilds the rendergraph and creates appropriate renderpasses and framebuffers.
-    pub fn build<T>(&mut self, textures: T, extent: Extent) -> Result<()>
+    pub fn build<T>(&mut self, textures: T, extent: Extent) -> crate::Result<()>
     where
         T: Deref<Target = ResourceCache<Texture>>,
     {
@@ -236,7 +236,7 @@ impl RenderGraph {
     // Begins the current frame and ensures resources are ready by waiting on fences.
     // Begins recording of the commandbuffers.
     // Returns the current frame in flight
-    pub fn begin(&self) -> Result<usize> {
+    pub fn begin(&self) -> crate::Result<usize> {
         let frame = &self.frames[self.current_frame];
         let device = self.context.device();
 
@@ -258,7 +258,7 @@ impl RenderGraph {
 
     // Executes the whole rendergraph by starting renderpass recording and filling it using the
     // node execution functions. Submits the resulting commandbuffer.
-    pub fn execute(&mut self, world: &mut World, resources: &Resources) -> Result<()> {
+    pub fn execute(&mut self, world: &mut World, resources: &Resources) -> crate::Result<()> {
         // Reset all commandbuffers for this frame
         let frame = &mut self.frames[self.current_frame];
 
@@ -272,7 +272,7 @@ impl RenderGraph {
         // Execute all nodes
         passes
             .iter()
-            .try_for_each(|(_pass_index, pass)| -> Result<()> {
+            .try_for_each(|(_pass_index, pass)| -> crate::Result<()> {
                 pass.execute(world, &cmd, nodes, current_frame, resources, extent)
             })?;
 
@@ -281,7 +281,7 @@ impl RenderGraph {
 
     /// Ends and submits recording of commandbuffer for the current frame, and increments the
     /// current_frame.
-    pub fn end(&mut self) -> Result<()> {
+    pub fn end(&mut self) -> crate::Result<()> {
         let frame = &self.frames[self.current_frame];
         let commandbuffer = &frame.commandbuffer;
         commandbuffer.end()?;
@@ -335,7 +335,7 @@ type Depth = u32;
 fn topological_sort<T, N>(
     nodes: N,
     edges: &SecondaryMap<NodeIndex, Vec<Edge>>,
-) -> Result<(Vec<NodeIndex>, SecondaryMap<NodeIndex, Depth>)>
+) -> crate::Result<(Vec<NodeIndex>, SecondaryMap<NodeIndex, Depth>)>
 where
     N: IntoIterator<Item = (NodeIndex, T)>,
 {
@@ -346,7 +346,7 @@ where
         current_node: NodeIndex,
         edges: &SecondaryMap<NodeIndex, Vec<Edge>>,
         depth: Depth,
-    ) -> Result<()> {
+    ) -> crate::Result<()> {
         // Update maximum recursion depth
         depths
             .entry(current_node)
@@ -474,7 +474,7 @@ struct FrameData {
 }
 
 impl FrameData {
-    pub fn new(context: SharedVulkanContext) -> Result<Self> {
+    pub fn new(context: SharedVulkanContext) -> crate::Result<Self> {
         let commandpool = CommandPool::new(
             context.device().clone(),
             context.queue_families().graphics().unwrap(),
@@ -649,7 +649,7 @@ struct EdgeConstructor<'a, I> {
 }
 
 impl<'a, I: Iterator<Item = Handle<Texture>>> Iterator for EdgeConstructor<'a, I> {
-    type Item = Result<Edge>;
+    type Item = crate::Result<Edge>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.reads
@@ -717,7 +717,7 @@ struct BufferEdgeConstructor<'a, I> {
 }
 
 impl<'a, I: Iterator<Item = vk::Buffer>> Iterator for BufferEdgeConstructor<'a, I> {
-    type Item = Result<Edge>;
+    type Item = crate::Result<Edge>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.reads

@@ -452,9 +452,9 @@ fn generate_tangents(vertices: &mut [Vertex], indices: &[u32]) {
 
         let r = 1.0 / (dt1.x * dt2.y - dt1.y * dt2.x);
         let tangent = (d1 * dt2.y - d2 * dt1.y) * r;
-        vertices[a].tangent = v0.normal.cross(tangent).normalize();
-        vertices[b].tangent = v1.normal.cross(tangent).normalize();
-        vertices[c].tangent = v2.normal.cross(tangent).normalize();
+        vertices[a].tangent = tangent;
+        vertices[b].tangent = tangent;
+        vertices[c].tangent = tangent;
     });
 }
 

@@ -7,6 +7,7 @@ mod error;
 mod handle;
 mod manager;
 mod traits;
+mod try_borrow_default;
 
 pub use borrow::*;
 pub use borrow_default::{DefaultResource, DefaultResourceMut};
@@ -17,3 +18,5 @@ pub use error::*;
 pub use handle::*;
 pub use manager::*;
 pub use traits::*;
+pub use try_borrow_default::{TryDefaultResource, TryDefaultResourceMut};
+

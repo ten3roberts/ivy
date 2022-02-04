@@ -34,6 +34,11 @@ impl<T: 'static + Sized> ResourceCache<T> {
         handle
     }
 
+    /// Free and invalidate all handles
+    pub fn clear(&mut self) {
+        self.slots.clear();
+        self.default = Handle::null();
+    }
     // Inserts a new resource into the cache.
     // If the cache is empty, the default is set to the first inserted value.
     // Returns a reference to the new value.

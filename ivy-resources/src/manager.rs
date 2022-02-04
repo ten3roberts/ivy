@@ -100,6 +100,12 @@ impl Resources {
         }
     }
 
+    /// Free and invalidate all handles
+    pub fn clear<T: Storage>(&self) -> Result<()> {
+        self.fetch_mut::<T>()?.clear();
+        Ok(())
+    }
+
     /// Returns a mutable reference to the resource pointed to by Handle<T>. Equivalent to using
     /// `cache()` and then `get()`. If dereferencing many handles, prefer gettting the cache first and
     /// the using it directly.

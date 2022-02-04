@@ -468,6 +468,12 @@ impl Layer for LogicLayer {
             }
         }
 
+        world
+            .query::<(&mut Velocity, &Position)>()
+            .iter()
+            .filter(|(_, (vel, pos))| pos.length() > 30.0 && vel.dot(***pos) > 0.0)
+            .for_each(|(_, (vel, _))| *vel = -*vel);
+
         WithTime::<RelativeOffset>::update(world, dt);
 
         move_system(world, &self.input);
