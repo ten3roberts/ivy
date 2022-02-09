@@ -1,5 +1,5 @@
 use hecs::World;
-use ivy_base::WorldExt;
+use ivy_base::{Extent, WorldExt};
 use ivy_graphics::{
     gizmos::GizmoRenderer, shaders::*, DepthAttachment, FullscreenRenderer, MainCamera,
     MeshRenderer, SkinnedMeshRenderer, WithPass,
@@ -8,7 +8,7 @@ use ivy_postprocessing::pbr::{create_pbr_pipeline, PBRInfo};
 use ivy_rendergraph::{
     AttachmentInfo, CameraNode, CameraNodeInfo, NodeIndex, RenderGraph, SwapchainNode,
 };
-use ivy_resources::Resources;
+use ivy_resources::{Handle, Resources};
 use ivy_ui::{Canvas, ImageRenderer, TextRenderer, TextUpdateNode};
 use ivy_vulkan::{
     context::SharedVulkanContext,
@@ -16,9 +16,7 @@ use ivy_vulkan::{
     ImageLayout, ImageUsage, LoadOp, PipelineInfo, StoreOp, Swapchain, Texture, TextureInfo,
 };
 
-use crate::{
-    Error, GeometryPass, GizmoPass, ImagePass, PostProcessingPass, Result, SkinnedPass, TextPass,
-};
+use crate::{Error, GeometryPass, GizmoPass, ImagePass, PbrPass, Result, SkinnedPass, TextPass};
 
 /// Create a pbr rendergraph with UI and gizmos
 /// This is the most common setup and works well for many use cases.
@@ -30,6 +28,23 @@ pub struct PBRRendering {
     ui: NodeIndex,
     pbr: NodeIndex,
     gizmo: NodeIndex,
+    color: Handle<Texture>,
+    extent: Extent,
+}
+
+#[records::record]
+pub struct PBRRenderingInfo {
+    pub color_usage: ImageUsage,
+}
+
+impl Default for PBRRenderingInfo {
+    fn default() -> Self {
+        Self {
+            color_usage: ImageUsage::COLOR_ATTACHMENT
+                | ImageUsage::SAMPLED
+                | ImageUsage::TRANSFER_SRC,
+        }
+    }
 }
 
 impl PBRRendering {
@@ -46,6 +61,7 @@ impl PBRRendering {
         resources: &Resources,
         pbr_info: PBRInfo<Env>,
         frames_in_flight: usize,
+        info: PBRRenderingInfo,
     ) -> Result<Self> {
         let camera = world
             .by_tag::<MainCamera>()
@@ -89,39 +105,27 @@ impl PBRRendering {
             &TextureInfo {
                 extent,
                 mip_levels: 1,
-                usage: ImageUsage::COLOR_ATTACHMENT
-                    | ImageUsage::SAMPLED
-                    | ImageUsage::TRANSFER_SRC,
+                usage: info.color_usage,
                 ..Default::default()
             },
         )?)?;
 
-        let pbr_nodes =
-            rendergraph.add_nodes(
-                create_pbr_pipeline::<GeometryPass, PostProcessingPass, _, _>(
-                    context.clone(),
-                    world,
-                    &resources,
-                    camera,
-                    (
-                        mesh_renderer,
-                        WithPass::<SkinnedPass, _>::new(skinned_renderer),
-                    ),
-                    extent,
-                    frames_in_flight,
-                    &[],
-                    &[AttachmentInfo {
-                        store_op: StoreOp::STORE,
-                        load_op: LoadOp::DONT_CARE,
-                        initial_layout: ImageLayout::UNDEFINED,
-                        final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                        resource: final_lit,
-                        clear_value: ClearValue::default(),
-                    }],
-                    &[],
-                    pbr_info,
-                )?,
-            );
+        let pbr_nodes = rendergraph.add_nodes(create_pbr_pipeline::<GeometryPass, PbrPass, _, _>(
+            context.clone(),
+            world,
+            &resources,
+            camera,
+            (
+                mesh_renderer,
+                WithPass::<SkinnedPass, _>::new(skinned_renderer),
+            ),
+            extent,
+            frames_in_flight,
+            &[],
+            &[AttachmentInfo::color(final_lit)],
+            &[],
+            pbr_info,
+        )?);
 
         let geometry = pbr_nodes[0];
         let pbr = pbr_nodes[1];
@@ -180,13 +184,6 @@ impl PBRRendering {
 
         rendergraph.add_node(TextUpdateNode::new(resources, text_renderer)?);
 
-        rendergraph.add_node(SwapchainNode::new(
-            context.clone(),
-            &resources,
-            resources.default()?,
-            final_lit,
-        )?);
-
         // Build renderpasses
         rendergraph.build(resources.fetch()?, extent)?;
 
@@ -194,10 +191,27 @@ impl PBRRendering {
 
         Ok(Self {
             geometry,
+            color: final_lit,
             ui,
             pbr,
             gizmo,
+            extent,
         })
+    }
+
+    pub fn using_swapchain(&self, resources: &Resources) -> Result<&Self> {
+        let mut rendergraph = resources.get_default_mut::<RenderGraph>()?;
+        let context = resources.get_default::<SharedVulkanContext>()?;
+
+        rendergraph.add_node(SwapchainNode::new(
+            context.clone(),
+            &resources,
+            resources.default()?,
+            self.color,
+        )?);
+
+        rendergraph.build(resources.fetch()?, self.extent)?;
+        Ok(self)
     }
 
     /// Setups basic pipelines and inserts them into the resource store
@@ -217,7 +231,7 @@ impl PBRRendering {
             ..Default::default()
         }))?;
 
-        resources.insert(PostProcessingPass(PipelineInfo {
+        resources.insert(PbrPass(PipelineInfo {
             vs: FULLSCREEN_SHADER,
             fs: PBR_SHADER,
             cull_mode: CullModeFlags::NONE,
@@ -249,6 +263,14 @@ impl PBRRendering {
         }))?;
 
         Ok(())
+    }
+
+    pub fn color(&self) -> Handle<Texture> {
+        self.color
+    }
+
+    pub fn extent(&self) -> Extent {
+        self.extent
     }
 }
 

@@ -154,7 +154,7 @@ impl Rotation {
 
     /// Creates a quaternion looking at `forward` with a roll facing `up`
     pub fn look_at(forward: Vec3, up: Vec3) -> Self {
-        let forward = forward.reject_from(up).normalize();
+        let forward = forward.reject_from(up).normalize_or_zero();
         if forward.is_nan() || forward.dot(Vec3::Z) > 0.99 {
             return Quat::IDENTITY.into();
         }

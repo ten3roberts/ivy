@@ -86,8 +86,8 @@ impl<N: CollisionTreeNode + Storage + DrawGizmos> Layer for PhysicsLayer<N> {
 
         if self.debug {
             let root = resources.get_default::<CollisionTree<N>>()?;
-            let gizmos = resources.get_default_mut()?;
-            root.draw_gizmos(gizmos, Color::white());
+            let mut gizmos = resources.get_default_mut()?;
+            root.draw_gizmos(&mut gizmos, Color::white());
         }
 
         self.schedule

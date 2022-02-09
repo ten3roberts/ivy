@@ -40,14 +40,9 @@ pub(crate) fn resolve_collision(
         // eprintln!("Separating");
         return Vec3::ZERO;
     }
-    let j = -(1.0 + resitution)
-        * contact_rel
-        * n
-        * (a.mass.inv()
-            + b.mass.inv()
-            + ra.cross(n).cross(*ra) * n * a.ang_mass.inv()
-            + rb.cross(n).cross(*rb) * n * b.ang_mass.inv())
-        .inv();
+    let j = -(1.0 + resitution) * contact_rel * (a.mass.inv() + b.mass.inv()).inv()
+        + ra.cross(n).length_squared() * a.ang_mass.inv()
+        + rb.cross(n).length_squared() * b.ang_mass.inv();
 
     //     let normal_force = j;
     //     // Calculate friction
@@ -58,10 +53,9 @@ pub(crate) fn resolve_collision(
     //     let b_f =
     //         -friction * normal_force * b_vel.reject_from(intersection.normal).normalize_or_zero() / dt;
 
-    let friction = a.friction.min(*b.friction)
-        * j.length()
-        * (a_vel - b_vel).reject_from(n).normalize_or_zero();
+    let friction =
+        a.friction.min(*b.friction) * j * (a_vel - b_vel).reject_from(n).normalize_or_zero();
     // (a_f, b_f, impulse)
-    j - friction
+    j * n - friction
     // impulse + friction
 }

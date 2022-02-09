@@ -1,5 +1,5 @@
 use glam::Vec3;
-use ivy_base::{DrawGizmos, Position};
+use ivy_base::{Cube, DrawGizmos, Gizmos, Position};
 
 use crate::Ray;
 
@@ -159,17 +159,15 @@ impl BoundingBox {
 }
 
 impl DrawGizmos for BoundingBox {
-    fn draw_gizmos<T: std::ops::DerefMut<Target = ivy_base::Gizmos>>(
-        &self,
-        mut gizmos: T,
-        color: ivy_base::Color,
-    ) {
-        gizmos.draw(ivy_base::Gizmo::Cube {
-            origin: self.origin,
+    fn draw_gizmos(&self, gizmos: &mut Gizmos, color: ivy_base::Color) {
+        gizmos.draw(
+            Cube {
+                origin: *self.origin,
+                half_extents: self.extents,
+                ..Default::default()
+            },
             color,
-            half_extents: self.extents,
-            radius: 0.01,
-        })
+        );
     }
 }
 

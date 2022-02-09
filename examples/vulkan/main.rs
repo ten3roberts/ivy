@@ -26,7 +26,7 @@ use physics::{
     bundles::*, connections::draw_connections, Effector, PhysicsLayer, PhysicsLayerInfo,
 };
 use postprocessing::pbr::PBRInfo;
-use presets::{GeometryPass, ImagePass, TextPass};
+use presets::{GeometryPass, ImagePass, PBRRenderingInfo, TextPass};
 use random::rand::SeedableRng;
 use random::{rand::rngs::StdRng, Random};
 use rendergraph::GraphicsLayer;
@@ -108,9 +108,11 @@ fn setup_graphics(world: &mut World, resources: &Resources) -> anyhow::Result<As
             },
         },
         FRAMES_IN_FLIGHT,
+        PBRRenderingInfo::default(),
     )?;
 
-    pbr.setup_pipelines(resources, presets::PipelinesInfo::default())?;
+    pbr.using_swapchain(resources)?
+        .setup_pipelines(resources, presets::PipelinesInfo::default())?;
 
     Ok(Assets {
         geometry_pass: resources.default()?,
@@ -459,11 +461,13 @@ impl Layer for LogicLayer {
                 effector.apply_force(dampening + towards + centering);
 
                 for (i, p) in hit.contact.points.iter().enumerate() {
-                    gizmos.draw(Gizmo::Sphere {
-                        origin: *p,
-                        color: Color::hsl(i as f32 * 30.0, 1.0, 0.5),
-                        radius: 0.05 / (i + 1) as f32,
-                    })
+                    gizmos.draw(
+                        ivy_base::Sphere {
+                            origin: **p,
+                            radius: 0.05 / (i + 1) as f32,
+                        },
+                        Color::hsl(i as f32 * 30.0, 1.0, 0.5),
+                    )
                 }
             }
         }

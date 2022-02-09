@@ -114,13 +114,15 @@ fn draw_subtree(world: &impl GenericWorld, root: Entity, gizmos: &mut Gizmos) ->
                 } => Color::red(),
             };
 
-            gizmos.draw(ivy_base::Gizmo::Line {
-                origin: *parent_pos,
+            gizmos.draw(
+                ivy_base::Line {
+                    origin: **parent_pos,
+                    dir: *(*pos - *parent_pos),
+                    radius: 0.02,
+                    corner_radius: 1.0,
+                },
                 color,
-                dir: *(*pos - *parent_pos),
-                radius: 0.02,
-                corner_radius: 1.0,
-            });
+            );
 
             draw_subtree(world, child, gizmos)
         })

@@ -11,9 +11,9 @@ use std::marker::PhantomData;
 
 use crate::{AttachmentInfo, Node, NodeKind};
 
-pub struct FullscreenNode<Pass, T, E> {
+pub struct FullscreenNode<Pass, T> {
     renderer: Handle<T>,
-    marker: PhantomData<(Pass, E)>,
+    marker: PhantomData<Pass>,
     color_attachments: Vec<AttachmentInfo>,
     read_attachments: Vec<Handle<Texture>>,
     input_attachments: Vec<Handle<Texture>>,
@@ -23,11 +23,11 @@ pub struct FullscreenNode<Pass, T, E> {
     set_count: usize,
 }
 
-impl<Pass, T, E> FullscreenNode<Pass, T, E>
+impl<Pass, T> FullscreenNode<Pass, T>
 where
     Pass: ShaderPass + Storage,
-    T: Renderer<Error = E> + Storage,
-    E: Into<anyhow::Error>,
+    T: Renderer + Storage,
+    <T as Renderer>::Error: Into<anyhow::Error>,
 {
     pub fn new(
         renderer: Handle<T>,
@@ -61,11 +61,11 @@ where
     }
 }
 
-impl<Pass, T, E> Node for FullscreenNode<Pass, T, E>
+impl<Pass, T> Node for FullscreenNode<Pass, T>
 where
     Pass: ShaderPass + Storage,
-    T: Renderer<Error = E> + Storage,
-    E: 'static + std::error::Error + Sync + Send,
+    T: Renderer + Storage,
+    <T as Renderer>::Error: Into<anyhow::Error>,
 {
     fn color_attachments(&self) -> &[AttachmentInfo] {
         &self.color_attachments
@@ -115,6 +115,7 @@ where
                 &[],
                 current_frame,
             )
+            .map_err(|e| e.into())
             .context("FullscreenNode failed to draw using supplied renderer")?;
 
         Ok(())

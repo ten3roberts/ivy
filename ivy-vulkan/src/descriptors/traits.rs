@@ -81,6 +81,21 @@ pub trait MultiDescriptorBindable {
     ) -> Result<&'a mut DescriptorBuilder>;
 }
 
+impl<T> MultiDescriptorBindable for Vec<T>
+where
+    T: DescriptorBindable,
+{
+    fn bind_resource_for<'a>(
+        &self,
+        binding: u32,
+        stage: ShaderStageFlags,
+        builder: &'a mut DescriptorBuilder,
+        current_frame: usize,
+    ) -> Result<&'a mut DescriptorBuilder> {
+        self[current_frame].bind_resource(binding, stage, builder)
+    }
+}
+
 impl<T> MultiDescriptorBindable for &[T]
 where
     T: DescriptorBindable,

@@ -1,6 +1,6 @@
 use glam::Vec3;
 use hecs::{Component, View};
-use ivy_base::{Color, DrawGizmos, Events};
+use ivy_base::{Color, Cube, DrawGizmos, Events, Gizmos};
 use ordered_float::OrderedFloat;
 use slotmap::SlotMap;
 use smallvec::{smallvec, Array, SmallVec};
@@ -410,11 +410,7 @@ impl<O: Array<Item = Object> + Component> CollisionTreeNode for BVHNode<O> {
 }
 
 impl<O: Array<Item = Object> + Component> DrawGizmos for BVHNode<O> {
-    fn draw_gizmos<T: std::ops::DerefMut<Target = ivy_base::Gizmos>>(
-        &self,
-        mut gizmos: T,
-        _: Color,
-    ) {
+    fn draw_gizmos(&self, gizmos: &mut Gizmos, _: Color) {
         if !self.is_leaf() {
             return;
         }
@@ -425,12 +421,14 @@ impl<O: Array<Item = Object> + Component> DrawGizmos for BVHNode<O> {
             Color::yellow()
         };
 
-        gizmos.draw(ivy_base::Gizmo::Cube {
-            origin: self.bounds.origin,
+        gizmos.draw(
+            Cube {
+                origin: *self.bounds.origin,
+                half_extents: self.bounds.extents,
+                ..Default::default()
+            },
             color,
-            half_extents: self.bounds.extents,
-            radius: 0.01,
-        })
+        )
     }
 }
 

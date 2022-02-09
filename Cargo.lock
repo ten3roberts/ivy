@@ -542,6 +542,7 @@ dependencies = [
  "log",
  "palette",
  "parking_lot",
+ "records",
  "serde",
  "thiserror",
 ]

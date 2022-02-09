@@ -160,24 +160,6 @@ impl IntoDuration for f32 {
     }
 }
 
-impl IntoDuration for f64 {
-    fn secs(&self) -> Duration {
-        Duration::from_secs_f64(*self)
-    }
-
-    fn ms(&self) -> Duration {
-        Duration::from_secs_f64(*self / 1000.0)
-    }
-
-    fn us(&self) -> Duration {
-        Duration::from_secs_f64(*self / 1_000_000.0)
-    }
-
-    fn ns(&self) -> Duration {
-        Duration::from_secs_f64(*self / 1_000_000_000.0)
-    }
-}
-
 /// Times the execution time of a scope and executes the provided function with
 /// the results
 pub struct TimedScope<F: FnOnce(Duration)> {

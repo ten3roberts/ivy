@@ -60,7 +60,7 @@ impl Renderer for GizmoRenderer {
 
         for gizmo in gizmos.sections().iter().flat_map(|val| val.1) {
             match gizmo {
-                ivy_base::Gizmo::Sphere {
+                ivy_base::GizmoPrimitive::Sphere {
                     origin,
                     color,
                     radius,
@@ -70,7 +70,7 @@ impl Renderer for GizmoRenderer {
                         ShaderStageFlags::VERTEX,
                         0,
                         &PushConstantData {
-                            model: Mat4::from_translation(**origin)
+                            model: Mat4::from_translation(*origin)
                                 * Mat4::from_scale(Vec3::splat(*radius)),
                             color: color.into(),
                             billboard_axis: Vec3::ZERO,
@@ -80,7 +80,7 @@ impl Renderer for GizmoRenderer {
 
                     cmd.draw_indexed(6, 1, 0, 0, 0);
                 }
-                ivy_base::Gizmo::Line {
+                ivy_base::GizmoPrimitive::Line {
                     origin,
                     color,
                     dir,
@@ -92,7 +92,7 @@ impl Renderer for GizmoRenderer {
                         ShaderStageFlags::VERTEX,
                         0,
                         &PushConstantData {
-                            model: Mat4::from_translation(**origin + *dir * 0.5)
+                            model: Mat4::from_translation(*origin + *dir * 0.5)
                                 * Mat4::from_scale(Vec3::new(*radius, dir.length() * 0.5, *radius)),
                             color: color.into(),
                             billboard_axis: dir.normalize(),
@@ -101,65 +101,6 @@ impl Renderer for GizmoRenderer {
                     );
 
                     cmd.draw_indexed(6, 1, 0, 0, 0);
-                }
-                ivy_base::Gizmo::Cube {
-                    origin,
-                    color,
-                    half_extents,
-                    radius,
-                } => {
-                    for (v, dir) in [(Vec3::X, Vec3::Z), (Vec3::Y, Vec3::X), (Vec3::Z, Vec3::Y)] {
-                        for (a, b) in [(1.0, 1.0), (-1.0, -1.0), (-1.0, 1.0), (1.0, -1.0)] {
-                            cmd.push_constants(
-                                layout,
-                                ShaderStageFlags::VERTEX,
-                                0,
-                                &PushConstantData {
-                                    model: Mat4::from_translation(
-                                        **origin
-                                            + b * (Vec3::ONE - (dir + v) + a * v) * *half_extents,
-                                    ) * Mat4::from_scale(Vec3::new(
-                                        *radius,
-                                        (dir * (*half_extents)).length() + radius * 1.0,
-                                        *radius,
-                                    )),
-                                    color: color.into(),
-                                    billboard_axis: dir.normalize(),
-                                    corner_radius: 1.0,
-                                },
-                            );
-
-                            cmd.draw_indexed(6, 1, 0, 0, 0);
-                        }
-                    }
-                }
-                ivy_base::Gizmo::Triangle {
-                    color,
-                    points,
-                    radius,
-                } => {
-                    for i in [(0, 1), (0, 2), (1, 2)] {
-                        let (p1, p2) = (points[i.0], points[i.1]);
-                        let dir = p2 - p1;
-                        cmd.push_constants(
-                            layout,
-                            ShaderStageFlags::VERTEX,
-                            0,
-                            &PushConstantData {
-                                model: Mat4::from_translation(p1 + dir * 0.5)
-                                    * Mat4::from_scale(Vec3::new(
-                                        *radius,
-                                        dir.length() * 0.5,
-                                        *radius,
-                                    )),
-                                color: color.into(),
-                                billboard_axis: dir.normalize(),
-                                corner_radius: 1.0,
-                            },
-                        );
-
-                        cmd.draw_indexed(6, 1, 0, 0, 0);
-                    }
                 }
             }
         }

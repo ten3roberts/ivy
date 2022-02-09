@@ -9,7 +9,7 @@ use ivy_vulkan::{commands::CommandBuffer, shaderpass::ShaderPass, PassInfo};
 
 // Generic interface for a renderer.
 pub trait Renderer {
-    type Error;
+    type Error: Into<anyhow::Error>;
     // Draws the scene using the pass [`Pass`] and the provided camera.
     // Note: camera must have gpu side data.
     fn draw<Pass: ShaderPass>(
@@ -50,11 +50,12 @@ where
     }
 }
 
-impl<Pass: ShaderPass, E, R> Renderer for WithPass<Pass, R>
+impl<Pass: ShaderPass, R> Renderer for WithPass<Pass, R>
 where
-    R: Renderer<Error = E>,
+    R: Renderer,
+    <R as Renderer>::Error: Into<anyhow::Error>,
 {
-    type Error = E;
+    type Error = R::Error;
 
     fn draw<Ignored: ShaderPass>(
         &mut self,

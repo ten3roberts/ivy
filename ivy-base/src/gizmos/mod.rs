@@ -2,24 +2,153 @@ use std::collections::BTreeMap;
 
 use glam::Vec3;
 
-use crate::{Color, Position};
+use crate::Color;
 
 mod traits;
 pub use traits::*;
 
 /// A default radius that looks good for small gizmos
-pub const DEFAULT_RADIUS: f32 = 0.01;
+pub const DEFAULT_RADIUS: f32 = 0.02;
 
+#[records::record]
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct Sphere {
+    origin: Vec3,
+    radius: f32,
+}
+
+impl Default for Sphere {
+    fn default() -> Self {
+        Self {
+            origin: Default::default(),
+            radius: DEFAULT_RADIUS,
+        }
+    }
+}
+
+impl DrawGizmos for Sphere {
+    fn draw_gizmos(&self, gizmos: &mut Gizmos, color: Color) {
+        gizmos.push(GizmoPrimitive::Sphere {
+            origin: self.origin,
+            color,
+            radius: self.radius,
+        })
+    }
+}
+
+#[records::record]
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct Line {
+    origin: Vec3,
+    dir: Vec3,
+    radius: f32,
+    corner_radius: f32,
+}
+
+impl Line {
+    pub fn from_points(a: Vec3, b: Vec3, radius: f32, corner_radius: f32) -> Self {
+        Self {
+            origin: a,
+            dir: (b - a),
+            radius,
+            corner_radius,
+        }
+    }
+}
+
+impl DrawGizmos for Line {
+    fn draw_gizmos(&self, gizmos: &mut Gizmos, color: Color) {
+        gizmos.push(GizmoPrimitive::Line {
+            origin: self.origin,
+            color,
+            dir: self.dir,
+            radius: self.radius,
+            corner_radius: self.corner_radius,
+        })
+    }
+}
+
+impl Default for Line {
+    fn default() -> Self {
+        Self {
+            origin: Default::default(),
+            radius: DEFAULT_RADIUS,
+            dir: Vec3::Z,
+            corner_radius: 1.0,
+        }
+    }
+}
+
+#[records::record]
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct Cube {
+    origin: Vec3,
+    half_extents: Vec3,
+    radius: f32,
+    corner_radius: f32,
+}
+
+impl Default for Cube {
+    fn default() -> Self {
+        Self {
+            origin: Default::default(),
+            radius: DEFAULT_RADIUS,
+            half_extents: Vec3::ONE,
+            corner_radius: 1.0,
+        }
+    }
+}
+
+impl DrawGizmos for Cube {
+    fn draw_gizmos(&self, gizmos: &mut Gizmos, color: Color) {
+        let lines = [(Vec3::X, Vec3::Z), (Vec3::Y, Vec3::X), (Vec3::Z, Vec3::Y)]
+            .iter()
+            .flat_map(|(v, dir)| {
+                [(1.0, 1.0), (-1.0, -1.0), (-1.0, 1.0), (1.0, -1.0)]
+                    .iter()
+                    .map(move |(a, b)| GizmoPrimitive::Line {
+                        origin: self.origin
+                            + *b * (Vec3::ONE - (*dir + *v) + *a * *v) * self.half_extents,
+                        dir: (*dir * self.half_extents),
+                        color,
+                        radius: self.radius,
+                        corner_radius: self.corner_radius,
+                    })
+            });
+
+        gizmos.extend(lines)
+    }
+}
+
+#[records::record]
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct Triangle {
+    origin: Vec3,
+    points: [Vec3; 3],
+    radius: f32,
+    corner_radius: f32,
+}
+
+impl Default for Triangle {
+    fn default() -> Self {
+        Self {
+            origin: Default::default(),
+            radius: DEFAULT_RADIUS,
+            points: [Vec3::X, Vec3::Y, Vec3::Z],
+            corner_radius: 1.0,
+        }
+    }
+}
 #[derive(Copy, Clone, PartialEq)]
 /// Represents a 3D world overlay for debugging purposes.
-pub enum Gizmo {
+pub enum GizmoPrimitive {
     Sphere {
-        origin: Position,
+        origin: Vec3,
         color: Color,
         radius: f32,
     },
     Line {
-        origin: Position,
+        origin: Vec3,
         color: Color,
         dir: Vec3,
         radius: f32,
@@ -27,26 +156,6 @@ pub enum Gizmo {
         // circle cap.
         corner_radius: f32,
     },
-    Cube {
-        origin: Position,
-        color: Color,
-        half_extents: Vec3,
-        radius: f32,
-    },
-    Triangle {
-        color: Color,
-        points: [Vec3; 3],
-        radius: f32,
-    }, // /// The position of the gizmo
-       // pos: Vec3,
-       // /// The direction the gizmo is facing
-       // dir: Vec3,
-       // /// The half width of the gizmo
-       // radius: f32,
-       // /// THe gizmo color with transparency
-       // color: Color,
-       // /// The type of gizmos, controls how it is rendered.
-       // kind: GizmoKind
 }
 
 pub type Section = &'static str;
@@ -62,7 +171,7 @@ pub type Section = &'static str;
 #[derive(Default)]
 pub struct Gizmos {
     current: Option<Section>,
-    sections: BTreeMap<Section, Vec<Gizmo>>,
+    sections: BTreeMap<Section, Vec<GizmoPrimitive>>,
 }
 
 impl Gizmos {
@@ -83,19 +192,21 @@ impl Gizmos {
     }
 
     /// Adds a new gizmos to the current section
-    pub fn draw(&mut self, gizmo: Gizmo) {
-        let section = self.get_section();
-
-        section.push(gizmo);
+    pub fn draw(&mut self, gizmo: impl DrawGizmos, color: Color) {
+        gizmo.draw_gizmos(self, color)
     }
 
-    pub fn extend<I: Iterator<Item = Gizmo>>(&mut self, iter: I) {
+    pub fn push(&mut self, primitive: GizmoPrimitive) {
+        self.get_section().push(primitive)
+    }
+
+    pub fn extend<I: Iterator<Item = GizmoPrimitive>>(&mut self, iter: I) {
         let section = self.get_section();
 
         section.extend(iter);
     }
 
-    fn get_section(&mut self) -> &mut Vec<Gizmo> {
+    fn get_section(&mut self) -> &mut Vec<GizmoPrimitive> {
         self.sections
             .entry(
                 self.current
@@ -105,7 +216,7 @@ impl Gizmos {
     }
 
     /// Get a reference to the gizmos's sections.
-    pub fn sections(&self) -> &BTreeMap<Section, Vec<Gizmo>> {
+    pub fn sections(&self) -> &BTreeMap<Section, Vec<GizmoPrimitive>> {
         &self.sections
     }
 }

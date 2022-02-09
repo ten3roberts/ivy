@@ -4,5 +4,5 @@ ivy_vulkan::new_shaderpass! {
     pub struct ImagePass;
     pub struct TextPass;
     pub struct GizmoPass;
-    pub struct PostProcessingPass;
+    pub struct PbrPass;
 }

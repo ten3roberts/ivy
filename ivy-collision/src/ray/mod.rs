@@ -3,7 +3,7 @@ use std::ops::Deref;
 use glam::{Mat4, Vec3};
 use hecs::Query;
 use hecs_schedule::GenericWorld;
-use ivy_base::{DrawGizmos, Position, TransformMatrix, DEFAULT_RADIUS};
+use ivy_base::{DrawGizmos, Gizmos, Line, Position, TransformMatrix};
 
 mod cast;
 pub use cast::*;
@@ -167,17 +167,14 @@ impl Ray {
 }
 
 impl DrawGizmos for Ray {
-    fn draw_gizmos<T: std::ops::DerefMut<Target = ivy_base::Gizmos>>(
-        &self,
-        mut gizmos: T,
-        color: ivy_base::Color,
-    ) {
-        gizmos.draw(ivy_base::Gizmo::Line {
-            origin: self.origin,
+    fn draw_gizmos(&self, gizmos: &mut Gizmos, color: ivy_base::Color) {
+        gizmos.draw(
+            Line {
+                origin: *self.origin,
+                dir: self.dir,
+                ..Default::default()
+            },
             color,
-            dir: self.dir,
-            radius: DEFAULT_RADIUS,
-            corner_radius: 1.0,
-        })
+        )
     }
 }

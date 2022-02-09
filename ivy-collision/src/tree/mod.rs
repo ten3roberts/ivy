@@ -234,8 +234,8 @@ impl<N: CollisionTreeNode> CollisionTree<N> {
 }
 
 impl<N: CollisionTreeNode + DrawGizmos> CollisionTree<N> {
-    pub fn draw_system(tree: DefaultResource<Self>, gizmos: DefaultResourceMut<Gizmos>) {
-        tree.draw_gizmos(gizmos, Color::white())
+    pub fn draw_system(tree: DefaultResource<Self>, mut gizmos: DefaultResourceMut<Gizmos>) {
+        tree.draw_gizmos(&mut gizmos, Color::white())
     }
 }
 
@@ -297,11 +297,7 @@ impl std::ops::Deref for EntityPayload {
 }
 
 impl<N: CollisionTreeNode + DrawGizmos> DrawGizmos for CollisionTree<N> {
-    fn draw_gizmos<T: std::ops::DerefMut<Target = Gizmos>>(
-        &self,
-        mut gizmos: T,
-        color: ivy_base::Color,
-    ) {
+    fn draw_gizmos(&self, mut gizmos: &mut Gizmos, color: ivy_base::Color) {
         gizmos.begin_section(any::type_name::<Self>());
         self.root
             .draw_gizmos_recursive(&self.nodes, &mut gizmos, color)

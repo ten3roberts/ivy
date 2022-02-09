@@ -233,7 +233,7 @@ fn resolve_static(
         effector.apply_impulse_at(-impulse, contact.points[1] - b.pos);
         // effector.apply_force_at(b_f, contact.points[1] - b.pos);
 
-        effector.translate(contact.normal * contact.depth);
+        // effector.translate(contact.normal * contact.depth);
     }
 
     Ok(())
