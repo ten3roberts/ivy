@@ -65,6 +65,10 @@ impl Animator {
         Ok(())
     }
 
+    pub fn stop_all(&mut self) {
+        self.states.clear();
+    }
+
     /// Play an animation by index
     pub fn stop_animation_index(&mut self, animation: usize) -> Result<()> {
         let animation = self.animations.get(animation)?;
