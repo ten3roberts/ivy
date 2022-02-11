@@ -15,11 +15,12 @@ readme = "../README.md"
 atomic_refcell = "0.1.8"
 derive_more = "0.99.17"
 hecs = "0.7.5"
-hecs-schedule = "0.5.1"
-hecs-hierarchy = "0.11.2"
+hecs-schedule = "0.6.0"
+hecs-hierarchy = "0.11.3"
 parking_lot = "0.12.0"
 slotmap = "1.0.6"
 thiserror = "1.0.30"
+ivy-base = { path = "../ivy-base", version = "*" }
 serde = { version = "1.0.136", features = [ "derive" ], optional = true }
 
 [features]

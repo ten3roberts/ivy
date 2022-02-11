@@ -25,8 +25,8 @@ ivy-resources = { path = "../ivy-resources", version = "0.10.0" }
 smallvec = "1.8.0"
 thiserror = "1.0.30"
 glam = "0.20.2"
-hecs-hierarchy = "0.11.2"
-hecs-schedule = "0.5.1"
+hecs-hierarchy = "0.11.3"
+hecs-schedule = "0.6.0"
 serde = { version = "1.0.136", features = [ "derive" ], optional = true }
 records = "0.2.0"
 rayon = "1.5.1"

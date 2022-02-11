@@ -549,7 +549,7 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
             ..Default::default()
         })
         .add_bundle(WidgetBundle {
-            abs_size: AbsoluteSize::new(100.0, 100.0),
+            abs_size: AbsoluteSize::new(500.0, 1160.0),
             rel_offset: RelativeOffset::new(1.0, -1.0),
             abs_offset: AbsoluteOffset::new(-20.0, 20.0),
             origin: Origin2D::lower_right(),

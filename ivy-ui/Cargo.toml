@@ -16,9 +16,9 @@ repository = "https://github.com/ten3roberts/ivy"
 anyhow = "1.0.53"
 derive-for = "1.2.2"
 derive_more = "0.99.17"
-fontdue = "0.6.3"
+fontdue = "0.6.4"
 hecs = "0.7.5"
-hecs-hierarchy = "0.11.2"
+hecs-hierarchy = "0.11.3"
 ivy-base = { path = "../ivy-base", version = "0.10.0" }
 glfw = "0.43.0"
 ivy-graphics = { path = "../ivy-graphics", version = "0.10.0" }
@@ -31,7 +31,7 @@ ivy-window = { path = "../ivy-window", version = "0.10.0" }
 thiserror = "1.0.30"
 glam = "0.20.2"
 flume = "0.10.10"
-hecs-schedule = "0.5.1"
+hecs-schedule = "0.6.0"
 serde = { version = "1.0.136", features = [ "derive" ], optional = true }
 records = "0.2.0"
 

@@ -45,7 +45,7 @@ ivy-presets        = { path = "./ivy-presets",        version = "0.10" }
 ivy-window         = { path = "./ivy-window",         version = "0.10" }
 
 hecs = "0.7.5"
-hecs-schedule = "0.5.1"
+hecs-schedule = "0.6.0"
 derive_more = "0.99.17"
 
 [dev-dependencies]
@@ -57,7 +57,7 @@ parking_lot = "0.12.0"
 slotmap = "1.0.6"
 hecs = "0.7.5"
 glfw = { version = "0.43.0", features = [ "vulkan" ] }
-hecs-hierarchy = "0.11.2"
+hecs-hierarchy = "0.11.3"
 glam = "0.20.2"
 log = "0.4.14"
 

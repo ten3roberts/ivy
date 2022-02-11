@@ -1,14 +1,18 @@
-use crate::{Error, Result, Template, TemplateKey};
+use crate::{Error, Result, TemplateKey};
 use std::collections::HashMap;
 
 use hecs::{DynamicBundleClone, Entity, EntityBuilderClone, World};
 
+use hecs_hierarchy::TreeBuilderClone;
 use hecs_schedule::{CommandBuffer, GenericWorld};
+use ivy_base::Connection;
+
+pub type Template = TreeBuilderClone<Connection>;
 
 //// Generic container for storing entity templates for later retrieval and
 ///spawning. Intended to be stored inside resources or standalone.
 pub struct TemplateStore {
-    templates: HashMap<TemplateKey, Box<dyn Template>>,
+    templates: HashMap<TemplateKey, Template>,
 }
 
 impl TemplateStore {
@@ -18,24 +22,23 @@ impl TemplateStore {
 
     /// Inserts a new template. A template is anything that is a closure or a
     /// built cloneable entity.
-    pub fn insert<T: Template>(&mut self, key: TemplateKey, mut template: T) {
-        template.root_mut().add(key.clone());
-        self.templates.insert(key, Box::new(template));
+    pub fn insert(&mut self, key: TemplateKey, template: impl Into<Template>) {
+        let mut template = template.into();
+        template.add(key.clone());
+        self.templates.insert(key, template);
     }
 
     /// Returns the template associated by key.
-    pub fn get(&self, key: &TemplateKey) -> Result<&dyn Template> {
+    pub fn get(&self, key: &TemplateKey) -> Result<&Template> {
         self.templates
             .get(key)
-            .map(|val| val.as_ref())
             .ok_or_else(|| Error::InvalidTemplateKey(key.clone()))
     }
 
     /// Returns the template associated by key.
-    pub fn get_mut<'a>(&'a mut self, key: &TemplateKey) -> Result<&'a mut dyn Template> {
+    pub fn get_mut<'a>(&'a mut self, key: &TemplateKey) -> Result<&'a mut Template> {
         self.templates
             .get_mut(key)
-            .map(|val| val.as_mut())
             .ok_or_else(|| Error::InvalidTemplateKey(key.clone()))
     }
 
@@ -46,10 +49,9 @@ impl TemplateStore {
         key: &TemplateKey,
         extra: impl DynamicBundleClone,
     ) -> Result<Entity> {
-        let template = self.get(key)?;
-        let mut builder = EntityBuilderClone::new();
-        builder.add_bundle(extra);
-        Ok(template.build(world, builder))
+        let mut template = self.get(key)?.clone();
+        template.add_bundle(extra);
+        Ok(template.spawn(world))
     }
 
     /// Spawns a template by key into the world.
@@ -60,11 +62,14 @@ impl TemplateStore {
         key: &TemplateKey,
         extra: impl DynamicBundleClone,
     ) -> Result<Entity> {
-        let template = self.get(key)?;
+        let mut template = self.get(key)?.clone();
 
-        let mut builder = EntityBuilderClone::new();
-        builder.add_bundle(extra);
-        let e = template.build_cmd(&world.to_empty(), cmd, builder);
+        template.add_bundle(extra);
+
+        let e = template.reserve(world);
+        cmd.write(move |w| {
+            template.spawn(w);
+        });
         Ok(e)
     }
 }
