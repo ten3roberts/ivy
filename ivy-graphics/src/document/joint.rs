@@ -19,7 +19,7 @@ pub type JointIndex = usize;
 pub struct Skin {
     // Map from node index to index
     joint_map: BTreeMap<JointIndex, usize>,
-    root: JointIndex,
+    roots: Vec<JointIndex>,
     joints: Vec<Joint>,
 }
 
@@ -67,16 +67,16 @@ impl Skin {
 
         // Find the intersect of armature children and joints
 
-        let root = armature
+        let roots = armature
             .children()
-            .find(|val| joint_map.contains_key(&val.index()))
-            .ok_or(Error::MissingRoot)?
-            .index();
+            .filter(|val| joint_map.contains_key(&val.index()))
+            .map(|val| val.index())
+            .collect();
 
         Ok(Self {
             joint_map,
             joints,
-            root,
+            roots,
         })
     }
 
@@ -98,7 +98,7 @@ impl Skin {
     }
 
     /// Get a reference to the skin's root.
-    pub fn root(&self) -> usize {
-        self.root
+    pub fn roots(&self) -> &[JointIndex] {
+        &self.roots
     }
 }

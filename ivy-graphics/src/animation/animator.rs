@@ -190,12 +190,18 @@ impl AnimationState {
         }
 
         // Loop through all states and check if the frame should be changed
-        self.time = self.time + dt * self.info.speed;
+        self.time = self.time + dt * self.info.speed.abs();
 
         if self.time > animation.duration() {
-            self.time = self.time % animation.duration();
-            self.states.clear();
+            if self.info.repeat {
+                self.time = self.time % animation.duration();
+                self.states.clear();
+            } else {
+                self.time = animation.duration()
+            }
         }
+
+        let dir = self.info.speed.signum() as isize;
 
         animation
             .channels
@@ -209,21 +215,31 @@ impl AnimationState {
                     .entry(channel.joint)
                     .or_insert_with(|| TransformBundle::default());
 
-                let next = (*current + 1) % channel.times.len();
+                let next = (*current + (channel.times.len() as isize + dir) as usize)
+                    % channel.times.len();
 
                 let start = channel.times[*current];
                 let end = channel.times[next];
 
-                let progress = (self.time - start) / (end - start);
+                let progress = if dir == -1 {
+                    1.0 - ((self.time - start) / (end - start)).abs()
+                } else {
+                    (self.time - start) / (end - start)
+                };
 
                 // Go to the next frame
                 if progress >= 1.0 {
                     *current = next;
                 }
 
+                if dir == -1 {
+                    dbg!(*current, next);
+                    dbg!(progress);
+                }
+
                 match &channel.values {
                     KeyFrameValues::Positions(val) => {
-                        transform.pos =
+                        transform.pos +=
                             (val[*current].lerp(*val[next], progress) * self.info.influence).into()
                     }
                     KeyFrameValues::Rotations(val) => {
@@ -235,6 +251,7 @@ impl AnimationState {
                     }
                 };
             });
+
         Ok(())
     }
 

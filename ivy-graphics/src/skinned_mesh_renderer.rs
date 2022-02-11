@@ -119,8 +119,14 @@ impl SkinnedMeshRenderer {
                         .for_each(|(_, (animator, skin, block))| {
                             let slice = &mut data[block.offset()..block.offset() + block.len()];
                             let skin = skins.get(*skin).unwrap();
-                            let root = skin.root();
-                            animator.fill_sparse(skin, slice, root, TransformMatrix::default());
+                            for root in skin.roots() {
+                                animator.fill_sparse(
+                                    skin,
+                                    slice,
+                                    *root,
+                                    TransformMatrix::default(),
+                                );
+                            }
                         })
                 },
             )

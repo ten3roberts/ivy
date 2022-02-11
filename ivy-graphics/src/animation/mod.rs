@@ -31,10 +31,10 @@ impl Animation {
 
             let joint = target.node().index();
 
-            let skin = skins
-                .iter()
-                .position(|skin| skin.joint(joint).is_some())
-                .unwrap();
+            let skin = match skins.iter().position(|skin| skin.joint(joint).is_some()) {
+                Some(val) => val,
+                None => return,
+            };
 
             let reader = channel.reader(|buffer| Some(&buffers[buffer.index()]));
             let inputs = reader.read_inputs().unwrap();

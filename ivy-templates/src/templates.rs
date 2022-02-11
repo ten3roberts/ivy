@@ -1,7 +1,7 @@
 use crate::{Error, Result, TemplateKey};
 use std::collections::HashMap;
 
-use hecs::{DynamicBundleClone, Entity, EntityBuilderClone, World};
+use hecs::{DynamicBundleClone, Entity, World};
 
 use hecs_hierarchy::TreeBuilderClone;
 use hecs_schedule::{CommandBuffer, GenericWorld};
