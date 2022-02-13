@@ -267,6 +267,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e78d4f1cc4ae33bbfc157ed5d5a5ef3bc29227303d595861deb238fcec4e9457"
 
 [[package]]
+name = "ezy"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "42ea8549cc3b09619954f2e4f9d52939557c03eb0c9551eed6390f9abe6cc6aa"
+dependencies = [
+ "glam",
+]
+
+[[package]]
 name = "find-crate"
 version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -533,6 +542,7 @@ dependencies = [
  "derive-for",
  "derive_more",
  "downcast-rs",
+ "ezy",
  "flume",
  "glam",
  "hecs",
@@ -554,6 +564,7 @@ dependencies = [
  "arrayvec",
  "derive-for",
  "derive_more",
+ "ezy",
  "flume",
  "glam",
  "hecs",

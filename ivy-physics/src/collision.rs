@@ -36,7 +36,7 @@ pub(crate) fn resolve_collision(
 
     let resitution = a.resitution.min(*b.resitution);
 
-    if contact_rel < 0.0 {
+    if contact_rel <= 0.0 {
         // eprintln!("Separating");
         return Vec3::ZERO;
     }
@@ -44,18 +44,8 @@ pub(crate) fn resolve_collision(
         + ra.cross(n).length_squared() * a.ang_mass.inv()
         + rb.cross(n).length_squared() * b.ang_mass.inv();
 
-    //     let normal_force = j;
-    //     // Calculate friction
-    //     let friction = a.friction.min(*b.friction);
-
-    //     let a_f =
-    //         -friction * normal_force * a_vel.reject_from(intersection.normal).normalize_or_zero() / dt;
-    //     let b_f =
-    //         -friction * normal_force * b_vel.reject_from(intersection.normal).normalize_or_zero() / dt;
-
     let friction =
         a.friction.min(*b.friction) * j * (a_vel - b_vel).reject_from(n).normalize_or_zero();
-    // (a_f, b_f, impulse)
+
     j * n + friction
-    // impulse + friction
 }

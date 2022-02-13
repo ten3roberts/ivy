@@ -1,6 +1,19 @@
-use glam::Vec3;
+use derive_more::{Deref, DerefMut, Display, From, Into};
+use ezy::Lerp;
+use glam::{Mat4, Vec3};
 
 use crate::{Capsule, CollisionPrimitive, Cube, Sphere};
+
+#[derive(Debug, Display, Clone, Copy, Deref, DerefMut, Default, From, Into)]
+pub struct ColliderOffset(pub Mat4);
+
+impl<'a> Lerp<'a> for ColliderOffset {
+    type Write = &'a mut Self;
+
+    fn lerp(write: Self::Write, start: &Self, end: &Self, t: f32) {
+        Mat4::lerp(&mut write.0, start, end, t)
+    }
+}
 
 /// Generic collider holding any primitive implementing a support function.
 pub struct Collider {

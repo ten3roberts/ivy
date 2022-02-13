@@ -141,6 +141,11 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
         let (a, a_mass) = get_rigid_root(&world, *coll.a)?;
         let (b, b_mass) = get_rigid_root(&world, *coll.b)?;
 
+        // Ignore collisions between two immovable objects
+        if !a_mass.is_normal() && !b_mass.is_normal() {
+            return Ok(());
+        }
+
         let mut a_query = world.try_query_one::<(RbQuery, &Position, &Effector)>(a)?;
         let (a, pos, eff) = a_query.get().unwrap();
 
@@ -181,13 +186,13 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
         let mut effector = world.get_mut::<Effector>(*coll.a)?;
         effector.apply_impulse_at(impulse, coll.contact.points[0] - a.pos);
         // effector.apply_force_at(a_f, coll.contact.points[0] - a.pos);
-        effector.translate(-dir * (*b.mass / *total_mass));
+        effector.translate(-dir * (*a.mass / *total_mass));
         drop(effector);
 
         let mut effector = world.get_mut::<Effector>(*coll.b)?;
         effector.apply_impulse_at(-impulse, coll.contact.points[1] - b.pos);
         // effector.apply_force_at(b_f, coll.contact.points[1] - b.pos);
-        effector.translate(dir * (*a.mass / *total_mass));
+        effector.translate(dir * (*b.mass / *total_mass));
 
         Ok(())
     })
@@ -228,12 +233,16 @@ fn resolve_static(
             friction: *rb.friction,
         };
 
+        if !b.mass.is_normal() {
+            return Ok(());
+        }
+
         let impulse = resolve_collision(&contact, &a, &b);
 
         effector.apply_impulse_at(-impulse, contact.points[1] - b.pos);
         // effector.apply_force_at(b_f, contact.points[1] - b.pos);
 
-        // effector.translate(contact.normal * contact.depth);
+        effector.translate(contact.normal * contact.depth);
     }
 
     Ok(())

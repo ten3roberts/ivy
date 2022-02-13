@@ -80,7 +80,7 @@ impl Layer for UILayer {
         let mut cursor_pos = Position2D(cursor_pos * **size);
 
         self.schedule
-            .execute((world, events, &mut self.state, &mut cursor_pos))
+            .execute_seq((world, events, &mut self.state, &mut cursor_pos))
             .context("Failed to execute UI schedule")?;
 
         Ok(())

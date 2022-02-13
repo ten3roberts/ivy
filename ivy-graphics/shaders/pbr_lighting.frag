@@ -135,9 +135,9 @@ vec3 PBR(vec3 albedo, vec3 pos, vec3 normal, float roughness, float metallic) {
 
 		vec3 radiance = light.radiance * dot(lightDir, normal) / (dist * dist);
 
-		/* if (dot(radiance, radiance) < 0.1) { */
-		/* 	continue; */
-		/* } */
+		if (dot(radiance, radiance) < 1.0 / 256.0) {
+			continue;
+		}
 
 		vec3 fresnel = FresnelSchlick(max(dot(halfway, cameraDir), 0.0), F0);
 
@@ -145,7 +145,7 @@ vec3 PBR(vec3 albedo, vec3 pos, vec3 normal, float roughness, float metallic) {
 		float G   = GeometrySmith(normal, cameraDir, lightDir, roughness);
 
 		vec3 numerator    = NDF * G * fresnel;
-		float denominator = 4.0 * max(dot(normal, cameraDir), 0.0) * max(dot(normal, lightDir), 0.0)  + 0.0001;
+		float denominator = 4.0 * max(dot(normal, cameraDir), 0.0) * max(dot(normal, lightDir), 0.0)  + 0.00001;
 		vec3 specular     = numerator / denominator;
 
 		vec3 kS = fresnel;

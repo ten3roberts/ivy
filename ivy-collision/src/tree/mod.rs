@@ -12,7 +12,7 @@ use records::record;
 use slotmap::{new_key_type, SlotMap};
 use smallvec::Array;
 
-use crate::{BoundingBox, Collider, CollisionPrimitive};
+use crate::{BoundingBox, Collider, ColliderOffset, CollisionPrimitive};
 
 mod binary_node;
 mod bvh;
@@ -253,6 +253,7 @@ pub struct ObjectData {
 #[derive(Query)]
 pub struct ObjectQuery<'a> {
     transform: TransformQuery<'a>,
+    offset: Option<&'a ColliderOffset>,
     collider: &'a Collider,
     is_trigger: Option<&'a Trigger>,
     is_static: Option<&'a Static>,
@@ -262,7 +263,9 @@ pub struct ObjectQuery<'a> {
 
 impl<'a> Into<ObjectData> for ObjectQuery<'a> {
     fn into(self) -> ObjectData {
-        let transform = self.transform.into_matrix();
+        let off = self.offset.cloned().unwrap_or_default();
+        let transform = TransformMatrix(*self.transform.into_matrix() * *off);
+
         let bounds = self.collider.bounding_box(transform);
         let extended_bounds = if let Some(vel) = self.velocity {
             bounds.expand(**vel * 0.1)

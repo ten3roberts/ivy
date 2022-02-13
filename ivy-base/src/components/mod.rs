@@ -466,3 +466,22 @@ impl std::ops::DerefMut for Name {
         self.0.to_mut()
     }
 }
+
+macro_rules! impl_lerp {
+    ([$(($ty: ident, $inner: ident),)*]) => {
+        $(
+            impl_lerp!($ty, $inner);
+        )*
+    };
+    ($ty: ident, $inner: ident) => {
+        impl<'a> ezy::Lerp<'a> for $ty {
+            type Write = &'a mut Self;
+
+            fn lerp(write: Self::Write, start: &Self, end: &Self, t: f32) {
+                <$inner as ezy::Lerp>::lerp(&mut write.0, start, end, t)
+            }
+        }
+    };
+}
+
+impl_lerp!([(Position, Vec3), (Scale, Vec3),]);
