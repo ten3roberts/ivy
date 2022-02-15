@@ -5,7 +5,8 @@ use hecs::{Entity, Query};
 use hecs_schedule::{CommandBuffer, SubWorld, Write};
 use ivy_base::components::Velocity;
 use ivy_base::{
-    Color, DrawGizmos, Events, Gizmos, Static, TransformMatrix, TransformQuery, Trigger, Visible,
+    Color, DrawGizmos, Events, Gizmos, Mass, Static, TransformMatrix, TransformQuery, Trigger,
+    Visible,
 };
 use ivy_resources::{DefaultResource, DefaultResourceMut};
 use records::record;
@@ -253,6 +254,7 @@ pub struct ObjectData {
 #[derive(Query)]
 pub struct ObjectQuery<'a> {
     transform: TransformQuery<'a>,
+    mass: Option<&'a Mass>,
     offset: Option<&'a ColliderOffset>,
     collider: &'a Collider,
     is_trigger: Option<&'a Trigger>,
@@ -278,7 +280,8 @@ impl<'a> Into<ObjectData> for ObjectQuery<'a> {
             transform,
             is_trigger: self.is_trigger.is_some(),
             is_visible: self.is_visible.map(|val| val.is_visible()).unwrap_or(true),
-            is_static: self.is_static.is_some(),
+            is_static: self.is_static.is_some()
+                || self.mass.map(|v| !v.is_normal()).unwrap_or(true),
         }
     }
 }

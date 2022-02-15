@@ -45,6 +45,7 @@ mod text;
 mod text_renderer;
 mod vertex;
 
+mod button;
 pub mod constraints;
 pub mod systems;
 

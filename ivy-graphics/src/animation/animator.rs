@@ -31,7 +31,9 @@ impl Default for AnimationInfo {
 pub struct Animator {
     states: BTreeMap<Handle<Animation>, AnimationState>,
     /// The keyframe index for each channel
-    joints: BTreeMap<JointIndex, TransformBundle>,
+    joints: BTreeMap<JointIndex, (TransformBundle, usize)>,
+    generation: usize,
+
     /// The current animation time
     animations: AnimationStore,
 }
@@ -41,19 +43,20 @@ impl Animator {
         Self {
             states: Default::default(),
             joints: Default::default(),
+            generation: 0,
             animations: animations.into(),
         }
     }
 
     /// Moves the animators state forward by `dt`
     pub fn progress(&mut self, animations: &ResourceCache<Animation>, dt: f32) -> Result<()> {
+        self.generation += 1;
         let joints = &mut self.joints;
+        let generation = self.generation;
 
-        joints.clear();
-
-        self.states
-            .iter_mut()
-            .try_for_each(|(_, animation)| animation.progress(animations, dt, joints))?;
+        self.states.iter_mut().try_for_each(|(_, animation)| {
+            animation.progress(animations, dt, joints, generation)
+        })?;
 
         Ok(())
     }
@@ -112,7 +115,7 @@ impl Animator {
         Ok(())
     }
 
-    pub fn joints(&self) -> Iter<JointIndex, TransformBundle> {
+    pub fn joints(&self) -> Iter<JointIndex, (TransformBundle, usize)> {
         self.joints.iter()
     }
 
@@ -123,10 +126,14 @@ impl Animator {
         current: JointIndex,
         parent: TransformMatrix,
     ) {
-        let transform = self.joints.entry(current).or_insert_with(|| {
-            skin.joint(current)
-                .expect("Missing joint in skin")
-                .local_bind_transform
+        let generation = self.generation;
+        let (transform, _) = self.joints.entry(current).or_insert_with(|| {
+            (
+                skin.joint(current)
+                    .expect("Missing joint in skin")
+                    .local_bind_transform,
+                generation,
+            )
         });
         let skin_joint = skin.joint(current).expect("Missing joint in skin");
         let current_transform = parent * transform.into_matrix();
@@ -181,7 +188,8 @@ impl AnimationState {
         &mut self,
         animations: &ResourceCache<Animation>,
         dt: f32,
-        joints: &mut BTreeMap<ChannelIndex, TransformBundle>,
+        joints: &mut BTreeMap<ChannelIndex, (TransformBundle, usize)>,
+        generation: usize,
     ) -> Result<()> {
         let animation = animations.get(self.animation)?;
 
@@ -190,14 +198,15 @@ impl AnimationState {
         }
 
         // Loop through all states and check if the frame should be changed
-        self.time = self.time + dt * self.info.speed.abs();
+        self.time += dt * self.info.speed.abs();
 
         if self.time > animation.duration() {
             if self.info.repeat {
                 self.time = self.time % animation.duration();
                 self.states.clear();
             } else {
-                self.time = animation.duration()
+                self.time = animation.duration();
+                self.playing = false;
             }
         }
 
@@ -211,9 +220,14 @@ impl AnimationState {
                 // Get or initiate state
                 let current = self.states.entry(index).or_default();
 
-                let transform = joints
+                let (transform, gen) = joints
                     .entry(channel.joint)
-                    .or_insert_with(|| TransformBundle::default());
+                    .or_insert_with(|| (TransformBundle::default(), generation));
+
+                if *gen != generation {
+                    *transform = TransformBundle::default();
+                    *gen = generation;
+                }
 
                 let next = (*current + (channel.times.len() as isize + dir) as usize)
                     % channel.times.len();
@@ -259,6 +273,10 @@ impl AnimationState {
         if !self.playing {
             self.playing = true;
             // self.time = 0.0;
+        }
+        if !self.info.repeat {
+            self.time = 0.0;
+            self.states.clear();
         }
     }
 }

@@ -1,6 +1,6 @@
 use derive_for::*;
 use derive_more::*;
-use hecs::Bundle;
+use hecs::{Bundle, DynamicBundleClone};
 
 use glam::{EulerRot, Quat, Vec3};
 
@@ -76,7 +76,7 @@ impl ConnectionKind {
     }
 }
 
-#[derive(Default, Bundle, Clone, Copy, Debug, PartialEq)]
+#[derive(Default, Bundle, Clone, Copy, Debug, PartialEq, DynamicBundleClone)]
 pub struct ConnectionBundle {
     pub kind: ConnectionKind,
     pub offset: PositionOffset,
