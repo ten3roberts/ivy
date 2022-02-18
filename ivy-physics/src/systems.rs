@@ -70,12 +70,12 @@ pub fn wrap_around_system(world: SubWorld<&mut Position>) {
 
 /// Returns the root of the rigid system, along with its mass
 pub fn get_rigid_root(world: &impl GenericWorld, child: Entity) -> Result<(Entity, Mass)> {
-    let mut system_mass = match world.try_get::<Mass>(child) {
-        Ok(mass) => *mass,
-        Err(_) => {
-            panic!("No mass in leaf");
-        }
-    };
+    let mut system_mass = world
+        .try_get::<Mass>(child)
+        .ok()
+        .as_deref()
+        .cloned()
+        .unwrap_or_default();
 
     let mut root = child;
 
@@ -185,13 +185,11 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
 
         let mut effector = world.get_mut::<Effector>(*coll.a)?;
         effector.apply_impulse_at(impulse, coll.contact.points[0] - a.pos);
-        // effector.apply_force_at(a_f, coll.contact.points[0] - a.pos);
         effector.translate(-dir * (*a.mass / *total_mass));
         drop(effector);
 
         let mut effector = world.get_mut::<Effector>(*coll.b)?;
         effector.apply_impulse_at(-impulse, coll.contact.points[1] - b.pos);
-        // effector.apply_force_at(b_f, coll.contact.points[1] - b.pos);
         effector.translate(dir * (*b.mass / *total_mass));
 
         Ok(())

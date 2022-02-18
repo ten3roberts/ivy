@@ -142,11 +142,11 @@ where
 
     pub fn calculate_bounds_incremental(&self, object: &ObjectData) -> BoundingBox {
         self.bounds
-            .merge(
-                object
-                    .extended_bounds
-                    .rel_margin(if object.is_static { 1.0 } else { MARGIN }),
-            )
+            .merge(object.extended_bounds.rel_margin(if !object.is_movable() {
+                1.0
+            } else {
+                MARGIN
+            }))
     }
 
     /// Updates the bounds of the object

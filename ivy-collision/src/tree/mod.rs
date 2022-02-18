@@ -249,6 +249,7 @@ pub struct ObjectData {
     pub is_trigger: bool,
     pub is_visible: bool,
     pub is_static: bool,
+    pub movable: bool,
 }
 
 #[derive(Query)]
@@ -261,6 +262,12 @@ pub struct ObjectQuery<'a> {
     is_static: Option<&'a Static>,
     is_visible: Option<&'a Visible>,
     velocity: Option<&'a Velocity>,
+}
+
+impl ObjectData {
+    pub fn is_movable(&self) -> bool {
+        !self.is_static && self.movable
+    }
 }
 
 impl<'a> Into<ObjectData> for ObjectQuery<'a> {
@@ -280,8 +287,8 @@ impl<'a> Into<ObjectData> for ObjectQuery<'a> {
             transform,
             is_trigger: self.is_trigger.is_some(),
             is_visible: self.is_visible.map(|val| val.is_visible()).unwrap_or(true),
-            is_static: self.is_static.is_some()
-                || self.mass.map(|v| !v.is_normal()).unwrap_or(true),
+            is_static: self.is_static.is_some(),
+            movable: self.mass.map(|v| v.is_normal()).unwrap_or(false),
         }
     }
 }

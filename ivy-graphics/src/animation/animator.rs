@@ -246,11 +246,6 @@ impl AnimationState {
                     *current = next;
                 }
 
-                if dir == -1 {
-                    dbg!(*current, next);
-                    dbg!(progress);
-                }
-
                 match &channel.values {
                     KeyFrameValues::Positions(val) => {
                         transform.pos +=

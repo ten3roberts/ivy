@@ -36,10 +36,11 @@ pub(crate) fn resolve_collision(
 
     let resitution = a.resitution.min(*b.resitution);
 
-    if contact_rel <= 0.0 {
+    if contact_rel < 0.01 {
         // eprintln!("Separating");
         return Vec3::ZERO;
     }
+
     let j = -(1.0 + resitution) * contact_rel * (a.mass.inv() + b.mass.inv()).inv()
         + ra.cross(n).length_squared() * a.ang_mass.inv()
         + rb.cross(n).length_squared() * b.ang_mass.inv();

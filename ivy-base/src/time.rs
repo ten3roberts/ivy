@@ -70,60 +70,6 @@ pub trait IntoDuration {
     fn ns(&self) -> Duration;
 }
 
-impl IntoDuration for i32 {
-    fn secs(&self) -> Duration {
-        Duration::from_secs(*self as u64)
-    }
-
-    fn ms(&self) -> Duration {
-        Duration::from_millis(*self as u64)
-    }
-
-    fn us(&self) -> Duration {
-        Duration::from_micros(*self as u64)
-    }
-
-    fn ns(&self) -> Duration {
-        Duration::from_nanos(*self as u64)
-    }
-}
-
-impl IntoDuration for i64 {
-    fn secs(&self) -> Duration {
-        Duration::from_secs(*self as u64)
-    }
-
-    fn ms(&self) -> Duration {
-        Duration::from_millis(*self as u64)
-    }
-
-    fn us(&self) -> Duration {
-        Duration::from_micros(*self as u64)
-    }
-
-    fn ns(&self) -> Duration {
-        Duration::from_nanos(*self as u64)
-    }
-}
-
-impl IntoDuration for u32 {
-    fn secs(&self) -> Duration {
-        Duration::from_secs(*self as u64)
-    }
-
-    fn ms(&self) -> Duration {
-        Duration::from_millis(*self as u64)
-    }
-
-    fn us(&self) -> Duration {
-        Duration::from_micros(*self as u64)
-    }
-
-    fn ns(&self) -> Duration {
-        Duration::from_nanos(*self as u64)
-    }
-}
-
 impl IntoDuration for u64 {
     fn secs(&self) -> Duration {
         Duration::from_secs(*self)
