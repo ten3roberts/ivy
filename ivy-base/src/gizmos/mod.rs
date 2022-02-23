@@ -191,6 +191,10 @@ impl Gizmos {
         self.sections.get_mut(section).map(Vec::clear);
     }
 
+    pub fn clear_section(&mut self, section: Section) {
+        self.sections.get_mut(section).map(Vec::clear);
+    }
+
     /// Adds a new gizmos to the current section
     pub fn draw(&mut self, gizmo: impl DrawGizmos, color: Color) {
         gizmo.draw_gizmos(self, color)

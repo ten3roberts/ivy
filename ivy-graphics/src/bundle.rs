@@ -1,4 +1,4 @@
-use hecs::Bundle;
+use hecs::{Bundle, Component, DynamicBundleClone};
 use ivy_base::{Color, Position, Rotation, Scale, Visible};
 use ivy_resources::Handle;
 
@@ -10,8 +10,8 @@ use crate::{Material, Mesh};
 /// By default, the material is taken from the mesh if available. It is valid
 /// for the material to be null, howver, I no materials exists in mesh the
 /// object won't be rendererd.
-#[derive(Bundle, Clone)]
-pub struct ObjectBundle<Pass> {
+#[derive(Bundle, DynamicBundleClone)]
+pub struct ObjectBundle<Pass: Component> {
     pub visible: Visible,
     pub pos: Position,
     pub rot: Rotation,
@@ -23,7 +23,7 @@ pub struct ObjectBundle<Pass> {
 }
 
 // Implement manually since `Handle<Pass>` implements default and debug regardless of `Pass`
-impl<Pass> std::fmt::Debug for ObjectBundle<Pass> {
+impl<Pass: Component> std::fmt::Debug for ObjectBundle<Pass> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ObjectBundle")
             .field("visible", &self.visible)
@@ -38,7 +38,7 @@ impl<Pass> std::fmt::Debug for ObjectBundle<Pass> {
     }
 }
 
-impl<Pass> Default for ObjectBundle<Pass> {
+impl<Pass: Component> Default for ObjectBundle<Pass> {
     fn default() -> Self {
         Self {
             visible: Default::default(),
