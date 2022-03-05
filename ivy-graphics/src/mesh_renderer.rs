@@ -115,8 +115,8 @@ impl Renderer for MeshRenderer {
     }
 }
 
-#[repr(C, align(16))]
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
+#[repr(C)]
 struct ObjectData {
     model: Mat4,
     color: Vec4,

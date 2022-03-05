@@ -395,7 +395,6 @@ impl<'d> DocumentNode<'d> {
             self.scale,
             PositionOffset(*self.pos),
             RotationOffset(*self.rot),
-            Color::default(),
             Visible::default(),
         ));
 

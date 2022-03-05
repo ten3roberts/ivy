@@ -99,7 +99,7 @@ impl AttachmentInfo {
             load_op: LoadOp::CLEAR,
             initial_layout: ImageLayout::UNDEFINED,
             final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-            clear_value: ClearValue::color(0.0, 0.0, 0.0, 0.0),
+            clear_value: ClearValue::color(0.0, 0.0, 0.0, 1.0),
             resource,
         }
     }

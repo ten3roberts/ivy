@@ -84,13 +84,6 @@ where
                 resource: *depth_attachment,
                 clear_value: ClearValue::depth_stencil(1.0, 0),
             }),
-            clear_values: vec![
-                ClearValue::color(0.0, 0.0, 0.0, 1.0),
-                ClearValue::color(0.0, 0.0, 0.0, 1.0),
-                ClearValue::color(0.0, 0.0, 0.0, 1.0),
-                ClearValue::color(0.0, 0.0, 0.0, 1.0),
-                ClearValue::depth_stencil(1.0, 0),
-            ],
             frames_in_flight,
             ..Default::default()
         },

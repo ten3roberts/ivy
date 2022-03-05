@@ -16,7 +16,10 @@ use ivy_vulkan::{
     ImageLayout, ImageUsage, LoadOp, PipelineInfo, StoreOp, Swapchain, Texture, TextureInfo,
 };
 
-use crate::{Error, GeometryPass, GizmoPass, ImagePass, PbrPass, Result, SkinnedPass, TextPass};
+use crate::{
+    Error, GeometryPass, GizmoPass, ImagePass, PbrPass, Result, SkinnedPass, TextPass,
+    TransparentPass,
+};
 
 /// Create a pbr rendergraph with UI and gizmos
 /// This is the most common setup and works well for many use cases.
@@ -24,9 +27,7 @@ use crate::{Error, GeometryPass, GizmoPass, ImagePass, PbrPass, Result, SkinnedP
 #[records::record]
 /// Preset for common PBR rendering setup with UI and gizmos
 pub struct PBRRendering {
-    geometry: NodeIndex,
     ui: NodeIndex,
-    pbr: NodeIndex,
     gizmo: NodeIndex,
     color: Handle<Texture>,
     extent: Extent,
@@ -110,6 +111,16 @@ impl PBRRendering {
             },
         )?)?;
 
+        let transparent = resources.insert(Texture::new(
+            context.clone(),
+            &TextureInfo {
+                extent,
+                mip_levels: 1,
+                usage: info.color_usage,
+                ..Default::default()
+            },
+        )?)?;
+
         let pbr_nodes = rendergraph.add_nodes(create_pbr_pipeline::<GeometryPass, PbrPass, _, _>(
             context.clone(),
             world,
@@ -117,7 +128,7 @@ impl PBRRendering {
             camera,
             (
                 mesh_renderer,
-                WithPass::<SkinnedPass, _>::new(skinned_renderer),
+                // WithPass::<SkinnedPass, _>::new(skinned_renderer),
             ),
             extent,
             frames_in_flight,
@@ -127,8 +138,33 @@ impl PBRRendering {
             pbr_info,
         )?);
 
-        let geometry = pbr_nodes[0];
-        let pbr = pbr_nodes[1];
+        let transparent_node = rendergraph.add_node(CameraNode::<TransparentPass, _>::new(
+            context.clone(),
+            resources,
+            camera,
+            mesh_renderer,
+            CameraNodeInfo {
+                name: "Transparent",
+                color_attachments: vec![AttachmentInfo {
+                    store_op: StoreOp::STORE,
+                    load_op: LoadOp::LOAD,
+                    initial_layout: ImageLayout::UNDEFINED,
+                    final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                    resource: final_lit,
+                    clear_value: Default::default(),
+                }],
+                depth_attachment: Some(AttachmentInfo {
+                    resource: **world.get::<DepthAttachment>(camera)?,
+                    store_op: StoreOp::STORE,
+                    load_op: LoadOp::LOAD,
+                    initial_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                    final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                    ..Default::default()
+                }),
+                frames_in_flight,
+                ..Default::default()
+            },
+        )?);
 
         let gizmo = rendergraph.add_node(CameraNode::<GizmoPass, _>::new(
             context.clone(),
@@ -190,10 +226,8 @@ impl PBRRendering {
         resources.insert_default(rendergraph)?;
 
         Ok(Self {
-            geometry,
             color: final_lit,
             ui,
-            pbr,
             gizmo,
             extent,
         })
@@ -221,9 +255,17 @@ impl PBRRendering {
             vs: DEFAULT_VERTEX_SHADER,
             fs: DEFAULT_FRAGMENT_SHADER,
             cull_mode: info.cull_mode,
+            blending: false,
             ..Default::default()
         }))?;
 
+        resources.insert(TransparentPass(PipelineInfo {
+            vs: DEFAULT_VERTEX_SHADER,
+            fs: TRANSPARENT_FRAGMENT_SHADER,
+            cull_mode: info.cull_mode,
+            blending: true,
+            ..Default::default()
+        }))?;
         resources.insert(SkinnedPass(PipelineInfo {
             vs: SKINNED_VERTEX_SHADER,
             fs: DEFAULT_FRAGMENT_SHADER,

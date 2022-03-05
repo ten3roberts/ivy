@@ -111,6 +111,13 @@ where
             None
         };
 
+        let clear_values = info
+            .color_attachments
+            .iter()
+            .chain(info.depth_attachment.as_ref())
+            .map(|v| v.clear_value)
+            .collect();
+
         Ok(Self {
             name: info.name,
             camera,
@@ -122,7 +129,7 @@ where
             input_attachments: info.input_attachments,
             depth_attachment: info.depth_attachment,
             buffer_reads: info.buffer_reads,
-            clear_values: info.clear_values,
+            clear_values,
         })
     }
 }

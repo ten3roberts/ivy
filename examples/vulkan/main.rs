@@ -26,7 +26,7 @@ use physics::{
     bundles::*, connections::draw_connections, Effector, PhysicsLayer, PhysicsLayerInfo,
 };
 use postprocessing::pbr::PBRInfo;
-use presets::{GeometryPass, ImagePass, PBRRenderingInfo, TextPass};
+use presets::{GeometryPass, ImagePass, PBRRenderingInfo, TextPass, TransparentPass};
 use random::rand::SeedableRng;
 use random::{rand::rngs::StdRng, Random};
 use rendergraph::GraphicsLayer;
@@ -116,6 +116,7 @@ fn setup_graphics(world: &mut World, resources: &Resources) -> anyhow::Result<As
 
     Ok(Assets {
         geometry_pass: resources.default()?,
+        trans_pass: resources.default()?,
         text_pass: resources.default()?,
         ui_pass: resources.default()?,
     })
@@ -253,9 +254,10 @@ fn setup_objects(
         builder
             .add_bundle(ObjectBundle {
                 mesh: cube_mesh,
-                pass: assets.geometry_pass,
+                pass: assets.trans_pass,
                 scale: Scale::uniform(0.5),
                 pos,
+                color: Color::rgba(1.0, 1.0, 0.2, 0.5),
                 ..Default::default()
             })
             .add_bundle(RbColliderBundle {
@@ -280,6 +282,7 @@ fn setup_objects(
 
 struct Assets {
     geometry_pass: Handle<GeometryPass>,
+    trans_pass: Handle<TransparentPass>,
     text_pass: Handle<TextPass>,
     ui_pass: Handle<ImagePass>,
 }
@@ -549,7 +552,7 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
             ..Default::default()
         })
         .add_bundle(WidgetBundle {
-            abs_size: AbsoluteSize::new(500.0, 1160.0),
+            abs_size: AbsoluteSize::new(500.0, 50.0),
             rel_offset: RelativeOffset::new(1.0, -1.0),
             abs_offset: AbsoluteOffset::new(-20.0, 20.0),
             origin: Origin2D::lower_right(),

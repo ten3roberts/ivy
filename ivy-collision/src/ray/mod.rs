@@ -22,10 +22,9 @@ pub struct Ray {
 
 impl Ray {
     pub fn new(origin: Position, dir: Vec3) -> Self {
-        assert!(dir.is_normalized());
         Self {
             origin,
-            dir: dir.normalize(),
+            dir: dir.normalize_or_zero(),
         }
     }
 
@@ -70,13 +69,12 @@ impl Ray {
         while let Some(dir) = simplex.next_flat(self.dir) {
             let dir = dir.normalize();
 
-            assert!((dir.length() - 1.0 < 0.0001));
             // Get the next simplex
             let p = self.support(collider, transform, &transform_inv, dir);
 
             // New point was not past the origin
             // No collision
-            if p.support.dot(dir) < 0.0 {
+            if p.support.dot(dir) < 0.0 || !dir.is_normalized() {
                 return None;
             }
 

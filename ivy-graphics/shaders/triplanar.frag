@@ -12,6 +12,7 @@ layout(location = 0) out vec4 outAlbedo;
 layout(location = 1) out vec4 outPosition;
 layout(location = 2) out vec3 outNormal;
 layout(location = 3) out vec2 metallicRoughness;
+layout(location = 4) out vec4 transparent;
 
 layout(set = 2, binding = 0) uniform sampler2D albedo;
 layout(set = 2, binding = 1) uniform sampler2D normalMap;
@@ -42,6 +43,7 @@ void main() {
 
 	vec3 bias = abs(fragNormal);
 
+
 	vec2 texCoord;
 
 	if (bias.x > bias.y && bias.x > bias.z) {
@@ -54,7 +56,8 @@ void main() {
 
 	texCoord *= 0.5;
 
-	outAlbedo = vec4(texture(albedo, texCoord).rgb, 1) * fragColor;
+	outAlbedo = texture(albedo, texCoord) * fragColor;
+	transparent = vec4(outAlbedo.xyz, 1 - outAlbedo.w);
 	outPosition = vec4(fragPosition, 0);
 	vec3 normal = texture(normalMap, texCoord).rgb * 2 - 1;
 
