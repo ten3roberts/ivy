@@ -80,7 +80,7 @@ where
                 store_op: StoreOp::STORE,
                 load_op: LoadOp::CLEAR,
                 initial_layout: ImageLayout::UNDEFINED,
-                final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                final_layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
                 resource: *depth_attachment,
                 clear_value: ClearValue::depth_stencil(1.0, 0),
             }),

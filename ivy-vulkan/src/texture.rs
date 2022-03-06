@@ -167,7 +167,7 @@ impl Texture {
 
         unsafe { device.bind_image_memory(image, allocation.memory(), allocation.offset())? };
 
-        Self::from_image(context, info, image, Some(allocation))
+        Self::from_image(context, info, image, Some(allocation), 1, 0)
     }
 
     /// Creates a texture from an already existing VkImage
@@ -177,6 +177,8 @@ impl Texture {
         info: &TextureInfo,
         image: vk::Image,
         allocation: Option<Allocation>,
+        layers: u32,
+        base_layer: u32,
     ) -> Result<Self> {
         let aspect_mask = if info.usage.contains(ImageUsage::DEPTH_STENCIL_ATTACHMENT) {
             ImageAspectFlags::DEPTH
@@ -192,8 +194,8 @@ impl Texture {
                 aspect_mask,
                 base_mip_level: 0,
                 level_count: info.mip_levels,
-                base_array_layer: 0,
-                layer_count: 1,
+                base_array_layer: base_layer,
+                layer_count: layers,
             });
 
         let image_view = unsafe { context.device().create_image_view(&create_info, None) }?;

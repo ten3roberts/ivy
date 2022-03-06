@@ -26,6 +26,8 @@ pub struct CameraNodeInfo<'a> {
     pub bindables: &'a [&'a dyn MultiDescriptorBindable],
     pub clear_values: Vec<ClearValue>,
     pub frames_in_flight: usize,
+
+    pub additional: Vec<Handle<Texture>>,
 }
 
 impl<'a> Default for CameraNodeInfo<'a> {
@@ -40,6 +42,7 @@ impl<'a> Default for CameraNodeInfo<'a> {
             bindables: Default::default(),
             clear_values: Default::default(),
             frames_in_flight: Default::default(),
+            additional: vec![],
         }
     }
 }
@@ -77,8 +80,8 @@ where
             .iter()
             .map(|val| -> Result<_> {
                 Ok(CombinedImageSampler::new(
-                    resources.get(val.0)?.deref(),
-                    resources.get(val.1)?.deref(),
+                    &*resources.get(val.0)?,
+                    &*resources.get(val.1)?,
                 ))
             })
             .collect::<Result<Vec<_>>>()?;
@@ -125,7 +128,12 @@ where
             renderer,
             marker: PhantomData,
             color_attachments: info.color_attachments,
-            read_attachments: info.read_attachments.iter().map(|val| val.0).collect_vec(),
+            read_attachments: info
+                .read_attachments
+                .iter()
+                .map(|val| val.0)
+                .chain(info.additional)
+                .collect_vec(),
             input_attachments: info.input_attachments,
             depth_attachment: info.depth_attachment,
             buffer_reads: info.buffer_reads,

@@ -8,9 +8,7 @@ use smallvec::SmallVec;
 use std::{borrow::Cow, ops::Deref, path::Path, path::PathBuf};
 
 use glam::*;
-use ivy_base::{
-    Color, Connection, Position, PositionOffset, Rotation, RotationOffset, Scale, Visible,
-};
+use ivy_base::{Connection, Position, PositionOffset, Rotation, RotationOffset, Scale, Visible};
 use ivy_resources::{Handle, LoadResource, Resources};
 use ivy_vulkan::{context::SharedVulkanContext, Texture};
 

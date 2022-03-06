@@ -63,17 +63,6 @@ impl PBRAttachments {
             },
         )?)?;
 
-        let trans = resources.insert(Texture::new(
-            context.clone(),
-            &TextureInfo {
-                extent,
-                mip_levels: 1,
-                usage: ImageUsage::COLOR_ATTACHMENT | ImageUsage::INPUT_ATTACHMENT,
-                format: Format::R8G8B8A8_SRGB,
-                samples: SampleCountFlags::TYPE_1,
-            },
-        )?)?;
-
         Ok(Self {
             albedo,
             position,

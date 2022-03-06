@@ -4,7 +4,7 @@ version = "0.10.3"
 edition = "2018"
 
 license-file = "../LICENSE"
-keywords = [ "high-level", "rendergraph", "vulkan", "graphics", "parallel" ]
+keywords = ["high-level", "rendergraph", "vulkan", "graphics", "parallel"]
 documentation = "https://lib.rs/ivy-rendergraph"
 repository = "https://github.com/ten3roberts/ivy"
 readme = "./README.md"
@@ -21,6 +21,8 @@ ivy-graphics = { path = "../ivy-graphics", version = "0.10.0" }
 ivy-resources = { path = "../ivy-resources", version = "0.10.0" }
 ivy-vulkan = { path = "../ivy-vulkan", version = "0.10.0" }
 ivy-window = { path = "../ivy-window", version = "0.10.0" }
+glam = "0.20"
+hecs-hierarchy = "0.11"
 records = "0.2.0"
 slotmap = "1.0.6"
 thiserror = "1.0.30"

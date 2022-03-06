@@ -6,14 +6,16 @@ use ivy_graphics::{
 };
 use ivy_postprocessing::pbr::{create_pbr_pipeline, PBRInfo};
 use ivy_rendergraph::{
-    AttachmentInfo, CameraNode, CameraNodeInfo, NodeIndex, RenderGraph, SwapchainNode,
+    cubemap_node, AttachmentInfo, CameraNode, CameraNodeInfo, NodeIndex, RenderGraph,
+    SwapchainNode, TransferNode,
 };
 use ivy_resources::{Handle, Resources};
 use ivy_ui::{Canvas, ImageRenderer, TextRenderer, TextUpdateNode};
 use ivy_vulkan::{
     context::SharedVulkanContext,
     vk::{ClearValue, CullModeFlags},
-    ImageLayout, ImageUsage, LoadOp, PipelineInfo, StoreOp, Swapchain, Texture, TextureInfo,
+    ClearValueExt, ImageLayout, ImageUsage, LoadOp, PipelineInfo, SampleCountFlags, Sampler,
+    SamplerInfo, StoreOp, Swapchain, Texture, TextureInfo,
 };
 
 use crate::{
@@ -106,17 +108,17 @@ impl PBRRendering {
             &TextureInfo {
                 extent,
                 mip_levels: 1,
-                usage: info.color_usage,
+                usage: info.color_usage | ImageUsage::TRANSFER_SRC,
                 ..Default::default()
             },
         )?)?;
 
-        let transparent = resources.insert(Texture::new(
+        let screenview = resources.insert(Texture::new(
             context.clone(),
             &TextureInfo {
                 extent,
                 mip_levels: 1,
-                usage: info.color_usage,
+                usage: ImageUsage::TRANSFER_DST | ImageUsage::SAMPLED,
                 ..Default::default()
             },
         )?)?;
@@ -128,14 +130,55 @@ impl PBRRendering {
             camera,
             (
                 mesh_renderer,
-                // WithPass::<SkinnedPass, _>::new(skinned_renderer),
+                WithPass::<SkinnedPass, _>::new(skinned_renderer),
             ),
             extent,
             frames_in_flight,
             &[],
-            &[AttachmentInfo::color(final_lit)],
+            &[AttachmentInfo {
+                store_op: StoreOp::STORE,
+                load_op: LoadOp::LOAD,
+                initial_layout: ImageLayout::UNDEFINED,
+                final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                resource: final_lit,
+                clear_value: ClearValue::color(0.0, 0.0, 0.0, 1.0),
+            }],
             &[],
             pbr_info,
+        )?);
+
+        //         let cube_map = CubeMap::new(
+        //             context.clone(),
+        //             resources,
+        //             &TextureInfo {
+        //                 extent: Extent::new(256, 256),
+        //                 mip_levels: 1,
+        //                 usage: ImageUsage::SAMPLED | ImageUsage::COLOR_ATTACHMENT,
+        //                 format: Format::R8G8B8_SRGB,
+        //                 samples: SampleCountFlags::TYPE_1,
+        //             },
+        //         )?;
+
+        //         let depth_map = CubeMap::new(
+        //             context.clone(),
+        //             resources,
+        //             &TextureInfo::depth(Extent::new(256, 256)),
+        //         )?;
+
+        // let cube_map = resources.insert(cube_map)?;
+        // let depth_map = resources.insert(depth_map)?;
+
+        // let camera_preset = (*world.get::<Camera>(camera)?).clone();
+
+        let sampler: Handle<Sampler> = resources.load(SamplerInfo::default())??;
+
+        // Copy lit to the attachment to read
+        let copy_pass = rendergraph.add_node(TransferNode::new(
+            context.clone(),
+            final_lit,
+            screenview,
+            ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+            ImageLayout::SHADER_READ_ONLY_OPTIMAL,
         )?);
 
         let transparent_node = rendergraph.add_node(CameraNode::<TransparentPass, _>::new(
@@ -148,19 +191,20 @@ impl PBRRendering {
                 color_attachments: vec![AttachmentInfo {
                     store_op: StoreOp::STORE,
                     load_op: LoadOp::LOAD,
-                    initial_layout: ImageLayout::UNDEFINED,
-                    final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                    initial_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                    final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
                     resource: final_lit,
-                    clear_value: Default::default(),
+                    clear_value: ClearValue::color(0.0, 0.0, 0.0, 0.0),
                 }],
                 depth_attachment: Some(AttachmentInfo {
                     resource: **world.get::<DepthAttachment>(camera)?,
                     store_op: StoreOp::STORE,
                     load_op: LoadOp::LOAD,
-                    initial_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-                    final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                    initial_layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                    final_layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
                     ..Default::default()
                 }),
+                read_attachments: &[(screenview, sampler)],
                 frames_in_flight,
                 ..Default::default()
             },
@@ -260,8 +304,8 @@ impl PBRRendering {
         }))?;
 
         resources.insert(TransparentPass(PipelineInfo {
-            vs: DEFAULT_VERTEX_SHADER,
-            fs: TRANSPARENT_FRAGMENT_SHADER,
+            vs: GLASS_VERTEX_SHADER,
+            fs: GLASS_FRAGMENT_SHADER,
             cull_mode: info.cull_mode,
             blending: true,
             ..Default::default()

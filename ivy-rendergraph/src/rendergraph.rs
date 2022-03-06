@@ -19,8 +19,9 @@ use std::{hash, ops::Deref};
 
 new_key_type! {
     pub struct NodeIndex;
-    pub struct PassIndex;
 }
+
+pub type PassIndex = usize;
 
 /// Direct acyclic graph abstraction for renderpasses, barriers and subpass dependencies.
 pub struct RenderGraph {
@@ -29,7 +30,7 @@ pub struct RenderGraph {
     nodes: SlotMap<NodeIndex, Box<dyn Node>>,
     edges: SecondaryMap<NodeIndex, Vec<Edge>>,
     dependencies: SecondaryMap<NodeIndex, Vec<Edge>>,
-    passes: SlotMap<PassIndex, Pass>,
+    passes: Vec<Pass>,
     // Maps a node to a pass index
     node_pass_map: SecondaryMap<NodeIndex, (PassIndex, u32)>,
 
@@ -52,7 +53,7 @@ impl RenderGraph {
             nodes: SlotMap::with_key(),
             edges: SecondaryMap::new(),
             dependencies: SecondaryMap::new(),
-            passes: SlotMap::with_key(),
+            passes: Vec::new(),
             node_pass_map: SecondaryMap::new(),
             frames,
             extent: Extent::new(0, 0),
@@ -183,8 +184,9 @@ impl RenderGraph {
     where
         T: Deref<Target = ResourceCache<Texture>>,
     {
+        eprintln!("----");
         self.build_edges()?;
-        let (ordered, _depths) = topological_sort(&self.nodes, &self.edges)?;
+        let (ordered, depths) = topological_sort(&self.nodes, &self.edges)?;
 
         let context = &self.context;
 
@@ -202,11 +204,13 @@ impl RenderGraph {
 
         // Build all graphics nodes
         let groups = ordered.iter().cloned().group_by(|node| {
-            return (_depths[*node], nodes[*node].node_kind());
+            return (depths[*node], nodes[*node].node_kind());
         });
 
-        for (key, pass_nodes) in &groups {
-            let pass_nodes = pass_nodes.collect::<Vec<_>>();
+        for (key, group) in &groups {
+            dbg!(&key);
+            let pass_nodes = group.collect_vec();
+
             let pass = Pass::new(
                 context,
                 nodes,
@@ -218,7 +222,8 @@ impl RenderGraph {
             )?;
 
             // Insert pass into slotmap
-            let pass_index = passes.insert(pass);
+            let pass_index = passes.len();
+            passes.push(pass);
 
             let pass_nodes = passes[pass_index].nodes();
 
@@ -270,11 +275,9 @@ impl RenderGraph {
         let cmd = &frame.commandbuffer;
 
         // Execute all nodes
-        passes
-            .iter()
-            .try_for_each(|(_pass_index, pass)| -> crate::Result<()> {
-                pass.execute(world, &cmd, nodes, current_frame, resources, extent)
-            })?;
+        passes.iter().try_for_each(|pass| -> crate::Result<()> {
+            pass.execute(world, &cmd, nodes, current_frame, resources, extent)
+        })?;
 
         Ok(())
     }
@@ -332,13 +335,10 @@ type Depth = u32;
 /// Toplogically sorts the graph provided by nodes and edges.
 /// Returns a tuple containing a dense array of ordered node indices, and a map containing each node's maximum depth.
 // TODO: Move graph functionality into separate crate.
-fn topological_sort<T, N>(
-    nodes: N,
+fn topological_sort(
+    nodes: &SlotMap<NodeIndex, Box<dyn Node>>,
     edges: &SecondaryMap<NodeIndex, Vec<Edge>>,
-) -> crate::Result<(Vec<NodeIndex>, SecondaryMap<NodeIndex, Depth>)>
-where
-    N: IntoIterator<Item = (NodeIndex, T)>,
-{
+) -> crate::Result<(Vec<NodeIndex>, SecondaryMap<NodeIndex, Depth>)> {
     fn internal(
         stack: &mut Vec<NodeIndex>,
         visited: &mut SecondaryMap<NodeIndex, VisitedState>,

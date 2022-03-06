@@ -21,9 +21,13 @@ pub const DEFAULT_FRAGMENT_SHADER: ShaderModuleInfo = ShaderModuleInfo::from_con
     include_bytes!(concat!(env!("OUT_DIR"), "/shaders/default.frag.spv")),
 );
 
-pub const TRANSPARENT_FRAGMENT_SHADER: ShaderModuleInfo = ShaderModuleInfo::from_const_bytes(
-    include_bytes!(concat!(env!("OUT_DIR"), "/shaders/transparent.frag.spv")),
+pub const GLASS_FRAGMENT_SHADER: ShaderModuleInfo = ShaderModuleInfo::from_const_bytes(
+    include_bytes!(concat!(env!("OUT_DIR"), "/shaders/glass.frag.spv")),
 );
+pub const GLASS_VERTEX_SHADER: ShaderModuleInfo = ShaderModuleInfo::from_const_bytes(
+    include_bytes!(concat!(env!("OUT_DIR"), "/shaders/glass.vert.spv")),
+);
+
 pub const TRIPLANAR_FRAGMENT_SHADER: ShaderModuleInfo = ShaderModuleInfo::from_const_bytes(
     include_bytes!(concat!(env!("OUT_DIR"), "/shaders/triplanar.frag.spv")),
 );

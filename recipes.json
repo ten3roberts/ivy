@@ -1,0 +1,7 @@
+{
+  "run-vulkan": {
+    "cmd": "cargo run --example vulkan",
+    "interactive": true
+  },
+  "build-vulkan": "cargo build --example vulkan"
+}

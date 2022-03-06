@@ -1,6 +1,7 @@
 pub mod buffer;
 pub mod commands;
 pub mod context;
+mod cubemap;
 pub mod debug_utils;
 pub mod descriptors;
 pub mod device;
@@ -23,6 +24,7 @@ pub mod vertex;
 pub use buffer::*;
 pub use commands::*;
 pub use context::VulkanContext;
+pub use cubemap::*;
 pub use error::*;
 pub use fence::Fence;
 pub use framebuffer::Framebuffer;

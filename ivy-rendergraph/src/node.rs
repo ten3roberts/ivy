@@ -14,6 +14,10 @@ pub trait Node: 'static + Send {
     fn color_attachments(&self) -> &[AttachmentInfo] {
         &[]
     }
+
+    fn output_attachments(&self) -> &[Handle<Texture>] {
+        &[]
+    }
     /// Returns the read attachments for this node. Should not be execution heavy function
     fn read_attachments(&self) -> &[Handle<Texture>] {
         &[]

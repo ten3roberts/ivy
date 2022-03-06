@@ -1,5 +1,6 @@
 use crate::{Edge, EdgeKind, Node, NodeIndex, NodeKind, ResourceKind, Result};
 use hecs::World;
+use itertools::Itertools;
 use ivy_base::Extent;
 use ivy_resources::{ResourceCache, Resources};
 use ivy_vulkan::{
@@ -67,6 +68,8 @@ impl Pass {
             } => {
                 cmd.begin_renderpass(&renderpass, &framebuffer, extent, clear_values);
 
+                eprintln!("Entering pass");
+
                 self.nodes
                     .iter()
                     .enumerate()
@@ -75,6 +78,9 @@ impl Pass {
                             cmd.next_subpass(vk::SubpassContents::INLINE);
                         }
                         let node = &mut nodes[*index];
+
+                        eprintln!("Executing node: {}", node.debug_name());
+
                         node.execute(
                             world,
                             resources,
@@ -157,6 +163,14 @@ impl PassKind {
     where
         T: Deref<Target = ResourceCache<Texture>>,
     {
+        println!(
+            "Building pass with nodes: {:?}",
+            pass_nodes
+                .iter()
+                .map(|v| nodes[*v].debug_name())
+                .collect_vec()
+        );
+
         // Collect clear values
         let clear_values = pass_nodes
             .iter()
@@ -211,8 +225,9 @@ impl PassKind {
                                 .iter()
                                 .enumerate()
                                 .find(|(_, node)| **node == edge.src)
-                                .unwrap()
-                                .0 as u32,
+                                .map(|v| v.0 as u32)
+                                .unwrap_or(vk::SUBPASS_EXTERNAL),
+
                             dst_subpass: subpass_index as u32,
                             src_stage_mask: edge.write_stage,
                             dst_stage_mask: edge.read_stage,

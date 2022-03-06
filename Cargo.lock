@@ -740,7 +740,9 @@ name = "ivy-rendergraph"
 version = "0.10.3"
 dependencies = [
  "anyhow",
+ "glam",
  "hecs",
+ "hecs-hierarchy",
  "itertools",
  "ivy-base",
  "ivy-graphics",
