@@ -14,25 +14,20 @@ use ivy_vulkan::{
     vk::{self, CommandBufferUsageFlags, PipelineStageFlags, Semaphore},
     Fence, ImageLayout, RenderPass, Texture,
 };
-use slotmap::{new_key_type, SecondaryMap, SlotMap};
-use std::{hash, ops::Deref};
-
-new_key_type! {
-    pub struct NodeIndex;
-}
+use std::{collections::HashMap, hash, ops::Deref};
 
 pub type PassIndex = usize;
+pub type NodeIndex = usize;
 
 /// Direct acyclic graph abstraction for renderpasses, barriers and subpass dependencies.
 pub struct RenderGraph {
     context: SharedVulkanContext,
     /// The unordered nodes in the arena.
-    nodes: SlotMap<NodeIndex, Box<dyn Node>>,
-    edges: SecondaryMap<NodeIndex, Vec<Edge>>,
-    dependencies: SecondaryMap<NodeIndex, Vec<Edge>>,
+    nodes: Vec<Box<dyn Node>>,
+    edges: HashMap<NodeIndex, Vec<Edge>>,
     passes: Vec<Pass>,
     // Maps a node to a pass index
-    node_pass_map: SecondaryMap<NodeIndex, (PassIndex, u32)>,
+    node_pass_map: HashMap<NodeIndex, (PassIndex, u32)>,
 
     // Data for each frame in flight
     frames: Vec<FrameData>,
@@ -50,11 +45,10 @@ impl RenderGraph {
 
         Ok(Self {
             context,
-            nodes: SlotMap::with_key(),
-            edges: SecondaryMap::new(),
-            dependencies: SecondaryMap::new(),
+            nodes: Default::default(),
+            edges: Default::default(),
             passes: Vec::new(),
-            node_pass_map: SecondaryMap::new(),
+            node_pass_map: Default::default(),
             frames,
             extent: Extent::new(0, 0),
             frames_in_flight,
@@ -65,7 +59,9 @@ impl RenderGraph {
     /// Adds a new node into the rendergraph.
     /// **Note**: The new node won't take effect until [`RenderGraph::build`] is called.
     pub fn add_node<T: 'static + Node>(&mut self, node: T) -> NodeIndex {
-        self.nodes.insert(Box::new(node))
+        let i = self.nodes.len();
+        self.nodes.push(Box::new(node));
+        i
     }
 
     /// Add several nodes into the rendergraph.
@@ -74,23 +70,27 @@ impl RenderGraph {
     pub fn add_nodes<I: IntoIterator<Item = Box<dyn Node>>>(&mut self, nodes: I) -> Vec<NodeIndex> {
         nodes
             .into_iter()
-            .map(|node| self.nodes.insert(node))
+            .map(|node| {
+                let i = self.nodes.len();
+                self.nodes.push(node);
+                i
+            })
             .collect_vec()
     }
 
-    pub fn build_edges(&mut self) -> crate::Result<()> {
-        // Clear edges
-        self.edges.clear();
-
+    pub fn build_edges(
+        &mut self,
+    ) -> crate::Result<(HashMap<usize, Vec<Edge>>, HashMap<usize, Vec<Edge>>)> {
         // Iterate all node's read attachments, and find any node which has the same write
         // attachment before the current node.
         // Finally, automatically construct edges.
         let nodes = &self.nodes;
-        let edges = &mut self.edges;
-        let dependencies = &mut self.dependencies;
+        let mut edges = HashMap::new();
+        let mut dependencies = HashMap::new();
 
         nodes
             .iter()
+            .enumerate()
             .flat_map(|node| {
                 EdgeConstructor {
                     nodes,
@@ -102,7 +102,7 @@ impl RenderGraph {
                     nodes,
                     dst: node.0,
                     reads: node.1.buffer_reads().into_iter().cloned(),
-                    kind: EdgeKind::Sampled,
+                    kind: EdgeKind::Buffer,
                 })
                 .chain(EdgeConstructor {
                     nodes,
@@ -110,45 +110,41 @@ impl RenderGraph {
                     reads: node.1.read_attachments().into_iter().cloned(),
                     kind: EdgeKind::Sampled,
                 })
+                .chain(
+                    EdgeConstructor {
+                        nodes,
+                        dst: node.0,
+                        reads: node.1.color_attachments().iter().map(|v| v.resource),
+                        kind: EdgeKind::Attachment,
+                    }
+                    .into_iter()
+                    .filter(|val| !matches!(*val, Err(Error::MissingWrite(_, _, _)))),
+                )
                 .chain(EdgeConstructor {
                     nodes,
                     dst: node.0,
-                    reads: node
-                        .1
-                        .color_attachments()
-                        .into_iter()
-                        .map(|val| val.resource),
-                    kind: EdgeKind::Attachment,
+                    reads: node.1.output_attachments().into_iter().cloned(),
+                    kind: EdgeKind::Sampled,
                 })
-                .filter(|val| !matches!(*val, Err(Error::MissingWrite(_, _, _))))
             })
             .try_for_each(|edge: crate::Result<Edge>| -> crate::Result<_> {
                 let edge = edge?;
-                edges
-                    .entry(edge.src)
-                    .unwrap()
-                    .or_insert_with(Vec::new)
-                    .push(edge);
+                eprintln!(
+                    "Edge: {:?} => {:?}",
+                    nodes[edge.dst].debug_name(),
+                    nodes[edge.src].debug_name(),
+                );
+                edges.entry(edge.src).or_insert_with(Vec::new).push(edge);
 
                 dependencies
                     .entry(edge.dst)
-                    .unwrap()
                     .or_insert_with(Vec::new)
                     .push(edge);
 
                 Ok(())
             })?;
 
-        Ok(())
-    }
-
-    /// Adds a new dependency between two nodes by introducing an edge.
-    pub fn add_edge(&mut self, src: NodeIndex, edge: Edge) {
-        self.edges
-            .entry(src)
-            .unwrap()
-            .or_insert_with(Vec::new)
-            .push(edge);
+        Ok((edges, dependencies))
     }
 
     pub fn node(&self, node: NodeIndex) -> crate::Result<&dyn Node> {
@@ -161,7 +157,7 @@ impl RenderGraph {
     pub fn node_renderpass<'a>(&'a self, node: NodeIndex) -> crate::Result<(&'a RenderPass, u32)> {
         let (pass, index) = self
             .node_pass_map
-            .get(node)
+            .get(&node)
             .and_then(|(pass, subpass_index)| Some((self.passes.get(*pass)?, *subpass_index)))
             .ok_or(Error::InvalidNodeIndex(node))?;
 
@@ -185,7 +181,7 @@ impl RenderGraph {
         T: Deref<Target = ResourceCache<Texture>>,
     {
         eprintln!("----");
-        self.build_edges()?;
+        let (_edges, dependencies) = self.build_edges()?;
         let (ordered, depths) = topological_sort(&self.nodes, &self.edges)?;
 
         let context = &self.context;
@@ -200,22 +196,20 @@ impl RenderGraph {
         let passes = &mut self.passes;
         passes.clear();
 
-        let dependencies = &self.dependencies;
-
         // Build all graphics nodes
         let groups = ordered.iter().cloned().group_by(|node| {
-            return (depths[*node], nodes[*node].node_kind());
+            return (depths[node], nodes[*node].node_kind());
         });
 
         for (key, group) in &groups {
-            dbg!(&key);
+            println!("New pass: {:?}", key);
             let pass_nodes = group.collect_vec();
 
             let pass = Pass::new(
                 context,
                 nodes,
                 &textures,
-                dependencies,
+                &dependencies,
                 pass_nodes,
                 key.1,
                 extent,
@@ -336,26 +330,25 @@ type Depth = u32;
 /// Returns a tuple containing a dense array of ordered node indices, and a map containing each node's maximum depth.
 // TODO: Move graph functionality into separate crate.
 fn topological_sort(
-    nodes: &SlotMap<NodeIndex, Box<dyn Node>>,
-    edges: &SecondaryMap<NodeIndex, Vec<Edge>>,
-) -> crate::Result<(Vec<NodeIndex>, SecondaryMap<NodeIndex, Depth>)> {
+    nodes: &Vec<Box<dyn Node>>,
+    edges: &HashMap<NodeIndex, Vec<Edge>>,
+) -> crate::Result<(Vec<NodeIndex>, HashMap<NodeIndex, Depth>)> {
     fn internal(
         stack: &mut Vec<NodeIndex>,
-        visited: &mut SecondaryMap<NodeIndex, VisitedState>,
-        depths: &mut SecondaryMap<NodeIndex, Depth>,
+        visited: &mut HashMap<NodeIndex, VisitedState>,
+        depths: &mut HashMap<NodeIndex, Depth>,
         current_node: NodeIndex,
-        edges: &SecondaryMap<NodeIndex, Vec<Edge>>,
+        edges: &HashMap<NodeIndex, Vec<Edge>>,
         depth: Depth,
     ) -> crate::Result<()> {
         // Update maximum recursion depth
         depths
             .entry(current_node)
-            .unwrap()
             .and_modify(|d| *d = (*d).max(depth))
             .or_insert(depth);
 
         // Node is already visited
-        match visited.get(current_node) {
+        match visited.get(&current_node) {
             Some(VisitedState::Pending) => return Err(Error::DependencyCycle),
             Some(VisitedState::Visited) => return Ok(()),
             _ => {}
@@ -365,7 +358,7 @@ fn topological_sort(
 
         // Add all children of `node`, before node to the stack.
         edges
-            .get(current_node)
+            .get(&current_node)
             .iter()
             .flat_map(|node_edges| node_edges.iter())
             .try_for_each(|edge| {
@@ -376,10 +369,9 @@ fn topological_sort(
                     edge.dst,
                     edges,
                     // Break depth if sampling is required since they can't share subpasses
-                    if edge.kind == EdgeKind::Sampled {
-                        depth + 1
-                    } else {
-                        depth
+                    match edge.kind {
+                        EdgeKind::Sampled | EdgeKind::Buffer => depth + 1,
+                        EdgeKind::Attachment | EdgeKind::Input => depth,
                     },
                 )
             })?;
@@ -387,24 +379,21 @@ fn topological_sort(
         stack.push(current_node);
 
         visited.insert(current_node, VisitedState::Visited);
+
         Ok(())
     }
 
-    let mut nodes_iter = nodes.into_iter();
+    let nodes_iter = nodes.into_iter();
     let cap = nodes_iter.size_hint().1.unwrap_or_default();
     let mut stack = Vec::with_capacity(cap);
-    let mut visited = SecondaryMap::with_capacity(cap);
-    let mut depths = SecondaryMap::with_capacity(cap);
+    let mut visited = HashMap::with_capacity(cap);
+    let mut depths = HashMap::with_capacity(cap);
 
-    loop {
-        if let Some(node) = nodes_iter.next().map(|(i, _)| i) {
-            internal(&mut stack, &mut visited, &mut depths, node, edges, 0)?;
-        } else {
-            break;
-        }
+    for (node, _) in nodes_iter.enumerate() {
+        internal(&mut stack, &mut visited, &mut depths, node, edges, 0)?;
     }
 
-    stack.reverse();
+    // stack.reverse();
 
     Ok((stack, depths))
 }
@@ -456,6 +445,7 @@ pub enum EdgeKind {
     Input,
     /// The attachment is loaded and written to. Depend on earlier nodes
     Attachment,
+    Buffer,
 }
 
 impl Default for EdgeKind {
@@ -509,140 +499,8 @@ impl Drop for FrameData {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-
-//     #[test]
-//     fn test_topological_sort() {
-//         let mut nodes = SlotMap::with_key();
-
-//         let a = nodes.insert('a');
-//         let b = nodes.insert('b');
-//         let c = nodes.insert('c');
-//         let d = nodes.insert('d');
-//         let e = nodes.insert('e');
-
-//         let mut edges = SecondaryMap::new();
-
-//         edges.insert(
-//             a,
-//             vec![Edge {
-//                 src: a,
-//                 dst: c,
-//                 ..Default::default()
-//             }],
-//         );
-//         edges.insert(
-//             b,
-//             vec![
-//                 Edge {
-//                     src: b,
-//                     dst: a,
-//                     ..Default::default()
-//                 },
-//                 Edge {
-//                     src: b,
-//                     dst: c,
-//                     ..Default::default()
-//                 },
-//             ],
-//         );
-//         edges.insert(
-//             c,
-//             vec![Edge {
-//                 src: c,
-//                 dst: e,
-//                 ..Default::default()
-//             }],
-//         );
-//         edges.insert(
-//             d,
-//             vec![Edge {
-//                 src: d,
-//                 dst: a,
-//                 ..Default::default()
-//             }],
-//         );
-
-//         let (ordered, _depths) =
-//             topological_sort(&nodes, &edges).expect("Failed to build rendergraph");
-
-//         assert_eq!(&ordered, &[d, b, a, c, e,]);
-//     }
-
-//     #[test]
-//     fn test_sort_cyclic() {
-//         let mut nodes = SlotMap::with_key();
-
-//         let a = nodes.insert('a');
-//         let b = nodes.insert('b');
-//         let c = nodes.insert('c');
-//         let d = nodes.insert('d');
-//         let e = nodes.insert('e');
-
-//         let mut edges = SecondaryMap::new();
-
-//         edges.insert(
-//             a,
-//             vec![Edge {
-//                 src: a,
-//                 dst: c,
-//                 ..Default::default()
-//             }],
-//         );
-//         edges.insert(
-//             b,
-//             vec![
-//                 Edge {
-//                     src: a,
-//                     dst: a,
-//                     ..Default::default()
-//                 },
-//                 Edge {
-//                     src: a,
-//                     dst: c,
-//                     ..Default::default()
-//                 },
-//             ],
-//         );
-//         edges.insert(
-//             e,
-//             vec![Edge {
-//                 src: a,
-//                 dst: d,
-//                 ..Default::default()
-//             }],
-//         );
-//         edges.insert(
-//             c,
-//             vec![Edge {
-//                 src: a,
-//                 dst: e,
-//                 ..Default::default()
-//             }],
-//         );
-//         edges.insert(
-//             d,
-//             vec![Edge {
-//                 src: a,
-//                 dst: a,
-//                 ..Default::default()
-//             }],
-//         );
-
-//         assert!(
-//             matches!(
-//                 topological_sort(&nodes, &edges),
-//                 Err(Error::DependencyCycle)
-//             ),
-//             "Did not detected cyclic graph"
-//         );
-//     }
-// }
-
 struct EdgeConstructor<'a, I> {
-    nodes: &'a SlotMap<NodeIndex, Box<dyn Node>>,
+    nodes: &'a Vec<Box<dyn Node>>,
     dst: NodeIndex,
     reads: I,
     kind: EdgeKind,
@@ -658,6 +516,7 @@ impl<'a, I: Iterator<Item = Handle<Texture>>> Iterator for EdgeConstructor<'a, I
             .map(move |read| {
                 self.nodes
                     .iter()
+                    .enumerate()
                     .take_while(|(src, _)| *src != self.dst)
                     .filter_map(|(src, src_node)| {
                         // Found color attachment output
@@ -677,7 +536,22 @@ impl<'a, I: Iterator<Item = Handle<Texture>>> Iterator for EdgeConstructor<'a, I
                                 read_access: vk::AccessFlags::SHADER_READ,
                                 kind: self.kind,
                             })
-                            // Found depth attachment output
+                            // Found transfer attachment output
+                        } else if let Some(_) =
+                            src_node.output_attachments().iter().find(|d| **d == read)
+                        {
+                            Some(Edge {
+                                src,
+                                dst: self.dst,
+                                resource: read.into(),
+                                layout: ImageLayout::TRANSFER_DST_OPTIMAL,
+                                // Write stage is between
+                                write_stage: vk::PipelineStageFlags::TRANSFER,
+                                read_stage: vk::PipelineStageFlags::FRAGMENT_SHADER,
+                                write_access: vk::AccessFlags::TRANSFER_WRITE,
+                                read_access: vk::AccessFlags::SHADER_READ,
+                                kind: self.kind,
+                            })
                         } else if let Some(write) = src_node
                             .depth_attachment()
                             .as_ref()
@@ -710,7 +584,7 @@ impl<'a, I: Iterator<Item = Handle<Texture>>> Iterator for EdgeConstructor<'a, I
 }
 
 struct BufferEdgeConstructor<'a, I> {
-    nodes: &'a SlotMap<NodeIndex, Box<dyn Node>>,
+    nodes: &'a Vec<Box<dyn Node>>,
     dst: NodeIndex,
     reads: I,
     kind: EdgeKind,
@@ -726,6 +600,7 @@ impl<'a, I: Iterator<Item = vk::Buffer>> Iterator for BufferEdgeConstructor<'a, 
             .map(move |read| {
                 self.nodes
                     .iter()
+                    .enumerate()
                     .take_while(|(src, _)| *src != self.dst)
                     .filter_map(|(src, src_node)| {
                         // Found color attachment output

@@ -12,6 +12,7 @@ layout(location = 7) in float fragFresnel;
 layout(location = 0) out vec4 outColor;
 
 layout(set = 1, binding = 0) uniform sampler2D screenspace;
+layout(set = 1, binding = 1) uniform sampler2D screenspace_d;
 
 layout(set = 3, binding = 0) uniform sampler2D albedo;
 layout(set = 3, binding = 1) uniform sampler2D normalMap;
@@ -23,10 +24,13 @@ layout(set = 3, binding = 2) uniform MaterialData {
 } materialData;
 
 void main() {
-	/* vec4 albedo = texture(albedo, fragTexCoord) * fragColor; */
-	vec4 albedo = texture(screenspace, fragTexCoord);
+	vec4 albedo = texture(albedo, fragTexCoord) * fragColor;
 
 	/* vec4 refractionColor = texture(u_cubemap, normalize(v_refraction)); */
+
+	// Trace
+
+
 	vec4 reflectionColor = vec4(1.0, 1.0, 1.0, 1.0);
 	/* vec4 reflectionColor = texture(u_cubemap, normalize(v_reflection)); */
 

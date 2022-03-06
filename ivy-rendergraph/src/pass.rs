@@ -10,8 +10,7 @@ use ivy_vulkan::{
     AttachmentDescription, AttachmentReference, Framebuffer, ImageLayout, LoadOp, PassInfo,
     RenderPass, RenderPassInfo, StoreOp, SubpassDependency, SubpassInfo, Texture,
 };
-use slotmap::{SecondaryMap, SlotMap};
-use std::{iter::repeat, ops::Deref};
+use std::{collections::HashMap, iter::repeat, ops::Deref};
 
 pub struct Pass {
     kind: PassKind,
@@ -26,9 +25,9 @@ impl Pass {
     // * Have the same dependency level.
     pub fn new<T>(
         context: &SharedVulkanContext,
-        nodes: &SlotMap<NodeIndex, Box<dyn Node>>,
+        nodes: &Vec<Box<dyn Node>>,
         textures: &T,
-        dependencies: &SecondaryMap<NodeIndex, Vec<Edge>>,
+        dependencies: &HashMap<NodeIndex, Vec<Edge>>,
         pass_nodes: Vec<NodeIndex>,
         kind: NodeKind,
         extent: Extent,
@@ -55,7 +54,7 @@ impl Pass {
         &self,
         world: &mut World,
         cmd: &CommandBuffer,
-        nodes: &mut SlotMap<NodeIndex, Box<dyn Node>>,
+        nodes: &mut Vec<Box<dyn Node>>,
         current_frame: usize,
         resources: &Resources,
         extent: Extent,
@@ -154,9 +153,9 @@ unsafe impl Sync for PassKind {}
 impl PassKind {
     fn graphics<T>(
         context: &SharedVulkanContext,
-        nodes: &SlotMap<NodeIndex, Box<dyn Node>>,
+        nodes: &Vec<Box<dyn Node>>,
         textures: &T,
-        dependencies: &SecondaryMap<NodeIndex, Vec<Edge>>,
+        dependencies: &HashMap<NodeIndex, Vec<Edge>>,
         pass_nodes: &[NodeIndex],
         extent: Extent,
     ) -> Result<Self>
@@ -193,11 +192,11 @@ impl PassKind {
             .flat_map(|(subpass_index, node_index)| {
                 // Get the dependencies of node.
                 dependencies
-                    .get(*node_index)
+                    .get(node_index)
                     .into_iter()
                     .flat_map(|val| val.iter())
-                    .map(move |edge| match edge.kind {
-                        EdgeKind::Sampled => SubpassDependency {
+                    .flat_map(move |edge| match edge.kind {
+                        EdgeKind::Sampled => Some(SubpassDependency {
                             src_subpass: vk::SUBPASS_EXTERNAL,
                             dst_subpass: subpass_index as u32,
                             src_stage_mask: edge.write_stage,
@@ -205,8 +204,8 @@ impl PassKind {
                             src_access_mask: edge.write_access,
                             dst_access_mask: edge.read_access,
                             dependency_flags: Default::default(),
-                        },
-                        EdgeKind::Input => SubpassDependency {
+                        }),
+                        EdgeKind::Input => Some(SubpassDependency {
                             src_subpass: pass_nodes
                                 .iter()
                                 .enumerate()
@@ -219,8 +218,8 @@ impl PassKind {
                             src_access_mask: edge.write_access,
                             dst_access_mask: edge.read_access,
                             dependency_flags: vk::DependencyFlags::BY_REGION,
-                        },
-                        EdgeKind::Attachment => SubpassDependency {
+                        }),
+                        EdgeKind::Attachment => Some(SubpassDependency {
                             src_subpass: pass_nodes
                                 .iter()
                                 .enumerate()
@@ -234,7 +233,8 @@ impl PassKind {
                             src_access_mask: edge.write_access,
                             dst_access_mask: edge.read_access,
                             dependency_flags: vk::DependencyFlags::BY_REGION,
-                        },
+                        }),
+                        EdgeKind::Buffer => None,
                     })
             })
             .collect::<Vec<_>>();
@@ -343,9 +343,9 @@ impl PassKind {
 
     fn transfer<T>(
         _context: &SharedVulkanContext,
-        _nodes: &SlotMap<NodeIndex, Box<dyn Node>>,
+        _nodes: &Vec<Box<dyn Node>>,
         textures: &T,
-        dependencies: &SecondaryMap<NodeIndex, Vec<Edge>>,
+        dependencies: &HashMap<NodeIndex, Vec<Edge>>,
         pass_nodes: &[NodeIndex],
         _extent: Extent,
     ) -> Result<Self>
@@ -356,7 +356,7 @@ impl PassKind {
         let mut src_stage = vk::PipelineStageFlags::default();
 
         let image_barriers = dependencies
-            .get(pass_nodes[0])
+            .get(&pass_nodes[0])
             .into_iter()
             .flat_map(|val| val.iter())
             .filter_map(|val| {

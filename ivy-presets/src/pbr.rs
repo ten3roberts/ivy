@@ -14,8 +14,8 @@ use ivy_ui::{Canvas, ImageRenderer, TextRenderer, TextUpdateNode};
 use ivy_vulkan::{
     context::SharedVulkanContext,
     vk::{ClearValue, CullModeFlags},
-    ClearValueExt, ImageLayout, ImageUsage, LoadOp, PipelineInfo, SampleCountFlags, Sampler,
-    SamplerInfo, StoreOp, Swapchain, Texture, TextureInfo,
+    ClearValueExt, Format, ImageLayout, ImageUsage, LoadOp, PipelineInfo, SampleCountFlags,
+    Sampler, SamplerInfo, StoreOp, Swapchain, Texture, TextureInfo,
 };
 
 use crate::{
@@ -123,6 +123,20 @@ impl PBRRendering {
             },
         )?)?;
 
+        let screenview_d = resources.insert(Texture::new(
+            context.clone(),
+            &TextureInfo {
+                extent,
+                mip_levels: 1,
+                usage: ImageUsage::TRANSFER_DST
+                    | ImageUsage::SAMPLED
+                    | ImageUsage::DEPTH_STENCIL_ATTACHMENT,
+
+                format: Format::D32_SFLOAT,
+                ..Default::default()
+            },
+        )?)?;
+
         let pbr_nodes = rendergraph.add_nodes(create_pbr_pipeline::<GeometryPass, PbrPass, _, _>(
             context.clone(),
             world,
@@ -147,68 +161,55 @@ impl PBRRendering {
             pbr_info,
         )?);
 
-        //         let cube_map = CubeMap::new(
-        //             context.clone(),
-        //             resources,
-        //             &TextureInfo {
-        //                 extent: Extent::new(256, 256),
-        //                 mip_levels: 1,
-        //                 usage: ImageUsage::SAMPLED | ImageUsage::COLOR_ATTACHMENT,
-        //                 format: Format::R8G8B8_SRGB,
-        //                 samples: SampleCountFlags::TYPE_1,
-        //             },
-        //         )?;
-
-        //         let depth_map = CubeMap::new(
-        //             context.clone(),
-        //             resources,
-        //             &TextureInfo::depth(Extent::new(256, 256)),
-        //         )?;
-
-        // let cube_map = resources.insert(cube_map)?;
-        // let depth_map = resources.insert(depth_map)?;
-
-        // let camera_preset = (*world.get::<Camera>(camera)?).clone();
-
         let sampler: Handle<Sampler> = resources.load(SamplerInfo::default())??;
 
         // Copy lit to the attachment to read
-        let copy_pass = rendergraph.add_node(TransferNode::new(
-            context.clone(),
-            final_lit,
-            screenview,
-            ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-            ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-        )?);
+        // let copy_pass = rendergraph.add_node(TransferNode::new(
+        //     context.clone(),
+        //     final_lit,
+        //     screenview,
+        //     ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+        //     ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        // )?);
 
-        let transparent_node = rendergraph.add_node(CameraNode::<TransparentPass, _>::new(
-            context.clone(),
-            resources,
-            camera,
-            mesh_renderer,
-            CameraNodeInfo {
-                name: "Transparent",
-                color_attachments: vec![AttachmentInfo {
-                    store_op: StoreOp::STORE,
-                    load_op: LoadOp::LOAD,
-                    initial_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-                    final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                    resource: final_lit,
-                    clear_value: ClearValue::color(0.0, 0.0, 0.0, 0.0),
-                }],
-                depth_attachment: Some(AttachmentInfo {
-                    resource: **world.get::<DepthAttachment>(camera)?,
-                    store_op: StoreOp::STORE,
-                    load_op: LoadOp::LOAD,
-                    initial_layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                    final_layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                    ..Default::default()
-                }),
-                read_attachments: &[(screenview, sampler)],
-                frames_in_flight,
-                ..Default::default()
-            },
-        )?);
+        // // Copy lit to the attachment to read
+        // let copy_pass = rendergraph.add_node(TransferNode::new(
+        //     context.clone(),
+        //     **world.get::<DepthAttachment>(camera)?,
+        //     screenview_d,
+        //     ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        //     ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        // )?);
+
+        //         let transparent_node = rendergraph.add_node(CameraNode::<TransparentPass, _>::new(
+        //             context.clone(),
+        //             resources,
+        //             camera,
+        //             mesh_renderer,
+        //             CameraNodeInfo {
+        //                 name: "Transparent",
+        //                 color_attachments: vec![AttachmentInfo {
+        //                     store_op: StoreOp::STORE,
+        //                     load_op: LoadOp::LOAD,
+        //                     initial_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        //                     final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+        //                     resource: final_lit,
+        //                     clear_value: ClearValue::color(0.0, 0.0, 0.0, 0.0),
+        //                 }],
+        //                 depth_attachment: Some(AttachmentInfo {
+        //                     resource: **world.get::<DepthAttachment>(camera)?,
+        //                     store_op: StoreOp::STORE,
+        //                     load_op: LoadOp::LOAD,
+        //                     initial_layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        //                     final_layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        //                     ..Default::default()
+        //                 }),
+        //                 // read_attachments: &[(screenview, sampler), (screenview_d, sampler)],
+        //                 additional: vec![final_lit],
+        //                 frames_in_flight,
+        //                 ..Default::default()
+        //             },
+        //         )?);
 
         let gizmo = rendergraph.add_node(CameraNode::<GizmoPass, _>::new(
             context.clone(),
@@ -241,6 +242,8 @@ impl PBRRendering {
             .or_try_insert_with(|| TextRenderer::new(context.clone(), 16, 512, frames_in_flight))?
             .handle;
 
+        rendergraph.add_node(TextUpdateNode::new(resources, text_renderer)?);
+
         let ui = rendergraph.add_node(CameraNode::<ImagePass, _>::new(
             context.clone(),
             resources,
@@ -261,8 +264,6 @@ impl PBRRendering {
                 ..Default::default()
             },
         )?);
-
-        rendergraph.add_node(TextUpdateNode::new(resources, text_renderer)?);
 
         // Build renderpasses
         rendergraph.build(resources.fetch()?, extent)?;
