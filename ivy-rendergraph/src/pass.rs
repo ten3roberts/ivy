@@ -397,6 +397,8 @@ impl PassKind {
             })
             .collect::<Result<Vec<_>>>()?;
 
+        eprintln!("Barriers: {:#?}", image_barriers);
+
         Ok(Self::Transfer {
             src_stage,
             image_barriers,

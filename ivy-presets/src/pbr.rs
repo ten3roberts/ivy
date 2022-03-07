@@ -13,7 +13,7 @@ use ivy_resources::{Handle, Resources};
 use ivy_ui::{Canvas, ImageRenderer, TextRenderer, TextUpdateNode};
 use ivy_vulkan::{
     context::SharedVulkanContext,
-    vk::{ClearValue, CullModeFlags},
+    vk::{ClearValue, CullModeFlags, ImageAspectFlags},
     ClearValueExt, Format, ImageLayout, ImageUsage, LoadOp, PipelineInfo, SampleCountFlags,
     Sampler, SamplerInfo, StoreOp, Swapchain, Texture, TextureInfo,
 };
@@ -161,56 +161,6 @@ impl PBRRendering {
             pbr_info,
         )?);
 
-        let sampler: Handle<Sampler> = resources.load(SamplerInfo::default())??;
-
-        // Copy lit to the attachment to read
-        // let copy_pass = rendergraph.add_node(TransferNode::new(
-        //     context.clone(),
-        //     final_lit,
-        //     screenview,
-        //     ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-        //     ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-        // )?);
-
-        // // Copy lit to the attachment to read
-        // let copy_pass = rendergraph.add_node(TransferNode::new(
-        //     context.clone(),
-        //     **world.get::<DepthAttachment>(camera)?,
-        //     screenview_d,
-        //     ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-        //     ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-        // )?);
-
-        //         let transparent_node = rendergraph.add_node(CameraNode::<TransparentPass, _>::new(
-        //             context.clone(),
-        //             resources,
-        //             camera,
-        //             mesh_renderer,
-        //             CameraNodeInfo {
-        //                 name: "Transparent",
-        //                 color_attachments: vec![AttachmentInfo {
-        //                     store_op: StoreOp::STORE,
-        //                     load_op: LoadOp::LOAD,
-        //                     initial_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-        //                     final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-        //                     resource: final_lit,
-        //                     clear_value: ClearValue::color(0.0, 0.0, 0.0, 0.0),
-        //                 }],
-        //                 depth_attachment: Some(AttachmentInfo {
-        //                     resource: **world.get::<DepthAttachment>(camera)?,
-        //                     store_op: StoreOp::STORE,
-        //                     load_op: LoadOp::LOAD,
-        //                     initial_layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-        //                     final_layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-        //                     ..Default::default()
-        //                 }),
-        //                 // read_attachments: &[(screenview, sampler), (screenview_d, sampler)],
-        //                 additional: vec![final_lit],
-        //                 frames_in_flight,
-        //                 ..Default::default()
-        //             },
-        //         )?);
-
         let gizmo = rendergraph.add_node(CameraNode::<GizmoPass, _>::new(
             context.clone(),
             resources,
@@ -227,6 +177,58 @@ impl PBRRendering {
                     clear_value: ClearValue::default(),
                 }],
                 input_attachments: vec![world.get::<DepthAttachment>(camera)?.0],
+                frames_in_flight,
+                ..Default::default()
+            },
+        )?);
+
+        let sampler: Handle<Sampler> = resources.load(SamplerInfo::default())??;
+
+        // Copy lit to the attachment to read
+        let copy_pass = rendergraph.add_node(TransferNode::new(
+            final_lit,
+            screenview,
+            ImageLayout::TRANSFER_SRC_OPTIMAL,
+            ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+            ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            ImageAspectFlags::COLOR,
+        )?);
+
+        // Copy lit to the attachment to read
+        let copy_pass = rendergraph.add_node(TransferNode::new(
+            **world.get::<DepthAttachment>(camera)?,
+            screenview_d,
+            ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            ImageAspectFlags::DEPTH,
+        )?);
+
+        let transparent_node = rendergraph.add_node(CameraNode::<TransparentPass, _>::new(
+            context.clone(),
+            resources,
+            camera,
+            mesh_renderer,
+            CameraNodeInfo {
+                name: "Transparent",
+                color_attachments: vec![AttachmentInfo {
+                    store_op: StoreOp::STORE,
+                    load_op: LoadOp::LOAD,
+                    initial_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                    final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                    resource: final_lit,
+                    clear_value: ClearValue::color(0.0, 0.0, 0.0, 0.0),
+                }],
+                depth_attachment: Some(AttachmentInfo {
+                    resource: **world.get::<DepthAttachment>(camera)?,
+                    store_op: StoreOp::STORE,
+                    load_op: LoadOp::LOAD,
+                    initial_layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                    final_layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                    ..Default::default()
+                }),
+                read_attachments: &[(screenview, sampler), (screenview_d, sampler)],
+                additional: vec![final_lit],
                 frames_in_flight,
                 ..Default::default()
             },

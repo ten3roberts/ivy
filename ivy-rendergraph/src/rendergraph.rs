@@ -120,12 +120,16 @@ impl RenderGraph {
                     .into_iter()
                     .filter(|val| !matches!(*val, Err(Error::MissingWrite(_, _, _)))),
                 )
-                .chain(EdgeConstructor {
-                    nodes,
-                    dst: node.0,
-                    reads: node.1.output_attachments().into_iter().cloned(),
-                    kind: EdgeKind::Sampled,
-                })
+                .chain(
+                    EdgeConstructor {
+                        nodes,
+                        dst: node.0,
+                        reads: node.1.output_attachments().into_iter().cloned(),
+                        kind: EdgeKind::Sampled,
+                    }
+                    .into_iter()
+                    .filter(|val| !matches!(*val, Err(Error::MissingWrite(_, _, _)))),
+                )
             })
             .try_for_each(|edge: crate::Result<Edge>| -> crate::Result<_> {
                 let edge = edge?;
@@ -545,7 +549,6 @@ impl<'a, I: Iterator<Item = Handle<Texture>>> Iterator for EdgeConstructor<'a, I
                                 dst: self.dst,
                                 resource: read.into(),
                                 layout: ImageLayout::TRANSFER_DST_OPTIMAL,
-                                // Write stage is between
                                 write_stage: vk::PipelineStageFlags::TRANSFER,
                                 read_stage: vk::PipelineStageFlags::FRAGMENT_SHADER,
                                 write_access: vk::AccessFlags::TRANSFER_WRITE,

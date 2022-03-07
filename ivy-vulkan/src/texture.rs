@@ -54,6 +54,7 @@ impl TextureInfo {
             mip_levels: 1,
             usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT
                 | ImageUsage::SAMPLED
+                | ImageUsage::TRANSFER_SRC
                 | ImageUsage::INPUT_ATTACHMENT,
             format: Format::D32_SFLOAT,
             samples: SampleCountFlags::TYPE_1,
