@@ -67,8 +67,6 @@ impl Pass {
             } => {
                 cmd.begin_renderpass(&renderpass, &framebuffer, extent, clear_values);
 
-                eprintln!("Entering pass");
-
                 self.nodes
                     .iter()
                     .enumerate()
@@ -77,8 +75,6 @@ impl Pass {
                             cmd.next_subpass(vk::SubpassContents::INLINE);
                         }
                         let node = &mut nodes[*index];
-
-                        eprintln!("Executing node: {}", node.debug_name());
 
                         node.execute(
                             world,
@@ -396,8 +392,6 @@ impl PassKind {
                 })
             })
             .collect::<Result<Vec<_>>>()?;
-
-        eprintln!("Barriers: {:#?}", image_barriers);
 
         Ok(Self::Transfer {
             src_stage,

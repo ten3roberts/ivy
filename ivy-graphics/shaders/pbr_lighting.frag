@@ -135,7 +135,7 @@ vec3 PBR(vec3 albedo, vec3 pos, vec3 normal, float roughness, float metallic) {
 
 		vec3 radiance = light.radiance * dot(lightDir, normal) / (dist * dist);
 
-		if (dot(radiance, radiance) < 1.0 / 256.0) {
+		if (dot(radiance, radiance) < 1.0 / 512.0) {
 			continue;
 		}
 

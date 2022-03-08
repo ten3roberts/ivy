@@ -470,12 +470,9 @@ fn generate_tangents_skinned(vertices: &mut [SkinnedVertex], indices: &[u32]) {
         let dt2 = v2.texcoord - v0.texcoord;
 
         let r = 1.0 / (dt1.x * dt2.y - dt1.y * dt2.x);
-        let tangent = ((d1 * dt2.y - d2 * dt1.y) * r).normalize();
+        let tangent = (d1 * dt2.y - d2 * dt1.y) * r;
         vertices[a].tangent = tangent;
         vertices[b].tangent = tangent;
         vertices[c].tangent = tangent;
-        // vertices[a].tangent = v0.normal.cross(tangent).normalize();
-        // vertices[b].tangent = v1.normal.cross(tangent).normalize();
-        // vertices[c].tangent = v2.normal.cross(tangent).normalize();
     });
 }

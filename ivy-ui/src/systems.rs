@@ -195,7 +195,6 @@ pub fn handle_events(
                 }
 
                 // Send unfocus event if widget is not sticky
-                dbg!("Sticky: {:?}", state.sticky());
                 if !state.sticky() {
                     state.set_focus(None, false, &mut events);
                 }

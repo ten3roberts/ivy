@@ -133,11 +133,6 @@ impl RenderGraph {
             })
             .try_for_each(|edge: crate::Result<Edge>| -> crate::Result<_> {
                 let edge = edge?;
-                eprintln!(
-                    "Edge: {:?} => {:?}",
-                    nodes[edge.dst].debug_name(),
-                    nodes[edge.src].debug_name(),
-                );
                 edges.entry(edge.src).or_insert_with(Vec::new).push(edge);
 
                 dependencies
@@ -184,7 +179,6 @@ impl RenderGraph {
     where
         T: Deref<Target = ResourceCache<Texture>>,
     {
-        eprintln!("----");
         let (_edges, dependencies) = self.build_edges()?;
         let (ordered, depths) = topological_sort(&self.nodes, &self.edges)?;
 

@@ -316,7 +316,7 @@ impl PBRRendering {
         }))?;
 
         resources.insert(TransparentPass(PipelineInfo {
-            vs: GLASS_VERTEX_SHADER,
+            vs: DEFAULT_VERTEX_SHADER,
             fs: GLASS_FRAGMENT_SHADER,
             cull_mode: info.cull_mode,
             ..Default::default()

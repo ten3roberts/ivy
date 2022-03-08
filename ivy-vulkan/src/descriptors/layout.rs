@@ -221,8 +221,6 @@ mod tests {
 
         layout.insert(bindings[0]);
 
-        eprintln!("Layout: {:?}", layout);
-
         bindings[2] = DescriptorSetBinding {
             binding: 2,
             descriptor_type: DescriptorType::UNIFORM_BUFFER,
@@ -231,8 +229,6 @@ mod tests {
         };
 
         layout.insert(bindings[2]);
-
-        eprintln!("Layout: {:?}", layout);
 
         bindings[1] = DescriptorSetBinding {
             binding: 1,
@@ -243,8 +239,6 @@ mod tests {
 
         layout.insert(bindings[1]);
 
-        eprintln!("Layout: {:?}", layout);
-
         bindings[3] = DescriptorSetBinding {
             binding: 3,
             descriptor_type: DescriptorType::UNIFORM_BUFFER,
@@ -254,8 +248,6 @@ mod tests {
 
         layout.insert(bindings[3]);
 
-        eprintln!("Layout: {:?}", layout);
-
         bindings[5] = DescriptorSetBinding {
             binding: 5,
             descriptor_type: DescriptorType::UNIFORM_BUFFER,
@@ -264,8 +256,6 @@ mod tests {
         };
 
         layout.insert(bindings[5]);
-
-        eprintln!("Layout: {:?}", layout);
 
         bindings[4] = DescriptorSetBinding {
             binding: 4,
@@ -282,8 +272,6 @@ mod tests {
             descriptor_count: 1,
             ..Default::default()
         });
-
-        eprintln!("Layout: {:?}", layout);
 
         assert!(layout
             .bindings()
