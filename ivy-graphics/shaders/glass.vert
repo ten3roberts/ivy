@@ -38,7 +38,7 @@ const float Eta = Air / Glass;
 // see http://en.wikipedia.org/wiki/Refractive_index Reflectivity
 const float R0 = ((Air - Glass) * (Air - Glass)) / ((Air + Glass) * (Air + Glass));
 
-layout(std140, set = 2, binding = 0) readonly buffer ObjectBuffer{
+layout(std140, set = 1, binding = 0) readonly buffer ObjectBuffer{
   ObjectData objects[];
 } objectBuffer;
 
@@ -54,7 +54,7 @@ void main() {
 
   vec3 incident = normalize((pos - cameraData.position).xyz);
 
-  fragNormal = (model * vec4(normal, 0.0)).xyz;
+  fragNormal = normalize((model * vec4(normal, 0.0)).xyz);
   fragRefraction = refract(incident, fragNormal, Eta);
   fragReflection = reflect(incident, fragNormal);
 

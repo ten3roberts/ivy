@@ -2,10 +2,7 @@ use crate::{NodeKind, Result};
 use ivy_resources::Handle;
 use ivy_vulkan::{
     traits::FromExtent,
-    vk::{
-        self, AccessFlags, ImageAspectFlags, ImageBlit, ImageSubresourceLayers, Offset3D,
-        PipelineStageFlags,
-    },
+    vk::{self, ImageAspectFlags, ImageBlit, ImageSubresourceLayers, Offset3D, PipelineStageFlags},
     ImageLayout, PassInfo, Texture,
 };
 use std::slice;

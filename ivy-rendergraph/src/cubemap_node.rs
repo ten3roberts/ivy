@@ -51,6 +51,7 @@ where
 
             let node = CameraNode::<P, _>::new(
                 context.clone(),
+                world,
                 resources,
                 camera,
                 renderer,

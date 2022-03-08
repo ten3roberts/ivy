@@ -61,7 +61,12 @@ impl DescriptorLayoutInfo {
                     mid += (len as f32 / 2.0).floor() as usize;
                 }
                 std::cmp::Ordering::Equal => {
-                    self.bindings[mid] = binding;
+                    let old = self.bindings[mid];
+                    self.bindings[mid] = DescriptorSetBinding {
+                        stage_flags: binding.stage_flags | old.stage_flags,
+                        ..binding
+                    };
+
                     break;
                 }
                 std::cmp::Ordering::Greater => {

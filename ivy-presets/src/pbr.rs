@@ -1,21 +1,20 @@
 use hecs::World;
 use ivy_base::{Extent, WorldExt};
 use ivy_graphics::{
-    gizmos::GizmoRenderer, shaders::*, DepthAttachment, FullscreenRenderer, MainCamera,
-    MeshRenderer, SkinnedMeshRenderer, WithPass,
+    gizmos::GizmoRenderer, shaders::*, DepthAttachment, FullscreenRenderer, GpuCameraData,
+    MainCamera, MeshRenderer, SkinnedMeshRenderer, WithPass,
 };
 use ivy_postprocessing::pbr::{create_pbr_pipeline, PBRInfo};
 use ivy_rendergraph::{
-    cubemap_node, AttachmentInfo, CameraNode, CameraNodeInfo, NodeIndex, RenderGraph,
-    SwapchainNode, TransferNode,
+    AttachmentInfo, CameraNode, CameraNodeInfo, NodeIndex, RenderGraph, SwapchainNode, TransferNode,
 };
 use ivy_resources::{Handle, Resources};
 use ivy_ui::{Canvas, ImageRenderer, TextRenderer, TextUpdateNode};
 use ivy_vulkan::{
     context::SharedVulkanContext,
-    vk::{ClearValue, CullModeFlags, ImageAspectFlags},
-    ClearValueExt, Format, ImageLayout, ImageUsage, LoadOp, PipelineInfo, SampleCountFlags,
-    Sampler, SamplerInfo, StoreOp, Swapchain, Texture, TextureInfo,
+    vk::{ClearValue, CullModeFlags, ImageAspectFlags, ShaderStageFlags},
+    AddressMode, ClearValueExt, Format, ImageLayout, ImageUsage, LoadOp, PipelineInfo, Sampler,
+    SamplerInfo, StoreOp, Swapchain, Texture, TextureInfo,
 };
 
 use crate::{
@@ -70,10 +69,12 @@ impl PBRRendering {
             .by_tag::<MainCamera>()
             .ok_or(Error::MissingMainCamera)?;
 
-        let canvas = world.by_tag::<Canvas>().ok_or(Error::MissingCanvas)?;
-
         let context = resources.get_default::<SharedVulkanContext>()?;
         context.wait_idle()?;
+
+        GpuCameraData::create_gpu_cameras(&context, world, frames_in_flight)?;
+
+        let canvas = world.by_tag::<Canvas>().ok_or(Error::MissingCanvas)?;
 
         let mut rendergraph = RenderGraph::new(context.clone(), frames_in_flight)?;
 
@@ -137,7 +138,7 @@ impl PBRRendering {
             },
         )?)?;
 
-        let pbr_nodes = rendergraph.add_nodes(create_pbr_pipeline::<GeometryPass, PbrPass, _, _>(
+        let _pbr_nodes = rendergraph.add_nodes(create_pbr_pipeline::<GeometryPass, PbrPass, _, _>(
             context.clone(),
             world,
             &resources,
@@ -151,7 +152,7 @@ impl PBRRendering {
             &[],
             &[AttachmentInfo {
                 store_op: StoreOp::STORE,
-                load_op: LoadOp::LOAD,
+                load_op: LoadOp::CLEAR,
                 initial_layout: ImageLayout::UNDEFINED,
                 final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
                 resource: final_lit,
@@ -161,8 +162,11 @@ impl PBRRendering {
             pbr_info,
         )?);
 
+        let depth_attachment = **world.get::<DepthAttachment>(camera)?;
+
         let gizmo = rendergraph.add_node(CameraNode::<GizmoPass, _>::new(
             context.clone(),
+            world,
             resources,
             camera,
             gizmo_renderer,
@@ -176,16 +180,19 @@ impl PBRRendering {
                     resource: final_lit,
                     clear_value: ClearValue::default(),
                 }],
-                input_attachments: vec![world.get::<DepthAttachment>(camera)?.0],
+                input_attachments: vec![depth_attachment],
                 frames_in_flight,
                 ..Default::default()
             },
         )?);
 
-        let sampler: Handle<Sampler> = resources.load(SamplerInfo::default())??;
+        let sampler: Handle<Sampler> = resources.load(SamplerInfo {
+            address_mode: AddressMode::CLAMP_TO_BORDER,
+            ..Default::default()
+        })??;
 
         // Copy lit to the attachment to read
-        let copy_pass = rendergraph.add_node(TransferNode::new(
+        rendergraph.add_node(TransferNode::new(
             final_lit,
             screenview,
             ImageLayout::TRANSFER_SRC_OPTIMAL,
@@ -195,7 +202,7 @@ impl PBRRendering {
         )?);
 
         // Copy lit to the attachment to read
-        let copy_pass = rendergraph.add_node(TransferNode::new(
+        rendergraph.add_node(TransferNode::new(
             **world.get::<DepthAttachment>(camera)?,
             screenview_d,
             ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
@@ -204,8 +211,9 @@ impl PBRRendering {
             ImageAspectFlags::DEPTH,
         )?);
 
-        let transparent_node = rendergraph.add_node(CameraNode::<TransparentPass, _>::new(
+        rendergraph.add_node(CameraNode::<TransparentPass, _>::new(
             context.clone(),
+            world,
             resources,
             camera,
             mesh_renderer,
@@ -220,7 +228,7 @@ impl PBRRendering {
                     clear_value: ClearValue::color(0.0, 0.0, 0.0, 0.0),
                 }],
                 depth_attachment: Some(AttachmentInfo {
-                    resource: **world.get::<DepthAttachment>(camera)?,
+                    resource: depth_attachment,
                     store_op: StoreOp::STORE,
                     load_op: LoadOp::LOAD,
                     initial_layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
@@ -229,6 +237,7 @@ impl PBRRendering {
                 }),
                 read_attachments: &[(screenview, sampler), (screenview_d, sampler)],
                 additional: vec![final_lit],
+                camera_stage: ShaderStageFlags::VERTEX | ShaderStageFlags::FRAGMENT,
                 frames_in_flight,
                 ..Default::default()
             },
@@ -248,6 +257,7 @@ impl PBRRendering {
 
         let ui = rendergraph.add_node(CameraNode::<ImagePass, _>::new(
             context.clone(),
+            world,
             resources,
             canvas,
             (image_renderer, WithPass::<TextPass, _>::new(text_renderer)),
@@ -302,7 +312,6 @@ impl PBRRendering {
             vs: DEFAULT_VERTEX_SHADER,
             fs: DEFAULT_FRAGMENT_SHADER,
             cull_mode: info.cull_mode,
-            blending: false,
             ..Default::default()
         }))?;
 
@@ -310,7 +319,6 @@ impl PBRRendering {
             vs: GLASS_VERTEX_SHADER,
             fs: GLASS_FRAGMENT_SHADER,
             cull_mode: info.cull_mode,
-            blending: true,
             ..Default::default()
         }))?;
         resources.insert(SkinnedPass(PipelineInfo {

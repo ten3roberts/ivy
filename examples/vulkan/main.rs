@@ -245,8 +245,37 @@ fn setup_objects(
     world.attach_new::<Connection, _>(light, builder.build())?;
     let mut rng = StdRng::seed_from_u64(42);
 
-    const COUNT: usize = 256;
+    const COUNT: usize = 128;
 
+    (0..COUNT).for_each(|_| {
+        let pos = Position::rand_uniform(&mut rng) * 10.0;
+        let vel = Velocity::rand_uniform(&mut rng);
+
+        builder
+            .add_bundle(ObjectBundle {
+                mesh: cube_mesh,
+                pass: assets.geometry_pass,
+                scale: Scale::uniform(0.5),
+                pos,
+                color: Color::rgba(1.0, 1.0, 0.2, 0.5),
+                ..Default::default()
+            })
+            .add_bundle(RbColliderBundle {
+                collider: Collider::new(Cube::uniform(1.0)),
+                vel,
+                mass: Mass(20.0),
+                ang_mass: AngularMass(5.0),
+                friction: Friction(1.0),
+                ..Default::default()
+            })
+            .add_bundle(ConnectionBundle::new(
+                ConnectionKind::Rigid,
+                PositionOffset::new(-1.0, 0.0, 2.0),
+                Default::default(),
+            ));
+
+        world.spawn(builder.build());
+    });
     (0..COUNT).for_each(|_| {
         let pos = Position::rand_uniform(&mut rng) * 10.0;
         let vel = Velocity::rand_uniform(&mut rng);

@@ -53,12 +53,14 @@ where
     R::Error: Storage + Into<anyhow::Error>,
     EnvData: Copy + Component,
 {
+    GpuCameraData::create_gpu_cameras(&context, world, frames_in_flight)?;
     let pbr_attachments = PBRAttachments::new(context.clone(), resources, extent)?;
 
     let depth_attachment = DepthAttachment::new(context.clone(), resources, extent)?;
 
     let camera_node = Box::new(CameraNode::<GeometryPass, R>::new(
         context.clone(),
+        world,
         resources,
         camera,
         renderer,
@@ -91,7 +93,7 @@ where
 
     let light_manager = LightManager::new(context.clone(), info.max_lights, frames_in_flight)?;
     let env_manager = EnvironmentManager::new(context.clone(), info.env_data, frames_in_flight)?;
-    let camera_data = GpuCameraData::new(context.clone(), frames_in_flight)?;
+    let camera_data = world.get::<GpuCameraData>(camera).unwrap();
 
     let data = [
         camera_data.buffers(),
@@ -124,13 +126,14 @@ where
         frames_in_flight,
     )?);
 
+    drop(camera_data);
+
     // Store data in camera
     world
         .insert(
             camera,
             (
                 light_manager,
-                camera_data,
                 pbr_attachments,
                 depth_attachment,
                 env_manager,

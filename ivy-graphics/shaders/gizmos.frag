@@ -9,7 +9,7 @@ layout(location = 4) in float cornerRadius;
 
 layout(location = 0) out vec4 outColor;
 
-layout (input_attachment_index = 0, binding = 0, set = 1) uniform subpassInput depthInput;
+layout (input_attachment_index = 0, binding = 1, set = 0) uniform subpassInput depthInput;
 
 void main() {
   float depth = subpassLoad(depthInput).x;
@@ -31,7 +31,7 @@ void main() {
   float midSegmentX = (1-radius);
 
   vec3 cap = (modelPosition * scale) - vec3((1-cornerRadius) * w * sign(modelPosition.x), midSegment *
-    sign(modelPosition.y), 0); 
+    sign(modelPosition.y), 0);
 
   if (abs((modelPosition * scale).y) > midSegment && (cap.x * sign(modelPosition.x) > 0) && length(cap) > radius) {
     alpha = 0;
