@@ -36,9 +36,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.53"
+version = "1.0.56"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94a45b455c14666b85fc40a019e8ab9eb75e3a124e05494f5397122bc9eb06e0"
+checksum = "4361135be9122e0870de935d7c439aef945b9f9ddd4199a553b5270b49c82a27"
 
 [[package]]
 name = "anymap"
@@ -63,9 +63,9 @@ checksum = "8da52d66c7071e2e3fa2a1e5c6d088fec47b593032b254f5e980de8ea54454d6"
 
 [[package]]
 name = "ash"
-version = "0.35.1+1.2.203"
+version = "0.36.0+1.3.206"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7fd04def1c9101b5fb488c131022d2d6f87753ef4b1b11b279e2af404fae6b9"
+checksum = "ceea9c64653169f33f946debf0a41568afc4e23a4c37d29004a23b2ffbfb4034"
 dependencies = [
  "libloading",
 ]
@@ -135,9 +135,9 @@ checksum = "14c189c53d098945499cdfa7ecc63567cf3886b3332b312a5b4585d8d3a6a610"
 
 [[package]]
 name = "cc"
-version = "1.0.72"
+version = "1.0.73"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22a9137b95ea06864e018375b72adfb7db6e6f68cfc8df5a04d00288050485ee"
+checksum = "2fff2a6927b3bb87f9595d67196a70493f627687a71d87a0d692242c33f58c11"
 
 [[package]]
 name = "cfg-if"
@@ -286,9 +286,9 @@ dependencies = [
 
 [[package]]
 name = "flume"
-version = "0.10.10"
+version = "0.10.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d04dafd11240188e146b6f6476a898004cace3be31d4ec5e08e216bf4947ac0"
+checksum = "0b279436a715a9de95dcd26b151db590a71961cc06e54918b24fe0dd5b7d3fc4"
 dependencies = [
  "futures-core",
  "futures-sink",
@@ -299,9 +299,9 @@ dependencies = [
 
 [[package]]
 name = "fontdue"
-version = "0.6.4"
+version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f716db304dca2e287fea5c7e3a22dac3eac9050f9bae143aa424ac2815494475"
+checksum = "6a62391ecb864cf12ed06b2af4eda2e609b97657950d6a8f06841b17726ab253"
 dependencies = [
  "hashbrown 0.11.2",
  "ttf-parser",
@@ -349,9 +349,9 @@ dependencies = [
 
 [[package]]
 name = "glfw"
-version = "0.43.0"
+version = "0.44.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae1439ba800d82c8fc55b86c400b5a4c30c5de5c5c24bb549981274bffba7b05"
+checksum = "103c29fa9d30c5371187895a10948d4f54b4111450328b4e439133d88243c5e3"
 dependencies = [
  "bitflags",
  "glfw-sys",
@@ -409,9 +409,9 @@ dependencies = [
 
 [[package]]
 name = "gpu-allocator"
-version = "0.16.0"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c50ecd19aa249a5f259d606fb7672efffb352ffff6fb9f8e7be3f83edb024004"
+checksum = "5ed7426eb788ccc1ad2f36294b038ea3d7aeec07da949d01221204f85e373439"
 dependencies = [
  "ash",
  "backtrace",
@@ -440,9 +440,9 @@ dependencies = [
 
 [[package]]
 name = "hecs"
-version = "0.7.5"
+version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c0eac587c883895f32067e69a2e241c57b6248eccee80e684033d4e2e1e43c3"
+checksum = "8d4e8eb4d5dd2ea100ffbb4eb6814f4294a7362fcafbc5c1c4c015b41d16f424"
 dependencies = [
  "hashbrown 0.12.0",
  "hecs-macros",
@@ -452,9 +452,9 @@ dependencies = [
 
 [[package]]
 name = "hecs-hierarchy"
-version = "0.11.3"
+version = "0.11.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7cdd88de1c79e7e8ebf1bdb6b5891db78ca0e5addbcfe88bfbba3a2f7b3feb53"
+checksum = "76d3a31c44c473d1e0d208a00d2ccd15f2d914cec2eca3a54a09a0c0d987f02b"
 dependencies = [
  "hecs",
  "hecs-schedule",
@@ -475,9 +475,9 @@ dependencies = [
 
 [[package]]
 name = "hecs-schedule"
-version = "0.6.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ba88fa3771d4c5831d92c79cc22eafb1559cf8bd1b59f52409191290fe64f26"
+checksum = "f4dbcaa778ffef1911b292933a40f8b7204f9fee0f02c3ebef702fad6a838e47"
 dependencies = [
  "anyhow",
  "atomic_refcell",
@@ -872,9 +872,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.117"
+version = "0.2.119"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e74d72e0f9b65b5b4ca49a346af3976df0f9c61d550727f349ecd559f251a26c"
+checksum = "1bf2e165bb3457c8e098ea76f3e3bc9db55f87aa90d52d0e6be741470916aaa4"
 
 [[package]]
 name = "libloading"
@@ -1027,9 +1027,9 @@ dependencies = [
 
 [[package]]
 name = "once_cell"
-version = "1.9.0"
+version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da32515d9f6e6e489d7bc9d84c71b060db7247dc035bbe44eac88cf87486d8d5"
+checksum = "87f3e037eac156d1775da914196f0f37741a274155e34a0b7e427c35d2a2ecb9"
 
 [[package]]
 name = "ordered-float"
@@ -1196,14 +1196,13 @@ dependencies = [
 
 [[package]]
 name = "rand"
-version = "0.8.4"
+version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e7573632e6454cf6b99d7aac4ccca54be06da05aca2ef7423d22d27d4d4bcd8"
+checksum = "34af8d1a0e25924bc5b7c43c079c942339d8f0a8b57c39049bef581b46327404"
 dependencies = [
  "libc",
  "rand_chacha",
  "rand_core",
- "rand_hc",
 ]
 
 [[package]]
@@ -1223,15 +1222,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d34f1408f55294453790c48b2f1ebbb1c5b4b7563eb1f418bcfcfdbb06ebb4e7"
 dependencies = [
  "getrandom",
-]
-
-[[package]]
-name = "rand_hc"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d51e9f596de227fda2ea6c84607f5558e196eeaf43c986b724ba4fb8fdf497e7"
-dependencies = [
- "rand_core",
 ]
 
 [[package]]
@@ -1488,9 +1478,9 @@ dependencies = [
 
 [[package]]
 name = "ttf-parser"
-version = "0.12.3"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ae2f58a822f08abdaf668897e96a5656fe72f5a9ce66422423e8849384872e6"
+checksum = "c74c96594835e10fa545e2a51e8709f30b173a092bfd6036ef2cec53376244f3"
 
 [[package]]
 name = "unicode-xid"

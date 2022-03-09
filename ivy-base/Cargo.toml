@@ -6,7 +6,7 @@ edition = "2018"
 description = "Base crate for the Ivy game engine"
 
 license-file = "../LICENSE"
-keywords = [ "graphics", "physics", "game-engine", "game", "vulkan" ]
+keywords = ["graphics", "physics", "game-engine", "game", "vulkan"]
 documentation = "https://lib.rs/ivy-base"
 repository = "https://github.com/ten3roberts/ivy"
 readme = "./README.md"
@@ -14,13 +14,13 @@ readme = "./README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.53"
+anyhow = "1.0.56"
 crossbeam-channel = { version = "0.5.2", optional = true }
 derive-for = "1.2.2"
 derive_more = "0.99.17"
 downcast-rs = "1.2.0"
-flume = "0.10.10"
-hecs = "0.7.5"
+flume = "0.10.11"
+hecs = "0.7.6"
 ivy-resources = { path = "../ivy-resources", version = "0.10.0" }
 ivy-random = { path = "../ivy-random", version = "0.10.0" }
 log = { version = "0.4.14", features = ["std"] }
@@ -28,11 +28,11 @@ palette = "0.6.0"
 thiserror = "1.0.30"
 glam = "0.20.2"
 parking_lot = "0.12.0"
-serde = { version = "1.0.136", features = [ "derive" ], optional = true }
-hecs-schedule = "0.6.0"
+serde = { version = "1.0.136", features = ["derive"], optional = true }
+hecs-schedule = "0.6.1"
 records = "0.2.0"
-ezy = { version = "0.1.1", features = [ "glam" ] }
+ezy = { version = "0.1.1", features = ["glam"] }
 
 [features]
 default = []
-serialize = [ "serde", "glam/serde", "palette/serializing" ]
+serialize = ["serde", "glam/serde", "palette/serializing"]

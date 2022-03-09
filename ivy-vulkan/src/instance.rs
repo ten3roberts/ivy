@@ -101,7 +101,7 @@ pub fn destroy(instance: &Instance) {
 
 /// Returns a vector of missing extensions
 fn get_missing_extensions(entry: &Entry, extensions: &[CString]) -> Result<Vec<CString>> {
-    let available = entry.enumerate_instance_extension_properties()?;
+    let available = entry.enumerate_instance_extension_properties(None)?;
 
     Ok(extensions
         .iter()

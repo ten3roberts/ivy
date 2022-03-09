@@ -21,5 +21,5 @@ ivy-resources = { path = "../ivy-resources", version = "0.10.0" }
 ivy-postprocessing = { path = "../ivy-postprocessing", version = "0.10.0" }
 thiserror = "1.0.30"
 records = "0.2.0"
-hecs = "0.7.5"
+hecs = "0.7.6"
 slotmap = "1.0.6"

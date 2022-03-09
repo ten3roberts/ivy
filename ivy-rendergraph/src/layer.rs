@@ -76,6 +76,13 @@ impl Layer for GraphicsLayer {
 
         let mut rendergraph = resources.get_default_mut::<RenderGraph>()?;
 
+        let window = resources.get_default::<Window>()?;
+        let extent = window.extent();
+
+        if extent.width == 0 || extent.height == 0 {
+            return Ok(());
+        }
+
         match self.execute_rendergraph(world, resources, &mut rendergraph) {
             Ok(()) => Ok(()),
             Err(crate::Error::Vulkan(ivy_vulkan::Error::Vulkan(
@@ -83,7 +90,6 @@ impl Layer for GraphicsLayer {
                 | ivy_vulkan::vk::Result::ERROR_OUT_OF_DATE_KHR,
             ))) => {
                 eprintln!("Recreating swapchain");
-                let window = resources.get_default::<Window>()?;
                 resources
                     .get_default_mut::<Swapchain>()?
                     .recreate(window.framebuffer_size())

@@ -6,7 +6,7 @@ edition = "2018"
 description = "Provides high level graphics abstractions like Meshes, Materials, etc. Builds on top of ivy-vulkan"
 
 license-file = "../LICENSE"
-keywords = [ "high-level", "graphics", "windowing", "game", "vulkan" ]
+keywords = ["high-level", "graphics", "windowing", "game", "vulkan"]
 documentation = "https://lib.rs/ivy-window"
 repository = "https://github.com/ten3roberts/ivy"
 readme = "../README.md"
@@ -14,18 +14,18 @@ readme = "../README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.53"
+anyhow = "1.0.56"
 anymap = "0.12.1"
-ash = "0.35.1"
+ash = "0.36.0"
 base64 = "0.13.0"
 derive_more = "0.99.17"
-flume = "0.10.10"
+flume = "0.10.11"
 glam = "0.20.2"
-glfw = "0.43.0"
-gltf =  { version = "1.0.0", features = [ "KHR_lights_punctual" ] }
-hecs = "0.7.5"
-hecs-hierarchy = "0.11.3"
-hecs-schedule = "0.6.0"
+glfw = "0.44.0"
+gltf = { version = "1.0.0", features = ["KHR_lights_punctual"] }
+hecs = "0.7.6"
+hecs-hierarchy = "0.11.6"
+hecs-schedule = "0.6.1"
 itertools = "0.10.3"
 ivy-base = { path = "../ivy-base", version = "0.10.0" }
 ivy-image = { path = "../ivy-image", version = "0.10.0" }
@@ -33,21 +33,21 @@ ivy-input = { path = "../ivy-input", version = "0.10.0" }
 ivy-resources = { path = "../ivy-resources", version = "0.10.0" }
 ivy-vulkan = { path = "../ivy-vulkan", version = "0.10.0" }
 ivy-window = { path = "../ivy-window", version = "0.10.0" }
-once_cell = "1.9.0"
+once_cell = "1.10.0"
 ordered-float = "2.10.0"
 parking_lot = "0.12.0"
 records = "0.2.0"
 rectangle-pack = "0.4.2"
-serde = { version = "1.0.136", features = [ "derive" ], optional = true }
+serde = { version = "1.0.136", features = ["derive"], optional = true }
 slotmap = "1.0.6"
 smallvec = "1.8.0"
 thiserror = "1.0.30"
 
 [features]
 default = []
-serialize = [ "serde", "glam/serde" ]
+serialize = ["serde", "glam/serde"]
 
 [build-dependencies]
-anyhow = "1.0.53"
+anyhow = "1.0.56"
 shaderc = "0.7.4"
 walkdir = "2.3.2"

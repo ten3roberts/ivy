@@ -5,17 +5,17 @@ edition = "2021"
 description = "GLFW window wrapper"
 
 license-file = "../LICENSE"
-keywords = [ "glfw", "graphics", "windowing", "game", "vulkan" ]
+keywords = ["glfw", "graphics", "windowing", "game", "vulkan"]
 documentation = "https://lib.rs/ivy-window"
 repository = "https://github.com/ten3roberts/ivy"
 readme = "../README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-glfw = "0.43.0"
+glfw = "0.44.0"
 thiserror = "1.0.30"
 parking_lot = "0.12.0"
 ivy-base = { path = "../ivy-base", version = "0.10.0" }
-ash = "0.35.1"
+ash = "0.36.0"
 glam = "0.20.2"
 ivy-vulkan = { path = "../ivy-vulkan", version = "0.10.0" }

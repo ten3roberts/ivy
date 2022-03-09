@@ -3,5 +3,6 @@
     "cmd": "cargo run --example vulkan",
     "interactive": true
   },
+  "check": "cargo check --bins",
   "build-vulkan": "cargo build --example vulkan"
 }
