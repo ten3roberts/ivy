@@ -520,6 +520,7 @@ impl GameLayer {
         // Add a node rendering the scene from the camera
         rendergraph.add_node(CameraNode::&lt;GeometryPass, _&gt;::new(
             context.clone(),
+            world,
             resources,
             camera,
             renderer,
