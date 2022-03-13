@@ -23,7 +23,10 @@ layout(set = 2, binding = 2) uniform MaterialData {
 } materialData;
 
 void main() {
-	outAlbedo = vec4(texture(albedo, fragTexCoord).rgb, 1) * fragColor;
+	outAlbedo = texture(albedo, fragTexCoord).rgba * fragColor;
+	if (outAlbedo.w < 0.2) {
+		discard;
+	}
 	outPosition = vec4(fragPosition, 0);
 	vec3 normal = texture(normalMap, fragTexCoord).rgb * 2 - 1;
 
