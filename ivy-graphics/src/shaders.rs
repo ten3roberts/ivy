@@ -66,3 +66,11 @@ pub const TEXT_VERTEX_SHADER: ShaderModuleInfo = ShaderModuleInfo::from_const_by
 pub const PBR_SHADER: ShaderModuleInfo = ShaderModuleInfo::from_const_bytes(include_bytes!(
     concat!(env!("OUT_DIR"), "/shaders/pbr_lighting.frag.spv")
 ));
+
+pub const POSTPROCESSING_SHADER: ShaderModuleInfo = ShaderModuleInfo::from_const_bytes(
+    include_bytes!(concat!(env!("OUT_DIR"), "/shaders/postprocessing.frag.spv")),
+);
+
+pub const LIGHT_VERTEX_SHADER: ShaderModuleInfo = ShaderModuleInfo::from_const_bytes(
+    include_bytes!(concat!(env!("OUT_DIR"), "/shaders/light_volume.vert.spv")),
+);

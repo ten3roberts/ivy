@@ -257,6 +257,7 @@ pub fn create(
     let enabled_features = vk::PhysicalDeviceFeatures {
         fill_mode_non_solid: vk::TRUE,
         sampler_anisotropy: pdevice_info.features.sampler_anisotropy,
+        depth_clamp: vk::TRUE,
         multi_draw_indirect: vk::TRUE,
         ..Default::default()
     };

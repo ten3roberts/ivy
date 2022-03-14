@@ -103,7 +103,7 @@ fn setup_graphics(world: &mut World, resources: &Resources) -> anyhow::Result<As
             env_data: DefaultEnvData {
                 ambient_radiance: Vec3::ONE * 0.01,
                 fog_density: 0.05,
-                fog_color: Vec3::new(0.0, 0.0, 0.0),
+                fog_color: Vec3::new(0.2, 0.0, 0.5),
                 fog_gradient: 2.0,
             },
         },

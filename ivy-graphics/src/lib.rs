@@ -21,6 +21,7 @@ mod events;
 mod skinned_mesh_renderer;
 
 pub mod gizmos;
+pub mod icosphere;
 pub mod layer;
 pub mod shaders;
 pub mod systems;

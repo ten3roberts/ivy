@@ -1,7 +1,7 @@
 use anyhow::Context;
 use hecs::World;
 use ivy_base::{Events, Layer};
-use ivy_graphics::{GpuCameraData, GraphicsEvent, LightManager};
+use ivy_graphics::{GpuCameraData, GraphicsEvent};
 use ivy_resources::Resources;
 use ivy_vulkan::{context::SharedVulkanContext, device, traits::Backend, Swapchain};
 use ivy_window::Window;
@@ -49,7 +49,7 @@ impl GraphicsLayer {
         ivy_graphics::systems::update_view_matrices(world);
 
         GpuCameraData::update_all_system(world, current_frame)?;
-        LightManager::update_all_system(world, current_frame)?;
+        // LightRenderer::update_all_system(world, &mut *gizmos, current_frame)?;
 
         rendergraph.execute(world, resources)?;
         rendergraph.end()?;

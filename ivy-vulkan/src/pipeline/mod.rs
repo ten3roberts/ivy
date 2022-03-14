@@ -22,6 +22,13 @@ pub struct PipelineInfo {
     pub fs: ShaderModuleInfo,
     // Enable alpha blending,
     pub blending: bool,
+    pub depth_clamp: bool,
+    pub color_blend_op: BlendOp,
+    pub alpha_blend_op: BlendOp,
+    pub src_color: BlendFactor,
+    pub dst_color: BlendFactor,
+    pub dst_alpha: BlendFactor,
+    pub src_alpha: BlendFactor,
     pub topology: PrimitiveTopology,
     pub samples: vk::SampleCountFlags,
     pub polygon_mode: vk::PolygonMode,
@@ -34,6 +41,7 @@ pub struct PipelineInfo {
 impl Default for PipelineInfo {
     fn default() -> Self {
         Self {
+            depth_clamp: false,
             blending: false,
             vs: "".into(),
             fs: "".into(),
@@ -43,6 +51,12 @@ impl Default for PipelineInfo {
             front_face: vk::FrontFace::COUNTER_CLOCKWISE,
             set_layouts: Cow::Borrowed(&[]),
             topology: PrimitiveTopology::TRIANGLE_LIST,
+            color_blend_op: BlendOp::ADD,
+            alpha_blend_op: BlendOp::ADD,
+            src_color: BlendFactor::SRC_ALPHA,
+            dst_color: BlendFactor::ONE_MINUS_SRC_ALPHA,
+            dst_alpha: BlendFactor::ONE,
+            src_alpha: BlendFactor::ONE,
         }
     }
 }
@@ -117,7 +131,7 @@ impl Pipeline {
 
         let rasterizer = vk::PipelineRasterizationStateCreateInfo::builder()
             // Clamp pixels outside far and near
-            .depth_clamp_enable(false)
+            .depth_clamp_enable(info.depth_clamp)
             // If true: Discard all pixels
             .rasterizer_discard_enable(false)
             .polygon_mode(info.polygon_mode)
@@ -141,11 +155,11 @@ impl Pipeline {
                 if info.blending {
                     PipelineColorBlendAttachmentState {
                         blend_enable: vk::TRUE,
-                        src_color_blend_factor: BlendFactor::SRC_ALPHA,
-                        dst_color_blend_factor: BlendFactor::ONE_MINUS_SRC_ALPHA,
-                        color_blend_op: BlendOp::ADD,
-                        src_alpha_blend_factor: BlendFactor::ONE,
-                        dst_alpha_blend_factor: BlendFactor::ONE_MINUS_SRC_ALPHA,
+                        src_color_blend_factor: info.src_color,
+                        dst_color_blend_factor: info.dst_color,
+                        color_blend_op: info.color_blend_op,
+                        src_alpha_blend_factor: info.src_alpha,
+                        dst_alpha_blend_factor: info.dst_alpha,
                         alpha_blend_op: BlendOp::ADD,
                         color_write_mask: ColorComponentFlags::R
                             | ColorComponentFlags::G

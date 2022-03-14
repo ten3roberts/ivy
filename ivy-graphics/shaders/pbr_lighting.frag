@@ -1,46 +1,31 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
 
-layout (input_attachment_index = 0, binding = 0) uniform subpassInput albedoBuffer;
-layout (input_attachment_index = 1, binding = 1) uniform subpassInput posBuffer;
-layout (input_attachment_index = 2, binding = 2) uniform subpassInput normalBuffer;
-layout (input_attachment_index = 3, binding = 3) uniform subpassInput roughnessMetallicBuffer;
+layout (input_attachment_index = 0, binding = 1) uniform subpassInput albedoBuffer;
+layout (input_attachment_index = 1, binding = 2) uniform subpassInput posBuffer;
+layout (input_attachment_index = 2, binding = 3) uniform subpassInput normalBuffer;
+layout (input_attachment_index = 3, binding = 4) uniform subpassInput roughnessMetallicBuffer;
 
-layout (input_attachment_index = 4, binding = 4) uniform subpassInput depthInput;
-
-layout(location = 0) in vec4 fragPosition;
-
-layout(location = 0) out vec4 outColor;
+layout (input_attachment_index = 4, binding = 5) uniform subpassInput depthInput;
 
 struct LightData {
 	vec3 pos;
-	float reference_illuminance;
+	float size;
 	vec3 radiance;
 	float radius;
 };
 
-layout(binding = 5) uniform CameraData {
+layout(location = 0) in vec4 fragPosition;
+layout(location = 1) in LightData light;
+
+layout(location = 0) out vec4 outColor;
+
+layout(binding = 0) uniform CameraData {
 	mat4 viewproj;
 	mat4 view;
 	mat4 projection;
 	vec4 pos;
 } cameraData;
-
-layout(binding = 6) uniform LightSceneData {
-	uint num_lights;
-} lightSceneData;
-
-layout(binding = 7) readonly buffer LightBufferData {
-	LightData lights[];
-} lightBuffer;
-
-layout(binding = 8) uniform EnvData {
-	vec3 ambient;
-	float fog_density;
-	vec3 fog_color;
-	float fog_gradient;
-} env;
-
 
 const float DIELECTRIC_F0 = 0.04;
 const float PI = 3.1415926535897932384626433832795;
@@ -89,29 +74,23 @@ vec3 ClipToWorldRay(vec2 clip) {
 	return ray_world;
 }
 
-vec3 DirectLightRadiances(float depth) {
+vec3 DirectLightRadiances(float depth, vec3 worldRay) {
 	vec3 Lo = vec3(0.0);
 
-	// Ray from camera towards current fragment
-	vec3 worldRay = ClipToWorldRay(fragPosition.xy);
+	// From camera to light vector
+	vec3 toLight = (light.pos - cameraData.pos.xyz);
 
-	for (int i = 0; i < lightSceneData.num_lights; i++) {
-		LightData light = lightBuffer.lights[i];
-		// From camera to light vector
-		vec3 toLight = (light.pos - cameraData.pos.xyz);
+	vec4 lightClipSpace = cameraData.viewproj * vec4(light.pos, 1);
+	float lightDepth = lightClipSpace.z / lightClipSpace.w;
 
-		vec4 lightClipSpace = cameraData.viewproj * vec4(light.pos, 1);
-		float lightDepth = lightClipSpace.z / lightClipSpace.w;
+	if (lightDepth > depth)
+		return vec3(0,0,0);
 
-		if (lightDepth > depth)
-		continue;
+	vec3 projected = worldRay * dot(worldRay, toLight);
+	vec3 radial = projected - toLight;
 
-		vec3 projected = worldRay * dot(worldRay, toLight);
-		vec3 radial = projected - toLight;
-
-		if (length(radial) < light.radius)
+	if (length(radial) < light.radius)
 		Lo += light.radiance;
-	}
 
 	return Lo;
 }
@@ -122,63 +101,51 @@ vec3 PBR(vec3 albedo, vec3 pos, vec3 normal, float roughness, float metallic) {
 
 	vec3 F0 = mix(vec3(DIELECTRIC_F0), albedo, metallic);
 
-	vec3 Lo = vec3(0.0);
+	vec3 lightDir = normalize(light.pos - pos);
+	vec3 halfway = normalize(lightDir + cameraDir);
+
+	float dist = distance(light.pos, pos);
 
 
-	for (int i = 0; i < lightSceneData.num_lights; i++) {
-		LightData light = lightBuffer.lights[i];
-		vec3 lightDir = normalize(light.pos - pos);
-		vec3 halfway = normalize(lightDir + cameraDir);
+	vec3 radiance = light.radiance * dot(lightDir, normal) / (dist * dist);
 
-		float dist = distance(light.pos, pos);
+	vec3 fresnel = FresnelSchlick(max(dot(halfway, cameraDir), 0.0), F0);
 
+	float NDF = DistributionGGX(normal, halfway, roughness);
+	float G   = GeometrySmith(normal, cameraDir, lightDir, roughness);
 
-		vec3 radiance = light.radiance * dot(lightDir, normal) / (dist * dist);
+	vec3 numerator    = NDF * G * fresnel;
+	float denominator = 4.0 * max(dot(normal, cameraDir), 0.0) * max(dot(normal, lightDir), 0.0)  + 0.00001;
+	vec3 specular     = numerator / denominator;
 
-		if (dot(radiance, radiance) < 1.0 / 512.0) {
-			continue;
-		}
+	vec3 kS = fresnel;
+	vec3 kD = vec3(1.0) - kS;
 
-		vec3 fresnel = FresnelSchlick(max(dot(halfway, cameraDir), 0.0), F0);
+	kD *= 1.0 - metallic;
 
-		float NDF = DistributionGGX(normal, halfway, roughness);
-		float G   = GeometrySmith(normal, cameraDir, lightDir, roughness);
-
-		vec3 numerator    = NDF * G * fresnel;
-		float denominator = 4.0 * max(dot(normal, cameraDir), 0.0) * max(dot(normal, lightDir), 0.0)  + 0.00001;
-		vec3 specular     = numerator / denominator;
-
-		vec3 kS = fresnel;
-		vec3 kD = vec3(1.0) - kS;
-
-		kD *= 1.0 - metallic;
-
-		float ndotL = max(dot(normal, lightDir), 0.0);
+	float ndotL = max(dot(normal, lightDir), 0.0);
 
 
-		Lo += (kD * albedo / PI + specular) * radiance * ndotL;
-	}
+	return (kD * albedo / PI + specular) * radiance * ndotL;
 
-	return Lo + env.ambient * albedo;
 }
 
-vec3 applyFog(vec3 color, float  distance) {
+/* vec3 applyFog(vec3 color, float  distance) { */
 
-	float exponent = distance * env.fog_density;
-	float visibility = exp(-pow(exponent, env.fog_gradient));
+/* 	float exponent = distance * env.fog_density; */
+/* 	float visibility = exp(-pow(exponent, env.fog_gradient)); */
 
-	return mix(env.fog_color, color, visibility);
-}
+/* 	return mix(env.fog_color, color, visibility); */
+/* } */
 
 void main() {
-
 	float depth = subpassLoad(depthInput).x;
 
+	vec3 ray = normalize(fragPosition.xyz - cameraData.pos.xyz);
 	if (depth == 1) {
-		outColor = vec4(DirectLightRadiances(1), 1);
+		outColor = vec4(DirectLightRadiances(1, ray), 1);
 		return;
 	}
-
 	vec3 albedo = subpassLoad(albedoBuffer).xyz;
 
 	vec2 roughnessMetallic = subpassLoad(roughnessMetallicBuffer).xy;
@@ -194,11 +161,11 @@ void main() {
 		color += PBR(albedo, pos, normal, roughness, metallic);
 	}
 
-	color += DirectLightRadiances(depth);
+	color += DirectLightRadiances(depth, ray);
 
 	float distance = length(cameraData.pos.xyz - pos);
 
-	color = applyFog(color, distance);
+	/* color = applyFog(color, distance); */
 
 	outColor = vec4(color, 1);
 }

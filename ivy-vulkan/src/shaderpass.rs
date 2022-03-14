@@ -6,6 +6,12 @@ pub trait ShaderPass: 'static + Send + Sync {
     fn pipeline(&self) -> &crate::PipelineInfo;
 }
 
+impl ShaderPass for () {
+    fn pipeline(&self) -> &crate::PipelineInfo {
+        panic!("Empty shaderpass")
+    }
+}
+
 /// Macro to create a strongly typed shaderpass.
 #[macro_export(local_inner_macros)]
 macro_rules! new_shaderpass {

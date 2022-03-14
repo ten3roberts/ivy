@@ -114,31 +114,13 @@ impl PBRRendering {
             },
         )?)?;
 
-        let screenview = resources.insert(Texture::new(
-            context.clone(),
-            &TextureInfo {
-                extent,
-                mip_levels: 1,
-                usage: ImageUsage::TRANSFER_DST | ImageUsage::SAMPLED,
-                ..Default::default()
-            },
-        )?)?;
-
-        let screenview_d = resources.insert(Texture::new(
-            context.clone(),
-            &TextureInfo {
-                extent,
-                mip_levels: 1,
-                usage: ImageUsage::TRANSFER_DST
-                    | ImageUsage::SAMPLED
-                    | ImageUsage::DEPTH_STENCIL_ATTACHMENT,
-
-                format: Format::D32_SFLOAT,
-                ..Default::default()
-            },
-        )?)?;
-
-        let _pbr_nodes = rendergraph.add_nodes(create_pbr_pipeline::<GeometryPass, PbrPass, _, _>(
+        rendergraph.add_nodes(create_pbr_pipeline::<
+            GeometryPass,
+            PbrPass,
+            TransparentPass,
+            _,
+            _,
+        >(
             context.clone(),
             world,
             &resources,
@@ -158,7 +140,6 @@ impl PBRRendering {
                 resource: final_lit,
                 clear_value: ClearValue::color(0.0, 0.0, 0.0, 1.0),
             }],
-            &[],
             pbr_info,
         )?);
 
@@ -190,58 +171,6 @@ impl PBRRendering {
             address_mode: AddressMode::CLAMP_TO_BORDER,
             ..Default::default()
         })??;
-
-        // Copy lit to the attachment to read
-        rendergraph.add_node(TransferNode::new(
-            final_lit,
-            screenview,
-            ImageLayout::TRANSFER_SRC_OPTIMAL,
-            ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-            ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-            ImageAspectFlags::COLOR,
-        )?);
-
-        // Copy lit to the attachment to read
-        rendergraph.add_node(TransferNode::new(
-            **world.get::<DepthAttachment>(camera)?,
-            screenview_d,
-            ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-            ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-            ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-            ImageAspectFlags::DEPTH,
-        )?);
-
-        rendergraph.add_node(CameraNode::<TransparentPass, _>::new(
-            context.clone(),
-            world,
-            resources,
-            camera,
-            mesh_renderer,
-            CameraNodeInfo {
-                name: "Transparent",
-                color_attachments: vec![AttachmentInfo {
-                    store_op: StoreOp::STORE,
-                    load_op: LoadOp::LOAD,
-                    initial_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                    final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                    resource: final_lit,
-                    clear_value: ClearValue::color(0.0, 0.0, 0.0, 0.0),
-                }],
-                depth_attachment: Some(AttachmentInfo {
-                    resource: depth_attachment,
-                    store_op: StoreOp::STORE,
-                    load_op: LoadOp::LOAD,
-                    initial_layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                    final_layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                    ..Default::default()
-                }),
-                read_attachments: &[(screenview, sampler), (screenview_d, sampler)],
-                additional: vec![final_lit],
-                camera_stage: ShaderStageFlags::VERTEX | ShaderStageFlags::FRAGMENT,
-                frames_in_flight,
-                ..Default::default()
-            },
-        )?);
 
         let image_renderer = resources
             .default_entry()?
@@ -330,7 +259,7 @@ impl PBRRendering {
 
         resources.insert(PbrPass(PipelineInfo {
             vs: FULLSCREEN_SHADER,
-            fs: PBR_SHADER,
+            fs: POSTPROCESSING_SHADER,
             cull_mode: CullModeFlags::NONE,
             ..Default::default()
         }))?;

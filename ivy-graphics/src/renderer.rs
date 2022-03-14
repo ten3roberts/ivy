@@ -37,6 +37,15 @@ pub struct WithPass<Pass, R> {
     pass: PhantomData<Pass>,
 }
 
+impl<Pass, R: Clone> Clone for WithPass<Pass, R> {
+    fn clone(&self) -> Self {
+        Self {
+            renderer: self.renderer.clone(),
+            pass: PhantomData,
+        }
+    }
+}
+
 impl<Pass, R> WithPass<Pass, R>
 where
     Pass: ShaderPass,

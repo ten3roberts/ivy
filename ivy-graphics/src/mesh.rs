@@ -23,6 +23,13 @@ pub struct Vertex {
     tangent: Vec3,
 }
 
+#[records::record]
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
+pub struct SimpleVertex {
+    position: Vec3,
+}
+
 /// A skinned vertex type with position, normal, texcoord and skinning
 /// information.
 #[records::record]
@@ -78,6 +85,24 @@ impl vulkan::VertexDesc for Vertex {
     ];
 }
 
+impl vulkan::VertexDesc for SimpleVertex {
+    const BINDING_DESCRIPTIONS: &'static [VertexInputBindingDescription] =
+        &[VertexInputBindingDescription {
+            binding: 0,
+            stride: size_of::<Self>() as u32,
+            input_rate: VertexInputRate::VERTEX,
+        }];
+
+    const ATTRIBUTE_DESCRIPTIONS: &'static [VertexInputAttributeDescription] = &[
+        // vec3 3*4 bytes
+        VertexInputAttributeDescription {
+            binding: 0,
+            location: 0,
+            format: vk::Format::R32G32B32_SFLOAT,
+            offset: 0,
+        },
+    ];
+}
 impl vulkan::VertexDesc for SkinnedVertex {
     const BINDING_DESCRIPTIONS: &'static [VertexInputBindingDescription] =
         &[VertexInputBindingDescription {
