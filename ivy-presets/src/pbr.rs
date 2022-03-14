@@ -6,15 +6,15 @@ use ivy_graphics::{
 };
 use ivy_postprocessing::pbr::{create_pbr_pipeline, PBRInfo};
 use ivy_rendergraph::{
-    AttachmentInfo, CameraNode, CameraNodeInfo, NodeIndex, RenderGraph, SwapchainNode, TransferNode,
+    AttachmentInfo, CameraNode, CameraNodeInfo, NodeIndex, RenderGraph, SwapchainNode,
 };
 use ivy_resources::{Handle, Resources};
 use ivy_ui::{Canvas, ImageRenderer, TextRenderer, TextUpdateNode};
 use ivy_vulkan::{
     context::SharedVulkanContext,
-    vk::{ClearValue, CullModeFlags, ImageAspectFlags, ShaderStageFlags},
-    AddressMode, ClearValueExt, Format, ImageLayout, ImageUsage, LoadOp, PipelineInfo, Sampler,
-    SamplerInfo, StoreOp, Swapchain, Texture, TextureInfo,
+    vk::{ClearValue, CullModeFlags},
+    ClearValueExt, ImageLayout, ImageUsage, LoadOp, PipelineInfo, StoreOp, Swapchain, Texture,
+    TextureInfo,
 };
 
 use crate::{
@@ -166,11 +166,6 @@ impl PBRRendering {
                 ..Default::default()
             },
         )?);
-
-        let sampler: Handle<Sampler> = resources.load(SamplerInfo {
-            address_mode: AddressMode::CLAMP_TO_BORDER,
-            ..Default::default()
-        })??;
 
         let image_renderer = resources
             .default_entry()?
