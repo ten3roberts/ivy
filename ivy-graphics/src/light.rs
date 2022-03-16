@@ -132,7 +132,7 @@ impl LightRenderer {
             ));
 
         self.lights
-            .sort_unstable_by_key(|val| -OrderedFloat(val.position.distance_squared(*center)));
+            .sort_unstable_by_key(|val| OrderedFloat(val.position.distance_squared(*center)));
 
         self.num_lights = self.max_lights.min(self.lights.len() as u64);
 
