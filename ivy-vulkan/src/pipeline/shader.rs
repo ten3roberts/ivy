@@ -15,7 +15,7 @@ use smallvec::SmallVec;
 
 use crate::Error;
 
-pub const MAX_SETS: usize = 4;
+pub const MAX_SETS: usize = 5;
 pub const MAX_PUSH_CONSTANTS: usize = 4;
 
 /// Represents a shader module as a file or a slice of compiled code
@@ -124,6 +124,7 @@ pub fn reflect<S: AsRef<spirv_reflect::ShaderModule>>(
     override_sets: &[DescriptorLayoutInfo],
 ) -> Result<vk::PipelineLayout> {
     let mut sets: [DescriptorLayoutInfo; MAX_SETS] = Default::default();
+    let mut max_set = 0;
 
     let mut push_constant_ranges: SmallVec<[PushConstantRange; MAX_PUSH_CONSTANTS]> =
         Default::default();
@@ -137,6 +138,7 @@ pub fn reflect<S: AsRef<spirv_reflect::ShaderModule>>(
             .map_err(|msg| Error::SpirvReflection(msg))?;
 
         for binding in bindings {
+            max_set = max_set.max(binding.set);
             sets[binding.set as usize].insert(descriptors::DescriptorSetBinding {
                 binding: binding.binding,
                 descriptor_type: map_descriptortype(binding.descriptor_type),
@@ -166,7 +168,8 @@ pub fn reflect<S: AsRef<spirv_reflect::ShaderModule>>(
         }
     }
 
-    let pipeline_layout = Pipeline::create_layout(context, &sets, &push_constant_ranges)?;
+    let pipeline_layout =
+        Pipeline::create_layout(context, &sets[0..=max_set as usize], &push_constant_ranges)?;
 
     Ok(pipeline_layout)
 }

@@ -12,7 +12,6 @@ layout(location = 0) out vec4 outAlbedo;
 layout(location = 1) out vec4 outPosition;
 layout(location = 2) out vec3 outNormal;
 layout(location = 3) out vec2 metallicRoughness;
-layout(location = 4) out vec4 transparent;
 
 layout(set = 2, binding = 0) uniform sampler2D albedo;
 layout(set = 2, binding = 1) uniform sampler2D normalMap;
@@ -57,7 +56,9 @@ void main() {
 	texCoord *= 0.5;
 
 	outAlbedo = texture(albedo, texCoord) * fragColor;
-	transparent = vec4(outAlbedo.xyz, 1 - outAlbedo.w);
+	if (outAlbedo.w < 0.2) {
+		discard;
+	}
 	outPosition = vec4(fragPosition, 0);
 	vec3 normal = texture(normalMap, texCoord).rgb * 2 - 1;
 

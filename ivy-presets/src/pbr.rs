@@ -245,6 +245,7 @@ impl PBRRendering {
             cull_mode: info.cull_mode,
             ..Default::default()
         }))?;
+
         resources.insert(SkinnedPass(PipelineInfo {
             vs: SKINNED_VERTEX_SHADER,
             fs: DEFAULT_FRAGMENT_SHADER,

@@ -2,7 +2,8 @@ use hecs::{Component, Entity, World};
 use itertools::Itertools;
 use ivy_base::Extent;
 use ivy_graphics::{
-    DepthAttachment, EnvironmentManager, FullscreenRenderer, GpuCameraData, LightRenderer, Renderer,
+    DepthAttachment, EnvironmentManager, FullscreenRenderer, GpuCameraData, LightRenderer,
+    MeshRenderer, Renderer,
 };
 use ivy_rendergraph::{AttachmentInfo, CameraNode, CameraNodeInfo, Node, TransferNode};
 use ivy_resources::{Handle, Resources, Storage};
@@ -197,7 +198,7 @@ where
         world,
         resources,
         camera,
-        renderer,
+        resources.default::<MeshRenderer>()?,
         CameraNodeInfo {
             name: "Transparent",
             color_attachments: vec![AttachmentInfo {
