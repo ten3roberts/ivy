@@ -6,21 +6,21 @@ use slotmap::SlotMap;
 use smallvec::{smallvec, Array, SmallVec};
 
 use crate::{
-    intersect, BoundingBox, Collider, Collision, CollisionTreeNode, NodeIndex, Nodes, Object,
-    ObjectData, ObjectIndex,
+    intersect, BoundingBox, Collider, Collision, CollisionTreeNode, NodeIndex, NodeState, Nodes,
+    Object, ObjectData, ObjectIndex,
 };
 
 const MARGIN: f32 = 1.2;
 
 #[derive(Debug, Clone)]
-pub struct BVHNode<O: Array<Item = Object> = [Object; 1]> {
+pub struct BVHNode<O: Array<Item = Object> = [Object; 4]> {
     bounds: BoundingBox,
     objects: SmallVec<O>,
     axis: Axis,
     children: Option<[NodeIndex; 2]>,
     depth: u32,
     /// all objects inside this subtree is static
-    is_static: bool,
+    state: NodeState,
 }
 
 impl<O: Array<Item = Object>> Default for BVHNode<O> {
@@ -31,7 +31,7 @@ impl<O: Array<Item = Object>> Default for BVHNode<O> {
             axis: Default::default(),
             children: Default::default(),
             depth: Default::default(),
-            is_static: Default::default(),
+            state: NodeState::Static,
         }
     }
 }
@@ -80,7 +80,7 @@ where
             axis,
             children: None,
             depth: 0,
-            is_static: true,
+            state: NodeState::Static,
         }
     }
 
@@ -91,9 +91,11 @@ where
         axis: Axis,
         depth: u32,
     ) -> NodeIndex {
-        let is_static = objects.iter().all(|val| data[val.index].is_static);
+        let state = objects
+            .iter()
+            .fold(NodeState::Static, |s, v| s.merge(data[v.index].state));
 
-        let bounds = Self::calculate_bounds(&objects, data, is_static);
+        let bounds = Self::calculate_bounds(&objects, data, state);
 
         let node = Self {
             bounds,
@@ -101,7 +103,7 @@ where
             axis,
             children: None,
             depth,
-            is_static,
+            state,
         };
 
         let index = nodes.insert(node);
@@ -153,7 +155,7 @@ where
     pub fn calculate_bounds(
         objects: &[Object],
         data: &SlotMap<ObjectIndex, ObjectData>,
-        is_static: bool,
+        state: NodeState,
     ) -> BoundingBox {
         let mut l = Vec3::new(f32::MAX, f32::MAX, f32::MAX);
         let mut r = Vec3::new(f32::MIN, f32::MIN, f32::MIN);
@@ -165,7 +167,7 @@ where
             r = r.max(r_obj);
         });
 
-        BoundingBox::from_corners(l, r).margin(if is_static { 1.0 } else { MARGIN })
+        BoundingBox::from_corners(l, r).margin(if state.is_dynamic() { MARGIN } else { 1.0 })
     }
 
     fn sort_by_axis(&mut self, data: &SlotMap<ObjectIndex, ObjectData>) {
@@ -184,7 +186,7 @@ where
         let b_node = &nodes[b];
 
         // Both leaves are dormant
-        if a_node.is_static && b_node.is_static {
+        if a_node.state.dormant() && b_node.state.dormant() {
             return;
         }
 
@@ -233,28 +235,28 @@ where
         nodes: &mut Nodes<Self>,
         data: &SlotMap<ObjectIndex, ObjectData>,
         to_refit: &mut Vec<Object>,
-        despawned: &mut usize,
-    ) -> bool {
+        changed: &mut usize,
+    ) -> NodeState {
         let node = &mut nodes[index];
 
-        if node.is_static && *despawned == 0 {
-            return true;
+        if node.state.is_static() && *changed == 0 {
+            return node.state;
         }
 
         // Traverse children
         if let Some([left, right]) = node.children {
             assert!(node.objects.is_empty());
-            let l = Self::update_impl(left, nodes, data, to_refit, despawned);
-            let r = Self::update_impl(right, nodes, data, to_refit, despawned);
-            let is_static = l && r;
+            let l = Self::update_impl(left, nodes, data, to_refit, changed);
+            let r = Self::update_impl(right, nodes, data, to_refit, changed);
+            let new_state = l.merge(r);
 
-            nodes[index].is_static = is_static;
-            is_static
+            nodes[index].state = new_state;
+            new_state
         } else {
             let bounds = node.bounds;
 
             let mut removed = 0;
-            let mut is_static = true;
+            let mut new_state = NodeState::Static;
 
             node.objects.retain(|val| {
                 let obj = match data.get(val.index) {
@@ -262,12 +264,12 @@ where
                     // Entity was removed
                     None => {
                         removed += 1;
-                        *despawned -= 1;
+                        *changed -= 1;
                         return false;
                     }
                 };
 
-                is_static = is_static && obj.is_static;
+                new_state = new_state.merge(obj.state);
 
                 if bounds.contains(obj.bounds) {
                     true
@@ -279,11 +281,11 @@ where
             });
 
             if removed > 0 {
-                node.bounds = Self::calculate_bounds(&node.objects, data, is_static);
+                node.bounds = Self::calculate_bounds(&node.objects, data, new_state);
             }
 
-            node.is_static = is_static;
-            is_static
+            node.state = new_state;
+            new_state
         }
     }
 }
@@ -305,7 +307,7 @@ impl<O: Array<Item = Object> + Component> CollisionTreeNode for BVHNode<O> {
         // Make bound fit object
         node.bounds = node.calculate_bounds_incremental(&obj);
 
-        node.is_static = node.is_static && obj.is_static;
+        node.state = node.state.merge(obj.state);
 
         // Internal node
         if let Some([left, right]) = node.children {
@@ -323,7 +325,7 @@ impl<O: Array<Item = Object> + Component> CollisionTreeNode for BVHNode<O> {
 
                 let node = &mut nodes[index];
 
-                node.bounds = Self::calculate_bounds(&objects, data, node.is_static);
+                node.bounds = Self::calculate_bounds(&objects, data, node.state);
                 node.objects = objects;
                 Self::try_split(index, nodes, data);
             }
@@ -392,7 +394,7 @@ impl<O: Array<Item = Object> + Component> CollisionTreeNode for BVHNode<O> {
             Self::traverse(left, right, nodes, &mut on_overlap);
             Self::check_collisions(colliders, events, left, nodes, data);
             Self::check_collisions(colliders, events, right, nodes, data);
-        } else if !node.is_static {
+        } else if !node.state.dormant() {
             // Check collisions for objects in the same leaf
             for (i, a) in node.objects.iter().enumerate() {
                 let a_obj = data[a.index];
@@ -409,16 +411,19 @@ impl<O: Array<Item = Object> + Component> CollisionTreeNode for BVHNode<O> {
     }
 }
 
-impl<O: Array<Item = Object> + Component> DrawGizmos for BVHNode<O> {
+impl<O> DrawGizmos for BVHNode<O>
+where
+    O: Array<Item = Object> + Component,
+{
     fn draw_gizmos(&self, gizmos: &mut Gizmos, _: Color) {
         if !self.is_leaf() {
             return;
         }
 
-        let color = if self.is_static {
-            Color::blue()
-        } else {
-            Color::yellow()
+        let color = match self.state {
+            NodeState::Dynamic => Color::green(),
+            NodeState::Static => Color::blue(),
+            NodeState::Sleeping => Color::yellow(),
         };
 
         gizmos.draw(
@@ -451,12 +456,12 @@ fn check_collision(
             a: crate::EntityPayload {
                 entity: a.entity,
                 is_trigger: a_obj.is_trigger,
-                is_static: a_obj.is_static,
+                state: a_obj.state,
             },
             b: crate::EntityPayload {
                 entity: b.entity,
                 is_trigger: b_obj.is_trigger,
-                is_static: b_obj.is_static,
+                state: b_obj.state,
             },
             contact,
         };

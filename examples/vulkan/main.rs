@@ -80,7 +80,7 @@ fn main() -> anyhow::Result<()> {
                                 Default::default(),
                             ),
                             gravity: Gravity::default(),
-                            debug: false,
+                            debug: true,
                         },
                     )?,
                     LogicLayer::new(w, r, e)?,
@@ -465,6 +465,12 @@ impl Layer for LogicLayer {
         let tree = resources.get_default::<CollisionTree<CollisionNode>>()?;
 
         gizmos.begin_section("Ray Casting");
+        // gizmos.draw(
+        //     base::Cube::new(Vec3::ZERO, Vec3::ONE, 0.01, 1.0),
+        //     Color::red(),
+        // );
+        // gizmos.draw(Line::new(Vec3::ZERO, Vec3::X, 0.01, 1.0), Color::blue());
+        // gizmos.draw(base::Sphere::new(Vec3::ZERO, 0.1), Color::blue());
         if self.input.mouse_button(MouseButton::Button1) {
             // let _scope = TimedScope::new(|elapsed| eprintln!("Ray casting took {:.3?}", elapsed));
 
@@ -490,7 +496,7 @@ impl Layer for LogicLayer {
 
                 let towards = towards.normalize() * 50.0 * (max_vel - towards_vel) / max_vel;
 
-                effector.apply_force(dampening + towards + centering);
+                effector.apply_force(dampening + towards + centering, true);
 
                 for (i, p) in hit.contact.points.iter().enumerate() {
                     gizmos.draw(
@@ -508,7 +514,7 @@ impl Layer for LogicLayer {
             .query::<(&mut Velocity, &Position)>()
             .iter()
             .filter(|(_, (vel, pos))| pos.length() > 30.0 && vel.dot(***pos) > 0.0)
-            .for_each(|(_, (vel, _))| *vel = -*vel);
+            .for_each(|(_, (vel, _))| *vel = -*vel * 0.5);
 
         WithTime::<RelativeOffset>::update(world, dt);
 

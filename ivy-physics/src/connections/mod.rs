@@ -50,10 +50,10 @@ pub fn update_connection(
             effector.translate(*displacement * parent_inf);
             parent_rb.effector.translate(-*displacement * child_inf);
 
-            effector.apply_velocity_change(*vel_diff * parent_inf);
+            effector.apply_velocity_change(*vel_diff * parent_inf, true);
             parent_rb
                 .effector
-                .apply_velocity_change(*-vel_diff * child_inf);
+                .apply_velocity_change(*-vel_diff * child_inf, true);
 
             *child_trans.rot = parent.rot * **offset_rot;
         }
@@ -62,8 +62,8 @@ pub fn update_connection(
             dampening,
         } => {
             let force = *displacement * *strength + **rb.vel * -dampening;
-            effector.apply_force(force);
-            parent_rb.effector.apply_force(-force);
+            effector.apply_force(force, true);
+            parent_rb.effector.apply_force(-force, true);
 
             *rb.ang_vel = parent_rb.ang_vel;
             *child_trans.rot = parent.rot * **offset_rot;

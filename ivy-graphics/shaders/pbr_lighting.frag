@@ -75,8 +75,6 @@ vec3 ClipToWorldRay(vec2 clip) {
 }
 
 vec3 DirectLightRadiances(float depth, vec3 worldRay) {
-	vec3 Lo = vec3(0.0);
-
 	// From camera to light vector
 	vec3 toLight = (light.pos - cameraData.pos.xyz);
 
@@ -90,9 +88,9 @@ vec3 DirectLightRadiances(float depth, vec3 worldRay) {
 	vec3 radial = projected - toLight;
 
 	if (length(radial) < light.radius)
-		Lo += light.radiance;
+		return light.radiance;
 
-	return Lo;
+	return vec3(0.0);
 }
 
 vec3 PBR(vec3 albedo, vec3 pos, vec3 normal, float roughness, float metallic) {
@@ -142,7 +140,7 @@ void main() {
 	float depth = subpassLoad(depthInput).x;
 
 	vec3 ray = normalize(fragPosition.xyz - cameraData.pos.xyz);
-	if (depth == 1) {
+	if (depth > 0.99999) {
 		outColor = vec4(DirectLightRadiances(1, ray), 1);
 		return;
 	}

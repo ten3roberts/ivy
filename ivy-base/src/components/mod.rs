@@ -393,6 +393,9 @@ impl Random for Size2D {
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct Static;
 
+#[derive(Default, Debug, Clone, Copy)]
+pub struct Sleeping;
+
 /// Marker type for objects that will not interact with the physics system
 /// through collisions despite having colliders.
 #[derive(Default, Debug, Clone, Copy)]

@@ -6,20 +6,31 @@ use crate::{
 use glam::Quat;
 use hecs::Entity;
 use hecs_hierarchy::{Hierarchy, HierarchyQuery};
-use hecs_schedule::{traits::QueryExt, GenericWorld, Read, SubWorld};
+use hecs_schedule::{traits::QueryExt, CommandBuffer, GenericWorld, Read, SubWorld, Write};
 use ivy_base::{
     AngularVelocity, Connection, ConnectionKind, DeltaTime, Events, Friction, Gravity,
-    GravityInfluence, Mass, Position, Resitution, Rotation, Static, Velocity,
+    GravityInfluence, Mass, Position, Resitution, Rotation, Sleeping, Static, Velocity,
 };
 use ivy_collision::{util::TOLERANCE, Collision, Contact};
 
 const BATCH_SIZE: u32 = 64;
 
-pub fn integrate_velocity(world: SubWorld<(&mut Position, &Velocity)>, dt: Read<DeltaTime>) {
+pub fn integrate_velocity(
+    world: SubWorld<(&mut Position, &Velocity)>,
+    dt: Read<DeltaTime>,
+    mut cmd: Write<CommandBuffer>,
+) {
     world
         .native_query()
         .without::<Static>()
-        .par_for_each(BATCH_SIZE, |(_, (pos, vel))| *pos += Position(**vel * **dt));
+        .without::<Sleeping>()
+        .iter()
+        .for_each(|(e, (pos, vel))| {
+            *pos += Position(**vel * **dt);
+            if vel.length_squared() < 0.1 {
+                cmd.insert_one(e, Sleeping)
+            }
+        });
 }
 
 pub fn gravity(world: SubWorld<(&GravityInfluence, &Mass, &mut Effector)>, gravity: Read<Gravity>) {
@@ -30,8 +41,9 @@ pub fn gravity(world: SubWorld<(&GravityInfluence, &Mass, &mut Effector)>, gravi
     world
         .native_query()
         .without::<Static>()
+        .without::<Sleeping>()
         .par_for_each(BATCH_SIZE, |(_, (influence, mass, effector))| {
-            effector.apply_force(**gravity * **influence * **mass)
+            effector.apply_force(**gravity * **influence * **mass, false)
         })
 }
 
@@ -116,9 +128,9 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
             return Ok(());
         }
         // Check for static collision
-        else if coll.a.is_static {
+        else if coll.a.state.is_static() {
             return resolve_static(&world, coll.a.entity, coll.b.entity, coll.contact, *dt);
-        } else if coll.b.is_static {
+        } else if coll.b.state.is_static() {
             return resolve_static(
                 &world,
                 coll.b.entity,
@@ -130,7 +142,7 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
                 },
                 *dt,
             );
-        } else if coll.a.is_static && coll.b.is_static {
+        } else if coll.a.state.is_static() && coll.b.state.is_static() {
             return Ok(());
         }
 
@@ -184,12 +196,12 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
         let dir = coll.contact.normal * coll.contact.depth;
 
         let mut effector = world.get_mut::<Effector>(*coll.a)?;
-        effector.apply_impulse_at(impulse, coll.contact.points[0] - a.pos);
+        effector.apply_impulse_at(impulse, coll.contact.points[0] - a.pos, true);
         effector.translate(-dir * (*a.mass / *total_mass));
         drop(effector);
 
         let mut effector = world.get_mut::<Effector>(*coll.b)?;
-        effector.apply_impulse_at(-impulse, coll.contact.points[1] - b.pos);
+        effector.apply_impulse_at(-impulse, coll.contact.points[1] - b.pos, true);
         effector.translate(dir * (*b.mass / *total_mass));
 
         Ok(())
@@ -237,7 +249,7 @@ fn resolve_static(
 
         let impulse = resolve_collision(&contact, &a, &b);
 
-        effector.apply_impulse_at(-impulse, contact.points[1] - b.pos);
+        effector.apply_impulse_at(-impulse, contact.points[1] - b.pos, false);
         // effector.apply_force_at(b_f, contact.points[1] - b.pos);
 
         effector.translate(contact.normal * contact.depth);
@@ -249,13 +261,14 @@ fn resolve_static(
 /// Applies effectors to their respective entities and clears the effects.
 pub fn apply_effectors(
     world: SubWorld<(RbQueryMut, &mut Position, &mut Effector)>,
+    mut cmd: Write<CommandBuffer>,
     dt: Read<DeltaTime>,
 ) {
     world
         .native_query()
         .without::<Static>()
         .iter()
-        .for_each(|(_, (rb, pos, effector))| {
+        .for_each(|(e, (rb, pos, effector))| {
             *rb.vel += effector.net_velocity_change(**dt);
             *pos += effector.translation();
 
@@ -263,6 +276,10 @@ pub fn apply_effectors(
 
             effector.set_mass(*rb.mass);
             effector.set_ang_mass(*rb.ang_mass);
+
+            if effector.should_wake() {
+                cmd.remove_one::<Sleeping>(e)
+            }
 
             effector.clear()
         })

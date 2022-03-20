@@ -17,6 +17,7 @@ pub struct Effector {
     inv_mass: f32,
     inv_ang_mass: f32,
     translation: Vec3,
+    wake: bool,
 }
 
 impl Effector {
@@ -29,7 +30,16 @@ impl Effector {
             instant_dv: Vec3::ZERO,
             instant_dw: Vec3::ZERO,
             translation: Vec3::ZERO,
+            wake: false,
         }
+    }
+
+    pub fn should_wake(&self) -> bool {
+        self.wake
+    }
+
+    pub fn wake(&mut self) {
+        self.wake = true
     }
 
     pub fn apply_other(&mut self, other: &Self) {
@@ -57,6 +67,7 @@ impl Effector {
             translation: Vec3::ZERO,
             inv_mass: self.inv_mass,
             inv_ang_mass: self.inv_ang_mass,
+            wake: false,
         }
     }
 
@@ -77,13 +88,15 @@ impl Effector {
     }
 
     /// Applies a continuos force using mass
-    pub fn apply_force(&mut self, f: Vec3) {
-        self.dv += f * self.inv_mass
+    pub fn apply_force(&mut self, f: Vec3, wake: bool) {
+        self.dv += f * self.inv_mass;
+        self.wake = self.wake || wake;
     }
 
     /// Applies an instantaneous force
-    pub fn apply_impulse(&mut self, j: Vec3) {
-        self.instant_dv += j * self.inv_mass
+    pub fn apply_impulse(&mut self, j: Vec3, wake: bool) {
+        self.instant_dv += j * self.inv_mass;
+        self.wake = self.wake || wake;
     }
 
     /// Applies a continous acceleration independent of mass
@@ -92,24 +105,25 @@ impl Effector {
     }
 
     /// Applies a force at the specified position from center of mass
-    pub fn apply_force_at(&mut self, f: Vec3, at: Position) {
-        self.apply_force(f);
+    pub fn apply_force_at(&mut self, f: Vec3, at: Position, wake: bool) {
+        self.apply_force(f, wake);
         self.apply_torque(at.cross(f));
     }
 
     /// Applies an impulse at the specified position from center of mass
-    pub fn apply_impulse_at(&mut self, impulse: Vec3, at: Position) {
-        self.apply_impulse(impulse);
+    pub fn apply_impulse_at(&mut self, impulse: Vec3, at: Position, wake: bool) {
+        self.apply_impulse(impulse, wake);
         self.apply_angular_impulse(at.cross(impulse));
     }
 
-    pub fn apply_velocity_change(&mut self, dv: Vec3) {
-        self.instant_dv += dv
+    pub fn apply_velocity_change(&mut self, dv: Vec3, wake: bool) {
+        self.instant_dv += dv;
+        self.wake = self.wake || wake;
     }
 
     /// Applies a velocity change at the specified position from center of mass
-    pub fn apply_velocity_change_at(&mut self, dv: Vec3, at: Position) {
-        self.apply_velocity_change(dv);
+    pub fn apply_velocity_change_at(&mut self, dv: Vec3, at: Position, wake: bool) {
+        self.apply_velocity_change(dv, wake);
         self.apply_angular_velocity_change(at.cross(dv))
     }
 

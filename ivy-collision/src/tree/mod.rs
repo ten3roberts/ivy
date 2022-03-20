@@ -5,8 +5,8 @@ use hecs::{Entity, Query};
 use hecs_schedule::{CommandBuffer, SubWorld, Write};
 use ivy_base::components::Velocity;
 use ivy_base::{
-    Color, DrawGizmos, Events, Gizmos, Mass, Static, TransformMatrix, TransformQuery, Trigger,
-    Visible,
+    Color, DrawGizmos, Events, Gizmos, Mass, Sleeping, Static, TransformMatrix, TransformQuery,
+    Trigger, Visible,
 };
 use ivy_resources::{DefaultResource, DefaultResourceMut};
 use records::record;
@@ -248,7 +248,7 @@ pub struct ObjectData {
     pub transform: TransformMatrix,
     pub is_trigger: bool,
     pub is_visible: bool,
-    pub is_static: bool,
+    pub state: NodeState,
     pub movable: bool,
 }
 
@@ -261,12 +261,13 @@ pub struct ObjectQuery<'a> {
     is_trigger: Option<&'a Trigger>,
     is_static: Option<&'a Static>,
     is_visible: Option<&'a Visible>,
+    is_sleeping: Option<&'a Sleeping>,
     velocity: Option<&'a Velocity>,
 }
 
 impl ObjectData {
     pub fn is_movable(&self) -> bool {
-        !self.is_static && self.movable
+        self.state != NodeState::Static && self.movable
     }
 }
 
@@ -287,9 +288,60 @@ impl<'a> Into<ObjectData> for ObjectQuery<'a> {
             transform,
             is_trigger: self.is_trigger.is_some(),
             is_visible: self.is_visible.map(|val| val.is_visible()).unwrap_or(true),
-            is_static: self.is_static.is_some(),
+            state: if self.is_sleeping.is_some() {
+                NodeState::Sleeping
+            } else if self.is_static.is_some() {
+                NodeState::Static
+            } else {
+                NodeState::Dynamic
+            },
             movable: self.mass.map(|v| v.is_normal()).unwrap_or(false),
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum NodeState {
+    Dynamic,
+    Static,
+    Sleeping,
+}
+
+impl NodeState {
+    pub fn merge(self, other: Self) -> Self {
+        match (self, other) {
+            (Self::Dynamic, _) => Self::Dynamic,
+            (_, Self::Dynamic) => Self::Dynamic,
+            (Self::Sleeping, _) => Self::Sleeping,
+            (_, Self::Sleeping) => Self::Sleeping,
+            (NodeState::Static, NodeState::Static) => NodeState::Static,
+        }
+    }
+
+    /// Returns `true` if the node state is [`Static`].
+    ///
+    /// [`Static`]: NodeState::Static
+    pub fn is_static(&self) -> bool {
+        matches!(self, Self::Static)
+    }
+
+    #[inline(always)]
+    pub fn dormant(&self) -> bool {
+        *self == NodeState::Static || *self == NodeState::Sleeping
+    }
+
+    /// Returns `true` if the node state is [`Sleeping`].
+    ///
+    /// [`Sleeping`]: NodeState::Sleeping
+    pub fn is_sleeping(&self) -> bool {
+        matches!(self, Self::Sleeping)
+    }
+
+    /// Returns `true` if the node state is [`Dynamic`].
+    ///
+    /// [`Dynamic`]: NodeState::Dynamic
+    pub fn is_dynamic(&self) -> bool {
+        matches!(self, Self::Dynamic)
     }
 }
 
@@ -298,7 +350,7 @@ impl<'a> Into<ObjectData> for ObjectQuery<'a> {
 pub struct EntityPayload {
     pub entity: Entity,
     pub is_trigger: bool,
-    pub is_static: bool,
+    pub state: NodeState,
 }
 
 impl std::ops::Deref for EntityPayload {

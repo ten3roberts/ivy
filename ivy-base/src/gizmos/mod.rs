@@ -101,20 +101,36 @@ impl Default for Cube {
 
 impl DrawGizmos for Cube {
     fn draw_gizmos(&self, gizmos: &mut Gizmos, color: Color) {
-        let lines = [(Vec3::X, Vec3::Z), (Vec3::Y, Vec3::X), (Vec3::Z, Vec3::Y)]
-            .iter()
-            .flat_map(|(v, dir)| {
-                [(1.0, 1.0), (-1.0, -1.0), (-1.0, 1.0), (1.0, -1.0)]
-                    .iter()
-                    .map(move |(a, b)| GizmoPrimitive::Line {
-                        origin: self.origin
-                            + *b * (Vec3::ONE - (*dir + *v) + *a * *v) * self.half_extents,
-                        dir: (*dir * self.half_extents),
-                        color,
-                        radius: self.radius,
-                        corner_radius: self.corner_radius,
-                    })
-            });
+        let sides = [
+            ((Vec3::X, Vec3::Y)),
+            ((Vec3::X, -Vec3::Y)),
+            ((-Vec3::X, -Vec3::Y)),
+            ((-Vec3::X, Vec3::Y)),
+            // --
+            (Vec3::Z, Vec3::Y),
+            (Vec3::Z, -Vec3::Y),
+            (-Vec3::Z, -Vec3::Y),
+            (-Vec3::Z, Vec3::Y),
+            // --
+            (Vec3::X, Vec3::Z),
+            (Vec3::X, -Vec3::Z),
+            (-Vec3::X, -Vec3::Z),
+            (-Vec3::X, Vec3::Z),
+        ];
+
+        let lines = sides.iter().map(|side| {
+            let mid = self.origin + (side.0 + side.1) * self.half_extents;
+            let dir = side.0.cross(side.1).normalize() * self.half_extents * 2.0;
+            let pos = mid - dir * 0.5;
+
+            GizmoPrimitive::Line {
+                origin: pos,
+                dir,
+                corner_radius: self.corner_radius,
+                color,
+                radius: self.radius,
+            }
+        });
 
         gizmos.extend(lines)
     }
