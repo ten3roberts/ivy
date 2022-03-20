@@ -5,6 +5,10 @@ use ivy_vulkan::{context::SharedVulkanContext, Buffer, BufferAccess::Mapped, Buf
 
 use crate::Result;
 
+pub trait EnvData {
+    fn clear_color(&self) -> Vec3;
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(C)]
 /// The environment data for the built in pbr shader
@@ -16,6 +20,12 @@ pub struct DefaultEnvData {
     /// The rate at which the fog fades. A higher value makes visiblity plateu
     /// longer and then steeply fall.
     pub fog_gradient: f32,
+}
+
+impl EnvData for DefaultEnvData {
+    fn clear_color(&self) -> Vec3 {
+        self.fog_color
+    }
 }
 
 impl Default for DefaultEnvData {

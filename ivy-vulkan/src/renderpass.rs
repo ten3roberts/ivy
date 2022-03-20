@@ -2,6 +2,7 @@ use crate::Result;
 use ash::vk;
 use ash::vk::SubpassDescription;
 use ash::Device;
+use glam::Vec4;
 use smallvec::SmallVec;
 use std::sync::Arc;
 
@@ -17,6 +18,7 @@ pub const MAX_SUBPASSES: usize = 8;
 
 pub trait ClearValueExt {
     fn color(r: f32, g: f32, b: f32, a: f32) -> Self;
+    fn color_vec4(color: Vec4) -> Self;
     fn depth_stencil(depth: f32, stencil: u32) -> Self;
 }
 
@@ -32,6 +34,14 @@ impl ClearValueExt for vk::ClearValue {
     fn depth_stencil(depth: f32, stencil: u32) -> vk::ClearValue {
         vk::ClearValue {
             depth_stencil: vk::ClearDepthStencilValue { depth, stencil },
+        }
+    }
+
+    fn color_vec4(color: Vec4) -> Self {
+        vk::ClearValue {
+            color: vk::ClearColorValue {
+                float32: [color.x, color.y, color.z, color.w],
+            },
         }
     }
 }

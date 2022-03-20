@@ -8,7 +8,7 @@ mod traits;
 pub use traits::*;
 
 /// A default radius that looks good for small gizmos
-pub const DEFAULT_RADIUS: f32 = 0.02;
+pub const DEFAULT_RADIUS: f32 = 0.01;
 
 #[records::record]
 #[derive(Copy, Clone, Debug, PartialEq)]

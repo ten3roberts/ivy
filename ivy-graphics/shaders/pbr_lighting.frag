@@ -88,7 +88,9 @@ vec3 DirectLightRadiances(float depth, vec3 worldRay) {
 	vec3 radial = projected - toLight;
 
 	if (length(radial) < light.radius)
+	{
 		return light.radiance;
+	}
 
 	return vec3(0.0);
 }
@@ -155,15 +157,13 @@ void main() {
 
 	vec3 color = vec3(0);
 
-	if (depth != 1) {
+	if (depth < 0.999) {
 		color += PBR(albedo, pos, normal, roughness, metallic);
 	}
 
 	color += DirectLightRadiances(depth, ray);
 
 	float distance = length(cameraData.pos.xyz - pos);
-
-	/* color = applyFog(color, distance); */
 
 	outColor = vec4(color, 1);
 }

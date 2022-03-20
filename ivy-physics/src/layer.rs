@@ -1,11 +1,14 @@
 use std::marker::PhantomData;
 
-use crate::{connections, systems};
+use crate::{
+    connections,
+    systems::{self, CollisionState},
+};
 use hecs::World;
 use hecs_schedule::{Read, Schedule, SubWorld, System};
 use ivy_base::{Color, DeltaTime, DrawGizmos, Events, Gravity, Layer};
 use ivy_collision::{CollisionTree, CollisionTreeNode};
-use ivy_resources::{Resources, Storage};
+use ivy_resources::{DefaultResourceMut, Resources, Storage};
 
 #[derive(Default, Debug, Clone)]
 pub struct PhysicsLayerInfo<N> {
@@ -46,9 +49,14 @@ impl<N: CollisionTreeNode + Storage> PhysicsLayer<N> {
             .default_entry::<CollisionTree<N>>()?
             .or_insert_with(|| CollisionTree::new(tree_root));
 
-        let resolve_collisions = move |w: SubWorld<_>, e: Read<_>, dt: Read<_>| {
-            systems::resolve_collisions(w, rx.try_iter(), e, dt)
-        };
+        resources
+            .default_entry::<CollisionState>()?
+            .or_insert_with(|| Default::default());
+
+        let resolve_collisions =
+            move |w: SubWorld<_>, r: DefaultResourceMut<_>, e: Read<_>, dt: Read<_>| {
+                systems::resolve_collisions(w, r, rx.try_iter(), e, dt)
+            };
 
         let schedule = Schedule::builder()
             .add_system(systems::integrate_velocity)

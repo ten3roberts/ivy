@@ -3,5 +3,18 @@
     "cmd": "cargo run --example vulkan",
     "interactive": true
   },
+  "debug-vulkan": {
+    "cmd": "cargo build --example vulkan",
+    "action": [
+      "qf",
+      {
+        "name": "dap",
+        "opts": {
+          "program": "./target/debug/examples/vulkan",
+          "stopOnEntry": false
+        }
+      }
+    ]
+  },
   "build-vulkan": "cargo build --example vulkan"
 }

@@ -23,7 +23,8 @@ use ivy_engine::{
 use ivy_resources::Resources;
 use movement::{move_system, Mover, WithTime};
 use physics::{
-    bundles::*, connections::draw_connections, Effector, PhysicsLayer, PhysicsLayerInfo,
+    bundles::*, connections::draw_connections, systems::CollisionState, Effector, PhysicsLayer,
+    PhysicsLayerInfo,
 };
 use postprocessing::pbr::PBRInfo;
 use presets::{GeometryPass, ImagePass, PBRRenderingInfo, TextPass, TransparentPass};
@@ -80,7 +81,7 @@ fn main() -> anyhow::Result<()> {
                                 Default::default(),
                             ),
                             gravity: Gravity::default(),
-                            debug: true,
+                            debug: false,
                         },
                     )?,
                     LogicLayer::new(w, r, e)?,
@@ -278,22 +279,24 @@ fn setup_objects(
     });
     (0..COUNT).for_each(|_| {
         let pos = Position::rand_uniform(&mut rng) * 10.0;
-        let vel = Velocity::rand_uniform(&mut rng);
+        let vel = Velocity::rand_uniform(&mut rng) * 1.0;
 
         builder
             .add_bundle(ObjectBundle {
-                mesh: cube_mesh,
+                mesh: sphere_mesh,
                 pass: assets.trans_pass,
-                scale: Scale::uniform(0.5),
+                material,
+                scale: Scale::uniform(0.1),
                 pos,
-                color: Color::rgba(1.0, 1.0, 0.2, 0.5),
+                color: Color::rgba(1.0, 1.0, 1.0, 0.1),
                 ..Default::default()
             })
             .add_bundle(RbColliderBundle {
-                collider: Collider::new(Cube::uniform(1.0)),
+                collider: Collider::sphere(1.0),
                 vel,
                 mass: Mass(20.0),
                 ang_mass: AngularMass(5.0),
+                resitution: Resitution(1.0),
                 friction: Friction(1.0),
                 ..Default::default()
             })
@@ -515,6 +518,15 @@ impl Layer for LogicLayer {
             .iter()
             .filter(|(_, (vel, pos))| pos.length() > 30.0 && vel.dot(***pos) > 0.0)
             .for_each(|(_, (vel, _))| *vel = -*vel * 0.5);
+
+        // Draw collisions
+        gizmos.begin_section("Draw collisions");
+        resources
+            .get_default::<CollisionState>()?
+            .get_all()
+            .for_each(|(_, _, v)| {
+                v.contact.draw_gizmos(&mut *gizmos, Color::yellow());
+            });
 
         WithTime::<RelativeOffset>::update(world, dt);
 

@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use crate::{
     bundles::*,
     collision::{resolve_collision, ResolveObject},
@@ -12,6 +14,7 @@ use ivy_base::{
     GravityInfluence, Mass, Position, Resitution, Rotation, Sleeping, Static, Velocity,
 };
 use ivy_collision::{util::TOLERANCE, Collision, Contact};
+use ivy_resources::DefaultResourceMut;
 
 const BATCH_SIZE: u32 = 64;
 
@@ -110,6 +113,52 @@ pub fn get_rigid_root(world: &impl GenericWorld, child: Entity) -> Result<(Entit
     Ok((root, system_mass))
 }
 
+#[derive(Debug, Clone)]
+pub struct CollisionState {
+    active: BTreeMap<(Entity, Entity), Collision>,
+}
+
+impl CollisionState {
+    pub fn new() -> Self {
+        Self {
+            active: BTreeMap::new(),
+        }
+    }
+
+    pub fn register(&mut self, col: Collision) {
+        self.active
+            .insert((col.a.entity, col.b.entity), col.clone());
+        self.active
+            .insert((col.b.entity, col.a.entity), col.clone());
+    }
+
+    pub fn next_frame(&mut self, world: &impl GenericWorld) {
+        let mut q = world.try_query::<hecs::Or<&Sleeping, &Static>>().unwrap();
+
+        let q = q.view();
+        self.active
+            .retain(|_, v| q.get(v.a.entity).is_some() && q.get(v.b.entity).is_some());
+    }
+
+    pub fn get<'a>(&'a self, e: Entity) -> impl Iterator<Item = &'a Collision> {
+        self.active
+            .iter()
+            .skip_while(move |((a, _), _)| *a == e)
+            .take_while(move |((a, _), _)| *a == e)
+            .map(|(_, v)| v)
+    }
+
+    pub fn get_all(&self) -> impl Iterator<Item = (Entity, Entity, &Collision)> {
+        self.active.iter().map(|((a, b), v)| (*a, *b, v))
+    }
+}
+
+impl Default for CollisionState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub fn resolve_collisions<I: Iterator<Item = Collision>>(
     world: SubWorld<(
         RbQuery,
@@ -117,41 +166,47 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
         &mut Effector,
         HierarchyQuery<Connection>,
         &ConnectionKind,
+        &Static,
+        &Sleeping,
     )>,
+    mut state: DefaultResourceMut<CollisionState>,
     mut collisions: I,
     dt: Read<DeltaTime>,
     _events: Read<Events>, // Wait for events
 ) -> Result<()> {
-    collisions.try_for_each(|coll| -> Result<()> {
+    state.next_frame(&world);
+    collisions.try_for_each(|col| -> Result<()> {
+        state.register(col.clone());
+
         // Ignore triggers
-        if coll.a.is_trigger || coll.b.is_trigger {
+        if col.a.is_trigger || col.b.is_trigger {
             return Ok(());
         }
         // Check for static collision
-        else if coll.a.state.is_static() {
-            return resolve_static(&world, coll.a.entity, coll.b.entity, coll.contact, *dt);
-        } else if coll.b.state.is_static() {
+        else if col.a.state.is_static() {
+            return resolve_static(&world, col.a.entity, col.b.entity, col.contact, *dt);
+        } else if col.b.state.is_static() {
             return resolve_static(
                 &world,
-                coll.b.entity,
-                coll.a.entity,
+                col.b.entity,
+                col.a.entity,
                 Contact {
-                    points: coll.contact.points.reverse(),
-                    depth: coll.contact.depth,
-                    normal: -coll.contact.normal,
+                    points: col.contact.points.reverse(),
+                    depth: col.contact.depth,
+                    normal: -col.contact.normal,
                 },
                 *dt,
             );
-        } else if coll.a.state.is_static() && coll.b.state.is_static() {
+        } else if col.a.state.is_static() && col.b.state.is_static() {
             return Ok(());
         }
 
-        assert_ne!(coll.a, coll.b);
+        assert_ne!(col.a, col.b);
 
         // Trace up to the root of the rigid connection before solving
         // collisions
-        let (a, a_mass) = get_rigid_root(&world, *coll.a)?;
-        let (b, b_mass) = get_rigid_root(&world, *coll.b)?;
+        let (a, a_mass) = get_rigid_root(&world, *col.a)?;
+        let (b, b_mass) = get_rigid_root(&world, *col.b)?;
 
         // Ignore collisions between two immovable objects
         if !a_mass.is_normal() && !b_mass.is_normal() {
@@ -189,19 +244,19 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
 
         let total_mass = a.mass + b.mass;
 
-        let impulse = resolve_collision(&coll.contact, &a, &b);
+        let impulse = resolve_collision(&col.contact, &a, &b);
 
         drop((a_query, b_query));
 
-        let dir = coll.contact.normal * coll.contact.depth;
+        let dir = col.contact.normal * col.contact.depth;
 
-        let mut effector = world.get_mut::<Effector>(*coll.a)?;
-        effector.apply_impulse_at(impulse, coll.contact.points[0] - a.pos, true);
+        let mut effector = world.get_mut::<Effector>(*col.a)?;
+        effector.apply_impulse_at(impulse, col.contact.points[0] - a.pos, true);
         effector.translate(-dir * (*a.mass / *total_mass));
         drop(effector);
 
-        let mut effector = world.get_mut::<Effector>(*coll.b)?;
-        effector.apply_impulse_at(-impulse, coll.contact.points[1] - b.pos, true);
+        let mut effector = world.get_mut::<Effector>(*col.b)?;
+        effector.apply_impulse_at(-impulse, col.contact.points[1] - b.pos, true);
         effector.translate(dir * (*b.mass / *total_mass));
 
         Ok(())

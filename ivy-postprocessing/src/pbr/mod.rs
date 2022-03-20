@@ -2,7 +2,7 @@ use hecs::{Component, Entity, World};
 use itertools::Itertools;
 use ivy_base::Extent;
 use ivy_graphics::{
-    DepthAttachment, EnvironmentManager, FullscreenRenderer, GpuCameraData, LightRenderer,
+    DepthAttachment, EnvData, EnvironmentManager, FullscreenRenderer, GpuCameraData, LightRenderer,
     MeshRenderer, Renderer,
 };
 use ivy_rendergraph::{AttachmentInfo, CameraNode, CameraNodeInfo, Node, TransferNode};
@@ -22,16 +22,16 @@ use self::attachments::PBRAttachments;
 
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct PBRInfo<EnvData> {
+pub struct PBRInfo<E: EnvData> {
     pub max_lights: u64,
-    pub env_data: EnvData,
+    pub env_data: E,
 }
 
-impl<EnvData: Default> Default for PBRInfo<EnvData> {
+impl<E: Default + EnvData> Default for PBRInfo<E> {
     fn default() -> Self {
         Self {
             max_lights: 5,
-            env_data: EnvData::default(),
+            env_data: E::default(),
         }
     }
 }
@@ -39,7 +39,7 @@ impl<EnvData: Default> Default for PBRInfo<EnvData> {
 /// Installs PBR rendering for the specified camera. Returns a list of nodes suitable for
 /// rendergraph insertions. Configures gpu camera data, light management and
 /// environment manager and attaches them to the camera.
-pub fn create_pbr_pipeline<GeometryPass, PostProcessingPass, TransparentPass, EnvData, R>(
+pub fn create_pbr_pipeline<GeometryPass, PostProcessingPass, TransparentPass, E, R>(
     context: SharedVulkanContext,
     world: &mut World,
     resources: &Resources,
@@ -48,8 +48,8 @@ pub fn create_pbr_pipeline<GeometryPass, PostProcessingPass, TransparentPass, En
     extent: Extent,
     frames_in_flight: usize,
     read_attachments: &[Handle<Texture>],
-    color_attachments: &[AttachmentInfo],
-    info: PBRInfo<EnvData>,
+    output: Handle<Texture>,
+    info: PBRInfo<E>,
 ) -> ivy_rendergraph::Result<[Box<dyn Node>; 6]>
 where
     GeometryPass: ShaderPass,
@@ -57,7 +57,8 @@ where
     TransparentPass: ShaderPass,
     R: Renderer + Storage + Clone,
     R::Error: Storage + Into<anyhow::Error>,
-    EnvData: Copy + Component,
+    E: Copy + Component,
+    E: EnvData,
 {
     GpuCameraData::create_gpu_cameras(&context, world, frames_in_flight)?;
     let pbr_attachments = PBRAttachments::new(context.clone(), resources, extent)?;
@@ -75,13 +76,19 @@ where
             color_attachments: pbr_attachments
                 .as_slice()
                 .iter()
-                .map(|resource| AttachmentInfo {
+                .zip([
+                    ClearValue::color_vec4(info.env_data.clear_color().extend(1.0)),
+                    ClearValue::default(),
+                    ClearValue::default(),
+                    ClearValue::default(),
+                ])
+                .map(|(resource, clear_value)| AttachmentInfo {
                     store_op: StoreOp::STORE,
                     load_op: LoadOp::CLEAR,
                     initial_layout: ImageLayout::UNDEFINED,
                     final_layout: ImageLayout::SHADER_READ_ONLY_OPTIMAL,
                     resource: *resource,
-                    clear_value: ClearValue::color(0.0, 0.0, 0.0, 1.0),
+                    clear_value,
                 })
                 .collect::<Vec<_>>(),
             depth_attachment: Some(AttachmentInfo {
@@ -110,6 +117,15 @@ where
         *depth_attachment,
     ];
 
+    let sampler: Handle<Sampler> = resources.load(SamplerInfo {
+        address_mode: AddressMode::CLAMP_TO_EDGE,
+        mag_filter: FilterMode::LINEAR,
+        min_filter: FilterMode::LINEAR,
+        unnormalized_coordinates: false,
+        anisotropy: 16,
+        mip_levels: 1,
+    })??;
+
     // TODO one image
     let final_lit = resources.insert(Texture::new(
         context.clone(),
@@ -123,15 +139,6 @@ where
         },
     )?)?;
 
-    let sampler: Handle<Sampler> = resources.load(SamplerInfo {
-        address_mode: AddressMode::CLAMP_TO_EDGE,
-        mag_filter: FilterMode::LINEAR,
-        min_filter: FilterMode::LINEAR,
-        unnormalized_coordinates: false,
-        anisotropy: 16,
-        mip_levels: 1,
-    })??;
-
     let light_node = Box::new(CameraNode::<(), _>::new(
         context.clone(),
         world,
@@ -142,7 +149,6 @@ where
             name: "Light renderer",
             color_attachments: vec![AttachmentInfo::color(final_lit)],
             input_attachments: input_attachments.to_vec(),
-            depth_attachment: None,
             camera_stage: ShaderStageFlags::VERTEX | ShaderStageFlags::FRAGMENT,
             frames_in_flight,
             ..Default::default()
@@ -233,7 +239,7 @@ where
         FullscreenRenderer::new(),
         CameraNodeInfo {
             name: "Post Processing node",
-            color_attachments: color_attachments.to_vec(),
+            color_attachments: vec![AttachmentInfo::color(output)],
             read_attachments: &read_attachments.iter().map(|v| (*v, sampler)).collect_vec(),
             input_attachments: vec![final_lit, *depth_attachment],
             bindables: &data,

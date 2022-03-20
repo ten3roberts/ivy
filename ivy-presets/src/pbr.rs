@@ -1,7 +1,7 @@
 use hecs::World;
 use ivy_base::{Extent, WorldExt};
 use ivy_graphics::{
-    gizmos::GizmoRenderer, shaders::*, DepthAttachment, FullscreenRenderer, GpuCameraData,
+    gizmos::GizmoRenderer, shaders::*, DepthAttachment, EnvData, FullscreenRenderer, GpuCameraData,
     MainCamera, MeshRenderer, SkinnedMeshRenderer, WithPass,
 };
 use ivy_postprocessing::pbr::{create_pbr_pipeline, PBRInfo};
@@ -58,7 +58,7 @@ impl PBRRendering {
     ///
     /// Requires the existence of [ Swapchain ](ivy_vulkan::Swapchain), [Canvas](ivy_ui::Canvas),
     /// [MainCamera](ivy_graphics::MainCamera).
-    pub fn setup<Env: 'static + Copy + Send + Sync>(
+    pub fn setup<Env: 'static + Copy + Send + Sync + EnvData>(
         world: &mut World,
         resources: &Resources,
         pbr_info: PBRInfo<Env>,
@@ -132,14 +132,7 @@ impl PBRRendering {
             extent,
             frames_in_flight,
             &[],
-            &[AttachmentInfo {
-                store_op: StoreOp::STORE,
-                load_op: LoadOp::CLEAR,
-                initial_layout: ImageLayout::UNDEFINED,
-                final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                resource: final_lit,
-                clear_value: ClearValue::color(0.0, 0.0, 0.0, 1.0),
-            }],
+            final_lit,
             pbr_info,
         )?);
 

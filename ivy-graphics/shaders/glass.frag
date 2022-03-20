@@ -47,8 +47,6 @@ vec4 raytrace(vec3 origin, vec3 dir) {
 
     vec3 ray = origin;
 
-    vec3 reflection = vec3(0,0,1);
-
     for (int i = 0; i < 10; i++) {
 	vec4 ndc_ray = (cameraData.viewproj * vec4(fragPosition, 1));
 	vec2 uv = ndcToUv(ndc_ray);
@@ -109,5 +107,5 @@ void main() {
     /* vec3 refraction = raytrace(fragPosition, v_refraction).rgb; */
     refraction = mix(refraction, refraction * albedo.rgb, albedo.w);
 
-    outColor = vec4(mix(refraction, reflection.rgb, v_fresnel), 1.0);
+    outColor = vec4(mix(refraction, reflection.rgb, 0.0), 1.0);
 }

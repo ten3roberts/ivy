@@ -1,7 +1,7 @@
 use std::ops::Index;
 
 use glam::{Mat4, Vec3};
-use ivy_base::Position;
+use ivy_base::{Color, DrawGizmos, Line, Position, Sphere};
 
 use crate::{epa, gjk, util::minkowski_diff, CollisionPrimitive, EntityPayload};
 
@@ -35,6 +35,20 @@ impl ContactPoints {
         match *self {
             Self::Single(p) => Self::Single(p),
             Self::Double([a, b]) => Self::Double([b, a]),
+        }
+    }
+}
+
+impl DrawGizmos for ContactPoints {
+    fn draw_gizmos(&self, gizmos: &mut ivy_base::Gizmos, color: ivy_base::Color) {
+        for &p in self.iter() {
+            gizmos.draw(
+                Sphere {
+                    origin: *p,
+                    radius: 0.1,
+                },
+                color,
+            )
         }
     }
 }
@@ -84,6 +98,21 @@ pub struct Contact {
     pub points: ContactPoints,
     pub depth: f32,
     pub normal: Vec3,
+}
+
+impl DrawGizmos for Contact {
+    fn draw_gizmos(&self, gizmos: &mut ivy_base::Gizmos, color: ivy_base::Color) {
+        gizmos.draw(self.points, color);
+        gizmos.draw(
+            Line {
+                origin: *self.points[0],
+                dir: self.normal * 0.2,
+
+                ..Default::default()
+            },
+            Color::blue(),
+        );
+    }
 }
 
 /// Represents a collision between two entities.
