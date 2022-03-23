@@ -566,6 +566,12 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
         ..Default::default()
     })??;
 
+    let heart = resources.insert(Image::new(
+        resources,
+        resources.get(font)?.atlas().texture(),
+        resources.load(SamplerInfo::pixelated())??,
+    )?)?;
+
     let monospace: Handle<Font> = resources.load(FontInfo {
         size: 48.0,
         path: "./res/fonts/Roboto_Mono/RobotoMono-VariableFont_wght.ttf".into(),

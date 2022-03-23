@@ -85,10 +85,10 @@ impl Font {
                 extent: Extent::new(dimension, dimension),
                 mip_levels: info.mip_levels,
                 usage: ImageUsage::SAMPLED | ImageUsage::TRANSFER_DST,
-                format: Format::R8G8B8A8_SRGB,
+                format: Format::R8_UNORM,
                 samples: SampleCountFlags::TYPE_1,
             },
-            4,
+            1,
             images,
             info.padding,
         )?;
