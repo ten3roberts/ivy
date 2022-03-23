@@ -100,8 +100,9 @@ impl Effector {
     }
 
     /// Applies a continous acceleration independent of mass
-    pub fn apply_acceleration(&mut self, dv: Vec3) {
+    pub fn apply_acceleration(&mut self, dv: Vec3, wake: bool) {
         self.dv += dv;
+        self.wake = self.wake || wake
     }
 
     /// Applies a force at the specified position from center of mass

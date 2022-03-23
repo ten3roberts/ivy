@@ -13,8 +13,7 @@ use ivy_ui::{Canvas, ImageRenderer, TextRenderer, TextUpdateNode};
 use ivy_vulkan::{
     context::SharedVulkanContext,
     vk::{ClearValue, CullModeFlags},
-    ClearValueExt, ImageLayout, ImageUsage, LoadOp, PipelineInfo, StoreOp, Swapchain, Texture,
-    TextureInfo,
+    ImageLayout, ImageUsage, LoadOp, PipelineInfo, StoreOp, Swapchain, Texture, TextureInfo,
 };
 
 use crate::{

@@ -1,5 +1,6 @@
 use hecs::{Component, Entity, World};
 use ivy_engine::{AngularVelocity, Input, InputVector, Rotation, Velocity};
+use ivy_physics::Effector;
 
 pub struct WithTime<T> {
     func: Box<dyn Fn(Entity, &mut T, f32, f32) + Send + Sync>,
@@ -45,9 +46,15 @@ impl Mover {
 
 pub fn move_system(world: &mut World, input: &Input) {
     world
-        .query::<(&Mover, &mut Velocity, &mut AngularVelocity, &Rotation)>()
+        .query::<(
+            &Mover,
+            &mut Velocity,
+            &mut Effector,
+            &mut AngularVelocity,
+            &Rotation,
+        )>()
         .iter()
-        .for_each(|(_, (m, v, a, r))| {
+        .for_each(|(_, (m, v, e, a, r))| {
             let movement = m.translate.get(&input);
             if m.local {
                 *v = Velocity(**r * movement) * m.speed;
@@ -57,5 +64,6 @@ pub fn move_system(world: &mut World, input: &Input) {
 
             let ang = m.rotate.get(&input);
             *a = ang.into();
+            e.wake()
         })
 }

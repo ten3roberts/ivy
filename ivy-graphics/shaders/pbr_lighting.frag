@@ -157,7 +157,7 @@ void main() {
 
 	vec3 color = vec3(0);
 
-	if (depth < 0.999) {
+	if (depth < 0.999999999) {
 		color += PBR(albedo, pos, normal, roughness, metallic);
 	}
 

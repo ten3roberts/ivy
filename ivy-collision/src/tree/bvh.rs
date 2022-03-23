@@ -13,7 +13,7 @@ use crate::{
 const MARGIN: f32 = 1.2;
 
 #[derive(Debug, Clone)]
-pub struct BVHNode<O: Array<Item = Object> = [Object; 4]> {
+pub struct BVHNode<O: Array<Item = Object> = [Object; 1]> {
     bounds: BoundingBox,
     objects: SmallVec<O>,
     axis: Axis,

@@ -6,7 +6,7 @@ use crate::{
     Effector, Result,
 };
 use glam::Quat;
-use hecs::Entity;
+use hecs::{Entity, Satisfies};
 use hecs_hierarchy::{Hierarchy, HierarchyQuery};
 use hecs_schedule::{traits::QueryExt, CommandBuffer, GenericWorld, Read, SubWorld, Write};
 use ivy_base::{
@@ -19,7 +19,7 @@ use ivy_resources::DefaultResourceMut;
 const BATCH_SIZE: u32 = 64;
 
 pub fn integrate_velocity(
-    world: SubWorld<(&mut Position, &Velocity)>,
+    world: SubWorld<(&mut Position, &mut Rotation, &AngularVelocity, &Velocity)>,
     dt: Read<DeltaTime>,
     mut cmd: Write<CommandBuffer>,
 ) {
@@ -28,9 +28,13 @@ pub fn integrate_velocity(
         .without::<Static>()
         .without::<Sleeping>()
         .iter()
-        .for_each(|(e, (pos, vel))| {
+        .for_each(|(e, (pos, rot, w, vel))| {
             *pos += Position(**vel * **dt);
-            if vel.length_squared() < 0.1 {
+            let mag = w.length();
+            if mag > 0.1 {
+                let w = Quat::from_axis_angle(w.0 / mag, mag * **dt);
+                *rot = Rotation(w * rot.0);
+            } else if vel.length_squared() < 0.1 {
                 cmd.insert_one(e, Sleeping)
             }
         });
@@ -48,23 +52,6 @@ pub fn gravity(world: SubWorld<(&GravityInfluence, &Mass, &mut Effector)>, gravi
         .par_for_each(BATCH_SIZE, |(_, (influence, mass, effector))| {
             effector.apply_force(**gravity * **influence * **mass, false)
         })
-}
-
-pub fn integrate_angular_velocity(
-    world: SubWorld<(&mut Rotation, &AngularVelocity)>,
-    dt: Read<DeltaTime>,
-) {
-    world
-        .native_query()
-        .without::<Static>()
-        .into_iter()
-        .for_each(|(_, (rot, w))| {
-            let mag = w.length();
-            if mag > 0.0 {
-                let w = Quat::from_axis_angle(w.0 / mag, mag * **dt);
-                *rot = Rotation(w * rot.0);
-            }
-        });
 }
 
 // pub fn gravity_system(world: SubWorld<(&Velocity, &mut Effector)>) {
@@ -115,6 +102,7 @@ pub fn get_rigid_root(world: &impl GenericWorld, child: Entity) -> Result<(Entit
 
 #[derive(Debug, Clone)]
 pub struct CollisionState {
+    sleeping: BTreeMap<(Entity, Entity), Collision>,
     active: BTreeMap<(Entity, Entity), Collision>,
 }
 
@@ -122,21 +110,27 @@ impl CollisionState {
     pub fn new() -> Self {
         Self {
             active: BTreeMap::new(),
+            sleeping: BTreeMap::new(),
         }
     }
 
     pub fn register(&mut self, col: Collision) {
-        self.active
-            .insert((col.a.entity, col.b.entity), col.clone());
-        self.active
-            .insert((col.b.entity, col.a.entity), col.clone());
+        let slot = if col.a.state.dormant() && col.b.state.dormant() {
+            &mut self.sleeping
+        } else {
+            &mut self.active
+        };
+
+        slot.insert((col.a.entity, col.b.entity), col.clone());
+        slot.insert((col.b.entity, col.a.entity), col.clone());
     }
 
     pub fn next_frame(&mut self, world: &impl GenericWorld) {
         let mut q = world.try_query::<hecs::Or<&Sleeping, &Static>>().unwrap();
 
         let q = q.view();
-        self.active
+        self.active.clear();
+        self.sleeping
             .retain(|_, v| q.get(v.a.entity).is_some() && q.get(v.b.entity).is_some());
     }
 
@@ -145,11 +139,20 @@ impl CollisionState {
             .iter()
             .skip_while(move |((a, _), _)| *a == e)
             .take_while(move |((a, _), _)| *a == e)
+            .chain(
+                self.sleeping
+                    .iter()
+                    .skip_while(move |((a, _), _)| *a == e)
+                    .take_while(move |((a, _), _)| *a == e),
+            )
             .map(|(_, v)| v)
     }
 
     pub fn get_all(&self) -> impl Iterator<Item = (Entity, Entity, &Collision)> {
-        self.active.iter().map(|((a, b), v)| (*a, *b, v))
+        self.active
+            .iter()
+            .chain(self.sleeping.iter())
+            .map(|((a, b), v)| (*a, *b, v))
     }
 }
 
@@ -315,19 +318,23 @@ fn resolve_static(
 
 /// Applies effectors to their respective entities and clears the effects.
 pub fn apply_effectors(
-    world: SubWorld<(RbQueryMut, &mut Position, &mut Effector)>,
+    world: SubWorld<(
+        RbQueryMut,
+        &mut Position,
+        &mut Effector,
+        Satisfies<&Sleeping>,
+    )>,
     mut cmd: Write<CommandBuffer>,
     dt: Read<DeltaTime>,
 ) {
-    world
-        .native_query()
-        .without::<Static>()
-        .iter()
-        .for_each(|(e, (rb, pos, effector))| {
-            *rb.vel += effector.net_velocity_change(**dt);
-            *pos += effector.translation();
+    world.native_query().without::<Static>().iter().for_each(
+        |(e, (rb, pos, effector, sleeping))| {
+            if !sleeping || effector.should_wake() {
+                *rb.vel += effector.net_velocity_change(**dt);
+                *pos += effector.translation();
 
-            *rb.ang_vel += effector.net_angular_velocity_change(**dt);
+                *rb.ang_vel += effector.net_angular_velocity_change(**dt);
+            }
 
             effector.set_mass(*rb.mass);
             effector.set_ang_mass(*rb.ang_mass);
@@ -337,5 +344,6 @@ pub fn apply_effectors(
             }
 
             effector.clear()
-        })
+        },
+    )
 }
