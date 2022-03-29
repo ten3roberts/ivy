@@ -185,6 +185,11 @@ pub trait Storage: 'static + Send {
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
 }
 
+unsafe impl<'a, T: Send> Send for CellRef<'a, T> {}
+unsafe impl<'a, T: Send> Send for CellRefMut<'a, T> {}
+unsafe impl<'a, T: Send> Sync for CellRef<'a, T> {}
+unsafe impl<'a, T: Send> Sync for CellRefMut<'a, T> {}
+
 impl<T> Storage for T
 where
     T: 'static + Sized + Send,

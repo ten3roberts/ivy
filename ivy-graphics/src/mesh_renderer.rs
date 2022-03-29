@@ -1,4 +1,7 @@
-use crate::{BaseRenderer, BatchMarker, Error, Material, Mesh, Renderer, Result, Vertex};
+use crate::{
+    BaseRenderer, BatchMarker, BoundingSphere, Camera, Error, MainCamera, Material, Mesh, Renderer,
+    Result, Vertex,
+};
 use ash::vk::{DescriptorSet, IndexType};
 use glam::{Mat4, Vec4};
 use hecs::{Query, World};
@@ -45,11 +48,22 @@ impl Renderer for MeshRenderer {
 
         pass.register::<Pass, KeyQuery, ObjectDataQuery>(world);
         pass.build_batches::<Pass, KeyQuery>(world, resources, pass_info)?;
-        let iter = world
-            .query_mut::<(&BatchMarker<ObjectData, Pass>, ObjectDataQuery, &Visible)>()
-            .into_iter()
-            .filter_map(|(e, (marker, obj, visible))| {
-                if visible.is_visible() {
+
+        let mut q = world.query::<&Camera>().with::<MainCamera>();
+        let camera = q.iter().next().unwrap().1;
+
+        let mut iter = world.query::<(
+            &BatchMarker<ObjectData, Pass>,
+            ObjectDataQuery,
+            &Visible,
+            &BoundingSphere,
+        )>();
+        let iter = iter
+            .iter()
+            .filter_map(|(e, (marker, obj, visible, bound))| {
+                if visible.is_visible()
+                    && camera.visible(**obj.position, **bound * obj.scale.max_element())
+                {
                     Some((e, (marker, obj)))
                 } else {
                     None

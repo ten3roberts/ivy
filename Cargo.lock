@@ -743,6 +743,7 @@ dependencies = [
  "glam",
  "hecs",
  "hecs-hierarchy",
+ "hecs-schedule",
  "itertools",
  "ivy-base",
  "ivy-graphics",

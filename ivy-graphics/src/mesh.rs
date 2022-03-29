@@ -2,11 +2,14 @@ use crate::{Error, Material, Result};
 use ash::vk::{
     self, VertexInputAttributeDescription, VertexInputBindingDescription, VertexInputRate,
 };
+use derive_more::{Deref, From, Into};
 use glam::{IVec4, Vec2, Vec3, Vec4};
 use gltf::buffer;
 use itertools::izip;
 use ivy_resources::Handle;
+use ordered_float::OrderedFloat;
 use std::mem::size_of;
+use std::ops::Deref;
 use std::{iter::repeat, marker::PhantomData};
 
 use ivy_vulkan as vulkan;
@@ -83,6 +86,10 @@ impl vulkan::VertexDesc for Vertex {
             offset: 12 + 12 + 8,
         },
     ];
+
+    fn pos(&self) -> Vec3 {
+        self.position
+    }
 }
 
 impl vulkan::VertexDesc for SimpleVertex {
@@ -102,6 +109,10 @@ impl vulkan::VertexDesc for SimpleVertex {
             offset: 0,
         },
     ];
+
+    fn pos(&self) -> Vec3 {
+        self.position
+    }
 }
 impl vulkan::VertexDesc for SkinnedVertex {
     const BINDING_DESCRIPTIONS: &'static [VertexInputBindingDescription] =
@@ -153,6 +164,10 @@ impl vulkan::VertexDesc for SkinnedVertex {
             offset: 12 + 12 + 8 + 16 + 16,
         },
     ];
+
+    fn pos(&self) -> Vec3 {
+        self.position
+    }
 }
 
 /// Represents a part of the mesh with a distincs material.
@@ -190,7 +205,11 @@ pub struct Mesh<V = Vertex> {
     primitives: Vec<Primitive>,
     index_count: u32,
     marker: PhantomData<V>,
+    bounds: BoundingSphere,
 }
+
+#[derive(Deref, From, Into, Copy, Clone, PartialEq)]
+pub struct BoundingSphere(pub f32);
 
 impl<V: VertexDesc> Mesh<V> {
     /// Creates a new mesh from provided vertices and indices.
@@ -218,6 +237,15 @@ impl<V: VertexDesc> Mesh<V> {
             indices,
         )?;
 
+        let bounds = vertices
+            .iter()
+            .map(|v| OrderedFloat(v.pos().length()))
+            .max()
+            .unwrap_or_default()
+            .deref()
+            .clone()
+            .into();
+
         Ok(Self {
             vertex_buffer,
             index_buffer,
@@ -225,6 +253,7 @@ impl<V: VertexDesc> Mesh<V> {
             index_count: indices.len() as u32,
             marker: PhantomData,
             primitives,
+            bounds,
         })
     }
 
@@ -249,6 +278,8 @@ impl<V: VertexDesc> Mesh<V> {
             index_count as u64,
         )?;
 
+        let bounds = BoundingSphere(1.0);
+
         Ok(Self {
             vertex_buffer,
             index_buffer,
@@ -256,6 +287,7 @@ impl<V: VertexDesc> Mesh<V> {
             index_count,
             marker: PhantomData,
             primitives,
+            bounds,
         })
     }
     // Returns the internal vertex buffer
@@ -291,6 +323,12 @@ impl<V: VertexDesc> Mesh<V> {
     /// Get a reference to the mesh's primitives.
     pub fn primitives(&self) -> &[Primitive] {
         self.primitives.as_slice()
+    }
+
+    /// Get the mesh's bounds.
+    #[must_use]
+    pub fn bounds(&self) -> BoundingSphere {
+        self.bounds
     }
 }
 

@@ -1,8 +1,9 @@
 use ash::vk::{DescriptorSet, ShaderStageFlags};
 use derive_more::{AsRef, Deref, From, Into};
-use glam::{Mat4, Vec2, Vec3, Vec4, Vec4Swizzles};
+use glam::{vec3, Mat4, Vec2, Vec3, Vec4, Vec4Swizzles};
 use hecs::World;
-use ivy_base::Extent;
+use hecs_schedule::{Read, SubWorld};
+use ivy_base::{Color, DrawGizmos, Extent, Line, Sphere};
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
     context::SharedVulkanContext,
@@ -24,6 +25,7 @@ pub struct Camera {
     view: Mat4,
     /// Cached version of view * projection
     viewproj: Mat4,
+    frustum: Frustum,
 }
 
 impl Camera {
@@ -38,11 +40,13 @@ impl Camera {
         let hh = height / 2.0;
 
         self.projection = orthographic_vk(-hw, hw, -hh, hh, near, far);
+        self.frustum = Frustum::ortho(hh, hw, near, far);
         self.update_viewproj();
     }
 
     pub fn set_perspective(&mut self, fov: f32, aspect: f32, near: f32, far: f32) {
         self.projection = perspective_vk(fov, aspect, near, far);
+        self.frustum = Frustum::perspective(fov, aspect, near, far);
         self.update_viewproj();
     }
 
@@ -97,6 +101,17 @@ impl Camera {
         (self.view.inverse() * Vec4::new(ray_eye.x, ray_eye.y, -1.0, 0.0))
             .xyz()
             .normalize()
+    }
+
+    pub fn visible(&self, p: Vec3, radius: f32) -> bool {
+        let p = self.view().transform_point3(p);
+        self.frustum.visible(p, radius)
+    }
+
+    /// Get a reference to the camera's frustum.
+    #[must_use]
+    pub fn frustum(&self) -> &Frustum {
+        &self.frustum
     }
 }
 
@@ -205,11 +220,14 @@ impl GpuCameraData {
 
     /// Updates all GPU camera data from the CPU side camera view and projection
     /// matrix. Position is automatically extracted from the camera's view matrix.
-    pub fn update_all_system(world: &mut World, current_frame: usize) -> Result<()> {
+    pub fn update_all_system(
+        world: SubWorld<(&Camera, &mut Self)>,
+        current_frame: Read<usize>,
+    ) -> Result<()> {
         world
-            .query_mut::<(&Camera, &mut GpuCameraData)>()
-            .into_iter()
-            .try_for_each(|(_, (camera, gpu_camera))| gpu_camera.update(camera, current_frame))
+            .query::<(&Camera, &mut GpuCameraData)>()
+            .iter()
+            .try_for_each(|(_, (camera, gpu_camera))| gpu_camera.update(camera, *current_frame))
     }
 
     // Creates gpu side data for all camera which do not already have any.
@@ -278,4 +296,122 @@ pub fn orthographic_vk(left: f32, right: f32, bottom: f32, top: f32, near: f32, 
         Vec4::new(0.0, 0.0, -1.0 / fmn, 0.0),
         Vec4::new(-(rpl / rml), -(tpb / tmb), -(near / fmn), 1.0),
     )
+}
+
+#[derive(Copy, Default, Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+pub struct Plane {
+    p: f32,
+    norm: Vec3,
+}
+
+impl Plane {
+    #[must_use]
+    pub fn new(p: f32, norm: Vec3) -> Self {
+        Self {
+            p,
+            norm: norm.normalize(),
+        }
+    }
+
+    pub fn distance(&self, p: Vec3) -> f32 {
+        p.dot(self.norm) + self.p
+    }
+}
+
+#[derive(Default, Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+pub struct Frustum {
+    top: Plane,
+    bot: Plane,
+    left: Plane,
+    right: Plane,
+    far: Plane,
+    near: Plane,
+}
+
+impl Frustum {
+    pub fn planes(&self) -> [&Plane; 6] {
+        [
+            &self.top,
+            &self.bot,
+            &self.left,
+            &self.right,
+            &self.far,
+            &self.near,
+        ]
+    }
+
+    pub fn ortho(hh: f32, hw: f32, near: f32, far: f32) -> Self {
+        let top = Plane::new(hh, Vec3::Y);
+        let bot = Plane::new(-hh, -Vec3::Y);
+        let right = Plane::new(hw, Vec3::X);
+        let left = Plane::new(-hw, -Vec3::X);
+        let far = Plane::new(far, Vec3::Z);
+        let near = Plane::new(near, Vec3::Z);
+
+        Self {
+            top,
+            bot,
+            left,
+            right,
+            far,
+            near,
+        }
+    }
+    #[must_use]
+    pub fn perspective(fov: f32, aspect: f32, near: f32, far: f32) -> Self {
+        let hh = (fov / 2.0).tan() * 1.;
+        let hw = hh * aspect;
+
+        let nw = vec3(-hw, hh, 1.).normalize();
+        let ne = vec3(hw, hh, 1.).normalize();
+        let se = vec3(hw, -hh, 1.).normalize();
+        let sw = vec3(-hw, -hh, 1.).normalize();
+
+        let top = Plane::new(0., nw.cross(ne));
+        let right = Plane::new(0., ne.cross(se));
+        let bot = Plane::new(0., se.cross(sw));
+        let left = Plane::new(0., sw.cross(nw));
+        let far = Plane::new(far, Vec3::Z);
+        let near = Plane::new(near, -Vec3::Z);
+        // let top = Plane::new(0., ne.cross(nw));
+        // let bot = Plane::new(0., sw.cross(se));
+        // let right = Plane::new(0., se.cross(ne));
+        // let left = Plane::new(0., nw.cross(sw));
+        // let far = Plane::new(far, Vec3::Z);
+
+        Self {
+            top,
+            bot,
+            left,
+            right,
+            far,
+            near,
+        }
+    }
+
+    pub fn visible(&self, p: Vec3, radius: f32) -> bool {
+        self.planes().iter().all(|v| v.distance(p) > -radius)
+        // self.near.distance(p) > radius
+    }
+}
+
+impl DrawGizmos for Frustum {
+    fn draw_gizmos(&self, gizmos: &mut ivy_base::Gizmos, color: ivy_base::Color) {
+        for plane in self.planes() {
+            plane.draw_gizmos(gizmos, color)
+        }
+    }
+}
+
+impl DrawGizmos for Plane {
+    fn draw_gizmos(&self, gizmos: &mut ivy_base::Gizmos, color: ivy_base::Color) {
+        Sphere {
+            origin: self.norm * self.p,
+            radius: 0.1,
+        }
+        .draw_gizmos(gizmos, Color::blue());
+        Line::new(self.norm * self.p, self.norm, 0.01, 1.0).draw_gizmos(gizmos, color);
+    }
 }

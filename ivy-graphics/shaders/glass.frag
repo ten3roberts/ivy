@@ -42,12 +42,12 @@ vec2 ndcToUv(vec4 ndc) {
 vec4 raytrace(vec3 origin, vec3 dir) {
     vec3 ndc_dir = (cameraData.viewproj * vec4(dir, 0)).xyz;
 
-    float step_size = 20.0;
+    float step_size = 40.0;
     float step = step_size * length(ndc_dir);
 
     vec3 ray = origin;
 
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 5; i++) {
 	vec4 ndc_ray = (cameraData.viewproj * vec4(fragPosition, 1));
 	vec2 uv = ndcToUv(ndc_ray);
 

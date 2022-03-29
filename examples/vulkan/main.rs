@@ -361,7 +361,7 @@ impl LogicLayer {
             .add_bundle(RbBundle::default())
             .add_bundle((
                 MainCamera,
-                Camera::perspective(1.0, input.window_extent().aspect(), 0.1, 100.0),
+                Camera::perspective(1.0, input.window_extent().aspect(), 0.1, 50.0),
                 Mover::new(input_vec, Default::default(), 5.0, true),
             ));
 
@@ -437,11 +437,9 @@ impl Layer for LogicLayer {
 
         let dt = frame_time.secs();
 
-        let (_e, (camera, camera_pos, camera_rot)) = world
-            .query_mut::<(&Camera, &Position, &mut Rotation)>()
-            .into_iter()
-            .next()
-            .unwrap();
+        let mut q = world.query::<(&Camera, &Position, &mut Rotation)>();
+
+        let (_e, (camera, camera_pos, camera_rot)) = q.iter().next().unwrap();
 
         let mut window = resources.get_default_mut::<Window>()?;
 
@@ -519,6 +517,17 @@ impl Layer for LogicLayer {
             .filter(|(_, (vel, pos))| pos.length() > 30.0 && vel.dot(***pos) > 0.0)
             .for_each(|(_, (vel, _))| *vel = -*vel * 0.5);
 
+        world
+            .query::<(&mut Color, &BoundingSphere, &Position, &Scale)>()
+            .iter()
+            .for_each(|(_, (color, bounds, pos, scale))| {
+                *color = if camera.visible(**pos, bounds.0 * scale.max_element()) {
+                    Color::green()
+                } else {
+                    Color::red()
+                };
+            });
+
         // Draw collisions
         gizmos.begin_section("Draw collisions");
         resources
@@ -528,11 +537,11 @@ impl Layer for LogicLayer {
                 v.contact.draw_gizmos(&mut *gizmos, Color::yellow());
             });
 
+        drop(q);
+
         WithTime::<RelativeOffset>::update(world, dt);
 
         move_system(world, &self.input);
-
-        graphics::systems::update_view_matrices(world);
 
         draw_connections(world, &mut gizmos)?;
 
@@ -565,12 +574,6 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
         path: "./res/fonts/Lora/Lora-VariableFont_wght.ttf".into(),
         ..Default::default()
     })??;
-
-    let heart = resources.insert(Image::new(
-        resources,
-        resources.get(font)?.atlas().texture(),
-        resources.load(SamplerInfo::pixelated())??,
-    )?)?;
 
     let monospace: Handle<Font> = resources.load(FontInfo {
         size: 48.0,

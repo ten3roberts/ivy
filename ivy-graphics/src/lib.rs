@@ -20,6 +20,7 @@ mod environment;
 mod events;
 mod skinned_mesh_renderer;
 
+mod culling;
 pub mod gizmos;
 pub mod icosphere;
 pub mod layer;
@@ -32,6 +33,7 @@ pub use atlas::*;
 pub use base_renderer::*;
 pub use bundle::*;
 pub use camera::*;
+pub use culling::*;
 pub use document::*;
 pub use environment::*;
 pub use error::*;

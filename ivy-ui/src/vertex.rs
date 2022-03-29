@@ -1,7 +1,7 @@
 use std::mem;
 
-use ivy_vulkan::{vk, VertexDesc};
 use glam::{Vec2, Vec3};
+use ivy_vulkan::{vk, VertexDesc};
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -41,4 +41,8 @@ impl VertexDesc for UIVertex {
             offset: 12,
         },
     ];
+
+    fn pos(&self) -> Vec3 {
+        self.position
+    }
 }
