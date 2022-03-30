@@ -1,6 +1,5 @@
 use crate::{
-    Animation, AnimationStore, Animator, BoundingSphere, Error, Material, Mesh, PointLight, Result,
-    SkinnedMesh,
+    Animation, AnimationStore, Animator, Error, Material, Mesh, PointLight, Result, SkinnedMesh,
 };
 use gltf::Gltf;
 use hecs::{Bundle, Component, DynamicBundleClone, EntityBuilder, EntityBuilderClone};

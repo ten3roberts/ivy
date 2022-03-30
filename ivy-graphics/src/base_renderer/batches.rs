@@ -71,20 +71,20 @@ impl<K: RendererKey> Batches<K> {
                 let idx = self.batches.len();
                 self.batches.push(batch);
                 self.dirty = true;
-                self.ordered.push(idx);
-                *entry.insert(idx)
+                self.ordered.push(idx as u32);
+                *entry.insert(idx as u32)
             }
         };
 
-        Ok((idx, &mut self.batches[idx]))
+        Ok((idx, &mut self.batches[idx as usize]))
     }
 
     pub fn get(&self, id: BatchId) -> Option<&BatchData<K>> {
-        self.batches.get(id)
+        self.batches.get(id as usize)
     }
 
     pub fn get_mut(&mut self, id: BatchId) -> Option<&mut BatchData<K>> {
-        self.batches.get_mut(id)
+        self.batches.get_mut(id as usize)
     }
 
     pub fn insert_entity<O, Pass: ShaderPass, V: VertexDesc>(
@@ -97,6 +97,7 @@ impl<K: RendererKey> Batches<K> {
         let frames_in_flight = self.frames_in_flight;
         let (batch_id, batch) = self.get_batch::<Pass, V>(resources, pass, key, pass_info)?;
         batch.instance_count += 1;
+        batch.max_count += 1;
         batch.set_dirty(frames_in_flight);
         Ok(BatchMarker {
             batch_id,
@@ -118,7 +119,7 @@ impl<K: RendererKey> Batches<K> {
     }
 
     /// Get a reference to the batches's ordered batches.
-    pub fn ordered(&self) -> &[usize] {
+    pub fn ordered(&self) -> &[BatchId] {
         self.ordered.as_ref()
     }
 
@@ -165,7 +166,8 @@ where
     /// Sorts the batches by the key
     pub fn sort_batches(&mut self) {
         let batches = &self.batches;
-        self.ordered.sort_unstable_by_key(|val| &batches[*val].key);
+        self.ordered
+            .sort_unstable_by_key(|val| &batches[*val as usize].key);
         self.set_dirty(false)
     }
 
@@ -189,7 +191,9 @@ impl<'a, K> Iterator for OrderedBatchIterator<'a, K> {
     type Item = &'a BatchData<K>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.ordered_batches.next().map(|idx| &self.batches[*idx])
+        self.ordered_batches
+            .next()
+            .map(|idx| &self.batches[*idx as usize])
     }
 }
 
@@ -197,6 +201,6 @@ impl<'a, K> DoubleEndedIterator for OrderedBatchIterator<'a, K> {
     fn next_back(&mut self) -> Option<Self::Item> {
         self.ordered_batches
             .next_back()
-            .map(|idx| &self.batches[*idx])
+            .map(|idx| &self.batches[*idx as usize])
     }
 }

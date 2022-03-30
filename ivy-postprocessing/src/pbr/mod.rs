@@ -50,7 +50,7 @@ pub fn create_pbr_pipeline<GeometryPass, PostProcessingPass, TransparentPass, E,
     read_attachments: &[Handle<Texture>],
     output: Handle<Texture>,
     info: PBRInfo<E>,
-) -> ivy_rendergraph::Result<[Box<dyn Node>; 3]>
+) -> ivy_rendergraph::Result<[Box<dyn Node>; 6]>
 where
     GeometryPass: ShaderPass,
     PostProcessingPass: ShaderPass,
@@ -155,81 +155,81 @@ where
         },
     )?);
 
-    //     let screenview = resources.insert(Texture::new(
-    //         context.clone(),
-    //         &TextureInfo {
-    //             extent,
-    //             mip_levels: 1,
-    //             usage: ImageUsage::TRANSFER_DST | ImageUsage::SAMPLED,
-    //             ..Default::default()
-    //         },
-    //     )?)?;
+    let screenview = resources.insert(Texture::new(
+        context.clone(),
+        &TextureInfo {
+            extent,
+            mip_levels: 1,
+            usage: ImageUsage::TRANSFER_DST | ImageUsage::SAMPLED,
+            ..Default::default()
+        },
+    )?)?;
 
-    //     let screenview_d = resources.insert(Texture::new(
-    //         context.clone(),
-    //         &TextureInfo {
-    //             extent,
-    //             mip_levels: 1,
-    //             usage: ImageUsage::TRANSFER_DST
-    //                 | ImageUsage::SAMPLED
-    //                 | ImageUsage::DEPTH_STENCIL_ATTACHMENT,
+    let screenview_d = resources.insert(Texture::new(
+        context.clone(),
+        &TextureInfo {
+            extent,
+            mip_levels: 1,
+            usage: ImageUsage::TRANSFER_DST
+                | ImageUsage::SAMPLED
+                | ImageUsage::DEPTH_STENCIL_ATTACHMENT,
 
-    //             format: Format::D32_SFLOAT,
-    //             ..Default::default()
-    //         },
-    //     )?)?;
+            format: Format::D32_SFLOAT,
+            ..Default::default()
+        },
+    )?)?;
 
-    // // Copy lit to the attachment to read
-    // let transfer = Box::new(TransferNode::new(
-    //     final_lit,
-    //     screenview,
-    //     ImageLayout::TRANSFER_SRC_OPTIMAL,
-    //     ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-    //     ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-    //     ImageAspectFlags::COLOR,
-    // )?);
+    // Copy lit to the attachment to read
+    let transfer = Box::new(TransferNode::new(
+        final_lit,
+        screenview,
+        ImageLayout::TRANSFER_SRC_OPTIMAL,
+        ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+        ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        ImageAspectFlags::COLOR,
+    )?);
 
-    // // Copy lit to the attachment to read
-    // let transfer_depth = Box::new(TransferNode::new(
-    //     *depth_attachment,
-    //     screenview_d,
-    //     ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-    //     ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-    //     ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-    //     ImageAspectFlags::DEPTH,
-    // )?);
+    // Copy lit to the attachment to read
+    let transfer_depth = Box::new(TransferNode::new(
+        *depth_attachment,
+        screenview_d,
+        ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        ImageAspectFlags::DEPTH,
+    )?);
 
-    // let transparent = Box::new(CameraNode::<TransparentPass, _>::new(
-    //     context.clone(),
-    //     world,
-    //     resources,
-    //     camera,
-    //     resources.default::<MeshRenderer>()?,
-    //     CameraNodeInfo {
-    //         name: "Transparent",
-    //         color_attachments: vec![AttachmentInfo {
-    //             store_op: StoreOp::STORE,
-    //             load_op: LoadOp::LOAD,
-    //             initial_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-    //             final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-    //             resource: final_lit,
-    //             clear_value: ClearValue::color(0.0, 0.0, 0.0, 0.0),
-    //         }],
-    //         depth_attachment: Some(AttachmentInfo {
-    //             resource: *depth_attachment,
-    //             store_op: StoreOp::STORE,
-    //             load_op: LoadOp::LOAD,
-    //             initial_layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-    //             final_layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-    //             ..Default::default()
-    //         }),
-    //         read_attachments: &[(screenview, sampler), (screenview_d, sampler)],
-    //         additional: vec![final_lit],
-    //         camera_stage: ShaderStageFlags::VERTEX | ShaderStageFlags::FRAGMENT,
-    //         frames_in_flight,
-    //         ..Default::default()
-    //     },
-    // )?);
+    let transparent = Box::new(CameraNode::<TransparentPass, _>::new(
+        context.clone(),
+        world,
+        resources,
+        camera,
+        resources.default::<MeshRenderer>()?,
+        CameraNodeInfo {
+            name: "Transparent",
+            color_attachments: vec![AttachmentInfo {
+                store_op: StoreOp::STORE,
+                load_op: LoadOp::LOAD,
+                initial_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                resource: final_lit,
+                clear_value: ClearValue::color(0.0, 0.0, 0.0, 0.0),
+            }],
+            depth_attachment: Some(AttachmentInfo {
+                resource: *depth_attachment,
+                store_op: StoreOp::STORE,
+                load_op: LoadOp::LOAD,
+                initial_layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                final_layout: ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                ..Default::default()
+            }),
+            read_attachments: &[(screenview, sampler), (screenview_d, sampler)],
+            additional: vec![final_lit],
+            camera_stage: ShaderStageFlags::VERTEX | ShaderStageFlags::FRAGMENT,
+            frames_in_flight,
+            ..Default::default()
+        },
+    )?);
 
     let post_processing_node = Box::new(CameraNode::<PostProcessingPass, _>::new(
         context.clone(),
@@ -257,9 +257,9 @@ where
     Ok([
         camera_node,
         light_node,
-        // transfer,
-        // transfer_depth,
-        // transparent,
+        transfer,
+        transfer_depth,
+        transparent,
         post_processing_node,
     ])
 }

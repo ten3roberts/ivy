@@ -80,4 +80,4 @@ where
     }
 }
 
-type BatchId = usize;
+type BatchId = u32;

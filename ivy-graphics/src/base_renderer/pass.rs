@@ -5,6 +5,7 @@ use super::*;
 
 use ash::vk::{DescriptorSet, ShaderStageFlags};
 use hecs::{Entity, Fetch, Query, World};
+use itertools::Itertools;
 use ivy_resources::{Handle, HandleUntyped, Resources};
 use ivy_vulkan::{
     context::SharedVulkanContext,
@@ -144,6 +145,7 @@ impl<V: VertexDesc, K: RendererKey, Obj: 'static> PassData<K, Obj, V> {
                 let marker =
                     batches.insert_entity::<Obj, Pass, V>(resources, pass, key, pass_info)?;
                 *object_count += 1;
+
                 world.insert_one(e, marker)?;
 
                 Ok(())
@@ -161,36 +163,49 @@ impl<V: VertexDesc, K: RendererKey, Obj: 'static> PassData<K, Obj, V> {
     where
         Pass: ShaderPass,
     {
-        // Update batch offsets
-        let mut instance_count = 0;
-
-        self.batches.iter_mut().for_each(|batch| {
-            batch.first_instance = instance_count;
-            batch.curr = 0;
-            instance_count += batch.instance_count;
-        });
-
         if self.object_count > self.capacity {
             self.resize(self.object_count)?;
         }
 
-        let batches = &mut self.batches;
+        // Update batch offsets
+        let mut total_offset = 0;
 
+        self.batches.iter_mut().for_each(|batch| {
+            batch.first_instance = total_offset;
+            batch.instance_count = 0;
+            total_offset += batch.max_count;
+        });
+
+        let batches = &mut self.batches;
         self.object_buffers[current_frame].write_slice::<Obj, _, _>(
             self.object_count as _,
             0,
             move |data| {
                 iter.into_iter().for_each(|(_, (marker, obj))| {
-                    let batch = &mut batches[marker.batch_id];
-                    data[(batch.first_instance + batch.curr) as usize] = obj.into();
-                    batch.curr += 1;
+                    let batch = &mut batches[marker.batch_id as usize];
+
+                    if batch.instance_count == batch.max_count {
+                        eprintln!("Growing beyond");
+                    }
+
+                    assert!(batch.instance_count <= batch.max_count);
+                    data[batch.first_instance as usize + batch.instance_count as usize] =
+                        obj.into();
+
+                    batch.instance_count += 1;
                 })
             },
         )?;
 
-        self.batches.iter_mut().for_each(|batch| {
-            batch.instance_count = batch.curr;
-        });
+        // println!(
+        //     "Batches: {}",
+        //     self.batches
+        //         .iter()
+        //         .format_with(", ", |v, f| f(&format_args!(
+        //             "{}:{} off: {}",
+        //             v.instance_count, v.max_count, v.first_instance
+        //         )))
+        // );
 
         Ok(())
     }

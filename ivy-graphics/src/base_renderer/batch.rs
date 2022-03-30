@@ -13,10 +13,10 @@ pub struct BatchData<K> {
     pub(crate) key: K,
     /// Number of entities in batches before
     pub(crate) first_instance: u32,
+
+    pub max_count: u32,
     /// The number of drawable objects in this batch
     pub instance_count: u32,
-
-    pub(crate) curr: u32,
 
     /// Set to frames_in_flight when the batch is dirty.
     dirty: usize,
@@ -28,7 +28,7 @@ impl<O> BatchData<O> {
             pipeline,
             first_instance: 0,
             instance_count: 0,
-            curr: 0,
+            max_count: 0,
             layout,
             pass,
             key,

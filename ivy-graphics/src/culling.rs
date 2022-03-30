@@ -1,8 +1,5 @@
 use glam::{Mat4, Vec4Swizzles};
-use hecs_schedule::SubWorld;
-use ivy_base::{Position, Visible, WorldExt};
-
-use crate::{Camera, MainCamera};
+use ivy_base::Position;
 
 pub fn visible(pos: Position, viewproj: Mat4) -> bool {
     let clip = viewproj * pos.extend(1.0);
