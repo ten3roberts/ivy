@@ -161,8 +161,8 @@ impl Rotation {
 
         let axis = Vec3::Z.cross(forward).normalize();
 
-        assert!(forward.is_normalized());
-        assert!(axis.is_normalized());
+        // assert!(forward.is_normalized());
+        // assert!(axis.is_normalized());
 
         let angle = forward.dot(Vec3::Z).acos();
 

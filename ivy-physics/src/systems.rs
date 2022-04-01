@@ -54,14 +54,6 @@ pub fn gravity(world: SubWorld<(&GravityInfluence, &Mass, &mut Effector)>, gravi
         })
 }
 
-// pub fn gravity_system(world: SubWorld<(&Velocity, &mut Effector)>) {
-//     world
-//         .native_query()
-//         .without::<Static>()
-//         .iter()
-//         .for_each(|(_, ( vel , effector))| effector.apply_acceleration(dv))
-// }
-
 pub fn wrap_around_system(world: SubWorld<&mut Position>) {
     world.native_query().iter().for_each(|(_, pos)| {
         if pos.y < -100.0 {
@@ -339,7 +331,7 @@ pub fn apply_effectors(
             effector.set_mass(*rb.mass);
             effector.set_ang_mass(*rb.ang_mass);
 
-            if effector.should_wake() {
+            if sleeping && effector.should_wake() {
                 cmd.remove_one::<Sleeping>(e)
             }
 

@@ -48,5 +48,5 @@ pub(crate) fn resolve_collision(
     let friction =
         a.friction.min(*b.friction) * j * (a_vel - b_vel).reject_from(n).normalize_or_zero();
 
-    j * n + friction
+    j * 0.9 * n + friction
 }
