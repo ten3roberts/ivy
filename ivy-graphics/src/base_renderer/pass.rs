@@ -5,7 +5,6 @@ use super::*;
 
 use ash::vk::{DescriptorSet, ShaderStageFlags};
 use hecs::{Entity, Fetch, Query, World};
-use itertools::Itertools;
 use ivy_resources::{Handle, HandleUntyped, Resources};
 use ivy_vulkan::{
     context::SharedVulkanContext,

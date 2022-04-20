@@ -230,7 +230,8 @@ impl Renderer for LightRenderer {
 
         cmd.draw_indexed(
             self.sphere.index_count(),
-            self.num_lights.min(self.max_lights) as u32,
+            4,
+            // self.num_lights.min(self.max_lights) as u32,
             0,
             0,
             0,

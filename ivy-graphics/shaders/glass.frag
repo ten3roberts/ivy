@@ -34,22 +34,39 @@ vec2 fragToUv(vec3 pos) {
     return vec2((clip.x + 1) / 2, (clip.y + 1) / 2);
 }
 
-vec2 ndcToUv(vec4 ndc) {
-    vec2 clip = ndc.xy / ndc.w;
+vec2 clipToUv(vec3 clip) {
     return vec2((clip.x + 1) / 2, (clip.y + 1) / 2);
 }
 
-vec4 raytrace(vec3 origin, vec3 dir) {
-    vec3 ndc_dir = (cameraData.viewproj * vec4(dir, 0)).xyz;
+vec2 worldToUv(vec3 w) {
+    vec4 ndc = (cameraData.viewproj * vec4(w, 1));
+    vec3 clip = ndc.xyz / ndc.w;
+    vec2 uv = clipToUv(clip);
+    return uv;
+}
 
-    float step_size = 40.0;
-    float step = step_size * length(ndc_dir);
+vec3 toClip(vec3 w) {
+    vec4 ndc = (cameraData.viewproj * vec4(w, 1));
+    vec3 clip = ndc.xyz / ndc.w;
+    return clip;
+}
+
+vec4 raytrace(vec3 origin, vec3 dir) {
+    vec4 ndc_dir = (cameraData.viewproj * vec4(dir, 0));
+    vec3 origin_clip = ndc_dir.xyz / ndc_dir.w;
+    vec2 origin_uv = clipToUv(origin_clip);
+
+    float step_size = 32.0;
+    float step = step_size * length(origin_clip);
 
     vec3 ray = origin;
 
-    for (int i = 0; i < 5; i++) {
-	vec4 ndc_ray = (cameraData.viewproj * vec4(fragPosition, 1));
-	vec2 uv = ndcToUv(ndc_ray);
+    /* return vec4(vec3(texture(screenspace_d, fragTexCoord).r), 1); */
+    /* return vec4(texture(screenspace, fragTexCoord).rgb, 1); */
+    for (int i = 0; i < 64; i++) {
+	vec4 ndc_ray = (cameraData.viewproj * vec4(ray, 1));
+	vec3 clip = ndc_ray.xyz / ndc_ray.w;
+	vec2 uv = clipToUv(clip);
 
 	// Outside
 	if (uv.x < 0 || uv.x > 1 || uv.y < 0 || uv.y > 1) {
@@ -57,16 +74,15 @@ vec4 raytrace(vec3 origin, vec3 dir) {
 	}
 
 	float screen_d = texture(screenspace_d, uv).r;
-	if (ndc_ray.z > screen_d && ndc_ray.z < screen_d * 1.01 && screen_d <
-	0.99) {
-	    return texture(screenspace, uv);
+	if (clip.z > screen_d  && clip.z < screen_d * 1.001 && screen_d < 0.9999) {
+	    return vec4(texture(screenspace, uv).rgb, 1.);
 	}
 
 	ray += dir * step;
     }
 
     vec2 uv = fragToUv(fragPosition);
-    return texture(screenspace, uv);
+    return vec4(0.0);
 }
 
 
@@ -103,9 +119,17 @@ void main() {
     /* vec2 uv = vec2((clip.x + 1) / 2, (clip.y + 1) / 2); */
     vec2 uv = fragToUv(fragPosition);
 
-    vec3 refraction = albedo.rbg * texture(screenspace, uv).rgb;
-    /* vec3 refraction = raytrace(fragPosition, v_refraction).rgb; */
-    refraction = mix(refraction, refraction * albedo.rgb, albedo.w);
+    /* vec4 refraction = raytrace(fragPosition, v_refraction); */
+    float d = texture(screenspace_d, uv).r;
+    /* uv = toClip(fragPosition + v_refraction * d); */
+    d = toClip(vec3(normalize(fragPosition) * d)).z;
 
-    outColor = vec4(mix(refraction, reflection.rgb, 0.0), 1.0);
+    vec2 r_uv = worldToUv(fragPosition + v_refraction * d * 0.5);
+    float depth = max(sign(texture(screenspace_d, r_uv).r - d + 0.0001), 0.0);
+    vec4 refraction = texture(screenspace, uv * (1.0 - depth) + r_uv * depth);
+    /* vec3 refraction = raytrace(fragPosition, v_refraction).rgb; */
+    /* refraction = mix(refraction, refraction * albedo.rgb, albedo.w); */
+
+    outColor = vec4(albedo.rgb * mix(refraction.rgb, reflection.rgb, v_fresnel * reflection.a), 1.0);
+
 }

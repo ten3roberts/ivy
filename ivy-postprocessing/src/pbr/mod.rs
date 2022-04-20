@@ -50,7 +50,7 @@ pub fn create_pbr_pipeline<GeometryPass, PostProcessingPass, TransparentPass, E,
     read_attachments: &[Handle<Texture>],
     output: Handle<Texture>,
     info: PBRInfo<E>,
-) -> ivy_rendergraph::Result<[Box<dyn Node>; 6]>
+) -> ivy_rendergraph::Result<impl IntoIterator<Item = Box<dyn Node>>>
 where
     GeometryPass: ShaderPass,
     PostProcessingPass: ShaderPass,
@@ -261,5 +261,5 @@ where
         transfer_depth,
         transparent,
         post_processing_node,
-    ])
+    ] as [Box<dyn Node>; 6])
 }
