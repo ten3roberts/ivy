@@ -40,7 +40,6 @@ pub fn integrate_velocity(
                 let w = Quat::from_axis_angle(w.0 / mag, mag * **dt);
                 *rot = Rotation(w * rot.0);
             } else if vel.length_squared() < 0.01 {
-                *vel = Velocity::zero();
                 cmd.insert_one(e, Sleeping)
             }
         });
@@ -61,7 +60,6 @@ pub fn gravity(
         .without::<Sleeping>()
         .par_for_each(BATCH_SIZE, |(e, (influence, mass, effector))| {
             let supported = collisions.has_collision(e);
-            eprintln!("Supported: {supported}");
             effector.apply_force(**gravity * **influence * **mass, !supported)
         })
 }

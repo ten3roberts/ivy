@@ -123,6 +123,7 @@ pub struct CameraData {
     pub view: Mat4,
     pub projection: Mat4,
     pub position: Vec4,
+    pub forward: Vec4,
 }
 
 #[derive(AsRef, Deref, Into, From)]
@@ -211,6 +212,7 @@ impl GpuCameraData {
                 &[CameraData {
                     viewproj: camera.viewproj(),
                     view,
+                    forward: camera.view().transform_vector3(Vec3::Z).extend(0.0),
                     projection: camera.projection(),
                     position: Vec4::new(position.x, position.y, position.z, 1.0),
                 }],

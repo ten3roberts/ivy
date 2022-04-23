@@ -14,6 +14,7 @@ layout(binding = 0) uniform CameraData {
     mat4 view;
     mat4 projection;
     vec4 position;
+    vec4 forward;
 } cameraData;
 
 layout(binding = 1) uniform sampler2D screenspace;
@@ -57,15 +58,15 @@ vec4 raytrace(vec3 origin, vec3 dir) {
     vec2 origin_uv = clipToUv(origin_clip);
 
     float step_size = 8.0;
-    float step = step_size * length(origin_clip);
+    float step = step_size;
 
-    vec3 ray = origin;
+    float dist = step_size;
 
     /* return vec4(vec3(texture(screenspace_d, fragTexCoord).r), 1); */
     /* return vec4(texture(screenspace, fragTexCoord).rgb, 1); */
     for (int i = 0; i < 64; i++) {
-	vec4 ndc_ray = (cameraData.viewproj * vec4(ray, 1));
-	vec3 clip = ndc_ray.xyz / ndc_ray.w;
+	vec3 point = origin + dir * dist;
+	vec3 clip = toClip(point);
 	vec2 uv = clipToUv(clip);
 
 	// Outside
@@ -73,13 +74,18 @@ vec4 raytrace(vec3 origin, vec3 dir) {
 	    break;
 	}
 
+	float depth = clip.z;
 	float screen_d = texture(screenspace_d, uv).r;
-	if (clip.z > screen_d  && clip.z < screen_d * 1.001 && screen_d < 0.9999) {
+
+	float diff = abs(depth - screen_d);
+
+	// Outside
+	if (diff < 0.001 / depth) {
 	    return vec4(texture(screenspace, uv).rgb, 1.);
 	}
 
 	step *= 2;
-	ray += dir * step;
+	dist += step;
     }
 
     vec2 uv = fragToUv(fragPosition);
@@ -101,8 +107,9 @@ void main() {
 
     vec3 normal = texture(normalMap, fragTexCoord).rgb * 2 - 1;
 
-    normal = normalize(mix(fragNormal, TBN * normal, materialData.normal * 0.0));
+    normal = normalize(mix(fragNormal, TBN * normal, materialData.normal * 0.1));
     vec3 incident = normalize(fragPosition - cameraData.position.xyz);
+
     vec3 v_refraction = refract(incident, normal, Eta);
     vec3 v_reflection = reflect(incident, normal);
 
@@ -112,16 +119,9 @@ void main() {
     vec4 albedo = texture(albedo, fragTexCoord) * fragColor;
 
     vec4 reflection = raytrace(fragPosition, v_reflection);
-
-    /* vec2 uv = (cameraData.viewproj * vec4(fragPosition, 1)).xy * vec2(0.5, -0.5) + 0.5; */
-    /* vec4 ndc = (cameraData.viewproj * vec4(fragPosition, 1)); */
-    /* vec2 clip = ndc.xy / ndc.w; */
-    /* vec2 uv = vec2((clip.x + 1) / 2, (clip.y + 1) / 2); */
     vec2 uv = fragToUv(fragPosition);
 
-    /* vec4 refraction = raytrace(fragPosition, v_refraction); */
     float d = texture(screenspace_d, uv).r;
-    /* uv = toClip(fragPosition + v_refraction * d); */
     d = toClip(vec3(normalize(fragPosition) * d)).z;
 
     vec2 r_uv = worldToUv(fragPosition + v_refraction * d * 0.5);
@@ -130,7 +130,6 @@ void main() {
     /* vec3 refraction = raytrace(fragPosition, v_refraction).rgb; */
     /* refraction = mix(refraction, refraction * albedo.rgb, albedo.w); */
 
-    /* outColor = vec4(mix(albedo.rgb * refraction.rgb, reflection.rgb, v_fresnel), 1.0); */
-    outColor = albedo * reflection;
+    outColor = vec4(mix(albedo.rgb * refraction.rgb, reflection.rgb, v_fresnel), 1.0);
 
 }

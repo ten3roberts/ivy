@@ -17,6 +17,7 @@ layout(binding = 0) uniform CameraData {
   mat4 view;
   mat4 projection;
   vec4 position;
+  vec4 forward;
 } cameraData;
 
 struct ObjectData {
