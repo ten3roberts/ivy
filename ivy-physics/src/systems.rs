@@ -14,12 +14,17 @@ use ivy_base::{
     GravityInfluence, Mass, Position, Resitution, Rotation, Sleeping, Static, Velocity,
 };
 use ivy_collision::{util::TOLERANCE, Collision, Contact};
-use ivy_resources::DefaultResourceMut;
+use ivy_resources::{DefaultResource, DefaultResourceMut};
 
 const BATCH_SIZE: u32 = 64;
 
 pub fn integrate_velocity(
-    world: SubWorld<(&mut Position, &mut Rotation, &AngularVelocity, &Velocity)>,
+    world: SubWorld<(
+        &mut Position,
+        &mut Rotation,
+        &AngularVelocity,
+        &mut Velocity,
+    )>,
     dt: Read<DeltaTime>,
     mut cmd: Write<CommandBuffer>,
 ) {
@@ -31,16 +36,21 @@ pub fn integrate_velocity(
         .for_each(|(e, (pos, rot, w, vel))| {
             *pos += Position(**vel * **dt);
             let mag = w.length();
-            if mag > 0.1 {
+            if mag > 0.2 {
                 let w = Quat::from_axis_angle(w.0 / mag, mag * **dt);
                 *rot = Rotation(w * rot.0);
-            } else if vel.length_squared() < 0.1 {
+            } else if vel.length_squared() < 0.01 {
+                *vel = Velocity::zero();
                 cmd.insert_one(e, Sleeping)
             }
         });
 }
 
-pub fn gravity(world: SubWorld<(&GravityInfluence, &Mass, &mut Effector)>, gravity: Read<Gravity>) {
+pub fn gravity(
+    world: SubWorld<(&GravityInfluence, &Mass, &mut Effector)>,
+    gravity: Read<Gravity>,
+    collisions: DefaultResource<CollisionState>,
+) {
     if gravity.length_squared() < TOLERANCE {
         return;
     }
@@ -49,8 +59,10 @@ pub fn gravity(world: SubWorld<(&GravityInfluence, &Mass, &mut Effector)>, gravi
         .native_query()
         .without::<Static>()
         .without::<Sleeping>()
-        .par_for_each(BATCH_SIZE, |(_, (influence, mass, effector))| {
-            effector.apply_force(**gravity * **influence * **mass, false)
+        .par_for_each(BATCH_SIZE, |(e, (influence, mass, effector))| {
+            let supported = collisions.has_collision(e);
+            eprintln!("Supported: {supported}");
+            effector.apply_force(**gravity * **influence * **mass, !supported)
         })
 }
 
@@ -126,10 +138,18 @@ impl CollisionState {
             .retain(|_, v| q.get(v.a.entity).is_some() && q.get(v.b.entity).is_some());
     }
 
+    pub fn has_collision(&self, e: Entity) -> bool {
+        self.active
+            .iter()
+            .skip_while(move |((a, _), _)| *a != e)
+            .next()
+            .is_some()
+    }
+
     pub fn get<'a>(&'a self, e: Entity) -> impl Iterator<Item = &'a Collision> {
         self.active
             .iter()
-            .skip_while(move |((a, _), _)| *a == e)
+            .skip_while(move |((a, _), _)| *a != e)
             .take_while(move |((a, _), _)| *a == e)
             .chain(
                 self.sleeping

@@ -59,9 +59,9 @@ impl<N: CollisionTreeNode + Storage> PhysicsLayer<N> {
             };
 
         let schedule = Schedule::builder()
+            .add_system(systems::gravity)
             .add_system(systems::integrate_velocity)
             .add_system(connections::update_connections)
-            .add_system(systems::gravity)
             .add_system(CollisionTree::<N>::register_system)
             .flush()
             .add_system(CollisionTree::<N>::update_system)

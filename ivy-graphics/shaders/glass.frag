@@ -56,7 +56,7 @@ vec4 raytrace(vec3 origin, vec3 dir) {
     vec3 origin_clip = ndc_dir.xyz / ndc_dir.w;
     vec2 origin_uv = clipToUv(origin_clip);
 
-    float step_size = 32.0;
+    float step_size = 8.0;
     float step = step_size * length(origin_clip);
 
     vec3 ray = origin;
@@ -70,7 +70,7 @@ vec4 raytrace(vec3 origin, vec3 dir) {
 
 	// Outside
 	if (uv.x < 0 || uv.x > 1 || uv.y < 0 || uv.y > 1) {
-	    continue;
+	    break;
 	}
 
 	float screen_d = texture(screenspace_d, uv).r;
@@ -78,6 +78,7 @@ vec4 raytrace(vec3 origin, vec3 dir) {
 	    return vec4(texture(screenspace, uv).rgb, 1.);
 	}
 
+	step *= 2;
 	ray += dir * step;
     }
 
@@ -98,10 +99,9 @@ const float R0 = ((Air - Glass) * (Air - Glass)) / ((Air + Glass) * (Air + Glass
 
 void main() {
 
-
     vec3 normal = texture(normalMap, fragTexCoord).rgb * 2 - 1;
 
-    normal = normalize(mix(fragNormal, TBN * normal, materialData.normal));
+    normal = normalize(mix(fragNormal, TBN * normal, materialData.normal * 0.0));
     vec3 incident = normalize(fragPosition - cameraData.position.xyz);
     vec3 v_refraction = refract(incident, normal, Eta);
     vec3 v_reflection = reflect(incident, normal);
@@ -130,6 +130,7 @@ void main() {
     /* vec3 refraction = raytrace(fragPosition, v_refraction).rgb; */
     /* refraction = mix(refraction, refraction * albedo.rgb, albedo.w); */
 
-    outColor = vec4(albedo.rgb * mix(refraction.rgb, reflection.rgb, v_fresnel * reflection.a), 1.0);
+    /* outColor = vec4(mix(albedo.rgb * refraction.rgb, reflection.rgb, v_fresnel), 1.0); */
+    outColor = albedo * reflection;
 
 }
