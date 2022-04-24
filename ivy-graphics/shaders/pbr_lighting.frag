@@ -106,8 +106,13 @@ vec3 PBR(vec3 albedo, vec3 pos, vec3 normal, float roughness, float metallic) {
 
 	float dist = distance(light.pos, pos);
 
+	float illu = dot(lightDir, normal) / (dist * dist);
+	if (illu < 0.0) {
+		normal *= -1;
+		illu *= -1;
+	}
 
-	vec3 radiance = light.radiance * dot(lightDir, normal) / (dist * dist);
+	vec3 radiance = light.radiance * illu;
 
 	vec3 fresnel = FresnelSchlick(max(dot(halfway, cameraDir), 0.0), F0);
 

@@ -124,8 +124,8 @@ void main() {
     float d = texture(screenspace_d, uv).r;
     d = toClip(vec3(normalize(fragPosition) * d)).z;
 
-    vec2 r_uv = worldToUv(fragPosition + v_refraction * d * 0.5);
-    float depth = max(sign(texture(screenspace_d, r_uv).r - d + 0.0001), 0.0);
+    vec2 r_uv = worldToUv(fragPosition + v_refraction * d);
+    float depth = max(sign(texture(screenspace_d, r_uv).r - d + 0.001), 0.0);
     vec4 refraction = texture(screenspace, uv * (1.0 - depth) + r_uv * depth);
     /* vec3 refraction = raytrace(fragPosition, v_refraction).rgb; */
     /* refraction = mix(refraction, refraction * albedo.rgb, albedo.w); */
