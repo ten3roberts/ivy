@@ -24,6 +24,7 @@ pub fn integrate_velocity(
         &mut Rotation,
         &AngularVelocity,
         &mut Velocity,
+        &Effector,
     )>,
     dt: Read<DeltaTime>,
     mut cmd: Write<CommandBuffer>,
@@ -33,13 +34,13 @@ pub fn integrate_velocity(
         .without::<Static>()
         .without::<Sleeping>()
         .iter()
-        .for_each(|(e, (pos, rot, w, vel))| {
+        .for_each(|(e, (pos, rot, w, vel, f))| {
             *pos += Position(**vel * **dt);
             let mag = w.length();
             if mag > 0.2 {
                 let w = Quat::from_axis_angle(w.0 / mag, mag * **dt);
                 *rot = Rotation(w * rot.0);
-            } else if vel.length_squared() < 0.01 {
+            } else if vel.length_squared() < 0.01 && !f.should_wake() {
                 cmd.insert_one(e, Sleeping)
             }
         });
