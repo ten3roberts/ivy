@@ -55,7 +55,7 @@ pub use extent::*;
 pub use gizmos::*;
 pub use layer::*;
 pub use logger::Logger;
-pub use time::{Clock, FromDuration, IntoDuration, TimedScope};
+pub use time::*;
 pub use updatable::*;
 
 /// 45 degrees in radians

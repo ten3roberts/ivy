@@ -361,7 +361,7 @@ impl LogicLayer {
             .add_bundle(RbBundle::default())
             .add_bundle((
                 MainCamera,
-                Camera::perspective(1.0, input.window_extent().aspect(), 0.1, 50.0),
+                Camera::perspective(1.0, input.window_extent().aspect(), 0.1, 100.0),
                 Mover::new(input_vec, Default::default(), 5.0, true),
             ));
 

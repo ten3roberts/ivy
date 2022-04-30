@@ -36,6 +36,55 @@ impl Default for Clock {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Timeout {
+    timeout: Duration,
+    start: Instant,
+}
+
+impl Default for Timeout {
+    fn default() -> Self {
+        Self {
+            timeout: Default::default(),
+            start: Instant::now(),
+        }
+    }
+}
+
+impl Timeout {
+    pub fn new(timeout: Duration) -> Self {
+        Self {
+            timeout,
+            start: Instant::now(),
+        }
+    }
+
+    pub fn empty() -> Self {
+        Self {
+            timeout: Duration::ZERO,
+            start: Instant::now(),
+        }
+    }
+
+    pub fn set_duration(&mut self, timeout: Duration) -> &mut Self {
+        self.timeout = timeout;
+        self
+    }
+
+    pub fn reset(&mut self) -> &mut Self {
+        self.start = Instant::now();
+        self
+    }
+
+    pub fn is_finished(&self) -> bool {
+        self.start.elapsed() >= self.timeout
+    }
+
+    pub fn remaining(&self) -> Duration {
+        self.timeout - self.start.elapsed()
+    }
+}
+
 /// Allows shorter function names to convert duration into intergral types
 pub trait FromDuration {
     fn secs(&self) -> f32;

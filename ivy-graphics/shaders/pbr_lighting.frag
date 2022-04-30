@@ -135,14 +135,6 @@ vec3 PBR(vec3 albedo, vec3 pos, vec3 normal, float roughness, float metallic) {
 
 }
 
-/* vec3 applyFog(vec3 color, float  distance) { */
-
-/* 	float exponent = distance * env.fog_density; */
-/* 	float visibility = exp(-pow(exponent, env.fog_gradient)); */
-
-/* 	return mix(env.fog_color, color, visibility); */
-/* } */
-
 void main() {
 	float depth = subpassLoad(depthInput).x;
 
@@ -162,7 +154,7 @@ void main() {
 
 	vec3 color = vec3(0);
 
-	if (depth < 0.999999999) {
+	if (depth < 0.99999) {
 		color += PBR(albedo, pos, normal, roughness, metallic);
 	}
 

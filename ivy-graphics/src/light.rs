@@ -6,7 +6,7 @@ use crate::{
 use ash::vk::{BlendFactor, CullModeFlags, DescriptorSet, IndexType, ShaderStageFlags};
 use glam::Vec3;
 use hecs::World;
-use ivy_base::{Position, WorldExt};
+use ivy_base::{Position, Rotation, WorldExt};
 use ivy_vulkan::{
     context::SharedVulkanContext,
     descriptors::{DescriptorBuilder, IntoSet},
@@ -107,7 +107,8 @@ impl LightRenderer {
     pub fn update_system(
         &mut self,
         world: &World,
-        center: Position,
+        camera_position: Position,
+        camera_forward: Vec3,
         current_frame: usize,
     ) -> Result<()> {
         // let v = &self.sphere.0;
@@ -131,8 +132,14 @@ impl LightRenderer {
                 },
             ));
 
-        self.lights
-            .sort_unstable_by_key(|val| OrderedFloat(val.position.distance_squared(*center)));
+        self.lights.sort_unstable_by_key(|val| {
+            OrderedFloat(
+                val.position.distance_squared(*camera_position)
+                    / ((val.position - *camera_position)
+                        .dot(camera_forward)
+                        .max(0.5)),
+            )
+        });
 
         self.num_lights = self.max_lights.min(self.lights.len() as u64);
 
@@ -151,10 +158,10 @@ impl LightRenderer {
 
     pub fn update_all_system(world: &World, current_frame: usize) -> Result<()> {
         world
-            .query::<(&mut LightRenderer, &Position)>()
+            .query::<(&mut LightRenderer, &Position, &Rotation)>()
             .iter()
-            .try_for_each(|(_, (light_manager, position))| {
-                light_manager.update_system(world, *position, current_frame)
+            .try_for_each(|(_, (light_manager, position, rot))| {
+                light_manager.update_system(world, *position, **rot * Vec3::Z, current_frame)
             })
     }
 
@@ -196,8 +203,10 @@ impl Renderer for LightRenderer {
         current_frame: usize,
     ) -> Result<()> {
         let cam = world.by_tag::<MainCamera>().unwrap();
-        let center = world.get::<Position>(cam)?;
-        self.update_system(world, *center, current_frame)?;
+        let mut query = world.query_one::<(&Position, &Rotation)>(cam)?;
+        let (pos, rot) = query.get().unwrap();
+
+        self.update_system(world, *pos, **rot * Vec3::Z, current_frame)?;
         let pipeline = self.pipeline.get_or_try_init(|| {
             let context = resources.get_default::<SharedVulkanContext>()?;
             Pipeline::new::<SimpleVertex>(
