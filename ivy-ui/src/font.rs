@@ -9,13 +9,13 @@ use ivy_vulkan::{
     AddressMode, FilterMode, Format, ImageUsage, SampleCountFlags, Sampler, SamplerInfo,
     TextureInfo,
 };
-use std::{borrow::Cow, ops::Range};
+use std::{borrow::Cow, collections::HashSet, ops::Range};
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct FontInfo {
     // The most optimal pixel size for the rasterized font.
     pub size: f32,
-    pub glyphs: Range<char>,
+    pub glyphs: Vec<char>,
     pub padding: u32,
     pub mip_levels: u32,
     pub path: Cow<'static, str>,
@@ -36,7 +36,11 @@ impl Default for FontInfo {
     fn default() -> Self {
         Self {
             size: 36.0,
-            glyphs: 32 as char..128 as char,
+            glyphs: (32..128)
+                .map(|v| char::from_u32(v).unwrap())
+                .into_iter()
+                .chain(['å', 'ä', 'ö'])
+                .collect(),
             padding: 5,
             mip_levels: 1,
             path: "".into(),
@@ -67,7 +71,7 @@ impl Font {
 
         let images = Self::rasterize(&font, &info);
 
-        let glyph_count = info.glyphs.end as usize - info.glyphs.start as usize;
+        let glyph_count = info.glyphs.len();
 
         let height = font
             .vertical_line_metrics(info.size)
@@ -114,7 +118,8 @@ impl Font {
         let size = info.size as f32;
 
         info.glyphs
-            .clone()
+            .iter()
+            .cloned()
             .filter_map(|c| {
                 let (metrics, pixels) = font.rasterize(c, size);
 

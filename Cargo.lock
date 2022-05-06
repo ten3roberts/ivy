@@ -793,6 +793,7 @@ dependencies = [
  "anyhow",
  "derive-for",
  "derive_more",
+ "ezy",
  "flume",
  "fontdue",
  "glam",

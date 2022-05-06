@@ -176,3 +176,11 @@ impl UIOffset for RelativeOffset {
         Position2D(**self * *parent_size)
     }
 }
+
+impl<'a> ezy::Lerp<'a> for RelativeOffset {
+    type Write = &'a mut RelativeOffset;
+
+    fn lerp(write: Self::Write, start: &Self, end: &Self, t: f32) {
+        *write = RelativeOffset(start.0.lerp(end.0, t))
+    }
+}
