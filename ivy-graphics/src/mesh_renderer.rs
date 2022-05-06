@@ -105,10 +105,6 @@ impl Renderer for MeshRenderer {
                 cmd.draw_indexed(mesh.index_count(), instance_count, 0, 0, first_instance);
             } else if !primitives.is_empty() {
                 primitives.iter().try_for_each(|val| -> Result<()> {
-                    if val.index_count > 128 {
-                        return Ok(());
-                    }
-
                     let material = materials.get(val.material)?;
 
                     cmd.bind_descriptor_sets(

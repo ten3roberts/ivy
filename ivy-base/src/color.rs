@@ -1,4 +1,5 @@
 use derive_more::*;
+use ezy::Lerp;
 use glam::{Vec3, Vec4};
 use palette::{FromColor, Hsla, Hsva, Srgba};
 
@@ -156,5 +157,13 @@ impl From<&Vec4> for Color {
 impl Default for Color {
     fn default() -> Self {
         Self::white()
+    }
+}
+
+impl<'a> Lerp<'a> for Color {
+    type Write = &'a mut Color;
+
+    fn lerp(write: Self::Write, start: &Self, end: &Self, t: f32) {
+        *write = Color::from(Vec4::from(start).lerp(Vec4::from(end), t));
     }
 }
