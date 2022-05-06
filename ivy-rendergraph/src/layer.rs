@@ -32,9 +32,9 @@ impl GraphicsLayer {
         let context = resources.get_default::<SharedVulkanContext>()?.clone();
 
         let schedule = Schedule::builder()
-            .add_system(GpuCameraData::update_all_system)
             .add_system(systems::update_view_matrices)
             .add_system(systems::add_bounds)
+            .add_system(GpuCameraData::update_all_system)
             .build();
 
         Ok(Self {

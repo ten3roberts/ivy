@@ -183,10 +183,6 @@ impl<V: VertexDesc, K: RendererKey, Obj: 'static> PassData<K, Obj, V> {
                 iter.into_iter().for_each(|(_, (marker, obj))| {
                     let batch = &mut batches[marker.batch_id as usize];
 
-                    if batch.instance_count == batch.max_count {
-                        eprintln!("Growing beyond");
-                    }
-
                     assert!(batch.instance_count <= batch.max_count);
                     data[batch.first_instance as usize + batch.instance_count as usize] =
                         obj.into();
