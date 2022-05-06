@@ -74,7 +74,7 @@ impl Renderer for MeshRenderer {
 
         let frame_set = pass.set(current_frame);
 
-        for batch in pass.batches().iter() {
+        for batch in pass.batches().iter().filter(|v| v.instance_count() != 0) {
             let key = batch.key();
 
             let mesh = meshes.get(key.mesh)?;
@@ -92,6 +92,8 @@ impl Renderer for MeshRenderer {
             let instance_count = batch.instance_count();
             let first_instance = batch.first_instance();
 
+            assert_ne!(instance_count, 0);
+
             if !key.material.is_null() {
                 let material = materials.get(key.material)?;
                 cmd.bind_descriptor_sets(
@@ -103,6 +105,10 @@ impl Renderer for MeshRenderer {
                 cmd.draw_indexed(mesh.index_count(), instance_count, 0, 0, first_instance);
             } else if !primitives.is_empty() {
                 primitives.iter().try_for_each(|val| -> Result<()> {
+                    if val.index_count > 128 {
+                        return Ok(());
+                    }
+
                     let material = materials.get(val.material)?;
 
                     cmd.bind_descriptor_sets(

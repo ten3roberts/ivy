@@ -38,7 +38,6 @@ impl PointLight {
 }
 
 pub struct LightRenderer {
-    scene_buffers: Vec<Buffer>,
     light_buffers: Vec<Buffer>,
     sets: Vec<DescriptorSet>,
     // All registered lights. Note: not all lights may be uploaded to the GPU
@@ -56,18 +55,6 @@ impl LightRenderer {
         max_lights: u64,
         frames_in_flight: usize,
     ) -> Result<Self> {
-        let scene_buffers = (0..frames_in_flight)
-            .map(|_| -> Result<_> {
-                Buffer::new_uninit::<LightSceneData>(
-                    context.clone(),
-                    ivy_vulkan::BufferUsage::UNIFORM_BUFFER,
-                    ivy_vulkan::BufferAccess::Mapped,
-                    1,
-                )
-                .map_err(|e| e.into())
-            })
-            .collect::<Result<Vec<_>>>()?;
-
         let light_buffers = (0..frames_in_flight)
             .map(|_| -> Result<_> {
                 Buffer::new_uninit::<LightData>(
@@ -86,11 +73,10 @@ impl LightRenderer {
             frames_in_flight,
         )?;
 
-        let sphere = create_ico_mesh(&context, 1.0, 1)?;
+        let sphere = create_ico_mesh(&context, 1.0, 0)?;
 
         Ok(Self {
             pipeline: OnceCell::new(),
-            scene_buffers,
             sphere,
             light_buffers,
             sets,
@@ -146,13 +132,6 @@ impl LightRenderer {
         // Use the first `max_lights` lights and upload to gpu
         self.light_buffers[current_frame].fill(0, &self.lights[0..self.num_lights as usize])?;
 
-        self.scene_buffers[current_frame].fill(
-            0,
-            &[LightSceneData {
-                num_lights: self.num_lights as u32,
-            }],
-        )?;
-
         Ok(())
     }
 
@@ -165,16 +144,8 @@ impl LightRenderer {
             })
     }
 
-    pub fn scene_buffers(&self) -> &[Buffer] {
-        &self.scene_buffers
-    }
-
     pub fn light_buffers(&self) -> &[Buffer] {
         &self.light_buffers
-    }
-
-    pub fn scene_buffer(&self, current_frame: usize) -> &Buffer {
-        &self.scene_buffers[current_frame]
     }
 
     pub fn light_buffer(&self, current_frame: usize) -> &Buffer {
@@ -239,8 +210,7 @@ impl Renderer for LightRenderer {
 
         cmd.draw_indexed(
             self.sphere.index_count(),
-            4,
-            // self.num_lights.min(self.max_lights) as u32,
+            self.num_lights.min(self.max_lights) as u32,
             0,
             0,
             0,

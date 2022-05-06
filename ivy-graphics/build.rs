@@ -98,6 +98,7 @@ where
 fn glslc(src: &Path, dst: &Path) -> Result<()> {
     let mut compiler = shaderc::Compiler::new().unwrap();
     let mut options = shaderc::CompileOptions::new().unwrap();
+    options.set_optimization_level(shaderc::OptimizationLevel::Performance);
     let source = fs::read_to_string(src)?;
 
     let ext = src.extension().unwrap_or_default();

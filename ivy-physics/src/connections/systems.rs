@@ -1,32 +1,47 @@
 use crate::{Effector, Result};
-use hecs::*;
+use hecs::Entity;
 use hecs_hierarchy::*;
-use hecs_schedule::{GenericWorld, SubWorld};
-use ivy_base::{Color, Connection, Gizmos, Position, TransformQuery};
+use hecs_schedule::*;
+use ivy_base::{Color, Connection, Gizmos, Position, Static, TransformQuery};
 
 use super::*;
 
+pub struct UpdatedStatic;
 pub fn update_connections(
     world: SubWorld<(
         &ConnectionKind,
         &PositionOffset,
         &RotationOffset,
         &mut Effector,
+        &Static,
+        &UpdatedStatic,
         HierarchyQuery<Connection>,
         RbQueryMut,
         TransformQueryMut,
     )>,
+    mut cmd: Write<CommandBuffer>,
 ) -> Result<()> {
     world
         .roots::<Connection>()?
         .into_iter()
-        .try_for_each(|root| update_subtree(&world, root.0))
+        .try_for_each(|root| update_subtree(&world, &mut *cmd, root.0))
 }
 
-fn update_subtree(world: &impl GenericWorld, root: Entity) -> Result<()> {
-    let mut query = world.try_query_one::<(TransformQuery, Option<RbQuery>)>(root)?;
+fn update_subtree(world: &impl GenericWorld, cmd: &mut CommandBuffer, root: Entity) -> Result<()> {
+    let mut query = world.try_query_one::<(
+        TransformQuery,
+        Option<RbQuery>,
+        Option<&Static>,
+        Option<&UpdatedStatic>,
+    )>(root)?;
 
-    if let Ok((parent_trans, rb)) = query.get() {
+    if let Ok((parent_trans, rb, is_static, updated)) = query.get() {
+        if is_static.is_some() && updated.is_some() {
+            return Ok(());
+        } else if is_static.is_some() {
+            cmd.insert_one(root, UpdatedStatic);
+        }
+
         let parent_trans = parent_trans.into_owned();
         let mut parent_rb = rb.map(|val| RbBundle {
             vel: *val.vel,
@@ -71,7 +86,7 @@ fn update_subtree(world: &impl GenericWorld, root: Entity) -> Result<()> {
                 }
 
                 drop((fixed, dynamic));
-                update_subtree(world, child)?;
+                update_subtree(world, cmd, child)?;
 
                 Ok(())
             })?;

@@ -139,10 +139,6 @@ void main() {
 	float depth = subpassLoad(depthInput).x;
 
 	vec3 ray = normalize(fragPosition.xyz - cameraData.pos.xyz);
-	if (depth > 0.99999) {
-		outColor = vec4(DirectLightRadiances(1, ray), 1);
-		return;
-	}
 	vec3 albedo = subpassLoad(albedoBuffer).xyz;
 
 	vec2 roughnessMetallic = subpassLoad(roughnessMetallicBuffer).xy;
@@ -157,8 +153,6 @@ void main() {
 	if (depth < 0.99999) {
 		color += PBR(albedo, pos, normal, roughness, metallic);
 	}
-
-	color += DirectLightRadiances(depth, ray);
 
 	float distance = length(cameraData.pos.xyz - pos);
 
