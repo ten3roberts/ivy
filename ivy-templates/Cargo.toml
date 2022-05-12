@@ -19,9 +19,9 @@ hecs-schedule = "0.6.1"
 hecs-hierarchy = "0.11.6"
 parking_lot = "0.12.0"
 slotmap = "1.0.6"
-thiserror = "1.0.30"
+thiserror = "1.0.31"
 ivy-base = { path = "../ivy-base", version = "*" }
-serde = { version = "1.0.136", features = [ "derive" ], optional = true }
+serde = { version = "1.0.137", features = [ "derive" ], optional = true }
 
 [features]
 default = []

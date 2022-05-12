@@ -1,21 +1,21 @@
 [package]
 name = "ivy-physics"
 version = "0.10.3"
-edition = "2018"
+edition = "2021"
 description = "Provides physics for the Ivy framework"
 
 license-file = "../LICENSE"
-keywords = [ "physics", "collisions", "rigidbody", "game" ]
+keywords = ["physics", "collisions", "rigidbody", "game"]
 documentation = "https://lib.rs/ivy-physics"
 repository = "https://github.com/ten3roberts/ivy"
 readme = "../README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.56"
+anyhow = "1.0.57"
 derive-for = "1.2.2"
 derive_more = "0.99.17"
-flume = "0.10.11"
+flume = "0.10.12"
 hecs = "0.7.6"
 ivy-collision = { path = "../ivy-collision", version = "0.10.0" }
 ivy-base = { path = "../ivy-base", version = "0.10.0" }
@@ -23,14 +23,14 @@ ivy-random = { path = "../ivy-random", version = "0.10.0" }
 ivy-graphics = { path = "../ivy-graphics", version = "0.10.0" }
 ivy-resources = { path = "../ivy-resources", version = "0.10.0" }
 smallvec = "1.8.0"
-thiserror = "1.0.30"
-glam = "0.20.2"
+thiserror = "1.0.31"
+glam = "0.20.5"
 hecs-hierarchy = "0.11.6"
 hecs-schedule = "0.6.1"
-serde = { version = "1.0.136", features = [ "derive" ], optional = true }
+serde = { version = "1.0.137", features = ["derive"], optional = true }
 records = "0.2.0"
-rayon = "1.5.1"
+rayon = "1.5.2"
 
 [features]
 default = []
-serialize = [ "serde", "glam/serde" ]
+serialize = ["serde", "glam/serde"]

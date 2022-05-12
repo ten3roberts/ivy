@@ -2,12 +2,12 @@
 name = "ivy-resources"
 version = "0.10.3"
 authors = ["Tim Roberts <ten3roberts@gmail.com>"]
-edition = "2018"
+edition = "2021"
 description = "Handle based resource management and shared state"
 
 
 license-file = "../LICENSE"
-keywords = [ "resources", "handle", "shared", "state" ]
+keywords = ["resources", "handle", "shared", "state"]
 documentation = "https://lib.rs/ivy-resources"
 repository = "https://github.com/ten3roberts/ivy"
 readme = "../README.md"
@@ -22,9 +22,9 @@ hecs-schedule = "0.6.1"
 parking_lot = "0.12.0"
 slotmap = "1.0.6"
 smallvec = "1.8.0"
-thiserror = "1.0.30"
-serde = { version = "1.0.136", features = [ "derive" ], optional = true }
+thiserror = "1.0.31"
+serde = { version = "1.0.137", features = ["derive"], optional = true }
 
 [features]
 default = []
-serialize = [ "serde" ]
+serialize = ["serde"]

@@ -2,18 +2,18 @@
 name = "ivy-ui"
 version = "0.10.3"
 authors = ["Tim Roberts <ten3roberts@gmail.com>"]
-edition = "2018"
+edition = "2021"
 description = "GUI library for Ivy"
 readme = "README.md"
 
 license-file = "../LICENSE"
-keywords = [ "graphics", "ui", "game-engine", "game", "vulkan" ]
+keywords = ["graphics", "ui", "game-engine", "game", "vulkan"]
 documentation = "https://lib.rs/ivy-ui"
 repository = "https://github.com/ten3roberts/ivy"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.56"
+anyhow = "1.0.57"
 derive-for = "1.2.2"
 derive_more = "0.99.17"
 fontdue = "0.7.2"
@@ -28,14 +28,14 @@ ivy-resources = { path = "../ivy-resources", version = "0.10.0" }
 ivy-vulkan = { path = "../ivy-vulkan", version = "0.10.0" }
 ivy-input = { path = "../ivy-input", version = "0.10.0" }
 ivy-window = { path = "../ivy-window", version = "0.10.0" }
-thiserror = "1.0.30"
-glam = "0.20.2"
-flume = "0.10.11"
+thiserror = "1.0.31"
+glam = "0.20.5"
+flume = "0.10.12"
 hecs-schedule = "0.6.1"
-serde = { version = "1.0.136", features = [ "derive" ], optional = true }
+serde = { version = "1.0.137", features = ["derive"], optional = true }
 records = "0.2.0"
 ezy = "0.1.1"
 
 [features]
 default = []
-serialize = [ "serde", "glam/serde" ]
+serialize = ["serde", "glam/serde"]

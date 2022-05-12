@@ -2,10 +2,10 @@
 name = "ivy-input"
 version = "0.10.3"
 authors = ["Tim Roberts <ten3roberts@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 license-file = "../LICENSE"
-keywords = [ "graphics", "input", "keyboard", "game", "vulkan" ]
+keywords = ["graphics", "input", "keyboard", "game", "vulkan"]
 documentation = "https://lib.rs/ivy-input"
 repository = "https://github.com/ten3roberts/ivy"
 readme = "../README.md"
@@ -13,9 +13,9 @@ description = "Input handling crate for Ivy"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-flume = "0.10.11"
-glfw = { version = "0.44.0", features = [ "vulkan" ] }
+flume = "0.10.12"
+glfw = { version = "0.44.0", features = ["vulkan"] }
 ivy-base = { path = "../ivy-base", version = "0.10.0" }
 ivy-resources = { path = "../ivy-resources", version = "0.10.0" }
 ivy-window = { path = "../ivy-window", version = "0.10.0" }
-glam = "0.20.2"
+glam = "0.20.5"

@@ -1,11 +1,11 @@
 [package]
 name = "ivy-random"
 version = "0.10.3"
-edition = "2018"
+edition = "2021"
 description = "Provides random utility functions to the ivy framework"
 
 license-file = "../LICENSE"
-keywords = [ "rand", "random", "linear-algebra", "vector" ]
+keywords = ["rand", "random", "linear-algebra", "vector"]
 documentation = "https://lib.rs/ivy-random"
 repository = "https://github.com/ten3roberts/ivy"
 readme = "../README.md"
@@ -13,4 +13,4 @@ readme = "../README.md"
 
 [dependencies]
 rand = "0.8.5"
-glam = "0.20.2"
+glam = "0.20.5"

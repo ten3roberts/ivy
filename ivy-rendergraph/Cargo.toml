@@ -1,7 +1,7 @@
 [package]
 name = "ivy-rendergraph"
 version = "0.10.3"
-edition = "2018"
+edition = "2021"
 
 license-file = "../LICENSE"
 keywords = ["high-level", "rendergraph", "vulkan", "graphics", "parallel"]
@@ -13,7 +13,7 @@ description = "Easy to use declarative rendergraph for vulkan and Ivy"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.56"
+anyhow = "1.0.57"
 hecs = "0.7.6"
 itertools = "0.10.3"
 ivy-base = { path = "../ivy-base", version = "0.10.0" }
@@ -21,9 +21,9 @@ ivy-graphics = { path = "../ivy-graphics", version = "0.10.0" }
 ivy-resources = { path = "../ivy-resources", version = "0.10.0" }
 ivy-vulkan = { path = "../ivy-vulkan", version = "0.10.0" }
 ivy-window = { path = "../ivy-window", version = "0.10.0" }
-glam = "0.20.2"
+glam = "0.20.5"
 hecs-hierarchy = "0.11.6"
 records = "0.2.0"
 slotmap = "1.0.6"
-thiserror = "1.0.30"
+thiserror = "1.0.31"
 hecs-schedule = "0.6.1"

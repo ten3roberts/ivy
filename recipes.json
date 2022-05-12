@@ -16,5 +16,9 @@
       }
     ]
   },
-  "build-vulkan": "cargo build --example vulkan"
+  "build-vulkan": "cargo build --example vulkan",
+  "run-wgpu": {
+    "cmd": "cargo run --example wgpu",
+    "interactive": true
+  }
 }

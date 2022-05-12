@@ -2,19 +2,19 @@
 name = "ivy-image"
 version = "0.10.2"
 authors = ["Tim Roberts <ten3roberts@gmail.com>"]
-edition = "2018"
+edition = "2021"
 description = "stb image loading library for ivy"
 
 license-file = "../LICENSE"
-keywords = [ "image-loading", "jpg", "png" ]
+keywords = ["image-loading", "jpg", "png"]
 documentation = "https://lib.rs/ivy"
 repository = "https://github.com/ten3roberts/ivy"
 readme = "../README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-libc = "0.2.119"
-thiserror = "1.0.30"
+libc = "0.2.125"
+thiserror = "1.0.31"
 
 [build-dependencies]
 cc = "1.0.73"
