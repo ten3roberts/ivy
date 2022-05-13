@@ -47,7 +47,7 @@ ivy-window = { path = "./ivy-window", version = "0.10" }
 hecs = "0.7.6"
 hecs-schedule = "0.6.1"
 derive_more = "0.99.17"
-bytemuck = "1.9.1"
+bytemuck = { version = "1.9.1", features = ["derive"] }
 
 [dev-dependencies]
 anyhow = "1.0.57"
@@ -59,7 +59,7 @@ slotmap = "1.0.6"
 hecs = "0.7.6"
 glfw = { version = "0.44.0", features = ["vulkan"] }
 hecs-hierarchy = "0.11.6"
-glam = "0.20.5"
+glam = { version = "0.20.5", features = ["bytemuck"] }
 log = "0.4.17"
 color-eyre = "0.6.1"
 tracing = "0.1.34"

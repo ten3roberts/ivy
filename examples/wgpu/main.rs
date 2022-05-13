@@ -1,6 +1,12 @@
+mod buffer;
 mod pipeline;
+mod vertex;
+
+use std::sync::Arc;
 
 use color_eyre::{eyre::ContextCompat, Result};
+use glam::vec3;
+use parking_lot::{RwLock, RwLockReadGuard};
 use tracing::*;
 use tracing_subscriber::{prelude::*, Registry};
 use tracing_tree::HierarchicalLayer;
@@ -12,18 +18,18 @@ use winit::{
     window::{Window, WindowBuilder},
 };
 
-use crate::pipeline::Pipeline;
+use crate::{pipeline::Pipeline, vertex::Vertex};
 
+#[derive(Debug)]
 pub struct Gpu {
     surface: Surface,
     device: Device,
     queue: Queue,
-    config: SurfaceConfiguration,
-    window_size: PhysicalSize<u32>,
+    config: RwLock<SurfaceConfiguration>,
 }
 
 impl Gpu {
-    pub async fn new(window: &Window) -> Result<Self> {
+    pub async fn new(window: &Window) -> Result<Arc<Self>> {
         let window_size = window.inner_size();
         let instance = Instance::new(wgpu::Backends::all());
         let surface = unsafe { instance.create_surface(window) };
@@ -63,26 +69,34 @@ impl Gpu {
 
         surface.configure(&device, &config);
 
-        Ok(Self {
+        Ok(Arc::new(Self {
             surface,
             device,
             queue,
-            config,
-            window_size,
-        })
+            config: RwLock::new(config),
+        }))
     }
 
-    pub fn on_resize(&mut self, size: PhysicalSize<u32>) {
+    pub fn on_resize(&self, size: PhysicalSize<u32>) {
         if size.width > 0 && size.height > 0 {
             info!("Resizing: {size:?}");
-            self.window_size = size;
-            self.config.width = size.width;
-            self.config.height = size.height;
-            self.surface.configure(&self.device, &self.config);
+            let mut config = self.config.write();
+            config.width = size.width;
+            config.height = size.height;
+            self.surface.configure(&self.device, &config);
         }
     }
 
-    pub fn on_draw(&mut self, pipeline: &Pipeline) -> std::result::Result<(), SurfaceError> {
+    pub fn config(&self) -> RwLockReadGuard<SurfaceConfiguration> {
+        self.config.read()
+    }
+
+    pub fn on_draw(
+        &self,
+        pipeline: &Pipeline,
+        vb: &buffer::Buffer<Vertex>,
+        ib: &buffer::Buffer<u32>,
+    ) -> std::result::Result<(), SurfaceError> {
         let target = self.surface.get_current_texture()?;
         let view = target
             .texture
@@ -108,9 +122,12 @@ impl Gpu {
                 depth_stencil_attachment: None,
             });
 
+            render_pass.set_vertex_buffer(0, vb.slice(..));
+            render_pass.set_index_buffer(ib.slice(..), IndexFormat::Uint32);
             render_pass.set_pipeline(pipeline.pipeline()); // 2.
-            render_pass.draw(0..3, 0..1); // 3.
+            render_pass.draw_indexed(0..ib.len(), 0, 0..1); // 3.
         }
+
         self.queue.submit([encoder.finish()]);
         target.present();
 
@@ -146,15 +163,45 @@ async fn main() -> Result<()> {
 
     info!("Opening window");
 
-    let mut gpu = Gpu::new(&window).await?;
+    let gpu = Gpu::new(&window).await?;
 
-    let pipeline = Pipeline::from_path(&gpu, "./examples/wgpu/shaders/default.wgsl").await?;
+    let pipeline = Pipeline::builder()
+        .with_source(&tokio::fs::read_to_string("./examples/wgpu/shaders/default.wgsl").await?)
+        .with_vertex_layout(Vertex::layout())
+        .build(&gpu, "Pipeline");
+
+    let vb = buffer::Buffer::new(
+        gpu.clone(),
+        "Vertexbuffer",
+        BufferUsages::VERTEX,
+        &[
+            Vertex {
+                pos: vec3(-0.5, -0.5, 0.0),
+            },
+            Vertex {
+                pos: vec3(0.5, -0.5, 0.0),
+            },
+            Vertex {
+                pos: vec3(0.5, 0.5, 0.0),
+            },
+            Vertex {
+                pos: vec3(-0.5, 0.5, 0.0),
+            },
+        ],
+    );
+
+    let ib = buffer::Buffer::new(
+        gpu.clone(),
+        "Indexbuffer",
+        BufferUsages::INDEX,
+        &[0, 1, 2, 2, 3, 0],
+    );
 
     events.run(move |event, _, ctl| match event {
         Event::RedrawRequested(window_id) if window_id == window.id() => {
-            match gpu.on_draw(&pipeline) {
+            match gpu.on_draw(&pipeline, &vb, &ib) {
                 Ok(_) => {}
-                Err(SurfaceError::Lost) => gpu.on_resize(gpu.window_size),
+                Err(SurfaceError::Lost) => gpu.on_resize(window.inner_size()),
                 Err(SurfaceError::OutOfMemory) => *ctl = ControlFlow::Exit,
                 Err(e) => tracing::warn!("Faild to draw frame: {e}"),
             }
