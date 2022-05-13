@@ -1,11 +1,13 @@
 mod buffer;
+mod error;
 mod pipeline;
+mod texture;
 mod vertex;
 
 use std::sync::Arc;
 
 use color_eyre::{eyre::ContextCompat, Result};
-use glam::vec3;
+use glam::{vec2, vec3};
 use parking_lot::{RwLock, RwLockReadGuard};
 use tracing::*;
 use tracing_subscriber::{prelude::*, Registry};
@@ -96,6 +98,7 @@ impl Gpu {
         pipeline: &Pipeline,
         vb: &buffer::Buffer<Vertex>,
         ib: &buffer::Buffer<u32>,
+        bind_groups: &[&BindGroup],
     ) -> std::result::Result<(), SurfaceError> {
         let target = self.surface.get_current_texture()?;
         let view = target
@@ -123,6 +126,9 @@ impl Gpu {
             });
 
             render_pass.set_vertex_buffer(0, vb.slice(..));
+            for (i, bind_group) in bind_groups.into_iter().enumerate() {
+                render_pass.set_bind_group(i as _, bind_group, &[])
+            }
             render_pass.set_index_buffer(ib.slice(..), IndexFormat::Uint32);
             render_pass.set_pipeline(pipeline.pipeline()); // 2.
             render_pass.draw_indexed(0..ib.len(), 0, 0..1); // 3.
@@ -168,38 +174,98 @@ async fn main() -> Result<()> {
     let pipeline = Pipeline::builder()
         .with_source(&tokio::fs::read_to_string("./examples/wgpu/shaders/default.wgsl").await?)
         .with_vertex_layout(Vertex::layout())
-        .build(&gpu, "Pipeline");
+        .build(&gpu, "pipeline");
 
     let vb = buffer::Buffer::new(
         gpu.clone(),
-        "Vertexbuffer",
+        "vertexbuffer",
         BufferUsages::VERTEX,
         &[
             Vertex {
                 pos: vec3(-0.5, -0.5, 0.0),
+                uv: vec2(0.0, 1.0),
             },
             Vertex {
                 pos: vec3(0.5, -0.5, 0.0),
+                uv: vec2(1.0, 1.0),
             },
             Vertex {
                 pos: vec3(0.5, 0.5, 0.0),
+                uv: vec2(1.0, 0.0),
             },
             Vertex {
                 pos: vec3(-0.5, 0.5, 0.0),
+                uv: vec2(0.0, 0.0),
             },
         ],
     );
 
     let ib = buffer::Buffer::new(
         gpu.clone(),
-        "Indexbuffer",
+        "indexbuffer",
         BufferUsages::INDEX,
         &[0, 1, 2, 2, 3, 0],
     );
 
+    let image = texture::Texture::from_path(
+        gpu.clone(),
+        "./examples/wgpu/images/statue.jpg",
+        &texture::TextureInfo::default(),
+    )
+    .await?;
+
+    let image_view = image.create_view(&Default::default());
+
+    let sampler = gpu.device.create_sampler(&SamplerDescriptor {
+        label: Some("filtered_sampler"),
+        mag_filter: FilterMode::Linear,
+        min_filter: FilterMode::Linear,
+        mipmap_filter: FilterMode::Linear,
+        ..Default::default()
+    });
+
+    let bind_group_layout = gpu
+        .device()
+        .create_bind_group_layout(&BindGroupLayoutDescriptor {
+            label: Some("texture_bind_group"),
+            entries: &[
+                BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Texture {
+                        sample_type: TextureSampleType::Float { filterable: true },
+                        view_dimension: TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Sampler(SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
+
+    let bind_group = gpu.device().create_bind_group(&BindGroupDescriptor {
+        label: Some("texture_bind_group"),
+        layout: &bind_group_layout,
+        entries: &[
+            BindGroupEntry {
+                binding: 0,
+                resource: BindingResource::TextureView(&image_view),
+            },
+            BindGroupEntry {
+                binding: 1,
+                resource: BindingResource::Sampler(&sampler),
+            },
+        ],
+    });
+
     events.run(move |event, _, ctl| match event {
         Event::RedrawRequested(window_id) if window_id == window.id() => {
-            match gpu.on_draw(&pipeline, &vb, &ib) {
+            match gpu.on_draw(&pipeline, &vb, &ib, &[&bind_group]) {
                 Ok(_) => {}
                 Err(SurfaceError::Lost) => gpu.on_resize(window.inner_size()),
                 Err(SurfaceError::OutOfMemory) => *ctl = ControlFlow::Exit,
