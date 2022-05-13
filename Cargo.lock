@@ -1095,6 +1095,7 @@ version = "0.10.5"
 dependencies = [
  "anyhow",
  "atomic_refcell",
+ "bytemuck",
  "color-eyre",
  "derive_more",
  "flume",

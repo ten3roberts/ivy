@@ -47,6 +47,7 @@ ivy-window = { path = "./ivy-window", version = "0.10" }
 hecs = "0.7.6"
 hecs-schedule = "0.6.1"
 derive_more = "0.99.17"
+bytemuck = "1.9.1"
 
 [dev-dependencies]
 anyhow = "1.0.57"

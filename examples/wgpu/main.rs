@@ -1,3 +1,5 @@
+mod pipeline;
+
 use color_eyre::{eyre::ContextCompat, Result};
 use tracing::*;
 use tracing_subscriber::{prelude::*, Registry};
@@ -10,7 +12,9 @@ use winit::{
     window::{Window, WindowBuilder},
 };
 
-struct Gpu {
+use crate::pipeline::Pipeline;
+
+pub struct Gpu {
     surface: Surface,
     device: Device,
     queue: Queue,
@@ -78,7 +82,7 @@ impl Gpu {
         }
     }
 
-    pub fn on_draw(&mut self) -> std::result::Result<(), SurfaceError> {
+    pub fn on_draw(&mut self, pipeline: &Pipeline) -> std::result::Result<(), SurfaceError> {
         let target = self.surface.get_current_texture()?;
         let view = target
             .texture
@@ -91,7 +95,7 @@ impl Gpu {
             });
 
         {
-            let _render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+            let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[RenderPassColorAttachment {
                     view: &view,
@@ -103,12 +107,26 @@ impl Gpu {
                 }],
                 depth_stencil_attachment: None,
             });
-        }
 
+            render_pass.set_pipeline(pipeline.pipeline()); // 2.
+            render_pass.draw(0..3, 0..1); // 3.
+        }
         self.queue.submit([encoder.finish()]);
         target.present();
 
         Ok(())
+    }
+
+    /// Get a reference to the gpu's device.
+    #[must_use]
+    fn device(&self) -> &Device {
+        &self.device
+    }
+
+    /// Get a reference to the gpu's queue.
+    #[must_use]
+    fn queue(&self) -> &Queue {
+        &self.queue
     }
 }
 
@@ -130,13 +148,17 @@ async fn main() -> Result<()> {
 
     let mut gpu = Gpu::new(&window).await?;
 
+    let pipeline = Pipeline::from_path(&gpu, "./examples/wgpu/shaders/default.wgsl").await?;
+
     events.run(move |event, _, ctl| match event {
-        Event::RedrawRequested(window_id) if window_id == window.id() => match gpu.on_draw() {
-            Ok(_) => {}
-            Err(SurfaceError::Lost) => gpu.on_resize(gpu.window_size),
-            Err(SurfaceError::OutOfMemory) => *ctl = ControlFlow::Exit,
-            Err(e) => tracing::warn!("Faild to draw frame: {e}"),
-        },
+        Event::RedrawRequested(window_id) if window_id == window.id() => {
+            match gpu.on_draw(&pipeline) {
+                Ok(_) => {}
+                Err(SurfaceError::Lost) => gpu.on_resize(gpu.window_size),
+                Err(SurfaceError::OutOfMemory) => *ctl = ControlFlow::Exit,
+                Err(e) => tracing::warn!("Faild to draw frame: {e}"),
+            }
+        }
         Event::WindowEvent {
             ref event,
             window_id,
