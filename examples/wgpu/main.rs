@@ -1,16 +1,121 @@
-use color_eyre::{eyre::bail, owo_colors::OwoColorize, Result};
-use tracing::info;
+use color_eyre::{eyre::ContextCompat, Result};
+use tracing::*;
 use tracing_subscriber::{prelude::*, Registry};
 use tracing_tree::HierarchicalLayer;
+use wgpu::*;
 use winit::{
     dpi::PhysicalSize,
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
-    window::WindowBuilder,
+    window::{Window, WindowBuilder},
 };
+
+struct Gpu {
+    surface: Surface,
+    device: Device,
+    queue: Queue,
+    config: SurfaceConfiguration,
+    window_size: PhysicalSize<u32>,
+}
+
+impl Gpu {
+    pub async fn new(window: &Window) -> Result<Self> {
+        let window_size = window.inner_size();
+        let instance = Instance::new(wgpu::Backends::all());
+        let surface = unsafe { instance.create_surface(window) };
+        let adapter = instance
+            .request_adapter(&RequestAdapterOptions {
+                power_preference: PowerPreference::HighPerformance,
+                force_fallback_adapter: false,
+                compatible_surface: Some(&surface),
+            })
+            .await
+            .wrap_err("Failed to find wgpu adapter")?;
+
+        let (device, queue) = adapter
+            .request_device(
+                &DeviceDescriptor {
+                    features: Features::empty(),
+                    limits: if cfg!(target_arch = "wasm32") {
+                        wgpu::Limits::downlevel_webgl2_defaults()
+                    } else {
+                        wgpu::Limits::default()
+                    },
+                    label: None,
+                },
+                None,
+            )
+            .await?;
+
+        let config = SurfaceConfiguration {
+            usage: TextureUsages::RENDER_ATTACHMENT,
+            format: surface
+                .get_preferred_format(&adapter)
+                .unwrap_or(TextureFormat::Rgba8UnormSrgb),
+            width: window_size.width.max(64),
+            height: window_size.height.max(64),
+            present_mode: PresentMode::Mailbox,
+        };
+
+        surface.configure(&device, &config);
+
+        Ok(Self {
+            surface,
+            device,
+            queue,
+            config,
+            window_size,
+        })
+    }
+
+    pub fn on_resize(&mut self, size: PhysicalSize<u32>) {
+        if size.width > 0 && size.height > 0 {
+            info!("Resizing: {size:?}");
+            self.window_size = size;
+            self.config.width = size.width;
+            self.config.height = size.height;
+            self.surface.configure(&self.device, &self.config);
+        }
+    }
+
+    pub fn on_draw(&mut self) -> std::result::Result<(), SurfaceError> {
+        let target = self.surface.get_current_texture()?;
+        let view = target
+            .texture
+            .create_view(&TextureViewDescriptor::default());
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&CommandEncoderDescriptor {
+                label: Some("Main Encoder"),
+            });
+
+        {
+            let _render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: Some("Render Pass"),
+                color_attachments: &[RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: Operations {
+                        load: LoadOp::Clear(Color::BLACK),
+                        store: true,
+                    },
+                }],
+                depth_stencil_attachment: None,
+            });
+        }
+
+        self.queue.submit([encoder.finish()]);
+        target.present();
+
+        Ok(())
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    color_eyre::install()?;
+
     let subscriber = Registry::default().with(HierarchicalLayer::new(2));
     tracing::subscriber::set_global_default(subscriber)?;
 
@@ -18,17 +123,30 @@ async fn main() -> Result<()> {
     let window = WindowBuilder::new()
         .with_inner_size(PhysicalSize::new(800, 600))
         .with_decorations(true)
+        .with_title("Ivy")
         .build(&events)?;
 
     info!("Opening window");
 
+    let mut gpu = Gpu::new(&window).await?;
+
     events.run(move |event, _, ctl| match event {
+        Event::RedrawRequested(window_id) if window_id == window.id() => match gpu.on_draw() {
+            Ok(_) => {}
+            Err(SurfaceError::Lost) => gpu.on_resize(gpu.window_size),
+            Err(SurfaceError::OutOfMemory) => *ctl = ControlFlow::Exit,
+            Err(e) => tracing::warn!("Faild to draw frame: {e}"),
+        },
         Event::WindowEvent {
             ref event,
             window_id,
         } if window_id == window.id() => match event {
             WindowEvent::CloseRequested => {
                 *ctl = ControlFlow::Exit;
+            }
+            WindowEvent::Resized(size) => gpu.on_resize(*size),
+            WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                gpu.on_resize(**new_inner_size)
             }
             _ => {}
         },
