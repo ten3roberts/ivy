@@ -139,6 +139,10 @@ pub fn reflect<S: AsRef<spirv_reflect::ShaderModule>>(
 
         for binding in bindings {
             max_set = max_set.max(binding.set);
+            eprintln!(
+                "Inserting binding: {}:{} at {:?}",
+                binding.set, binding.binding, stage_flags
+            );
             sets[binding.set as usize].insert(descriptors::DescriptorSetBinding {
                 binding: binding.binding,
                 descriptor_type: map_descriptortype(binding.descriptor_type),

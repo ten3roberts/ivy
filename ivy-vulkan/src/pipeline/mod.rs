@@ -2,7 +2,8 @@ use crate::context::SharedVulkanContext;
 use crate::traits::FromExtent;
 use crate::{descriptors::DescriptorLayoutInfo, Result, VertexDesc, VulkanContext};
 use ash::vk::{
-    BlendFactor, BlendOp, ColorComponentFlags, Extent2D, PipelineColorBlendAttachmentState,
+    BlendFactor, BlendOp, ColorComponentFlags, DebugReportObjectTypeEXT,
+    DebugUtilsObjectNameInfoEXT, Extent2D, Handle, ObjectType, PipelineColorBlendAttachmentState,
     PipelineLayout, PrimitiveTopology, PushConstantRange,
 };
 use ivy_base::Extent;
@@ -18,6 +19,7 @@ use shader::*;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct PipelineInfo {
+    pub name: Cow<'static, str>,
     pub vs: ShaderModuleInfo,
     pub fs: ShaderModuleInfo,
     // Enable alpha blending,
@@ -57,6 +59,7 @@ impl Default for PipelineInfo {
             dst_color: BlendFactor::ONE_MINUS_SRC_ALPHA,
             dst_alpha: BlendFactor::ONE,
             src_alpha: BlendFactor::ONE,
+            name: Cow::Borrowed("Unnamed"),
         }
     }
 }
@@ -230,6 +233,26 @@ impl Pipeline {
         // Destroy shader modules
         vertexshader.destroy(device);
         fragmentshader.destroy(device);
+
+        if let Some(utils) = context.debug_utils() {
+            unsafe {
+                let name = CString::new(info.name.as_ref()).unwrap();
+                utils.0.debug_utils_set_object_name(
+                    context.device().handle(),
+                    &DebugUtilsObjectNameInfoEXT::builder()
+                        .object_handle(Handle::as_raw(pipeline))
+                        .object_type(ObjectType::PIPELINE)
+                        .object_name(name.as_c_str()),
+                )?;
+                utils.0.debug_utils_set_object_name(
+                    context.device().handle(),
+                    &DebugUtilsObjectNameInfoEXT::builder()
+                        .object_handle(Handle::as_raw(layout))
+                        .object_type(ObjectType::PIPELINE_LAYOUT)
+                        .object_name(name.as_c_str()),
+                )?;
+            }
+        }
 
         Ok(Pipeline {
             context,

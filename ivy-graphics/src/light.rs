@@ -183,6 +183,7 @@ impl Renderer for LightRenderer {
             Pipeline::new::<SimpleVertex>(
                 context.clone(),
                 &PipelineInfo {
+                    name: "Light".into(),
                     blending: true,
                     depth_clamp: true,
                     vs: LIGHT_VERTEX_SHADER,

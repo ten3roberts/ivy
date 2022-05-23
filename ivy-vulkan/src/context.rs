@@ -3,7 +3,7 @@ use crate::traits::Backend;
 use crate::{commands::CommandPool, device::QueueFamilies, Result, *};
 use ash::extensions::ext::DebugUtils;
 use ash::extensions::khr::Surface;
-use ash::vk;
+use ash::vk::{self, DebugUtilsMessengerEXT};
 
 use gpu_allocator::vulkan::{Allocator, AllocatorCreateDesc};
 use parking_lot::RwLock;
@@ -199,6 +199,12 @@ impl VulkanContext {
 
     pub fn wait_idle(&self) -> Result<()> {
         unsafe { self.device().device_wait_idle().map_err(|e| e.into()) }
+    }
+
+    /// Get a reference to the vulkan context's debug utils.
+    #[must_use]
+    pub fn debug_utils(&self) -> Option<&(DebugUtils, DebugUtilsMessengerEXT)> {
+        self.debug_utils.as_ref()
     }
 }
 

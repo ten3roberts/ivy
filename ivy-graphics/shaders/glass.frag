@@ -116,7 +116,7 @@ void main() {
     // see http://en.wikipedia.org/wiki/Schlick%27s_approximation
     float v_fresnel = R0 + (1.0 - R0) * pow((1.0 - dot(-incident, normal)), 5.0);
 
-    vec4 albedo = fragColor;
+    vec4 color = texture(albedo, fragTexCoord) * fragColor;
 
     vec4 reflection = raytrace(fragPosition, v_reflection);
     vec2 uv = fragToUv(fragPosition);
@@ -124,6 +124,6 @@ void main() {
     vec2 r_uv = worldToUv(fragPosition + v_refraction);
     vec4 refraction = texture(screenspace, uv);
 
-    outColor = vec4(albedo.rbg * mix(refraction.rgb, reflection.rgb, v_fresnel), 1.0);
+    outColor = vec4(color.rbg * mix(refraction.rgb, reflection.rgb, v_fresnel), 1.0);
 
 }

@@ -1,3 +1,5 @@
+use std::any::type_name;
+
 use crate::{
     BaseRenderer, BatchMarker, BoundingSphere, Camera, Error, MainCamera, Material, Mesh, Renderer,
     Result, Vertex,

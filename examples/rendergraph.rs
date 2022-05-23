@@ -104,6 +104,7 @@ impl GameLayer {
 
         // Create a simple pipeline
         let pipeline = GeometryPass(PipelineInfo {
+            name: "Forward".into(),
             vs: FORWARD_VERTEX_SHADER,
             fs: FORWARD_FRAGMENT_SHADER,
             ..Default::default()

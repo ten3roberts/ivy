@@ -225,6 +225,7 @@ impl PBRRendering {
     pub fn setup_pipelines(&self, resources: &Resources, info: PipelinesInfo) -> Result<()> {
         // Create pipelines
         resources.insert(GeometryPass(PipelineInfo {
+            name: "Default".into(),
             vs: DEFAULT_VERTEX_SHADER,
             fs: DEFAULT_FRAGMENT_SHADER,
             cull_mode: info.cull_mode,
@@ -232,6 +233,7 @@ impl PBRRendering {
         }))?;
 
         resources.insert(TransparentPass(PipelineInfo {
+            name: "Transparent".into(),
             vs: DEFAULT_VERTEX_SHADER,
             fs: GLASS_FRAGMENT_SHADER,
             cull_mode: info.cull_mode,
@@ -239,6 +241,7 @@ impl PBRRendering {
         }))?;
 
         resources.insert(SkinnedPass(PipelineInfo {
+            name: "Skinned".into(),
             vs: SKINNED_VERTEX_SHADER,
             fs: DEFAULT_FRAGMENT_SHADER,
             cull_mode: info.cull_mode,
@@ -246,6 +249,7 @@ impl PBRRendering {
         }))?;
 
         resources.insert(PbrPass(PipelineInfo {
+            name: "Fullscreen".into(),
             vs: FULLSCREEN_SHADER,
             fs: POSTPROCESSING_SHADER,
             cull_mode: CullModeFlags::NONE,
@@ -253,6 +257,7 @@ impl PBRRendering {
         }))?;
 
         resources.insert(ImagePass(PipelineInfo {
+            name: "Image".into(),
             vs: IMAGE_VERTEX_SHADER,
             fs: IMAGE_FRAGMENT_SHADER,
             blending: true,
@@ -261,6 +266,7 @@ impl PBRRendering {
         }))?;
 
         resources.insert(TextPass(PipelineInfo {
+            name: "Text".into(),
             vs: TEXT_VERTEX_SHADER,
             fs: TEXT_FRAGMENT_SHADER,
             cull_mode: CullModeFlags::BACK,
@@ -269,6 +275,7 @@ impl PBRRendering {
         }))?;
 
         resources.insert(GizmoPass(PipelineInfo {
+            name: "Gizmo".into(),
             vs: GIZMO_VERTEX_SHADER,
             fs: GIZMO_FRAGMENT_SHADER,
             cull_mode: CullModeFlags::NONE,
