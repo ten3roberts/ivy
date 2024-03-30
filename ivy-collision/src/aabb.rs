@@ -1,17 +1,17 @@
 use glam::Vec3;
-use ivy_base::{Cube, DrawGizmos, Gizmos, Position};
+use ivy_base::{Cube, DrawGizmos, Gizmos};
 
 use crate::Ray;
 
 /// Represents an axis aligned bounding box
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct BoundingBox {
-    pub origin: Position,
+    pub origin: Vec3,
     pub extents: Vec3,
 }
 
 impl BoundingBox {
-    pub fn new(half_extents: Vec3, origin: Position) -> Self {
+    pub fn new(half_extents: Vec3, origin: Vec3) -> Self {
         Self {
             origin,
             extents: half_extents,
@@ -111,7 +111,7 @@ impl BoundingBox {
             && self.neg_z() <= other.z()
     }
 
-    pub fn contains_point(&self, point: Position) -> bool {
+    pub fn contains_point(&self, point: Vec3) -> bool {
         self.x() >= point.x
             && self.neg_x() <= point.x
             && self.y() >= point.y
@@ -152,7 +152,7 @@ impl BoundingBox {
 
     pub(crate) fn expand(&self, amount: Vec3) -> BoundingBox {
         let extents = self.extents + amount.abs();
-        let origin = self.origin + Position(amount) * 0.5;
+        let origin = self.origin + amount * 0.5;
 
         BoundingBox { origin, extents }
     }
@@ -173,8 +173,7 @@ impl DrawGizmos for BoundingBox {
 
 #[cfg(test)]
 mod tests {
-    use glam::Vec3;
-    use ivy_base::Position;
+    use glam::{vec3, Vec3};
 
     use crate::BoundingBox;
 
@@ -185,11 +184,11 @@ mod tests {
 
         let bounds = BoundingBox::from_corners(l, r);
 
-        assert_eq!(bounds.extents, Vec3::new(0.5, 1.5, 0.5));
-        assert_eq!(bounds.origin, Position::new(-0.5, 0.5, -0.5));
+        assert_eq!(bounds.extents, vec3(0.5, 1.5, 0.5));
+        assert_eq!(bounds.origin, vec3(-0.5, 0.5, -0.5));
         assert_eq!(bounds.into_corners(), (l, r));
 
-        let smaller = BoundingBox::new(Vec3::new(0.5, 0.5, 0.5), Position::zero());
+        let smaller = BoundingBox::new(vec3(0.5, 0.5, 0.5), Vec3::ZERO);
 
         dbg!(bounds.y(), smaller.y());
 

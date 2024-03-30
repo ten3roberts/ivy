@@ -3,7 +3,7 @@ use std::{marker::PhantomData, slice::Iter};
 use glam::{f32, Vec3};
 use hecs::{Entity, Query};
 use hecs_schedule::GenericWorld;
-use ivy_base::{Position, Visible};
+use ivy_base::Visible;
 use ordered_float::OrderedFloat;
 use slotmap::SlotMap;
 
@@ -38,7 +38,7 @@ impl RayIntersection {
     }
 
     /// Returns the single ray contact point
-    pub fn point(&self) -> Position {
+    pub fn point(&self) -> Vec3 {
         self.contact.points[0]
     }
 

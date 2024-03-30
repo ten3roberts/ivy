@@ -15,9 +15,8 @@ readme = "../README.md"
 arrayvec = "0.7.2"
 derive-for = "1.2.2"
 derive_more = "0.99.17"
-flume = "0.10.12"
-hecs = "0.7.6"
-hecs-schedule = "0.6.1"
+flume.workspace = true
+flax.workspace = true
 ivy-base = { path = "../ivy-base", version = "0.10.0" }
 ivy-resources = { path = "../ivy-resources", version = "0.10.0" }
 ordered-float = "3.0.0"

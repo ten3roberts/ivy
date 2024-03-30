@@ -2,7 +2,7 @@
 use crate::impl_for_tuples;
 use crate::Events;
 use anyhow::Context;
-use hecs::World;
+use flax::World;
 use ivy_resources::Resources;
 use std::time::Duration;
 

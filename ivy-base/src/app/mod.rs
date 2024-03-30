@@ -6,8 +6,8 @@ use std::time::Duration;
 pub use builder::*;
 pub use event::*;
 
+use flax::World;
 use flume::Receiver;
-use hecs::World;
 
 use crate::{
     layer::{Layer, LayerStack},

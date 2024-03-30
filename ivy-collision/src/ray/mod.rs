@@ -3,7 +3,7 @@ use std::ops::Deref;
 use glam::{Mat4, Vec3};
 use hecs::Query;
 use hecs_schedule::GenericWorld;
-use ivy_base::{DrawGizmos, Gizmos, Line, Position, TransformMatrix};
+use ivy_base::{DrawGizmos, Gizmos, Line};
 
 mod cast;
 pub use cast::*;
@@ -16,12 +16,12 @@ use crate::{
 };
 
 pub struct Ray {
-    pub(crate) origin: Position,
+    pub(crate) origin: Vec3,
     pub(crate) dir: Vec3,
 }
 
 impl Ray {
-    pub fn new(origin: Position, dir: Vec3) -> Self {
+    pub fn new(origin: Vec3, dir: Vec3) -> Self {
         Self {
             origin,
             dir: dir.normalize_or_zero(),
@@ -48,7 +48,7 @@ impl Ray {
     pub fn intersects<T: CollisionPrimitive>(
         &self,
         collider: &T,
-        transform: &TransformMatrix,
+        transform: &Mat4,
     ) -> Option<Contact> {
         // Check if any point is behind ray
 
@@ -154,7 +154,7 @@ impl Ray {
     }
 
     /// Get a reference to the ray's origin.
-    pub fn origin(&self) -> Position {
+    pub fn origin(&self) -> Vec3 {
         self.origin
     }
 

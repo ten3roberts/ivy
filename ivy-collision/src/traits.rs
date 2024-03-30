@@ -1,5 +1,4 @@
-use glam::Vec3;
-use ivy_base::TransformMatrix;
+use glam::{Mat4, Vec3};
 
 use crate::{util::support, BoundingBox, Contact, Ray};
 
@@ -15,7 +14,7 @@ pub trait CollisionPrimitive {
 
     /// Returns an axis aligned bounding box enclosing the shape at the current
     /// rotation and scale
-    fn bounding_box(&self, transform: TransformMatrix) -> BoundingBox
+    fn bounding_box(&self, transform: Mat4) -> BoundingBox
     where
         Self: Sized,
     {
@@ -35,9 +34,9 @@ pub trait CollisionPrimitive {
 
 pub trait RayIntersect: CollisionPrimitive + Sized {
     // Returns true if the shape intersects the ray
-    fn check_intersect(&self, transform: &TransformMatrix, ray: &Ray) -> bool;
+    fn check_intersect(&self, transform: &Mat4, ray: &Ray) -> bool;
     // Returns the intersection point of a ray onto shape
-    fn intersect(&self, transform: &TransformMatrix, ray: &Ray) -> Option<Contact> {
+    fn intersect(&self, transform: &Mat4, ray: &Ray) -> Option<Contact> {
         ray.intersects(self, transform)
     }
 }

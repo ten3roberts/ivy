@@ -1,33 +1,33 @@
 use std::ops::Index;
 
 use glam::{Mat4, Vec3};
-use ivy_base::{Color, DrawGizmos, Line, Position, Sphere};
+use ivy_base::{Color, DrawGizmos, Line, Sphere};
 
 use crate::{epa, gjk, util::minkowski_diff, CollisionPrimitive, EntityPayload};
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum ContactPoints {
-    Single([Position; 1]),
-    Double([Position; 2]),
+    Single([Vec3; 1]),
+    Double([Vec3; 2]),
 }
 
 impl ContactPoints {
-    pub fn single(p: Position) -> Self {
+    pub fn single(p: Vec3) -> Self {
         Self::Single([p])
     }
 
-    pub fn double(a: Position, b: Position) -> Self {
+    pub fn double(a: Vec3, b: Vec3) -> Self {
         Self::Double([a, b])
     }
 
-    pub fn points(&self) -> &[Position] {
+    pub fn points(&self) -> &[Vec3] {
         match self {
             ContactPoints::Single(val) => val,
             ContactPoints::Double(val) => val,
         }
     }
 
-    pub fn iter(&self) -> std::slice::Iter<Position> {
+    pub fn iter(&self) -> std::slice::Iter<Vec3> {
         self.into_iter()
     }
 
@@ -53,28 +53,28 @@ impl DrawGizmos for ContactPoints {
     }
 }
 
-impl From<Position> for ContactPoints {
-    fn from(val: Position) -> Self {
+impl From<Vec3> for ContactPoints {
+    fn from(val: Vec3) -> Self {
         Self::Single([val])
     }
 }
 
-impl From<[Position; 1]> for ContactPoints {
-    fn from(val: [Position; 1]) -> Self {
+impl From<[Vec3; 1]> for ContactPoints {
+    fn from(val: [Vec3; 1]) -> Self {
         Self::Single(val)
     }
 }
 
-impl From<[Position; 2]> for ContactPoints {
-    fn from(val: [Position; 2]) -> Self {
+impl From<[Vec3; 2]> for ContactPoints {
+    fn from(val: [Vec3; 2]) -> Self {
         Self::Double(val)
     }
 }
 
 impl<'a> IntoIterator for &'a ContactPoints {
-    type Item = &'a Position;
+    type Item = &'a Vec3;
 
-    type IntoIter = std::slice::Iter<'a, Position>;
+    type IntoIter = std::slice::Iter<'a, Vec3>;
 
     fn into_iter(self) -> Self::IntoIter {
         match self {
@@ -85,7 +85,7 @@ impl<'a> IntoIterator for &'a ContactPoints {
 }
 
 impl Index<usize> for ContactPoints {
-    type Output = Position;
+    type Output = Vec3;
 
     fn index(&self, index: usize) -> &Self::Output {
         &self.points()[index]

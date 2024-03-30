@@ -32,7 +32,7 @@ thiserror = "1.0.31"
 glam = "0.20.5"
 flume = "0.10.12"
 hecs-schedule = "0.6.1"
-serde = { version = "1.0.137", features = ["derive"], optional = true }
+serde = { workspace = true, optional = true }
 records = "0.2.0"
 ezy = "0.1.1"
 

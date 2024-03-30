@@ -27,9 +27,25 @@ members = [
   "ivy-random",
 ]
 
+[workspace.dependencies]
+anyhow = "1.0"
+flume = "0.11"
+tracing = "0.1"
+tracing-tree = "0.3"
+tracing-subscriber = "0.3"
+palette = "0.7"
+glam = "0.20"
+serde = { version = "1.0", features = ["derive"] }
+rand_distr = "0.4"
+rand = "0.8"
+
+parking_lot = "0.12"
+thiserror = "1.0"
+flax = { git = "https://github.com/ten3roberts/flax", features = [ "serde", "derive", "puffin" ] }
+
+
 [dependencies]
 ivy-collision = { path = "./ivy-collision", version = "0.10" }
-ivy-templates = { path = "./ivy-templates", version = "0.10" }
 ivy-base = { path = "./ivy-base", version = "0.10" }
 ivy-graphics = { path = "./ivy-graphics", version = "0.10" }
 ivy-image = { path = "./ivy-image", version = "0.10" }
@@ -44,8 +60,6 @@ ivy-vulkan = { path = "./ivy-vulkan", version = "0.10" }
 ivy-presets = { path = "./ivy-presets", version = "0.10" }
 ivy-window = { path = "./ivy-window", version = "0.10" }
 
-hecs = "0.7.6"
-hecs-schedule = "0.6.1"
 derive_more = "0.99.17"
 bytemuck = { version = "1.9.1", features = ["derive"] }
 image = { version = "0.24.2", features = ["png", "jpeg"] }
@@ -74,14 +88,12 @@ thiserror = "1.0.31"
 
 [features]
 default = []
-crossbeam-channel = ["ivy-base/crossbeam-channel"]
 serialize = [
   "ivy-base/serialize",
   "ivy-ui/serialize",
   "ivy-physics/serialize",
   "ivy-vulkan/serialize",
   "ivy-resources/serialize",
-  "ivy-templates/serialize",
   "ivy-graphics/serialize",
 ]
 

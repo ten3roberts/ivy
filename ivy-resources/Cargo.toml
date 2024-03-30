@@ -23,7 +23,7 @@ parking_lot = "0.12.0"
 slotmap = "1.0.6"
 smallvec = "1.8.0"
 thiserror = "1.0.31"
-serde = { version = "1.0.137", features = ["derive"], optional = true }
+serde = { workspace = true, optional = true }
 
 [features]
 default = []

@@ -37,7 +37,6 @@ pub mod extensions;
 mod extent;
 pub mod gizmos;
 mod layer;
-mod logger;
 pub mod macros;
 pub mod math;
 mod time;
@@ -54,13 +53,12 @@ pub use extensions::*;
 pub use extent::*;
 pub use gizmos::*;
 pub use layer::*;
-pub use logger::Logger;
 pub use time::*;
 pub use updatable::*;
 
 /// 45 degrees in radians
-pub const DEG_45: f32 = PI * 0.25;
+pub const DEG_45: f32 = PI / 4.0;
 /// 90 degrees in radians
-pub const DEG_90: f32 = PI * 0.5;
+pub const DEG_90: f32 = PI / 2.0;
 /// 180 degrees in radians
 pub const DEG_180: f32 = PI;

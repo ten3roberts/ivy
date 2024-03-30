@@ -3,10 +3,8 @@ use std::any;
 use flume::{Receiver, Sender};
 use hecs::{Entity, Query};
 use hecs_schedule::{CommandBuffer, SubWorld, Write};
-use ivy_base::components::Velocity;
 use ivy_base::{
-    Color, DrawGizmos, Events, Gizmos, Mass, Sleeping, Static, TransformMatrix, TransformQuery,
-    Trigger, Visible,
+    Color, DrawGizmos, Events, Gizmos, Sleeping, Static, TransformQuery, Trigger, Visible,
 };
 use ivy_resources::{DefaultResource, DefaultResourceMut};
 use records::record;
@@ -245,11 +243,18 @@ impl<N: CollisionTreeNode + DrawGizmos> CollisionTree<N> {
 pub struct ObjectData {
     pub bounds: BoundingBox,
     pub extended_bounds: BoundingBox,
-    pub transform: TransformMatrix,
+    pub transform: Mat4,
     pub is_trigger: bool,
     pub is_visible: bool,
     pub state: NodeState,
     pub movable: bool,
+}
+
+use flax::Fetch;
+#[derive(Fetch)]
+pub struct ObjectQuery {
+    transform: TransformQuery,
+    mass: Opt<Component<Mass>>,
 }
 
 #[derive(Query)]
@@ -274,7 +279,7 @@ impl ObjectData {
 impl<'a> Into<ObjectData> for ObjectQuery<'a> {
     fn into(self) -> ObjectData {
         let off = self.offset.cloned().unwrap_or_default();
-        let transform = TransformMatrix(*self.transform.into_matrix() * *off);
+        let transform = *self.transform.into_matrix() * *off;
 
         let bounds = self.collider.bounding_box(transform);
         let extended_bounds = if let Some(vel) = self.velocity {
