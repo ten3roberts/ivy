@@ -1,7 +1,7 @@
 use hecs::World;
 use ivy_base::{Extent, WorldExt};
 use ivy_graphics::{
-    gizmos::GizmoRenderer, shaders::*, DepthAttachment, EnvData, FullscreenRenderer, GpuCameraData,
+    gizmos::GizmoRenderer, shaders::*, DepthAttachment, EnvData, FullscreenRenderer, GpuCamera,
     MainCamera, MeshRenderer, SkinnedMeshRenderer, WithPass,
 };
 use ivy_postprocessing::pbr::{create_pbr_pipeline, PBRInfo};
@@ -71,7 +71,7 @@ impl PBRRendering {
         let context = resources.get_default::<SharedVulkanContext>()?;
         context.wait_idle()?;
 
-        GpuCameraData::create_gpu_cameras(&context, world, frames_in_flight)?;
+        GpuCamera::create_gpu_cameras(&context, world, frames_in_flight)?;
 
         let canvas = world.by_tag::<Canvas>().ok_or(Error::MissingCanvas)?;
 

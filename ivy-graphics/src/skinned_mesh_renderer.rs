@@ -1,16 +1,17 @@
 use crate::{
+    batch_id,
+    components::{animator, material, mesh, skin, skinned_mesh},
     Allocator, Animator, BaseRenderer, BatchMarker, BufferAllocation, Error, Material, Renderer,
     Result, Skin, SkinnedMesh, SkinnedVertex,
 };
 use ash::vk::{DescriptorSet, IndexType, ShaderStageFlags};
+use flax::{entity_ids, CommandBuffer, Component, Fetch, FetchExt, OptOr, Query, World};
 use glam::{Mat4, Vec4};
-use hecs::{Query, World};
-use hecs_schedule::CommandBuffer;
-use ivy_base::{Color, Position, Rotation, Scale, TransformMatrix, Visible};
+use ivy_base::{color, Color, ColorExt, TransformQuery, Visible};
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
-    context::SharedVulkanContext, descriptors::IntoSet, device, shaderpass::ShaderPass, Buffer,
-    BufferUsage, PassInfo,
+    context::SharedVulkanContext, descriptors::IntoSet, device, Buffer, BufferUsage, PassInfo,
+    Shader,
 };
 use smallvec::SmallVec;
 use std::iter::repeat;
@@ -58,7 +59,7 @@ impl SkinnedMeshRenderer {
                     BufferUsage::STORAGE_BUFFER,
                     ivy_vulkan::BufferAccess::Mapped,
                     joint_capacity as _,
-                    repeat(TransformMatrix::default()),
+                    repeat(Mat4::IDENTITY),
                 )?;
 
                 let set = ivy_vulkan::descriptors::DescriptorBuilder::new()
@@ -77,19 +78,19 @@ impl SkinnedMeshRenderer {
     fn register_entities(&mut self, world: &mut World, resources: &Resources) -> Result<()> {
         let skins = resources.fetch::<Skin>()?;
 
-        let needs_resize = world
-            .query_mut::<&Handle<Skin>>()
-            .without::<BufferAllocation<Marker>>()
-            .into_iter()
-            .try_for_each(|(e, skin)| {
+        let needs_resize = Query::new((entity_ids(), skin()))
+            .without(joint_buffer())
+            .borrow(world)
+            .iter()
+            .try_for_each(|(id, skin)| {
                 let skin = skins.get(*skin).unwrap();
                 let block = self.allocator.allocate(skin.joint_count())?;
-                self.cmd.insert_one(e, block);
+                self.cmd.set(id, joint_buffer(), block);
                 Some(())
             })
             .is_none();
 
-        self.cmd.execute(world);
+        self.cmd.apply(world).unwrap();
 
         if needs_resize {
             self.grow()?;
@@ -109,27 +110,23 @@ impl SkinnedMeshRenderer {
         let skins = resources.fetch::<Skin>()?;
         self.buffers[current_frame]
             .0
-            .write_slice(
-                self.allocator.capacity() as _,
-                0,
-                |data: &mut [TransformMatrix]| {
-                    world
-                        .query_mut::<(&mut Animator, &Handle<Skin>, &BufferAllocation<Marker>)>()
-                        .into_iter()
-                        .for_each(|(_, (animator, skin, block))| {
-                            let slice = &mut data[block.offset()..block.offset() + block.len()];
-                            let skin = skins.get(*skin).unwrap();
-                            for root in skin.roots() {
-                                animator.fill_sparse(
-                                    skin,
-                                    slice,
-                                    *root,
-                                    TransformMatrix::default(),
-                                );
-                            }
-                        })
-                },
-            )
+            .write_slice(self.allocator.capacity() as _, 0, |data: &mut [Mat4]| {
+                Query::new((animator().as_mut(), skin(), joint_buffer()))
+                    .borrow(world)
+                    .iter()
+                    .for_each(|(animator, skin, block)| {
+                        let slice = &mut data[block.offset()..block.offset() + block.len()];
+                        let skin = skins.get(*skin).unwrap();
+                        for root in skin.roots() {
+                            animator.fill_sparse(skin, slice, *root, Mat4::default());
+                        }
+                    });
+                // world
+                //     .query_mut::<(&mut Animator, &Handle<Skin>, &BufferAllocation<Marker>)>()
+                //     .into_iter()
+                //     .for_each(|(_, (animator, skin, block))| {
+                //     })
+            })
             .map_err(|e| e.into())
     }
 
@@ -156,9 +153,8 @@ impl Drop for SkinnedMeshRenderer {
 }
 
 impl Renderer for SkinnedMeshRenderer {
-    type Error = Error;
     /// Will draw all entities with a Handle<Material>, Handle<Mesh>, Modelmatrix and Shaderpass `Handle<T>`
-    fn draw<Pass: ShaderPass>(
+    fn draw(
         &mut self,
         world: &mut World,
         resources: &Resources,
@@ -167,35 +163,39 @@ impl Renderer for SkinnedMeshRenderer {
         pass_info: &PassInfo,
         offsets: &[u32],
         current_frame: usize,
-    ) -> Result<()> {
+        pass: Component<Shader>,
+    ) -> anyhow::Result<()> {
         let meshes = resources.fetch::<SkinnedMesh>()?;
         let materials = resources.fetch::<Material>()?;
 
         self.register_entities(world, resources)?;
         self.update_joints(world, resources, current_frame)?;
 
-        let pass = self.base_renderer.pass_mut::<Pass>()?;
+        let renderpass = self.base_renderer.pass_mut(pass)?;
 
-        pass.register::<Pass, KeyQuery, ObjectDataQuery>(world);
-        pass.build_batches::<Pass, KeyQuery>(world, resources, pass_info)?;
+        renderpass.register(world, KeyQuery::new());
+        renderpass.build_batches(world, resources, pass_info)?;
 
-        let iter = world
-            .query_mut::<(&BatchMarker<ObjectData, Pass>, ObjectDataQuery, &Visible)>()
-            .into_iter()
-            .filter_map(|(e, (marker, obj, visible))| {
-                if visible.is_visible() {
-                    Some((e, (marker, obj)))
-                } else {
-                    None
-                }
-            });
+        renderpass.update(
+            current_frame,
+            Query::new((entity_ids(), batch_id(pass.id()), ObjectDataQuery::new()))
+                .borrow(world)
+                .iter()
+                .filter_map(|(e, &batch_id, obj /* , bound */)| {
+                    // if visible.is_visible()
+                    //     && camera.visible(**obj.position, **bound * obj.scale.max_element())
+                    // {
+                    Some((e, batch_id, ObjectData::from(obj)))
+                    // } else {
+                    //     None
+                    // }
+                }),
+        )?;
 
-        pass.update(current_frame, iter)?;
-
-        let frame_set = pass.set(current_frame);
+        let frame_set = renderpass.set(current_frame);
         let joint_set = self.buffers[current_frame].1;
 
-        for batch in pass.batches().iter() {
+        for batch in renderpass.batches().iter() {
             let key = batch.key();
 
             let mesh = meshes.get(key.mesh)?;
@@ -260,33 +260,52 @@ struct ObjectData {
     pad: [f32; 2],
 }
 
-#[derive(Query)]
-struct ObjectDataQuery<'a> {
-    position: &'a Position,
-    rotation: &'a Rotation,
-    scale: &'a Scale,
-    color: Option<&'a Color>,
-    block: &'a BufferAllocation<Marker>,
+#[derive(Fetch)]
+struct ObjectDataQuery {
+    transform: TransformQuery,
+    color: OptOr<Component<Color>, Color>,
+    block: Component<BufferAllocation<Marker>>,
 }
 
-impl<'a> Into<ObjectData> for ObjectDataQuery<'a> {
-    fn into(self) -> ObjectData {
+impl ObjectDataQuery {
+    fn new() -> Self {
+        Self {
+            transform: TransformQuery::new(),
+            color: color().opt_or(Color::new(1.0, 1.0, 1.0, 1.0)),
+            block: joint_buffer(),
+        }
+    }
+}
+
+impl From<ObjectDataQueryItem<'_>> for ObjectData {
+    fn from(value: ObjectDataQueryItem<'_>) -> ObjectData {
         ObjectData {
-            model: Mat4::from_translation(**self.position)
-                * self.rotation.into_matrix()
-                * Mat4::from_scale(**self.scale),
-            color: self.color.cloned().unwrap_or(Color::white()).into(),
-            offset: self.block.offset() as u32,
-            len: self.block.len() as u32,
+            model: Mat4::from_scale_rotation_translation(
+                *value.transform.scale,
+                *value.transform.rotation,
+                *value.transform.pos,
+            ),
+            color: value.color.to_vec4(),
+            offset: value.block.offset() as u32,
+            len: value.block.len() as u32,
             pad: Default::default(),
         }
     }
 }
 
-#[derive(Query, PartialEq, Eq)]
-struct KeyQuery<'a> {
-    mesh: &'a Handle<SkinnedMesh>,
-    material: Option<&'a Handle<Material>>,
+#[derive(Fetch, PartialEq, Eq)]
+struct KeyQuery {
+    mesh: Component<Handle<SkinnedMesh>>,
+    material: Component<Handle<Material>>,
+}
+
+impl KeyQuery {
+    fn new() -> Self {
+        Self {
+            mesh: skinned_mesh(),
+            material: material(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -295,15 +314,17 @@ struct Key {
     material: Handle<Material>,
 }
 
-impl<'a> crate::KeyQuery for KeyQuery<'a> {
-    type K = Key;
-
-    fn into_key(&self) -> Self::K {
-        Self::K {
-            mesh: *self.mesh,
-            material: self.material.cloned().unwrap_or_default(),
+impl From<KeyQueryItem<'_>> for Key {
+    fn from(value: KeyQueryItem<'_>) -> Self {
+        Self {
+            mesh: *value.mesh,
+            material: *value.material,
         }
     }
+}
+
+flax::component! {
+    joint_buffer: BufferAllocation<Marker>,
 }
 
 #[derive(Default, Debug, Clone, Eq, PartialEq)]

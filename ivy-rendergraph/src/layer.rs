@@ -2,7 +2,7 @@ use anyhow::Context;
 use hecs::World;
 use hecs_schedule::Schedule;
 use ivy_base::{Events, Layer};
-use ivy_graphics::{systems, GpuCameraData, GraphicsEvent};
+use ivy_graphics::{systems, GpuCamera, GraphicsEvent};
 use ivy_resources::Resources;
 use ivy_vulkan::{context::SharedVulkanContext, device, traits::Backend, Swapchain};
 use ivy_window::Window;
@@ -34,7 +34,7 @@ impl GraphicsLayer {
         let schedule = Schedule::builder()
             .add_system(systems::update_view_matrices)
             .add_system(systems::add_bounds)
-            .add_system(GpuCameraData::update_all_system)
+            .add_system(GpuCamera::update_all_system)
             .build();
 
         Ok(Self {
@@ -84,7 +84,7 @@ impl Layer for GraphicsLayer {
         _frame_time: std::time::Duration,
     ) -> anyhow::Result<()> {
         // Ensure gpu side data for cameras
-        GpuCameraData::create_gpu_cameras(&self.context, world, self.frames_in_flight)?;
+        GpuCamera::create_gpu_cameras(&self.context, world, self.frames_in_flight)?;
 
         let window = resources.get_default::<Window>()?;
         let extent = window.extent();

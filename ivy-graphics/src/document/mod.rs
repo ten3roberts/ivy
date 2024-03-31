@@ -1,14 +1,14 @@
 use crate::{
-    Animation, AnimationStore, Animator, Error, Material, Mesh, PointLight, Result, SkinnedMesh,
+    components, Animation, AnimationStore, Animator, Error, Material, Mesh, PointLight, Result,
+    SkinnedMesh,
 };
+use flax::{components::child_of, EntityBuilder};
 use gltf::Gltf;
-use hecs::{Bundle, Component, DynamicBundleClone, EntityBuilder, EntityBuilderClone};
-use hecs_hierarchy::TreeBuilderClone;
 use smallvec::SmallVec;
 use std::{borrow::Cow, ops::Deref, path::Path, path::PathBuf};
 
 use glam::*;
-use ivy_base::{Connection, Position, PositionOffset, Rotation, RotationOffset, Scale, Visible};
+use ivy_base::{position, position_offset, rotation, rotation_offset, scale, visible, Visible};
 use ivy_resources::{Handle, LoadResource, Resources};
 use ivy_vulkan::{context::SharedVulkanContext, Texture};
 
@@ -31,9 +31,9 @@ pub struct Node {
     animations: AnimationStore,
     light: Option<PointLight>,
     skin: Option<Handle<Skin>>,
-    pos: Position,
-    rot: Rotation,
-    scale: Scale,
+    pos: Vec3,
+    rot: Quat,
+    scale: Vec3,
     children: SmallVec<[usize; 4]>,
 }
 
@@ -49,17 +49,17 @@ impl Node {
     }
 
     /// Get a reference to the node's position.
-    pub fn pos(&self) -> Position {
+    pub fn pos(&self) -> Vec3 {
         self.pos
     }
 
     /// Get a reference to the node's rotation.
-    pub fn rot(&self) -> Rotation {
+    pub fn rot(&self) -> Quat {
         self.rot
     }
 
     /// Get a reference to the node's scale.
-    pub fn scale(&self) -> Scale {
+    pub fn scale(&self) -> Vec3 {
         self.scale
     }
 
@@ -279,11 +279,10 @@ impl Document {
     }
 }
 
-#[derive(Bundle, Copy, Clone, Default)]
 pub struct NodeBundle {
-    pos: Position,
-    rot: Rotation,
-    scale: Scale,
+    pos: Vec3,
+    rot: Quat,
+    scale: Vec3,
     mesh: Handle<Mesh>,
 }
 
@@ -298,39 +297,22 @@ impl LoadResource for Document {
     }
 }
 
-// Generic interface for cloneable and non coneable entity builders.
-pub trait GenericBuilder {
-    fn add<T: Component + Clone>(&mut self, component: T) -> &mut Self;
-    fn add_bundle<T: DynamicBundleClone>(&mut self, bundle: T) -> &mut Self;
-}
-
-impl GenericBuilder for EntityBuilder {
-    fn add<T: Component + Clone>(&mut self, component: T) -> &mut Self {
-        self.add(component)
-    }
-
-    fn add_bundle<T: DynamicBundleClone>(&mut self, bundle: T) -> &mut Self {
-        self.add_bundle(bundle)
-    }
-}
-
-impl GenericBuilder for EntityBuilderClone {
-    fn add<T: Component + Clone>(&mut self, component: T) -> &mut Self {
-        self.add(component)
-    }
-
-    fn add_bundle<T: DynamicBundleClone>(&mut self, bundle: T) -> &mut Self {
-        self.add_bundle(bundle)
-    }
-}
-
-#[records::record]
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct NodeBuildInfo {
     skinned: bool,
     /// Insert an animator
     animated: bool,
     light_radius: f32,
+}
+
+impl NodeBuildInfo {
+    pub fn new(skinned: bool, animated: bool, light_radius: f32) -> Self {
+        Self {
+            skinned,
+            animated,
+            light_radius,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -359,44 +341,55 @@ impl<'a> std::fmt::Debug for DocumentNode<'a> {
 
 impl<'d> DocumentNode<'d> {
     /// Spawns a node using the supplied builder into the world
-    pub fn build<'a, B: GenericBuilder>(
+    pub fn mount<'a>(
         &self,
-        builder: &'a mut B,
+        entity: &'a mut EntityBuilder,
         info: &NodeBuildInfo,
-    ) -> &'a mut B {
+    ) -> &'a mut EntityBuilder {
         if let Some(mesh) = self.mesh {
-            builder.add(mesh);
+            entity.set(components::mesh(), mesh);
         }
 
         if let Some(mut light) = self.light {
             light.radius = info.light_radius;
-            builder.add(light);
+            entity.set(components::light(), light);
         }
 
-        // Add skinning info
+        // set skinning info
         if info.skinned {
             if let Some(mesh) = self.skinned_mesh {
-                builder.add(mesh);
+                entity.set(components::skinned_mesh(), mesh);
             }
             if let Some(skin) = self.skin {
-                builder.add(skin);
+                entity.set(components::skin(), skin);
             }
         }
 
         if info.animated {
-            builder.add(Animator::new(self.animations.clone()));
+            entity.set(
+                components::animator(),
+                Animator::new(self.animations.clone()),
+            );
         }
 
-        builder.add_bundle((
-            self.pos,
-            self.rot,
-            self.scale,
-            PositionOffset(*self.pos),
-            RotationOffset(*self.rot),
-            Visible::default(),
-        ));
+        entity
+            .set(position(), self.pos)
+            .set(rotation(), self.rot)
+            .set(scale(), self.scale)
+            .set(position_offset(), self.pos)
+            .set(rotation_offset(), self.rot)
+            .set(visible(), Visible::Visible);
 
-        builder
+        // entity.add_bundle((
+        //     self.pos,
+        //     self.rot,
+        //     self.scale,
+        //     PositionOffset(*self.pos),
+        //     RotationOffset(*self.rot),
+        //     Visible::default(),
+        // ));
+
+        entity
     }
 
     /// Recursively build the whole tree with node as root.
@@ -404,18 +397,18 @@ impl<'d> DocumentNode<'d> {
     /// Requires access to the orignal document.
     ///
     /// Behavior is undefined if a different document is used
-    pub fn build_tree<'a>(
+    pub fn mount_tree<'a>(
         &self,
-        builder: &'a mut TreeBuilderClone<Connection>,
+        builder: &'a mut EntityBuilder,
         info: &NodeBuildInfo,
-    ) -> &'a mut TreeBuilderClone<Connection> {
-        self.build(builder.root_mut(), info);
+    ) -> &'a mut EntityBuilder {
+        self.mount(builder, info);
 
         for child in self.children() {
-            let mut subtree = TreeBuilderClone::new();
+            let mut subtree = EntityBuilder::new();
             let child = self.document.node(*child);
-            child.build_tree(&mut subtree, info);
-            builder.attach(subtree);
+            child.mount_tree(&mut subtree, info);
+            builder.attach(child_of, subtree);
         }
 
         builder

@@ -4,7 +4,7 @@ use std::{any::type_name, iter::once, marker::PhantomData, ops::Deref};
 use anyhow::Context;
 use hecs::{Entity, World};
 use itertools::Itertools;
-use ivy_graphics::{GpuCameraData, Renderer};
+use ivy_graphics::{GpuCamera, Renderer};
 use ivy_resources::{Handle, Resources, Storage};
 use ivy_vulkan::{
     context::SharedVulkanContext,
@@ -94,7 +94,7 @@ where
             .map(|val| -> Result<_> { Ok(InputAttachment::new(resources.get(*val)?.deref())) })
             .collect::<Result<Vec<_>>>()?;
 
-        let camera_buffers = world.get::<GpuCameraData>(camera).unwrap();
+        let camera_buffers = world.get::<GpuCamera>(camera).unwrap();
 
         let camera_buffers = camera_buffers.buffers();
         let bindables = once(&camera_buffers)

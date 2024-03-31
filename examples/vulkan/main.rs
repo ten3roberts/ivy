@@ -162,16 +162,17 @@ fn setup_objects(
     ));
 
     let mut builder = EntityBuilder::new();
+    todo!();
     builder
         .add_bundle(RbColliderBundle {
             mass: Mass(50.0),
             collider: Collider::new(Sphere::new(1.0)),
             ..Default::default()
         })
-        .add_bundle(ObjectBundle {
+        .add_bundle(RenderObjectTemplate {
             pos: Position::new(0.0, 0.6, -1.2),
             scale: Scale::uniform(0.5),
-            pass: assets.geometry_pass,
+            // pass: assets.geometry_pass,
             mesh: sphere_mesh,
             material,
             color: Color::red(),
@@ -203,7 +204,7 @@ fn setup_objects(
 
     let mut builder = EntityBuilder::new();
     builder
-        .add_bundle(ObjectBundle {
+        .add_bundle(RenderObjectTemplate {
             scale: Scale::uniform(0.25),
             mesh: cube_mesh,
             pass: assets.geometry_pass,
@@ -225,7 +226,7 @@ fn setup_objects(
     let mut builder = EntityBuilder::new();
 
     builder
-        .add_bundle(ObjectBundle {
+        .add_bundle(RenderObjectTemplate {
             scale: Scale::uniform(0.25),
             mesh: sphere_mesh,
             pass: assets.geometry_pass,
@@ -253,7 +254,7 @@ fn setup_objects(
         let vel = Velocity::rand_uniform(&mut rng);
 
         builder
-            .add_bundle(ObjectBundle {
+            .add_bundle(RenderObjectTemplate {
                 mesh: cube_mesh,
                 pass: assets.geometry_pass,
                 scale: Scale::uniform(0.5),
@@ -282,7 +283,7 @@ fn setup_objects(
         let vel = Velocity::rand_uniform(&mut rng) * 1.0;
 
         builder
-            .add_bundle(ObjectBundle {
+            .add_bundle(RenderObjectTemplate {
                 mesh: sphere_mesh,
                 pass: assets.trans_pass,
                 material,

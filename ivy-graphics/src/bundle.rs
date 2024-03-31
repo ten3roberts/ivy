@@ -1,8 +1,12 @@
-use hecs::{Bundle, Component, DynamicBundleClone};
-use ivy_base::{Color, Position, Rotation, Scale, Visible};
+use flax::EntityBuilder;
+use glam::{Quat, Vec3};
+use ivy_base::{color, position, rotation, scale, visible, Color, Visible};
 use ivy_resources::Handle;
 
-use crate::{Material, Mesh};
+use crate::{
+    components::{material, mesh},
+    Material, Mesh,
+};
 
 /// Represents a bundle for anything that can be rendererd into the 3D world.
 /// **Note**: This bundle is a superset of [`ivy_base::TransformBundle`] and the
@@ -10,20 +14,33 @@ use crate::{Material, Mesh};
 /// By default, the material is taken from the mesh if available. It is valid
 /// for the material to be null, howver, I no materials exists in mesh the
 /// object won't be rendererd.
-#[derive(Bundle, DynamicBundleClone)]
-pub struct ObjectBundle<Pass: Component> {
+pub struct RenderObjectTemplate {
     pub visible: Visible,
-    pub pos: Position,
-    pub rot: Rotation,
-    pub scale: Scale,
+    pub pos: Vec3,
+    pub rot: Quat,
+    pub scale: Vec3,
     pub color: Color,
-    pub pass: Handle<Pass>,
+    // pub pass: Handle<Pass>,
     pub mesh: Handle<Mesh>,
     pub material: Handle<Material>,
 }
 
+impl RenderObjectTemplate {
+    fn mount(&self, entity: &mut EntityBuilder) {
+        entity
+            .set(visible(), self.visible)
+            .set(position(), self.pos)
+            .set(rotation(), self.rot)
+            .set(scale(), self.scale)
+            .set(color(), self.color)
+            // .set(self.pass)
+            .set(mesh(), self.mesh)
+            .set(material(), self.material);
+    }
+}
+
 // Implement manually since `Handle<Pass>` implements default and debug regardless of `Pass`
-impl<Pass: Component> std::fmt::Debug for ObjectBundle<Pass> {
+impl std::fmt::Debug for RenderObjectTemplate {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ObjectBundle")
             .field("visible", &self.visible)
@@ -31,22 +48,22 @@ impl<Pass: Component> std::fmt::Debug for ObjectBundle<Pass> {
             .field("rot", &self.rot)
             .field("scale", &self.scale)
             .field("color", &self.color)
-            .field("pass", &self.pass)
+            // .field("pass", &self.pass)
             .field("mesh", &self.mesh)
             .field("material", &self.material)
             .finish()
     }
 }
 
-impl<Pass: Component> Default for ObjectBundle<Pass> {
+impl Default for RenderObjectTemplate {
     fn default() -> Self {
         Self {
-            visible: Default::default(),
+            visible: Visible::Visible,
             pos: Default::default(),
             rot: Default::default(),
             scale: Default::default(),
             color: Default::default(),
-            pass: Default::default(),
+            // pass: Default::default(),
             mesh: Default::default(),
             material: Default::default(),
         }

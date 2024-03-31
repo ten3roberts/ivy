@@ -1,6 +1,5 @@
 use glam::{Quat, Vec3};
 use gltf::animation::util::{ReadOutputs, Rotations, Scales, Translations};
-use ivy_base::{Position, Rotation, Scale};
 
 mod animations;
 mod animator;
@@ -97,9 +96,9 @@ type Frame = usize;
 
 #[derive(Debug, Clone)]
 pub enum KeyFrameValues {
-    Positions(Vec<Position>),
-    Rotations(Vec<Rotation>),
-    Scales(Vec<Scale>),
+    Positions(Vec<Vec3>),
+    Rotations(Vec<Quat>),
+    Scales(Vec<Vec3>),
 }
 
 impl KeyFrameValues {

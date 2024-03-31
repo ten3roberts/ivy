@@ -13,7 +13,6 @@ use ivy_base::{
 };
 use ivy_resources::{DefaultResource, DefaultResourceMut};
 use palette::Srgba;
-use records::record;
 use slotmap::{new_key_type, SlotMap};
 use smallvec::Array;
 

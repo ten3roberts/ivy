@@ -3,8 +3,8 @@ use std::{
     time::Duration,
 };
 
+use flax::World;
 use glfw::{Glfw, WindowEvent};
-use hecs::World;
 use ivy_base::{AppEvent, Events, Layer};
 use ivy_input::InputEvent;
 use ivy_resources::Resources;

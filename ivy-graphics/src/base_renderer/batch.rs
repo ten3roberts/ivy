@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 
 use ash::vk::{Pipeline, PipelineLayout};
 use ivy_resources::{Handle, HandleUntyped};
+use ivy_vulkan::PipelineInfo;
 
 use super::{BatchId, ObjectId};
 
@@ -9,7 +10,7 @@ use super::{BatchId, ObjectId};
 pub struct BatchData<K> {
     pipeline: Pipeline,
     layout: PipelineLayout,
-    pass: HandleUntyped,
+    pass: Handle<PipelineInfo>,
     pub(crate) key: K,
     /// Number of entities in batches before
     pub(crate) first_instance: u32,
@@ -23,7 +24,12 @@ pub struct BatchData<K> {
 }
 
 impl<O> BatchData<O> {
-    pub fn new(pipeline: Pipeline, layout: PipelineLayout, pass: HandleUntyped, key: O) -> Self {
+    pub fn new(
+        pipeline: Pipeline,
+        layout: PipelineLayout,
+        pass: Handle<PipelineInfo>,
+        key: O,
+    ) -> Self {
         Self {
             pipeline,
             first_instance: 0,
@@ -52,8 +58,8 @@ impl<O> BatchData<O> {
     }
 
     #[inline]
-    pub fn shaderpass<T>(&self) -> Handle<T> {
-        Handle::from_untyped(self.pass)
+    pub fn shaderpass<T>(&self) -> Handle<PipelineInfo> {
+        self.pass
     }
 
     #[inline]

@@ -2,15 +2,14 @@ use std::{collections::BTreeMap, slice::Iter};
 
 use glam::{Mat4, Quat, Vec3};
 use gltf::buffer::Data;
-use ivy_base::{Position, Rotation, Scale, TransformBundle, TransformMatrix};
 use smallvec::SmallVec;
 
-use crate::{Error, Result};
+use crate::{Error, JointTarget, Result};
 
 pub struct Joint {
     /// Transform vertex to bone space when no animation is applied
-    pub inverse_bind_matrix: TransformMatrix,
-    pub local_bind_transform: TransformBundle,
+    pub inverse_bind_matrix: Mat4,
+    pub local_bind_transform: JointTarget,
     pub children: SmallVec<[usize; 4]>,
 }
 
@@ -41,16 +40,21 @@ impl Skin {
                 (
                     (index, idx),
                     Joint {
-                        inverse_bind_matrix: TransformMatrix(Mat4::from_cols(
+                        inverse_bind_matrix: Mat4::from_cols(
                             ibm[0].into(),
                             ibm[1].into(),
                             ibm[2].into(),
                             ibm[3].into(),
-                        )),
-                        local_bind_transform: TransformBundle {
-                            pos: Position(Vec3::from(transform.0)),
-                            rot: Rotation(Quat::from_array(transform.1)),
-                            scale: Scale(Vec3::from(transform.2)),
+                        ),
+                        // local_bind_transform: Mat4::from_scale_rotation_translation(
+                        //     transform.2.into(),
+                        //     Quat::from_array(transform.1),
+                        //     transform.0.into(),
+                        // ),
+                        local_bind_transform: JointTarget {
+                            position: Vec3::from(transform.0),
+                            rotation: Quat::from_array(transform.1),
+                            scale: Vec3::from(transform.2),
                         },
                         children: joint.children().map(|val| val.index()).collect(),
                     },

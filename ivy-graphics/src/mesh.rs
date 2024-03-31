@@ -16,37 +16,71 @@ use ivy_vulkan as vulkan;
 use vulkan::{context::SharedVulkanContext, Buffer, BufferAccess, BufferUsage, VertexDesc};
 
 /// A simple vertex type with position, normal and texcoord.
-#[records::record]
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct Vertex {
-    position: Vec3,
-    normal: Vec3,
-    texcoord: Vec2,
-    tangent: Vec3,
+    pub position: Vec3,
+    pub normal: Vec3,
+    pub texcoord: Vec2,
+    pub tangent: Vec3,
 }
 
-#[records::record]
+impl Vertex {
+    pub fn new(position: Vec3, normal: Vec3, texcoord: Vec2, tangent: Vec3) -> Self {
+        Self {
+            position,
+            normal,
+            texcoord,
+            tangent,
+        }
+    }
+}
+
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct SimpleVertex {
-    position: Vec3,
+    pub position: Vec3,
+}
+
+impl SimpleVertex {
+    pub fn new(position: Vec3) -> Self {
+        Self { position }
+    }
 }
 
 /// A skinned vertex type with position, normal, texcoord and skinning
 /// information.
-#[records::record]
 #[repr(C, align(16))]
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct SkinnedVertex {
-    position: Vec3,
-    normal: Vec3,
-    texcoord: Vec2,
+    pub position: Vec3,
+    pub normal: Vec3,
+    pub texcoord: Vec2,
     /// Joint indices
-    joints: IVec4,
-    /// Corresponding weight
-    weights: Vec4,
-    tangent: Vec3,
+    pub joints: IVec4,
+    /// Corresponding weights
+    pub weights: Vec4,
+    pub tangent: Vec3,
+}
+
+impl SkinnedVertex {
+    pub fn new(
+        position: Vec3,
+        normal: Vec3,
+        texcoord: Vec2,
+        joints: IVec4,
+        weights: Vec4,
+        tangent: Vec3,
+    ) -> Self {
+        Self {
+            position,
+            normal,
+            texcoord,
+            joints,
+            weights,
+            tangent,
+        }
+    }
 }
 
 impl vulkan::VertexDesc for Vertex {
@@ -410,7 +444,9 @@ impl Mesh<Vertex> {
                 .flat_map(|val| val.into_f32())
                 .map(Vec2::from);
 
-            vertices.extend(izip!(pos, normals, texcoord, repeat(Vec3::ZERO)).map(Vertex::from));
+            vertices.extend(izip!(pos, normals, texcoord, repeat(Vec3::ZERO)).map(
+                |(pos, normal, textcoord, tangent)| Vertex::new(pos, normal, textcoord, tangent),
+            ));
 
             // Keep track of which materials map to which part of the index buffer
             if let Some(material) = materials.get(primitive.material().index().unwrap_or(0)) {
@@ -481,8 +517,11 @@ impl Mesh<SkinnedVertex> {
                 .map(|val| IVec4::new(val[0] as i32, val[1] as i32, val[2] as i32, val[3] as i32));
 
             vertices.extend(
-                izip!(pos, normals, texcoord, joints, weights, repeat(Vec3::ZERO),)
-                    .map(SkinnedVertex::from),
+                izip!(pos, normals, texcoord, joints, weights, repeat(Vec3::ZERO),).map(
+                    |(pos, normal, texcoord, joints, weight, tangent)| {
+                        SkinnedVertex::new(pos, normal, texcoord, joints, weight, tangent)
+                    },
+                ),
             );
 
             // Keep track of which materials map to which part of the index buffer

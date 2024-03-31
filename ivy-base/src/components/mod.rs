@@ -3,30 +3,33 @@ use std::{borrow::Cow, time::Duration};
 use flax::{Component, Debuggable, Fetch};
 use glam::{Mat3, Mat4, Quat, Vec2, Vec3, Vec4Swizzles};
 use ivy_random::Random;
-#[cfg(feature = "serialize")]
-use serde::{Deserialize, Serialize};
 mod connections;
 mod physics;
 pub use connections::*;
 pub use physics::*;
 
+use crate::Color;
+
 flax::component! {
-    pub position:Vec3 => [Debuggable],
+    pub position: Vec3 => [Debuggable],
     /// Describes a rotation in 3D space.
-    pub rotation:Quat => [ Debuggable ],
-    pub scale:Vec3 => [ Debuggable ],
+    pub rotation: Quat => [ Debuggable ],
+    pub scale: Vec3 => [ Debuggable ],
 
     /// Calculated scale, rotation, and position transform matrix in world space
-    pub transform:Mat4 => [ Debuggable ],
+    pub transform: Mat4 => [ Debuggable ],
 
     /// TODO: remove
-    pub position2v:Vec2 => [ Debuggable ],
+    pub position2v: Vec2 => [ Debuggable ],
 
     pub size:Vec3 => [ Debuggable ],
 
     pub is_static: () => [ Debuggable ],
     pub visible: Visible => [ Debuggable ],
 
+    pub color: Color => [ Debuggable ],
+
+    pub main_camera: () => [ Debuggable ],
 }
 
 #[derive(Fetch, Debug, Clone)]

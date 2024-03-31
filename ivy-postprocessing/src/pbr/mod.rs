@@ -2,7 +2,7 @@ use hecs::{Component, Entity, World};
 use itertools::Itertools;
 use ivy_base::Extent;
 use ivy_graphics::{
-    DepthAttachment, EnvData, EnvironmentManager, FullscreenRenderer, GpuCameraData, LightRenderer,
+    DepthAttachment, EnvData, EnvironmentManager, FullscreenRenderer, GpuCamera, LightRenderer,
     MeshRenderer, Renderer,
 };
 use ivy_rendergraph::{AttachmentInfo, CameraNode, CameraNodeInfo, Node, TransferNode};
@@ -60,7 +60,7 @@ where
     E: Copy + Component,
     E: EnvData,
 {
-    GpuCameraData::create_gpu_cameras(&context, world, frames_in_flight)?;
+    GpuCamera::create_gpu_cameras(&context, world, frames_in_flight)?;
     let pbr_attachments = PBRAttachments::new(context.clone(), resources, extent)?;
 
     let depth_attachment = DepthAttachment::new(context.clone(), resources, extent)?;

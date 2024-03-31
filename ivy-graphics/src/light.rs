@@ -1,16 +1,17 @@
 use crate::{
+    components::{light, light_renderer},
     icosphere::create_ico_mesh,
     shaders::{LIGHT_VERTEX_SHADER, PBR_SHADER},
     MainCamera, Mesh, Renderer, Result, SimpleVertex,
 };
 use ash::vk::{BlendFactor, CullModeFlags, DescriptorSet, IndexType, ShaderStageFlags};
+use flax::{Component, Query, World};
 use glam::Vec3;
-use hecs::World;
-use ivy_base::{Position, Rotation, WorldExt};
+use ivy_base::{main_camera, position, rotation, WorldExt};
 use ivy_vulkan::{
     context::SharedVulkanContext,
     descriptors::{DescriptorBuilder, IntoSet},
-    Buffer, Pipeline, PipelineInfo,
+    Buffer, Pipeline, PipelineInfo, Shader,
 };
 use once_cell::sync::OnceCell;
 use ordered_float::OrderedFloat;
@@ -93,7 +94,7 @@ impl LightRenderer {
     pub fn update_system(
         &mut self,
         world: &World,
-        camera_position: Position,
+        camera_position: Vec3,
         camera_forward: Vec3,
         current_frame: usize,
     ) -> Result<()> {
@@ -107,21 +108,26 @@ impl LightRenderer {
         // }
         // v.draw_gizmos(gizmos, Color::red())
         self.lights.clear();
-        self.lights
-            .extend(world.query::<(&PointLight, &Position)>().iter().map(
-                |(_, (light, position))| LightData {
-                    position: **position,
+
+        let mut query = Query::new((light(), position()));
+
+        self.lights.extend(
+            query
+                .borrow(world)
+                .iter()
+                .map(|(light, position)| LightData {
+                    position: *position,
                     radiance: light.radiance,
                     size: (light.radiance.length() * 256.).sqrt(),
                     radius: light.radius,
                     ..Default::default()
-                },
-            ));
+                }),
+        );
 
         self.lights.sort_unstable_by_key(|val| {
             OrderedFloat(
-                val.position.distance_squared(*camera_position)
-                    / ((val.position - *camera_position)
+                val.position.distance_squared(camera_position)
+                    / ((val.position - camera_position)
                         .dot(camera_forward)
                         .max(0.5)),
             )
@@ -136,11 +142,13 @@ impl LightRenderer {
     }
 
     pub fn update_all_system(world: &World, current_frame: usize) -> Result<()> {
-        world
-            .query::<(&mut LightRenderer, &Position, &Rotation)>()
+        // TODO change detection
+
+        Query::new((light_renderer().as_mut(), position(), rotation()))
+            .borrow(world)
             .iter()
-            .try_for_each(|(_, (light_manager, position, rot))| {
-                light_manager.update_system(world, *position, **rot * Vec3::Z, current_frame)
+            .try_for_each(|(light_manager, position, rot)| {
+                light_manager.update_system(world, *position, *rot * Vec3::Z, current_frame)
             })
     }
 
@@ -154,9 +162,7 @@ impl LightRenderer {
 }
 
 impl Renderer for LightRenderer {
-    type Error = crate::Error;
-
-    fn draw<Pass: ivy_vulkan::ShaderPass>(
+    fn draw(
         &mut self,
         // The ecs world
         world: &mut World,
@@ -172,12 +178,18 @@ impl Renderer for LightRenderer {
         offsets: &[u32],
         // The current swapchain image or backbuffer index
         current_frame: usize,
-    ) -> Result<()> {
-        let cam = world.by_tag::<MainCamera>().unwrap();
-        let mut query = world.query_one::<(&Position, &Rotation)>(cam)?;
-        let (pos, rot) = query.get().unwrap();
+        _pass: Component<Shader>,
+    ) -> anyhow::Result<()> {
+        let cam = world.by_tag(main_camera()).unwrap();
+        let (&camera_pos, &camera_rot) = Query::new((position(), rotation()))
+            .with(main_camera())
+            .borrow(world)
+            .iter()
+            .next()
+            .unwrap();
 
-        self.update_system(world, *pos, **rot * Vec3::Z, current_frame)?;
+        self.update_system(world, camera_pos, camera_rot * Vec3::Z, current_frame)?;
+
         let pipeline = self.pipeline.get_or_try_init(|| {
             let context = resources.get_default::<SharedVulkanContext>()?;
             Pipeline::new::<SimpleVertex>(

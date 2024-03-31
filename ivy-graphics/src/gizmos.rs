@@ -1,33 +1,35 @@
 use ash::vk::{DescriptorSet, IndexType, ShaderStageFlags};
+use flax::{Component, World};
 use glam::{Mat4, Vec3, Vec4};
-use hecs::World;
-use ivy_base::Gizmos;
+use ivy_base::{ColorExt, Gizmos};
 use ivy_resources::Resources;
-use ivy_vulkan::{context::SharedVulkanContext, shaderpass::ShaderPass, PassInfo, Pipeline};
+use ivy_vulkan::{context::SharedVulkanContext, PassInfo, Pipeline, PipelineInfo, Shader};
 use once_cell::sync::OnceCell;
 
 use crate::{Mesh, Renderer, Result, Vertex};
 
+/// Renders all the drawn gizmos
+/// TODO: supply the pipeline info/shader from a node
 pub struct GizmoRenderer {
     mesh: crate::Mesh,
     pipeline: OnceCell<Pipeline>,
+    pipeline_info: PipelineInfo,
 }
 
 impl GizmoRenderer {
-    pub fn new(context: SharedVulkanContext) -> Result<Self> {
+    pub fn new(context: SharedVulkanContext, pipeline_info: PipelineInfo) -> Result<Self> {
         let mesh = Mesh::new_square(context, 2.0, 2.0)?;
 
         Ok(Self {
             mesh,
             pipeline: OnceCell::new(),
+            pipeline_info,
         })
     }
 }
 
 impl Renderer for GizmoRenderer {
-    type Error = crate::Error;
-
-    fn draw<Pass: ShaderPass>(
+    fn draw(
         &mut self,
         _: &mut World,
         resources: &Resources,
@@ -36,11 +38,11 @@ impl Renderer for GizmoRenderer {
         pass_info: &PassInfo,
         offsets: &[u32],
         _: usize,
-    ) -> Result<()> {
+        _: Component<Shader>,
+    ) -> anyhow::Result<()> {
         let pipeline = self.pipeline.get_or_try_init(|| {
             let context = resources.get_default::<SharedVulkanContext>()?;
-            let pass = resources.get_default::<Pass>()?;
-            Pipeline::new::<Vertex>(context.clone(), pass.pipeline(), pass_info)
+            Pipeline::new::<Vertex>(context.clone(), &self.pipeline_info, pass_info)
         })?;
 
         cmd.bind_vertexbuffer(0, self.mesh.vertex_buffer());
@@ -72,7 +74,7 @@ impl Renderer for GizmoRenderer {
                         &PushConstantData {
                             model: Mat4::from_translation(*origin)
                                 * Mat4::from_scale(Vec3::splat(*radius)),
-                            color: color.into(),
+                            color: color.to_vec4(),
                             billboard_axis: Vec3::ZERO,
                             corner_radius: 1.0,
                         },
@@ -94,7 +96,7 @@ impl Renderer for GizmoRenderer {
                         &PushConstantData {
                             model: Mat4::from_translation(*origin + *dir * 0.5)
                                 * Mat4::from_scale(Vec3::new(*radius, dir.length() * 0.5, *radius)),
-                            color: color.into(),
+                            color: color.to_vec4(),
                             billboard_axis: dir.normalize(),
                             corner_radius: *corner_radius,
                         },

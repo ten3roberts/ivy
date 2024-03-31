@@ -1,47 +1,46 @@
-use std::{
-    any::TypeId,
-    collections::{btree_map::Entry, BTreeMap},
-};
+use std::collections::btree_map::Entry;
 
-use crate::{Error, Renderer, Result};
+use crate::{Renderer, Result};
 use ash::vk::DescriptorSet;
+use flax::{Component, World};
 use ivy_resources::Resources;
-use ivy_vulkan::{context::SharedVulkanContext, shaderpass::ShaderPass, PassInfo, Pipeline};
+use ivy_vulkan::{context::SharedVulkanContext, PassInfo, Pipeline, PipelineInfo, Shader};
 
 // Renders a fullscreen quad using the supplied shader pass and descriptors
 pub struct FullscreenRenderer {
-    pipeline: BTreeMap<TypeId, Pipeline>,
+    pipeline: Option<Pipeline>,
+    pipeline_info: PipelineInfo,
 }
 
 impl FullscreenRenderer {
-    pub fn new() -> Self {
+    pub fn new(pipeline_info: PipelineInfo) -> Self {
         Self {
-            pipeline: BTreeMap::new(),
+            pipeline: None,
+            pipeline_info,
         }
     }
 }
 
 impl Renderer for FullscreenRenderer {
-    type Error = Error;
-    fn draw<Pass: ShaderPass>(
+    fn draw(
         &mut self,
-        _world: &mut hecs::World,
+        _world: &mut World,
         resources: &Resources,
         cmd: &ivy_vulkan::commands::CommandBuffer,
         sets: &[DescriptorSet],
         pass_info: &PassInfo,
         offsets: &[u32],
         _current_frame: usize,
-    ) -> Result<()> {
-        let pipeline = match self.pipeline.entry(TypeId::of::<Pass>()) {
-            Entry::Vacant(entry) => {
+        pass: Component<Shader>,
+    ) -> anyhow::Result<()> {
+        let pipeline = match &mut self.pipeline {
+            Some(v) => v,
+            None => {
                 let context = resources.get_default::<SharedVulkanContext>()?;
-                let pass = resources.get_default::<Pass>()?;
-                let val = Pipeline::new::<()>(context.clone(), pass.pipeline(), pass_info)?;
+                let val = Pipeline::new::<()>(context.clone(), &self.pipeline_info, pass_info)?;
 
-                entry.insert(val)
+                self.pipeline.insert(val)
             }
-            Entry::Occupied(entry) => entry.into_mut(),
         };
 
         cmd.bind_pipeline(pipeline.pipeline());

@@ -24,12 +24,6 @@ pub enum Error {
     #[error("Graphics resource error")]
     ResourceError(#[from] ivy_resources::Error),
 
-    #[error("Graphics component fetch error")]
-    ComponentError(#[from] hecs::ComponentError),
-
-    #[error("UI entity query error")]
-    NoSuchEntity(#[from] hecs::NoSuchEntity),
-
     #[error("Failed to pack rectangles for texture atlas of size: {0:?}")]
     RectanglePack(Extent),
 
@@ -61,4 +55,7 @@ pub enum Error {
     MissingAnimation(String),
     #[error("The animation index was out of bounds.\nAttempt to index animation {0}")]
     InvalidAnimation(usize),
+
+    #[error("ECS error")]
+    Flax(#[from] flax::Error),
 }

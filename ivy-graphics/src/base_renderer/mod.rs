@@ -1,4 +1,4 @@
-use std::{any::TypeId, collections::HashMap};
+use std::collections::{btree_map::Entry, BTreeMap};
 
 use crate::Result;
 
@@ -7,11 +7,11 @@ mod batches;
 mod pass;
 pub use batch::*;
 pub use batches::*;
-use hecs::Query;
-use ivy_vulkan::{context::SharedVulkanContext, shaderpass::ShaderPass, VertexDesc};
+use flax::{component::ComponentKey, Component, Debuggable};
+use ivy_vulkan::{context::SharedVulkanContext, Shader, VertexDesc};
 pub use pass::*;
 
-pub trait KeyQuery: Send + Sync + Query {
+pub trait KeyQuery: Send + Sync {
     type K: RendererKey;
     fn into_key(&self) -> Self::K;
 }
@@ -22,15 +22,10 @@ impl<T> RendererKey for T where T: std::hash::Hash + std::cmp::Eq + Copy {}
 
 type ObjectId = u32;
 
-/// A mesh renderer using vkCmdDrawIndirectIndexed and efficient batching.
-/// A query and key are provided. On register, all entites satisfying the
-/// `KeyQuery` will be placed into the object buffer. Objects will then be
-/// placed into the correct batch according to their shaderpass and key hash.
-/// This means that if the key is made of a Material and Mesh, all objects with
-/// the same pipeline, material, and mesh will be placed in the same batch.
+/// A renderer that can be reused for multiple passes
 pub struct BaseRenderer<K, Obj, V> {
     context: SharedVulkanContext,
-    passes: HashMap<TypeId, PassData<K, Obj, V>>,
+    passes: BTreeMap<ComponentKey, BaseRendererPass<K, Obj, V>>,
     frames_in_flight: usize,
     capacity: u32,
 }
@@ -45,21 +40,23 @@ where
         capacity: ObjectId,
         frames_in_flight: usize,
     ) -> Result<Self> {
-        let passes = HashMap::new();
-
         Ok(Self {
             capacity,
             context,
-            passes,
+            passes: Default::default(),
             frames_in_flight,
         })
     }
 
-    /// Returns the pass data for the shaderpass.
-    pub fn pass_mut<Pass: ShaderPass>(&mut self) -> Result<&mut PassData<K, Obj, V>> {
-        match self.passes.entry(TypeId::of::<Pass>()) {
-            std::collections::hash_map::Entry::Occupied(entry) => Ok(entry.into_mut()),
-            std::collections::hash_map::Entry::Vacant(entry) => Ok(entry.insert(PassData::new(
+    /// Returns the pass data for the shader pass.
+    pub fn pass_mut(
+        &mut self,
+        shaderpass: Component<Shader>,
+    ) -> Result<&mut BaseRendererPass<K, Obj, V>> {
+        match self.passes.entry(shaderpass.key()) {
+            Entry::Occupied(entry) => Ok(entry.into_mut()),
+            Entry::Vacant(entry) => Ok(entry.insert(BaseRendererPass::new(
+                shaderpass,
                 self.context.clone(),
                 self.capacity,
                 self.frames_in_flight,
@@ -67,11 +64,9 @@ where
         }
     }
 
-    /// Returns the pass data for the shaderpass.
-    pub fn pass<Pass: ShaderPass>(&self) -> &PassData<K, Obj, V> {
-        self.passes
-            .get(&TypeId::of::<Pass>())
-            .expect("Pass does not exist")
+    /// Returns the pass data for the shader pass.
+    pub fn pass(&self, pass: Component<Shader>) -> &BaseRendererPass<K, Obj, V> {
+        self.passes.get(&pass.key()).expect("Pass does not exist")
     }
 
     /// Get a reference to the base renderer's context.
@@ -80,4 +75,8 @@ where
     }
 }
 
-type BatchId = u32;
+pub(crate) type BatchId = u32;
+
+flax::component! {
+    pub batch_id(pass_id): BatchId => [ Debuggable ],
+}
