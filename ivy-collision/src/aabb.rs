@@ -94,8 +94,8 @@ impl BoundingBox {
 
         let origin = ray.origin - self.origin;
 
-        let t1 = (-self.extents - *origin) * inv_dir;
-        let t2 = (self.extents - *origin) * inv_dir;
+        let t1 = (-self.extents - origin) * inv_dir;
+        let t2 = (self.extents - origin) * inv_dir;
         let tmin = t1.min(t2);
         let tmax = t1.max(t2);
 
@@ -162,7 +162,7 @@ impl DrawGizmos for BoundingBox {
     fn draw_gizmos(&self, gizmos: &mut Gizmos, color: ivy_base::Color) {
         gizmos.draw(
             Cube {
-                origin: *self.origin,
+                origin: self.origin,
                 half_extents: self.extents,
                 ..Default::default()
             },

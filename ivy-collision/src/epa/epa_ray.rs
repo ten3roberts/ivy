@@ -45,7 +45,7 @@ pub fn epa_ray<F: Fn(Vec3) -> SupportPoint>(
         if iterations >= MAX_ITERATIONS
             || (support_distance.abs() - max_face.distance.abs()).abs() < TOLERANCE
         {
-            let point = plane_ray(*polytype[max_face.indices[0]].a, max_face.normal, ray).into();
+            let point = plane_ray(polytype[max_face.indices[0]].a, max_face.normal, ray).into();
 
             return Contact {
                 // points: ContactPoints::new(&[polytype[min_face.indices[0]].a]),

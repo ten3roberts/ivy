@@ -34,7 +34,7 @@ tracing = "0.1"
 tracing-tree = "0.3"
 tracing-subscriber = "0.3"
 palette = "0.7"
-glam = "0.20"
+glam = { version = "0.20", features = ["bytemuck", "rand"] }
 serde = { version = "1.0", features = ["derive"] }
 rand_distr = "0.4"
 rand = "0.8"
@@ -74,7 +74,7 @@ slotmap = "1.0.6"
 hecs = "0.7.6"
 glfw = { version = "0.44.0", features = ["vulkan"] }
 hecs-hierarchy = "0.11.6"
-glam = { version = "0.20.5", features = ["bytemuck"] }
+glam.workspace = true
 log = "0.4.17"
 color-eyre = "0.6.1"
 tracing = "0.1.34"

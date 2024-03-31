@@ -1,13 +1,17 @@
+use flax::component::ComponentValue;
 use glam::Vec3;
-use hecs::{Component, View};
 use ivy_base::{Color, Cube, DrawGizmos, Events, Gizmos};
 use ordered_float::OrderedFloat;
+use palette::{
+    named::{BLUE, GREEN, YELLOW},
+    Srgb, WithAlpha,
+};
 use slotmap::SlotMap;
 use smallvec::{smallvec, Array, SmallVec};
 
 use crate::{
-    intersect, BoundingBox, Collider, Collision, CollisionTreeNode, NodeIndex, NodeState, Nodes,
-    Object, ObjectData, ObjectIndex,
+    intersect, BoundingBox, Collision, CollisionTreeNode, NodeIndex, NodeState, Nodes, Object,
+    ObjectData, ObjectIndex,
 };
 
 const MARGIN: f32 = 1.2;
@@ -290,7 +294,7 @@ where
     }
 }
 
-impl<O: Array<Item = Object> + Component> CollisionTreeNode for BVHNode<O> {
+impl<O: Array<Item = Object> + ComponentValue> CollisionTreeNode for BVHNode<O> {
     fn objects(&self) -> &[Object] {
         &self.objects
     }
@@ -367,7 +371,6 @@ impl<O: Array<Item = Object> + Component> CollisionTreeNode for BVHNode<O> {
     }
 
     fn check_collisions(
-        colliders: &View<&Collider>,
         events: &Events,
         index: NodeIndex,
         nodes: &Nodes<Self>,
@@ -377,10 +380,10 @@ impl<O: Array<Item = Object> + Component> CollisionTreeNode for BVHNode<O> {
             assert!(a.is_leaf());
             assert!(b.is_leaf());
             for a in a.objects() {
-                let a_obj = data[a.index];
+                let a_obj = &data[a.index];
                 for b in b.objects() {
-                    let b_obj = data[b.index];
-                    if let Some(collision) = check_collision(colliders, *a, &a_obj, *b, &b_obj) {
+                    let b_obj = &data[b.index];
+                    if let Some(collision) = check_collision(data, *a, &a_obj, *b, &b_obj) {
                         events.send(collision)
                     }
                 }
@@ -392,17 +395,17 @@ impl<O: Array<Item = Object> + Component> CollisionTreeNode for BVHNode<O> {
         if let Some([left, right]) = node.children {
             assert!(node.objects.is_empty());
             Self::traverse(left, right, nodes, &mut on_overlap);
-            Self::check_collisions(colliders, events, left, nodes, data);
-            Self::check_collisions(colliders, events, right, nodes, data);
+            Self::check_collisions(events, left, nodes, data);
+            Self::check_collisions(events, right, nodes, data);
         } else if !node.state.dormant() {
             // Check collisions for objects in the same leaf
             for (i, a) in node.objects.iter().enumerate() {
-                let a_obj = data[a.index];
+                let a_obj = &data[a.index];
 
                 for b in node.objects.iter().skip(i + 1) {
                     assert_ne!(a, b);
-                    let b_obj = data[b.index];
-                    if let Some(collision) = check_collision(colliders, *a, &a_obj, *b, &b_obj) {
+                    let b_obj = &data[b.index];
+                    if let Some(collision) = check_collision(data, *a, &a_obj, *b, &b_obj) {
                         events.send(collision)
                     }
                 }
@@ -413,7 +416,7 @@ impl<O: Array<Item = Object> + Component> CollisionTreeNode for BVHNode<O> {
 
 impl<O> DrawGizmos for BVHNode<O>
 where
-    O: Array<Item = Object> + Component,
+    O: Array<Item = Object> + ComponentValue,
 {
     fn draw_gizmos(&self, gizmos: &mut Gizmos, _: Color) {
         if !self.is_leaf() {
@@ -421,24 +424,24 @@ where
         }
 
         let color = match self.state {
-            NodeState::Dynamic => Color::green(),
-            NodeState::Static => Color::blue(),
-            NodeState::Sleeping => Color::yellow(),
+            NodeState::Dynamic => GREEN,
+            NodeState::Static => BLUE,
+            NodeState::Sleeping => YELLOW,
         };
 
         gizmos.draw(
             Cube {
-                origin: *self.bounds.origin,
+                origin: self.bounds.origin,
                 half_extents: self.bounds.extents,
                 ..Default::default()
             },
-            color,
+            Srgb::from_format(color).with_alpha(1.0),
         )
     }
 }
 
 fn check_collision(
-    colliders: &View<&Collider>,
+    data: &SlotMap<ObjectIndex, ObjectData>,
     a: Object,
     a_obj: &ObjectData,
     b: Object,
@@ -448,10 +451,15 @@ fn check_collision(
         return None;
     }
 
-    let a_coll = colliders.get(a.entity).expect("Collider");
-    let b_coll = colliders.get(b.entity).expect("Collider");
+    let a_data = &data[a.index];
+    let b_data = &data[b.index];
 
-    if let Some(contact) = intersect(&a_obj.transform, &b_obj.transform, a_coll, b_coll) {
+    if let Some(contact) = intersect(
+        &a_obj.transform,
+        &b_obj.transform,
+        &a_data.collider,
+        &b_data.collider,
+    ) {
         let collision = Collision {
             a: crate::EntityPayload {
                 entity: a.entity,

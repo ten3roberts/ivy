@@ -1,7 +1,7 @@
 use flume::Receiver;
 use glam::Vec2;
 use glfw::{Action, Key, MouseButton};
-use ivy_base::{Events, Extent, Position2D};
+use ivy_base::{Events, Extent};
 use ivy_resources::Resources;
 use ivy_window::Window;
 
@@ -20,9 +20,9 @@ pub struct Input {
     rx: Receiver<InputEvent>,
     keys: [bool; MAX_KEYS],
     mouse_buttons: [bool; MAX_MOUSE_BUTTONS],
-    cursor_pos: Position2D,
+    cursor_pos: Vec2,
     scroll: Vec2,
-    old_cursor_pos: Position2D,
+    old_cursor_pos: Vec2,
     window_extent: Extent,
 }
 
@@ -37,7 +37,7 @@ impl Input {
         let window = resources.get_default::<Window>()?;
 
         let window_size = window.extent();
-        let cursor_pos = window.cursor_pos().into();
+        let cursor_pos = window.cursor_pos();
 
         Ok(Self {
             release_unfocus: true,
@@ -106,9 +106,9 @@ impl Input {
 
     /// Returns the cursor positon in normalized device coordinates [-1,1]
     #[inline]
-    pub fn normalized_cursor_pos(&self) -> Position2D {
+    pub fn normalized_cursor_pos(&self) -> Vec2 {
         let pos = self.cursor_pos;
-        Position2D::new(
+        Vec2::new(
             (2.0 * pos.x) / self.window_extent.width as f32 - 1.0,
             1.0 - (2.0 * pos.y) / self.window_extent.height as f32,
         )
@@ -116,7 +116,7 @@ impl Input {
 
     /// Returns the current mouse position in screen coordinates.
     #[inline]
-    pub fn cursor_pos(&self) -> Position2D {
+    pub fn cursor_pos(&self) -> Vec2 {
         self.cursor_pos
     }
 
@@ -124,7 +124,7 @@ impl Input {
     /// call to `on_update`. Does not take into account the time between each frame. To get the
     /// cursor velocity, divide by deltatime.
     #[inline]
-    pub fn cursor_movement(&self) -> Position2D {
+    pub fn cursor_movement(&self) -> Vec2 {
         self.old_cursor_pos - self.cursor_pos
     }
 
@@ -132,7 +132,7 @@ impl Input {
     /// Returns the relative mouse movement in normalized coordinates between this and the previous
     /// call to `on_update`. Does not take into account the time between each frame. To get the
     /// cursor velocity, divide by deltatime.
-    pub fn normalized_cursor_movement(&self) -> Position2D {
+    pub fn normalized_cursor_movement(&self) -> Vec2 {
         self.cursor_movement() / self.window_extent().as_vec()
     }
 

@@ -1,17 +1,26 @@
 use std::any;
 
+use anyhow::Context;
+use flax::{
+    components::is_static, entity_ids, fetch::Satisfied, CommandBuffer, Component, Entity, Error,
+    Fetch, FetchExt, Opt, Query, World,
+};
 use flume::{Receiver, Sender};
-use hecs::{Entity, Query};
-use hecs_schedule::{CommandBuffer, SubWorld, Write};
+use glam::{Mat4, Vec3};
 use ivy_base::{
-    Color, DrawGizmos, Events, Gizmos, Sleeping, Static, TransformQuery, Trigger, Visible,
+    mass, transform, velocity, Color, DrawGizmos, Events, Gizmos, Sleeping, Static, TransformQuery,
+    Trigger, Visible,
 };
 use ivy_resources::{DefaultResource, DefaultResourceMut};
+use palette::Srgba;
 use records::record;
 use slotmap::{new_key_type, SlotMap};
 use smallvec::Array;
 
-use crate::{BoundingBox, Collider, ColliderOffset, CollisionPrimitive};
+use crate::{
+    components::{self, collider, collider_offset, tree_index},
+    BoundingBox, Collider, ColliderOffset, CollisionPrimitive,
+};
 
 mod binary_node;
 mod bvh;
@@ -110,17 +119,21 @@ impl<N: CollisionTreeNode> CollisionTree<N> {
         object
     }
 
-    pub fn register(&mut self, world: SubWorld<ObjectQuery>, cmd: &mut CommandBuffer) {
-        for (e, q) in world.native_query().without::<Object>().iter() {
-            let obj: ObjectData = q.into();
-            let object = self.insert(e, obj);
+    /// Registers new entities in the tree
+    pub fn register(&mut self, world: &World, cmd: &mut CommandBuffer) {
+        let mut query = Query::new((entity_ids(), ObjectQuery::new())).without(tree_index());
 
+        for (id, q) in query.borrow(world).iter() {
+            let obj: ObjectData = q.into_object_data();
+            let tree_index = self.insert(id, obj);
+
+            // TODO: remove query instead
             let on_drop = OnDrop {
-                object,
+                object: tree_index,
                 tx: self.tx.clone(),
             };
 
-            cmd.insert(e, (object, on_drop))
+            cmd.set(id, components::tree_index(), tree_index.index);
         }
     }
 
@@ -134,14 +147,12 @@ impl<N: CollisionTreeNode> CollisionTree<N> {
             .count()
     }
 
-    pub fn update(
-        &mut self,
-        world: SubWorld<(&Object, ObjectQuery)>,
-    ) -> Result<(), hecs_schedule::Error> {
+    pub fn update(&mut self, world: &World) -> Result<(), Error> {
+        let mut query = Query::new((tree_index(), ObjectQuery::new()));
         // Update object data
-        for (_, (obj, q)) in world.native_query().without::<Static>().iter() {
-            let data: ObjectData = q.into();
-            self.objects[obj.index] = data;
+        for (&index, q) in query.borrow(world).iter() {
+            let data: ObjectData = q.into_object_data();
+            self.objects[index] = data;
         }
 
         let mut despawned = self.handle_despawned();
@@ -165,15 +176,13 @@ impl<N: CollisionTreeNode> CollisionTree<N> {
     }
 
     #[inline]
+    /// Checks the tree for collisions and dispatches them as events
     pub fn check_collisions<'a, G: Array<Item = &'a ObjectData>>(
         &'a self,
-        world: SubWorld<&Collider>,
+        world: &World,
         events: &mut Events,
-    ) -> hecs_schedule::error::Result<()> {
-        let mut colliders = world.query();
-        let colliders = colliders.view();
-
-        N::check_collisions(&colliders, events, self.root, &self.nodes, &self.objects);
+    ) -> anyhow::Result<()> {
+        N::check_collisions(events, self.root, &self.nodes, &self.objects);
 
         Ok(())
     }
@@ -202,27 +211,24 @@ impl<N: CollisionTreeNode> std::fmt::Debug for CollisionTree<N> {
 
 impl<N: CollisionTreeNode> CollisionTree<N> {
     pub fn register_system(
-        world: SubWorld<ObjectQuery>,
-        mut cmd: Write<CommandBuffer>,
+        world: &World,
+        mut cmd: &mut CommandBuffer,
         mut tree: DefaultResourceMut<Self>,
-    ) -> hecs_schedule::error::Result<()> {
+    ) -> anyhow::Result<()> {
         tree.register(world, &mut cmd);
 
         Ok(())
     }
 
-    pub fn update_system(
-        world: SubWorld<(&Object, ObjectQuery)>,
-        mut tree: DefaultResourceMut<Self>,
-    ) -> hecs_schedule::error::Result<()> {
-        tree.update(world)
+    pub fn update_system(world: &World, mut tree: DefaultResourceMut<Self>) -> anyhow::Result<()> {
+        tree.update(world).context("Failed to update tree")
     }
 
     pub fn check_collisions_system(
-        world: SubWorld<&Collider>,
+        world: &World,
         tree: DefaultResourceMut<Self>,
-        mut events: Write<Events>,
-    ) -> hecs_schedule::error::Result<()>
+        mut events: &mut Events,
+    ) -> anyhow::Result<()>
     where
         N: CollisionTreeNode,
     {
@@ -234,13 +240,17 @@ impl<N: CollisionTreeNode> CollisionTree<N> {
 
 impl<N: CollisionTreeNode + DrawGizmos> CollisionTree<N> {
     pub fn draw_system(tree: DefaultResource<Self>, mut gizmos: DefaultResourceMut<Gizmos>) {
-        tree.draw_gizmos(&mut gizmos, Color::white())
+        tree.draw_gizmos(&mut gizmos, Srgba::new(1.0, 1.0, 1.0, 1.0))
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-#[record]
+#[derive(Debug, Clone)]
+/// Data contained in each object in the tree.
+///
+/// Copied and retained from the ECS for easy access
+/// TODO: reduce size
 pub struct ObjectData {
+    pub collider: Collider,
     pub bounds: BoundingBox,
     pub extended_bounds: BoundingBox,
     pub transform: Mat4,
@@ -249,26 +259,45 @@ pub struct ObjectData {
     pub state: NodeState,
     pub movable: bool,
 }
-
-use flax::Fetch;
 #[derive(Fetch)]
 pub struct ObjectQuery {
-    transform: TransformQuery,
-    mass: Opt<Component<Mass>>,
+    transform: Component<Mat4>,
+    mass: Opt<Component<f32>>,
+    collider: Component<Collider>,
+    offset: Component<Mat4>,
+    is_trigger: Satisfied<()>,
+    is_static: Satisfied<Component<()>>,
+    is_visible: Satisfied<()>,
+    velocity: Component<Vec3>,
 }
 
-#[derive(Query)]
-pub struct ObjectQuery<'a> {
-    transform: TransformQuery<'a>,
-    mass: Option<&'a Mass>,
-    offset: Option<&'a ColliderOffset>,
-    collider: &'a Collider,
-    is_trigger: Option<&'a Trigger>,
-    is_static: Option<&'a Static>,
-    is_visible: Option<&'a Visible>,
-    is_sleeping: Option<&'a Sleeping>,
-    velocity: Option<&'a Velocity>,
+impl ObjectQuery {
+    fn new() -> Self {
+        Self {
+            transform: transform(),
+            mass: mass().opt(),
+            collider: collider(),
+            offset: collider_offset(),
+            is_static: is_static().satisfied(),
+            velocity: velocity(),
+            is_visible: todo!(),
+            is_trigger: todo!(),
+        }
+    }
 }
+
+// #[derive(Query)]
+// pub struct ObjectQuery<'a> {
+//     transform: TransformQuery<'a>,
+//     mass: Option<&'a Mass>,
+//     offset: Option<&'a ColliderOffset>,
+//     collider: &'a Collider,
+//     is_trigger: Option<&'a Trigger>,
+//     is_static: Option<&'a Static>,
+//     is_visible: Option<&'a Visible>,
+//     is_sleeping: Option<&'a Sleeping>,
+//     velocity: Option<&'a Velocity>,
+// }
 
 impl ObjectData {
     pub fn is_movable(&self) -> bool {
@@ -276,31 +305,30 @@ impl ObjectData {
     }
 }
 
-impl<'a> Into<ObjectData> for ObjectQuery<'a> {
-    fn into(self) -> ObjectData {
-        let off = self.offset.cloned().unwrap_or_default();
-        let transform = *self.transform.into_matrix() * *off;
+impl ObjectQueryItem<'_> {
+    fn into_object_data(self) -> ObjectData {
+        let offset = *self.offset;
+        let transform = *self.transform * offset;
 
         let bounds = self.collider.bounding_box(transform);
-        let extended_bounds = if let Some(vel) = self.velocity {
-            bounds.expand(**vel * 0.1)
-        } else {
-            bounds
-        };
+        let extended_bounds = bounds.expand(*self.velocity * 0.1);
+
         ObjectData {
             bounds,
             extended_bounds,
             transform,
-            is_trigger: self.is_trigger.is_some(),
-            is_visible: self.is_visible.map(|val| val.is_visible()).unwrap_or(true),
-            state: if self.is_sleeping.is_some() {
-                NodeState::Sleeping
-            } else if self.is_static.is_some() {
-                NodeState::Static
-            } else {
-                NodeState::Dynamic
-            },
+            is_trigger: self.is_trigger,
+            is_visible: self.is_visible,
+            state: NodeState::Dynamic,
+            // state: if self.is_sleeping.is_some() {
+            //     NodeState::Sleeping
+            // } else if self.is_static.is_some() {
+            //     NodeState::Static
+            // } else {
+            //     NodeState::Dynamic
+            // },
             movable: self.mass.map(|v| v.is_normal()).unwrap_or(false),
+            collider: self.collider.clone(),
         }
     }
 }

@@ -15,6 +15,8 @@ flax::component! {
     /// Describes a rotation in 3D space.
     pub rotation:Quat => [ Debuggable ],
     pub scale:Vec3 => [ Debuggable ],
+
+    /// Calculated scale, rotation, and position transform matrix in world space
     pub transform:Mat4 => [ Debuggable ],
 
     /// TODO: remove

@@ -1,9 +1,10 @@
 use std::path::PathBuf;
 
+use glam::{vec2, IVec2, Vec2};
 use glfw::{Action, Key, Modifiers, MouseButton, Scancode, WindowEvent};
-use ivy_base::{Extent, Position2D};
-use glam::{IVec2, Vec2};
+use ivy_base::Extent;
 
+/// Window input events
 #[derive(Debug, Clone, PartialEq)]
 pub enum InputEvent {
     /// Window moved event
@@ -26,7 +27,7 @@ pub enum InputEvent {
         mods: Modifiers,
     },
     /// Cursor moved
-    CursorPos(Position2D),
+    CursorPos(Vec2),
     /// Cursor entered window
     CursorEnter(bool),
     /// Window recieved or lost focus
@@ -63,7 +64,7 @@ impl From<WindowEvent> for InputEvent {
                 action: b,
                 mods: c,
             },
-            WindowEvent::CursorPos(x, y) => Self::CursorPos(Position2D::new(x as _, y as _)),
+            WindowEvent::CursorPos(x, y) => Self::CursorPos(vec2(x as _, y as _)),
             WindowEvent::CursorEnter(val) => Self::CursorEnter(val),
             WindowEvent::Scroll(x, y) => Self::Scroll(Vec2::new(x as _, y as _)),
             WindowEvent::Key(key, scancode, action, mods) => Self::Key {

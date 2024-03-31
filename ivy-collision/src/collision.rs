@@ -44,7 +44,7 @@ impl DrawGizmos for ContactPoints {
         for &p in self.iter() {
             gizmos.draw(
                 Sphere {
-                    origin: *p,
+                    origin: p,
                     radius: 0.1,
                 },
                 color,
@@ -105,12 +105,12 @@ impl DrawGizmos for Contact {
         gizmos.draw(self.points, color);
         gizmos.draw(
             Line {
-                origin: *self.points[0],
+                origin: self.points[0],
                 dir: self.normal * 0.2,
 
                 ..Default::default()
             },
-            Color::blue(),
+            Color::new(0.0, 0.0, 1.0, 1.0),
         );
     }
 }

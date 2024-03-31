@@ -68,7 +68,7 @@ impl RayIntersect for Cube {
         let dir = inv.transform_vector3(ray.dir()).normalize();
         let inv_dir = Vec3::new(1.0 / dir.x, 1.0 / dir.y, 1.0 / dir.z);
 
-        let origin = inv.transform_point3(*ray.origin);
+        let origin = inv.transform_point3(ray.origin);
 
         let t1 = (-self.half_extents - origin) * inv_dir;
         let t2 = (self.half_extents - origin) * inv_dir;
@@ -112,7 +112,7 @@ impl Sphere {
     /// Checks an axis aligned perfect sphere ray intersection
     pub fn check_aa_intersect(&self, pos: Vec3, ray: &Ray) -> bool {
         let dir = ray.dir();
-        let origin = *ray.origin - *pos;
+        let origin = ray.origin - pos;
 
         let a = dir.dot(dir);
 
@@ -147,10 +147,10 @@ impl CollisionPrimitive for Sphere {
 
 impl RayIntersect for Sphere {
     // https://gist.github.com/wwwtyro/beecc31d65d1004f5a9d
-    fn check_intersect(&self, transform: &Vec3, ray: &Ray) -> bool {
+    fn check_intersect(&self, transform: &Mat4, ray: &Ray) -> bool {
         let inv = transform.inverse();
         let dir = inv.transform_vector3(ray.dir()).normalize();
-        let origin = inv.transform_point3(*ray.origin);
+        let origin = inv.transform_point3(ray.origin);
 
         let a = dir.dot(dir);
 

@@ -1,8 +1,10 @@
+use std::fmt::Debug;
+
 use glam::{Mat4, Vec3};
 
 use crate::{util::support, BoundingBox, Contact, Ray};
 
-pub trait CollisionPrimitive {
+pub trait CollisionPrimitive: Debug {
     /// Returns the furtherst vertex in `dir`.
     /// Direction is given in collider/model space.
     fn support(&self, dir: Vec3) -> Vec3;
@@ -10,6 +12,7 @@ pub trait CollisionPrimitive {
     fn max_radius(&self) -> f32;
 
     /// Dynamically clone type erased collider.
+    #[deprecated(note = "Use `Arc` instead")]
     fn dyn_clone(&self) -> Box<dyn CollisionPrimitive + Send + Sync>;
 
     /// Returns an axis aligned bounding box enclosing the shape at the current
@@ -20,13 +23,13 @@ pub trait CollisionPrimitive {
     {
         let inv = transform.inverse();
 
-        let lx = support(&*transform, &inv, self, -Vec3::X).x;
-        let ly = support(&*transform, &inv, self, -Vec3::Y).y;
-        let lz = support(&*transform, &inv, self, -Vec3::Z).z;
+        let lx = support(&transform, &inv, self, -Vec3::X).x;
+        let ly = support(&transform, &inv, self, -Vec3::Y).y;
+        let lz = support(&transform, &inv, self, -Vec3::Z).z;
 
-        let rx = support(&*transform, &inv, self, Vec3::X).x;
-        let ry = support(&*transform, &inv, self, Vec3::Y).y;
-        let rz = support(&*transform, &inv, self, Vec3::Z).z;
+        let rx = support(&transform, &inv, self, Vec3::X).x;
+        let ry = support(&transform, &inv, self, Vec3::Y).y;
+        let rz = support(&transform, &inv, self, Vec3::Z).z;
 
         BoundingBox::from_corners(Vec3::new(lx, ly, lz), Vec3::new(rx, ry, rz))
     }
