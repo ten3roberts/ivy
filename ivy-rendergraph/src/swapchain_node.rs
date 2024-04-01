@@ -1,5 +1,6 @@
 use crate::{NodeKind, Result};
 use anyhow::Context;
+use flax::World;
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
     context::SharedVulkanContext,
@@ -127,7 +128,7 @@ impl Node for SwapchainNode {
 
     fn execute(
         &mut self,
-        _world: &mut hecs::World,
+        _world: &mut World,
         resources: &ivy_resources::Resources,
         cmd: &ivy_vulkan::commands::CommandBuffer,
         _: &PassInfo,

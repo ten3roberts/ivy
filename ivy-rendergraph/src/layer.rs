@@ -1,6 +1,7 @@
+use std::time::Duration;
+
 use anyhow::Context;
-use hecs::World;
-use hecs_schedule::Schedule;
+use flax::{Schedule, World};
 use ivy_base::{Events, Layer};
 use ivy_graphics::{systems, GpuCamera, GraphicsEvent};
 use ivy_resources::Resources;
@@ -32,9 +33,9 @@ impl GraphicsLayer {
         let context = resources.get_default::<SharedVulkanContext>()?.clone();
 
         let schedule = Schedule::builder()
-            .add_system(systems::update_view_matrices)
-            .add_system(systems::add_bounds)
-            .add_system(GpuCamera::update_all_system)
+            .with_system(systems::update_view_matrices())
+            .with_system(systems::add_bounds_system())
+            .with_system(GpuCamera::update_all_system())
             .build();
 
         Ok(Self {
@@ -58,7 +59,7 @@ impl GraphicsLayer {
 
         drop(rendergraph);
         self.schedule
-            .execute_seq((&mut *world, &mut current_frame, &mut *resources))
+            .execute_seq_with(&mut *world, (&mut current_frame, &mut *resources))
             .unwrap();
 
         let mut rendergraph = resources.get_default_mut::<RenderGraph>()?;
@@ -78,18 +79,17 @@ impl GraphicsLayer {
 impl Layer for GraphicsLayer {
     fn on_update(
         &mut self,
-        world: &mut hecs::World,
-        resources: &mut ivy_resources::Resources,
-        events: &mut ivy_base::Events,
-        _frame_time: std::time::Duration,
+        world: &mut World,
+        resources: &mut Resources,
+        events: &mut Events,
+        _frame_time: Duration,
     ) -> anyhow::Result<()> {
         // Ensure gpu side data for cameras
         GpuCamera::create_gpu_cameras(&self.context, world, self.frames_in_flight)?;
 
-        let window = resources.get_default::<Window>()?;
-        let extent = window.extent();
-        drop(window);
+        let extent = resources.get_default::<Window>()?.extent();
 
+        // Window is minimized, no need to render
         if extent.width == 0 || extent.height == 0 {
             return Ok(());
         }

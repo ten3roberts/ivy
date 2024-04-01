@@ -1,17 +1,16 @@
 use crate::Result;
-use std::{any::type_name, iter::once, marker::PhantomData, ops::Deref};
+use std::{any::type_name, iter::once, ops::Deref};
 
 use anyhow::Context;
-use hecs::{Entity, World};
+use flax::{Component, Entity, World};
 use itertools::Itertools;
-use ivy_graphics::{GpuCamera, Renderer};
+use ivy_graphics::{components::gpu_camera, Renderer};
 use ivy_resources::{Handle, Resources, Storage};
 use ivy_vulkan::{
     context::SharedVulkanContext,
     descriptors::{DescriptorBuilder, DescriptorSet, MultiDescriptorBindable},
-    shaderpass::ShaderPass,
     vk::{self, ClearValue, ShaderStageFlags},
-    CombinedImageSampler, InputAttachment, PassInfo, Sampler, Texture,
+    CombinedImageSampler, InputAttachment, PassInfo, Sampler, Shader, Texture,
 };
 
 use crate::{AttachmentInfo, Node, NodeKind};
@@ -49,11 +48,11 @@ impl<'a> Default for CameraNodeInfo<'a> {
     }
 }
 
-/// A rendergraph node rendering the scene using the provided camera.
-pub struct CameraNode<Pass, R: Renderer> {
+/// Renders the scene with the given mesh pass using the provided camera.
+pub struct CameraNode<R> {
     name: &'static str,
     renderer: R,
-    marker: PhantomData<Pass>,
+    pass: Component<Shader>,
     color_attachments: Vec<AttachmentInfo>,
     read_attachments: Vec<Handle<Texture>>,
     input_attachments: Vec<Handle<Texture>>,
@@ -63,11 +62,9 @@ pub struct CameraNode<Pass, R: Renderer> {
     sets: Vec<DescriptorSet>,
 }
 
-impl<Pass, R> CameraNode<Pass, R>
+impl<R> CameraNode<R>
 where
-    Pass: ShaderPass + Storage,
     R: Renderer + Storage,
-    R::Error: Into<anyhow::Error>,
 {
     pub fn new<'a>(
         context: SharedVulkanContext,
@@ -75,6 +72,7 @@ where
         resources: &Resources,
         camera: Entity,
         renderer: R,
+        shaderpass: Component<Shader>,
         info: CameraNodeInfo<'a>,
     ) -> Result<Self> {
         let combined_image_samplers = info
@@ -94,9 +92,11 @@ where
             .map(|val| -> Result<_> { Ok(InputAttachment::new(resources.get(*val)?.deref())) })
             .collect::<Result<Vec<_>>>()?;
 
-        let camera_buffers = world.get::<GpuCamera>(camera).unwrap();
+        let gpu_camera = world
+            .get(camera, gpu_camera())
+            .context("Missing GpuCamera component")?;
 
-        let camera_buffers = camera_buffers.buffers();
+        let camera_buffers = gpu_camera.buffers();
         let bindables = once(&camera_buffers)
             .map(|v| (v as &dyn MultiDescriptorBindable, info.camera_stage))
             .chain(
@@ -130,7 +130,7 @@ where
             name: info.name,
             sets,
             renderer,
-            marker: PhantomData,
+            pass: shaderpass,
             color_attachments: info.color_attachments,
             read_attachments: info
                 .read_attachments
@@ -146,11 +146,9 @@ where
     }
 }
 
-impl<Pass, R> Node for CameraNode<Pass, R>
+impl<R> Node for CameraNode<R>
 where
-    Pass: ShaderPass + Storage,
     R: Renderer + Storage,
-    R::Error: Into<anyhow::Error> + Storage,
 {
     fn color_attachments(&self) -> &[AttachmentInfo] {
         &self.color_attachments
@@ -186,14 +184,14 @@ where
 
     fn execute(
         &mut self,
-        world: &mut hecs::World,
+        world: &mut World,
         resources: &ivy_resources::Resources,
         cmd: &ivy_vulkan::commands::CommandBuffer,
         pass_info: &PassInfo,
         current_frame: usize,
     ) -> anyhow::Result<()> {
         self.renderer
-            .draw::<Pass>(
+            .draw(
                 world,
                 resources,
                 cmd,
@@ -201,12 +199,14 @@ where
                 pass_info,
                 &[],
                 current_frame,
+                self.pass,
             )
-            .map_err(|e| e.into())
-            .context(format!(
-                "CameraNode failed to draw using supplied renderer: {:?}",
-                type_name::<R>()
-            ))?;
+            .with_context(|| {
+                format!(
+                    "CameraNode failed to draw using supplied renderer: {:?}",
+                    type_name::<R>()
+                )
+            })?;
 
         Ok(())
     }

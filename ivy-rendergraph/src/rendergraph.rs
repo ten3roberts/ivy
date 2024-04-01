@@ -2,8 +2,8 @@ use crate::{
     pass::{Pass, PassKind},
     Error, Node, NodeKind,
 };
+use flax::World;
 use hash::Hash;
-use hecs::World;
 use itertools::Itertools;
 use ivy_base::Extent;
 use ivy_resources::{Handle, ResourceCache, Resources};

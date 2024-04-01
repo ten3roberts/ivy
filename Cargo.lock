@@ -1444,17 +1444,14 @@ name = "ivy-rendergraph"
 version = "0.10.3"
 dependencies = [
  "anyhow",
+ "flax",
  "glam",
- "hecs",
- "hecs-hierarchy",
- "hecs-schedule",
- "itertools 0.10.3",
+ "itertools 0.12.1",
  "ivy-base",
  "ivy-graphics",
  "ivy-resources",
  "ivy-vulkan",
  "ivy-window",
- "records",
  "slotmap",
  "thiserror",
 ]

@@ -1,10 +1,11 @@
 use anyhow::Context;
-use hecs::World;
+use flax::{Component, World};
 use ivy_graphics::Renderer;
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
-    commands::CommandBuffer, shaderpass::ShaderPass, vk::Buffer, vk::ClearValue, ClearValueExt,
-    ImageLayout, LoadOp, PassInfo, StoreOp, Texture,
+    commands::CommandBuffer,
+    vk::{Buffer, ClearValue},
+    ClearValueExt, ImageLayout, LoadOp, PassInfo, Shader, StoreOp, Texture,
 };
 use std::{any::type_name, marker::PhantomData};
 
@@ -130,26 +131,24 @@ impl AttachmentInfo {
     }
 }
 
-/// Simple node for rendering a pass in the rendergraph
-pub struct RenderNode<Pass, T> {
+/// Simple node for rendering a pass in the rendergraph using the provided renderer
+pub struct RenderNode<T> {
     renderer: Handle<T>,
-    marker: PhantomData<Pass>,
+    shaderpass: Component<Shader>,
 }
 
-impl<Pass, T> RenderNode<Pass, T> {
-    pub fn new(renderer: Handle<T>) -> Self {
+impl<T> RenderNode<T> {
+    pub fn new(renderer: Handle<T>, shaderpass: Component<Shader>) -> Self {
         Self {
             renderer,
-            marker: PhantomData,
+            shaderpass,
         }
     }
 }
 
-impl<Pass, T, E> Node for RenderNode<Pass, T>
+impl<T> Node for RenderNode<T>
 where
-    Pass: ShaderPass,
-    T: 'static + Renderer<Error = E> + Send + Sync,
-    E: Into<anyhow::Error>,
+    T: 'static + Renderer + Send + Sync,
 {
     fn node_kind(&self) -> NodeKind {
         NodeKind::Graphics
@@ -166,12 +165,20 @@ where
         resources
             .get_mut(self.renderer)
             .with_context(|| format!("Failed to borrow {:?} mutably", type_name::<T>()))?
-            .draw::<Pass>(world, resources, cmd, &[], pass_info, &[], current_frame)
-            .map_err(|e| e.into())
+            .draw(
+                world,
+                resources,
+                cmd,
+                &[],
+                pass_info,
+                &[],
+                current_frame,
+                self.shaderpass,
+            )
             .with_context(|| format!("Failed to draw using {:?}", type_name::<T>()))
     }
 
     fn debug_name(&self) -> &'static str {
-        std::any::type_name::<RenderNode<Pass, T>>()
+        std::any::type_name::<RenderNode<T>>()
     }
 }

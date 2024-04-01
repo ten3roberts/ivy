@@ -1,19 +1,17 @@
 use anyhow::Context;
+use flax::{Component, World};
 use ivy_graphics::Renderer;
 use ivy_resources::{Handle, Storage};
 use ivy_vulkan::{
     descriptors::{DescriptorSet, IntoSet},
-    shaderpass::ShaderPass,
     vk::ClearValue,
-    PassInfo, Texture,
+    PassInfo, Shader, Texture,
 };
-use std::marker::PhantomData;
 
 use crate::{AttachmentInfo, Node, NodeKind};
 
-pub struct FullscreenNode<Pass, T> {
+pub struct FullscreenNode<T> {
     renderer: Handle<T>,
-    marker: PhantomData<Pass>,
     color_attachments: Vec<AttachmentInfo>,
     read_attachments: Vec<Handle<Texture>>,
     input_attachments: Vec<Handle<Texture>>,
@@ -21,13 +19,12 @@ pub struct FullscreenNode<Pass, T> {
     clear_values: Vec<ClearValue>,
     sets: Vec<DescriptorSet>,
     set_count: usize,
+    shaderpass: Component<Shader>,
 }
 
-impl<Pass, T> FullscreenNode<Pass, T>
+impl<T> FullscreenNode<T>
 where
-    Pass: ShaderPass + Storage,
     T: Renderer + Storage,
-    <T as Renderer>::Error: Into<anyhow::Error>,
 {
     pub fn new(
         renderer: Handle<T>,
@@ -38,6 +35,7 @@ where
         clear_values: Vec<ClearValue>,
         sets: Vec<&dyn IntoSet>,
         frames_in_flight: usize,
+        shaderpass: Component<Shader>,
     ) -> Self {
         let set_count = sets.len();
 
@@ -49,7 +47,6 @@ where
 
         Self {
             renderer,
-            marker: PhantomData,
             color_attachments,
             read_attachments,
             input_attachments,
@@ -57,15 +54,14 @@ where
             clear_values,
             sets,
             set_count,
+            shaderpass,
         }
     }
 }
 
-impl<Pass, T> Node for FullscreenNode<Pass, T>
+impl<T> Node for FullscreenNode<T>
 where
-    Pass: ShaderPass + Storage,
     T: Renderer + Storage,
-    <T as Renderer>::Error: Into<anyhow::Error>,
 {
     fn color_attachments(&self) -> &[AttachmentInfo] {
         &self.color_attachments
@@ -97,7 +93,7 @@ where
 
     fn execute(
         &mut self,
-        world: &mut hecs::World,
+        world: &mut World,
         resources: &ivy_resources::Resources,
         cmd: &ivy_vulkan::commands::CommandBuffer,
         pass_info: &PassInfo,
@@ -106,7 +102,7 @@ where
         let offset = self.set_count * current_frame;
         resources
             .get_mut(self.renderer)?
-            .draw::<Pass>(
+            .draw(
                 world,
                 resources,
                 cmd,
@@ -114,8 +110,8 @@ where
                 pass_info,
                 &[],
                 current_frame,
+                self.shaderpass,
             )
-            .map_err(|e| e.into())
             .context("FullscreenNode failed to draw using supplied renderer")?;
 
         Ok(())

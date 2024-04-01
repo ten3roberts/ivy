@@ -1,4 +1,5 @@
 use crate::{NodeKind, Result};
+use flax::World;
 use ivy_resources::Handle;
 use ivy_vulkan::{
     traits::FromExtent,
@@ -132,7 +133,7 @@ impl Node for TransferNode {
 
     fn execute(
         &mut self,
-        _world: &mut hecs::World,
+        _world: &mut World,
         resources: &ivy_resources::Resources,
         cmd: &ivy_vulkan::commands::CommandBuffer,
         _: &PassInfo,

@@ -1,6 +1,6 @@
 use ash::vk::{DescriptorSet, ShaderStageFlags};
 use derive_more::{AsRef, Deref, From, Into};
-use flax::{entity_ids, Query, World};
+use flax::{entity_ids, BoxedSystem, Component, Mutable, Query, QueryBorrow, System, World};
 use glam::{vec3, Mat4, Vec2, Vec3, Vec4, Vec4Swizzles};
 use itertools::Itertools;
 use ivy_base::{Color, DrawGizmos, Extent, Line, Sphere};
@@ -225,15 +225,21 @@ impl GpuCamera {
 
     /// Updates all GPU camera data from the CPU side camera view and projection
     /// matrix. Position is automatically extracted from the camera's view matrix.
-    pub fn update_all_system(world: &World, current_frame: usize) -> Result<()> {
-        Query::new((camera(), gpu_camera().as_mut()))
-            .borrow(world)
-            .iter()
-            .for_each(|(camera, gpu_camera)| {
-                gpu_camera.update(camera, current_frame).unwrap();
-            });
+    pub fn update_all_system() -> BoxedSystem {
+        let query = Query::new((camera(), gpu_camera().as_mut()));
 
-        Ok(())
+        System::builder()
+            .with_query(query)
+            .with_input::<usize>()
+            .build(
+                |mut query: QueryBorrow<(Component<Camera>, Mutable<GpuCamera>)>,
+                 current_frame: &usize| {
+                    query.iter().for_each(|(camera, gpu_camera)| {
+                        gpu_camera.update(camera, *current_frame).unwrap();
+                    });
+                },
+            )
+            .boxed()
     }
 
     // Creates gpu side data for all camera which do not already have any.
@@ -245,7 +251,7 @@ impl GpuCamera {
         let mut query = Query::new(entity_ids())
             .with(camera())
             .without(gpu_camera());
-        let mut ids = query.borrow(world).iter().collect_vec();
+        let ids = query.borrow(world).iter().collect_vec();
 
         ids.iter().try_for_each(|&camera| -> Result<()> {
             let v = GpuCamera::new(context.clone(), frames_in_flight)?;

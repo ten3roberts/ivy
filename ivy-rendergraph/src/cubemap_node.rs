@@ -1,15 +1,14 @@
 use crate::{AttachmentInfo, CameraNode, CameraNodeInfo, Node};
+use flax::{Component, Entity, World};
 use glam::Vec3;
-use hecs::{Entity, World};
-use hecs_hierarchy::HierarchyMut;
-use ivy_base::{Connection, Position, Rotation, Scale};
+use ivy_base::{connection, position, rotation, scale};
 use ivy_graphics::{Camera, Renderer};
 use ivy_resources::{Handle, Resources, Storage};
 use ivy_vulkan::{
-    context::SharedVulkanContext, descriptors::MultiDescriptorBindable, CubeMap, ShaderPass,
+    context::SharedVulkanContext, descriptors::MultiDescriptorBindable, CubeMap, Shader,
 };
 
-pub fn setup_cubemap_node<P, R>(
+pub fn setup_cubemap_node<R>(
     context: SharedVulkanContext,
     world: &mut World,
     resources: &Resources,
@@ -20,11 +19,10 @@ pub fn setup_cubemap_node<P, R>(
     depth: Handle<CubeMap>,
     bindables: &[&dyn MultiDescriptorBindable],
     frames_in_flight: usize,
+    shaderpass: Component<Shader>,
 ) -> crate::Result<Vec<Box<dyn Node>>>
 where
-    P: ShaderPass + Storage,
     R: Renderer + Storage,
-    R::Error: Into<anyhow::Error> + Send,
 {
     let cubemap = resources.get(cubemap).unwrap();
     let depth = resources.get(depth).unwrap();
@@ -37,26 +35,23 @@ where
         .zip(depth.views())
         .zip(dirs)
         .map(|((view, depth), dir)| -> crate::Result<Box<dyn Node>> {
-            let camera = world
-                .attach_new::<Connection, _>(
-                    origin,
-                    (
-                        Position::default(),
-                        Rotation::look_at(dir, Vec3::Y),
-                        Scale::default(),
-                        camera.clone(),
-                    ),
-                )
-                .unwrap();
+            let camera = Entity::builder()
+                .set_default(position())
+                .set_default(rotation())
+                .set_default(scale())
+                .set(ivy_graphics::components::camera(), camera.clone())
+                .set_default(connection(origin))
+                .spawn(world);
 
-            let node = CameraNode::<P, _>::new(
+            let node = CameraNode::new(
                 context.clone(),
                 world,
                 resources,
                 camera,
                 renderer,
+                shaderpass,
                 CameraNodeInfo {
-                    name: "Cube map camera node",
+                    name: "cube_map_camera_node",
                     color_attachments: vec![AttachmentInfo::color(*view)],
                     read_attachments: &[],
                     input_attachments: vec![],

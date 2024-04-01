@@ -1,6 +1,6 @@
-use flax::{entity_ids, BoxedSystem, CommandBuffer, Query, System, World};
+use flax::{entity_ids, BoxedSystem, Component, EntityIds, Query, QueryBorrow, System, World};
 use ivy_base::transform;
-use ivy_resources::ResourceView;
+use ivy_resources::{Handle, ResourceView, Resources};
 
 use crate::{
     components::{bounding_sphere, camera, mesh},
@@ -21,16 +21,23 @@ pub fn update_view_matrices() -> BoxedSystem {
         .boxed()
 }
 
-pub fn add_bounds(world: &World, resources: ResourceView<Mesh>, cmd: &mut CommandBuffer) {
-    Query::new((entity_ids(), mesh()))
-        .without(bounding_sphere())
-        .borrow(world)
-        .iter()
-        .for_each(|(id, mesh)| {
-            cmd.set(
-                id,
-                bounding_sphere(),
-                resources.get(*mesh).unwrap().bounds(),
-            );
-        });
+pub fn add_bounds_system() -> BoxedSystem {
+    System::builder()
+        .with_cmd_mut()
+        .with_input::<Resources>()
+        .with_query(Query::new((entity_ids(), mesh())).without(bounding_sphere()))
+        .build(
+            |cmd: &mut flax::CommandBuffer,
+             resources: &Resources,
+             mut query: QueryBorrow<(EntityIds, Component<Handle<Mesh>>), _>| {
+                query.iter().for_each(|(id, mesh)| {
+                    cmd.set(
+                        id,
+                        bounding_sphere(),
+                        resources.get(*mesh).unwrap().bounds(),
+                    );
+                });
+            },
+        )
+        .boxed()
 }

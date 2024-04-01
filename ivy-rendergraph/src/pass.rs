@@ -1,5 +1,5 @@
 use crate::{Edge, EdgeKind, Node, NodeIndex, NodeKind, ResourceKind, Result};
-use hecs::World;
+use flax::World;
 use itertools::Itertools;
 use ivy_base::Extent;
 use ivy_resources::{ResourceCache, Resources};
