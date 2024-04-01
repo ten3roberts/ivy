@@ -1,12 +1,13 @@
 #![allow(non_snake_case)]
 use anyhow::Context;
-use hecs::World;
-use hecs_schedule::{Read, Schedule, SubWorld, Write};
-use ivy_base::{Events, Layer, Position2D, Size2D};
+use flax::{BoxedSystem, Query, Schedule, System, World};
+use glam::Vec2;
+use ivy_base::{size, Events, Layer};
+use ivy_input::InputEvent;
 use ivy_resources::Resources;
 use ivy_window::Window;
 
-use crate::{handle_events, input_field_system, systems, Canvas};
+use crate::{canvas, handle_events, input_field_system, systems, Canvas, UIControl};
 mod event_handling;
 pub use event_handling::*;
 
@@ -32,19 +33,8 @@ impl UILayer {
         let input_field_rx = events.subscribe();
 
         let schedule = Schedule::builder()
-            .add_system(
-                move |w: Write<_>, state: Write<_>, events: Write<_>, cursor_pos: Read<_>| {
-                    handle_events(
-                        w,
-                        events,
-                        state,
-                        cursor_pos,
-                        window_rx.try_iter(),
-                        control_rx.try_iter(),
-                    )
-                },
-            )
-            .add_system(move |w: SubWorld<_>, state: Read<_>, events: Write<_>| {
+            .with_system(handle_events_system(window_rx, control_rx))
+            .with_system(move |w: SubWorld<_>, state: Read<_>, events: Write<_>| {
                 input_field_system(w, state, input_field_rx.try_iter(), events)
             })
             .build();
@@ -71,13 +61,19 @@ impl Layer for UILayer {
         let window = resources.get_default::<Window>()?;
         // Transform the cursor position to canvas size
         let cursor_pos = window.normalized_cursor_pos();
-        let (_, (_, size)) = world
-            .query_mut::<(&Canvas, &Size2D)>()
-            .into_iter()
+        let size = Query::new(size())
+            .with(canvas())
+            .borrow(world)
+            .iter()
             .next()
-            .context("Failed to get canvas")?;
+            .context("No canvas")?;
+        // let (_, (_, size)) = world
+        //     .query_mut::<(&Canvas, &Size2D)>()
+        //     .into_iter()
+        //     .next()
+        //     .context("Failed to get canvas")?;
 
-        let mut cursor_pos = Position2D(cursor_pos * **size);
+        let mut cursor_pos = cursor_pos * *size;
 
         self.schedule
             .execute_seq((world, events, &mut self.state, &mut cursor_pos))
@@ -85,4 +81,31 @@ impl Layer for UILayer {
 
         Ok(())
     }
+}
+
+fn handle_events_system(
+    input_events: flume::Receiver<InputEvent>,
+    control_events: flume::Receiver<UIControl>,
+) -> BoxedSystem {
+    System::builder()
+        .with_world_mut()
+        .with_input_mut::<Events>()
+        .with_input_mut::<InteractiveState>()
+        .with_input::<Vec2>()
+        .build(
+            |world: &mut World,
+             events: &mut Events,
+             state: &mut InteractiveState,
+             cursor_pos: &Vec2| {
+                handle_events(
+                    world,
+                    events,
+                    state,
+                    cursor_pos,
+                    input_events.try_iter(),
+                    control_events.try_iter(),
+                )
+            },
+        )
+        .boxed()
 }

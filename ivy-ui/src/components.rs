@@ -1,118 +1,121 @@
-use crate::{constraints::*, Canvas, Font, Image, Text};
-use derive_for::*;
-use derive_more::*;
+use crate::{Font, Image, InputField, Text};
+use flax::{Entity, EntityBuilder, EntityRef, World};
 pub use fontdue::layout::{HorizontalAlign, VerticalAlign};
 use glam::Vec2;
-use hecs::{Bundle, DynamicBundleClone, Entity, EntityRef, World};
-use ivy_base::{Color, Events, Position2D, Size2D, Visible};
-use ivy_graphics::Camera;
+use ivy_base::{color, position, size, Color, Events};
+use ivy_graphics::components::camera;
 use ivy_resources::Handle;
-#[cfg(feature = "serialize")]
-use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 
-derive_for!(
-    (
-        Add,
-        AddAssign,
-        AsRef,
-        Clone,
-        Copy,
-        Debug,
-        Default,
-        Deref,
-        DerefMut,
-        Div,
-        DivAssign,
-        From,
-        Into,
-        Mul,
-        MulAssign,
-        Sub,
-        SubAssign,
-        PartialEq,
-        Hash,
-        Eq,
-        PartialOrd,
-        Ord,
-    );
-    /// The depth of the widget from the root.
-    #[repr(transparent)]
-    #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
-    pub struct WidgetDepth(pub u32);
-);
+flax::component! {
+    /// The depth of the widget in the tree
+    pub widget_depth: u32,
+    pub image: Handle<Image>,
+    pub font: Handle<Font>,
+    pub text: Text,
+    pub input_field: InputField,
+    pub interactive: (),
+    pub widget: (),
+    pub sticky: (),
+    pub horizontal_align: HorizontalAlign,
+    pub vertical_align: VerticalAlign,
+    pub alignment: Alignment,
+    pub wrap: WrapStyle,
+    pub on_click: OnClick,
+
+    // Constraints
+    pub absolute_offset: Vec2,
+    pub relative_offset: Vec2,
+    pub relative_size: Vec2,
+    pub absolute_size: Vec2,
+    pub aspect: Vec2,
+    pub origin: Vec2,
+    pub margin: Vec2,
+
+    pub children: Vec<Entity>,
+
+    pub canvas: (),
+}
 
 /// Bundle for widgets.
 /// Use further bundles for images and texts
-#[derive(Bundle, Clone, Debug, Default, DynamicBundleClone)]
-#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
-pub struct WidgetBundle {
-    pub widget: Widget,
-    pub visible: Visible,
-    pub depth: WidgetDepth,
-    pub abs_offset: AbsoluteOffset,
-    pub rel_offset: RelativeOffset,
-    pub abs_size: AbsoluteSize,
-    pub rel_size: RelativeSize,
-    pub origin: Origin2D,
-    pub aspect: Aspect,
-    pub pos: Position2D,
-    pub size: Size2D,
+#[derive(Clone, Debug, Default)]
+pub struct WidgetTemplate {
+    pub abs_offset: Vec2,
+    pub rel_offset: Vec2,
+    pub abs_size: Vec2,
+    pub rel_size: Vec2,
+    pub origin: Vec2,
+    pub aspect: Vec2,
 }
 
-impl WidgetBundle {
+impl WidgetTemplate {
     pub fn new(
-        abs_offset: AbsoluteOffset,
-        rel_offset: RelativeOffset,
-        abs_size: AbsoluteSize,
-        rel_size: RelativeSize,
-        origin: Origin2D,
-        aspect: Aspect,
+        abs_offset: Vec2,
+        rel_offset: Vec2,
+        abs_size: Vec2,
+        rel_size: Vec2,
+        origin: Vec2,
+        aspect: Vec2,
     ) -> Self {
         Self {
-            widget: Widget,
-            depth: WidgetDepth(0),
             abs_offset,
             rel_offset,
             abs_size,
             rel_size,
             origin,
             aspect,
-            ..Default::default()
         }
+    }
+
+    pub fn mount(&mut self, entity: &mut EntityBuilder) {
+        entity
+            .set_default(widget())
+            .set_default(widget_depth())
+            // .set(visible(), Visible::Visible)
+            .set(absolute_offset(), self.abs_offset)
+            .set(relative_offset(), self.rel_offset)
+            .set(absolute_size(), self.abs_size)
+            .set(relative_size(), self.rel_size)
+            .set(origin(), self.origin)
+            .set(aspect(), self.aspect)
+            .set_default(position())
+            .set_default(size());
     }
 }
 
 /// Bundle for widgets.
 /// Use further bundles for images and texts
-#[derive(Bundle, Clone, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct CanvasBundle {
-    pub widget: Widget,
-    pub visible: Visible,
-    pub depth: WidgetDepth,
-    pub abs_offset: AbsoluteOffset,
-    pub rel_offset: RelativeOffset,
-    pub abs_size: AbsoluteSize,
-    pub rel_size: RelativeSize,
-    pos: Position2D,
-    size: Size2D,
-    pub origin: Origin2D,
-    pub aspect: Aspect,
-    pub canvas: Canvas,
-    pub camera: Camera,
+    widget: WidgetTemplate,
+    pub origin: Vec2,
+    pub aspect: Vec2,
 }
 
 impl CanvasBundle {
     pub fn new<E: Into<Vec2>>(extent: E) -> Self {
         Self {
-            abs_size: AbsoluteSize(extent.into()),
+            widget: WidgetTemplate {
+                abs_size: extent.into(),
+                ..Default::default()
+            },
             ..Default::default()
         }
     }
+
+    pub fn mount(&mut self, entity: &mut EntityBuilder) {
+        self.widget.mount(entity);
+        entity
+            .set(origin(), self.origin)
+            .set(aspect(), self.aspect)
+            .set_default(canvas())
+            .set_default(camera());
+    }
 }
 
-#[derive(Default, Bundle, Debug, Clone, DynamicBundleClone)]
+#[derive(Default, Debug, Clone)]
 /// Specialize widget into an image
 pub struct ImageBundle {
     pub image: Handle<Image>,
@@ -125,43 +128,50 @@ impl ImageBundle {
     }
 }
 
-#[derive(Default, Bundle, Debug, Clone, DynamicBundleClone)]
+#[derive(Default, Debug, Clone)]
 /// Specialize widget into text
-#[records::record]
 pub struct TextBundle {
     pub text: Text,
     pub font: Handle<Font>,
     pub color: Color,
     pub wrap: WrapStyle,
     pub align: Alignment,
-    pub margin: Margin,
+    pub margin: Vec2,
 }
 
 impl TextBundle {
+    pub fn new(
+        font: Handle<Font>,
+        color: Color,
+        wrap: WrapStyle,
+        align: Alignment,
+        margin: Vec2,
+        text: Text,
+    ) -> Self {
+        Self {
+            text,
+            font,
+            color,
+            wrap,
+            align,
+            margin,
+        }
+    }
+
     pub fn set_text<U: Into<Cow<'static, str>>>(&mut self, val: U) {
         self.text.set(val)
     }
+
+    pub fn mount(&mut self, entity: &mut EntityBuilder) {
+        entity
+            .set(font(), self.font)
+            .set(color(), self.color)
+            .set(wrap(), self.wrap)
+            .set(alignment(), self.align)
+            .set(margin(), self.margin)
+            .set(text(), self.text)
+    }
 }
-
-/// Marker type specifying that this widget is interactive and will consume
-/// click events and not forward them down. Does not neccessarily mean that the
-/// widget will react to it.
-/// The interactive widget doesn't neccessarily need to be a visible object,
-/// which allows for transparent blockers in menus.
-#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
-#[derive(Default, Debug, Clone, Copy, PartialEq)]
-pub struct Interactive;
-/// Marker type for UI and the UI hierarchy.
-#[derive(Default, Debug, Clone, Copy, PartialEq)]
-#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
-pub struct Widget;
-
-/// Marker type specifying that a widget should remain active even after the
-/// mouse button was released. Release events will still be sent, but input will
-/// continue to be absorbed and sent to the widget.
-#[derive(Default, Debug, Clone, Copy, PartialEq)]
-#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
-pub struct Sticky;
 
 #[cfg(feature = "serialize")]
 #[derive(Serialize, Deserialize)]

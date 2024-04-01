@@ -1,6 +1,6 @@
 use crate::{AttachmentInfo, CameraNode, CameraNodeInfo, Node};
 use flax::{Component, Entity, World};
-use glam::Vec3;
+use glam::{Quat, Vec3};
 use ivy_base::{connection, position, rotation, scale};
 use ivy_graphics::{Camera, Renderer};
 use ivy_resources::{Handle, Resources, Storage};
@@ -37,7 +37,7 @@ where
         .map(|((view, depth), dir)| -> crate::Result<Box<dyn Node>> {
             let camera = Entity::builder()
                 .set_default(position())
-                .set_default(rotation())
+                .set(rotation(), Quat::from_rotation_arc(Vec3::Y, dir))
                 .set_default(scale())
                 .set(ivy_graphics::components::camera(), camera.clone())
                 .set_default(connection(origin))

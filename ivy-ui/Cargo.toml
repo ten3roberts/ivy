@@ -13,28 +13,24 @@ repository = "https://github.com/ten3roberts/ivy"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.57"
-derive-for = "1.2.2"
-derive_more = "0.99.17"
-fontdue = "0.7.2"
-hecs = "0.7.6"
-hecs-hierarchy = "0.11.6"
 ivy-base = { path = "../ivy-base", version = "0.10.0" }
-glfw = "0.44.0"
-ivy-graphics = { path = "../ivy-graphics", version = "0.10.0" }
 ivy-image = { path = "../ivy-image", version = "0.10.0" }
-ivy-rendergraph = { path = "../ivy-rendergraph", version = "0.10.0" }
-ivy-resources = { path = "../ivy-resources", version = "0.10.0" }
-ivy-vulkan = { path = "../ivy-vulkan", version = "0.10.0" }
 ivy-input = { path = "../ivy-input", version = "0.10.0" }
+ivy-vulkan = { path = "../ivy-vulkan", version = "0.10.0" }
 ivy-window = { path = "../ivy-window", version = "0.10.0" }
-thiserror = "1.0.31"
-glam = "0.20.5"
-flume = "0.10.12"
-hecs-schedule = "0.6.1"
-serde = { workspace = true, optional = true }
-records = "0.2.0"
+ivy-graphics = { path = "../ivy-graphics", version = "0.10.0" }
+ivy-resources = { path = "../ivy-resources", version = "0.10.0" }
+ivy-rendergraph = { path = "../ivy-rendergraph", version = "0.10.0" }
+
 ezy = "0.1.1"
+glfw = "0.44.0"
+fontdue = "0.7.2"
+flax.workspace = true
+glam.workspace = true
+flume.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+serde = { workspace = true, optional = true }
 
 [features]
 default = []

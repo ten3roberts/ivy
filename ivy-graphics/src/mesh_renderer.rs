@@ -1,13 +1,12 @@
 use crate::{
     batch_id,
     components::{camera, material, mesh},
-    BaseRenderer, BatchMarker, BoundingSphere, Camera, Error, MainCamera, Material, Mesh, Renderer,
-    Result, Vertex,
+    BaseRenderer, Material, Mesh, Renderer, Result, Vertex,
 };
 use ash::vk::{DescriptorSet, IndexType};
-use flax::{entity_ids, Component, Fetch, FetchExt, Opt, OptOr, Query, World};
+use flax::{entity_ids, Component, Fetch, FetchExt, OptOr, Query, World};
 use glam::{Mat4, Quat, Vec3, Vec4};
-use ivy_base::{color, main_camera, position, rotation, scale, Color, ColorExt, Visible};
+use ivy_base::{color, main_camera, position, rotation, scale, Color, ColorExt};
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{context::SharedVulkanContext, descriptors::IntoSet, PassInfo, Shader};
 

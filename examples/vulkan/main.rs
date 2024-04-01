@@ -585,7 +585,7 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
     let mut builder = EntityBuilder::new();
 
     builder
-        .add_bundle(WidgetBundle {
+        .add_bundle(WidgetTemplate {
             rel_offset: RelativeOffset::new(-0.25, -0.5),
             abs_size: AbsoluteSize::new(100.0, 100.0),
             aspect: Aspect(1.0),
@@ -608,7 +608,7 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
             field: InputField::new(|_, _, val| println!("Input: {:?}", val)),
             ..Default::default()
         })
-        .add_bundle(WidgetBundle {
+        .add_bundle(WidgetTemplate {
             abs_size: AbsoluteSize::new(500.0, 50.0),
             rel_offset: RelativeOffset::new(1.0, -1.0),
             abs_offset: AbsoluteOffset::new(-20.0, 20.0),
@@ -630,7 +630,7 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
     world.attach_new::<Widget, _>(canvas, builder.build())?;
 
     builder
-        .add_bundle(WidgetBundle {
+        .add_bundle(WidgetTemplate {
             abs_size: AbsoluteSize::new(-10.0, -10.0),
             rel_size: RelativeSize::new(1.0, 1.0),
             ..Default::default()
@@ -648,7 +648,7 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
     world.attach_new::<Widget, _>(canvas, builder.build())?;
 
     builder
-        .add_bundle(WidgetBundle {
+        .add_bundle(WidgetTemplate {
             rel_offset: RelativeOffset::new(0.0, -0.5),
             rel_size: RelativeSize::new(0.2, 0.2),
             aspect: Aspect(1.0),
@@ -670,7 +670,7 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
 
     let mut builder = EntityBuilder::new();
     builder
-        .add_bundle(WidgetBundle {
+        .add_bundle(WidgetTemplate {
             abs_size: AbsoluteSize::new(-10.0, -10.0),
             rel_size: RelativeSize::new(1.0, 1.0),
             aspect: Aspect(1.0),
@@ -686,7 +686,7 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
 
     let mut builder = EntityBuilder::new();
     builder
-        .add_bundle(WidgetBundle {
+        .add_bundle(WidgetTemplate {
             rel_size: RelativeSize::new(1.0, 1.0),
             ..Default::default()
         })
@@ -703,7 +703,7 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
 
     let mut builder = EntityBuilder::new();
     builder
-        .add_bundle(WidgetBundle {
+        .add_bundle(WidgetTemplate {
             rel_size: RelativeSize::new(0.5, 0.5),
             aspect: Aspect(1.0),
             ..Default::default()
@@ -722,7 +722,7 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
 
     let mut builder = EntityBuilder::new();
     builder
-        .add_bundle(WidgetBundle {
+        .add_bundle(WidgetTemplate {
             rel_size: RelativeSize::new(0.4, 0.4),
             aspect: Aspect(1.0),
             ..Default::default()
@@ -742,7 +742,7 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
 
     let mut builder = EntityBuilder::new();
     builder
-        .add_bundle(WidgetBundle {
+        .add_bundle(WidgetTemplate {
             abs_size: AbsoluteSize::new(50.0, 50.0),
             aspect: Aspect(1.0),
             ..Default::default()

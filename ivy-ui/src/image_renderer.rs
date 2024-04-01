@@ -1,12 +1,10 @@
 use crate::*;
-use glam::{Mat4, Vec2, Vec3, Vec4};
-use hecs::{Query, World};
-use ivy_base::{Color, Position2D, Size2D, Visible};
-use ivy_graphics::{BaseRenderer, BatchMarker, Mesh, Renderer};
+use flax::{entity_ids, Component, Fetch, Query, World};
+use glam::{vec2, vec3, Mat4, Vec2, Vec3, Vec4};
+use ivy_base::{color, position, size, Color};
+use ivy_graphics::{batch_id, BaseRenderer, Mesh, Renderer};
 use ivy_resources::{Handle, Resources};
-use ivy_vulkan::{
-    context::SharedVulkanContext, descriptors::*, shaderpass::ShaderPass, vk::IndexType, PassInfo,
-};
+use ivy_vulkan::{context::SharedVulkanContext, descriptors::*, vk::IndexType, PassInfo, Shader};
 
 /// A mesh renderer using vkCmdDrawIndirectIndexed and efficient batching.
 pub struct ImageRenderer {
@@ -25,10 +23,10 @@ impl ImageRenderer {
 
             // Simple quad
             let vertices = [
-                UIVertex::new(Vec3::new(-1.0, -1.0, 0.0), Vec2::new(0.0, 1.0)),
-                UIVertex::new(Vec3::new(1.0, -1.0, 0.0), Vec2::new(1.0, 1.0)),
-                UIVertex::new(Vec3::new(1.0, 1.0, 0.0), Vec2::new(1.0, 0.0)),
-                UIVertex::new(Vec3::new(-1.0, 1.0, 0.0), Vec2::new(0.0, 0.0)),
+                UIVertex::new(vec3(-1.0, -1.0, 0.0), vec2(0.0, 1.0)),
+                UIVertex::new(vec3(1.0, -1.0, 0.0), vec2(1.0, 1.0)),
+                UIVertex::new(vec3(1.0, 1.0, 0.0), vec2(1.0, 0.0)),
+                UIVertex::new(vec3(-1.0, 1.0, 0.0), vec2(0.0, 0.0)),
             ];
 
             let indices: [u32; 6] = [0, 1, 2, 2, 3, 0];
@@ -46,9 +44,8 @@ impl ImageRenderer {
 }
 
 impl Renderer for ImageRenderer {
-    type Error = Error;
-    /// Will draw all entities with a Handle<Material>, Handle<Mesh>, Modelmatrix and Shaderpass `Handle<T>`
-    fn draw<Pass: ShaderPass>(
+    /// Draw all entities with a material, mesh, and model matrix for the specified shaderpass.
+    fn draw(
         &mut self,
         world: &mut World,
         resources: &Resources,
@@ -57,29 +54,37 @@ impl Renderer for ImageRenderer {
         pass_info: &PassInfo,
         offsets: &[u32],
         current_frame: usize,
+        shaderpass: Component<Shader>,
     ) -> Result<()> {
         cmd.bind_vertexbuffer(0, self.square.vertex_buffer());
         cmd.bind_indexbuffer(self.square.index_buffer(), IndexType::UINT32, 0);
 
         let images = resources.fetch::<Image>()?;
 
-        let pass = self.base_renderer.pass_mut::<Pass>()?;
+        let pass = self.base_renderer.pass_mut(shaderpass)?;
 
-        pass.register::<Pass, KeyQuery, ObjectDataQuery>(world);
-        pass.build_batches::<Pass, KeyQuery>(world, resources, pass_info)?;
+        pass.register(world, KeyQuery::new());
+        pass.build_batches(world, resources, pass_info)?;
 
-        let iter = world
-            .query_mut::<(&BatchMarker<ObjectData, Pass>, ObjectDataQuery, &Visible)>()
-            .into_iter()
-            .filter_map(|(e, (marker, obj, visible))| {
-                if visible.is_visible() {
-                    Some((e, (marker, obj)))
-                } else {
-                    None
-                }
-            });
-
-        pass.update(current_frame, iter)?;
+        pass.update(
+            current_frame,
+            Query::new((
+                entity_ids(),
+                batch_id(shaderpass.id()),
+                ObjectDataQuery::new(),
+            ))
+            .borrow(world)
+            .iter()
+            .filter_map(|(e, &batch_id, obj /* , bound */)| {
+                // if visible.is_visible()
+                //     && camera.visible(**obj.position, **bound * obj.scale.max_element())
+                // {
+                Some((e, batch_id, ObjectData::from(obj)))
+                // } else {
+                //     None
+                // }
+            }),
+        )?;
 
         pass.sort_batches_if_dirty();
 
@@ -117,11 +122,21 @@ struct ObjectData {
     color: Vec4,
 }
 
-#[derive(Query)]
+#[derive(Fetch)]
 struct ObjectDataQuery<'a> {
-    position: &'a Position2D,
-    size: &'a Size2D,
-    color: &'a Color,
+    position: Component<Vec3>,
+    size: Component<Vec2>,
+    color: Component<Color>,
+}
+
+impl<'a> ObjectDataQuery<'a> {
+    fn new() -> Self {
+        Self {
+            position: position(),
+            size: size(),
+            color: color(),
+        }
+    }
 }
 
 impl<'a> Into<ObjectData> for ObjectDataQuery<'a> {
@@ -134,15 +149,24 @@ impl<'a> Into<ObjectData> for ObjectDataQuery<'a> {
     }
 }
 
-#[derive(Query, PartialEq)]
-struct KeyQuery<'a> {
-    depth: &'a WidgetDepth,
-    image: &'a Handle<Image>,
+#[derive(Fetch, PartialEq)]
+struct KeyQuery {
+    depth: Component<u32>,
+    image: Component<Handle<Image>>,
+}
+
+impl KeyQuery {
+    pub fn new() -> Self {
+        Self {
+            depth: widget_depth(),
+            image: image(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct Key {
-    depth: WidgetDepth,
+    depth: u32,
     image: Handle<Image>,
 }
 
@@ -158,13 +182,11 @@ impl Ord for Key {
     }
 }
 
-impl<'a> ivy_graphics::KeyQuery for KeyQuery<'a> {
-    type K = Key;
-
-    fn into_key(&self) -> Self::K {
-        Self::K {
-            depth: *self.depth,
-            image: *self.image,
+impl From<KeyQueryItem<'_>> for Key {
+    fn from(item: KeyQueryItem) -> Self {
+        Self {
+            depth: *item.depth,
+            image: *item.image,
         }
     }
 }

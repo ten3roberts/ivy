@@ -67,7 +67,7 @@ pub use ivy_resources::{
 };
 pub use ivy_templates::{TemplateKey, TemplateStore};
 pub use ivy_ui::{
-    constraints::*, Canvas, CanvasBundle, ImageBundle, ImageInfo, TextBundle, Widget, WidgetBundle,
+    constraints::*, Canvas, CanvasBundle, ImageBundle, ImageInfo, TextBundle, Widget, WidgetTemplate,
 };
 pub use ivy_vulkan::{ImageLayout, ImageUsage, ShaderPass, Texture};
 pub use ivy_window::*;

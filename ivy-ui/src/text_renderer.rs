@@ -1,6 +1,6 @@
 use anyhow::Context;
-use glam::{Mat4, Vec4};
-use hecs::{Query, World};
+use flax::{Component, Fetch, Mutable, Query, World};
+use glam::{Mat4, Vec2, Vec4};
 use ivy_graphics::{Allocator, BaseRenderer, BatchMarker, BufferAllocation, Mesh, Renderer};
 use ivy_rendergraph::Node;
 use ivy_resources::{Handle, Resources};
@@ -8,29 +8,45 @@ use ivy_vulkan::{
     commands::CommandBuffer,
     context::SharedVulkanContext,
     descriptors::{DescriptorSet, IntoSet},
-    shaderpass::ShaderPass,
     vk::{self, AccessFlags, BufferCopy, BufferMemoryBarrier, IndexType},
-    BufferAccess, BufferUsage, PassInfo,
+    BufferAccess, BufferUsage, PassInfo, Shader,
 };
 use ivy_vulkan::{device, Buffer};
-use std::mem::size_of;
+use std::{mem::size_of, path::Component};
 
-use crate::UIVertex;
 use crate::WrapStyle;
-use crate::{constraints::Margin, Text};
-use crate::{Alignment, Font};
+use crate::{alignment, font, margin, text, wrap, Font, UIVertex};
+use crate::{Alignment, Text};
 use crate::{Error, Result};
-use ivy_base::{Color, Position2D, Size2D, Visible};
+use ivy_base::{size, Color, Visible};
 
-#[derive(Query)]
+flax::component! {
+    block: BufferAllocation<Marker>,
+}
+
+#[derive(Fetch)]
 struct TextQuery<'a> {
-    text: &'a mut Text,
-    font: &'a Handle<Font>,
-    block: &'a mut BufferAllocation<Marker>,
-    bounds: &'a Size2D,
-    alignment: &'a Alignment,
-    wrap: &'a WrapStyle,
-    margin: &'a Margin,
+    text: Mutable<Text>,
+    font: Component<Handle<Font>>,
+    block: Mutable<BufferAllocation<Marker>>,
+    bounds: Component<Vec2>,
+    alignment: Component<Alignment>,
+    wrap: Component<WrapStyle>,
+    margin: Component<Vec2>,
+}
+
+impl<'a> TextQuery<'a> {
+    fn new() -> Self {
+        Self {
+            text: text(),
+            font: font(),
+            block: block(),
+            bounds: size(),
+            alignment: alignment(),
+            wrap: wrap(),
+            margin: margin(),
+        }
+    }
 }
 
 /// Renders arbitrary text using associated font and text objects attached to
@@ -133,9 +149,9 @@ impl TextRenderer {
     /// # Failures
     /// Fails if object buffer cannot be reallocated to accomodate new entities.
     fn register_entities(&mut self, world: &mut World) -> Result<()> {
-        let inserted = world
-            .query::<&Text>()
-            .without::<BufferAllocation<Marker>>()
+        let inserted = Query::new(text())
+            .without(block)
+            .borrow(world)
             .iter()
             .map(|(e, text)| {
                 self.glyph_count += text.len() as u32;
@@ -280,8 +296,7 @@ impl TextRenderer {
 }
 
 impl Renderer for TextRenderer {
-    type Error = Error;
-    fn draw<Pass: ShaderPass>(
+    fn draw(
         &mut self,
         world: &mut World,
         resources: &Resources,
@@ -290,13 +305,14 @@ impl Renderer for TextRenderer {
         pass_info: &PassInfo,
         offsets: &[u32],
         current_frame: usize,
+        shaderpass: Component<Shader>,
     ) -> Result<()> {
         cmd.bind_vertexbuffer(0, self.mesh.vertex_buffer());
         cmd.bind_indexbuffer(self.mesh.index_buffer(), IndexType::UINT32, 0);
 
         {
             let pass = self.base_renderer.pass_mut::<Pass>()?;
-            pass.register::<Pass, KeyQuery, ObjectDataQuery>(world);
+            pass.register(world);
             pass.build_batches::<Pass, KeyQuery>(world, resources, pass_info)?;
             let iter = world
                 .query_mut::<(&BatchMarker<ObjectData, Pass>, ObjectDataQuery, &Visible)>()
