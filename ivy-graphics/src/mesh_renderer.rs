@@ -6,7 +6,7 @@ use crate::{
 use ash::vk::{DescriptorSet, IndexType};
 use flax::{entity_ids, Component, Fetch, FetchExt, OptOr, Query, World};
 use glam::{Mat4, Quat, Vec3, Vec4};
-use ivy_base::{color, main_camera, position, rotation, scale, Color, ColorExt};
+use ivy_base::{color, main_camera, position, rotation, scale, Color, ColorExt, Visible};
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{context::SharedVulkanContext, descriptors::IntoSet, PassInfo, Shader};
 

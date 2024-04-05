@@ -1,7 +1,7 @@
 use anyhow::Context;
-use flax::{Component, Fetch, Mutable, Query, World};
-use glam::{Mat4, Vec2, Vec4};
-use ivy_graphics::{Allocator, BaseRenderer, BatchMarker, BufferAllocation, Mesh, Renderer};
+use flax::{entity_ids, Component, Fetch, Mutable, Query, World};
+use glam::{Mat4, Vec2, Vec3, Vec4};
+use ivy_graphics::{batch_id, Allocator, BaseRenderer, BufferAllocation, Mesh, Renderer};
 use ivy_rendergraph::Node;
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
@@ -12,20 +12,20 @@ use ivy_vulkan::{
     BufferAccess, BufferUsage, PassInfo, Shader,
 };
 use ivy_vulkan::{device, Buffer};
-use std::{mem::size_of, path::Component};
+use std::mem::size_of;
 
 use crate::WrapStyle;
 use crate::{alignment, font, margin, text, wrap, Font, UIVertex};
 use crate::{Alignment, Text};
 use crate::{Error, Result};
-use ivy_base::{size, Color, Visible};
+use ivy_base::{color, position, size, visible, Color, ColorExt, Visible};
 
 flax::component! {
     block: BufferAllocation<Marker>,
 }
 
 #[derive(Fetch)]
-struct TextQuery<'a> {
+struct TextQuery {
     text: Mutable<Text>,
     font: Component<Handle<Font>>,
     block: Mutable<BufferAllocation<Marker>>,
@@ -35,12 +35,12 @@ struct TextQuery<'a> {
     margin: Component<Vec2>,
 }
 
-impl<'a> TextQuery<'a> {
+impl TextQuery {
     fn new() -> Self {
         Self {
-            text: text(),
+            text: text().as_mut(),
             font: font(),
-            block: block(),
+            block: block().as_mut(),
             bounds: size(),
             alignment: alignment(),
             wrap: wrap(),
@@ -149,20 +149,20 @@ impl TextRenderer {
     /// # Failures
     /// Fails if object buffer cannot be reallocated to accomodate new entities.
     fn register_entities(&mut self, world: &mut World) -> Result<()> {
-        let inserted = Query::new(text())
-            .without(block)
+        let inserted = Query::new((entity_ids(), text()))
+            .without(block())
             .borrow(world)
             .iter()
-            .map(|(e, text)| {
+            .map(|(id, text)| {
                 self.glyph_count += text.len() as u32;
-                self.allocator.allocate(text.len()).map(|block| (e, block))
+                self.allocator.allocate(text.len()).map(|block| (id, block))
             })
             .collect::<Option<Vec<_>>>();
 
         if let Some(inserted) = inserted {
-            inserted
-                .into_iter()
-                .for_each(|(e, block)| world.insert_one(e, block).unwrap());
+            inserted.into_iter().for_each(|(id, block)| {
+                world.set(id, self::block(), block).unwrap();
+            });
         } else {
             self.grow()?;
 
@@ -184,10 +184,11 @@ impl TextRenderer {
         self.glyph_count = 0;
 
         // Reallocate as needed
-        let success = world
-            .query_mut::<(&Text, &mut BufferAllocation<Marker>)>()
-            .into_iter()
-            .map(|(_, (text, block))| {
+        let mut query = Query::new((text(), block().as_mut()));
+        let success = query
+            .borrow(world)
+            .iter()
+            .map(|(text, block)| {
                 self.glyph_count += text.len() as u32;
 
                 // Reallocate to fit longer text
@@ -221,24 +222,25 @@ impl TextRenderer {
         let sb = staging_buffer.buffer();
         let vb = self.mesh.vertex_buffer().into();
 
-        let dirty_texts = world
-            .query_mut::<TextQuery>()
-            .into_iter()
-            .filter(|(_, query)| {
-                query.text.len() > 0
-                    && (query.text.dirty()
-                        || query.text.old_bounds() != *query.bounds
-                        || query.text.old_margin() != *query.margin
-                        || &query.text.old_wrap() != query.wrap)
+        let mut query = Query::new(TextQuery::new());
+        let mut query = query.borrow(world);
+        let dirty_texts = query
+            .iter()
+            .filter(|item| {
+                item.text.len() > 0
+                    && (item.text.dirty()
+                        || item.text.old_bounds() != *item.bounds
+                        || item.text.old_margin() != *item.margin
+                        || &item.text.old_wrap() != item.wrap)
             })
-            .flat_map(|(_, query)| {
-                query.text.set_dirty(false);
+            .flat_map(|(item)| {
+                item.text.set_dirty(false);
 
-                let size = (query.text.len() * 4 * size_of::<UIVertex>()) as u64;
+                let size = (item.text.len() * 4 * size_of::<UIVertex>()) as u64;
 
                 let region = &[BufferCopy {
                     src_offset: offset,
-                    dst_offset: query.block.offset() as u64 * 4 * size_of::<UIVertex>() as u64,
+                    dst_offset: item.block.offset() as u64 * 4 * size_of::<UIVertex>() as u64,
                     size,
                 }];
 
@@ -246,15 +248,14 @@ impl TextRenderer {
 
                 offset += size;
 
-                let font = fonts.get(*query.font).unwrap();
-                query
-                    .text
+                let font = fonts.get(*item.font).unwrap();
+                item.text
                     .layout(
                         font,
-                        *query.bounds,
-                        *query.wrap,
-                        *query.alignment,
-                        *query.margin,
+                        *item.bounds,
+                        *item.wrap,
+                        *item.alignment,
+                        *item.margin,
                     )
                     .unwrap()
             });
@@ -306,29 +307,33 @@ impl Renderer for TextRenderer {
         offsets: &[u32],
         current_frame: usize,
         shaderpass: Component<Shader>,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         cmd.bind_vertexbuffer(0, self.mesh.vertex_buffer());
         cmd.bind_indexbuffer(self.mesh.index_buffer(), IndexType::UINT32, 0);
 
+        let pass = self.base_renderer.pass_mut(shaderpass)?;
         {
-            let pass = self.base_renderer.pass_mut::<Pass>()?;
-            pass.register(world);
-            pass.build_batches::<Pass, KeyQuery>(world, resources, pass_info)?;
-            let iter = world
-                .query_mut::<(&BatchMarker<ObjectData, Pass>, ObjectDataQuery, &Visible)>()
-                .into_iter()
-                .filter_map(|(e, (marker, obj, visible))| {
+            pass.register(world, KeyQuery::new());
+            pass.build_batches(world, resources, pass_info)?;
+            pass.update(
+                current_frame,
+                Query::new((
+                    entity_ids(),
+                    batch_id(shaderpass.id()),
+                    ObjectDataQuery::new(),
+                    visible(),
+                ))
+                .borrow(world)
+                .iter()
+                .filter_map(|(id, &marker, object, visible)| {
                     if visible.is_visible() {
-                        Some((e, (marker, obj)))
+                        Some((id, marker, ObjectData::from(object)))
                     } else {
                         None
                     }
-                });
-
-            pass.update(current_frame, iter)?;
+                }),
+            )?;
         }
-
-        let pass = self.base_renderer.pass::<Pass>();
 
         let frame_set = pass.set(current_frame);
 
@@ -375,28 +380,45 @@ struct ObjectData {
     len: u32,
 }
 
-#[derive(Query)]
-struct ObjectDataQuery<'a> {
-    position: &'a Position2D,
-    color: &'a Color,
-    text: &'a Text,
-    block: &'a BufferAllocation<Marker>,
+#[derive(Fetch)]
+struct ObjectDataQuery {
+    position: Component<Vec3>,
+    color: Component<Color>,
+    text: Component<Text>,
+    block: Component<BufferAllocation<Marker>>,
 }
 
-impl<'a> Into<ObjectData> for ObjectDataQuery<'a> {
-    fn into(self) -> ObjectData {
-        ObjectData {
-            mvp: Mat4::from_translation(self.position.extend(0.0)),
-            color: self.color.into(),
-            offset: self.block.offset() as u32,
-            len: self.text.len() as u32,
+impl ObjectDataQuery {
+    pub fn new() -> Self {
+        Self {
+            position: position(),
+            color: color(),
+            text: text(),
+            block: block(),
         }
     }
 }
 
-#[derive(Query, PartialEq, Eq)]
-struct KeyQuery<'a> {
-    font: &'a Handle<Font>,
+impl<'a> From<ObjectDataQueryItem<'a>> for ObjectData {
+    fn from(value: ObjectDataQueryItem) -> ObjectData {
+        ObjectData {
+            mvp: Mat4::from_translation(*value.position),
+            color: value.color.to_vec4(),
+            offset: value.block.offset() as u32,
+            len: value.text.len() as u32,
+        }
+    }
+}
+
+#[derive(Fetch)]
+struct KeyQuery {
+    font: Component<Handle<Font>>,
+}
+
+impl KeyQuery {
+    fn new() -> Self {
+        Self { font: font() }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -404,14 +426,11 @@ struct Key {
     font: Handle<Font>,
 }
 
-impl<'a> ivy_graphics::KeyQuery for KeyQuery<'a> {
-    type K = Key;
-
-    fn into_key(&self) -> Self::K {
-        Self::K { font: *self.font }
+impl<'a> From<KeyQueryItem<'a>> for Key {
+    fn from(value: KeyQueryItem) -> Self {
+        Self { font: *value.font }
     }
 }
-
 pub struct TextUpdateNode {
     text_renderer: Handle<TextRenderer>,
     buffer: vk::Buffer,

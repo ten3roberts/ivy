@@ -1,5 +1,5 @@
-use crate::{apply_constraints, children, components, update_from, Alignment, Result};
-use flax::{Entity, EntityRef, World};
+use crate::{apply_constraints, children, update_from, Alignment, Result};
+use flax::{EntityRef, World};
 use fontdue::layout::{HorizontalAlign, VerticalAlign};
 use glam::Vec2;
 
@@ -37,21 +37,22 @@ impl WidgetLayout {
         depth: u32,
         is_visible: bool,
     ) -> Result<()> {
-        let mut iter = parent
+        let total_size: Vec2 = parent
             .get(children())
             .ok()
             .iter()
             .flat_map(|v| v.iter())
-            .map(|&v| world.entity(v).unwrap());
+            .map(|&v| world.entity(v).unwrap())
+            .try_fold(Vec2::default(), |acc, child| -> Result<Vec2> {
+                apply_constraints(world, &child, position, size, is_visible)?;
 
-        let total_size: Vec2 = iter.try_fold(Vec2::default(), |acc, child| -> Result<Vec2> {
-            apply_constraints(world, child, position, size, is_visible)?;
+                let child_size = child
+                    .get(ivy_base::components::size())
+                    .expect("Missing size");
+                // let child_size = world.try_get::<Vec2>(child)?;
 
-            let child_size = world.get(child, ivy_base::components::size())?;
-            // let child_size = world.try_get::<Vec2>(child)?;
-
-            Ok(acc + *child_size)
-        })?;
+                Ok(acc + *child_size)
+            })?;
 
         let total_size = match self.kind {
             LayoutKind::Horizontal => Vec2::new(total_size.x, size.y),
@@ -70,9 +71,8 @@ impl WidgetLayout {
             VerticalAlign::Bottom => position.y - size.y + total_size.y,
         };
 
-        let mut iter = parent
-            .get(children())
-            .ok()
+        let c = parent.get(children()).ok();
+        let mut iter = c
             .iter()
             .flat_map(|v| v.iter())
             .map(|&v| world.entity(v).unwrap());
@@ -81,17 +81,17 @@ impl WidgetLayout {
             LayoutKind::Horizontal => {
                 let mut cursor = Vec2::new(x, y);
                 iter.try_for_each(|child| -> Result<()> {
-                    apply_constraints(world, child, position, size, is_visible)?;
+                    apply_constraints(world, &child, position, size, is_visible)?;
                     {
-                        let child_position =
+                        let mut child_position =
                             child.get_mut(ivy_base::components::position()).unwrap();
                         let child_size = child.get_copy(ivy_base::components::size()).unwrap();
 
-                        *child_position = cursor; //+ Position2D(**child_size);
+                        *child_position = cursor.extend(0.0); //+ Position2D(**child_size);
                         cursor.x += child_size.x * 2.0 + self.spacing.x;
                     }
 
-                    update_from(world, child, depth + 1)?;
+                    update_from(world, &child, depth + 1)?;
                     Ok(())
                 })?
             }
@@ -105,9 +105,9 @@ impl WidgetLayout {
 
                 let mut cursor = Vec2::new(x, y);
                 iter.try_for_each(|child| -> Result<()> {
-                    apply_constraints(world, child.id(), position, size, is_visible)?;
+                    apply_constraints(world, &child, position, size, is_visible)?;
                     {
-                        let child_position =
+                        let mut child_position =
                             child.get_mut(ivy_base::components::position()).unwrap();
                         let child_size = child.get_copy(ivy_base::components::size()).unwrap();
 
@@ -115,13 +115,14 @@ impl WidgetLayout {
 
                         // let (child_pos, child_size) = query.get()?;
 
-                        *child_position = cursor + Vec2::new(child_size.x * offset_x, 0.0);
+                        *child_position =
+                            (cursor + Vec2::new(child_size.x * offset_x, 0.0)).extend(0.0);
                         cursor.y -= child_size.y * 2.0 + self.spacing.y;
                     }
 
                     // drop(query);
 
-                    update_from(world, child, depth + 1)?;
+                    update_from(world, &child, depth + 1)?;
                     Ok(())
                 })?
             }

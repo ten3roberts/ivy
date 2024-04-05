@@ -657,8 +657,8 @@ dependencies = [
 
 [[package]]
 name = "flax"
-version = "0.6.2"
-source = "git+https://github.com/ten3roberts/flax#db625c0d1ed3c93220902034bd81a478ceded9a1"
+version = "0.7.0"
+source = "git+https://github.com/ten3roberts/flax#d55f9dcfed564062af51d1ff076c425c6fc5e30b"
 dependencies = [
  "anyhow",
  "atomic_refcell",
@@ -666,7 +666,7 @@ dependencies = [
  "erased-serde",
  "flax-derive",
  "flume 0.11.0",
- "itertools 0.11.0",
+ "itertools 0.12.1",
  "once_cell",
  "puffin",
  "rayon",
@@ -677,8 +677,8 @@ dependencies = [
 
 [[package]]
 name = "flax-derive"
-version = "0.6.0"
-source = "git+https://github.com/ten3roberts/flax#db625c0d1ed3c93220902034bd81a478ceded9a1"
+version = "0.7.0"
+source = "git+https://github.com/ten3roberts/flax#d55f9dcfed564062af51d1ff076c425c6fc5e30b"
 dependencies = [
  "itertools 0.11.0",
  "proc-macro-crate 2.0.2",

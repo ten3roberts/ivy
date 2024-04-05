@@ -1,8 +1,8 @@
 use std::marker::PhantomData;
 
 use anyhow::Context;
+use flax::World;
 use flume::Receiver;
-use hecs::World;
 use ivy_base::{Events, Layer};
 use ivy_resources::Resources;
 
@@ -84,7 +84,7 @@ impl<T> ReactiveLayer<T> {
 impl<T: 'static + Copy + Send + Sync> Layer for ReactiveLayer<T> {
     fn on_update(
         &mut self,
-        world: &mut hecs::World,
+        world: &mut World,
         _: &mut ivy_resources::Resources,
         _: &mut ivy_base::Events,
         _: std::time::Duration,

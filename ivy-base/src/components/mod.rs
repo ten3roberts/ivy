@@ -1,8 +1,5 @@
-use std::{borrow::Cow, time::Duration};
-
 use flax::{Component, Debuggable, Fetch};
-use glam::{Mat3, Mat4, Quat, Vec2, Vec3, Vec4Swizzles};
-use ivy_random::Random;
+use glam::{Mat4, Quat, Vec2, Vec3, Vec4Swizzles};
 mod connections;
 mod physics;
 pub use connections::*;
@@ -22,7 +19,7 @@ flax::component! {
     /// TODO: remove
     pub position2v: Vec2 => [ Debuggable ],
 
-    pub size:Vec3 => [ Debuggable ],
+    pub size:Vec2 => [ Debuggable ],
 
     pub is_static: () => [ Debuggable ],
     pub visible: Visible => [ Debuggable ],
@@ -82,4 +79,14 @@ pub enum Visible {
     Hidden,
     /// Entity is hidden by a parent node
     HiddenInherit,
+}
+
+impl Visible {
+    /// Returns `true` if the visible is [`Visible`].
+    ///
+    /// [`Visible`]: Visible::Visible
+    #[must_use]
+    pub fn is_visible(&self) -> bool {
+        matches!(self, Self::Visible)
+    }
 }

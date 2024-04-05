@@ -1,4 +1,3 @@
-use ezy::Lerp;
 use glam::{Vec3, Vec4};
 use palette::{FromColor, Hsla, Hsva, Srgba};
 

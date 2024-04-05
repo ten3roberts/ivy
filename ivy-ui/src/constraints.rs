@@ -38,7 +38,7 @@ pub struct ConstraintQuery {
     pub abs_offset: Component<Vec2>,
     pub rel_size: Component<Vec2>,
     pub abs_size: Component<Vec2>,
-    pub aspect: Component<Vec2>,
+    pub aspect: Component<f32>,
     pub origin: Component<Vec2>,
 }
 
@@ -67,7 +67,7 @@ pub struct ConstraintBundle {
     pub abs_offset: Vec2,
     pub rel_size: Vec2,
     pub abs_size: Vec2,
-    pub aspect: Vec2,
+    pub aspect: f32,
 }
 
 impl ConstraintBundle {
@@ -79,6 +79,10 @@ impl ConstraintBundle {
             .set(absolute_size(), self.abs_size)
             .set(aspect(), self.aspect);
     }
+}
+
+pub(crate) fn calculate_relative(size: Vec2, parent_size: Vec2) -> Vec2 {
+    size * parent_size
 }
 
 // /// Trait for encompassing the different size constraints

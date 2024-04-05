@@ -7,7 +7,7 @@ use ivy_input::InputEvent;
 use ivy_resources::Resources;
 use ivy_window::Window;
 
-use crate::{canvas, handle_events, input_field_system, systems, Canvas, UIControl};
+use crate::{canvas, handle_events, input_field_system, update_system, UIControl};
 mod event_handling;
 pub use event_handling::*;
 
@@ -16,12 +16,13 @@ pub use event_handling::*;
 /// through the world in the form of [`ivy-input::InputEvent`]s.
 pub struct UILayer {
     state: InteractiveState,
+    update_canvas: BoxedSystem,
     schedule: Schedule,
 }
 
 impl UILayer {
     pub fn new(
-        _world: &mut World,
+        world: &mut World,
         _resources: &mut Resources,
         events: &mut Events,
     ) -> anyhow::Result<Self> {
@@ -34,16 +35,13 @@ impl UILayer {
 
         let schedule = Schedule::builder()
             .with_system(handle_events_system(window_rx, control_rx))
-            .with_system(move |w: SubWorld<_>, state: Read<_>, events: Write<_>| {
-                input_field_system(w, state, input_field_rx.try_iter(), events)
-            })
+            .with_system(input_field_system(input_field_rx))
             .build();
-
-        eprintln!("UI Layer: {}", schedule.batch_info());
 
         Ok(Self {
             state: InteractiveState::default(),
             schedule,
+            update_canvas: update_system(),
         })
     }
 }
@@ -56,12 +54,14 @@ impl Layer for UILayer {
         events: &mut Events,
         _frame_time: std::time::Duration,
     ) -> anyhow::Result<()> {
-        systems::update(world)?;
+        self.update_canvas
+            .run(world)
+            .context("Failed to update canvas")?;
 
         let window = resources.get_default::<Window>()?;
         // Transform the cursor position to canvas size
         let cursor_pos = window.normalized_cursor_pos();
-        let size = Query::new(size())
+        let &size = Query::new(size())
             .with(canvas())
             .borrow(world)
             .iter()
@@ -73,10 +73,10 @@ impl Layer for UILayer {
         //     .next()
         //     .context("Failed to get canvas")?;
 
-        let mut cursor_pos = cursor_pos * *size;
+        let mut cursor_pos = cursor_pos * size;
 
         self.schedule
-            .execute_seq((world, events, &mut self.state, &mut cursor_pos))
+            .execute_seq_with(world, (events, &mut self.state, &mut cursor_pos))
             .context("Failed to execute UI schedule")?;
 
         Ok(())
@@ -93,10 +93,10 @@ fn handle_events_system(
         .with_input_mut::<InteractiveState>()
         .with_input::<Vec2>()
         .build(
-            |world: &mut World,
-             events: &mut Events,
-             state: &mut InteractiveState,
-             cursor_pos: &Vec2| {
+            move |world: &mut World,
+                  events: &mut Events,
+                  state: &mut InteractiveState,
+                  &cursor_pos: &Vec2| {
                 handle_events(
                     world,
                     events,

@@ -1,10 +1,10 @@
-use flax::{Entity, EntityBuilder, Mutable, Query, QueryBorrow, System};
+use flax::{BoxedSystem, Entity, EntityBuilder, Mutable, Query, QueryBorrow, System};
 use glfw::{Action, Key, Modifiers};
 
 use ivy_base::Events;
 
 use crate::{
-    events::WidgetEvent, input_field, interactive, sticky, text, InteractiveState, Result, Text,
+    events::WidgetEvent, input_field, interactive, sticky, text, InteractiveState, Text,
     WidgetEventKind,
 };
 
@@ -28,7 +28,7 @@ impl InputFieldBundle {
         entity
             .set_default(interactive())
             .set_default(sticky())
-            .set(input_field(), self.field)
+            .set(input_field(), self.field);
     }
 }
 
@@ -51,41 +51,32 @@ impl InputField {
     }
 }
 
-pub fn input_field_system(
-    // world: SubWorld<(&mut InputField, &mut Text)>,
-    // state: Read<InteractiveState>,
-    reader: flume::Receiver<WidgetEvent>,
-    // mut events: Write<Events>,
-) -> Result<()> {
+pub fn input_field_system(reader: flume::Receiver<WidgetEvent>) -> BoxedSystem {
     System::builder()
         .with_query(Query::new((input_field().as_mut(), text().as_mut())))
-        .with_input::<InteractiveState>()
+        .with_input_mut::<InteractiveState>()
         .with_input_mut::<Events>()
         .build(
-            |mut query: QueryBorrow<(Mutable<InputField>, Mutable<Text>)>,
-             state: &mut InteractiveState,
-             events: &mut Events| {
+            move |mut query: QueryBorrow<(Mutable<InputField>, Mutable<Text>), _>,
+                  state: &mut InteractiveState,
+                  events: &mut Events| {
                 let focused = match state.focused() {
                     Some(val) => val,
-                    None => return Ok(()),
+                    None => return anyhow::Ok(()),
                 };
 
                 let Ok((field, text)) = query.get(focused) else {
                     return Ok(());
                 };
-                // let (field, text) = match query.get().ok() {
-                //     Some(val) => val,
-                //     None => return Ok(()),
-                // };
 
-                reader.for_each(|event| match event.kind {
+                reader.try_iter().for_each(|event| match event.kind {
                     WidgetEventKind::Focus(false)
                     | WidgetEventKind::Key {
                         key: Key::Enter,
                         action: Action::Press,
                         ..
                     } => {
-                        (field.on_submit)(focused, &mut events, text.val());
+                        (field.on_submit)(focused, events, text.val());
                     }
                     WidgetEventKind::CharTyped(c) => {
                         text.append(c);

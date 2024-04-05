@@ -1,7 +1,7 @@
 use crate::*;
 use flax::{entity_ids, Component, Fetch, Query, World};
 use glam::{vec2, vec3, Mat4, Vec2, Vec3, Vec4};
-use ivy_base::{color, position, size, Color};
+use ivy_base::{color, position, size, visible, Color, ColorExt};
 use ivy_graphics::{batch_id, BaseRenderer, Mesh, Renderer};
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{context::SharedVulkanContext, descriptors::*, vk::IndexType, PassInfo, Shader};
@@ -55,7 +55,7 @@ impl Renderer for ImageRenderer {
         offsets: &[u32],
         current_frame: usize,
         shaderpass: Component<Shader>,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         cmd.bind_vertexbuffer(0, self.square.vertex_buffer());
         cmd.bind_indexbuffer(self.square.index_buffer(), IndexType::UINT32, 0);
 
@@ -72,17 +72,16 @@ impl Renderer for ImageRenderer {
                 entity_ids(),
                 batch_id(shaderpass.id()),
                 ObjectDataQuery::new(),
+                visible(),
             ))
             .borrow(world)
             .iter()
-            .filter_map(|(e, &batch_id, obj /* , bound */)| {
-                // if visible.is_visible()
-                //     && camera.visible(**obj.position, **bound * obj.scale.max_element())
-                // {
-                Some((e, batch_id, ObjectData::from(obj)))
-                // } else {
-                //     None
-                // }
+            .filter_map(|(e, &batch_id, obj, visible)| {
+                if visible.is_visible() {
+                    Some((e, batch_id, ObjectData::from(obj)))
+                } else {
+                    None
+                }
             }),
         )?;
 
@@ -123,13 +122,13 @@ struct ObjectData {
 }
 
 #[derive(Fetch)]
-struct ObjectDataQuery<'a> {
+struct ObjectDataQuery {
     position: Component<Vec3>,
     size: Component<Vec2>,
     color: Component<Color>,
 }
 
-impl<'a> ObjectDataQuery<'a> {
+impl ObjectDataQuery {
     fn new() -> Self {
         Self {
             position: position(),
@@ -139,12 +138,11 @@ impl<'a> ObjectDataQuery<'a> {
     }
 }
 
-impl<'a> Into<ObjectData> for ObjectDataQuery<'a> {
-    fn into(self) -> ObjectData {
+impl<'a> From<ObjectDataQueryItem<'a>> for ObjectData {
+    fn from(value: ObjectDataQueryItem<'_>) -> ObjectData {
         ObjectData {
-            mvp: Mat4::from_translation(self.position.extend(0.0))
-                * Mat4::from_scale(self.size.extend(1.0)),
-            color: self.color.into(),
+            mvp: Mat4::from_translation(*value.position) * Mat4::from_scale(value.size.extend(1.0)),
+            color: value.color.to_vec4(),
         }
     }
 }

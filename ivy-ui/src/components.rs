@@ -1,4 +1,4 @@
-use crate::{Font, Image, InputField, Text};
+use crate::{Font, Image, InputField, Text, WidgetLayout};
 use flax::{Entity, EntityBuilder, EntityRef, World};
 pub use fontdue::layout::{HorizontalAlign, VerticalAlign};
 use glam::Vec2;
@@ -28,9 +28,11 @@ flax::component! {
     pub relative_offset: Vec2,
     pub relative_size: Vec2,
     pub absolute_size: Vec2,
-    pub aspect: Vec2,
+    pub aspect: f32,
     pub origin: Vec2,
     pub margin: Vec2,
+
+    pub widget_layout: WidgetLayout,
 
     pub children: Vec<Entity>,
 
@@ -46,7 +48,7 @@ pub struct WidgetTemplate {
     pub abs_size: Vec2,
     pub rel_size: Vec2,
     pub origin: Vec2,
-    pub aspect: Vec2,
+    pub aspect: f32,
 }
 
 impl WidgetTemplate {
@@ -56,7 +58,7 @@ impl WidgetTemplate {
         abs_size: Vec2,
         rel_size: Vec2,
         origin: Vec2,
-        aspect: Vec2,
+        aspect: f32,
     ) -> Self {
         Self {
             abs_offset,
@@ -91,7 +93,7 @@ impl WidgetTemplate {
 pub struct CanvasBundle {
     widget: WidgetTemplate,
     pub origin: Vec2,
-    pub aspect: Vec2,
+    pub aspect: f32,
 }
 
 impl CanvasBundle {
@@ -162,14 +164,14 @@ impl TextBundle {
         self.text.set(val)
     }
 
-    pub fn mount(&mut self, entity: &mut EntityBuilder) {
+    pub fn mount(self, entity: &mut EntityBuilder) {
         entity
             .set(font(), self.font)
             .set(color(), self.color)
             .set(wrap(), self.wrap)
             .set(alignment(), self.align)
             .set(margin(), self.margin)
-            .set(text(), self.text)
+            .set(text(), self.text);
     }
 }
 

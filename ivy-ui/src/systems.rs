@@ -1,72 +1,95 @@
 use std::convert::TryInto;
 
-use crate::{constraints::*, events::WidgetEvent, InteractiveState, Result};
-use glam::{Mat4, Vec2};
+use crate::{events::WidgetEvent, InteractiveState, Result};
+use anyhow::Context;
+use flax::{
+    components::child_of, entity_ids, fetch::entity_refs, BoxedSystem, Entity, EntityRef, FetchExt,
+    Query, System, World,
+};
+use glam::{Mat4, Vec2, Vec3Swizzles};
 use glfw::Action;
-use hecs::{Entity, World};
-use hecs_hierarchy::Hierarchy;
-use hecs_schedule::{GenericWorld, Read, Write};
-use ivy_base::{Events, Position2D, Size2D, Visible};
-use ivy_graphics::Camera;
+use ivy_base::{position, size, visible, Events, Visible};
+use ivy_graphics::components::camera;
 use ivy_input::InputEvent;
 
 use crate::{constraints::ConstraintQuery, *};
 
+use self::constraints::calculate_relative;
+
 /// Updates all UI trees and applies constraints.
 /// Also updates canvas cameras.
-pub fn update(world: &World) -> Result<()> {
-    world.roots::<Widget>()?.iter().try_for_each(|(root, _)| {
-        apply_constraints(
-            world,
-            root,
-            Position2D::default(),
-            Size2D::new(1.0, 1.0),
-            true,
-        )?;
+pub fn update_system() -> BoxedSystem {
+    System::builder()
+        .with_query(Query::new((entity_refs(), canvas())).without_relation(child_of))
+        .try_for_each(|(root, _)| {
+            let world = root.world();
+            apply_constraints(world, &root, Vec2::ZERO, Vec2::ONE, true)?;
 
-        if world.get::<Canvas>(root).is_ok() {
-            update_canvas(world, root)?;
-        }
+            update_canvas(world, &root)?;
 
-        update_from(world, root, 1)
-    })
+            update_from(world, &root, 1)?;
+
+            anyhow::Ok(())
+        })
+        .boxed()
 }
 
-pub(crate) fn update_from(world: &impl GenericWorld, parent: Entity, depth: u32) -> Result<()> {
-    let mut query =
-        world.try_query_one::<(&Position2D, &Size2D, &mut WidgetDepth, &mut Visible)>(parent)?;
-    let (position, size, curr_depth, visible) = query.get()?;
-    let position = *position;
-    let size = *size;
-    *curr_depth = depth.into();
+pub(crate) fn update_from(world: &World, entity: &EntityRef, depth: u32) -> Result<()> {
+    let query = &(position(), size(), widget_depth().as_mut(), visible());
 
-    let is_visible = visible.is_visible();
+    let (position, size, is_visible) = {
+        let mut query = entity.query(query);
 
-    drop(query);
+        let (position, size, cur_depth, visible) = query.get().unwrap();
 
-    if let Ok(layout) = world.try_get::<WidgetLayout>(parent) {
-        layout.update(world, parent, position, size, depth, is_visible)
-    } else {
-        world.children::<Widget>(parent).try_for_each(|child| {
-            apply_constraints(world, child, position, size, is_visible)?;
-            update_from(world, child, depth + 1)
-        })
+        // let mut query =
+        //     world.try_query_one::<(&Position2D, &Size2D, &mut WidgetDepth, &mut Visible)>(parent)?;
+
+        // let (position, size, curr_depth, visible) = query.get()?;
+        *cur_depth = depth.into();
+        (*position, *size, *visible)
+    };
+
+    let is_visible = is_visible.is_visible();
+
+    if let Ok(layout) = entity.get(widget_layout()) {
+        layout.update(world, entity, position.xy(), size, depth, is_visible)?;
+    } else if let Ok(children) = entity.get(children()) {
+        children.iter().try_for_each(|&child| {
+            let entity = world.entity(child).unwrap();
+
+            apply_constraints(world, &entity, position.xy(), size, is_visible)?;
+            update_from(world, &entity, depth + 1)
+        })?;
     }
+
+    Ok(())
 }
 
 /// Applies the constraints associated to entity and uses the given parent.
 pub(crate) fn apply_constraints(
-    world: &impl GenericWorld,
-    entity: Entity,
-    parent_pos: Position2D,
-    parent_size: Size2D,
+    world: &World,
+    entity: &EntityRef,
+    parent_pos: Vec2,
+    parent_size: Vec2,
     is_visible: bool,
 ) -> Result<()> {
-    let mut constaints_query =
-        world.try_query_one::<(ConstraintQuery, &mut Position2D, &mut Size2D, &mut Visible)>(
-            entity,
-        )?;
-    let (constraints, pos, size, visible) = constaints_query.get()?;
+    let query = &(
+        ConstraintQuery::new(),
+        position().as_mut(),
+        size().as_mut(),
+        visible().as_mut(),
+    );
+
+    let mut query = entity.query(query);
+
+    // let mut constaints_query =
+    //     world.try_query_one::<(ConstraintQuery, &mut Position2D, &mut Size2D, &mut Visible)>(
+    //         entity,
+    //     )?;
+    let Some((constraints, pos, size, visible)) = query.get() else {
+        return Ok(());
+    };
 
     if !is_visible {
         *visible = Visible::HiddenInherit;
@@ -74,29 +97,30 @@ pub(crate) fn apply_constraints(
         *visible = Visible::Visible;
     }
 
-    *size =
-        constraints.rel_size.calculate(parent_size) + constraints.abs_size.calculate(parent_size);
+    *size = calculate_relative(*constraints.rel_size, parent_size) + *constraints.abs_size;
 
-    *pos = parent_pos
-        + constraints.rel_offset.calculate(parent_size)
-        + constraints.abs_offset.calculate(parent_size)
-        - Position2D(**constraints.origin * **size);
+    *pos = (parent_pos
+        + calculate_relative(*constraints.rel_offset, parent_size)
+        + *constraints.abs_offset
+        - *constraints.origin * *size)
+        .extend(0.0);
 
-    if **constraints.aspect != 0.0 {
-        size.x = size.y * **constraints.aspect
+    if *constraints.aspect != 0.0 {
+        size.x = size.y * *constraints.aspect
     }
 
     Ok(())
 }
 
 /// Updates the canvas view and projection
-pub fn update_canvas(world: &World, canvas: Entity) -> Result<()> {
-    let mut camera_query = world.try_query_one::<(&mut Camera, &Size2D, &Position2D)>(canvas)?;
+pub fn update_canvas(world: &World, canvas: &EntityRef) -> Result<()> {
+    let query = &(camera().as_mut(), size().as_mut(), position().as_mut());
 
-    let (camera, size, position) = camera_query.get()?;
+    let mut query = canvas.query(query);
+    let (camera, size, position) = query.get().unwrap();
 
     camera.set_orthographic(size.x * 2.0, size.y * 2.0, 0.0, 100.0);
-    camera.set_view(Mat4::from_translation(-position.extend(0.0)));
+    camera.set_view(Mat4::from_translation(-*position));
 
     Ok(())
 }
@@ -105,23 +129,14 @@ pub fn reactive_system<T: 'static + Copy + Send + Sync, I: Iterator<Item = Widge
     world: &World,
     events: I,
 ) -> Result<()> {
-    events
-        .filter_map(|event| ReactiveState::try_from_event(&event).map(|val| (event.entity(), val)))
-        .try_for_each(|(entity, state)| -> Result<()> {
-            eprintln!("Got: {:?}", state);
-            let mut query = world.try_query_one::<(&mut T, &Reactive<T>)>(entity)?;
-            if let Ok((val, reactive)) = query.get() {
-                reactive.update(val, state);
-            }
-            Ok(())
-        })
+    unimplemented!()
 }
 
 pub fn handle_events(
-    world: Write<World>,
-    mut events: Write<Events>,
-    mut state: Write<InteractiveState>,
-    cursor_pos: Read<Position2D>,
+    world: &mut World,
+    mut events: &mut Events,
+    state: &mut InteractiveState,
+    cursor_pos: Vec2,
     intercepted_events: impl Iterator<Item = InputEvent>,
     control_events: impl Iterator<Item = UIControl>,
 ) {
@@ -129,10 +144,10 @@ pub fn handle_events(
         UIControl::Focus(widget) => state.set_focus(widget, true, &mut events),
     });
 
-    let hovered = intersect_widget(&*world, *cursor_pos);
+    let hovered = intersect_widget(&*world, cursor_pos);
 
     let sticky = hovered
-        .map(|val| world.get::<Sticky>(val).is_ok())
+        .map(|val| world.has(val, sticky()))
         .unwrap_or_default();
 
     for event in intercepted_events {
@@ -153,7 +168,7 @@ pub fn handle_events(
                 if let Some(widget) = hovered {
                     let entity = world.entity(widget).unwrap();
 
-                    if let Some(click) = entity.get::<OnClick>() {
+                    if let Ok(click) = entity.get(on_click()) {
                         click.0(entity, &mut events);
                     }
 
@@ -220,27 +235,23 @@ pub fn handle_events(
 }
 
 /// Returns the first widget that intersects the postiion
-fn intersect_widget(world: &impl GenericWorld, point: Position2D) -> Option<Entity> {
-    world
-        .try_query::<(&Position2D, &Size2D, &WidgetDepth, &Visible)>()
-        .unwrap()
-        .with::<Interactive>()
+fn intersect_widget(world: &World, point: Vec2) -> Option<Entity> {
+    Query::new((entity_ids(), position(), size(), widget_depth(), visible()))
+        .with(interactive())
+        .borrow(world)
         .iter()
-        .filter_map(|(e, (pos, size, depth, visible))| {
-            if visible.is_visible() && box_intersection(*pos, *size, *point) {
-                Some((e, depth))
+        .filter_map(|(id, pos, size, depth, visible)| {
+            if visible.is_visible() && box_intersection(pos.xy(), *size, point) {
+                Some((id, depth))
             } else {
                 None
             }
         })
-        .max_by_key(|(_, depth)| *depth)
-        .map(|(a, _)| a)
+        .max_by_key(|v| v.1)
+        .map(|v| v.0)
 }
 
-fn box_intersection(pos: Position2D, size: Size2D, point: Vec2) -> bool {
-    let pos = *pos;
-    let size = *size;
-
+fn box_intersection(pos: Vec2, size: Vec2, point: Vec2) -> bool {
     point.x > pos.x - size.x
         && point.x < pos.x + size.x
         && point.y > pos.y - size.y

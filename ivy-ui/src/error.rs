@@ -24,5 +24,5 @@ pub enum Error {
     MissingGlyph(u16),
 
     #[error("UI ecs error: {0}")]
-    EcsError(#[from] hecs_schedule::Error),
+    EcsError(#[from] flax::Error),
 }
