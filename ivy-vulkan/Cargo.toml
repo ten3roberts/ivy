@@ -20,14 +20,13 @@ ivy-image = { path = "../ivy-image", version = "0.10.0" }
 ivy-resources = { path = "../ivy-resources", version = "0.10.0" }
 ivy-base = { path = "../ivy-base", version = "0.10.0" }
 log = "0.4.17"
-parking_lot = "0.12.0"
+parking_lot.workspace = true
 smallvec = "1.8.0"
 spirv-reflect = "0.2.3"
-thiserror = "1.0.31"
-glam = "0.20.5"
+thiserror.workspace = true
+glam.workspace = true
 serde = { workspace = true, optional = true }
 bitflags = "1.3.2"
-records = "0.2.0"
 
 [features]
 default = []

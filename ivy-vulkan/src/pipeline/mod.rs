@@ -315,11 +315,28 @@ impl Drop for Pipeline {
 }
 
 #[derive(Default)]
-#[records::record]
 pub struct PassInfo {
-    renderpass: vk::RenderPass,
-    subpass: u32,
-    extent: Extent,
-    color_attachment_count: u32,
-    depth_attachment: bool,
+    pub renderpass: vk::RenderPass,
+    pub subpass: u32,
+    pub extent: Extent,
+    pub color_attachment_count: u32,
+    pub depth_attachment: bool,
+}
+
+impl PassInfo {
+    pub fn new(
+        renderpass: vk::RenderPass,
+        subpass: u32,
+        extent: Extent,
+        color_attachment_count: u32,
+        depth_attachment: bool,
+    ) -> Self {
+        Self {
+            renderpass,
+            subpass,
+            extent,
+            color_attachment_count,
+            depth_attachment,
+        }
+    }
 }

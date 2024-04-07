@@ -1456,9 +1456,7 @@ name = "ivy-resources"
 version = "0.10.3"
 dependencies = [
  "atomic_refcell",
- "derive_more",
- "hecs",
- "hecs-schedule",
+ "flax",
  "parking_lot 0.12.0",
  "serde",
  "slotmap",
@@ -1503,7 +1501,6 @@ dependencies = [
  "ivy-resources",
  "log",
  "parking_lot 0.12.0",
- "records",
  "serde",
  "smallvec",
  "spirv-reflect",

@@ -36,6 +36,7 @@ impl Default for Clock {
 }
 
 /// Allows shorter function names to convert duration into intergral types
+#[deprecated(note = "Use Duration::from methods instead")]
 pub trait FromDuration {
     fn secs(&self) -> f32;
     fn ms(&self) -> u128;
