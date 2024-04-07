@@ -17,7 +17,7 @@ use crate::{
 const MARGIN: f32 = 1.2;
 
 #[derive(Debug, Clone)]
-pub struct BVHNode<O: Array<Item = Object> = [Object; 1]> {
+pub struct BvhNode<O: Array<Item = Object> = [Object; 1]> {
     bounds: BoundingBox,
     objects: SmallVec<O>,
     axis: Axis,
@@ -27,7 +27,7 @@ pub struct BVHNode<O: Array<Item = Object> = [Object; 1]> {
     state: NodeState,
 }
 
-impl<O: Array<Item = Object>> Default for BVHNode<O> {
+impl<O: Array<Item = Object>> Default for BvhNode<O> {
     fn default() -> Self {
         Self {
             bounds: Default::default(),
@@ -73,7 +73,7 @@ impl Axis {
     }
 }
 
-impl<O> BVHNode<O>
+impl<O> BvhNode<O>
 where
     O: Array<Item = Object>,
 {
@@ -294,7 +294,7 @@ where
     }
 }
 
-impl<O: Array<Item = Object> + ComponentValue> CollisionTreeNode for BVHNode<O> {
+impl<O: Array<Item = Object> + ComponentValue> CollisionTreeNode for BvhNode<O> {
     fn objects(&self) -> &[Object] {
         &self.objects
     }
@@ -414,7 +414,7 @@ impl<O: Array<Item = Object> + ComponentValue> CollisionTreeNode for BVHNode<O> 
     }
 }
 
-impl<O> DrawGizmos for BVHNode<O>
+impl<O> DrawGizmos for BvhNode<O>
 where
     O: Array<Item = Object> + ComponentValue,
 {

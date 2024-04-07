@@ -11,6 +11,21 @@ pub trait ColorExt {
     fn to_vec4(&self) -> Vec4;
     fn to_hsva(&self) -> Hsva;
     fn to_hsla(&self) -> Hsla;
+    fn red() -> Self;
+
+    fn green() -> Self;
+
+    fn blue() -> Self;
+
+    fn white() -> Self;
+
+    fn black() -> Self;
+
+    fn transparent() -> Self;
+
+    fn yellow() -> Self;
+
+    fn cyan() -> Self;
 }
 
 impl ColorExt for Color {
@@ -28,6 +43,39 @@ impl ColorExt for Color {
 
     fn to_hsla(&self) -> Hsla {
         Hsla::from_color(*self)
+    }
+
+    // TODO: replace with color scheme from violet
+    fn red() -> Self {
+        Color::new(1.0, 0.0, 0.0, 1.0)
+    }
+
+    fn green() -> Self {
+        Color::new(0.0, 1.0, 0.0, 1.0)
+    }
+
+    fn blue() -> Self {
+        Color::new(0.0, 0.0, 1.0, 1.0)
+    }
+
+    fn white() -> Self {
+        Color::new(1.0, 1.0, 1.0, 1.0)
+    }
+
+    fn black() -> Self {
+        Color::new(0.0, 0.0, 0.0, 1.0)
+    }
+
+    fn transparent() -> Self {
+        Color::new(0.0, 0.0, 0.0, 0.0)
+    }
+
+    fn yellow() -> Self {
+        Color::new(1.0, 1.0, 0.0, 1.0)
+    }
+
+    fn cyan() -> Self {
+        Color::new(0.0, 1.0, 1.0, 1.0)
     }
 }
 // impl<'a> Lerp<'a> for Color {

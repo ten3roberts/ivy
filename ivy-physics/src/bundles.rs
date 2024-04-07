@@ -1,99 +1,91 @@
 //! This module contains bundles and queries suitable for physics.
-use crate::Effector;
-use hecs::{Bundle, DynamicBundleClone, Query};
-use ivy_base::{AngularMass, AngularVelocity, Friction, Mass, Resitution, Velocity};
-use ivy_collision::Collider;
+use flax::{Component, EntityBuilder, Fetch, Mutable};
+use glam::Vec3;
+use ivy_base::{angular_mass, angular_velocity, friction, mass, restitution, velocity};
 
-#[derive(Query, Clone, Copy, Debug, PartialEq)]
-pub struct RbQuery<'a> {
-    pub resitution: &'a Resitution,
-    pub vel: &'a Velocity,
-    pub ang_vel: &'a AngularVelocity,
-    pub mass: &'a Mass,
-    pub ang_mass: &'a AngularMass,
-    pub friction: &'a Friction,
+#[derive(Fetch)]
+pub struct RbQuery {
+    pub restitution: Component<f32>,
+    pub vel: Component<Vec3>,
+    pub ang_vel: Component<Vec3>,
+    pub mass: Component<f32>,
+    pub ang_mass: Component<f32>,
+    pub friction: Component<f32>,
 }
 
-#[derive(Default, Bundle, Debug, DynamicBundleClone)]
+impl RbQuery {
+    pub fn new() -> Self {
+        Self {
+            restitution: restitution(),
+            vel: velocity(),
+            ang_vel: angular_velocity(),
+            mass: mass(),
+            ang_mass: angular_mass(),
+            friction: friction(),
+        }
+    }
+}
+
+#[derive(Default, Debug)]
 /// Bundle for all things neccessary for all things physics
 pub struct RbBundle {
-    pub vel: Velocity,
-    pub mass: Mass,
-    pub ang_mass: AngularMass,
-    pub ang_vel: AngularVelocity,
-    pub resitution: Resitution,
-    pub friction: Friction,
-    pub effector: Effector,
+    pub vel: Vec3,
+    pub mass: f32,
+    pub ang_mass: f32,
+    pub ang_vel: Vec3,
+    pub restitution: f32,
+    pub friction: f32,
 }
 
 impl RbBundle {
     pub fn new(
-        mass: Mass,
-        vel: Velocity,
-        ang_vel: AngularVelocity,
-        ang_mass: AngularMass,
-        resitution: Resitution,
-        friction: Friction,
+        mass: f32,
+        vel: Vec3,
+        ang_vel: Vec3,
+        ang_mass: f32,
+        resitution: f32,
+        friction: f32,
     ) -> Self {
         Self {
             vel,
             mass,
             ang_vel,
             ang_mass,
-            resitution,
-            effector: Default::default(),
+            restitution: resitution,
             friction,
         }
     }
 
-    /// Get a reference to the rb bundle's vel.
-    pub fn vel(&self) -> Velocity {
-        self.vel
+    pub fn mount(self, entity: &mut EntityBuilder) {
+        entity
+            .set(velocity(), self.vel)
+            .set(mass(), self.mass)
+            .set(angular_mass(), self.ang_mass)
+            .set(angular_velocity(), self.ang_vel)
+            .set(restitution(), self.restitution)
+            .set(friction(), self.friction);
     }
 }
 
-/// Same as [ `crate::RbBundle` ] but also contains a collider.
-#[derive(Default, Bundle, Debug, DynamicBundleClone)]
-pub struct RbColliderBundle {
-    pub vel: Velocity,
-    pub mass: Mass,
-    pub ang_mass: AngularMass,
-    pub ang_vel: AngularVelocity,
-    pub resitution: Resitution,
-    pub effector: Effector,
-    pub collider: Collider,
-    pub friction: Friction,
+#[derive(Fetch)]
+pub struct RbQueryMut {
+    pub resitution: Mutable<f32>,
+    pub vel: Mutable<Vec3>,
+    pub ang_vel: Mutable<Vec3>,
+    pub mass: Mutable<f32>,
+    pub ang_mass: Mutable<f32>,
+    pub friction: Mutable<f32>,
 }
 
-impl RbColliderBundle {
-    pub fn new(
-        mass: Mass,
-        vel: Velocity,
-        ang_vel: AngularVelocity,
-        ang_mass: AngularMass,
-        resitution: Resitution,
-        collider: Collider,
-        friction: Friction,
-    ) -> Self {
+impl RbQueryMut {
+    pub fn new() -> Self {
         Self {
-            vel,
-            mass,
-            ang_vel,
-            ang_mass,
-            resitution,
-            effector: Default::default(),
-            collider: collider.into(),
-            friction,
+            resitution: restitution().as_mut(),
+            vel: velocity().as_mut(),
+            ang_vel: angular_velocity().as_mut(),
+            mass: mass().as_mut(),
+            ang_mass: angular_mass().as_mut(),
+            friction: friction().as_mut(),
         }
     }
-}
-
-#[derive(Query, PartialEq)]
-pub struct RbQueryMut<'a> {
-    pub resitution: &'a mut Resitution,
-    pub vel: &'a mut Velocity,
-    pub ang_vel: &'a mut AngularVelocity,
-    pub mass: &'a mut Mass,
-    pub ang_mass: &'a mut AngularMass,
-    pub friction: &'a mut Friction,
 }

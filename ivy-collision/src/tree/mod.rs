@@ -2,8 +2,8 @@ use std::any;
 
 use anyhow::Context;
 use flax::{
-    components::is_static, entity_ids, fetch::Satisfied, CommandBuffer, Component, Entity, Error,
-    Fetch, FetchExt, Opt, Query, World,
+    components::is_static, entity_ids, fetch::Satisfied, BoxedSystem, CommandBuffer, Component,
+    Entity, Error, Fetch, FetchExt, Mutable, Opt, Query, QueryBorrow, System, World,
 };
 use flume::{Receiver, Sender};
 use glam::{Mat4, Vec3};
@@ -208,34 +208,83 @@ impl<N: CollisionTreeNode> std::fmt::Debug for CollisionTree<N> {
     }
 }
 
-impl<N: CollisionTreeNode> CollisionTree<N> {
-    pub fn register_system(
-        world: &World,
-        mut cmd: &mut CommandBuffer,
-        mut tree: DefaultResourceMut<Self>,
-    ) -> anyhow::Result<()> {
-        tree.register(world, &mut cmd);
-
-        Ok(())
-    }
-
-    pub fn update_system(world: &World, mut tree: DefaultResourceMut<Self>) -> anyhow::Result<()> {
-        tree.update(world).context("Failed to update tree")
-    }
-
-    pub fn check_collisions_system(
-        world: &World,
-        tree: DefaultResourceMut<Self>,
-        mut events: &mut Events,
-    ) -> anyhow::Result<()>
-    where
-        N: CollisionTreeNode,
-    {
-        tree.check_collisions::<[&ObjectData; 128]>(world, &mut events)?;
-
-        Ok(())
-    }
+pub fn register_system<N: CollisionTreeNode>(state: Component<CollisionTree<N>>) -> BoxedSystem {
+    System::builder()
+        .with_world()
+        .with_cmd_mut()
+        .with_query(Query::new(state.as_mut()))
+        .build(
+            |world: &World,
+             cmd: &mut CommandBuffer,
+             mut query: QueryBorrow<Mutable<CollisionTree<N>>>| {
+                query.iter().for_each(|tree| {
+                    tree.register(world, &mut *cmd);
+                })
+            },
+        )
+        .boxed()
 }
+
+pub fn update_system<N: CollisionTreeNode>(state: Component<CollisionTree<N>>) -> BoxedSystem {
+    System::builder()
+        .with_world()
+        .with_query(Query::new(state.as_mut()))
+        .build(
+            |world: &World, mut query: QueryBorrow<Mutable<CollisionTree<N>>>| {
+                query.iter().for_each(|tree| {
+                    tree.update(world);
+                })
+            },
+        )
+        .boxed()
+}
+pub fn check_collisions_system<N: CollisionTreeNode>(
+    state: Component<CollisionTree<N>>,
+) -> BoxedSystem {
+    System::builder()
+        .with_world()
+        .with_input_mut()
+        .with_query(Query::new(state.as_mut()))
+        .build(
+            |world: &World,
+             events: &mut Events,
+             mut query: QueryBorrow<Mutable<CollisionTree<N>>>| {
+                query.iter().try_for_each(|tree| {
+                    tree.check_collisions::<[&ObjectData; 128]>(world, &mut *events)
+                })
+            },
+        )
+        .boxed()
+}
+
+// impl<N: CollisionTreeNode> CollisionTree<N> {
+//     pub fn register_system(
+//         &mut self,
+//         world: &World,
+//         mut cmd: &mut CommandBuffer,
+//     ) -> anyhow::Result<()> {
+//         self.register(world, &mut cmd);
+
+//         Ok(())
+//     }
+
+//     pub fn update_system(world: &World, mut tree: DefaultResourceMut<Self>) -> anyhow::Result<()> {
+//         tree.update(world).context("Failed to update tree")
+//     }
+
+//     pub fn check_collisions_system(
+//         world: &World,
+//         tree: DefaultResourceMut<Self>,
+//         mut events: &mut Events,
+//     ) -> anyhow::Result<()>
+//     where
+//         N: CollisionTreeNode,
+//     {
+//         tree.check_collisions::<[&ObjectData; 128]>(world, &mut events)?;
+
+//         Ok(())
+//     }
+// }
 
 impl<N: CollisionTreeNode + DrawGizmos> CollisionTree<N> {
     pub fn draw_system(tree: DefaultResource<Self>, mut gizmos: DefaultResourceMut<Gizmos>) {

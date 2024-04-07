@@ -3,110 +3,125 @@ use std::collections::BTreeMap;
 use crate::{
     bundles::*,
     collision::{resolve_collision, ResolveObject},
+    components::{collision_state, effector, gravity_state, physics_state, PhysicsState},
     Effector, Result,
 };
+use flax::{
+    BoxedSystem, Component, Entity, EntityRef, FetchExt, Mutable, Query, QueryBorrow, System, World,
+};
+use flume::Receiver;
 use glam::Quat;
-use hecs::{Entity, Satisfies};
-use hecs_hierarchy::{Hierarchy, HierarchyQuery};
-use hecs_schedule::{traits::QueryExt, CommandBuffer, GenericWorld, Read, SubWorld, Write};
 use ivy_base::{
-    AngularVelocity, Connection, ConnectionKind, DeltaTime, Events, Friction, Gravity,
-    GravityInfluence, Mass, Position, Resitution, Rotation, Sleeping, Static, Velocity,
+    angular_velocity, connection, engine_state, friction, gravity_influence, position, restitution,
+    rotation, sleeping, velocity,
 };
 use ivy_collision::{util::TOLERANCE, Collision, Contact};
-use ivy_resources::{DefaultResource, DefaultResourceMut};
 
 const BATCH_SIZE: u32 = 64;
 
-pub fn integrate_velocity(
-    world: SubWorld<(
-        &mut Position,
-        &mut Rotation,
-        &AngularVelocity,
-        &mut Velocity,
-        &Effector,
-    )>,
-    dt: Read<DeltaTime>,
-    mut cmd: Write<CommandBuffer>,
-) {
-    world
-        .native_query()
-        .without::<Static>()
-        .without::<Sleeping>()
-        .iter()
-        .for_each(|(e, (pos, rot, w, vel, f))| {
-            *pos += Position(**vel * **dt);
-            let mag = w.length();
-            if mag > 0.2 {
-                let w = Quat::from_axis_angle(w.0 / mag, mag * **dt);
-                *rot = Rotation(w * rot.0);
-            } else if vel.length_squared() < 0.01 && !f.should_wake() {
-                cmd.insert_one(e, Sleeping)
-            }
-        });
-}
-
-pub fn gravity(
-    world: SubWorld<(&GravityInfluence, &Mass, &mut Effector)>,
-    gravity: Read<Gravity>,
-    collisions: DefaultResource<CollisionState>,
-) {
-    if gravity.length_squared() < TOLERANCE {
-        return;
-    }
-
-    world
-        .native_query()
-        .without::<Static>()
-        .without::<Sleeping>()
-        .par_for_each(BATCH_SIZE, |(e, (influence, mass, effector))| {
-            let supported = collisions.has_collision(e);
-            effector.apply_force(**gravity * **influence * **mass, !supported)
+pub fn integrate_velocity() -> BoxedSystem {
+    System::builder()
+        .with_query(
+            Query::new((
+                physics_state().source(engine_state()),
+                position().as_mut(),
+                velocity(),
+            ))
+            .without(sleeping()),
+        )
+        .for_each(|(state, pos, vel)| {
+            *pos += *vel;
         })
+        .boxed()
 }
 
-pub fn wrap_around_system(world: SubWorld<&mut Position>) {
-    world.native_query().iter().for_each(|(_, pos)| {
-        if pos.y < -100.0 {
-            pos.y = 100.0
+pub fn integrate_angular_velocity() -> BoxedSystem {
+    System::builder()
+        .with_query(
+            Query::new((
+                physics_state().source(engine_state()),
+                rotation().as_mut(),
+                angular_velocity(),
+            ))
+            .without(sleeping()),
+        )
+        .for_each(|(state, rot, w)| todo!())
+        .boxed()
+}
+
+// pub fn integrate_velocity(world: &World, dt: Read<DeltaTime>, mut cmd: Write<CommandBuffer>) {
+//     world
+//         .native_query()
+//         .without::<Static>()
+//         .without::<Sleeping>()
+//         .iter()
+//         .for_each(|(e, (pos, rot, w, vel, f))| {
+//             *pos += Position(**vel * **dt);
+//             let mag = w.length();
+//             if mag > 0.2 {
+//                 let w = Quat::from_axis_angle(w.0 / mag, mag * **dt);
+//                 *rot = Rotation(w * rot.0);
+//             } else if vel.length_squared() < 0.01 && !f.should_wake() {
+//                 cmd.insert_one(e, Sleeping)
+//             }
+//         });
+// }
+
+pub fn gravity() -> BoxedSystem {
+    System::builder()
+        .with_query(Query::new((
+            gravity_state(),
+            effector().as_mut(),
+            gravity_influence(),
+        )))
+        .for_each(|(state, effector, &gravity_influence)| {
+            effector.apply_acceleration(gravity_influence * state.gravity, true);
+        })
+        .boxed()
+}
+// pub fn gravity(
+//     world: SubWorld<(&GravityInfluence, &Mass, &mut Effector)>,
+//     gravity: Read<Gravity>,
+//     collisions: DefaultResource<CollisionState>,
+// ) {
+//     if gravity.length_squared() < TOLERANCE {
+//         return;
+//     }
+
+//     world
+//         .native_query()
+//         .without::<Static>()
+//         .without::<Sleeping>()
+//         .par_for_each(BATCH_SIZE, |(e, (influence, mass, effector))| {
+//             let supported = collisions.has_collision(e);
+//             effector.apply_force(**gravity * **influence * **mass, !supported)
+//         })
+// }
+
+// pub fn wrap_around_system(world: SubWorld<&mut Position>) {
+//     world.native_query().iter().for_each(|(_, pos)| {
+//         if pos.y < -100.0 {
+//             pos.y = 100.0
+//         }
+//     });
+// }
+
+pub fn get_rigid_root<'a>(entity: &EntityRef<'a>) -> EntityRef<'a> {
+    let mut current = *entity;
+    loop {
+        if let Some((parent, _)) = entity.relations(connection).next() {
+            current = entity.world().entity(parent).unwrap();
+        } else {
+            return current;
         }
-    });
-}
-
-/// Returns the root of the rigid system, along with its mass
-pub fn get_rigid_root(world: &impl GenericWorld, child: Entity) -> Result<(Entity, Mass)> {
-    let mut system_mass = world
-        .try_get::<Mass>(child)
-        .ok()
-        .as_deref()
-        .cloned()
-        .unwrap_or_default();
-
-    let mut root = child;
-
-    for val in world.ancestors::<Connection>(child) {
-        root = val;
-        system_mass += match world.try_get::<Mass>(val) {
-            Ok(mass) => *mass,
-            Err(_) => break,
-        };
-
-        match *world.try_get::<ConnectionKind>(child)? {
-            ConnectionKind::Rigid => {}
-            ConnectionKind::Spring {
-                strength: _,
-                dampening: _,
-            } => break,
-        };
     }
-
-    Ok((root, system_mass))
 }
 
 #[derive(Debug, Clone)]
 pub struct CollisionState {
     sleeping: BTreeMap<(Entity, Entity), Collision>,
     active: BTreeMap<(Entity, Entity), Collision>,
+    pending: Vec<Collision>,
 }
 
 impl CollisionState {
@@ -114,6 +129,7 @@ impl CollisionState {
         Self {
             active: BTreeMap::new(),
             sleeping: BTreeMap::new(),
+            pending: Vec::new(),
         }
     }
 
@@ -128,13 +144,14 @@ impl CollisionState {
         slot.insert((col.b.entity, col.a.entity), col.clone());
     }
 
-    pub fn next_frame(&mut self, world: &impl GenericWorld) {
-        let mut q = world.try_query::<hecs::Or<&Sleeping, &Static>>().unwrap();
+    pub fn next_frame(&mut self) {
+        todo!()
+        // let mut q = world.try_query::<hecs::Or<&Sleeping, &Static>>().unwrap();
 
-        let q = q.view();
-        self.active.clear();
-        self.sleeping
-            .retain(|_, v| q.get(v.a.entity).is_some() && q.get(v.b.entity).is_some());
+        // let q = q.view();
+        // self.active.clear();
+        // self.sleeping
+        //     .retain(|_, v| q.get(v.a.entity).is_some() && q.get(v.b.entity).is_some());
     }
 
     pub fn has_collision(&self, e: Entity) -> bool {
@@ -167,30 +184,47 @@ impl CollisionState {
     }
 }
 
+fn clear_sleeping() -> BoxedSystem {
+    System::builder()
+        .with_query(Query::new(collision_state().as_mut()))
+        .for_each(|v| v.next_frame())
+        .boxed()
+}
+
 impl Default for CollisionState {
     fn default() -> Self {
         Self::new()
     }
 }
 
-pub fn resolve_collisions<I: Iterator<Item = Collision>>(
-    world: SubWorld<(
-        RbQuery,
-        &Position,
-        &mut Effector,
-        HierarchyQuery<Connection>,
-        &ConnectionKind,
-        &Static,
-        &Sleeping,
-    )>,
-    mut state: DefaultResourceMut<CollisionState>,
-    mut collisions: I,
-    dt: Read<DeltaTime>,
-    _events: Read<Events>, // Wait for events
+/// Resolves all pending collisions to be processed
+pub fn resolve_collisions_system(collisions: Receiver<Collision>) -> BoxedSystem {
+    System::builder()
+        .with_world()
+        .with_query(Query::new((collision_state().as_mut(), physics_state())))
+        .build(
+            move |world:&World, mut query: QueryBorrow<(Mutable<CollisionState>, Component<PhysicsState>)>| {
+                query.for_each(|(collision_state, physics_state)| {
+                    resolve_collisions(world, collision_state, collisions.try_iter(), physics_state.dt).unwrap();
+                })
+            },
+        )
+        .boxed()
+}
+
+pub fn resolve_collisions(
+    world: &World,
+    state: &mut CollisionState,
+    collisions: impl Iterator<Item = Collision>,
+    dt: f32,
 ) -> Result<()> {
-    state.next_frame(&world);
-    collisions.try_for_each(|col| -> Result<()> {
+    state.next_frame();
+
+    for col in collisions {
         state.register(col.clone());
+
+        let a = world.entity(col.a.entity)?;
+        let b = world.entity(col.b.entity)?;
 
         // Ignore triggers
         if col.a.is_trigger || col.b.is_trigger {
@@ -198,163 +232,195 @@ pub fn resolve_collisions<I: Iterator<Item = Collision>>(
         }
         // Check for static collision
         else if col.a.state.is_static() {
-            return resolve_static(&world, col.a.entity, col.b.entity, col.contact, *dt);
+            resolve_static(&a, &b, col.contact, dt);
+            continue;
         } else if col.b.state.is_static() {
-            return resolve_static(
-                &world,
-                col.b.entity,
-                col.a.entity,
+            resolve_static(
+                &b,
+                &a,
                 Contact {
                     points: col.contact.points.reverse(),
                     depth: col.contact.depth,
                     normal: -col.contact.normal,
                 },
-                *dt,
-            );
+                dt,
+            )?;
+            continue;
         } else if col.a.state.is_static() && col.b.state.is_static() {
-            return Ok(());
+            continue;
         }
 
         assert_ne!(col.a, col.b);
 
         // Trace up to the root of the rigid connection before solving
         // collisions
-        let (a, a_mass) = get_rigid_root(&world, *col.a)?;
-        let (b, b_mass) = get_rigid_root(&world, *col.b)?;
+        // let (a, a_mass) = get_rigid_root(&world.entity(*col.a))?;
+        // let (b, b_mass) = get_rigid_root(&world.entity(*col.b)?)?;
 
-        // Ignore collisions between two immovable objects
-        if !a_mass.is_normal() && !b_mass.is_normal() {
-            return Ok(());
-        }
+        // let a_mass = world
 
-        let mut a_query = world.try_query_one::<(RbQuery, &Position, &Effector)>(a)?;
-        let (a, pos, eff) = a_query.get().unwrap();
+        // // Ignore collisions between two immovable objects
+        // if !a_mass.is_normal() && !b_mass.is_normal() {
+        //     return Ok(());
+        // }
 
-        // Modify mass to include all children masses
+        // let mut a_query = world.try_query_one::<(RbQuery, &Position, &Effector)>(a)?;
+        // let (a, pos, eff) = a_query.get().unwrap();
 
-        let a = ResolveObject {
-            pos: *pos,
-            vel: *a.vel + eff.net_velocity_change(**dt),
-            ang_vel: *a.ang_vel,
-            resitution: *a.resitution,
-            mass: a_mass,
-            ang_mass: *a.ang_mass,
-            friction: *a.friction,
-        };
+        // // Modify mass to include all children masses
 
-        let mut b_query = world.try_query_one::<(RbQuery, &Position, &Effector)>(b)?;
+        // let a = ResolveObject {
+        //     pos: *pos,
+        //     vel: *a.vel + eff.net_velocity_change(**dt),
+        //     ang_vel: *a.ang_vel,
+        //     resitution: *a.resitution,
+        //     mass: a.mass,
+        //     ang_mass: *a.ang_mass,
+        //     friction: *a.friction,
+        // };
 
-        let (b, pos, eff) = b_query.get().unwrap();
+        // let mut b_query = world.try_query_one::<(RbQuery, &Position, &Effector)>(b)?;
 
-        let b = ResolveObject {
-            pos: *pos,
-            vel: *b.vel + eff.net_velocity_change(**dt),
-            ang_vel: *b.ang_vel,
-            resitution: *b.resitution,
-            mass: b_mass,
-            ang_mass: *b.ang_mass,
-            friction: *b.friction,
-        };
+        // let (b, pos, eff) = b_query.get().unwrap();
 
-        let total_mass = a.mass + b.mass;
+        // let b = ResolveObject {
+        //     pos: *pos,
+        //     vel: *b.vel + eff.net_velocity_change(**dt),
+        //     ang_vel: *b.ang_vel,
+        //     resitution: *b.resitution,
+        //     mass: b_mass,
+        //     ang_mass: *b.ang_mass,
+        //     friction: *b.friction,
+        // };
 
-        let impulse = resolve_collision(&col.contact, &a, &b);
+        // let total_mass = a.mass + b.mass;
 
-        drop((a_query, b_query));
+        // let impulse = resolve_collision(&col.contact, &a, &b);
 
-        let dir = col.contact.normal * col.contact.depth;
+        // drop((a_query, b_query));
 
-        let mut effector = world.get_mut::<Effector>(*col.a)?;
-        effector.apply_impulse_at(impulse, col.contact.points[0] - a.pos, true);
-        effector.translate(-dir * (*a.mass / *total_mass));
-        drop(effector);
+        // let dir = col.contact.normal * col.contact.depth;
 
-        let mut effector = world.get_mut::<Effector>(*col.b)?;
-        effector.apply_impulse_at(-impulse, col.contact.points[1] - b.pos, true);
-        effector.translate(dir * (*b.mass / *total_mass));
+        // let mut effector = world.get_mut::<Effector>(*col.a)?;
+        // effector.apply_impulse_at(impulse, col.contact.points[0] - a.pos, true);
+        // effector.translate(-dir * (*a.mass / *total_mass));
 
-        Ok(())
-    })
-}
+        // drop(effector);
 
-// Resolves a static collision
-fn resolve_static(
-    world: &impl GenericWorld,
-    a: Entity,
-    b: Entity,
-    contact: Contact,
-    dt: DeltaTime,
-) -> Result<()> {
-    let mut a_query =
-        world.try_query_one::<(Option<&Resitution>, Option<&Friction>, &Position)>(a)?;
-    let a = a_query
-        .get()
-        .expect("Static collider did not satisfy query");
-
-    let a = ResolveObject {
-        pos: *a.2,
-        resitution: a.0.cloned().unwrap_or_default(),
-
-        friction: a.1.cloned().unwrap_or_default(),
-        ..Default::default()
-    };
-
-    let mut b_query = world.try_query_one::<(RbQuery, &Position, &mut Effector)>(b)?;
-
-    if let Ok((rb, pos, effector)) = b_query.get() {
-        let b = ResolveObject {
-            pos: *pos,
-            vel: *rb.vel + effector.net_velocity_change(*dt),
-            ang_vel: *rb.ang_vel,
-            resitution: *rb.resitution,
-            mass: *rb.mass,
-            ang_mass: *rb.ang_mass,
-            friction: *rb.friction,
-        };
-
-        if !b.mass.is_normal() {
-            return Ok(());
-        }
-
-        let impulse = resolve_collision(&contact, &a, &b);
-
-        effector.apply_impulse_at(-impulse, contact.points[1] - b.pos, false);
-        // effector.apply_force_at(b_f, contact.points[1] - b.pos);
-
-        effector.translate(contact.normal * contact.depth);
+        // let mut effector = world.get_mut::<Effector>(*col.b)?;
+        // effector.apply_impulse_at(-impulse, col.contact.points[1] - b.pos, true);
+        // effector.translate(dir * (*b.mass / *total_mass));
     }
 
     Ok(())
 }
 
-/// Applies effectors to their respective entities and clears the effects.
-pub fn apply_effectors(
-    world: SubWorld<(
-        RbQueryMut,
-        &mut Position,
-        &mut Effector,
-        Satisfies<&Sleeping>,
-    )>,
-    mut cmd: Write<CommandBuffer>,
-    dt: Read<DeltaTime>,
-) {
-    world.native_query().without::<Static>().iter().for_each(
-        |(e, (rb, pos, effector, sleeping))| {
-            if !sleeping || effector.should_wake() {
-                *rb.vel += effector.net_velocity_change(**dt);
-                *pos += effector.translation();
+// Resolves collision with a static entity
+fn resolve_static(a: &EntityRef, b: &EntityRef, contact: Contact, dt: f32) -> Result<()> {
+    let query = &(
+        restitution().opt_or_default(),
+        friction().opt_or_default(),
+        position(),
+    );
 
-                *rb.ang_vel += effector.net_angular_velocity_change(**dt);
-            }
+    let mut a = a.query(&query);
+    let a = a.get().unwrap();
+
+    let query = &(RbQuery::new(), position(), effector().as_mut());
+
+    let mut b = b.query(query);
+    let Some(b) = b.get() else { return Ok(()) };
+    let b_effector = b.2;
+
+    let b = ResolveObject {
+        pos: *b.1,
+        vel: *b.0.vel + b_effector.net_velocity_change(dt),
+        ang_vel: *b.0.ang_vel,
+        resitution: *b.0.restitution,
+        mass: *b.0.mass,
+        ang_mass: *b.0.ang_mass,
+        friction: *b.0.friction,
+    };
+
+    let a = ResolveObject {
+        pos: *a.2,
+        resitution: *a.0,
+        friction: *a.1,
+        ..Default::default()
+    };
+
+    // let mut b_query = world.try_query_one::<(RbQuery, &Position, &mut Effector)>(b)?;
+
+    if !b.mass.is_normal() {
+        return Ok(());
+    }
+
+    let impulse = resolve_collision(&contact, &a, &b);
+
+    b_effector.apply_impulse_at(-impulse, contact.points[1] - b.pos, false);
+    // effector.apply_force_at(b_f, contact.points[1] - b.pos);
+
+    b_effector.translate(contact.normal * contact.depth);
+
+    Ok(())
+}
+
+/// Applies effectors to their respective entities and clears the effects.
+pub fn apply_effectors() -> BoxedSystem {
+    System::builder()
+        .with_query(Query::new((
+            physics_state().source(engine_state()),
+            RbQueryMut::new(),
+            position().as_mut(),
+            effector().as_mut(),
+        )))
+        .for_each(|(physics_state, rb, position, effector)| {
+            // if !sleeping || effector.should_wake() {
+            *rb.vel += effector.net_velocity_change(physics_state.dt);
+            *position += effector.translation();
+
+            *rb.ang_vel += effector.net_angular_velocity_change(physics_state.dt);
+            // }
 
             effector.set_mass(*rb.mass);
             effector.set_ang_mass(*rb.ang_mass);
 
-            if sleeping && effector.should_wake() {
-                cmd.remove_one::<Sleeping>(e)
-            }
+            // if sleeping && effector.should_wake() {
+            //     cmd.remove_one::<Sleeping>(e)
+            // }
 
             effector.clear()
-        },
-    )
+        })
+        .boxed()
 }
+
+// pub fn apply_effectors(
+//     world: SubWorld<(
+//         RbQueryMut,
+//         &mut Position,
+//         &mut Effector,
+//         Satisfies<&Sleeping>,
+//     )>,
+//     mut cmd: Write<CommandBuffer>,
+//     dt: Read<DeltaTime>,
+// ) {
+//     world.native_query().without::<Static>().iter().for_each(
+//         |(e, (rb, pos, effector, sleeping))| {
+//             if !sleeping || effector.should_wake() {
+//                 *rb.vel += effector.net_velocity_change(**dt);
+//                 *pos += effector.translation();
+
+//                 *rb.ang_vel += effector.net_angular_velocity_change(**dt);
+//             }
+
+//             effector.set_mass(*rb.mass);
+//             effector.set_ang_mass(*rb.ang_mass);
+
+//             if sleeping && effector.should_wake() {
+//                 cmd.remove_one::<Sleeping>(e)
+//             }
+
+//             effector.clear()
+//         },
+//     )
+// }

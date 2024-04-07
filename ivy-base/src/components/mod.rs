@@ -1,4 +1,4 @@
-use flax::{Component, Debuggable, Fetch};
+use flax::{Component, Debuggable, Fetch, Mutable};
 use glam::{Mat4, Quat, Vec2, Vec3, Vec4Swizzles};
 mod connections;
 mod physics;
@@ -27,6 +27,8 @@ flax::component! {
     pub color: Color => [ Debuggable ],
 
     pub main_camera: () => [ Debuggable ],
+
+    pub engine_state,
 }
 
 #[derive(Fetch, Debug, Clone)]
@@ -43,6 +45,29 @@ impl TransformQuery {
             rotation: rotation(),
             scale: scale(),
         }
+    }
+}
+
+#[derive(Fetch, Debug, Clone)]
+pub struct TransformQueryMut {
+    pub pos: Mutable<Vec3>,
+    pub rotation: Mutable<Quat>,
+    pub scale: Mutable<Vec3>,
+}
+
+impl TransformQueryMut {
+    pub fn new() -> Self {
+        Self {
+            pos: position().as_mut(),
+            rotation: rotation().as_mut(),
+            scale: scale().as_mut(),
+        }
+    }
+}
+
+impl Default for TransformQueryMut {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

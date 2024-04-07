@@ -4,7 +4,7 @@ mod movement;
 use std::{fmt::Display, time::Duration};
 
 use anyhow::{anyhow, Context};
-use collision::{util::project_plane, BVHNode, Collider, CollisionTree, Cube, Ray, Sphere};
+use collision::{util::project_plane, BvhNode, Collider, CollisionTree, Cube, Ray, Sphere};
 use flume::Receiver;
 use glam::{Vec2, Vec2Swizzles, Vec3};
 use glfw::{CursorMode, Key, MouseButton, WindowEvent};
@@ -38,7 +38,7 @@ use log::*;
 
 const FRAMES_IN_FLIGHT: usize = 2;
 
-type CollisionNode = BVHNode;
+type CollisionNode = BvhNode;
 
 fn main() -> anyhow::Result<()> {
     Logger {

@@ -8,5 +8,5 @@ pub enum Error {
     ResourceError(#[from] ivy_resources::Error),
 
     #[error("Physics ECS error")]
-    EcsError(#[from] hecs_schedule::Error),
+    EcsError(#[from] flax::Error),
 }

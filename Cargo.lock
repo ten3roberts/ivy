@@ -658,7 +658,7 @@ dependencies = [
 [[package]]
 name = "flax"
 version = "0.7.0"
-source = "git+https://github.com/ten3roberts/flax#d55f9dcfed564062af51d1ff076c425c6fc5e30b"
+source = "git+https://github.com/ten3roberts/flax#1f56e896c1a2034e480af1caa73fdf741afaf52b"
 dependencies = [
  "anyhow",
  "atomic_refcell",
@@ -678,7 +678,7 @@ dependencies = [
 [[package]]
 name = "flax-derive"
 version = "0.7.0"
-source = "git+https://github.com/ten3roberts/flax#d55f9dcfed564062af51d1ff076c425c6fc5e30b"
+source = "git+https://github.com/ten3roberts/flax#1f56e896c1a2034e480af1caa73fdf741afaf52b"
 dependencies = [
  "itertools 0.11.0",
  "proc-macro-crate 2.0.2",
@@ -1378,20 +1378,15 @@ name = "ivy-physics"
 version = "0.10.3"
 dependencies = [
  "anyhow",
- "derive-for",
- "derive_more",
- "flume 0.10.12",
+ "flax",
+ "flume 0.11.0",
  "glam",
- "hecs",
- "hecs-hierarchy",
- "hecs-schedule",
  "ivy-base",
  "ivy-collision",
  "ivy-graphics",
  "ivy-random",
  "ivy-resources",
  "rayon",
- "records",
  "serde",
  "smallvec",
  "thiserror",
