@@ -1,4 +1,4 @@
-use hecs::{Component, Entity, World};
+use flax::{Component, Entity, World};
 use itertools::Itertools;
 use ivy_base::Extent;
 use ivy_graphics::{
@@ -10,10 +10,9 @@ use ivy_resources::{Handle, Resources, Storage};
 use ivy_vulkan::{
     context::SharedVulkanContext,
     descriptors::MultiDescriptorBindable,
-    shaderpass::ShaderPass,
     vk::{ClearValue, ImageAspectFlags, ShaderStageFlags},
     AddressMode, ClearValueExt, FilterMode, Format, ImageLayout, ImageUsage, LoadOp, Sampler,
-    SamplerInfo, StoreOp, Texture, TextureInfo,
+    SamplerInfo, Shader, StoreOp, Texture, TextureInfo,
 };
 
 mod attachments;
@@ -21,25 +20,19 @@ mod attachments;
 use self::attachments::PBRAttachments;
 
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PBRInfo<E: EnvData> {
     pub max_lights: u64,
     pub env_data: E,
-}
-
-impl<E: Default + EnvData> Default for PBRInfo<E> {
-    fn default() -> Self {
-        Self {
-            max_lights: 5,
-            env_data: E::default(),
-        }
-    }
+    output: Handle<Texture>,
+    read_attachments: Vec<Handle<Texture>>,
+    post_processing: Shader,
 }
 
 /// Installs PBR rendering for the specified camera. Returns a list of nodes suitable for
 /// rendergraph insertions. Configures gpu camera data, light management and
 /// environment manager and attaches them to the camera.
-pub fn create_pbr_pipeline<GeometryPass, PostProcessingPass, TransparentPass, E, R>(
+pub fn create_pbr_pipeline<E, R>(
     context: SharedVulkanContext,
     world: &mut World,
     resources: &Resources,
@@ -47,17 +40,13 @@ pub fn create_pbr_pipeline<GeometryPass, PostProcessingPass, TransparentPass, E,
     renderer: R,
     extent: Extent,
     frames_in_flight: usize,
-    read_attachments: &[Handle<Texture>],
-    output: Handle<Texture>,
     info: PBRInfo<E>,
+    geometry_pass: Component<Shader>,
+    transparent_pass: Component<Shader>,
 ) -> ivy_rendergraph::Result<impl IntoIterator<Item = Box<dyn Node>>>
 where
-    GeometryPass: ShaderPass,
-    PostProcessingPass: ShaderPass,
-    TransparentPass: ShaderPass,
     R: Renderer + Storage + Clone,
-    R::Error: Storage + Into<anyhow::Error>,
-    E: Copy + Component,
+    E: 'static + Send + Sync + Copy,
     E: EnvData,
 {
     GpuCamera::create_gpu_cameras(&context, world, frames_in_flight)?;
@@ -65,12 +54,13 @@ where
 
     let depth_attachment = DepthAttachment::new(context.clone(), resources, extent)?;
 
-    let camera_node = Box::new(CameraNode::<GeometryPass, R>::new(
+    let camera_node = Box::new(CameraNode::<R>::new(
         context.clone(),
         world,
         resources,
         camera,
         renderer.clone(),
+        geometry_pass,
         CameraNodeInfo {
             name: "PBR Camera Node",
             color_attachments: pbr_attachments
@@ -139,12 +129,13 @@ where
         },
     )?)?;
 
-    let light_node = Box::new(CameraNode::<(), _>::new(
+    let light_node = Box::new(CameraNode::new(
         context.clone(),
         world,
         resources,
         camera,
         light_renderer,
+        geometry_pass,
         CameraNodeInfo {
             name: "Light renderer",
             color_attachments: vec![AttachmentInfo::color(final_lit)],
@@ -199,12 +190,13 @@ where
         ImageAspectFlags::DEPTH,
     )?);
 
-    let transparent = Box::new(CameraNode::<TransparentPass, _>::new(
+    let transparent = Box::new(CameraNode::new(
         context.clone(),
         world,
         resources,
         camera,
         resources.default::<MeshRenderer>()?,
+        transparent_pass,
         CameraNodeInfo {
             name: "Transparent",
             color_attachments: vec![AttachmentInfo {
@@ -231,16 +223,31 @@ where
         },
     )?);
 
-    let post_processing_node = Box::new(CameraNode::<PostProcessingPass, _>::new(
+    // TODO: remove once wgpu redesigns this slight mess that I made :P
+    flax::component! {
+        dummy_pass: Shader,
+    }
+
+    let post_processing_node = Box::new(CameraNode::new(
         context.clone(),
         world,
         resources,
         camera,
-        FullscreenRenderer::new(),
+        FullscreenRenderer::new(
+            resources
+                .get(info.post_processing.pipeline_info)
+                .unwrap()
+                .clone(),
+        ),
+        dummy_pass(),
         CameraNodeInfo {
             name: "Post Processing node",
-            color_attachments: vec![AttachmentInfo::color(output)],
-            read_attachments: &read_attachments.iter().map(|v| (*v, sampler)).collect_vec(),
+            color_attachments: vec![AttachmentInfo::color(info.output)],
+            read_attachments: &info
+                .read_attachments
+                .iter()
+                .map(|v| (*v, sampler))
+                .collect_vec(),
             input_attachments: vec![final_lit, *depth_attachment],
             bindables: &data,
             frames_in_flight,
@@ -250,9 +257,9 @@ where
     )?);
 
     // Store data in camera
-    world
-        .insert(camera, (pbr_attachments, depth_attachment, env_manager))
-        .expect("Entity is valid");
+    // world
+    //     .set(camera, (pbr_attachments, depth_attachment, env_manager))
+    //     .expect("Entity is valid");
 
     Ok([
         camera_node,

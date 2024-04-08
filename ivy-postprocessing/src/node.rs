@@ -1,19 +1,20 @@
 use std::{marker::PhantomData, ops::Deref};
 
+use flax::World;
 use ivy_graphics::Result;
 use ivy_rendergraph::{AttachmentInfo, Node, NodeKind};
 use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{context::SharedVulkanContext, descriptors::*, vk::ShaderStageFlags, *};
 use once_cell::sync::OnceCell;
 
-pub struct PostProcessingNode<Pass> {
+pub struct PostProcessingNode {
     sets: Option<Vec<DescriptorSet>>,
     read_attachments: Vec<Handle<Texture>>,
     input_attachments: Vec<Handle<Texture>>,
     color_attachments: Vec<AttachmentInfo>,
     sampler: Sampler,
-    marker: PhantomData<Pass>,
     pipeline: OnceCell<Pipeline>,
+    shader: Shader,
 }
 
 /// Creates a post processing node that will execute using the default shaderpass of the provided
@@ -21,7 +22,7 @@ pub struct PostProcessingNode<Pass> {
 /// A descriptor for each frame in flight referencing all `read_attachments`, `input_attachments`, and
 /// `bindables` in order are automatically created, and need to be matched in the shader at set
 /// = 0;
-impl<Pass: 'static + ShaderPass> PostProcessingNode<Pass> {
+impl PostProcessingNode {
     pub fn new(
         context: SharedVulkanContext,
         resources: &Resources,
@@ -30,6 +31,7 @@ impl<Pass: 'static + ShaderPass> PostProcessingNode<Pass> {
         bindables: &[&dyn MultiDescriptorBindable],
         color_attachments: &[AttachmentInfo],
         frames_in_flight: usize,
+        shader: Shader,
     ) -> Result<Self> {
         let sampler = Sampler::new(
             context.clone(),
@@ -87,7 +89,7 @@ impl<Pass: 'static + ShaderPass> PostProcessingNode<Pass> {
             input_attachments: input_attachments.to_owned(),
             color_attachments: color_attachments.to_owned(),
             sampler,
-            marker: PhantomData,
+            shader,
         })
     }
 
@@ -97,7 +99,7 @@ impl<Pass: 'static + ShaderPass> PostProcessingNode<Pass> {
     }
 }
 
-impl<Pass: ShaderPass> Node for PostProcessingNode<Pass> {
+impl Node for PostProcessingNode {
     fn color_attachments(&self) -> &[AttachmentInfo] {
         &self.color_attachments
     }
@@ -124,7 +126,7 @@ impl<Pass: ShaderPass> Node for PostProcessingNode<Pass> {
 
     fn execute(
         &mut self,
-        _: &mut hecs::World,
+        _: &mut World,
         resources: &Resources,
         cmd: &ivy_vulkan::commands::CommandBuffer,
         pass_info: &PassInfo,
@@ -132,8 +134,11 @@ impl<Pass: ShaderPass> Node for PostProcessingNode<Pass> {
     ) -> anyhow::Result<()> {
         let pipeline = self.pipeline.get_or_try_init(|| {
             let context = resources.get_default::<SharedVulkanContext>()?;
-            let pass = resources.get_default::<Pass>()?;
-            Pipeline::new::<()>(context.clone(), pass.pipeline(), pass_info)
+            Pipeline::new::<()>(
+                context.clone(),
+                &resources.get(self.shader.pipeline_info).unwrap(),
+                pass_info,
+            )
         })?;
 
         cmd.bind_pipeline(pipeline);
