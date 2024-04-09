@@ -1,19 +1,22 @@
-use base::{BuilderExt, Events};
-use glam::Vec3;
+use std::time::Duration;
+
+use base::Events;
+use flax::{Entity, EntityBuilder, World};
+use glam::{vec3, Vec3};
 use graphics::{
+    components::camera,
     shaders::{FORWARD_FRAGMENT_SHADER, FORWARD_VERTEX_SHADER},
     NodeBuildInfo,
 };
-use hecs::{EntityBuilder, World};
 use ivy_engine::*;
 use physics::PhysicsLayer;
-use presets::GeometryPass;
+use presets::geometry_pass;
 use rendergraph::{AttachmentInfo, CameraNode, CameraNodeInfo, GraphicsLayer, SwapchainNode};
 use resources::LoadResource;
 use vulkan::{
     context::SharedVulkanContext,
     vk::{ClearValue, PresentModeKHR},
-    ClearValueExt, PipelineInfo, SwapchainInfo, TextureInfo,
+    ClearValueExt, PipelineInfo, Shader, SwapchainInfo, TextureInfo,
 };
 pub struct GameLayer {}
 
@@ -32,16 +35,26 @@ impl GameLayer {
         let window = resources.get_default::<Window>()?;
 
         // Create a camera
-        let camera = EntityBuilder::new()
-            .add_bundle((
-                Camera::perspective(1.0, window.aspect(), 0.1, 100.0),
-                MainCamera,
-            ))
-            .add_bundle(TransformBundle {
-                pos: Position::new(0.0, 0.0, -3.0),
-                ..Default::default()
-            })
+        let camera = Entity::builder()
+            .set(
+                camera(),
+                Camera::perspective(1.0, window.aspect(), 0.1, 1000.0),
+            )
+            .set_default(main_camera())
+            .set(position(), vec3(0.0, 0.0, -3.0))
+            .set_default(scale())
+            .set_default(rotation())
             .spawn(world);
+
+        // .add_bundle((
+        //     Camera::perspective(1.0, window.aspect(), 0.1, 100.0),
+        //     MainCamera,
+        // ))
+        // .add_bundle( {
+        //     pos: vec3(0.0, 0.0, -3.0),
+        //     ..Default::default()
+        // })
+        // .spawn(world);
 
         let context = resources.get_default::<SharedVulkanContext>()?;
 
@@ -75,12 +88,13 @@ impl GameLayer {
             .handle;
 
         // Add a node rendering the scene from the camera
-        rendergraph.add_node(CameraNode::<GeometryPass, _>::new(
+        rendergraph.add_node(CameraNode::new(
             context.clone(),
             world,
             resources,
             camera,
             renderer,
+            geometry_pass(),
             CameraNodeInfo {
                 color_attachments: vec![AttachmentInfo::color(color)],
                 depth_attachment: Some(AttachmentInfo::depth_discard(depth)),
@@ -102,21 +116,20 @@ impl GameLayer {
 
         rendergraph.build(resources.fetch()?, window.extent())?;
 
-        // Create a simple pipeline
-        let pipeline = GeometryPass(PipelineInfo {
+        // Create a simple shader
+        let pass = Shader::new(resources.insert(PipelineInfo {
             vs: FORWARD_VERTEX_SHADER,
             fs: FORWARD_FRAGMENT_SHADER,
             ..Default::default()
-        });
-
-        let pass = resources.insert(pipeline)?;
+        })?);
 
         let document = Document::load(resources, &"./res/models/monkey.gltf".into())?;
 
         let mut builder = EntityBuilder::new();
+
         document
             .find("Suzanne")?
-            .build(
+            .mount(
                 &mut builder,
                 &NodeBuildInfo {
                     skinned: false,
@@ -124,12 +137,14 @@ impl GameLayer {
                     light_radius: 0.1,
                 },
             )
-            .add(pass)
-            .add_bundle(RbBundle {
-                ang_vel: AngularVelocity::new(0.0, 1.0, 0.0),
-                ..Default::default()
-            })
-            .spawn(world);
+            .set(geometry_pass(), pass);
+
+        RbBundle {
+            ang_vel: vec3(0.0, 1.0, 0.0),
+            ..Default::default()
+        }
+        .mount(&mut builder)
+        .spawn(world);
 
         Ok(())
     }
@@ -138,10 +153,10 @@ impl GameLayer {
 impl Layer for GameLayer {
     fn on_update(
         &mut self,
-        _: &mut hecs::World,
+        _: &mut World,
         _: &mut Resources,
-        _: &mut base::Events,
-        _: std::time::Duration,
+        _: &mut Events,
+        _: Duration,
     ) -> anyhow::Result<()> {
         Ok(())
     }

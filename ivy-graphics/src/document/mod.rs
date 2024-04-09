@@ -299,10 +299,10 @@ impl LoadResource for Document {
 
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct NodeBuildInfo {
-    skinned: bool,
+    pub skinned: bool,
     /// Insert an animator
-    animated: bool,
-    light_radius: f32,
+    pub animated: bool,
+    pub light_radius: f32,
 }
 
 impl NodeBuildInfo {

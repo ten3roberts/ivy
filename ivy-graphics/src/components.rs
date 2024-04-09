@@ -2,8 +2,8 @@ use flax::Debuggable;
 use ivy_resources::Handle;
 
 use crate::{
-    Animator, BoundingSphere, Camera, GpuCamera, LightRenderer, Material, Mesh, PointLight, Skin,
-    SkinnedVertex,
+    Animator, BoundingSphere, Camera, DepthAttachment, GpuCamera, LightRenderer, Material, Mesh,
+    PointLight, Skin, SkinnedVertex,
 };
 
 flax::component! {
@@ -27,4 +27,5 @@ flax::component! {
 
     pub bounding_sphere: BoundingSphere,
 
+    pub depth_attachment: DepthAttachment,
 }

@@ -15,7 +15,7 @@ pub enum Error {
     RenderGraph(#[from] ivy_rendergraph::Error),
 
     #[error("Failed to get component from entity")]
-    ComponentError(#[from] hecs::ComponentError),
+    EcsError(#[from] flax::Error),
 
     #[error("Failed to find main camera in world")]
     MissingMainCamera,

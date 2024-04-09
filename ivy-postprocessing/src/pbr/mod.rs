@@ -2,8 +2,8 @@ use flax::{Component, Entity, World};
 use itertools::Itertools;
 use ivy_base::Extent;
 use ivy_graphics::{
-    DepthAttachment, EnvData, EnvironmentManager, FullscreenRenderer, GpuCamera, LightRenderer,
-    MeshRenderer, Renderer,
+    components::depth_attachment, DepthAttachment, EnvData, EnvironmentManager, FullscreenRenderer,
+    GpuCamera, LightRenderer, MeshRenderer, Renderer,
 };
 use ivy_rendergraph::{AttachmentInfo, CameraNode, CameraNodeInfo, Node, TransferNode};
 use ivy_resources::{Handle, Resources, Storage};
@@ -255,6 +255,14 @@ where
             ..Default::default()
         },
     )?);
+
+    world
+        .set(
+            camera,
+            ivy_graphics::components::depth_attachment(),
+            depth_attachment,
+        )
+        .unwrap();
 
     // Store data in camera
     // world

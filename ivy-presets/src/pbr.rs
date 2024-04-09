@@ -1,52 +1,52 @@
-use hecs::World;
-use ivy_base::{Extent, WorldExt};
+use flax::World;
+use ivy_base::{main_camera, Extent, WorldExt};
 use ivy_graphics::{
-    gizmos::GizmoRenderer, shaders::*, DepthAttachment, EnvData, FullscreenRenderer, GpuCamera,
-    MainCamera, MeshRenderer, SkinnedMeshRenderer, WithPass,
+    components::depth_attachment, gizmos::GizmoRenderer, shaders::*, DepthAttachment, EnvData,
+    FullscreenRenderer, GpuCamera, MainCamera, MeshRenderer, SkinnedMeshRenderer,
 };
 use ivy_postprocessing::pbr::{create_pbr_pipeline, PBRInfo};
 use ivy_rendergraph::{
     AttachmentInfo, CameraNode, CameraNodeInfo, NodeIndex, RenderGraph, SwapchainNode,
 };
 use ivy_resources::{Handle, Resources};
-use ivy_ui::{Canvas, ImageRenderer, TextRenderer, TextUpdateNode};
+use ivy_ui::{canvas, ImageRenderer, TextRenderer, TextUpdateNode};
 use ivy_vulkan::{
     context::SharedVulkanContext,
     vk::{ClearValue, CullModeFlags},
-    ImageLayout, ImageUsage, LoadOp, PipelineInfo, StoreOp, Swapchain, Texture, TextureInfo,
+    ImageLayout, ImageUsage, LoadOp, PipelineInfo, Shader, StoreOp, Swapchain, Texture,
+    TextureInfo,
 };
 
-use crate::{
-    Error, GeometryPass, GizmoPass, ImagePass, PbrPass, Result, SkinnedPass, TextPass,
-    TransparentPass,
-};
+use crate::{geometry_pass, gizmo_pass, transparent_pass, ui_pass, Error};
 
 /// Create a pbr rendergraph with UI and gizmos
 /// This is the most common setup and works well for many use cases.
 
-#[records::record]
 /// Preset for common PBR rendering setup with UI and gizmos
 pub struct PBRRendering {
-    ui: NodeIndex,
-    gizmo: NodeIndex,
-    color: Handle<Texture>,
-    extent: Extent,
+    pub ui: NodeIndex,
+    pub gizmo: NodeIndex,
+    pub color: Handle<Texture>,
+    pub extent: Extent,
 }
 
-#[records::record]
 pub struct PBRRenderingInfo {
     pub color_usage: ImageUsage,
+    pub test_shader: Shader,
+    pub ui_shader: Shader,
+    pub post_processing_shader: Shader,
+    pub gizmo_shader: Shader,
 }
 
-impl Default for PBRRenderingInfo {
-    fn default() -> Self {
-        Self {
-            color_usage: ImageUsage::COLOR_ATTACHMENT
-                | ImageUsage::SAMPLED
-                | ImageUsage::TRANSFER_SRC,
-        }
-    }
-}
+// impl Default for PBRRenderingInfo {
+//     fn default() -> Self {
+//         Self {
+//             color_usage: ImageUsage::COLOR_ATTACHMENT
+//                 | ImageUsage::SAMPLED
+//                 | ImageUsage::TRANSFER_SRC,
+//         }
+//     }
+// }
 
 impl PBRRendering {
     /// Setup a PBR rendergraph consisting of
@@ -63,28 +63,42 @@ impl PBRRendering {
         pbr_info: PBRInfo<Env>,
         frames_in_flight: usize,
         info: PBRRenderingInfo,
-    ) -> Result<Self> {
+    ) -> crate::Result<Self> {
         let camera = world
-            .by_tag::<MainCamera>()
-            .ok_or(Error::MissingMainCamera)?;
+            .by_tag(main_camera())
+            .ok_or(Error::MissingMainCamera)?
+            .id();
 
         let context = resources.get_default::<SharedVulkanContext>()?;
         context.wait_idle()?;
 
         GpuCamera::create_gpu_cameras(&context, world, frames_in_flight)?;
 
-        let canvas = world.by_tag::<Canvas>().ok_or(Error::MissingCanvas)?;
+        let canvas = world.by_tag(canvas()).ok_or(Error::MissingCanvas)?.id();
 
         let mut rendergraph = RenderGraph::new(context.clone(), frames_in_flight)?;
 
         // Setup renderers
-        resources
-            .default_entry()?
-            .or_insert_with(|| FullscreenRenderer::new());
+        resources.default_entry()?.or_insert_with(|| {
+            FullscreenRenderer::new(
+                resources
+                    .get(info.post_processing_shader.pipeline_info)
+                    .unwrap()
+                    .clone(),
+            )
+        });
 
         let gizmo_renderer = resources
             .default_entry()?
-            .or_try_insert_with(|| GizmoRenderer::new(context.clone()))?
+            .or_try_insert_with(|| {
+                GizmoRenderer::new(
+                    context.clone(),
+                    resources
+                        .get(info.gizmo_shader.pipeline_info)
+                        .unwrap()
+                        .clone(),
+                )
+            })?
             .handle;
 
         let mesh_renderer = resources
@@ -113,36 +127,28 @@ impl PBRRendering {
             },
         )?)?;
 
-        rendergraph.add_nodes(create_pbr_pipeline::<
-            GeometryPass,
-            PbrPass,
-            TransparentPass,
-            _,
-            _,
-        >(
+        rendergraph.add_nodes(create_pbr_pipeline(
             context.clone(),
             world,
-            &resources,
+            resources,
             camera,
-            (
-                mesh_renderer,
-                WithPass::<SkinnedPass, _>::new(skinned_renderer),
-            ),
+            (mesh_renderer, skinned_renderer),
             extent,
             frames_in_flight,
-            &[],
-            final_lit,
             pbr_info,
+            geometry_pass(),
+            transparent_pass(),
         )?);
 
-        let depth_attachment = **world.get::<DepthAttachment>(camera)?;
+        let depth_attachment = **world.get(camera, depth_attachment()).unwrap();
 
-        let gizmo = rendergraph.add_node(CameraNode::<GizmoPass, _>::new(
+        let gizmo = rendergraph.add_node(CameraNode::new(
             context.clone(),
             world,
             resources,
             camera,
             gizmo_renderer,
+            gizmo_pass(),
             CameraNodeInfo {
                 name: "Gizmos Node",
                 color_attachments: vec![AttachmentInfo {
@@ -171,12 +177,13 @@ impl PBRRendering {
 
         rendergraph.add_node(TextUpdateNode::new(resources, text_renderer)?);
 
-        let ui = rendergraph.add_node(CameraNode::<ImagePass, _>::new(
+        let ui = rendergraph.add_node(CameraNode::new(
             context.clone(),
             world,
             resources,
             canvas,
-            (image_renderer, WithPass::<TextPass, _>::new(text_renderer)),
+            (image_renderer, text_renderer),
+            ui_pass(),
             CameraNodeInfo {
                 name: "UI Node",
                 color_attachments: vec![AttachmentInfo {
@@ -206,77 +213,19 @@ impl PBRRendering {
         })
     }
 
-    pub fn using_swapchain(&self, resources: &Resources) -> Result<&Self> {
+    pub fn using_swapchain(&self, resources: &Resources) -> crate::Result<&Self> {
         let mut rendergraph = resources.get_default_mut::<RenderGraph>()?;
         let context = resources.get_default::<SharedVulkanContext>()?;
 
         rendergraph.add_node(SwapchainNode::new(
             context.clone(),
-            &resources,
+            resources,
             resources.default()?,
             self.color,
         )?);
 
         rendergraph.build(resources.fetch()?, self.extent)?;
         Ok(self)
-    }
-
-    /// Setups basic pipelines and inserts them into the resource store
-    pub fn setup_pipelines(&self, resources: &Resources, info: PipelinesInfo) -> Result<()> {
-        // Create pipelines
-        resources.insert(GeometryPass(PipelineInfo {
-            vs: DEFAULT_VERTEX_SHADER,
-            fs: DEFAULT_FRAGMENT_SHADER,
-            cull_mode: info.cull_mode,
-            ..Default::default()
-        }))?;
-
-        resources.insert(TransparentPass(PipelineInfo {
-            vs: DEFAULT_VERTEX_SHADER,
-            fs: GLASS_FRAGMENT_SHADER,
-            cull_mode: info.cull_mode,
-            ..Default::default()
-        }))?;
-
-        resources.insert(SkinnedPass(PipelineInfo {
-            vs: SKINNED_VERTEX_SHADER,
-            fs: DEFAULT_FRAGMENT_SHADER,
-            cull_mode: info.cull_mode,
-            ..Default::default()
-        }))?;
-
-        resources.insert(PbrPass(PipelineInfo {
-            vs: FULLSCREEN_SHADER,
-            fs: POSTPROCESSING_SHADER,
-            cull_mode: CullModeFlags::NONE,
-            ..Default::default()
-        }))?;
-
-        resources.insert(ImagePass(PipelineInfo {
-            vs: IMAGE_VERTEX_SHADER,
-            fs: IMAGE_FRAGMENT_SHADER,
-            blending: true,
-            cull_mode: CullModeFlags::BACK,
-            ..Default::default()
-        }))?;
-
-        resources.insert(TextPass(PipelineInfo {
-            vs: TEXT_VERTEX_SHADER,
-            fs: TEXT_FRAGMENT_SHADER,
-            cull_mode: CullModeFlags::BACK,
-            blending: true,
-            ..Default::default()
-        }))?;
-
-        resources.insert(GizmoPass(PipelineInfo {
-            vs: GIZMO_VERTEX_SHADER,
-            fs: GIZMO_FRAGMENT_SHADER,
-            cull_mode: CullModeFlags::NONE,
-            blending: true,
-            ..Default::default()
-        }))?;
-
-        Ok(())
     }
 
     pub fn color(&self) -> Handle<Texture> {
@@ -288,10 +237,80 @@ impl PBRRendering {
     }
 }
 
-#[records::record]
+pub fn default_geometry_shader(cull_mode: CullModeFlags) -> PipelineInfo {
+    PipelineInfo {
+        vs: DEFAULT_VERTEX_SHADER,
+        fs: DEFAULT_FRAGMENT_SHADER,
+        cull_mode,
+        ..Default::default()
+    }
+}
+
+pub fn default_transparent_shader() -> PipelineInfo {
+    PipelineInfo {
+        vs: DEFAULT_VERTEX_SHADER,
+        fs: GLASS_FRAGMENT_SHADER,
+        cull_mode: CullModeFlags::BACK,
+        ..Default::default()
+    }
+}
+
+pub fn default_skinned_shader() -> PipelineInfo {
+    PipelineInfo {
+        vs: SKINNED_VERTEX_SHADER,
+        fs: DEFAULT_FRAGMENT_SHADER,
+        cull_mode: CullModeFlags::BACK,
+        ..Default::default()
+    }
+}
+
+pub fn default_post_processing_shader() -> PipelineInfo {
+    PipelineInfo {
+        vs: FULLSCREEN_SHADER,
+        fs: POSTPROCESSING_SHADER,
+        cull_mode: CullModeFlags::NONE,
+        ..Default::default()
+    }
+}
+
+pub fn default_image_shader() -> PipelineInfo {
+    PipelineInfo {
+        vs: IMAGE_VERTEX_SHADER,
+        fs: IMAGE_FRAGMENT_SHADER,
+        blending: true,
+        cull_mode: CullModeFlags::BACK,
+        ..Default::default()
+    }
+}
+
+pub fn default_text_shader() -> PipelineInfo {
+    PipelineInfo {
+        vs: TEXT_VERTEX_SHADER,
+        fs: TEXT_FRAGMENT_SHADER,
+        cull_mode: CullModeFlags::BACK,
+        blending: true,
+        ..Default::default()
+    }
+}
+
+pub fn default_gizmo_shader() -> PipelineInfo {
+    PipelineInfo {
+        vs: GIZMO_VERTEX_SHADER,
+        fs: GIZMO_FRAGMENT_SHADER,
+        cull_mode: CullModeFlags::NONE,
+        ..Default::default()
+    }
+}
+
 pub struct PipelinesInfo {
     /// The cull mode to use where it makes sense
     cull_mode: CullModeFlags,
+}
+
+impl PipelinesInfo {
+    pub fn new(cull_mode: CullModeFlags) -> Self {
+        Self { cull_mode }
+    }
 }
 
 impl Default for PipelinesInfo {

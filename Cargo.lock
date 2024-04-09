@@ -697,7 +697,7 @@ dependencies = [
  "futures-sink",
  "nanorand",
  "pin-project",
- "spin 0.9.8",
+ "spin",
 ]
 
 [[package]]
@@ -709,7 +709,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "nanorand",
- "spin 0.9.8",
+ "spin",
 ]
 
 [[package]]
@@ -1022,67 +1022,9 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db0d4cf898abf0081f964436dc980e96670a0f36863e4b83aaacdb65c9d7ccc3"
-dependencies = [
- "ahash",
-]
-
-[[package]]
-name = "hashbrown"
 version = "0.14.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "290f1a1d9242c78d09ce40a5e87e7554ee637af1351968159f4952f028f75604"
-
-[[package]]
-name = "hecs"
-version = "0.7.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d4e8eb4d5dd2ea100ffbb4eb6814f4294a7362fcafbc5c1c4c015b41d16f424"
-dependencies = [
- "hashbrown 0.12.1",
- "hecs-macros",
- "lazy_static",
- "spin 0.9.8",
-]
-
-[[package]]
-name = "hecs-hierarchy"
-version = "0.11.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76d3a31c44c473d1e0d208a00d2ccd15f2d914cec2eca3a54a09a0c0d987f02b"
-dependencies = [
- "hecs",
- "hecs-schedule",
- "once_cell",
- "smallvec",
-]
-
-[[package]]
-name = "hecs-macros"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aff344a9defb0a5af1de8a7cee4f992bfbdf54c9608b10e30fefc85a1e7f2854"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.93",
-]
-
-[[package]]
-name = "hecs-schedule"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4dbcaa778ffef1911b292933a40f8b7204f9fee0f02c3ebef702fad6a838e47"
-dependencies = [
- "anyhow",
- "atomic_refcell",
- "hecs",
- "rayon",
- "smallvec",
- "thiserror",
-]
 
 [[package]]
 name = "hermit-abi"
@@ -1275,13 +1217,11 @@ dependencies = [
  "atomic_refcell",
  "bytemuck",
  "color-eyre",
- "derive_more",
- "flume 0.10.12",
+ "flax",
+ "flume 0.11.0",
  "futures",
  "glam",
  "glfw",
- "hecs",
- "hecs-hierarchy",
  "image 0.24.2",
  "ivy-base",
  "ivy-collision",
@@ -1297,7 +1237,6 @@ dependencies = [
  "ivy-ui",
  "ivy-vulkan",
  "ivy-window",
- "log",
  "parking_lot 0.12.0",
  "slotmap",
  "thiserror",
@@ -1403,7 +1342,7 @@ dependencies = [
 name = "ivy-presets"
 version = "0.10.3"
 dependencies = [
- "hecs",
+ "flax",
  "ivy-base",
  "ivy-graphics",
  "ivy-postprocessing",
@@ -1411,7 +1350,6 @@ dependencies = [
  "ivy-resources",
  "ivy-ui",
  "ivy-vulkan",
- "records",
  "slotmap",
  "thiserror",
 ]
@@ -1555,9 +1493,6 @@ name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
-dependencies = [
- "spin 0.5.2",
-]
 
 [[package]]
 name = "lebe"
@@ -2470,12 +2405,6 @@ dependencies = [
  "libc",
  "winapi",
 ]
-
-[[package]]
-name = "spin"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e63cff320ae2c57904679ba7cb63280a3dc4613885beafb148ee7bf9aa9042d"
 
 [[package]]
 name = "spin"

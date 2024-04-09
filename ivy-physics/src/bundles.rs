@@ -56,14 +56,14 @@ impl RbBundle {
         }
     }
 
-    pub fn mount(self, entity: &mut EntityBuilder) {
+    pub fn mount(self, entity: &mut EntityBuilder) -> &mut EntityBuilder {
         entity
             .set(velocity(), self.vel)
             .set(mass(), self.mass)
             .set(angular_mass(), self.ang_mass)
             .set(angular_velocity(), self.ang_vel)
             .set(restitution(), self.restitution)
-            .set(friction(), self.friction);
+            .set(friction(), self.friction)
     }
 }
 

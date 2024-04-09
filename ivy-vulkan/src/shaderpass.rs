@@ -6,3 +6,9 @@ use crate::PipelineInfo;
 pub struct Shader {
     pub pipeline_info: Handle<PipelineInfo>,
 }
+
+impl Shader {
+    pub fn new(pipeline_info: Handle<PipelineInfo>) -> Self {
+        Self { pipeline_info }
+    }
+}
