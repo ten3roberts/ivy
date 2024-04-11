@@ -30,6 +30,7 @@ pub fn create(
     let engine_name = CString::new(engine_name).unwrap();
 
     let app_info = vk::ApplicationInfo::builder()
+        .api_version(vk::API_VERSION_1_0)
         .application_name(&name)
         .engine_name(&engine_name);
 

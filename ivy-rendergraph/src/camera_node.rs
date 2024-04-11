@@ -66,14 +66,14 @@ impl<R> CameraNode<R>
 where
     R: Renderer + Storage,
 {
-    pub fn new<'a>(
+    pub fn new(
         context: SharedVulkanContext,
         world: &mut World,
         resources: &Resources,
         camera: Entity,
         renderer: R,
         shaderpass: Component<Shader>,
-        info: CameraNodeInfo<'a>,
+        info: CameraNodeInfo<'_>,
     ) -> Result<Self> {
         let combined_image_samplers = info
             .read_attachments
