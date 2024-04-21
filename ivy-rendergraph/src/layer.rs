@@ -35,7 +35,7 @@ impl GraphicsLayer {
         let schedule = Schedule::builder()
             .with_system(systems::update_view_matrices())
             .with_system(systems::add_bounds_system())
-            .with_system(GpuCamera::update_all_system())
+            .with_system(GpuCamera::update_system())
             .build();
 
         Ok(Self {

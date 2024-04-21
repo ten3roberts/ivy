@@ -1,11 +1,11 @@
-use flax::{Component, Debuggable, Fetch, Mutable};
+use flax::{Component, Debuggable, EntityBuilder, Fetch, Mutable};
 use glam::{Mat4, Quat, Vec2, Vec3, Vec4Swizzles};
 mod connections;
 mod physics;
 pub use connections::*;
 pub use physics::*;
 
-use crate::Color;
+use crate::{Bundle, Color};
 
 flax::component! {
     pub position: Vec3 => [Debuggable],
@@ -13,8 +13,8 @@ flax::component! {
     pub rotation: Quat => [ Debuggable ],
     pub scale: Vec3 => [ Debuggable ],
 
-    /// Calculated scale, rotation, and position transform matrix in world space
-    pub transform: Mat4 => [ Debuggable ],
+    /// Computed world space transform based on [`position`], [`rotation`], and [`scale`].
+    pub world_transform: Mat4 => [ Debuggable ],
 
     /// TODO: remove
     pub position2v: Vec2 => [ Debuggable ],
@@ -28,7 +28,7 @@ flax::component! {
 
     pub main_camera: () => [ Debuggable ],
 
-    pub engine_state,
+    pub engine,
 }
 
 #[derive(Fetch, Debug, Clone)]
@@ -74,6 +74,32 @@ impl Default for TransformQueryMut {
 impl Default for TransformQuery {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+pub struct TransformBundle {
+    pub pos: Vec3,
+    pub rotation: Quat,
+    pub scale: Vec3,
+}
+
+impl Default for TransformBundle {
+    fn default() -> Self {
+        Self {
+            pos: Vec3::ZERO,
+            rotation: Quat::IDENTITY,
+            scale: Vec3::ONE,
+        }
+    }
+}
+
+impl Bundle for TransformBundle {
+    fn mount(self, entity: &mut EntityBuilder) {
+        entity
+            .set(position(), self.pos)
+            .set(rotation(), self.rotation)
+            .set(scale(), self.scale)
+            .set(world_transform(), Default::default());
     }
 }
 

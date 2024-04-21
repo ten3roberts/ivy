@@ -352,7 +352,7 @@ impl<'d> DocumentNode<'d> {
 
         if let Some(mut light) = self.light {
             light.radius = info.light_radius;
-            entity.set(components::light(), light);
+            entity.set(components::light_source(), light);
         }
 
         // set skinning info

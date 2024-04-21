@@ -8,21 +8,27 @@ use crate::{
     systems::{self, resolve_collisions_system, CollisionState},
 };
 use anyhow::Context;
-use flax::{events::Event, Entity, Schedule, World};
+use flax::{
+    events::{Event, EventKind, EventSubscriber, WithIds},
+    Entity, Schedule, World,
+};
 use glam::Vec3;
-use ivy_base::{engine_state, Color, ColorExt, DrawGizmos, Events, Layer};
-use ivy_collision::{Collision, CollisionTree, CollisionTreeNode};
+use ivy_base::{engine, Color, ColorExt, DrawGizmos, Events, Layer};
+use ivy_collision::{
+    components::tree_index, BvhNode, Collision, CollisionTree, CollisionTreeNode,
+    DespawnedSubscriber,
+};
 use ivy_resources::{DefaultResourceMut, Resources, Storage};
 
 #[derive(Default, Debug, Clone)]
-pub struct PhysicsLayerInfo<N> {
+pub struct PhysicsLayerInfo {
     pub gravity: Vec3,
-    pub tree_root: N,
+    pub tree_root: BvhNode,
     pub debug: bool,
 }
 
-impl<N> PhysicsLayerInfo<N> {
-    pub fn new(gravity: Vec3, tree_root: N, debug: bool) -> Self {
+impl PhysicsLayerInfo {
+    pub fn new(gravity: Vec3, tree_root: BvhNode, debug: bool) -> Self {
         Self {
             gravity,
             tree_root,
@@ -31,21 +37,24 @@ impl<N> PhysicsLayerInfo<N> {
     }
 }
 
-pub struct PhysicsLayer<N> {
+pub struct PhysicsLayer {
     gravity: Vec3,
     debug: bool,
     schedule: Schedule,
-    marker: PhantomData<N>,
 }
 
-impl<N: CollisionTreeNode + Storage> PhysicsLayer<N> {
+impl PhysicsLayer {
     pub fn new(
         world: &mut World,
         resources: &mut Resources,
         events: &mut Events,
-        info: PhysicsLayerInfo<N>,
+        info: PhysicsLayerInfo,
     ) -> anyhow::Result<Self> {
         // let rx = events.subscribe();
+
+        let (despawned_tx, despawned_rx) = flume::unbounded();
+
+        world.subscribe(DespawnedSubscriber::new(despawned_tx));
 
         let tree_root = info.tree_root;
         Entity::builder()
@@ -57,7 +66,11 @@ impl<N: CollisionTreeNode + Storage> PhysicsLayer<N> {
                 },
             )
             .set(collision_state(), CollisionState::new())
-            .append_to(world, engine_state())?;
+            .set(
+                collision_tree(),
+                CollisionTree::new(tree_root, despawned_rx),
+            )
+            .append_to(world, engine())?;
 
         // resources
         //     .default_entry::<CollisionTree<N>>()?
@@ -91,12 +104,11 @@ impl<N: CollisionTreeNode + Storage> PhysicsLayer<N> {
             gravity: info.gravity,
             debug: info.debug,
             schedule,
-            marker: PhantomData,
         })
     }
 }
 
-impl<N: CollisionTreeNode + Storage + DrawGizmos> Layer for PhysicsLayer<N> {
+impl Layer for PhysicsLayer {
     fn on_update(
         &mut self,
         world: &mut World,
@@ -104,7 +116,7 @@ impl<N: CollisionTreeNode + Storage + DrawGizmos> Layer for PhysicsLayer<N> {
         events: &mut Events,
         frame_time: std::time::Duration,
     ) -> anyhow::Result<()> {
-        let engine_state = world.entity(engine_state())?;
+        let engine_state = world.entity(engine())?;
 
         engine_state
             .get_mut(physics_state())
@@ -112,8 +124,9 @@ impl<N: CollisionTreeNode + Storage + DrawGizmos> Layer for PhysicsLayer<N> {
             .dt = frame_time.as_secs_f32();
 
         if self.debug {
-            let root = resources.get_default::<CollisionTree<N>>()?;
+            let root = world.get(engine(), collision_tree())?;
             let mut gizmos = resources.get_default_mut()?;
+
             root.draw_gizmos(&mut gizmos, Color::white());
         }
 

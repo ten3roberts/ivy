@@ -12,7 +12,7 @@ use flax::{
 use flume::Receiver;
 use glam::Quat;
 use ivy_base::{
-    angular_velocity, connection, engine_state, friction, gravity_influence, position, restitution,
+    angular_velocity, connection, engine, friction, gravity_influence, position, restitution,
     rotation, sleeping, velocity,
 };
 use ivy_collision::{util::TOLERANCE, Collision, Contact};
@@ -23,14 +23,14 @@ pub fn integrate_velocity() -> BoxedSystem {
     System::builder()
         .with_query(
             Query::new((
-                physics_state().source(engine_state()),
+                physics_state().source(engine()),
                 position().as_mut(),
                 velocity(),
             ))
             .without(sleeping()),
         )
         .for_each(|(state, pos, vel)| {
-            *pos += *vel;
+            *pos += *vel * state.dt;
         })
         .boxed()
 }
@@ -39,13 +39,15 @@ pub fn integrate_angular_velocity() -> BoxedSystem {
     System::builder()
         .with_query(
             Query::new((
-                physics_state().source(engine_state()),
+                physics_state().source(engine()),
                 rotation().as_mut(),
                 angular_velocity(),
             ))
             .without(sleeping()),
         )
-        .for_each(|(state, rot, w)| todo!())
+        .for_each(|(state, rot, &w)| {
+            *rot *= Quat::from_axis_angle(w / w.length(), w.length() * state.dt);
+        })
         .boxed()
 }
 
@@ -145,11 +147,12 @@ impl CollisionState {
     }
 
     pub fn next_frame(&mut self) {
-        todo!()
+        // todo!()
         // let mut q = world.try_query::<hecs::Or<&Sleeping, &Static>>().unwrap();
+        // let query = Query::new()
 
         // let q = q.view();
-        // self.active.clear();
+        self.active.clear();
         // self.sleeping
         //     .retain(|_, v| q.get(v.a.entity).is_some() && q.get(v.b.entity).is_some());
     }
@@ -369,18 +372,20 @@ fn resolve_static(a: &EntityRef, b: &EntityRef, contact: Contact, dt: f32) -> Re
 pub fn apply_effectors() -> BoxedSystem {
     System::builder()
         .with_query(Query::new((
-            physics_state().source(engine_state()),
+            physics_state().source(engine()),
             RbQueryMut::new(),
             position().as_mut(),
             effector().as_mut(),
+            sleeping().satisfied(),
         )))
-        .for_each(|(physics_state, rb, position, effector)| {
-            // if !sleeping || effector.should_wake() {
-            *rb.vel += effector.net_velocity_change(physics_state.dt);
-            *position += effector.translation();
+        .for_each(|(physics_state, rb, position, effector, is_sleeping)| {
+            if !is_sleeping || effector.should_wake() {
+                // tracing::info!(%physics_state.dt, ?effector, "updating effector");
+                *rb.vel += effector.net_velocity_change(physics_state.dt);
+                *position += effector.translation();
 
-            *rb.ang_vel += effector.net_angular_velocity_change(physics_state.dt);
-            // }
+                *rb.ang_vel += effector.net_angular_velocity_change(physics_state.dt);
+            }
 
             effector.set_mass(*rb.mass);
             effector.set_ang_mass(*rb.ang_mass);

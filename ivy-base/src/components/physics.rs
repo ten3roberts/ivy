@@ -22,4 +22,5 @@ flax::component! {
     pub friction: f32 => [ Debuggable ],
 
     pub sleeping: () => [ Debuggable ],
+    pub is_trigger: () => [ Debuggable ],
 }

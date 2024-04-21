@@ -1,16 +1,13 @@
-use std::any;
+use std::{any, sync::ONCE_INIT};
 
-use anyhow::Context;
 use flax::{
-    components::is_static, entity_ids, fetch::Satisfied, BoxedSystem, CommandBuffer, Component,
-    Entity, Error, Fetch, FetchExt, Mutable, Opt, Query, QueryBorrow, System, World,
+    components::is_static, entity_ids, fetch::Satisfied, sink::Sink, BoxedSystem, CommandBuffer,
+    Component, Entity, Error, Fetch, FetchExt, Mutable, Opt, OptOr, Query, QueryBorrow, System,
+    World,
 };
 use flume::{Receiver, Sender};
 use glam::{Mat4, Vec3};
-use ivy_base::{
-    mass, transform, velocity, Color, DrawGizmos, Events, Gizmos, Sleeping, Static, TransformQuery,
-    Trigger, Visible,
-};
+use ivy_base::{is_trigger, mass, velocity, world_transform, DrawGizmos, Events, Gizmos};
 use ivy_resources::{DefaultResource, DefaultResourceMut};
 use palette::Srgba;
 use slotmap::{new_key_type, SlotMap};
@@ -18,7 +15,7 @@ use smallvec::Array;
 
 use crate::{
     components::{self, collider, collider_offset, tree_index},
-    BoundingBox, Collider, ColliderOffset, CollisionPrimitive,
+    BoundingBox, Collider, CollisionPrimitive,
 };
 
 mod binary_node;
@@ -73,25 +70,21 @@ pub struct CollisionTree<N> {
     objects: SlotMap<ObjectIndex, ObjectData>,
     /// Objects that need to be reinserted into the tree
     popped: Vec<Object>,
-    tx: Sender<Object>,
-    rx: Receiver<Object>,
+    rx: Receiver<ObjectIndex>,
 }
 
 impl<N: CollisionTreeNode> CollisionTree<N> {
-    pub fn new(root: N) -> Self {
+    pub fn new(root: N, despawned: Receiver<ObjectIndex>) -> Self {
         let mut nodes = SlotMap::with_key();
 
         let root = nodes.insert(root);
-
-        let (tx, rx) = flume::unbounded();
 
         Self {
             nodes,
             root,
             objects: SlotMap::with_key(),
             popped: Vec::new(),
-            tx,
-            rx,
+            rx: despawned,
         }
     }
 
@@ -125,23 +118,17 @@ impl<N: CollisionTreeNode> CollisionTree<N> {
         for (id, q) in query.borrow(world).iter() {
             let obj: ObjectData = q.into_object_data();
             let tree_index = self.insert(id, obj);
-
-            // TODO: remove query instead
-            let on_drop = OnDrop {
-                object: tree_index,
-                tx: self.tx.clone(),
-            };
+            tracing::info!(?id, ?tree_index.index, "registering entity into tree");
 
             cmd.set(id, components::tree_index(), tree_index.index);
         }
     }
 
     fn handle_despawned(&mut self) -> usize {
-        let objects = &mut self.objects;
         self.rx
             .try_iter()
-            .map(|object| {
-                objects.remove(object.index);
+            .map(|index| {
+                self.objects.remove(index);
             })
             .count()
     }
@@ -150,6 +137,7 @@ impl<N: CollisionTreeNode> CollisionTree<N> {
         let mut query = Query::new((tree_index(), ObjectQuery::new()));
         // Update object data
         for (&index, q) in query.borrow(world).iter() {
+            tracing::info!(?index);
             let data: ObjectData = q.into_object_data();
             self.objects[index] = data;
         }
@@ -231,8 +219,9 @@ pub fn update_system<N: CollisionTreeNode>(state: Component<CollisionTree<N>>) -
         .with_query(Query::new(state.as_mut()))
         .build(
             |world: &World, mut query: QueryBorrow<Mutable<CollisionTree<N>>>| {
-                query.iter().for_each(|tree| {
-                    tree.update(world);
+                query.iter().try_for_each(|tree| {
+                    tree.update(world)?;
+                    anyhow::Ok(())
                 })
             },
         )
@@ -303,7 +292,6 @@ pub struct ObjectData {
     pub extended_bounds: BoundingBox,
     pub transform: Mat4,
     pub is_trigger: bool,
-    pub is_visible: bool,
     pub state: NodeState,
     pub movable: bool,
 }
@@ -312,24 +300,22 @@ pub struct ObjectQuery {
     transform: Component<Mat4>,
     mass: Opt<Component<f32>>,
     collider: Component<Collider>,
-    offset: Component<Mat4>,
-    is_trigger: Satisfied<()>,
+    offset: OptOr<Component<Mat4>, Mat4>,
     is_static: Satisfied<Component<()>>,
-    is_visible: Satisfied<()>,
+    is_trigger: Satisfied<Component<()>>,
     velocity: Component<Vec3>,
 }
 
 impl ObjectQuery {
     fn new() -> Self {
         Self {
-            transform: transform(),
+            transform: world_transform(),
             mass: mass().opt(),
             collider: collider(),
-            offset: collider_offset(),
+            offset: collider_offset().opt_or_default(),
             is_static: is_static().satisfied(),
             velocity: velocity(),
-            is_visible: todo!(),
-            is_trigger: todo!(),
+            is_trigger: is_trigger().satisfied(),
         }
     }
 }
@@ -366,7 +352,6 @@ impl ObjectQueryItem<'_> {
             extended_bounds,
             transform,
             is_trigger: self.is_trigger,
-            is_visible: self.is_visible,
             state: NodeState::Dynamic,
             // state: if self.is_sleeping.is_some() {
             //     NodeState::Sleeping
@@ -445,7 +430,41 @@ impl std::ops::Deref for EntityPayload {
 impl<N: CollisionTreeNode + DrawGizmos> DrawGizmos for CollisionTree<N> {
     fn draw_gizmos(&self, mut gizmos: &mut Gizmos, color: ivy_base::Color) {
         gizmos.begin_section(any::type_name::<Self>());
-        self.root
-            .draw_gizmos_recursive(&self.nodes, &mut gizmos, color)
+        self.root.draw_gizmos_recursive(&self.nodes, gizmos, color)
+    }
+}
+
+pub struct DespawnedSubscriber {
+    tx: flume::Sender<ObjectIndex>,
+}
+
+impl DespawnedSubscriber {
+    pub fn new(tx: flume::Sender<ObjectIndex>) -> Self {
+        Self { tx }
+    }
+}
+
+impl flax::events::EventSubscriber for DespawnedSubscriber {
+    fn on_added(&self, storage: &flax::archetype::Storage, event: &flax::events::EventData) {}
+
+    fn on_modified(&self, event: &flax::events::EventData) {}
+
+    fn on_removed(&self, storage: &flax::archetype::Storage, event: &flax::events::EventData) {
+        let values = storage.downcast_ref::<ObjectIndex>();
+        event.slots.iter().map(|slot| {
+            self.tx.send(values[slot]).unwrap();
+        });
+    }
+
+    fn is_connected(&self) -> bool {
+        self.tx.is_connected()
+    }
+
+    fn matches_arch(&self, arch: &flax::archetype::Archetype) -> bool {
+        arch.has(tree_index().key())
+    }
+
+    fn matches_component(&self, desc: flax::component::ComponentDesc) -> bool {
+        desc.key() == tree_index().key()
     }
 }

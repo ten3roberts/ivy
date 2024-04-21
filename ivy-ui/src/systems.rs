@@ -129,7 +129,7 @@ pub fn reactive_system<T: 'static + Copy + Send + Sync, I: Iterator<Item = Widge
     world: &World,
     events: I,
 ) -> Result<()> {
-    unimplemented!()
+    Ok(())
 }
 
 pub fn handle_events(

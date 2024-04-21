@@ -209,6 +209,7 @@ impl GpuCamera {
         let view = camera.view();
         let position = view.inverse().col(3).xyz();
 
+        // tracing::info!(?camera, %current_frame, "updating gpu camera");
         self.uniformbuffers[current_frame]
             .fill(
                 0,
@@ -225,7 +226,7 @@ impl GpuCamera {
 
     /// Updates all GPU camera data from the CPU side camera view and projection
     /// matrix. Position is automatically extracted from the camera's view matrix.
-    pub fn update_all_system() -> BoxedSystem {
+    pub fn update_system() -> BoxedSystem {
         let query = Query::new((camera(), gpu_camera().as_mut()));
 
         System::builder()

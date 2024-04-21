@@ -31,7 +31,7 @@ impl Renderer for FullscreenRenderer {
         pass_info: &PassInfo,
         offsets: &[u32],
         _current_frame: usize,
-        pass: Component<Shader>,
+        _: Component<Shader>,
     ) -> anyhow::Result<()> {
         let pipeline = match &mut self.pipeline {
             Some(v) => v,

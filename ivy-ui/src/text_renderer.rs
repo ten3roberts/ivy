@@ -308,6 +308,7 @@ impl Renderer for TextRenderer {
         current_frame: usize,
         shaderpass: Component<Shader>,
     ) -> anyhow::Result<()> {
+        return Ok(());
         cmd.bind_vertexbuffer(0, self.mesh.vertex_buffer());
         cmd.bind_indexbuffer(self.mesh.index_buffer(), IndexType::UINT32, 0);
 

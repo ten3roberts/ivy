@@ -4,7 +4,7 @@ use flax::{
     BoxedSystem, CommandBuffer, Dfs, EntityRef, FetchExt, Query, QueryBorrow, System, World,
 };
 use ivy_base::{
-    connection, is_static, position_offset, rotation_offset, transform, Color, ColorExt, Gizmos,
+    connection, is_static, position_offset, rotation_offset, world_transform, Color, ColorExt, Gizmos,
     Static, TransformQuery,
 };
 
@@ -41,7 +41,7 @@ pub fn update_connections_system() -> BoxedSystem {
 // }
 
 fn update_subtree(world: &World, cmd: &mut CommandBuffer, parent: EntityRef) -> Result<()> {
-    let query = (transform(), RbQuery::new().opt(), is_static().opt());
+    let query = (world_transform(), RbQuery::new().opt(), is_static().opt());
     // let mut query = world.try_query_one::<(
     //     TransformQuery,
     //     Option<RbQuery>,
@@ -139,7 +139,7 @@ fn update_subtree(world: &World, cmd: &mut CommandBuffer, parent: EntityRef) -> 
 
 /// Recursively draw the connection tree using gizmos
 pub fn draw_connections(world: &World, gizmos: &mut Gizmos) -> Result<()> {
-    Query::new((entity_refs(), transform()))
+    Query::new((entity_refs(), world_transform()))
         .with_strategy(Dfs::new(connection))
         .borrow(world)
         .traverse(&Vec3::ZERO, |(entity, transform), conn, &parent_pos| {

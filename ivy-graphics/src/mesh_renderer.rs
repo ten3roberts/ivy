@@ -55,11 +55,11 @@ impl Renderer for MeshRenderer {
                 Query::new((entity_ids(), batch_id(pass.id()), ObjectDataQuery::new()))
                     .borrow(world)
                     .iter()
-                    .filter_map(|(e, &batch_id, obj /* , bound */)| {
+                    .map(|(e, &batch_id, obj /* , bound */)| {
                         // if visible.is_visible()
                         //     && camera.visible(**obj.position, **bound * obj.scale.max_element())
                         // {
-                        Some((e, batch_id, ObjectData::from(obj)))
+                        (e, batch_id, ObjectData::from(obj))
                         // } else {
                         //     None
                         // }

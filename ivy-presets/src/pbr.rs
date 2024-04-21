@@ -4,7 +4,7 @@ use ivy_graphics::{
     components::depth_attachment, gizmos::GizmoRenderer, shaders::*, DepthAttachment, EnvData,
     FullscreenRenderer, GpuCamera, MainCamera, MeshRenderer, SkinnedMeshRenderer,
 };
-use ivy_postprocessing::pbr::{create_pbr_pipeline, PBRInfo};
+use ivy_postprocessing::pbr::{setup_pbr_nodes, PBRInfo};
 use ivy_rendergraph::{
     AttachmentInfo, CameraNode, CameraNodeInfo, NodeIndex, RenderGraph, SwapchainNode,
 };
@@ -19,20 +19,9 @@ use ivy_vulkan::{
 
 use crate::{geometry_pass, gizmo_pass, transparent_pass, ui_pass, Error};
 
-/// Create a pbr rendergraph with UI and gizmos
-/// This is the most common setup and works well for many use cases.
-
-/// Preset for common PBR rendering setup with UI and gizmos
-pub struct PBRRendering {
-    pub ui: NodeIndex,
-    pub gizmo: NodeIndex,
-    pub color: Handle<Texture>,
-    pub extent: Extent,
-}
-
 pub struct PBRRenderingInfo {
     pub color_usage: ImageUsage,
-    pub test_shader: Shader,
+    pub text_shader: Shader,
     pub ui_shader: Shader,
     pub post_processing_shader: Shader,
     pub gizmo_shader: Shader,
@@ -48,6 +37,16 @@ pub struct PBRRenderingInfo {
 //     }
 // }
 
+/// Create a pbr rendergraph with UI and gizmos
+/// This is the most common setup and works well for many use cases.
+/// Preset for common PBR rendering setup with UI and gizmos
+pub struct PBRRendering {
+    pub ui: NodeIndex,
+    pub gizmo: NodeIndex,
+    pub color: Handle<Texture>,
+    pub extent: Extent,
+}
+
 impl PBRRendering {
     /// Setup a PBR rendergraph consisting of
     /// - Geometry rendering
@@ -60,7 +59,7 @@ impl PBRRendering {
     pub fn setup<Env: 'static + Copy + Send + Sync + EnvData>(
         world: &mut World,
         resources: &Resources,
-        pbr_info: PBRInfo<Env>,
+        env: Env,
         frames_in_flight: usize,
         info: PBRRenderingInfo,
     ) -> crate::Result<Self> {
@@ -127,7 +126,7 @@ impl PBRRendering {
             },
         )?)?;
 
-        rendergraph.add_nodes(create_pbr_pipeline(
+        rendergraph.add_nodes(setup_pbr_nodes(
             context.clone(),
             world,
             resources,
@@ -135,9 +134,15 @@ impl PBRRendering {
             (mesh_renderer, skinned_renderer),
             extent,
             frames_in_flight,
-            pbr_info,
-            geometry_pass(),
-            transparent_pass(),
+            PBRInfo {
+                max_lights: 64,
+                output: final_lit,
+                read_attachments: vec![],
+                post_processing_shader: info.post_processing_shader,
+                geometry_pass: geometry_pass(),
+                transparent_pass: transparent_pass(),
+            },
+            env,
         )?);
 
         let depth_attachment = **world.get(camera, depth_attachment()).unwrap();
@@ -248,7 +253,7 @@ pub fn default_geometry_shader(cull_mode: CullModeFlags) -> PipelineInfo {
 
 pub fn default_transparent_shader() -> PipelineInfo {
     PipelineInfo {
-        vs: DEFAULT_VERTEX_SHADER,
+        vs: GLASS_VERTEX_SHADER,
         fs: GLASS_FRAGMENT_SHADER,
         cull_mode: CullModeFlags::BACK,
         ..Default::default()

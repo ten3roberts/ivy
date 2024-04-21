@@ -1,5 +1,5 @@
 use crate::{
-    components::{light, light_renderer},
+    components::{light_renderer, light_source},
     icosphere::create_ico_mesh,
     shaders::{LIGHT_VERTEX_SHADER, PBR_SHADER},
     MainCamera, Mesh, Renderer, Result, SimpleVertex,
@@ -109,7 +109,7 @@ impl LightRenderer {
         // v.draw_gizmos(gizmos, Color::red())
         self.lights.clear();
 
-        let mut query = Query::new((light(), position()));
+        let mut query = Query::new((light_source(), position()));
 
         self.lights.extend(
             query
@@ -120,7 +120,6 @@ impl LightRenderer {
                     radiance: light.radiance,
                     size: (light.radiance.length() * 256.).sqrt(),
                     radius: light.radius,
-                    ..Default::default()
                 }),
         );
 
@@ -180,7 +179,7 @@ impl Renderer for LightRenderer {
         current_frame: usize,
         _pass: Component<Shader>,
     ) -> anyhow::Result<()> {
-        let cam = world.by_tag(main_camera()).unwrap();
+        let camera = world.by_tag(main_camera()).unwrap();
         let (&camera_pos, &camera_rot) = Query::new((position(), rotation()))
             .with(main_camera())
             .borrow(world)

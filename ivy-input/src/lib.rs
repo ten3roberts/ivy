@@ -1,4 +1,5 @@
 mod axis;
+pub mod components;
 mod events;
 mod input;
 mod vector;

@@ -14,7 +14,7 @@ pub const MAX_MOUSE_BUTTONS: usize = glfw::MouseButton::Button8 as usize;
 /// functions for keys pressed this frame as layers may run at different intervals, and thus the
 /// concept of frame is ambiguos. A fixed update may for example run twice for each window event
 /// frame. This will cause a press for this frame to persists across multiple physics frames.
-pub struct Input {
+pub struct InputState {
     /// If the currently pressed keys should be released when window loses focus
     release_unfocus: bool,
     rx: Receiver<InputEvent>,
@@ -26,7 +26,7 @@ pub struct Input {
     window_extent: Extent,
 }
 
-impl Input {
+impl InputState {
     /// Creates a new Input state handler. Queries the default window for size
     /// and cursor position.
     pub fn new(resources: &Resources, events: &mut Events) -> ivy_resources::Result<Self> {
@@ -100,7 +100,7 @@ impl Input {
 
     /// Returns true if the given mouse button is pressed.
     #[inline]
-    pub fn mouse_button(&self, button: MouseButton) -> bool {
+    pub fn mouse_button_down(&self, button: MouseButton) -> bool {
         self.mouse_buttons[button as usize]
     }
 

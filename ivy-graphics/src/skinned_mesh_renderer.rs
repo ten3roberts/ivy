@@ -165,6 +165,7 @@ impl Renderer for SkinnedMeshRenderer {
         current_frame: usize,
         pass: Component<Shader>,
     ) -> anyhow::Result<()> {
+        return Ok(());
         let meshes = resources.fetch::<SkinnedMesh>()?;
         let materials = resources.fetch::<Material>()?;
 

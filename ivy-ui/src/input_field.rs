@@ -1,7 +1,7 @@
 use flax::{BoxedSystem, Entity, EntityBuilder, Mutable, Query, QueryBorrow, System};
 use glfw::{Action, Key, Modifiers};
 
-use ivy_base::Events;
+use ivy_base::{Bundle, Events};
 
 use crate::{
     events::WidgetEvent, input_field, interactive, sticky, text, InteractiveState, Text,
@@ -23,8 +23,10 @@ impl InputFieldBundle {
     pub fn new(field: InputField) -> Self {
         Self { field }
     }
+}
 
-    pub fn mount(&self, entity: &mut EntityBuilder) {
+impl Bundle for InputFieldBundle {
+    fn mount(self, entity: &mut EntityBuilder) {
         entity
             .set_default(interactive())
             .set_default(sticky())

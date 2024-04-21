@@ -56,6 +56,7 @@ impl Renderer for ImageRenderer {
         current_frame: usize,
         shaderpass: Component<Shader>,
     ) -> anyhow::Result<()> {
+        return Ok(());
         cmd.bind_vertexbuffer(0, self.square.vertex_buffer());
         cmd.bind_indexbuffer(self.square.index_buffer(), IndexType::UINT32, 0);
 

@@ -40,6 +40,7 @@ rectangle-pack = "0.4.2"
 serde = { workspace = true, optional = true }
 slotmap.workspace = true
 smallvec = "1.8.0"
+tracing.workspace = true
 
 [features]
 default = []

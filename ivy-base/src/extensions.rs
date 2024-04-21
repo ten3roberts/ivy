@@ -1,4 +1,6 @@
-use flax::{component::ComponentValue, entity_ids, Component, EntityRef, Query, World};
+use flax::{
+    component::ComponentValue, entity_ids, Component, EntityBuilder, EntityRef, Query, World,
+};
 
 pub trait WorldExt {
     /// Finds an entity by name
@@ -22,5 +24,20 @@ impl WorldExt for World {
             .iter()
             .next()
             .map(|(v, _)| self.entity(v).unwrap())
+    }
+}
+
+pub trait Bundle {
+    fn mount(self, entity: &mut EntityBuilder);
+}
+
+pub trait EntityBuilderExt {
+    fn mount<T: Bundle>(&mut self, bundle: T) -> &mut Self;
+}
+
+impl EntityBuilderExt for EntityBuilder {
+    fn mount<T: Bundle>(&mut self, bundle: T) -> &mut Self {
+        bundle.mount(self);
+        self
     }
 }

@@ -2,8 +2,8 @@ use flax::{Component, Entity, World};
 use itertools::Itertools;
 use ivy_base::Extent;
 use ivy_graphics::{
-    components::depth_attachment, DepthAttachment, EnvData, EnvironmentManager, FullscreenRenderer,
-    GpuCamera, LightRenderer, MeshRenderer, Renderer,
+    DepthAttachment, EnvData, EnvironmentManager, FullscreenRenderer, GpuCamera, LightRenderer,
+    MeshRenderer, Renderer,
 };
 use ivy_rendergraph::{AttachmentInfo, CameraNode, CameraNodeInfo, Node, TransferNode};
 use ivy_resources::{Handle, Resources, Storage};
@@ -17,22 +17,27 @@ use ivy_vulkan::{
 
 mod attachments;
 
+use crate::components::env_state;
+
 use self::attachments::PBRAttachments;
 
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
-pub struct PBRInfo<E: EnvData> {
+pub struct PBRInfo {
     pub max_lights: u64,
-    pub env_data: E,
-    output: Handle<Texture>,
-    read_attachments: Vec<Handle<Texture>>,
-    post_processing: Shader,
+    pub output: Handle<Texture>,
+    pub read_attachments: Vec<Handle<Texture>>,
+
+    pub post_processing_shader: Shader,
+
+    pub geometry_pass: Component<Shader>,
+    pub transparent_pass: Component<Shader>,
 }
 
 /// Installs PBR rendering for the specified camera. Returns a list of nodes suitable for
 /// rendergraph insertions. Configures gpu camera data, light management and
 /// environment manager and attaches them to the camera.
-pub fn create_pbr_pipeline<E, R>(
+pub fn setup_pbr_nodes<E, R>(
     context: SharedVulkanContext,
     world: &mut World,
     resources: &Resources,
@@ -40,9 +45,8 @@ pub fn create_pbr_pipeline<E, R>(
     renderer: R,
     extent: Extent,
     frames_in_flight: usize,
-    info: PBRInfo<E>,
-    geometry_pass: Component<Shader>,
-    transparent_pass: Component<Shader>,
+    info: PBRInfo,
+    env: E,
 ) -> ivy_rendergraph::Result<impl IntoIterator<Item = Box<dyn Node>>>
 where
     R: Renderer + Storage + Clone,
@@ -60,14 +64,14 @@ where
         resources,
         camera,
         renderer.clone(),
-        geometry_pass,
+        info.geometry_pass,
         CameraNodeInfo {
             name: "PBR Camera Node",
             color_attachments: pbr_attachments
                 .as_slice()
                 .iter()
                 .zip([
-                    ClearValue::color_vec4(info.env_data.clear_color().extend(1.0)),
+                    ClearValue::color_vec4(env.clear_color().extend(1.0)),
                     ClearValue::default(),
                     ClearValue::default(),
                     ClearValue::default(),
@@ -95,7 +99,7 @@ where
     )?);
 
     let light_renderer = LightRenderer::new(context.clone(), info.max_lights, frames_in_flight)?;
-    let env_manager = EnvironmentManager::new(context.clone(), info.env_data, frames_in_flight)?;
+    let env_manager = EnvironmentManager::new(context.clone(), env, frames_in_flight)?;
 
     let data = [&env_manager.buffers() as &dyn MultiDescriptorBindable];
 
@@ -135,7 +139,7 @@ where
         resources,
         camera,
         light_renderer,
-        geometry_pass,
+        info.geometry_pass,
         CameraNodeInfo {
             name: "Light renderer",
             color_attachments: vec![AttachmentInfo::color(final_lit)],
@@ -196,7 +200,7 @@ where
         resources,
         camera,
         resources.default::<MeshRenderer>()?,
-        transparent_pass,
+        info.transparent_pass,
         CameraNodeInfo {
             name: "Transparent",
             color_attachments: vec![AttachmentInfo {
@@ -235,7 +239,7 @@ where
         camera,
         FullscreenRenderer::new(
             resources
-                .get(info.post_processing.pipeline_info)
+                .get(info.post_processing_shader.pipeline_info)
                 .unwrap()
                 .clone(),
         ),
@@ -256,13 +260,13 @@ where
         },
     )?);
 
-    world
-        .set(
-            camera,
-            ivy_graphics::components::depth_attachment(),
-            depth_attachment,
-        )
-        .unwrap();
+    let mut camera = world.entity_mut(camera).unwrap();
+
+    camera.set(
+        ivy_graphics::components::depth_attachment(),
+        depth_attachment,
+    );
+    camera.set(env_state(), env_manager);
 
     // Store data in camera
     // world

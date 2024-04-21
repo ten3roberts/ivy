@@ -85,32 +85,6 @@ impl Timeout {
     }
 }
 
-/// Allows shorter function names to convert duration into intergral types
-pub trait FromDuration {
-    fn secs(&self) -> f32;
-    fn ms(&self) -> u128;
-    fn us(&self) -> u128;
-    fn ns(&self) -> u128;
-}
-
-impl FromDuration for Duration {
-    fn secs(&self) -> f32 {
-        self.as_secs_f32()
-    }
-
-    fn ms(&self) -> u128 {
-        self.as_millis()
-    }
-
-    fn us(&self) -> u128 {
-        self.as_micros()
-    }
-
-    fn ns(&self) -> u128 {
-        self.as_nanos()
-    }
-}
-
 /// Trait that allows easier construction of durations
 pub trait IntoDuration {
     fn secs(&self) -> Duration;

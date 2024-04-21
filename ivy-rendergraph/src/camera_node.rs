@@ -108,7 +108,7 @@ where
                             .iter()
                             .map(|val| val as &dyn MultiDescriptorBindable),
                     )
-                    .chain(info.bindables.into_iter().cloned())
+                    .chain(info.bindables.iter().cloned())
                     .map(|val| (val, ShaderStageFlags::FRAGMENT)),
             )
             .collect::<Vec<_>>();

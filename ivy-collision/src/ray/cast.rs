@@ -14,7 +14,7 @@ use crate::{
 /// Data about the ray is not saved.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RayIntersection {
-    pub entity: Entity,
+    pub id: Entity,
     pub contact: Contact,
 }
 
@@ -34,7 +34,10 @@ impl Ord for RayIntersection {
 
 impl RayIntersection {
     pub fn new(entity: Entity, contact: Contact) -> Self {
-        Self { entity, contact }
+        Self {
+            id: entity,
+            contact,
+        }
     }
 
     /// Returns the single ray contact point

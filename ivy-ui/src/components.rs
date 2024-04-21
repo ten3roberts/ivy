@@ -2,7 +2,7 @@ use crate::{Font, Image, InputField, Text, WidgetLayout};
 use flax::{Entity, EntityBuilder, EntityRef, World};
 pub use fontdue::layout::{HorizontalAlign, VerticalAlign};
 use glam::Vec2;
-use ivy_base::{color, position, size, Color, Events};
+use ivy_base::{color, position, size, visible, Bundle, Color, Events, Visible};
 use ivy_graphics::components::camera;
 use ivy_resources::Handle;
 use std::borrow::Cow;
@@ -42,7 +42,7 @@ flax::component! {
 /// Bundle for widgets.
 /// Use further bundles for images and texts
 #[derive(Clone, Debug, Default)]
-pub struct WidgetTemplate {
+pub struct WidgetBundle {
     pub abs_offset: Vec2,
     pub rel_offset: Vec2,
     pub abs_size: Vec2,
@@ -51,7 +51,7 @@ pub struct WidgetTemplate {
     pub aspect: f32,
 }
 
-impl WidgetTemplate {
+impl WidgetBundle {
     pub fn new(
         abs_offset: Vec2,
         rel_offset: Vec2,
@@ -69,12 +69,14 @@ impl WidgetTemplate {
             aspect,
         }
     }
+}
 
-    pub fn mount(&mut self, entity: &mut EntityBuilder) {
+impl Bundle for WidgetBundle {
+    fn mount(self, entity: &mut EntityBuilder) {
         entity
             .set_default(widget())
             .set_default(widget_depth())
-            // .set(visible(), Visible::Visible)
+            .set(visible(), Visible::Visible)
             .set(absolute_offset(), self.abs_offset)
             .set(relative_offset(), self.rel_offset)
             .set(absolute_size(), self.abs_size)
@@ -91,7 +93,7 @@ impl WidgetTemplate {
 #[derive(Clone, Debug, Default)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct CanvasBundle {
-    widget: WidgetTemplate,
+    widget: WidgetBundle,
     pub origin: Vec2,
     pub aspect: f32,
 }
@@ -99,15 +101,17 @@ pub struct CanvasBundle {
 impl CanvasBundle {
     pub fn new<E: Into<Vec2>>(extent: E) -> Self {
         Self {
-            widget: WidgetTemplate {
+            widget: WidgetBundle {
                 abs_size: extent.into(),
                 ..Default::default()
             },
             ..Default::default()
         }
     }
+}
 
-    pub fn mount(&mut self, entity: &mut EntityBuilder) {
+impl Bundle for CanvasBundle {
+    fn mount(self, entity: &mut EntityBuilder) {
         self.widget.mount(entity);
         entity
             .set(origin(), self.origin)
@@ -127,6 +131,12 @@ pub struct ImageBundle {
 impl ImageBundle {
     pub fn new(image: Handle<Image>, color: Color) -> Self {
         Self { image, color }
+    }
+}
+
+impl Bundle for ImageBundle {
+    fn mount(self, entity: &mut EntityBuilder) {
+        entity.set(image(), self.image).set(color(), self.color);
     }
 }
 
@@ -163,8 +173,10 @@ impl TextBundle {
     pub fn set_text<U: Into<Cow<'static, str>>>(&mut self, val: U) {
         self.text.set(val)
     }
+}
 
-    pub fn mount(self, entity: &mut EntityBuilder) {
+impl Bundle for TextBundle {
+    fn mount(self, entity: &mut EntityBuilder) {
         entity
             .set(font(), self.font)
             .set(color(), self.color)

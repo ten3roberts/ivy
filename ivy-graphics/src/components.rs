@@ -13,7 +13,7 @@ flax::component! {
     pub material: Handle<Material>,
 
     /// Emission source for entity
-    pub light: PointLight => [ Debuggable ],
+    pub light_source: PointLight => [ Debuggable ],
 
 
     /// Drives the animation of an entity

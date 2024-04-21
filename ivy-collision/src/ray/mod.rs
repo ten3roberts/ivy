@@ -14,6 +14,7 @@ use crate::{
     CollisionPrimitive, CollisionTree, CollisionTreeNode, Contact, Simplex,
 };
 
+#[derive(Debug, Clone)]
 pub struct Ray {
     pub(crate) origin: Vec3,
     pub(crate) dir: Vec3,

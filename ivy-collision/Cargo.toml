@@ -16,8 +16,10 @@ anyhow.workspace = true
 arrayvec = "0.7.2"
 derive-for = "1.2.2"
 derive_more = "0.99.17"
-flume.workspace = true
+ezy = { version = "0.1.1", features = ["glam"] }
 flax.workspace = true
+flume.workspace = true
+glam.workspace = true
 ivy-base = { path = "../ivy-base", version = "0.10.0" }
 ivy-resources = { path = "../ivy-resources", version = "0.10.0" }
 ordered-float = "3.0.0"
@@ -25,5 +27,4 @@ palette.workspace = true
 rayon = "1.5.2"
 slotmap.workspace = true
 smallvec = "1.8.0"
-glam.workspace = true
-ezy = { version = "0.1.1", features = ["glam"] }
+tracing.workspace = true

@@ -1,7 +1,9 @@
 //! This module contains bundles and queries suitable for physics.
 use flax::{Component, EntityBuilder, Fetch, Mutable};
 use glam::Vec3;
-use ivy_base::{angular_mass, angular_velocity, friction, mass, restitution, velocity};
+use ivy_base::{angular_mass, angular_velocity, friction, mass, restitution, velocity, Bundle};
+
+use crate::components::effector;
 
 #[derive(Fetch)]
 pub struct RbQuery {
@@ -23,6 +25,12 @@ impl RbQuery {
             ang_mass: angular_mass(),
             friction: friction(),
         }
+    }
+}
+
+impl Default for RbQuery {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -55,8 +63,10 @@ impl RbBundle {
             friction,
         }
     }
+}
 
-    pub fn mount(self, entity: &mut EntityBuilder) -> &mut EntityBuilder {
+impl Bundle for RbBundle {
+    fn mount(self, entity: &mut EntityBuilder) {
         entity
             .set(velocity(), self.vel)
             .set(mass(), self.mass)
@@ -64,6 +74,7 @@ impl RbBundle {
             .set(angular_velocity(), self.ang_vel)
             .set(restitution(), self.restitution)
             .set(friction(), self.friction)
+            .set(effector(), Default::default());
     }
 }
 
@@ -75,6 +86,12 @@ pub struct RbQueryMut {
     pub mass: Mutable<f32>,
     pub ang_mass: Mutable<f32>,
     pub friction: Mutable<f32>,
+}
+
+impl Default for RbQueryMut {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl RbQueryMut {

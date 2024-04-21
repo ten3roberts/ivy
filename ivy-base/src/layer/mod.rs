@@ -1,8 +1,9 @@
 #![allow(non_snake_case)]
 use crate::impl_for_tuples;
+use crate::systems::update_transform_system;
 use crate::Events;
 use anyhow::Context;
-use flax::World;
+use flax::{Schedule, World};
 use ivy_resources::Resources;
 use std::time::Duration;
 
@@ -45,3 +46,28 @@ macro_rules! tuple_impl {
 
 // Implement renderer on tuple of renderers and tuple of render handles
 impl_for_tuples!(tuple_impl);
+
+pub struct EngineLayer {
+    schedule: Schedule,
+}
+
+impl EngineLayer {
+    pub fn new() -> Self {
+        let schedule = Schedule::from([update_transform_system()]);
+        Self { schedule }
+    }
+}
+
+impl Layer for EngineLayer {
+    fn on_update(
+        &mut self,
+        world: &mut World,
+        resources: &mut Resources,
+        events: &mut Events,
+        frame_time: Duration,
+    ) -> anyhow::Result<()> {
+        self.schedule.execute_par(world)?;
+
+        Ok(())
+    }
+}
