@@ -1,5 +1,9 @@
+use flax::{error::MissingComponent, EntityRef};
 use glam::Vec3;
-use ivy_base::math::Inverse;
+use ivy_base::{
+    angular_mass, angular_velocity, friction, mass, math::Inverse, restitution, velocity,
+    world_transform,
+};
 use ivy_collision::Contact;
 
 use crate::util::point_vel;
@@ -13,6 +17,40 @@ pub(crate) struct ResolveObject {
     pub mass: f32,
     pub ang_mass: f32,
     pub friction: f32,
+}
+
+impl ResolveObject {
+    pub(crate) fn new(
+        pos: Vec3,
+        vel: Vec3,
+        ang_vel: Vec3,
+        resitution: f32,
+        mass: f32,
+        ang_mass: f32,
+        friction: f32,
+    ) -> Self {
+        Self {
+            pos,
+            vel,
+            ang_vel,
+            resitution,
+            mass,
+            ang_mass,
+            friction,
+        }
+    }
+
+    pub fn from_entity(entity: &EntityRef) -> Result<Self, MissingComponent> {
+        Ok(Self {
+            pos: entity.get(world_transform())?.transform_point3(Vec3::ZERO),
+            vel: entity.get_copy(velocity())?,
+            ang_vel: entity.get_copy(angular_velocity())?,
+            resitution: entity.get_copy(restitution())?,
+            mass: entity.get_copy(mass())?,
+            ang_mass: entity.get_copy(angular_mass())?,
+            friction: entity.get_copy(friction())?,
+        })
+    }
 }
 
 /// Generates an impulse for solving a collision.

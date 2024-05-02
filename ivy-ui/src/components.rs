@@ -2,16 +2,16 @@ use crate::{Font, Image, InputField, Text, WidgetLayout};
 use flax::{Entity, EntityBuilder, EntityRef, World};
 pub use fontdue::layout::{HorizontalAlign, VerticalAlign};
 use glam::Vec2;
+use ivy_assets::Asset;
 use ivy_base::{color, position, size, visible, Bundle, Color, Events, Visible};
 use ivy_graphics::components::camera;
-use ivy_resources::Handle;
 use std::borrow::Cow;
 
 flax::component! {
     /// The depth of the widget in the tree
     pub widget_depth: u32,
-    pub image: Handle<Image>,
-    pub font: Handle<Font>,
+    pub image: Asset<Image>,
+    pub font: Asset<Font>,
     pub text: Text,
     pub input_field: InputField,
     pub interactive: (),
@@ -124,27 +124,30 @@ impl Bundle for CanvasBundle {
 #[derive(Default, Debug, Clone)]
 /// Specialize widget into an image
 pub struct ImageBundle {
-    pub image: Handle<Image>,
+    pub image: Option<Asset<Image>>,
     pub color: Color,
 }
 
 impl ImageBundle {
-    pub fn new(image: Handle<Image>, color: Color) -> Self {
-        Self { image, color }
+    pub fn new(image: Asset<Image>, color: Color) -> Self {
+        Self {
+            image: Some(image),
+            color,
+        }
     }
 }
 
 impl Bundle for ImageBundle {
     fn mount(self, entity: &mut EntityBuilder) {
-        entity.set(image(), self.image).set(color(), self.color);
+        entity.set_opt(image(), self.image).set(color(), self.color);
     }
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Debug, Clone)]
 /// Specialize widget into text
 pub struct TextBundle {
     pub text: Text,
-    pub font: Handle<Font>,
+    pub font: Asset<Font>,
     pub color: Color,
     pub wrap: WrapStyle,
     pub align: Alignment,
@@ -153,7 +156,7 @@ pub struct TextBundle {
 
 impl TextBundle {
     pub fn new(
-        font: Handle<Font>,
+        font: Asset<Font>,
         color: Color,
         wrap: WrapStyle,
         align: Alignment,

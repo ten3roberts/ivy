@@ -14,14 +14,14 @@ use crate::{
     Clock, Events, Gizmos, IntoDuration,
 };
 
-use ivy_resources::Resources;
+use ivy_assets::AssetCache;
 
 pub struct App {
     name: String,
 
     layers: LayerStack,
 
-    resources: Resources,
+    asset_cache: AssetCache,
     world: World,
     events: Events,
 
@@ -38,16 +38,15 @@ impl App {
 
         let (tx, rx) = flume::unbounded();
         events.subscribe_custom(tx);
-        let resources = Resources::new();
+        let asset_cache = AssetCache::new();
 
-        // Will never fail
-        resources.insert(Gizmos::default()).unwrap();
+        // asset_cache.insert(Gizmos::default());
 
         Self {
             name: "Ivy".into(),
             layers: LayerStack::new(),
             world: World::new(),
-            resources,
+            asset_cache,
             events,
             rx,
             running: false,
@@ -77,11 +76,14 @@ impl App {
 
             let frame_time = frame_clock.reset();
             let world = &mut self.world;
-            let resources = &mut self.resources;
+            let asset_cache = &mut self.asset_cache;
             let events = &mut self.events;
 
             for layer in self.layers.iter_mut() {
-                layer.on_update(world, resources, events, frame_time)?;
+                if let Err(err) = layer.on_update(world, asset_cache, events, frame_time) {
+                    tracing::error!("Error in layer: {:?}", err);
+                    return Err(err);
+                }
             }
 
             // Read all events sent by application
@@ -107,10 +109,10 @@ impl App {
     /// closure to construct the layer takes in the world and events.
     pub fn push_layer<F, T>(&mut self, func: F)
     where
-        F: FnOnce(&mut World, &mut Resources, &mut Events) -> T,
+        F: FnOnce(&mut World, &mut AssetCache, &mut Events) -> T,
         T: 'static + Layer,
     {
-        let layer = func(&mut self.world, &mut self.resources, &mut self.events);
+        let layer = func(&mut self.world, &mut self.asset_cache, &mut self.events);
         self.layers.push(layer);
     }
 
@@ -119,10 +121,10 @@ impl App {
     /// is propagated to the callee.
     pub fn try_push_layer<F, T, E>(&mut self, func: F) -> Result<(), E>
     where
-        F: FnOnce(&mut World, &mut Resources, &mut Events) -> Result<T, E>,
+        F: FnOnce(&mut World, &mut AssetCache, &mut Events) -> Result<T, E>,
         T: 'static + Layer,
     {
-        let layer = func(&mut self.world, &mut self.resources, &mut self.events)?;
+        let layer = func(&mut self.world, &mut self.asset_cache, &mut self.events)?;
         self.layers.push(layer);
         Ok(())
     }
@@ -131,10 +133,10 @@ impl App {
     /// closure to construct the layer takes in the world and events.
     pub fn insert_layer<F, T>(&mut self, index: usize, func: F)
     where
-        F: FnOnce(&mut World, &mut Resources, &mut Events) -> T,
+        F: FnOnce(&mut World, &mut AssetCache, &mut Events) -> T,
         T: 'static + Layer,
     {
-        let layer = func(&mut self.world, &mut self.resources, &mut self.events);
+        let layer = func(&mut self.world, &mut self.asset_cache, &mut self.events);
         self.layers.insert(index, layer);
     }
 
@@ -143,10 +145,10 @@ impl App {
     /// is propagated to the callee.
     pub fn try_insert_layer<F, T, E>(&mut self, index: usize, func: F) -> Result<(), E>
     where
-        F: FnOnce(&mut World, &mut Resources, &mut Events) -> Result<T, E>,
+        F: FnOnce(&mut World, &mut AssetCache, &mut Events) -> Result<T, E>,
         T: 'static + Layer,
     {
-        let layer = func(&mut self.world, &mut self.resources, &mut self.events)?;
+        let layer = func(&mut self.world, &mut self.asset_cache, &mut self.events)?;
         self.layers.insert(index, layer);
         Ok(())
     }
@@ -161,9 +163,9 @@ impl App {
         &mut self.events
     }
 
-    /// Get a mutable reference to the app's resources.
-    pub fn resources_mut(&mut self) -> &mut Resources {
-        &mut self.resources
+    /// Get a mutable reference to the app's asset_cache.
+    pub fn asset_cache_mut(&mut self) -> &mut AssetCache {
+        &mut self.asset_cache
     }
 
     /// Get a reference to the app's world.
@@ -176,9 +178,9 @@ impl App {
         &self.events
     }
 
-    /// Get a reference to the app's resources.
-    pub fn resources(&self) -> &Resources {
-        &self.resources
+    /// Get a reference to the app's asset_cache.
+    pub fn asset_cache(&self) -> &AssetCache {
+        &self.asset_cache
     }
 }
 

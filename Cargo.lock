@@ -524,6 +524,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "dashmap"
+version = "5.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3495912c9c1ccf2e18976439f4443f3fee0fd61f424ff99fde6a66b15ecb448f"
+dependencies = [
+ "cfg-if 1.0.0",
+ "hashbrown 0.12.3",
+ "lock_api",
+ "parking_lot_core 0.9.3",
+]
+
+[[package]]
 name = "deflate"
 version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1023,6 +1035,12 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
+version = "0.12.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
+
+[[package]]
+name = "hashbrown"
 version = "0.14.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "290f1a1d9242c78d09ce40a5e87e7554ee637af1351968159f4952f028f75604"
@@ -1168,6 +1186,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1aab8fc367588b89dcee83ab0fd66b72b50b72fa1904d7095045ace2b0c81c35"
 
 [[package]]
+name = "ivy-assets"
+version = "0.10.0"
+dependencies = [
+ "atomic_refcell",
+ "dashmap",
+ "image 0.24.2",
+ "parking_lot 0.12.0",
+ "slotmap",
+ "tracing",
+]
+
+[[package]]
 name = "ivy-base"
 version = "0.10.3"
 dependencies = [
@@ -1177,8 +1207,8 @@ dependencies = [
  "flax",
  "flume 0.11.0",
  "glam",
+ "ivy-assets",
  "ivy-random",
- "ivy-resources",
  "palette",
  "parking_lot 0.12.0",
  "rand",
@@ -1201,8 +1231,8 @@ dependencies = [
  "flax",
  "flume 0.11.0",
  "glam",
+ "ivy-assets",
  "ivy-base",
- "ivy-resources",
  "ordered-float",
  "palette",
  "rayon",
@@ -1225,6 +1255,7 @@ dependencies = [
  "glam",
  "glfw",
  "image 0.24.2",
+ "ivy-assets",
  "ivy-base",
  "ivy-collision",
  "ivy-graphics",
@@ -1235,7 +1266,6 @@ dependencies = [
  "ivy-presets",
  "ivy-random",
  "ivy-rendergraph",
- "ivy-resources",
  "ivy-ui",
  "ivy-vulkan",
  "ivy-window",
@@ -1266,10 +1296,10 @@ dependencies = [
  "glfw",
  "gltf",
  "itertools 0.12.1",
+ "ivy-assets",
  "ivy-base",
  "ivy-image",
  "ivy-input",
- "ivy-resources",
  "ivy-vulkan",
  "ivy-window",
  "once_cell",
@@ -1303,8 +1333,8 @@ dependencies = [
  "flume 0.11.0",
  "glam",
  "glfw",
+ "ivy-assets",
  "ivy-base",
- "ivy-resources",
  "ivy-window",
 ]
 
@@ -1316,11 +1346,11 @@ dependencies = [
  "flax",
  "flume 0.11.0",
  "glam",
+ "ivy-assets",
  "ivy-base",
  "ivy-collision",
  "ivy-graphics",
  "ivy-random",
- "ivy-resources",
  "rayon",
  "serde",
  "smallvec",
@@ -1336,10 +1366,10 @@ dependencies = [
  "flax",
  "glam",
  "itertools 0.12.1",
+ "ivy-assets",
  "ivy-base",
  "ivy-graphics",
  "ivy-rendergraph",
- "ivy-resources",
  "ivy-vulkan",
  "once_cell",
 ]
@@ -1349,13 +1379,14 @@ name = "ivy-presets"
 version = "0.10.3"
 dependencies = [
  "flax",
+ "ivy-assets",
  "ivy-base",
  "ivy-graphics",
  "ivy-postprocessing",
  "ivy-rendergraph",
- "ivy-resources",
  "ivy-ui",
  "ivy-vulkan",
+ "parking_lot 0.12.0",
  "slotmap",
  "thiserror",
 ]
@@ -1376,25 +1407,13 @@ dependencies = [
  "flax",
  "glam",
  "itertools 0.12.1",
+ "ivy-assets",
  "ivy-base",
  "ivy-graphics",
- "ivy-resources",
  "ivy-vulkan",
  "ivy-window",
- "slotmap",
- "thiserror",
-]
-
-[[package]]
-name = "ivy-resources"
-version = "0.10.3"
-dependencies = [
- "atomic_refcell",
- "flax",
  "parking_lot 0.12.0",
- "serde",
  "slotmap",
- "smallvec",
  "thiserror",
 ]
 
@@ -1409,14 +1428,15 @@ dependencies = [
  "fontdue",
  "glam",
  "glfw",
+ "ivy-assets",
  "ivy-base",
  "ivy-graphics",
  "ivy-image",
  "ivy-input",
  "ivy-rendergraph",
- "ivy-resources",
  "ivy-vulkan",
  "ivy-window",
+ "parking_lot 0.12.0",
  "serde",
  "thiserror",
 ]
@@ -1430,15 +1450,16 @@ dependencies = [
  "glam",
  "glfw",
  "gpu-allocator",
+ "ivy-assets",
  "ivy-base",
  "ivy-image",
- "ivy-resources",
  "log",
  "parking_lot 0.12.0",
  "serde",
  "smallvec",
  "spirv-reflect",
  "thiserror",
+ "tracing",
 ]
 
 [[package]]
@@ -1452,6 +1473,7 @@ dependencies = [
  "ivy-vulkan",
  "parking_lot 0.12.0",
  "thiserror",
+ "tracing",
 ]
 
 [[package]]

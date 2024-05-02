@@ -16,7 +16,7 @@ mod shader;
 pub use shader::ShaderModuleInfo;
 use shader::*;
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PipelineInfo {
     pub vs: ShaderModuleInfo,
     pub fs: ShaderModuleInfo,

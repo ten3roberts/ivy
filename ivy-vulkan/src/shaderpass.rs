@@ -1,14 +1,14 @@
-use ivy_resources::Handle;
+use ivy_assets::Asset;
 
 use crate::PipelineInfo;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Shader {
-    pub pipeline_info: Handle<PipelineInfo>,
+    pub pipeline_info: Asset<PipelineInfo>,
 }
 
 impl Shader {
-    pub fn new(pipeline_info: Handle<PipelineInfo>) -> Self {
+    pub fn new(pipeline_info: Asset<PipelineInfo>) -> Self {
         Self { pipeline_info }
     }
 }

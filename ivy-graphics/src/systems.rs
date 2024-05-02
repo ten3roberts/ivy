@@ -1,7 +1,7 @@
 use flax::{entity_ids, BoxedSystem, Component, EntityIds, Query, QueryBorrow, System, World};
 use glam::Mat4;
+use ivy_assets::Asset;
 use ivy_base::{world_transform, DEG_180};
-use ivy_resources::{Handle, ResourceView, Resources};
 
 use crate::{
     components::{bounding_sphere, camera, mesh},
@@ -29,18 +29,12 @@ pub fn update_view_matrices() -> BoxedSystem {
 pub fn add_bounds_system() -> BoxedSystem {
     System::builder()
         .with_cmd_mut()
-        .with_input::<Resources>()
         .with_query(Query::new((entity_ids(), mesh())).without(bounding_sphere()))
         .build(
             |cmd: &mut flax::CommandBuffer,
-             resources: &Resources,
-             mut query: QueryBorrow<(EntityIds, Component<Handle<Mesh>>), _>| {
+             mut query: QueryBorrow<(EntityIds, Component<Asset<Mesh>>), _>| {
                 query.iter().for_each(|(id, mesh)| {
-                    cmd.set(
-                        id,
-                        bounding_sphere(),
-                        resources.get(*mesh).unwrap().bounds(),
-                    );
+                    cmd.set(id, bounding_sphere(), mesh.bounds());
                 });
             },
         )

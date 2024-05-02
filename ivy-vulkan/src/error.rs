@@ -47,9 +47,6 @@ pub enum Error {
     #[error("Unable to determine descriptor type for buffer with usage: {0:?}")]
     DescriptorType(BufferUsageFlags),
 
-    #[error("Vulkan resource error")]
-    ResourceError(#[from] ivy_resources::Error),
-
     #[error("Failed to read spv")]
     SpvRead(std::io::Error),
 }

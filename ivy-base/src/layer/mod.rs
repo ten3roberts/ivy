@@ -4,7 +4,7 @@ use crate::systems::update_transform_system;
 use crate::Events;
 use anyhow::Context;
 use flax::{Schedule, World};
-use ivy_resources::Resources;
+use ivy_assets::AssetCache;
 use std::time::Duration;
 
 mod fixed;
@@ -22,7 +22,7 @@ pub trait Layer {
     fn on_update(
         &mut self,
         world: &mut World,
-        resources: &mut Resources,
+        assets: &mut AssetCache,
         events: &mut Events,
         frame_time: Duration,
     ) -> anyhow::Result<()>;
@@ -33,10 +33,10 @@ macro_rules! tuple_impl {
         impl<$($name: Layer),*> Layer for ($($name,)*) {
             // Draws the scene using the pass [`Pass`] and the provided camera.
             // Note: camera must have gpu side data.
-            fn on_update(&mut self, world: &mut World, resources: &mut Resources, events: &mut Events, frame_time: Duration) -> anyhow::Result<()> {
+            fn on_update(&mut self, world: &mut World, asset_cache: &mut AssetCache, events: &mut Events, frame_time: Duration) -> anyhow::Result<()> {
                 let ($($name,)+) = self;
 
-                ($($name.on_update(world, resources, events, frame_time).with_context(|| format!("Failed to execute {:?}", std::any::type_name::<$name>()))?), *);
+                ($($name.on_update(world, asset_cache, events, frame_time).with_context(|| format!("Failed to execute {:?}", std::any::type_name::<$name>()))?), *);
 
                 Ok(())
             }
@@ -62,7 +62,7 @@ impl Layer for EngineLayer {
     fn on_update(
         &mut self,
         world: &mut World,
-        resources: &mut Resources,
+        assets: &mut AssetCache,
         events: &mut Events,
         frame_time: Duration,
     ) -> anyhow::Result<()> {

@@ -1,9 +1,12 @@
 use crate::{NodeKind, Result};
 use flax::World;
-use ivy_resources::Handle;
+use ivy_assets::{Asset, AssetCache};
 use ivy_vulkan::{
     traits::FromExtent,
-    vk::{self, ImageAspectFlags, ImageBlit, ImageSubresourceLayers, Offset3D, PipelineStageFlags},
+    vk::{
+        self, AttachmentSampleCountInfoAMD, ImageAspectFlags, ImageBlit, ImageSubresourceLayers,
+        Offset3D, PipelineStageFlags,
+    },
     ImageLayout, PassInfo, Texture,
 };
 use std::slice;
@@ -11,8 +14,8 @@ use std::slice;
 use crate::Node;
 
 pub struct TransferNode {
-    src: Handle<Texture>,
-    dst: Handle<Texture>,
+    src: Asset<Texture>,
+    dst: Asset<Texture>,
     // Barrier from renderpass to transfer
     dst_barrier: vk::ImageMemoryBarrier,
     src_barriers: [vk::ImageMemoryBarrier; 2],
@@ -26,8 +29,8 @@ unsafe impl Sync for TransferNode {}
 
 impl TransferNode {
     pub fn new(
-        src: Handle<Texture>,
-        dst: Handle<Texture>,
+        src: Asset<Texture>,
+        dst: Asset<Texture>,
         initial_layout: ImageLayout,
         src_final_layout: ImageLayout,
         dst_final_layout: ImageLayout,
@@ -115,11 +118,11 @@ impl TransferNode {
 }
 
 impl Node for TransferNode {
-    fn output_attachments(&self) -> &[Handle<Texture>] {
+    fn output_attachments(&self) -> &[Asset<Texture>] {
         slice::from_ref(&self.dst)
     }
 
-    fn read_attachments(&self) -> &[Handle<Texture>] {
+    fn read_attachments(&self) -> &[Asset<Texture>] {
         slice::from_ref(&self.src)
     }
 
@@ -134,14 +137,14 @@ impl Node for TransferNode {
     fn execute(
         &mut self,
         _world: &mut World,
-        resources: &ivy_resources::Resources,
+        assets: &AssetCache,
         cmd: &ivy_vulkan::commands::CommandBuffer,
         _: &PassInfo,
         _current_frame: usize,
     ) -> anyhow::Result<()> {
-        let dst = resources.get(self.dst)?;
+        let dst = self.dst.clone();
 
-        let src = resources.get(self.src)?;
+        let src = self.src.clone();
         let offset = Offset3D::from_extent(src.extent());
 
         let src_barrier = vk::ImageMemoryBarrier {

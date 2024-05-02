@@ -5,16 +5,12 @@
   },
   "debug-vulkan": {
     "cmd": "cargo build --example vulkan",
-    "action": [
-      "qf",
-      {
-        "name": "dap",
-        "opts": {
-          "program": "./target/debug/examples/vulkan",
-          "stopOnEntry": false
-        }
+    "components": {
+      "dap": {
+        "program": "./target/debug/examples/vulkan",
+        "adapter": "rust"
       }
-    ]
+    }
   },
   "build-vulkan": "cargo build --example vulkan",
   "run-wgpu": {

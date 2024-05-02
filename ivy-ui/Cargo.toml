@@ -19,11 +19,11 @@ ivy-input = { path = "../ivy-input", version = "0.10.0" }
 ivy-vulkan = { path = "../ivy-vulkan", version = "0.10.0" }
 ivy-window = { path = "../ivy-window", version = "0.10.0" }
 ivy-graphics = { path = "../ivy-graphics", version = "0.10.0" }
-ivy-resources = { path = "../ivy-resources", version = "0.10.0" }
+ivy-assets = { path = "../ivy-assets", version = "0.10.0" }
 ivy-rendergraph = { path = "../ivy-rendergraph", version = "0.10.0" }
 
 ezy = "0.1.1"
-glfw = "0.44.0"
+glfw.workspace = true
 fontdue = "0.7.2"
 flax.workspace = true
 glam.workspace = true
@@ -31,6 +31,7 @@ flume.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 serde = { workspace = true, optional = true }
+parking_lot.workspace = true
 
 [features]
 default = []

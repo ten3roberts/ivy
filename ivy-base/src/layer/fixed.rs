@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use flax::World;
+use ivy_assets::AssetCache;
 
 use crate::Layer;
 
@@ -27,7 +28,7 @@ impl<T: Layer> Layer for FixedTimeStep<T> {
     fn on_update(
         &mut self,
         world: &mut World,
-        resources: &mut ivy_resources::Resources,
+        assets: &mut AssetCache,
         events: &mut crate::Events,
         frame_time: Duration,
     ) -> anyhow::Result<()> {
@@ -39,7 +40,7 @@ impl<T: Layer> Layer for FixedTimeStep<T> {
 
         while self.acc > 0.0 {
             self.layers
-                .on_update(world, resources, events, self.timestep)?;
+                .on_update(world, assets, events, self.timestep)?;
 
             self.acc -= dt;
         }

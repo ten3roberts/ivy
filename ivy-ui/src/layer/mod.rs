@@ -2,10 +2,10 @@
 use anyhow::Context;
 use flax::{BoxedSystem, Query, Schedule, System, World};
 use glam::Vec2;
-use ivy_base::{size, Events, Layer};
+use ivy_assets::AssetCache;
+use ivy_base::{engine, size, Events, Layer};
+use ivy_graphics::components::window;
 use ivy_input::InputEvent;
-use ivy_resources::Resources;
-use ivy_window::Window;
 
 use crate::{canvas, handle_events, input_field_system, update_system, UIControl};
 mod event_handling;
@@ -23,7 +23,7 @@ pub struct UILayer {
 impl UILayer {
     pub fn new(
         world: &mut World,
-        _resources: &mut Resources,
+        assets: &AssetCache,
         events: &mut Events,
     ) -> anyhow::Result<Self> {
         let (tx, window_rx) = flume::unbounded();
@@ -50,7 +50,7 @@ impl Layer for UILayer {
     fn on_update(
         &mut self,
         world: &mut World,
-        resources: &mut Resources,
+        assets: &mut AssetCache,
         events: &mut Events,
         _frame_time: std::time::Duration,
     ) -> anyhow::Result<()> {
@@ -58,7 +58,7 @@ impl Layer for UILayer {
             .run(world)
             .context("Failed to update canvas")?;
 
-        let window = resources.get_default::<Window>()?;
+        let window = world.get(engine(), window())?;
         // Transform the cursor position to canvas size
         let cursor_pos = window.normalized_cursor_pos();
         let &size = Query::new(size())
@@ -67,6 +67,8 @@ impl Layer for UILayer {
             .iter()
             .next()
             .context("No canvas")?;
+
+        drop(window);
         // let (_, (_, size)) = world
         //     .query_mut::<(&Canvas, &Size2D)>()
         //     .into_iter()

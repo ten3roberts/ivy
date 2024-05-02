@@ -3,8 +3,8 @@ use derive_more::{AsRef, Deref, From, Into};
 use flax::{entity_ids, BoxedSystem, Component, Mutable, Query, QueryBorrow, System, World};
 use glam::{vec3, Mat4, Vec2, Vec3, Vec4, Vec4Swizzles};
 use itertools::Itertools;
+use ivy_assets::{Asset, AssetCache};
 use ivy_base::{Color, DrawGizmos, Extent, Line, Sphere};
-use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
     context::SharedVulkanContext,
     descriptors::{DescriptorBuilder, IntoSet},
@@ -131,31 +131,27 @@ pub struct CameraData {
 
 #[derive(AsRef, Deref, Into, From)]
 /// The color attachment of a camera.
-pub struct ColorAttachment(pub Handle<Texture>);
+pub struct ColorAttachment(pub Asset<Texture>);
 
 impl ColorAttachment {
-    pub fn new(texture: Handle<Texture>) -> ColorAttachment {
+    pub fn new(texture: Asset<Texture>) -> ColorAttachment {
         Self(texture)
     }
 }
 
 /// The depth attachment of a camera.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deref, AsRef, Into, From)]
-pub struct DepthAttachment(pub Handle<Texture>);
+#[derive(Clone, PartialEq, Eq, Deref, AsRef, Into, From)]
+pub struct DepthAttachment(pub Asset<Texture>);
 
 impl DepthAttachment {
-    pub fn new(
-        context: SharedVulkanContext,
-        resources: &Resources,
-        extent: Extent,
-    ) -> Result<Self> {
-        Ok(Self(resources.insert(Texture::new(
+    pub fn new(context: SharedVulkanContext, assets: &AssetCache, extent: Extent) -> Result<Self> {
+        Ok(Self(assets.insert(Texture::new(
             context.clone(),
             &TextureInfo::depth(extent),
-        )?)?))
+        )?)))
     }
 
-    pub fn from_handle(texture: Handle<Texture>) -> DepthAttachment {
+    pub fn from_handle(texture: Asset<Texture>) -> DepthAttachment {
         Self(texture)
     }
 }

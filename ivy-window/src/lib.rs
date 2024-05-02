@@ -33,6 +33,7 @@ impl Window {
         glfw: Arc<RwLock<Glfw>>,
         info: WindowInfo,
     ) -> Result<(Window, Receiver<(f64, WindowEvent)>)> {
+        tracing::info!(?info, "creating window");
         let mut glfw_mut = glfw.write();
         glfw_mut.window_hint(WindowHint::ClientApi(ClientApiHint::NoApi));
 

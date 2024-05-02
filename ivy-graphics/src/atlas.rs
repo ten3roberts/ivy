@@ -1,8 +1,8 @@
 use crate::{Error, Result};
 use ash::vk;
+use ivy_assets::{Asset, AssetCache};
 use ivy_base::Extent;
 use ivy_image::Image;
-use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{context::SharedVulkanContext, Texture, TextureInfo};
 use rectangle_pack::{
     contains_smallest_box, volume_heuristic, GroupedRectsToPlace, PackedLocation, RectToInsert,
@@ -88,7 +88,7 @@ impl NormalizedRect {
 pub struct TextureAtlas<K: AtlasKey> {
     rects: RectanglePackOk<K, BinId>,
     extent: Extent,
-    texture: Handle<Texture>,
+    texture: Asset<Texture>,
     padding: u32,
 }
 
@@ -104,7 +104,7 @@ where
     /// packed. All images are expected to have the same number of channels.
     pub fn new(
         context: SharedVulkanContext,
-        resources: &Resources,
+        assets: &AssetCache,
         texture_info: &TextureInfo,
         channels: u32,
         images: Vec<(K, Image)>,
@@ -183,7 +183,7 @@ where
 
         texture.write(&pixels)?;
 
-        let texture = resources.insert(texture)?;
+        let texture = assets.insert(texture);
 
         Ok(Self {
             rects,
@@ -232,7 +232,7 @@ where
     }
 
     /// Get a reference to the texture atlas's texture.
-    pub fn texture(&self) -> Handle<Texture> {
-        self.texture
+    pub fn texture(&self) -> &Asset<Texture> {
+        &self.texture
     }
 }

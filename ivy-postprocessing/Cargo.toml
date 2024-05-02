@@ -15,7 +15,7 @@ readme = "../README.md"
 ivy-base = { path = "../ivy-base", version = "0.10.0" }
 ivy-vulkan = { path = "../ivy-vulkan", version = "0.10.0" }
 ivy-graphics = { path = "../ivy-graphics", version = "0.10.0" }
-ivy-resources = { path = "../ivy-resources", version = "0.10.0" }
+ivy-assets = { path = "../ivy-assets", version = "0.10.0" }
 ivy-rendergraph = { path = "../ivy-rendergraph", version = "0.10.0" }
 
 anyhow.workspace = true

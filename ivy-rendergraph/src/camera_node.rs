@@ -1,11 +1,11 @@
 use crate::Result;
-use std::{any::type_name, iter::once, ops::Deref};
+use std::{any::type_name, iter::once};
 
 use anyhow::Context;
 use flax::{Component, Entity, World};
 use itertools::Itertools;
+use ivy_assets::{Asset, AssetCache};
 use ivy_graphics::{components::gpu_camera, Renderer};
-use ivy_resources::{Handle, Resources, Storage};
 use ivy_vulkan::{
     context::SharedVulkanContext,
     descriptors::{DescriptorBuilder, DescriptorSet, MultiDescriptorBindable},
@@ -18,15 +18,15 @@ use crate::{AttachmentInfo, Node, NodeKind};
 pub struct CameraNodeInfo<'a> {
     pub name: &'static str,
     pub color_attachments: Vec<AttachmentInfo>,
-    pub read_attachments: &'a [(Handle<Texture>, Handle<Sampler>)],
-    pub input_attachments: Vec<Handle<Texture>>,
+    pub read_attachments: &'a [(Asset<Texture>, Asset<Sampler>)],
+    pub input_attachments: Vec<Asset<Texture>>,
     pub depth_attachment: Option<AttachmentInfo>,
     pub buffer_reads: Vec<vk::Buffer>,
     pub bindables: &'a [&'a dyn MultiDescriptorBindable],
     pub clear_values: Vec<ClearValue>,
     pub frames_in_flight: usize,
 
-    pub additional: Vec<Handle<Texture>>,
+    pub additional: Vec<Asset<Texture>>,
     pub camera_stage: ShaderStageFlags,
 }
 
@@ -54,8 +54,8 @@ pub struct CameraNode<R> {
     renderer: R,
     pass: Component<Shader>,
     color_attachments: Vec<AttachmentInfo>,
-    read_attachments: Vec<Handle<Texture>>,
-    input_attachments: Vec<Handle<Texture>>,
+    read_attachments: Vec<Asset<Texture>>,
+    input_attachments: Vec<Asset<Texture>>,
     depth_attachment: Option<AttachmentInfo>,
     buffer_reads: Vec<vk::Buffer>,
     clear_values: Vec<ClearValue>,
@@ -64,12 +64,12 @@ pub struct CameraNode<R> {
 
 impl<R> CameraNode<R>
 where
-    R: Renderer + Storage,
+    R: Renderer,
 {
     pub fn new(
         context: SharedVulkanContext,
         world: &mut World,
-        resources: &Resources,
+        assets: &AssetCache,
         camera: Entity,
         renderer: R,
         shaderpass: Component<Shader>,
@@ -78,18 +78,13 @@ where
         let combined_image_samplers = info
             .read_attachments
             .iter()
-            .map(|val| -> Result<_> {
-                Ok(CombinedImageSampler::new(
-                    &*resources.get(val.0)?,
-                    &*resources.get(val.1)?,
-                ))
-            })
+            .map(|val| -> Result<_> { Ok(CombinedImageSampler::new(&*val.0, &*val.1)) })
             .collect::<Result<Vec<_>>>()?;
 
         let input_bindabled = info
             .input_attachments
             .iter()
-            .map(|val| -> Result<_> { Ok(InputAttachment::new(resources.get(*val)?.deref())) })
+            .map(|val| -> Result<_> { Ok(InputAttachment::new(&**val)) })
             .collect::<Result<Vec<_>>>()?;
 
         let gpu_camera = world
@@ -135,7 +130,7 @@ where
             read_attachments: info
                 .read_attachments
                 .iter()
-                .map(|val| val.0)
+                .map(|val| val.0.clone())
                 .chain(info.additional)
                 .collect_vec(),
             input_attachments: info.input_attachments,
@@ -148,17 +143,17 @@ where
 
 impl<R> Node for CameraNode<R>
 where
-    R: Renderer + Storage,
+    R: 'static + Send + Sync + Renderer,
 {
     fn color_attachments(&self) -> &[AttachmentInfo] {
         &self.color_attachments
     }
 
-    fn read_attachments(&self) -> &[Handle<Texture>] {
+    fn read_attachments(&self) -> &[Asset<Texture>] {
         &self.read_attachments
     }
 
-    fn input_attachments(&self) -> &[Handle<Texture>] {
+    fn input_attachments(&self) -> &[Asset<Texture>] {
         &self.input_attachments
     }
 
@@ -185,7 +180,7 @@ where
     fn execute(
         &mut self,
         world: &mut World,
-        resources: &ivy_resources::Resources,
+        assets: &AssetCache,
         cmd: &ivy_vulkan::commands::CommandBuffer,
         pass_info: &PassInfo,
         current_frame: usize,
@@ -193,7 +188,7 @@ where
         self.renderer
             .draw(
                 world,
-                resources,
+                assets,
                 cmd,
                 &[self.sets[current_frame]],
                 pass_info,

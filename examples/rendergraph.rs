@@ -11,7 +11,7 @@ use graphics::{
 use ivy_engine::*;
 use physics::PhysicsLayer;
 use presets::geometry_pass;
-use rendergraph::{AttachmentInfo, CameraNode, CameraNodeInfo, GraphicsLayer, SwapchainNode};
+use rendergraph::{AttachmentInfo, CameraNode, CameraNodeInfo, GraphicsLayer, SwapchainPresentNode};
 use resources::LoadResource;
 use vulkan::{
     context::SharedVulkanContext,
@@ -107,7 +107,7 @@ impl GameLayer {
         )?);
 
         // Add a node to present the texture to the swapchain and window
-        rendergraph.add_node(SwapchainNode::new(
+        rendergraph.add_node(SwapchainPresentNode::new(
             context.clone(),
             &resources,
             resources.default()?,

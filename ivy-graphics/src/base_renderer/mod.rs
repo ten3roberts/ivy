@@ -16,9 +16,9 @@ pub trait KeyQuery: Send + Sync {
     fn into_key(&self) -> Self::K;
 }
 
-pub trait RendererKey: std::hash::Hash + std::cmp::Eq + Copy {}
+pub trait RendererKey: std::hash::Hash + std::cmp::Eq + Clone {}
 
-impl<T> RendererKey for T where T: std::hash::Hash + std::cmp::Eq + Copy {}
+impl<T> RendererKey for T where T: std::hash::Hash + std::cmp::Eq + Clone {}
 
 type ObjectId = u32;
 

@@ -1,25 +1,21 @@
+use ivy_assets::{Asset, AssetCache};
 use ivy_base::Extent;
 use ivy_graphics::Result;
-use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
     context::SharedVulkanContext, Format, ImageUsage, SampleCountFlags, Texture, TextureInfo,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PBRAttachments {
-    pub albedo: Handle<Texture>,
-    pub position: Handle<Texture>,
-    pub normal: Handle<Texture>,
-    pub roughness_metallic: Handle<Texture>,
+    pub albedo: Asset<Texture>,
+    pub position: Asset<Texture>,
+    pub normal: Asset<Texture>,
+    pub roughness_metallic: Asset<Texture>,
 }
 
 impl PBRAttachments {
-    pub fn new(
-        context: SharedVulkanContext,
-        resources: &Resources,
-        extent: Extent,
-    ) -> Result<Self> {
-        let albedo = resources.insert(Texture::new(
+    pub fn new(context: SharedVulkanContext, assets: &AssetCache, extent: Extent) -> Result<Self> {
+        let albedo = assets.insert(Texture::new(
             context.clone(),
             &TextureInfo {
                 extent,
@@ -28,9 +24,9 @@ impl PBRAttachments {
                 format: Format::R8G8B8A8_SRGB,
                 samples: SampleCountFlags::TYPE_1,
             },
-        )?)?;
+        )?);
 
-        let position = resources.insert(Texture::new(
+        let position = assets.insert(Texture::new(
             context.clone(),
             &TextureInfo {
                 extent,
@@ -39,9 +35,9 @@ impl PBRAttachments {
                 format: Format::R32G32B32A32_SFLOAT,
                 samples: SampleCountFlags::TYPE_1,
             },
-        )?)?;
+        )?);
 
-        let normal = resources.insert(Texture::new(
+        let normal = assets.insert(Texture::new(
             context.clone(),
             &TextureInfo {
                 extent,
@@ -50,9 +46,9 @@ impl PBRAttachments {
                 format: Format::R32G32B32A32_SFLOAT,
                 samples: SampleCountFlags::TYPE_1,
             },
-        )?)?;
+        )?);
 
-        let roughness_metallic = resources.insert(Texture::new(
+        let roughness_metallic = assets.insert(Texture::new(
             context.clone(),
             &TextureInfo {
                 extent,
@@ -61,7 +57,7 @@ impl PBRAttachments {
                 format: Format::R8G8_UNORM,
                 samples: SampleCountFlags::TYPE_1,
             },
-        )?)?;
+        )?);
 
         Ok(Self {
             albedo,
@@ -71,12 +67,12 @@ impl PBRAttachments {
         })
     }
 
-    pub fn as_slice(&self) -> [Handle<Texture>; 4] {
+    pub fn as_slice(&self) -> [&Asset<Texture>; 4] {
         [
-            self.albedo,
-            self.position,
-            self.normal,
-            self.roughness_metallic,
+            &self.albedo,
+            &self.position,
+            &self.normal,
+            &self.roughness_metallic,
         ]
     }
 }

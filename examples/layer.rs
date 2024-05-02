@@ -1,5 +1,5 @@
 use ivy_engine::{App, Layer, Logger};
-use log::{error, info};
+use tracing::{error, info};
 
 /// Define the game layer
 struct GameLayer {}
@@ -25,7 +25,9 @@ impl Layer for GameLayer {
 
 fn main() -> anyhow::Result<()> {
     // Install a default logger
-    Logger::default().install();
+    tracing_subscriber::fmt::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .init();
 
     // Create a simple app
     let result = App::builder()

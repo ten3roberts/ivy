@@ -4,13 +4,16 @@ use crate::{
 };
 use flax::{components::child_of, EntityBuilder};
 use gltf::Gltf;
+use ivy_assets::{Asset, AssetCache, AssetKey};
 use smallvec::SmallVec;
-use std::{borrow::Cow, ops::Deref, path::Path, path::PathBuf};
+use std::{ops::Deref, path::Path, path::PathBuf};
 
 use glam::*;
 use ivy_base::{position, position_offset, rotation, rotation_offset, scale, visible, Visible};
-use ivy_resources::{Handle, LoadResource, Resources};
-use ivy_vulkan::{context::SharedVulkanContext, Texture};
+use ivy_vulkan::{
+    context::{SharedVulkanContext, VulkanContextService},
+    Texture,
+};
 
 mod joint;
 pub(crate) mod scheme;
@@ -20,17 +23,17 @@ pub use joint::*;
 pub(crate) use scheme::*;
 pub(crate) use util::*;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 #[doc(hidden)]
 pub struct Node {
     /// The name of this node.
     name: String,
     /// The mesh index references by this node.
-    mesh: Option<Handle<Mesh>>,
-    skinned_mesh: Option<Handle<SkinnedMesh>>,
+    mesh: Option<Asset<Mesh>>,
+    skinned_mesh: Option<Asset<SkinnedMesh>>,
     animations: AnimationStore,
     light: Option<PointLight>,
-    skin: Option<Handle<Skin>>,
+    skin: Option<Asset<Skin>>,
     pos: Vec3,
     rot: Quat,
     scale: Vec3,
@@ -39,8 +42,8 @@ pub struct Node {
 
 impl Node {
     /// Get a reference to the node's mesh.
-    pub fn mesh(&self) -> Option<Handle<Mesh>> {
-        self.mesh
+    pub fn mesh(&self) -> Option<&Asset<Mesh>> {
+        self.mesh.as_ref()
     }
 
     /// Get a reference to the node's light.
@@ -69,8 +72,8 @@ impl Node {
     }
 
     /// Get a reference to the node's skin.
-    pub fn skin(&self) -> Option<Handle<Skin>> {
-        self.skin
+    pub fn skin(&self) -> Option<&Asset<Skin>> {
+        self.skin.as_ref()
     }
 
     /// Get a reference to the node's children.
@@ -79,8 +82,8 @@ impl Node {
     }
 
     /// Get a reference to the node's skinned mesh.
-    pub fn skinned_mesh(&self) -> Option<Handle<SkinnedMesh>> {
-        self.skinned_mesh
+    pub fn skinned_mesh(&self) -> Option<&Asset<SkinnedMesh>> {
+        self.skinned_mesh.as_ref()
     }
 
     /// Get a reference to the node's animations.
@@ -90,9 +93,9 @@ impl Node {
 }
 
 pub struct Document {
-    meshes: Vec<Handle<Mesh>>,
-    materials: Vec<Handle<Material>>,
-    skins: Vec<Handle<Skin>>,
+    meshes: Vec<Asset<Mesh>>,
+    materials: Vec<Asset<Material>>,
+    skins: Vec<Asset<Skin>>,
     nodes: Vec<Node>,
 }
 
@@ -100,7 +103,7 @@ impl Document {
     /// Loads a gltf document/asset from path
     pub fn from_file<P, O>(
         context: SharedVulkanContext,
-        resources: &Resources,
+        assets: &AssetCache,
         path: P,
     ) -> Result<Self>
     where
@@ -113,48 +116,39 @@ impl Document {
 
         let buffers = import_buffer_data(&document, blob, path)?;
 
-        let textures = import_image_data(&document, path, &buffers, resources)?;
+        let textures = import_image_data(assets, &document, path, &buffers)?;
 
-        Self::from_gltf(context, resources, document, &buffers, textures)
+        Self::from_gltf(context, assets, document, &buffers, textures)
     }
 
     /// Loads a gltf import document's meshes and scene data. Will insert the meshes into the
     /// provided resource cache.
     pub fn from_gltf(
         context: SharedVulkanContext,
-        resources: &Resources,
+        assets: &AssetCache,
         document: gltf::Document,
         buffers: &[gltf::buffer::Data],
-        textures: Vec<Handle<Texture>>,
+        textures: Vec<Asset<Texture>>,
     ) -> Result<Self> {
-        let mut material_cache = resources.fetch_mut::<Material>()?;
         let materials = document
             .materials()
-            .map(|material| {
-                Material::from_gltf(&context, material, &textures, resources)
-                    .map(|material| material_cache.insert(material))
-            })
+            .map(|material| Ok(assets.insert(Material::from_gltf(assets, material, &textures)?)))
             .collect::<Result<Vec<_>>>()?;
 
-        drop(material_cache);
-
-        let mut mesh_cache = resources.fetch_mut::<Mesh>()?;
         let meshes = document
             .meshes()
             .map(|mesh| {
                 Mesh::from_gltf(context.clone(), mesh, buffers, &materials)
-                    .map(|mesh| mesh_cache.insert(mesh))
+                    .map(|mesh| assets.insert(mesh))
             })
             .collect::<Result<Vec<_>>>()?;
-
-        let mut skinned_meshes = resources.fetch_mut::<SkinnedMesh>()?;
 
         // There may not be joint and weight information of all meshes
         let skinned_meshes = document
             .meshes()
-            .map(|mesh| -> Result<Option<Handle<SkinnedMesh>>> {
+            .map(|mesh| -> Result<Option<Asset<SkinnedMesh>>> {
                 match Mesh::from_gltf_skinned(context.clone(), mesh, buffers, &materials) {
-                    Ok(val) => Ok(Some(skinned_meshes.insert(val))),
+                    Ok(val) => Ok(Some(assets.insert(val))),
                     Err(Error::EmptyMesh) => Ok(None),
                     Err(e) => Err(e),
                 }
@@ -166,21 +160,13 @@ impl Document {
             .map(|skin| -> Result<_> { Skin::from_gltf(&document, skin, buffers) })
             .collect::<Result<Vec<_>>>()?;
 
-        let mut animations = resources.fetch_mut::<Animation>()?;
-
         let animations = document
             .animations()
             .flat_map(|anim| Animation::from_gltf(anim, &skins, buffers))
-            .map(|val| (val.skin(), (val.name().to_string(), animations.insert(val))))
+            .map(|val| (val.skin(), (val.name().to_string(), assets.insert(val))))
             .collect::<Vec<_>>();
 
-        let mut skin_cache = resources.fetch_mut()?;
-        let skins: Vec<_> = skins
-            .into_iter()
-            .map(|val| skin_cache.insert(val))
-            .collect();
-
-        drop(mesh_cache);
+        let skins: Vec<_> = skins.into_iter().map(|val| assets.insert(val)).collect();
 
         let nodes = document
             .nodes()
@@ -190,7 +176,7 @@ impl Document {
                     .light()
                     .map(|val| PointLight::new(0.1, Vec3::from(val.color()) * val.intensity()));
 
-                let skin = node.skin().map(|skin| skins[skin.index()]);
+                let skin = node.skin().map(|skin| skins[skin.index()].clone());
                 let animations = if let Some(skin) = node.skin() {
                     let skin = skin.index();
                     let animations = animations.iter().filter_map(|val| {
@@ -211,8 +197,10 @@ impl Document {
                     skin,
                     animations,
                     light,
-                    mesh: node.mesh().map(|mesh| meshes[mesh.index()]),
-                    skinned_mesh: node.mesh().and_then(|mesh| skinned_meshes[mesh.index()]),
+                    mesh: node.mesh().map(|mesh| meshes[mesh.index()].clone()),
+                    skinned_mesh: node
+                        .mesh()
+                        .and_then(|mesh| skinned_meshes[mesh.index()].clone()),
                     pos: Vec3::from(position).into(),
                     rot: Quat::from_array(rotation).into(),
                     scale: Vec3::from(scale).into(),
@@ -233,24 +221,24 @@ impl Document {
 impl Document {
     /// Returns a handle to the mesh at index. Mesh was inserted in the resource cache upon
     /// creation.
-    pub fn material(&self, index: usize) -> Handle<Material> {
-        self.materials[index]
+    pub fn material(&self, index: usize) -> &Asset<Material> {
+        &self.materials[index]
     }
 
     /// Returns the skin at index
-    pub fn skin(&self, index: usize) -> Handle<Skin> {
-        self.skins[index]
+    pub fn skin(&self, index: usize) -> &Asset<Skin> {
+        &self.skins[index]
     }
 
     /// Get a reference to the document's skins.
-    pub fn skins(&self) -> &[Handle<Skin>] {
+    pub fn skins(&self) -> &[Asset<Skin>] {
         self.skins.as_ref()
     }
 
     /// Returns a handle to the mesh at index. Mesh was inserted in the resource cache upon
     /// creation.
-    pub fn mesh(&self, index: usize) -> Handle<Mesh> {
-        self.meshes[index]
+    pub fn mesh(&self, index: usize) -> &Asset<Mesh> {
+        &self.meshes[index]
     }
 
     /// Returns a reference to the node at index.
@@ -283,17 +271,21 @@ pub struct NodeBundle {
     pos: Vec3,
     rot: Quat,
     scale: Vec3,
-    mesh: Handle<Mesh>,
+    mesh: Asset<Mesh>,
 }
 
-impl LoadResource for Document {
-    type Info = Cow<'static, str>;
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct DocumentFromPath(pub PathBuf);
 
+impl AssetKey<Document> for DocumentFromPath {
     type Error = Error;
 
-    fn load(resources: &ivy_resources::Resources, path: &Self::Info) -> Result<Self> {
-        let context = resources.get_default::<SharedVulkanContext>()?;
-        Self::from_file(context.clone(), resources, path.as_ref())
+    fn load(&self, assets: &AssetCache) -> Result<Asset<Document>> {
+        Ok(assets.insert(Document::from_file(
+            assets.service::<VulkanContextService>().context(),
+            assets,
+            &self.0,
+        )?))
     }
 }
 
@@ -333,7 +325,7 @@ impl<'a> Deref for DocumentNode<'a> {
 impl<'a> std::fmt::Debug for DocumentNode<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("DocumentNode")
-            .field("node", &self.node)
+            // .field("node", &self.node)
             .field("index", &self.index)
             .finish()
     }
@@ -346,7 +338,7 @@ impl<'d> DocumentNode<'d> {
         entity: &'a mut EntityBuilder,
         info: &NodeBuildInfo,
     ) -> &'a mut EntityBuilder {
-        if let Some(mesh) = self.mesh {
+        if let Some(mesh) = self.mesh.clone() {
             entity.set(components::mesh(), mesh);
         }
 
@@ -357,10 +349,10 @@ impl<'d> DocumentNode<'d> {
 
         // set skinning info
         if info.skinned {
-            if let Some(mesh) = self.skinned_mesh {
+            if let Some(mesh) = self.skinned_mesh.clone() {
                 entity.set(components::skinned_mesh(), mesh);
             }
-            if let Some(skin) = self.skin {
+            if let Some(skin) = self.skin.clone() {
                 entity.set(components::skin(), skin);
             }
         }

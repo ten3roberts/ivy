@@ -1,8 +1,11 @@
 use std::path::Path;
 
 use gltf::{buffer, image};
-use ivy_resources::{Handle, Resources};
-use ivy_vulkan::{context::SharedVulkanContext, Texture};
+use ivy_assets::{Asset, AssetCache};
+use ivy_vulkan::{
+    context::{SharedVulkanContext, VulkanContextService},
+    Texture, TextureFromMemory,
+};
 
 use crate::{Error, Result, Scheme};
 
@@ -42,30 +45,32 @@ pub fn import_buffer_data(
 
 /// Import the image data referenced by a glTF document.
 pub fn import_image_data(
+    assets: &AssetCache,
     document: &gltf::Document,
     base: &Path,
     buffer_data: &[buffer::Data],
-    resources: &Resources,
-) -> Result<Vec<Handle<Texture>>> {
-    let context = resources.get_default::<SharedVulkanContext>()?;
-
+) -> Result<Vec<Asset<Texture>>> {
     document
         .textures()
-        .map(|tex| -> Result<Handle<Texture>> {
+        .map(|tex| -> Result<Asset<Texture>> {
             match tex.source().source() {
                 image::Source::Uri { uri, mime_type: _ } => {
                     let data = Scheme::read(base, uri)?;
 
-                    let texture = Texture::from_memory(context.clone(), &data)?;
-                    Ok(resources.insert(texture)?)
+                    let texture = assets.load(&TextureFromMemory(data));
+                    Ok(texture)
                 }
                 image::Source::View { view, mime_type: _ } => {
                     let parent_buffer_data = &buffer_data[view.buffer().index()].0;
                     let begin = view.offset();
                     let end = begin + view.length();
                     let encoded_image = &parent_buffer_data[begin..end];
-                    let texture = Texture::from_memory(context.clone(), encoded_image)?;
-                    Ok(resources.insert(texture)?)
+                    let texture = Texture::from_memory(
+                        assets.service::<VulkanContextService>().context(),
+                        encoded_image,
+                    )?;
+
+                    Ok(assets.insert(texture))
                 }
             }
         })

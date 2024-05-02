@@ -1,24 +1,27 @@
 use anyhow::Context;
 use flax::{entity_ids, Component, Fetch, Mutable, Query, World};
 use glam::{Mat4, Vec2, Vec3, Vec4};
+use ivy_assets::{Asset, AssetCache};
 use ivy_graphics::{batch_id, Allocator, BaseRenderer, BufferAllocation, Mesh, Renderer};
 use ivy_rendergraph::Node;
-use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
     commands::CommandBuffer,
     context::SharedVulkanContext,
     descriptors::{DescriptorSet, IntoSet},
-    vk::{self, AccessFlags, BufferCopy, BufferMemoryBarrier, IndexType},
+    vk::{
+        self, AccessFlags, AttachmentSampleCountInfoAMD, BufferCopy, BufferMemoryBarrier, IndexType,
+    },
     BufferAccess, BufferUsage, PassInfo, Shader,
 };
 use ivy_vulkan::{device, Buffer};
-use std::mem::size_of;
+use parking_lot::Mutex;
+use std::{mem::size_of, sync::Arc};
 
 use crate::WrapStyle;
 use crate::{alignment, font, margin, text, wrap, Font, UIVertex};
 use crate::{Alignment, Text};
 use crate::{Error, Result};
-use ivy_base::{color, position, size, visible, Color, ColorExt, Visible};
+use ivy_base::{color, position, size, visible, Color, ColorExt};
 
 flax::component! {
     block: BufferAllocation<Marker>,
@@ -27,7 +30,7 @@ flax::component! {
 #[derive(Fetch)]
 struct TextQuery {
     text: Mutable<Text>,
-    font: Component<Handle<Font>>,
+    font: Component<Asset<Font>>,
     block: Mutable<BufferAllocation<Marker>>,
     bounds: Component<Vec2>,
     alignment: Component<Alignment>,
@@ -175,7 +178,7 @@ impl TextRenderer {
     fn update_dirty_texts(
         &mut self,
         world: &mut World,
-        resources: &Resources,
+        assets: &AssetCache,
         cmd: &CommandBuffer,
         current_frame: usize,
     ) -> Result<()> {
@@ -212,12 +215,11 @@ impl TextRenderer {
         // Resize to fit
         if !success {
             self.grow()?;
-            return self.update_dirty_texts(world, resources, cmd, current_frame);
+            return self.update_dirty_texts(world, assets, cmd, current_frame);
         }
 
         let mut offset = 0;
 
-        let fonts = resources.fetch::<Font>()?;
         let staging_buffer = &mut self.staging_buffers[current_frame];
         let sb = staging_buffer.buffer();
         let vb = self.mesh.vertex_buffer().into();
@@ -233,7 +235,7 @@ impl TextRenderer {
                         || item.text.old_margin() != *item.margin
                         || &item.text.old_wrap() != item.wrap)
             })
-            .flat_map(|(item)| {
+            .flat_map(|item| {
                 item.text.set_dirty(false);
 
                 let size = (item.text.len() * 4 * size_of::<UIVertex>()) as u64;
@@ -248,10 +250,9 @@ impl TextRenderer {
 
                 offset += size;
 
-                let font = fonts.get(*item.font).unwrap();
                 item.text
                     .layout(
-                        font,
+                        item.font,
                         *item.bounds,
                         *item.wrap,
                         *item.alignment,
@@ -300,7 +301,7 @@ impl Renderer for TextRenderer {
     fn draw(
         &mut self,
         world: &mut World,
-        resources: &Resources,
+        assets: &AssetCache,
         cmd: &ivy_vulkan::CommandBuffer,
         sets: &[DescriptorSet],
         pass_info: &PassInfo,
@@ -315,7 +316,7 @@ impl Renderer for TextRenderer {
         let pass = self.base_renderer.pass_mut(shaderpass)?;
         {
             pass.register(world, KeyQuery::new());
-            pass.build_batches(world, resources, pass_info)?;
+            pass.build_batches(world, pass_info)?;
             pass.update(
                 current_frame,
                 Query::new((
@@ -346,8 +347,6 @@ impl Renderer for TextRenderer {
         for batch in pass.batches().iter() {
             let key = batch.key();
 
-            let font = resources.get(key.font)?;
-
             cmd.bind_pipeline(batch.pipeline());
 
             if !sets.is_empty() {
@@ -357,7 +356,7 @@ impl Renderer for TextRenderer {
             cmd.bind_descriptor_sets(
                 batch.layout(),
                 sets.len() as u32,
-                &[frame_set, font.set(0)],
+                &[frame_set, key.font.set(0)],
                 &[],
             );
 
@@ -413,7 +412,7 @@ impl<'a> From<ObjectDataQueryItem<'a>> for ObjectData {
 
 #[derive(Fetch)]
 struct KeyQuery {
-    font: Component<Handle<Font>>,
+    font: Component<Asset<Font>>,
 }
 
 impl KeyQuery {
@@ -422,26 +421,26 @@ impl KeyQuery {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Key {
-    font: Handle<Font>,
+    font: Asset<Font>,
 }
 
 impl<'a> From<KeyQueryItem<'a>> for Key {
     fn from(value: KeyQueryItem) -> Self {
-        Self { font: *value.font }
+        Self {
+            font: value.font.clone(),
+        }
     }
 }
 pub struct TextUpdateNode {
-    text_renderer: Handle<TextRenderer>,
+    text_renderer: Arc<Mutex<TextRenderer>>,
     buffer: vk::Buffer,
 }
 
 impl TextUpdateNode {
-    pub fn new(resources: &Resources, text_renderer: Handle<TextRenderer>) -> Result<Self> {
-        let buffer = resources
-            .get::<TextRenderer>(text_renderer)?
-            .vertex_buffer();
+    pub fn new(assets: &AssetCache, text_renderer: Arc<Mutex<TextRenderer>>) -> Result<Self> {
+        let buffer = text_renderer.lock().vertex_buffer();
 
         Ok(Self {
             text_renderer,
@@ -462,14 +461,14 @@ impl Node for TextUpdateNode {
     fn execute(
         &mut self,
         world: &mut World,
-        resources: &Resources,
+        assets: &AssetCache,
         cmd: &CommandBuffer,
         _: &PassInfo,
         current_frame: usize,
     ) -> anyhow::Result<()> {
-        resources
-            .get_mut(self.text_renderer)?
-            .update_dirty_texts(world, resources, cmd, current_frame)
+        self.text_renderer
+            .lock()
+            .update_dirty_texts(world, assets, cmd, current_frame)
             .context("Failed to update text")
     }
 

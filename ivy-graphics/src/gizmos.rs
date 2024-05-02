@@ -1,9 +1,12 @@
-use ash::vk::{DescriptorSet, IndexType, ShaderStageFlags};
+use ash::vk::{AttachmentSampleCountInfoAMD, DescriptorSet, IndexType, ShaderStageFlags};
 use flax::{Component, World};
 use glam::{Mat4, Vec3, Vec4};
-use ivy_base::{ColorExt, Gizmos};
-use ivy_resources::Resources;
-use ivy_vulkan::{context::SharedVulkanContext, PassInfo, Pipeline, PipelineInfo, Shader};
+use ivy_assets::AssetCache;
+use ivy_base::{engine, gizmos, ColorExt, Gizmos};
+use ivy_vulkan::{
+    context::{SharedVulkanContext, VulkanContextService},
+    PassInfo, Pipeline, PipelineInfo, Shader,
+};
 use once_cell::sync::OnceCell;
 
 use crate::{Mesh, Renderer, Result, Vertex};
@@ -31,8 +34,8 @@ impl GizmoRenderer {
 impl Renderer for GizmoRenderer {
     fn draw(
         &mut self,
-        _: &mut World,
-        resources: &Resources,
+        world: &mut World,
+        assets: &AssetCache,
         cmd: &ivy_vulkan::CommandBuffer,
         sets: &[DescriptorSet],
         pass_info: &PassInfo,
@@ -41,7 +44,7 @@ impl Renderer for GizmoRenderer {
         _: Component<Shader>,
     ) -> anyhow::Result<()> {
         let pipeline = self.pipeline.get_or_try_init(|| {
-            let context = resources.get_default::<SharedVulkanContext>()?;
+            let context = assets.service::<VulkanContextService>().context();
             Pipeline::new::<Vertex>(context.clone(), &self.pipeline_info, pass_info)
         })?;
 
@@ -50,9 +53,7 @@ impl Renderer for GizmoRenderer {
 
         let layout = pipeline.layout();
 
-        let gizmos = resources
-            .default_entry::<Gizmos>()?
-            .or_insert_with(|| Gizmos::default());
+        let gizmos = world.get(engine(), gizmos())?;
 
         cmd.bind_pipeline(pipeline);
 

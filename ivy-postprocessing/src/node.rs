@@ -1,16 +1,19 @@
-use std::{marker::PhantomData, ops::Deref};
-
 use flax::World;
+use ivy_assets::{Asset, AssetCache};
 use ivy_graphics::Result;
 use ivy_rendergraph::{AttachmentInfo, Node, NodeKind};
-use ivy_resources::{Handle, Resources};
-use ivy_vulkan::{context::SharedVulkanContext, descriptors::*, vk::ShaderStageFlags, *};
+use ivy_vulkan::{
+    context::{SharedVulkanContext, VulkanContextService},
+    descriptors::*,
+    vk::ShaderStageFlags,
+    *,
+};
 use once_cell::sync::OnceCell;
 
 pub struct PostProcessingNode {
     sets: Option<Vec<DescriptorSet>>,
-    read_attachments: Vec<Handle<Texture>>,
-    input_attachments: Vec<Handle<Texture>>,
+    read_attachments: Vec<Asset<Texture>>,
+    input_attachments: Vec<Asset<Texture>>,
     color_attachments: Vec<AttachmentInfo>,
     sampler: Sampler,
     pipeline: OnceCell<Pipeline>,
@@ -25,9 +28,9 @@ pub struct PostProcessingNode {
 impl PostProcessingNode {
     pub fn new(
         context: SharedVulkanContext,
-        resources: &Resources,
-        read_attachments: &[Handle<Texture>],
-        input_attachments: &[Handle<Texture>],
+        assets: &AssetCache,
+        read_attachments: &[Asset<Texture>],
+        input_attachments: &[Asset<Texture>],
         bindables: &[&dyn MultiDescriptorBindable],
         color_attachments: &[AttachmentInfo],
         frames_in_flight: usize,
@@ -35,7 +38,7 @@ impl PostProcessingNode {
     ) -> Result<Self> {
         let sampler = Sampler::new(
             context.clone(),
-            &SamplerInfo {
+            &SamplerKey {
                 address_mode: AddressMode::CLAMP_TO_EDGE,
                 mag_filter: FilterMode::LINEAR,
                 min_filter: FilterMode::LINEAR,
@@ -47,17 +50,12 @@ impl PostProcessingNode {
 
         let combined_image_samplers = read_attachments
             .iter()
-            .map(|val| -> Result<_> {
-                Ok(CombinedImageSampler::new(
-                    resources.get(*val)?.deref(),
-                    &sampler,
-                ))
-            })
+            .map(|val| -> Result<_> { Ok(CombinedImageSampler::new(&**val, &sampler)) })
             .collect::<Result<Vec<_>>>()?;
 
         let input_bindabled = input_attachments
             .iter()
-            .map(|val| -> Result<_> { Ok(InputAttachment::new(resources.get(*val)?.deref())) })
+            .map(|val| -> Result<_> { Ok(InputAttachment::new(&**val)) })
             .collect::<Result<Vec<_>>>()?;
 
         let bindables = combined_image_samplers
@@ -104,11 +102,11 @@ impl Node for PostProcessingNode {
         &self.color_attachments
     }
 
-    fn read_attachments(&self) -> &[Handle<Texture>] {
+    fn read_attachments(&self) -> &[Asset<Texture>] {
         &self.read_attachments
     }
 
-    fn input_attachments(&self) -> &[Handle<Texture>] {
+    fn input_attachments(&self) -> &[Asset<Texture>] {
         &self.input_attachments
     }
 
@@ -127,18 +125,14 @@ impl Node for PostProcessingNode {
     fn execute(
         &mut self,
         _: &mut World,
-        resources: &Resources,
+        assets: &AssetCache,
         cmd: &ivy_vulkan::commands::CommandBuffer,
         pass_info: &PassInfo,
         current_frame: usize,
     ) -> anyhow::Result<()> {
         let pipeline = self.pipeline.get_or_try_init(|| {
-            let context = resources.get_default::<SharedVulkanContext>()?;
-            Pipeline::new::<()>(
-                context.clone(),
-                &resources.get(self.shader.pipeline_info).unwrap(),
-                pass_info,
-            )
+            let context = assets.service::<VulkanContextService>().context();
+            Pipeline::new::<()>(context.clone(), &self.shader.pipeline_info, pass_info)
         })?;
 
         cmd.bind_pipeline(pipeline);

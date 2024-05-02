@@ -24,7 +24,7 @@ flax.workspace = true
 thiserror.workspace = true
 parking_lot.workspace = true
 downcast-rs = "1.2.0"
-ivy-resources = { path = "../ivy-resources", version = "0.10.0" }
+ivy-assets = { path = "../ivy-assets", version = "0.10.0" }
 ivy-random = { path = "../ivy-random", version = "0.10.0" }
 records = "0.2.0"
 ezy = { version = "0.1.1", features = ["glam"] }

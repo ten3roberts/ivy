@@ -3,7 +3,7 @@ use gpu_allocator::{
     vulkan::{Allocation, AllocationCreateDesc},
     MemoryLocation,
 };
-use ivy_resources::{Handle, Resources};
+use ivy_assets::{Asset, AssetCache};
 use smallvec::SmallVec;
 
 use crate::{context::SharedVulkanContext, traits::FromExtent, Texture, TextureInfo};
@@ -11,8 +11,8 @@ use crate::{context::SharedVulkanContext, traits::FromExtent, Texture, TextureIn
 pub struct CubeMap {
     context: SharedVulkanContext,
     image: Image,
-    views: SmallVec<[Handle<Texture>; 6]>,
-    view: Handle<Texture>,
+    views: SmallVec<[Asset<Texture>; 6]>,
+    view: Asset<Texture>,
     allocation: Option<Allocation>,
 }
 
@@ -36,7 +36,7 @@ impl CubeMap {
     /// Note, raw pixels must match format, width, and height
     pub fn new(
         context: SharedVulkanContext,
-        resources: &Resources,
+        assets: &AssetCache,
         info: &TextureInfo,
     ) -> crate::Result<Self> {
         let location = MemoryLocation::GpuOnly;
@@ -70,27 +70,27 @@ impl CubeMap {
         })?;
 
         unsafe { device.bind_image_memory(image, allocation.memory(), allocation.offset())? };
-        let view = resources.insert(Texture::from_image(
+        let view = assets.insert(Texture::from_image(
             context.clone(),
             info,
             image,
             None,
             6,
             0,
-        )?)?;
+        )?);
 
         let views = (0..6)
             .map(|i| -> crate::Result<_> {
-                resources
-                    .insert(Texture::from_image(
-                        context.clone(),
-                        info,
-                        image,
-                        None,
-                        6,
-                        i,
-                    )?)
-                    .map_err(|v| v.into())
+                let texture = assets.insert(Texture::from_image(
+                    context.clone(),
+                    info,
+                    image,
+                    None,
+                    6,
+                    i,
+                )?);
+
+                Ok(texture)
             })
             .collect::<Result<_, _>>()?;
 
@@ -104,12 +104,12 @@ impl CubeMap {
     }
 
     /// Get a reference to the cube map's views.
-    pub fn views(&self) -> &SmallVec<[Handle<Texture>; 6]> {
+    pub fn views(&self) -> &SmallVec<[Asset<Texture>; 6]> {
         &self.views
     }
 
     /// Get the cube map's view.
-    pub fn view(&self) -> Handle<Texture> {
-        self.view
+    pub fn view(&self) -> &Asset<Texture> {
+        &self.view
     }
 }

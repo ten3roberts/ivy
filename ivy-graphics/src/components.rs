@@ -1,16 +1,18 @@
 use flax::Debuggable;
-use ivy_resources::Handle;
+use ivy_assets::Asset;
+use ivy_vulkan::Swapchain;
+use ivy_window::Window;
 
 use crate::{
     Animator, BoundingSphere, Camera, DepthAttachment, GpuCamera, LightRenderer, Material, Mesh,
-    PointLight, Skin, SkinnedVertex,
+    PointLight, Renderer, Skin, SkinnedVertex,
 };
 
 flax::component! {
-    pub mesh: Handle<Mesh>,
-    pub skinned_mesh: Handle<Mesh<SkinnedVertex>>,
-    pub skin: Handle<Skin>,
-    pub material: Handle<Material>,
+    pub mesh: Asset<Mesh>,
+    pub skinned_mesh: Asset<Mesh<SkinnedVertex>>,
+    pub skin: Asset<Skin>,
+    pub material: Asset<Material>,
 
     /// Emission source for entity
     pub light_source: PointLight => [ Debuggable ],
@@ -28,4 +30,7 @@ flax::component! {
     pub bounding_sphere: BoundingSphere,
 
     pub depth_attachment: DepthAttachment,
+
+    pub window: Window,
+    pub swapchain: Swapchain,
 }

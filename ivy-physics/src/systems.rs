@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use crate::{
     bundles::*,
     collision::{resolve_collision, ResolveObject},
-    components::{collision_state, effector, gravity_state, physics_state, PhysicsState},
+    components::{self, collision_state, effector, gravity_state, physics_state, PhysicsState},
     Effector, Result,
 };
 use flax::{
@@ -94,7 +94,7 @@ pub fn gravity() -> BoxedSystem {
 //         .native_query()
 //         .without::<Static>()
 //         .without::<Sleeping>()
-//         .par_for_each(BATCH_SIZE, |(e, (influence, mass, effector))| {
+//         .par_for_each(BATCH_SIZE, |(e, (influence, mass, effector))| mut {
 //             let supported = collisions.has_collision(e);
 //             effector.apply_force(**gravity * **influence * **mass, !supported)
 //         })
@@ -109,12 +109,12 @@ pub fn gravity() -> BoxedSystem {
 // }
 
 pub fn get_rigid_root<'a>(entity: &EntityRef<'a>) -> EntityRef<'a> {
-    let mut current = *entity;
+    let mut entity = *entity;
     loop {
         if let Some((parent, _)) = entity.relations(connection).next() {
-            current = entity.world().entity(parent).unwrap();
+            entity = entity.world().entity(parent).unwrap();
         } else {
-            return current;
+            return entity;
         }
     }
 }
@@ -223,47 +223,50 @@ pub fn resolve_collisions(
 ) -> Result<()> {
     state.next_frame();
 
-    for col in collisions {
-        state.register(col.clone());
+    for collision in collisions {
+        tracing::info!(?collision, "resolve collision");
+        state.register(collision.clone());
 
-        let a = world.entity(col.a.entity)?;
-        let b = world.entity(col.b.entity)?;
+        let a = world.entity(collision.a.entity)?;
+        let b = world.entity(collision.b.entity)?;
 
         // Ignore triggers
-        if col.a.is_trigger || col.b.is_trigger {
+        if collision.a.is_trigger || collision.b.is_trigger {
             return Ok(());
         }
         // Check for static collision
-        else if col.a.state.is_static() {
-            resolve_static(&a, &b, col.contact, dt);
+        else if collision.a.state.is_static() {
+            resolve_static(&a, &b, collision.contact, dt);
             continue;
-        } else if col.b.state.is_static() {
+        } else if collision.b.state.is_static() {
             resolve_static(
                 &b,
                 &a,
                 Contact {
-                    points: col.contact.points.reverse(),
-                    depth: col.contact.depth,
-                    normal: -col.contact.normal,
+                    points: collision.contact.points.reverse(),
+                    depth: collision.contact.depth,
+                    normal: -collision.contact.normal,
                 },
                 dt,
             )?;
             continue;
-        } else if col.a.state.is_static() && col.b.state.is_static() {
+        } else if collision.a.state.is_static() && collision.b.state.is_static() {
+            tracing::warn!("static-static collision detected, ignoring");
             continue;
         }
 
-        assert_ne!(col.a, col.b);
+        assert_ne!(collision.a, collision.b);
 
         // Trace up to the root of the rigid connection before solving
         // collisions
-        // let (a, a_mass) = get_rigid_root(&world.entity(*col.a))?;
-        // let (b, b_mass) = get_rigid_root(&world.entity(*col.b)?)?;
+        tracing::info!("get rigid roots");
+        let a = get_rigid_root(&world.entity(*collision.a).unwrap());
+        let b = get_rigid_root(&world.entity(*collision.b).unwrap());
 
-        // let a_mass = world
-
-        // // Ignore collisions between two immovable objects
+        tracing::info!(%a, %b, "found roots");
+        // Ignore collisions between two immovable objects
         // if !a_mass.is_normal() && !b_mass.is_normal() {
+        //     tracing::warn!("ignoring collision between two immovable objects");
         //     return Ok(());
         // }
 
@@ -272,53 +275,32 @@ pub fn resolve_collisions(
 
         // // Modify mass to include all children masses
 
-        // let a = ResolveObject {
-        //     pos: *pos,
-        //     vel: *a.vel + eff.net_velocity_change(**dt),
-        //     ang_vel: *a.ang_vel,
-        //     resitution: *a.resitution,
-        //     mass: a.mass,
-        //     ang_mass: *a.ang_mass,
-        //     friction: *a.friction,
-        // };
+        let a_object = ResolveObject::from_entity(&a)?;
+        let b_object = ResolveObject::from_entity(&b)?;
 
-        // let mut b_query = world.try_query_one::<(RbQuery, &Position, &Effector)>(b)?;
+        let total_mass = a_object.mass + b_object.mass;
 
-        // let (b, pos, eff) = b_query.get().unwrap();
+        let impulse = resolve_collision(&collision.contact, &a_object, &b_object);
 
-        // let b = ResolveObject {
-        //     pos: *pos,
-        //     vel: *b.vel + eff.net_velocity_change(**dt),
-        //     ang_vel: *b.ang_vel,
-        //     resitution: *b.resitution,
-        //     mass: b_mass,
-        //     ang_mass: *b.ang_mass,
-        //     friction: *b.friction,
-        // };
+        let dir = collision.contact.normal * collision.contact.depth;
 
-        // let total_mass = a.mass + b.mass;
+        {
+            let effector = &mut *a.get_mut(effector())?;
+            effector.apply_impulse_at(impulse, collision.contact.points[0] - a_object.pos, true);
+            effector.translate(-dir * (a_object.mass / total_mass));
+        }
 
-        // let impulse = resolve_collision(&col.contact, &a, &b);
-
-        // drop((a_query, b_query));
-
-        // let dir = col.contact.normal * col.contact.depth;
-
-        // let mut effector = world.get_mut::<Effector>(*col.a)?;
-        // effector.apply_impulse_at(impulse, col.contact.points[0] - a.pos, true);
-        // effector.translate(-dir * (*a.mass / *total_mass));
-
-        // drop(effector);
-
-        // let mut effector = world.get_mut::<Effector>(*col.b)?;
-        // effector.apply_impulse_at(-impulse, col.contact.points[1] - b.pos, true);
-        // effector.translate(dir * (*b.mass / *total_mass));
+        {
+            let effector = &mut *b.get_mut(effector())?;
+            effector.apply_impulse_at(-impulse, collision.contact.points[1] - b_object.pos, true);
+            effector.translate(dir * (b_object.mass / total_mass));
+        }
     }
 
     Ok(())
 }
 
-// Resolves collision with a static entity
+// Resolves collision against a static or immovable object
 fn resolve_static(a: &EntityRef, b: &EntityRef, contact: Contact, dt: f32) -> Result<()> {
     let query = &(
         restitution().opt_or_default(),

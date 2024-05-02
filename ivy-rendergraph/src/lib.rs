@@ -8,6 +8,7 @@ pub mod pass;
 mod rendergraph;
 mod swapchain_node;
 mod transfer_node;
+pub mod components;
 
 pub use camera_node::*;
 pub use error::*;

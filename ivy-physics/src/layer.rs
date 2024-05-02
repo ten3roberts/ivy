@@ -1,24 +1,15 @@
-use std::marker::PhantomData;
-
 use crate::{
     components::{
         collision_state, collision_tree, gravity_state, physics_state, GravityState, PhysicsState,
     },
-    connections,
     systems::{self, resolve_collisions_system, CollisionState},
 };
 use anyhow::Context;
-use flax::{
-    events::{Event, EventKind, EventSubscriber, WithIds},
-    Entity, Schedule, World,
-};
+use flax::{Entity, Schedule, World};
 use glam::Vec3;
-use ivy_base::{engine, Color, ColorExt, DrawGizmos, Events, Layer};
-use ivy_collision::{
-    components::tree_index, BvhNode, Collision, CollisionTree, CollisionTreeNode,
-    DespawnedSubscriber,
-};
-use ivy_resources::{DefaultResourceMut, Resources, Storage};
+use ivy_assets::AssetCache;
+use ivy_base::{engine, gizmos, Color, ColorExt, DrawGizmos, Events, Layer};
+use ivy_collision::{BvhNode, CollisionTree, DespawnedSubscriber};
 
 #[derive(Default, Debug, Clone)]
 pub struct PhysicsLayerInfo {
@@ -46,7 +37,7 @@ pub struct PhysicsLayer {
 impl PhysicsLayer {
     pub fn new(
         world: &mut World,
-        resources: &mut Resources,
+        assets: &AssetCache,
         events: &mut Events,
         info: PhysicsLayerInfo,
     ) -> anyhow::Result<Self> {
@@ -112,7 +103,7 @@ impl Layer for PhysicsLayer {
     fn on_update(
         &mut self,
         world: &mut World,
-        resources: &mut Resources,
+        assets: &mut AssetCache,
         events: &mut Events,
         frame_time: std::time::Duration,
     ) -> anyhow::Result<()> {
@@ -125,9 +116,9 @@ impl Layer for PhysicsLayer {
 
         if self.debug {
             let root = world.get(engine(), collision_tree())?;
-            let mut gizmos = resources.get_default_mut()?;
+            let gizmos = &mut *world.get_mut(engine(), gizmos())?;
 
-            root.draw_gizmos(&mut gizmos, Color::white());
+            root.draw_gizmos(gizmos, Color::white());
         }
 
         self.schedule.execute_par_with(world, events)?;

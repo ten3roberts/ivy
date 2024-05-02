@@ -1,21 +1,28 @@
+use std::{borrow::BorrowMut, sync::Arc};
+
 use flax::World;
-use ivy_base::{main_camera, Extent, WorldExt};
+use ivy_assets::{Asset, AssetCache};
+use ivy_base::{engine, main_camera, Extent, WorldExt};
 use ivy_graphics::{
-    components::depth_attachment, gizmos::GizmoRenderer, shaders::*, DepthAttachment, EnvData,
-    FullscreenRenderer, GpuCamera, MainCamera, MeshRenderer, SkinnedMeshRenderer,
+    components::{depth_attachment, swapchain},
+    gizmos::GizmoRenderer,
+    shaders::*,
+    DepthAttachment, EnvData, FullscreenRenderer, GpuCamera, MainCamera, MeshRenderer,
+    SkinnedMeshRenderer,
 };
 use ivy_postprocessing::pbr::{setup_pbr_nodes, PBRInfo};
 use ivy_rendergraph::{
-    AttachmentInfo, CameraNode, CameraNodeInfo, NodeIndex, RenderGraph, SwapchainNode,
+    components::render_graph, AttachmentInfo, CameraNode, CameraNodeInfo, NodeIndex, RenderGraph,
+    SwapchainPresentNode,
 };
-use ivy_resources::{Handle, Resources};
 use ivy_ui::{canvas, ImageRenderer, TextRenderer, TextUpdateNode};
 use ivy_vulkan::{
-    context::SharedVulkanContext,
+    context::{SharedVulkanContext, VulkanContextService},
     vk::{ClearValue, CullModeFlags},
     ImageLayout, ImageUsage, LoadOp, PipelineInfo, Shader, StoreOp, Swapchain, Texture,
     TextureInfo,
 };
+use parking_lot::Mutex;
 
 use crate::{geometry_pass, gizmo_pass, transparent_pass, ui_pass, Error};
 
@@ -43,8 +50,9 @@ pub struct PBRRenderingInfo {
 pub struct PBRRendering {
     pub ui: NodeIndex,
     pub gizmo: NodeIndex,
-    pub color: Handle<Texture>,
+    pub color: Asset<Texture>,
     pub extent: Extent,
+    pub render_graph: RenderGraph,
 }
 
 impl PBRRendering {
@@ -58,7 +66,7 @@ impl PBRRendering {
     /// [MainCamera](ivy_graphics::MainCamera).
     pub fn setup<Env: 'static + Copy + Send + Sync + EnvData>(
         world: &mut World,
-        resources: &Resources,
+        assets: &AssetCache,
         env: Env,
         frames_in_flight: usize,
         info: PBRRenderingInfo,
@@ -68,7 +76,7 @@ impl PBRRendering {
             .ok_or(Error::MissingMainCamera)?
             .id();
 
-        let context = resources.get_default::<SharedVulkanContext>()?;
+        let context = assets.service::<VulkanContextService>().context();
         context.wait_idle()?;
 
         GpuCamera::create_gpu_cameras(&context, world, frames_in_flight)?;
@@ -78,45 +86,20 @@ impl PBRRendering {
         let mut rendergraph = RenderGraph::new(context.clone(), frames_in_flight)?;
 
         // Setup renderers
-        resources.default_entry()?.or_insert_with(|| {
-            FullscreenRenderer::new(
-                resources
-                    .get(info.post_processing_shader.pipeline_info)
-                    .unwrap()
-                    .clone(),
-            )
-        });
+        let fullscreen_renderer =
+            FullscreenRenderer::new((*info.post_processing_shader.pipeline_info).clone());
 
-        let gizmo_renderer = resources
-            .default_entry()?
-            .or_try_insert_with(|| {
-                GizmoRenderer::new(
-                    context.clone(),
-                    resources
-                        .get(info.gizmo_shader.pipeline_info)
-                        .unwrap()
-                        .clone(),
-                )
-            })?
-            .handle;
+        let gizmo_renderer =
+            GizmoRenderer::new(context.clone(), (*info.gizmo_shader.pipeline_info).clone())?;
+        let mesh_renderer = MeshRenderer::new(context.clone(), 16, frames_in_flight)?;
+        let skinned_renderer =
+            SkinnedMeshRenderer::new(context.clone(), 16, 128, frames_in_flight)?;
 
-        let mesh_renderer = resources
-            .default_entry()?
-            .or_try_insert_with(|| MeshRenderer::new(context.clone(), 16, frames_in_flight))?
-            .handle;
+        // let swapchain = resources.get_default::<Swapchain>()?;
 
-        let skinned_renderer = resources
-            .default_entry()?
-            .or_try_insert_with(|| {
-                SkinnedMeshRenderer::new(context.clone(), 16, 128, frames_in_flight)
-            })?
-            .handle;
+        let extent = world.get(engine(), swapchain()).unwrap().extent();
 
-        let swapchain = resources.get_default::<Swapchain>()?;
-
-        let extent = swapchain.extent();
-
-        let final_lit = resources.insert(Texture::new(
+        let final_lit = assets.insert(Texture::new(
             context.clone(),
             &TextureInfo {
                 extent,
@@ -124,19 +107,19 @@ impl PBRRendering {
                 usage: info.color_usage | ImageUsage::TRANSFER_SRC,
                 ..Default::default()
             },
-        )?)?;
+        )?);
 
         rendergraph.add_nodes(setup_pbr_nodes(
             context.clone(),
             world,
-            resources,
+            assets,
             camera,
             (mesh_renderer, skinned_renderer),
             extent,
             frames_in_flight,
             PBRInfo {
                 max_lights: 64,
-                output: final_lit,
+                output: final_lit.clone(),
                 read_attachments: vec![],
                 post_processing_shader: info.post_processing_shader,
                 geometry_pass: geometry_pass(),
@@ -145,12 +128,12 @@ impl PBRRendering {
             env,
         )?);
 
-        let depth_attachment = **world.get(camera, depth_attachment()).unwrap();
+        let depth_attachment = world.get(camera, depth_attachment()).unwrap().0.clone();
 
         let gizmo = rendergraph.add_node(CameraNode::new(
             context.clone(),
             world,
-            resources,
+            assets,
             camera,
             gizmo_renderer,
             gizmo_pass(),
@@ -161,7 +144,7 @@ impl PBRRendering {
                     load_op: LoadOp::LOAD,
                     initial_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
                     final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                    resource: final_lit,
+                    resource: final_lit.clone(),
                     clear_value: ClearValue::default(),
                 }],
                 input_attachments: vec![depth_attachment],
@@ -170,24 +153,23 @@ impl PBRRendering {
             },
         )?);
 
-        let image_renderer = resources
-            .default_entry()?
-            .or_try_insert_with(|| ImageRenderer::new(context.clone(), 16, frames_in_flight))?
-            .handle;
+        let image_renderer = ImageRenderer::new(context.clone(), 16, frames_in_flight)?;
 
-        let text_renderer = resources
-            .default_entry()?
-            .or_try_insert_with(|| TextRenderer::new(context.clone(), 16, 512, frames_in_flight))?
-            .handle;
+        let text_renderer = Arc::new(Mutex::new(TextRenderer::new(
+            context.clone(),
+            16,
+            512,
+            frames_in_flight,
+        )?));
 
-        rendergraph.add_node(TextUpdateNode::new(resources, text_renderer)?);
+        rendergraph.add_node(TextUpdateNode::new(assets, text_renderer.clone())?);
 
         let ui = rendergraph.add_node(CameraNode::new(
             context.clone(),
             world,
-            resources,
+            assets,
             canvas,
-            (image_renderer, text_renderer),
+            (image_renderer, text_renderer.clone()),
             ui_pass(),
             CameraNodeInfo {
                 name: "UI Node",
@@ -196,45 +178,57 @@ impl PBRRendering {
                     load_op: LoadOp::LOAD,
                     initial_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
                     final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                    resource: final_lit,
+                    resource: final_lit.clone(),
                     clear_value: ClearValue::default(),
                 }],
-                buffer_reads: vec![resources.get(text_renderer)?.vertex_buffer()],
+                buffer_reads: vec![text_renderer.lock().vertex_buffer()],
                 frames_in_flight,
                 ..Default::default()
             },
         )?);
 
         // Build renderpasses
-        rendergraph.build(resources.fetch()?, extent)?;
-
-        resources.insert_default(rendergraph)?;
+        rendergraph.build(extent)?;
 
         Ok(Self {
             color: final_lit,
             ui,
             gizmo,
             extent,
+            render_graph: rendergraph,
         })
     }
 
-    pub fn using_swapchain(&self, resources: &Resources) -> crate::Result<&Self> {
-        let mut rendergraph = resources.get_default_mut::<RenderGraph>()?;
-        let context = resources.get_default::<SharedVulkanContext>()?;
+    pub fn using_swapchain(
+        &mut self,
+        world: &mut World,
+        assets: &AssetCache,
+    ) -> crate::Result<&Self> {
+        let context = assets.service::<VulkanContextService>().context();
 
-        rendergraph.add_node(SwapchainNode::new(
+        self.render_graph.add_node(SwapchainPresentNode::new(
+            world,
             context.clone(),
-            resources,
-            resources.default()?,
-            self.color,
+            assets,
+            self.color.clone(),
         )?);
 
-        rendergraph.build(resources.fetch()?, self.extent)?;
+        self.render_graph.build(self.extent)?;
         Ok(self)
     }
 
-    pub fn color(&self) -> Handle<Texture> {
-        self.color
+    pub fn install(self, world: &mut World) {
+        world
+            .set(
+                engine(),
+                render_graph(),
+                Arc::new(Mutex::new(self.render_graph)),
+            )
+            .unwrap();
+    }
+
+    pub fn color(&self) -> &Asset<Texture> {
+        &self.color
     }
 
     pub fn extent(&self) -> Extent {

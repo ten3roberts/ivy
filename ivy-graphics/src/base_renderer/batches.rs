@@ -5,7 +5,7 @@ use std::{
 };
 
 use flax::Component;
-use ivy_resources::{Handle, HandleUntyped, Resources};
+use ivy_assets::Asset;
 use ivy_vulkan::{
     context::SharedVulkanContext, PassInfo, Pipeline, PipelineInfo, Shader, VertexDesc,
 };
@@ -21,8 +21,8 @@ pub struct Batches<K> {
     /// Ordered access of batches
     ordered: Vec<BatchId>,
     // Map from key to index in batches
-    batch_map: HashMap<(Handle<PipelineInfo>, K), BatchId>,
-    pipeline_cache: HashMap<PipelineInfo, Pipeline>,
+    batch_map: HashMap<(Asset<PipelineInfo>, K), BatchId>,
+    pipeline_cache: HashMap<Asset<PipelineInfo>, Pipeline>,
     /// Set to true if any batch has been added or removed.
     /// Is not set if entities withing the batch are modified.
     dirty: bool,
@@ -43,18 +43,17 @@ impl<K: RendererKey> Batches<K> {
 
     pub fn get_batch<V: VertexDesc>(
         &mut self,
-        resources: &Resources,
         pass: &Shader,
         key: K,
         pass_info: &PassInfo,
     ) -> Result<(BatchId, &mut BatchData<K>)> {
-        let combined_key = (pass.pipeline_info, key);
+        let combined_key = (pass.pipeline_info.clone(), key.clone());
         let idx = match self.batch_map.entry(combined_key) {
             Entry::Occupied(entry) => *entry.get(),
             Entry::Vacant(entry) => {
                 // Create the batch
 
-                let shaderpass = resources.get(pass.pipeline_info)?;
+                let shaderpass = &pass.pipeline_info;
                 let pipeline = self.pipeline_cache.entry(shaderpass.clone());
 
                 let pipeline = match pipeline {
@@ -71,7 +70,7 @@ impl<K: RendererKey> Batches<K> {
                 let batch = BatchData::new(
                     pipeline.pipeline(),
                     pipeline.layout(),
-                    pass.pipeline_info,
+                    pass.pipeline_info.clone(),
                     key,
                 );
                 let idx = self.batches.len();
@@ -95,13 +94,12 @@ impl<K: RendererKey> Batches<K> {
 
     pub fn insert_entity<O, V: VertexDesc>(
         &mut self,
-        resources: &Resources,
         pass: &Shader,
         key: K,
         pass_info: &PassInfo,
     ) -> Result<BatchId> {
         let frames_in_flight = self.frames_in_flight;
-        let (batch_id, batch) = self.get_batch::<V>(resources, pass, key, pass_info)?;
+        let (batch_id, batch) = self.get_batch::<V>(pass, key, pass_info)?;
         batch.instance_count += 1;
         batch.max_count += 1;
         batch.set_dirty(frames_in_flight);

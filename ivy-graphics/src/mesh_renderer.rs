@@ -4,10 +4,10 @@ use crate::{
     BaseRenderer, Material, Mesh, Renderer, Result, Vertex,
 };
 use ash::vk::{DescriptorSet, IndexType};
-use flax::{entity_ids, Component, Fetch, FetchExt, OptOr, Query, World};
+use flax::{entity_ids, Component, Fetch, FetchExt, Opt, OptOr, Query, World};
 use glam::{Mat4, Quat, Vec3, Vec4};
+use ivy_assets::{Asset, AssetCache};
 use ivy_base::{color, main_camera, position, rotation, scale, Color, ColorExt, Visible};
-use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{context::SharedVulkanContext, descriptors::IntoSet, PassInfo, Shader};
 
 /// Draw a static mesh with a material
@@ -28,11 +28,11 @@ impl MeshRenderer {
 }
 
 impl Renderer for MeshRenderer {
-    /// Will draw all entities with a Handle<Material>, Handle<Mesh>, Modelmatrix and Shaderpass `Handle<T>`
+    /// Will draw all entities with a Asset<Material>, Asset<Mesh>, Modelmatrix and Shaderpass `Asset<T>`
     fn draw(
         &mut self,
         world: &mut World,
-        resources: &Resources,
+        assets: &AssetCache,
         cmd: &ivy_vulkan::CommandBuffer,
         sets: &[DescriptorSet],
         pass_info: &PassInfo,
@@ -40,12 +40,9 @@ impl Renderer for MeshRenderer {
         current_frame: usize,
         pass: Component<Shader>,
     ) -> anyhow::Result<()> {
-        let meshes = resources.fetch::<Mesh>()?;
-        let materials = resources.fetch::<Material>()?;
-
         let renderpass = self.base_renderer.pass_mut(pass)?;
 
-        renderpass.build_batches(world, resources, pass_info)?;
+        renderpass.build_batches(world, pass_info)?;
         {
             let mut q = Query::new(camera()).with(main_camera());
             let camera = q.borrow(world).iter().next().unwrap();
@@ -69,7 +66,7 @@ impl Renderer for MeshRenderer {
 
         renderpass.register(world, KeyQuery::new());
 
-        renderpass.build_batches(world, resources, pass_info)?;
+        renderpass.build_batches(world, pass_info)?;
 
         let frame_set = renderpass.set(current_frame);
 
@@ -80,7 +77,7 @@ impl Renderer for MeshRenderer {
         {
             let key = batch.key();
 
-            let mesh = meshes.get(key.mesh)?;
+            let mesh = &key.mesh;
 
             cmd.bind_pipeline(batch.pipeline());
 
@@ -97,8 +94,7 @@ impl Renderer for MeshRenderer {
 
             assert_ne!(instance_count, 0);
 
-            if !key.material.is_null() {
-                let material = materials.get(key.material)?;
+            if let Some(material) = &key.material {
                 cmd.bind_descriptor_sets(
                     batch.layout(),
                     sets.len() as u32,
@@ -106,14 +102,13 @@ impl Renderer for MeshRenderer {
                     &[],
                 );
                 cmd.draw_indexed(mesh.index_count(), instance_count, 0, 0, first_instance);
-            } else if !primitives.is_empty() {
+            }
+            if !primitives.is_empty() {
                 primitives.iter().try_for_each(|val| -> Result<()> {
-                    let material = materials.get(val.material)?;
-
                     cmd.bind_descriptor_sets(
                         batch.layout(),
                         sets.len() as u32,
-                        &[frame_set, material.set(current_frame)],
+                        &[frame_set, val.material.set(current_frame)],
                         &[],
                     );
 
@@ -176,30 +171,30 @@ impl From<ObjectDataQueryItem<'_>> for ObjectData {
 #[derive(Fetch)]
 #[fetch(item_derives = [ PartialEq, Eq ])]
 struct KeyQuery {
-    mesh: Component<Handle<Mesh>>,
-    material: OptOr<Component<Handle<Material>>, Handle<Material>>,
+    mesh: Component<Asset<Mesh>>,
+    material: Opt<Component<Asset<Material>>>,
 }
 
 impl KeyQuery {
     fn new() -> Self {
         Self {
             mesh: mesh(),
-            material: material().opt_or_default(),
+            material: material().opt(),
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct MeshKey {
-    mesh: Handle<Mesh>,
-    material: Handle<Material>,
+    mesh: Asset<Mesh>,
+    material: Option<Asset<Material>>,
 }
 
 impl From<KeyQueryItem<'_>> for MeshKey {
     fn from(value: KeyQueryItem<'_>) -> Self {
         Self {
-            mesh: *value.mesh,
-            material: *value.material,
+            mesh: value.mesh.clone(),
+            material: value.material.cloned(),
         }
     }
 }

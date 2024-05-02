@@ -1,9 +1,9 @@
 use crate::*;
 use flax::{entity_ids, Component, Fetch, Query, World};
 use glam::{vec2, vec3, Mat4, Vec2, Vec3, Vec4};
+use ivy_assets::{Asset, AssetCache};
 use ivy_base::{color, position, size, visible, Color, ColorExt};
 use ivy_graphics::{batch_id, BaseRenderer, Mesh, Renderer};
-use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{context::SharedVulkanContext, descriptors::*, vk::IndexType, PassInfo, Shader};
 
 /// A mesh renderer using vkCmdDrawIndirectIndexed and efficient batching.
@@ -48,7 +48,7 @@ impl Renderer for ImageRenderer {
     fn draw(
         &mut self,
         world: &mut World,
-        resources: &Resources,
+        assets: &AssetCache,
         cmd: &ivy_vulkan::CommandBuffer,
         sets: &[DescriptorSet],
         pass_info: &PassInfo,
@@ -60,12 +60,10 @@ impl Renderer for ImageRenderer {
         cmd.bind_vertexbuffer(0, self.square.vertex_buffer());
         cmd.bind_indexbuffer(self.square.index_buffer(), IndexType::UINT32, 0);
 
-        let images = resources.fetch::<Image>()?;
-
         let pass = self.base_renderer.pass_mut(shaderpass)?;
 
         pass.register(world, KeyQuery::new());
-        pass.build_batches(world, resources, pass_info)?;
+        pass.build_batches(world, pass_info)?;
 
         pass.update(
             current_frame,
@@ -93,7 +91,7 @@ impl Renderer for ImageRenderer {
         for batch in pass.ordered_batches() {
             let key = batch.key();
 
-            let image = images.get(key.image)?;
+            let image = key.image;
 
             cmd.bind_pipeline(batch.pipeline());
 
@@ -151,7 +149,7 @@ impl<'a> From<ObjectDataQueryItem<'a>> for ObjectData {
 #[derive(Fetch, PartialEq)]
 struct KeyQuery {
     depth: Component<u32>,
-    image: Component<Handle<Image>>,
+    image: Component<Asset<Image>>,
 }
 
 impl KeyQuery {
@@ -163,10 +161,10 @@ impl KeyQuery {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Key {
     depth: u32,
-    image: Handle<Image>,
+    image: Asset<Image>,
 }
 
 impl PartialOrd for Key {
@@ -185,7 +183,7 @@ impl From<KeyQueryItem<'_>> for Key {
     fn from(item: KeyQueryItem) -> Self {
         Self {
             depth: *item.depth,
-            image: *item.image,
+            image: item.image.clone(),
         }
     }
 }

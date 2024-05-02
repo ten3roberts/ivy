@@ -1,8 +1,11 @@
+use std::sync::Arc;
+
 use anyhow::Context;
 use ash::vk::DescriptorSet;
 use flax::{Component, World};
-use ivy_resources::{Handle, Resources, Storage};
+use ivy_assets::AssetCache;
 use ivy_vulkan::{commands::CommandBuffer, PassInfo, Shader};
+use parking_lot::Mutex;
 
 // Generic interface provided for the base renderer
 // TODO: remove this trait/simplity and use nodes instead
@@ -11,11 +14,8 @@ pub trait Renderer {
     // NOTE: camera must have gpu side data.
     fn draw(
         &mut self,
-        // The ecs world
         world: &mut World,
-        // Graphics resources like textures and materials
-        resources: &Resources,
-        // The commandbuffer to record into
+        assets: &AssetCache,
         cmd: &CommandBuffer,
         // Descriptor sets to bind before renderer specific sets
         sets: &[DescriptorSet],
@@ -31,14 +31,14 @@ pub trait Renderer {
     ) -> anyhow::Result<()>;
 }
 
-impl<T> Renderer for Handle<T>
+impl<T> Renderer for Arc<Mutex<T>>
 where
-    T: Renderer + Storage,
+    T: Renderer,
 {
     fn draw(
         &mut self,
         world: &mut World,
-        resources: &Resources,
+        assets: &AssetCache,
         cmd: &CommandBuffer,
         sets: &[DescriptorSet],
         pass_info: &PassInfo,
@@ -46,17 +46,10 @@ where
         current_frame: usize,
         pass: Component<Shader>,
     ) -> anyhow::Result<()> {
-        resources
-            .get_mut(*self)
-            .with_context(|| {
-                format!(
-                    "Failed to get renderer {:?} from handle",
-                    std::any::type_name::<T>()
-                )
-            })?
+        self.lock()
             .draw(
                 world,
-                resources,
+                assets,
                 cmd,
                 sets,
                 pass_info,
@@ -75,13 +68,13 @@ where
 
 macro_rules! tuple_impl {
     ($($name: ident),*) => {
-        impl<$($name: Renderer + ivy_resources::Storage),*> Renderer for ($($name,)*) {
+        impl<$($name: Renderer),*> Renderer for ($($name,)*) {
             // Draws the scene using the pass [`Pass`] and the provided camera.
             // Note: camera must have gpu side data.
             fn draw(
                 &mut self,
                 world: &mut World,
-                resources: &Resources,
+                assets: &AssetCache,
                 cmd: &CommandBuffer,
                 sets: &[DescriptorSet],
                 pass_info: &PassInfo,
@@ -92,7 +85,7 @@ macro_rules! tuple_impl {
                 #[allow(non_snake_case)]
                 let ($($name,)+) = self;
                 ($($name
-                    .draw(world, resources, cmd, sets, pass_info, offsets, current_frame, pass)
+                    .draw(world, assets, cmd, sets, pass_info, offsets, current_frame, pass)
                     .with_context(|| {
                         format!(
                             "Failed to draw using renderer {:?}",

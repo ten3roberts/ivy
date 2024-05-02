@@ -5,10 +5,10 @@ use crate::{
     Result, Skin, SkinnedMesh, SkinnedVertex,
 };
 use ash::vk::{DescriptorSet, IndexType, ShaderStageFlags};
-use flax::{entity_ids, CommandBuffer, Component, Fetch, FetchExt, OptOr, Query, World};
+use flax::{entity_ids, CommandBuffer, Component, Fetch, FetchExt, Opt, OptOr, Query, World};
 use glam::{Mat4, Vec4};
+use ivy_assets::{Asset, AssetCache};
 use ivy_base::{color, Color, ColorExt, TransformQuery, Visible};
-use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
     context::SharedVulkanContext, descriptors::IntoSet, device, Buffer, BufferUsage, PassInfo,
     Shader,
@@ -75,15 +75,12 @@ impl SkinnedMeshRenderer {
     /// nothing if entities are already registered. Call this function after adding new entities to the world.
     /// # Failures
     /// Fails if object buffer cannot be reallocated to accomodate new entities.
-    fn register_entities(&mut self, world: &mut World, resources: &Resources) -> Result<()> {
-        let skins = resources.fetch::<Skin>()?;
-
+    fn register_entities(&mut self, world: &mut World, assets: &AssetCache) -> Result<()> {
         let needs_resize = Query::new((entity_ids(), skin()))
             .without(joint_buffer())
             .borrow(world)
             .iter()
             .try_for_each(|(id, skin)| {
-                let skin = skins.get(*skin).unwrap();
                 let block = self.allocator.allocate(skin.joint_count())?;
                 self.cmd.set(id, joint_buffer(), block);
                 Some(())
@@ -95,19 +92,13 @@ impl SkinnedMeshRenderer {
         if needs_resize {
             self.grow()?;
 
-            return self.register_entities(world, resources);
+            return self.register_entities(world, assets);
         }
 
         Ok(())
     }
 
-    fn update_joints(
-        &mut self,
-        world: &mut World,
-        resources: &Resources,
-        current_frame: usize,
-    ) -> Result<()> {
-        let skins = resources.fetch::<Skin>()?;
+    fn update_joints(&mut self, world: &mut World, current_frame: usize) -> Result<()> {
         self.buffers[current_frame]
             .0
             .write_slice(self.allocator.capacity() as _, 0, |data: &mut [Mat4]| {
@@ -116,7 +107,6 @@ impl SkinnedMeshRenderer {
                     .iter()
                     .for_each(|(animator, skin, block)| {
                         let slice = &mut data[block.offset()..block.offset() + block.len()];
-                        let skin = skins.get(*skin).unwrap();
                         for root in skin.roots() {
                             animator.fill_sparse(skin, slice, *root, Mat4::default());
                         }
@@ -157,7 +147,7 @@ impl Renderer for SkinnedMeshRenderer {
     fn draw(
         &mut self,
         world: &mut World,
-        resources: &Resources,
+        assets: &AssetCache,
         cmd: &ivy_vulkan::CommandBuffer,
         sets: &[DescriptorSet],
         pass_info: &PassInfo,
@@ -166,16 +156,14 @@ impl Renderer for SkinnedMeshRenderer {
         pass: Component<Shader>,
     ) -> anyhow::Result<()> {
         return Ok(());
-        let meshes = resources.fetch::<SkinnedMesh>()?;
-        let materials = resources.fetch::<Material>()?;
 
-        self.register_entities(world, resources)?;
-        self.update_joints(world, resources, current_frame)?;
+        self.register_entities(world, assets)?;
+        self.update_joints(world, current_frame)?;
 
         let renderpass = self.base_renderer.pass_mut(pass)?;
 
         renderpass.register(world, KeyQuery::new());
-        renderpass.build_batches(world, resources, pass_info)?;
+        renderpass.build_batches(world, pass_info)?;
 
         renderpass.update(
             current_frame,
@@ -199,7 +187,7 @@ impl Renderer for SkinnedMeshRenderer {
         for batch in renderpass.batches().iter() {
             let key = batch.key();
 
-            let mesh = meshes.get(key.mesh)?;
+            let mesh = key.mesh;
 
             cmd.bind_pipeline(batch.pipeline());
 
@@ -214,8 +202,7 @@ impl Renderer for SkinnedMeshRenderer {
             let instance_count = batch.instance_count();
             let first_instance = batch.first_instance();
 
-            if !key.material.is_null() {
-                let material = materials.get(key.material)?;
+            if let Some(material) = key.material {
                 cmd.bind_descriptor_sets(
                     batch.layout(),
                     sets.len() as u32,
@@ -225,12 +212,10 @@ impl Renderer for SkinnedMeshRenderer {
                 cmd.draw_indexed(mesh.index_count(), instance_count, 0, 0, first_instance);
             } else if !primitives.is_empty() {
                 primitives.iter().try_for_each(|val| -> Result<()> {
-                    let material = materials.get(val.material)?;
-
                     cmd.bind_descriptor_sets(
                         batch.layout(),
                         sets.len() as u32,
-                        &[frame_set, material.set(current_frame), joint_set],
+                        &[frame_set, val.material.set(current_frame), joint_set],
                         &[],
                     );
 
@@ -294,32 +279,32 @@ impl From<ObjectDataQueryItem<'_>> for ObjectData {
     }
 }
 
-#[derive(Fetch, PartialEq, Eq)]
+#[derive(Fetch)]
 struct KeyQuery {
-    mesh: Component<Handle<SkinnedMesh>>,
-    material: Component<Handle<Material>>,
+    mesh: Component<Asset<SkinnedMesh>>,
+    material: Opt<Component<Asset<Material>>>,
 }
 
 impl KeyQuery {
     fn new() -> Self {
         Self {
             mesh: skinned_mesh(),
-            material: material(),
+            material: material().opt(),
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Key {
-    mesh: Handle<SkinnedMesh>,
-    material: Handle<Material>,
+    mesh: Asset<SkinnedMesh>,
+    material: Option<Asset<Material>>,
 }
 
 impl From<KeyQueryItem<'_>> for Key {
     fn from(value: KeyQueryItem<'_>) -> Self {
         Self {
-            mesh: *value.mesh,
-            material: *value.material,
+            mesh: value.mesh.clone(),
+            material: value.material.cloned(),
         }
     }
 }

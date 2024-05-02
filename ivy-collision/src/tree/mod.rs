@@ -8,7 +8,6 @@ use flax::{
 use flume::{Receiver, Sender};
 use glam::{Mat4, Vec3};
 use ivy_base::{is_trigger, mass, velocity, world_transform, DrawGizmos, Events, Gizmos};
-use ivy_resources::{DefaultResource, DefaultResourceMut};
 use palette::Srgba;
 use slotmap::{new_key_type, SlotMap};
 use smallvec::Array;
@@ -213,6 +212,23 @@ pub fn register_system<N: CollisionTreeNode>(state: Component<CollisionTree<N>>)
         .boxed()
 }
 
+// pub fn draw_system<N: CollisionTreeNode>(state: Component<CollisionTree<N>>) -> BoxedSystem {
+//     System::builder()
+//         .with_world()
+//         .with_cmd_mut()
+//         .with_query(Query::new(state.as_mut()))
+//         .build(
+//             |world: &World,
+//              cmd: &mut CommandBuffer,
+//              mut query: QueryBorrow<Mutable<CollisionTree<N>>>| {
+//                 query.iter().for_each(|tree| {
+//                     tree.register(world, &mut *cmd);
+//                 })
+//             },
+//         )
+//         .boxed()
+// }
+
 pub fn update_system<N: CollisionTreeNode>(state: Component<CollisionTree<N>>) -> BoxedSystem {
     System::builder()
         .with_world()
@@ -275,11 +291,11 @@ pub fn check_collisions_system<N: CollisionTreeNode>(
 //     }
 // }
 
-impl<N: CollisionTreeNode + DrawGizmos> CollisionTree<N> {
-    pub fn draw_system(tree: DefaultResource<Self>, mut gizmos: DefaultResourceMut<Gizmos>) {
-        tree.draw_gizmos(&mut gizmos, Srgba::new(1.0, 1.0, 1.0, 1.0))
-    }
-}
+// impl<N: CollisionTreeNode + DrawGizmos> CollisionTree<N> {
+//     pub fn draw_system(tree: DefaultResource<Self>, mut gizmos: DefaultResourceMut<Gizmos>) {
+//         tree.draw_gizmos(&mut gizmos, Srgba::new(1.0, 1.0, 1.0, 1.0))
+//     }
+// }
 
 #[derive(Debug, Clone)]
 /// Data contained in each object in the tree.

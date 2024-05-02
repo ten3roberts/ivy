@@ -3,13 +3,11 @@ mod movement;
 
 use std::{fmt::Display, time::Duration};
 
-use anyhow::{anyhow, Context};
-use collision::{
-    components::collider, util::project_plane, BvhNode, Collider, CollisionTree, Cube, Ray, Sphere,
-};
+use anyhow::Context;
+use collision::{components::collider, util::project_plane, BvhNode, Collider, Cube, Ray, Sphere};
 use flax::{
-    components::child_of, entity_ids, fetch::TransformFetch, BoxedSystem, Entity, EntityBuilder,
-    FetchExt, Query, Schedule, System, World,
+    components::child_of, entity_ids, BoxedSystem, Entity, EntityBuilder, FetchExt, Query,
+    Schedule, System, World,
 };
 use flume::Receiver;
 use glam::{vec2, vec3, Quat, Vec2, Vec2Swizzles, Vec3};
@@ -19,34 +17,22 @@ use graphics::{
     layer::{WindowLayer, WindowLayerInfo},
 };
 use input::components::input_state;
-use ivy_engine::{
-    base::*,
-    graphics::*,
-    input::*,
-    resources::*,
-    ui::{constraints::*, *},
-    vulkan::*,
-    *,
-};
-use ivy_resources::Resources;
+use ivy_assets::{Asset, AssetCache};
+use ivy_engine::{base::*, graphics::*, input::*, ui::*, vulkan::*, *};
 use movement::{move_system, mover, Mover};
 use physics::{
-    bundles::*,
     components::{collision_state, collision_tree, effector},
     connections::draw_connections,
-    systems::CollisionState,
-    Effector, PhysicsLayer, PhysicsLayerInfo,
+    PhysicsLayer, PhysicsLayerInfo,
 };
-use postprocessing::pbr::PBRInfo;
 use presets::{
     default_geometry_shader, default_gizmo_shader, default_image_shader,
     default_post_processing_shader, default_text_shader, default_transparent_shader, geometry_pass,
-    text_pass, transparent_pass, ui_pass, PBRRenderingInfo,
+    text_pass, ui_pass, PBRRenderingInfo,
 };
 use random::rand::SeedableRng;
 use random::{rand::rngs::StdRng, Random};
-use rendergraph::GraphicsLayer;
-use std::fmt::Write;
+use rendergraph::{GraphicsDesc, GraphicsLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 use vulkan::vk::{CullModeFlags, PresentModeKHR};
 
@@ -77,7 +63,7 @@ fn main() -> anyhow::Result<()> {
 
     let mut app = App::builder()
         .push_layer(|_, _, _| EngineLayer::new())
-        .try_push_layer(|_, r, _| WindowLayer::new(r, WindowLayerInfo { window, swapchain }))?
+        .try_push_layer(|w, r, _| WindowLayer::new(w, r, WindowLayerInfo { window, swapchain }))?
         .try_push_layer(|w, r, e| -> anyhow::Result<_> {
             Ok((UILayer::new(w, r, e)?, ReactiveLayer::<Color>::new(w, r, e)))
         })?
@@ -102,31 +88,39 @@ fn main() -> anyhow::Result<()> {
                 ),
             ))
         })?
-        .try_push_layer(|w, r, e| GraphicsLayer::new(w, r, e, FRAMES_IN_FLIGHT))?
+        .try_push_layer(|w, r, e| {
+            GraphicsLayer::new(
+                w,
+                r,
+                e,
+                GraphicsDesc {
+                    frames_in_flight: FRAMES_IN_FLIGHT,
+                },
+            )
+        })?
         .try_push_layer(|w, r, e| DebugLayer::new(w, r, e, 100.ms()))?
         .build();
 
     app.run().context("Failed to run application")
 }
 
-fn setup_graphics(world: &mut World, resources: &Resources) -> anyhow::Result<Assets> {
-    let text_shader = Shader::new(resources.insert(default_text_shader())?);
-    let ui_shader = Shader::new(resources.insert(default_image_shader())?);
-    let post_processing_shader = Shader::new(resources.insert(default_post_processing_shader())?);
-    let geometry_shader =
-        Shader::new(resources.insert(default_geometry_shader(CullModeFlags::BACK))?);
+fn setup_graphics(world: &mut World, assets: &AssetCache) -> anyhow::Result<AssetPack> {
+    let text_shader = Shader::new(assets.insert(default_text_shader()));
+    let ui_shader = Shader::new(assets.insert(default_image_shader()));
+    let post_processing_shader = Shader::new(assets.insert(default_post_processing_shader()));
+    let geometry_shader = Shader::new(assets.insert(default_geometry_shader(CullModeFlags::BACK)));
 
-    let transparent_shader = Shader::new(resources.insert(default_transparent_shader())?);
+    let transparent_shader = Shader::new(assets.insert(default_transparent_shader()));
 
-    let gizmo_shader = Shader::new(resources.insert(default_gizmo_shader())?);
+    let gizmo_shader = Shader::new(assets.insert(default_gizmo_shader()));
 
-    let pbr = presets::PBRRendering::setup(
+    let mut pbr = presets::PBRRendering::setup(
         world,
-        resources,
+        assets,
         DefaultEnvData {
-            ambient_radiance: Vec3::ONE * 0.01,
+            ambient_radiance: Vec3::ONE * 0.5,
             fog_density: 0.01,
-            fog_color: Vec3::new(0.0, 0.1, 0.1),
+            fog_color: Vec3::new(0.1, 0.1, 0.1),
             fog_gradient: 2.0,
         },
         FRAMES_IN_FLIGHT,
@@ -134,17 +128,18 @@ fn setup_graphics(world: &mut World, resources: &Resources) -> anyhow::Result<As
             color_usage: ImageUsage::COLOR_ATTACHMENT
                 | ImageUsage::SAMPLED
                 | ImageUsage::TRANSFER_SRC,
-            text_shader,
-            ui_shader,
+            text_shader: text_shader.clone(),
+            ui_shader: ui_shader.clone(),
             post_processing_shader,
             gizmo_shader,
         },
     )?;
 
-    pbr.using_swapchain(resources)?;
+    pbr.using_swapchain(world, assets)?;
+    pbr.install(world);
     // .setup_pipelines(resources, presets::PipelinesInfo::default())?;
 
-    Ok(Assets {
+    Ok(AssetPack {
         geometry_shader,
         transparent_shader,
         text_shader,
@@ -154,32 +149,29 @@ fn setup_graphics(world: &mut World, resources: &Resources) -> anyhow::Result<As
 
 fn setup_objects(
     world: &mut World,
-    resources: &Resources,
-    assets: &Assets,
+    assets: &AssetCache,
+    asset_pack: &AssetPack,
     camera: Entity,
     canvas: Entity,
 ) -> anyhow::Result<Entities> {
     let _scope = TimedScope::new(|elapsed| eprintln!("Object setup took {:.3?}", elapsed));
-    resources.insert(Gizmos::default())?;
+    world.set(engine(), gizmos(), Default::default())?;
 
-    let cube_document: Handle<Document> = resources
-        .load("./res/models/cube.glb")
-        .context("Failed to load cube model")??;
+    let cube_document: Asset<Document> =
+        assets.load(&DocumentFromPath("./res/models/cube.glb".into()));
 
-    let cube_mesh = resources.get(cube_document)?.mesh(0);
-    let material = resources.load::<Material, _, _, _>(MaterialInfo {
+    let cube_mesh = cube_document.mesh(0);
+    let material = assets.load(&MaterialInfo {
         albedo: "./res/textures/metal.png".into(),
         normal: Some("./res/textures/metal_normal.png".into()),
-        sampler: SamplerInfo::default(),
+        sampler: SamplerKey::default(),
         roughness: 0.1,
         metallic: 1.0,
-    })??;
+    });
 
-    let sphere_document: Handle<Document> = resources
-        .load("./res/models/sphere.gltf")
-        .context("Failed to load sphere model")??;
+    let sphere_document = assets.load(&DocumentFromPath("./res/models/sphere.gltf".into()));
 
-    let sphere_mesh = resources.get(sphere_document)?.mesh(0);
+    let sphere_mesh = sphere_document.mesh(0);
 
     let mut builder = Entity::builder();
 
@@ -187,7 +179,7 @@ fn setup_objects(
         .set(position(), vec3(0.0, 5.0, 5.0))
         .set(
             light_source(),
-            PointLight::new(1.0, vec3(1.0, 1.0, 0.7) * 5000.0),
+            PointLight::new(1.0, vec3(1.0, 1.0, 1.0) * 5000.0),
         )
         .spawn(world);
 
@@ -203,12 +195,12 @@ fn setup_objects(
             pos: vec3(0.0, 0.6, -1.2),
             scale: Vec3::splat(0.5),
             // pass: assets.geometry_pass,
-            mesh: sphere_mesh,
-            material,
+            mesh: sphere_mesh.clone(),
+            material: Some(material.clone()),
             color: Color::red(),
-            ..Default::default()
+            rotation: Default::default(),
         })
-        .set(geometry_pass(), assets.geometry_shader)
+        .set(geometry_pass(), asset_pack.geometry_shader.clone())
         .set(is_static(), ());
 
     let sphere = builder.spawn(world);
@@ -229,10 +221,7 @@ fn setup_objects(
         //     PositionOffset::new(0.0, 4.0, 0.0),
         //     RotationOffset::default(),
         // ))
-        .set(
-            light_source(),
-            PointLight::new(0.2, Vec3::new(0.0, 0.0, 5000.0)),
-        )
+        // .set(light_source(), PointLight::new(0.2, Vec3::ONE * 10000.0))
         .set(
             connection(sphere),
             ConnectionKind::Spring {
@@ -246,10 +235,13 @@ fn setup_objects(
     builder
         .mount(RenderObjectBundle {
             scale: Vec3::splat(0.25),
-            mesh: cube_mesh,
-            ..Default::default()
+            mesh: cube_mesh.clone(),
+            material: Some(material.clone()),
+            pos: Default::default(),
+            rotation: Default::default(),
+            color: Color::white(),
         })
-        .set(geometry_pass(), assets.geometry_shader)
+        .set(geometry_pass(), asset_pack.geometry_shader.clone())
         .mount(RbBundle {
             mass: 10.0,
             ..Default::default()
@@ -271,11 +263,13 @@ fn setup_objects(
     builder
         .mount(RenderObjectBundle {
             scale: Vec3::splat(0.25),
-            mesh: sphere_mesh,
-            material,
-            ..Default::default()
+            mesh: sphere_mesh.clone(),
+            material: Some(material.clone()),
+            pos: Default::default(),
+            rotation: Default::default(),
+            color: Color::white(),
         })
-        .set(geometry_pass(), assets.geometry_shader)
+        .set(geometry_pass(), asset_pack.geometry_shader.clone())
         .mount(RbBundle {
             // collider: Collider::new(Sphere::new(1.0)),
             mass: 10.0,
@@ -297,13 +291,14 @@ fn setup_objects(
 
         builder
             .mount(RenderObjectBundle {
-                mesh: cube_mesh,
+                mesh: cube_mesh.clone(),
                 scale: Vec3::splat(0.5),
                 pos,
-                color: Color::new(1.0, 1.0, 0.2, 0.5),
-                ..Default::default()
+                color: Color::white(),
+                rotation: Default::default(),
+                material: None,
             })
-            .set(geometry_pass(), assets.geometry_shader)
+            .set(geometry_pass(), asset_pack.geometry_shader.clone())
             .mount(RbBundle {
                 vel,
                 mass: 20.0,
@@ -321,15 +316,15 @@ fn setup_objects(
 
         builder
             .mount(RenderObjectBundle {
-                mesh: sphere_mesh,
-                material,
+                mesh: sphere_mesh.clone(),
+                material: Some(material.clone()),
                 scale: Vec3::splat(0.5),
                 pos,
                 color: Color::new(1.0, 1.0, 1.0, 1.0),
-                ..Default::default()
+                rotation: Default::default(),
             })
             // Assign to a pass during rendering
-            .set(geometry_pass(), assets.geometry_shader)
+            .set(geometry_pass(), asset_pack.geometry_shader.clone())
             .mount(RbBundle {
                 vel,
                 mass: 20.0,
@@ -345,7 +340,7 @@ fn setup_objects(
     Ok(Entities { camera, canvas })
 }
 
-struct Assets {
+struct AssetPack {
     geometry_shader: Shader,
     transparent_shader: Shader,
     text_shader: Shader,
@@ -366,17 +361,22 @@ struct LogicLayer {
 
     window_events: Receiver<WindowEvent>,
     graphics_events: Receiver<GraphicsEvent>,
-    assets: Assets,
+    assets: AssetPack,
     entities: Entities,
 }
 
 impl LogicLayer {
     pub fn new(
         world: &mut World,
-        resources: &mut Resources,
+        assets: &mut AssetCache,
         events: &mut Events,
     ) -> anyhow::Result<Self> {
-        let input = InputState::new(resources, events)?;
+        let input = InputState::new(
+            &world
+                .get(engine(), ivy_graphics::components::window())
+                .unwrap(),
+            events,
+        );
 
         let input_vector = InputVector::new(
             InputAxis::keyboard(Key::A, Key::D),
@@ -407,11 +407,11 @@ impl LogicLayer {
             .mount(CanvasBundle::new(input.window_extent()))
             .spawn(world);
 
-        let assets = setup_graphics(world, resources).context("Failed to setup graphics")?;
+        let asset_pack = setup_graphics(world, assets).context("Failed to setup graphics")?;
 
-        let entities = setup_objects(world, resources, &assets, camera, canvas)?;
+        let entities = setup_objects(world, &assets, &asset_pack, camera, canvas)?;
 
-        setup_ui(world, resources, &assets)?;
+        setup_ui(world, &assets, &asset_pack)?;
 
         let window_events = events.subscribe();
         let graphics_events = events.subscribe();
@@ -422,7 +422,7 @@ impl LogicLayer {
         Ok(Self {
             camera_euler: Vec3::ZERO,
             entities,
-            assets,
+            assets: asset_pack,
             window_events,
             graphics_events,
             cursor_mode: CursorMode::Normal,
@@ -430,27 +430,20 @@ impl LogicLayer {
         })
     }
 
-    pub fn handle_events(
-        &mut self,
-        world: &mut World,
-        resources: &Resources,
-    ) -> anyhow::Result<()> {
+    pub fn handle_events(&mut self, world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
         // let window = resources.get_default_mut::<Window>()?;
 
         for event in self.window_events.try_iter() {
-            match event {
-                WindowEvent::Scroll(_, scroll) => {
-                    let mut mover = world.get_mut(self.entities.camera, mover())?;
-                    mover.speed = (mover.speed + scroll as f32 * 0.2).clamp(0.1, 20.0);
-                }
-                _ => {}
+            if let WindowEvent::Scroll(_, scroll) = event {
+                let mut mover = world.get_mut(self.entities.camera, mover())?;
+                mover.speed = (mover.speed + scroll as f32 * 0.2).clamp(0.1, 20.0);
             }
         }
 
         for event in self.graphics_events.try_iter() {
             match event {
                 GraphicsEvent::SwapchainRecreation => {
-                    setup_graphics(world, resources)?;
+                    setup_graphics(world, assets)?;
                 }
             }
         }
@@ -471,26 +464,25 @@ impl Layer for LogicLayer {
     fn on_update(
         &mut self,
         world: &mut World,
-        resources: &mut Resources,
+        assets: &mut AssetCache,
         _events: &mut Events,
-        frame_time: Duration,
+        _: Duration,
     ) -> anyhow::Result<()> {
         // let _scope = TimedScope::new(|elapsed| log::trace!("Logic layer took {:.3?}", elapsed));
 
-        self.handle_events(world, resources)
+        self.handle_events(world, assets)
             .context("Failed to handle events")?;
 
         self.schedule.execute_par(world)?;
 
         let input = &mut world.get_mut(engine(), input_state())?;
 
-        let dt = frame_time.as_secs_f32();
         let mut query = Query::new((camera(), position(), rotation().as_mut())).with(main_camera());
         let mut query = query.borrow(world);
 
         let (camera, &camera_position, camera_rotation) = query.iter().next().unwrap();
 
-        let mut window = resources.get_default_mut::<Window>()?;
+        let mut window = world.get_mut(engine(), ivy_graphics::components::window())?;
 
         //  Only move camera if right mouse button is held
         if input.mouse_button_down(MouseButton::Button2) {
@@ -515,7 +507,7 @@ impl Layer for LogicLayer {
         let dir = camera.to_world_ray(cursor_pos);
 
         let ray = Ray::new(camera_position, dir);
-        let mut gizmos = resources.get_default_mut::<Gizmos>()?;
+        let mut gizmos = world.get_mut(engine(), gizmos())?;
 
         let tree = world.get_mut(engine(), collision_tree())?;
         let collision_state = world.get_mut(engine(), collision_state())?;
@@ -614,34 +606,34 @@ impl Layer for LogicLayer {
 
 struct DisplayDebugReport;
 
-fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow::Result<()> {
+fn setup_ui(world: &mut World, assets: &AssetCache, asset_pack: &AssetPack) -> anyhow::Result<()> {
     let canvas = Query::new(entity_ids())
         .with(canvas())
         .borrow(world)
         .first()
         .unwrap();
 
-    let heart: Handle<Image> = resources.load(ImageInfo {
+    let heart: Asset<Image> = assets.load(&ImageInfo {
         texture: "./res/textures/heart.png".into(),
-        sampler: SamplerInfo::pixelated(),
-    })??;
+        sampler: SamplerKey::pixelated(),
+    });
 
-    let input_field: Handle<Image> = resources.load(ImageInfo {
+    let input_field: Asset<Image> = assets.load(&ImageInfo {
         texture: "./res/textures/field.png".into(),
-        sampler: SamplerInfo::pixelated(),
-    })??;
+        sampler: SamplerKey::pixelated(),
+    });
 
-    let font: Handle<Font> = resources.load(FontInfo {
+    let font: Asset<Font> = assets.load(&FontInfo {
         size: 48.0,
         path: "./res/fonts/Lora/Lora-VariableFont_wght.ttf".into(),
         ..Default::default()
-    })??;
+    });
 
-    let monospace: Handle<Font> = resources.load(FontInfo {
+    let monospace: Asset<Font> = assets.load(&FontInfo {
         size: 48.0,
         path: "./res/fonts/Roboto_Mono/RobotoMono-VariableFont_wght.ttf".into(),
         ..Default::default()
-    })??;
+    });
 
     let mut builder = EntityBuilder::new();
 
@@ -653,10 +645,10 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
             ..Default::default()
         })
         .mount(ImageBundle {
-            image: heart,
+            image: Some(heart.clone()),
             color: Color::white(),
         })
-        .set(ui_pass(), assets.ui_shader)
+        .set(ui_pass(), asset_pack.ui_shader.clone())
         .set(interactive(), ())
         .set(child_of(canvas), ())
         .spawn(world);
@@ -672,7 +664,6 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
     builder
         .mount(InputFieldBundle {
             field: InputField::new(|_, _, val| println!("Input: {:?}", val)),
-            ..Default::default()
         })
         .mount(WidgetBundle {
             abs_size: vec2(500.0, 50.0),
@@ -683,16 +674,18 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
         })
         .mount(TextBundle {
             text: Text::new(""),
-            font,
+            font: font.clone(),
             margin: vec2(10.0, 10.0),
-            ..Default::default()
+            color: Default::default(),
+            wrap: Default::default(),
+            align: Default::default(),
         })
         .mount(ImageBundle {
-            image: input_field,
+            image: Some(input_field),
             ..Default::default()
         })
-        .set(text_pass(), assets.text_shader)
-        .set(ui_pass(), assets.ui_shader)
+        .set(text_pass(), asset_pack.text_shader.clone())
+        .set(ui_pass(), asset_pack.ui_shader.clone())
         .set(child_of(canvas), ())
         .spawn(world);
 
@@ -707,9 +700,11 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
             text: Text::new("Debug"),
             color: Color::white(),
             align: Alignment::new(HorizontalAlign::Left, VerticalAlign::Top),
-            ..Default::default()
+
+            wrap: Default::default(),
+            margin: Default::default(),
         })
-        .set(text_pass(), assets.text_shader)
+        .set(text_pass(), asset_pack.text_shader.clone())
         .set(child_of(canvas), ())
         .spawn(world);
 
@@ -725,10 +720,10 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
             ..Default::default()
         })
         .mount(ImageBundle {
-            image: heart,
+            image: Some(heart.clone()),
             color: Color::white(),
         })
-        .set(ui_pass(), assets.ui_shader)
+        .set(ui_pass(), asset_pack.ui_shader.clone())
         .set(child_of(canvas), ())
         .spawn(world);
 
@@ -750,10 +745,10 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
             ..Default::default()
         })
         .mount(ImageBundle {
-            image: heart,
+            image: Some(heart.clone()),
             color: Color::white(),
         })
-        .set(ui_pass(), assets.ui_shader)
+        .set(ui_pass(), asset_pack.ui_shader.clone())
         .set(child_of(canvas), ())
         .spawn(world);
 
@@ -767,12 +762,13 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
         })
         .mount(TextBundle {
             text: Text::new("Hello, World!"),
-            font,
+            font: font.clone(),
             color: Color::purple(),
             align: Alignment::new(HorizontalAlign::Center, VerticalAlign::Top),
-            ..Default::default()
+            wrap: Default::default(),
+            margin: Default::default(),
         })
-        .set(text_pass(), assets.text_shader)
+        .set(text_pass(), asset_pack.text_shader.clone())
         .set(child_of(canvas), ())
         .spawn(world);
 
@@ -788,9 +784,10 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
             text: Text::new("Ivy"),
             color: Color::green(),
             align: Alignment::new(HorizontalAlign::Left, VerticalAlign::Bottom),
-            ..Default::default()
+            wrap: Default::default(),
+            margin: Default::default(),
         })
-        .set(text_pass(), assets.text_shader)
+        .set(text_pass(), asset_pack.text_shader.clone())
         .set(child_of(widget2), ())
         .spawn(world);
 
@@ -804,10 +801,10 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
             ..Default::default()
         })
         .mount(ImageBundle {
-            image: heart,
+            image: Some(heart.clone()),
             color: Color::white(),
         })
-        .set(ui_pass(), assets.ui_shader)
+        .set(ui_pass(), asset_pack.ui_shader.clone())
         .set(child_of(widget2), ())
         .spawn(world);
 
@@ -819,10 +816,10 @@ fn setup_ui(world: &mut World, resources: &Resources, assets: &Assets) -> anyhow
             ..Default::default()
         })
         .mount(ImageBundle {
-            image: heart,
+            image: Some(heart.clone()),
             color: Color::white(),
         })
-        .set(ui_pass(), assets.ui_shader)
+        .set(ui_pass(), asset_pack.ui_shader.clone())
         .set(child_of(satellite), ())
         .spawn(world);
 
@@ -883,7 +880,7 @@ struct DebugLayer {
 impl DebugLayer {
     fn new(
         _world: &mut World,
-        _resources: &Resources,
+        _assets: &mut AssetCache,
         _events: &mut Events,
         frequency: Duration,
     ) -> anyhow::Result<Self> {
@@ -903,7 +900,7 @@ impl Layer for DebugLayer {
     fn on_update(
         &mut self,
         world: &mut World,
-        _: &mut Resources,
+        _: &mut AssetCache,
         _: &mut Events,
         frametime: Duration,
     ) -> anyhow::Result<()> {

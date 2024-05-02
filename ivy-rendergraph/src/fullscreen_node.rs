@@ -1,7 +1,7 @@
 use anyhow::Context;
 use flax::{Component, World};
+use ivy_assets::{Asset, AssetCache};
 use ivy_graphics::Renderer;
-use ivy_resources::{Handle, Storage};
 use ivy_vulkan::{
     descriptors::{DescriptorSet, IntoSet},
     vk::ClearValue,
@@ -11,10 +11,10 @@ use ivy_vulkan::{
 use crate::{AttachmentInfo, Node, NodeKind};
 
 pub struct FullscreenNode<T> {
-    renderer: Handle<T>,
+    renderer: T,
     color_attachments: Vec<AttachmentInfo>,
-    read_attachments: Vec<Handle<Texture>>,
-    input_attachments: Vec<Handle<Texture>>,
+    read_attachments: Vec<Asset<Texture>>,
+    input_attachments: Vec<Asset<Texture>>,
     depth_attachment: Option<AttachmentInfo>,
     clear_values: Vec<ClearValue>,
     sets: Vec<DescriptorSet>,
@@ -24,13 +24,13 @@ pub struct FullscreenNode<T> {
 
 impl<T> FullscreenNode<T>
 where
-    T: Renderer + Storage,
+    T: Renderer,
 {
     pub fn new(
-        renderer: Handle<T>,
+        renderer: T,
         color_attachments: Vec<AttachmentInfo>,
-        read_attachments: Vec<Handle<Texture>>,
-        input_attachments: Vec<Handle<Texture>>,
+        read_attachments: Vec<Asset<Texture>>,
+        input_attachments: Vec<Asset<Texture>>,
         depth_attachment: Option<AttachmentInfo>,
         clear_values: Vec<ClearValue>,
         sets: Vec<&dyn IntoSet>,
@@ -61,17 +61,17 @@ where
 
 impl<T> Node for FullscreenNode<T>
 where
-    T: Renderer + Storage,
+    T: 'static + Send + Sync + Renderer,
 {
     fn color_attachments(&self) -> &[AttachmentInfo] {
         &self.color_attachments
     }
 
-    fn read_attachments(&self) -> &[Handle<Texture>] {
+    fn read_attachments(&self) -> &[Asset<Texture>] {
         &self.read_attachments
     }
 
-    fn input_attachments(&self) -> &[Handle<Texture>] {
+    fn input_attachments(&self) -> &[Asset<Texture>] {
         &self.input_attachments
     }
 
@@ -94,17 +94,16 @@ where
     fn execute(
         &mut self,
         world: &mut World,
-        resources: &ivy_resources::Resources,
+        assets: &AssetCache,
         cmd: &ivy_vulkan::commands::CommandBuffer,
         pass_info: &PassInfo,
         current_frame: usize,
     ) -> anyhow::Result<()> {
         let offset = self.set_count * current_frame;
-        resources
-            .get_mut(self.renderer)?
+        self.renderer
             .draw(
                 world,
-                resources,
+                assets,
                 cmd,
                 &self.sets[offset..offset + self.set_count],
                 pass_info,

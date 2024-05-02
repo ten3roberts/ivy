@@ -3,8 +3,8 @@ use std::marker::PhantomData;
 use anyhow::Context;
 use flax::World;
 use flume::Receiver;
+use ivy_assets::AssetCache;
 use ivy_base::{Events, Layer};
-use ivy_resources::Resources;
 
 use crate::{events::WidgetEvent, systems, WidgetEventKind};
 
@@ -71,7 +71,7 @@ pub struct ReactiveLayer<T> {
 }
 
 impl<T> ReactiveLayer<T> {
-    pub fn new(_world: &mut World, _resources: &mut Resources, events: &mut Events) -> Self {
+    pub fn new(_world: &mut World, _resources: &mut AssetCache, events: &mut Events) -> Self {
         let (tx, rx) = flume::unbounded();
         events.subscribe_custom(tx);
         Self {
@@ -85,7 +85,7 @@ impl<T: 'static + Copy + Send + Sync> Layer for ReactiveLayer<T> {
     fn on_update(
         &mut self,
         world: &mut World,
-        _: &mut ivy_resources::Resources,
+        _: &mut AssetCache,
         _: &mut ivy_base::Events,
         _: std::time::Duration,
     ) -> anyhow::Result<()> {

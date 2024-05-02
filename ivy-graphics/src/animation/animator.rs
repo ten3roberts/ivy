@@ -2,7 +2,7 @@ use std::collections::{btree_map::Iter, BTreeMap};
 
 use flax::{Query, World};
 use glam::{Mat4, Quat, Vec3};
-use ivy_resources::{Handle, ResourceCache, ResourceView};
+use ivy_assets::Asset;
 
 use crate::{
     components::animator, Animation, AnimationStore, JointIndex, KeyFrameValues, Result, Skin,
@@ -66,7 +66,7 @@ impl Default for JointTarget {
 /// Allows playing multiple overlapping animations at once
 #[derive(Debug, Clone)]
 pub struct Animator {
-    states: BTreeMap<Handle<Animation>, AnimationState>,
+    states: BTreeMap<Asset<Animation>, AnimationState>,
     /// The keyframe index for each channel
     joints: BTreeMap<JointIndex, (JointTarget, usize)>,
     generation: usize,
@@ -86,14 +86,14 @@ impl Animator {
     }
 
     /// Moves the animators state forward by `dt`
-    pub fn progress(&mut self, animations: &ResourceCache<Animation>, dt: f32) -> Result<()> {
+    pub fn progress(&mut self, dt: f32) -> Result<()> {
         self.generation += 1;
         let joints = &mut self.joints;
         let generation = self.generation;
 
-        self.states.iter_mut().try_for_each(|(_, animation)| {
-            animation.progress(animations, dt, joints, generation)
-        })?;
+        self.states
+            .iter_mut()
+            .try_for_each(|(_, animation)| animation.progress(dt, joints, generation))?;
 
         Ok(())
     }
@@ -117,7 +117,7 @@ impl Animator {
         Ok(())
     }
 
-    pub fn stop_animation_handle(&mut self, animation: Handle<Animation>) {
+    pub fn stop_animation_handle(&mut self, animation: Asset<Animation>) {
         self.states
             .entry(animation)
             .and_modify(|val| val.playing = false);
@@ -134,14 +134,14 @@ impl Animator {
 
     /// Play an animation by handle
     /// **NOTE**: Behaviour is undefined if an animation for a different skin is used
-    fn play_animation_handle(&mut self, animation: Handle<Animation>, info: AnimationInfo) {
+    fn play_animation_handle(&mut self, animation: Asset<Animation>, info: AnimationInfo) {
         self.states
             .entry(animation)
             .and_modify(|val| {
                 val.reset();
                 val.info = info
             })
-            .or_insert_with(|| AnimationState::new(animation, info));
+            .or_insert_with_key(|animation| AnimationState::new(animation.clone(), info));
     }
 
     /// Play an animation by index
@@ -184,11 +184,11 @@ impl Animator {
     }
 
     /// ECS system for updating all animators
-    pub fn system(world: &World, animations: ResourceView<Animation>, dt: f32) -> Result<()> {
+    pub fn system(world: &World, dt: f32) -> Result<()> {
         Query::new(animator().as_mut())
             .borrow(world)
             .iter()
-            .try_for_each(|animator| animator.progress(&*animations, dt))
+            .try_for_each(|animator| animator.progress(dt))
     }
 
     /// Get a reference to the animator's animations.
@@ -197,9 +197,9 @@ impl Animator {
     }
 }
 
-#[derive(Default, Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 struct AnimationState {
-    animation: Handle<Animation>,
+    animation: Asset<Animation>,
     states: BTreeMap<ChannelIndex, Frame>,
     time: f32,
     playing: bool,
@@ -207,7 +207,7 @@ struct AnimationState {
 }
 
 impl AnimationState {
-    pub fn new(animation: Handle<Animation>, info: AnimationInfo) -> Self {
+    pub fn new(animation: Asset<Animation>, info: AnimationInfo) -> Self {
         Self {
             animation,
             states: BTreeMap::new(),
@@ -220,13 +220,10 @@ impl AnimationState {
     /// Moves the state forward by `dt`
     pub fn progress(
         &mut self,
-        animations: &ResourceCache<Animation>,
         dt: f32,
         joints: &mut BTreeMap<ChannelIndex, (JointTarget, usize)>,
         generation: usize,
     ) -> Result<()> {
-        let animation = animations.get(self.animation)?;
-
         if !self.playing {
             return Ok(());
         }
@@ -234,19 +231,19 @@ impl AnimationState {
         // Loop through all states and check if the frame should be changed
         self.time += dt * self.info.speed.abs();
 
-        if self.time > animation.duration() {
+        if self.time > self.animation.duration() {
             if self.info.repeat {
-                self.time = self.time % animation.duration();
+                self.time = self.time % self.animation.duration();
                 self.states.clear();
             } else {
-                self.time = animation.duration();
+                self.time = self.animation.duration();
                 self.playing = false;
             }
         }
 
         let dir = self.info.speed.signum() as isize;
 
-        animation
+        self.animation
             .channels
             .iter()
             .enumerate()

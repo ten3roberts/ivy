@@ -21,9 +21,6 @@ pub enum Error {
     #[error("Failed to create window")]
     WindowCreation,
 
-    #[error("Graphics resource error")]
-    ResourceError(#[from] ivy_resources::Error),
-
     #[error("Failed to pack rectangles for texture atlas of size: {0:?}")]
     RectanglePack(Extent),
 

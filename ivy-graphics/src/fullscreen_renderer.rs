@@ -3,8 +3,11 @@ use std::collections::btree_map::Entry;
 use crate::{Renderer, Result};
 use ash::vk::DescriptorSet;
 use flax::{Component, World};
-use ivy_resources::Resources;
-use ivy_vulkan::{context::SharedVulkanContext, PassInfo, Pipeline, PipelineInfo, Shader};
+use ivy_assets::AssetCache;
+use ivy_vulkan::{
+    context::{SharedVulkanContext, VulkanContextService},
+    PassInfo, Pipeline, PipelineInfo, Shader,
+};
 
 // Renders a fullscreen quad using the supplied shader pass and descriptors
 pub struct FullscreenRenderer {
@@ -25,7 +28,7 @@ impl Renderer for FullscreenRenderer {
     fn draw(
         &mut self,
         _world: &mut World,
-        resources: &Resources,
+        assets: &AssetCache,
         cmd: &ivy_vulkan::commands::CommandBuffer,
         sets: &[DescriptorSet],
         pass_info: &PassInfo,
@@ -36,7 +39,7 @@ impl Renderer for FullscreenRenderer {
         let pipeline = match &mut self.pipeline {
             Some(v) => v,
             None => {
-                let context = resources.get_default::<SharedVulkanContext>()?;
+                let context = assets.service::<VulkanContextService>().context();
                 let val = Pipeline::new::<()>(context.clone(), &self.pipeline_info, pass_info)?;
 
                 self.pipeline.insert(val)

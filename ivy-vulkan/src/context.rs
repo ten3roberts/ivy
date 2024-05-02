@@ -6,10 +6,27 @@ use ash::extensions::khr::Surface;
 use ash::vk;
 
 use gpu_allocator::vulkan::{Allocator, AllocatorCreateDesc};
+use ivy_assets::service::Service;
 use parking_lot::RwLock;
 use std::sync::Arc;
 
 pub type SharedVulkanContext = Arc<VulkanContext>;
+
+pub struct VulkanContextService {
+    pub context: SharedVulkanContext,
+}
+
+impl VulkanContextService {
+    pub fn new(context: SharedVulkanContext) -> Self {
+        Self { context }
+    }
+
+    pub fn context(&self) -> SharedVulkanContext {
+        self.context.clone()
+    }
+}
+
+impl Service for VulkanContextService {}
 
 pub struct VulkanContext {
     _entry: ash::Entry,

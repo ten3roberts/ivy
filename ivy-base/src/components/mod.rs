@@ -5,7 +5,7 @@ mod physics;
 pub use connections::*;
 pub use physics::*;
 
-use crate::{Bundle, Color};
+use crate::{Bundle, Color, Gizmos};
 
 flax::component! {
     pub position: Vec3 => [Debuggable],
@@ -27,6 +27,8 @@ flax::component! {
     pub color: Color => [ Debuggable ],
 
     pub main_camera: () => [ Debuggable ],
+
+    pub gizmos: Gizmos,
 
     pub engine,
 }

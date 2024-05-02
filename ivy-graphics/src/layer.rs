@@ -5,12 +5,14 @@ use std::{
 
 use flax::World;
 use glfw::{Glfw, WindowEvent};
-use ivy_base::{AppEvent, Events, Layer};
+use ivy_assets::AssetCache;
+use ivy_base::{engine, AppEvent, Events, Layer};
 use ivy_input::InputEvent;
-use ivy_resources::Resources;
-use ivy_vulkan::{Swapchain, SwapchainInfo, VulkanContext};
+use ivy_vulkan::{context::VulkanContextService, Swapchain, SwapchainInfo, VulkanContext};
 use ivy_window::{Window, WindowInfo};
 use parking_lot::RwLock;
+
+use crate::components;
 
 /// Customize behaviour of the window layer
 #[derive(Debug, Clone, PartialEq)]
@@ -38,7 +40,11 @@ pub struct WindowLayer {
 }
 
 impl WindowLayer {
-    pub fn new(resources: &Resources, info: WindowLayerInfo) -> anyhow::Result<Self> {
+    pub fn new(
+        world: &mut World,
+        assets: &AssetCache,
+        info: WindowLayerInfo,
+    ) -> anyhow::Result<Self> {
         let glfw = Arc::new(RwLock::new(glfw::init(glfw::FAIL_ON_ERRORS)?));
         let (window, events) = Window::new(glfw.clone(), info.window)?;
 
@@ -46,9 +52,10 @@ impl WindowLayer {
 
         let swapchain = Swapchain::new(context.clone(), &window, info.swapchain)?;
 
-        resources.insert(context)?;
-        resources.insert(swapchain)?;
-        resources.insert(window)?;
+        assets.register_service(VulkanContextService::new(context));
+
+        world.set(engine(), components::window(), window)?;
+        world.set(engine(), components::swapchain(), swapchain)?;
 
         Ok(Self { glfw, events })
     }
@@ -58,7 +65,7 @@ impl Layer for WindowLayer {
     fn on_update(
         &mut self,
         _world: &mut World,
-        _: &mut Resources,
+        _: &mut AssetCache,
         events: &mut Events,
         _frame_time: Duration,
     ) -> anyhow::Result<()> {

@@ -6,7 +6,7 @@ use derive_more::{Deref, From, Into};
 use glam::{IVec4, Vec2, Vec3, Vec4};
 use gltf::buffer;
 use itertools::izip;
-use ivy_resources::Handle;
+use ivy_assets::Asset;
 use ordered_float::OrderedFloat;
 use std::mem::size_of;
 use std::ops::Deref;
@@ -205,11 +205,11 @@ impl vulkan::VertexDesc for SkinnedVertex {
 }
 
 /// Represents a part of the mesh with a distincs material.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Primitive {
     pub first_index: u32,
     pub index_count: u32,
-    pub material: Handle<Material>,
+    pub material: Asset<Material>,
 }
 
 impl Primitive {
@@ -224,8 +224,8 @@ impl Primitive {
     }
 
     /// Get a reference to the primitive's material index.
-    pub fn material(&self) -> Handle<Material> {
-        self.material
+    pub fn material(&self) -> &Asset<Material> {
+        &self.material
     }
 }
 
@@ -409,7 +409,7 @@ impl Mesh<Vertex> {
         context: SharedVulkanContext,
         mesh: gltf::Mesh,
         buffers: &[buffer::Data],
-        materials: &[Handle<Material>],
+        materials: &[Asset<Material>],
     ) -> Result<Self> {
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
@@ -453,7 +453,7 @@ impl Mesh<Vertex> {
                 primitives.push(Primitive {
                     first_index,
                     index_count,
-                    material: *material,
+                    material: material.clone(),
                 });
             }
         }
@@ -469,7 +469,7 @@ impl Mesh<SkinnedVertex> {
         context: SharedVulkanContext,
         mesh: gltf::Mesh,
         buffers: &[buffer::Data],
-        materials: &[Handle<Material>],
+        materials: &[Asset<Material>],
     ) -> Result<Self> {
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
@@ -529,7 +529,7 @@ impl Mesh<SkinnedVertex> {
                 primitives.push(Primitive {
                     first_index,
                     index_count,
-                    material: *material,
+                    material: material.clone(),
                 });
             }
         }

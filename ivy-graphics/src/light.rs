@@ -2,14 +2,15 @@ use crate::{
     components::{light_renderer, light_source},
     icosphere::create_ico_mesh,
     shaders::{LIGHT_VERTEX_SHADER, PBR_SHADER},
-    MainCamera, Mesh, Renderer, Result, SimpleVertex,
+    Mesh, Renderer, Result, SimpleVertex,
 };
 use ash::vk::{BlendFactor, CullModeFlags, DescriptorSet, IndexType, ShaderStageFlags};
 use flax::{Component, Query, World};
 use glam::Vec3;
+use ivy_assets::AssetCache;
 use ivy_base::{main_camera, position, rotation, WorldExt};
 use ivy_vulkan::{
-    context::SharedVulkanContext,
+    context::{SharedVulkanContext, VulkanContextService},
     descriptors::{DescriptorBuilder, IntoSet},
     Buffer, Pipeline, PipelineInfo, Shader,
 };
@@ -163,10 +164,8 @@ impl LightRenderer {
 impl Renderer for LightRenderer {
     fn draw(
         &mut self,
-        // The ecs world
         world: &mut World,
-        // Graphics resources like textures and materials
-        resources: &ivy_resources::Resources,
+        assets: &AssetCache,
         // The commandbuffer to record into
         cmd: &ivy_vulkan::CommandBuffer,
         // Descriptor sets to bind before renderer specific sets
@@ -190,7 +189,7 @@ impl Renderer for LightRenderer {
         self.update_system(world, camera_pos, camera_rot * Vec3::Z, current_frame)?;
 
         let pipeline = self.pipeline.get_or_try_init(|| {
-            let context = resources.get_default::<SharedVulkanContext>()?;
+            let context = assets.service::<VulkanContextService>().context();
             Pipeline::new::<SimpleVertex>(
                 context.clone(),
                 &PipelineInfo {

@@ -21,7 +21,7 @@ flax.workspace = true
 flume.workspace = true
 glam.workspace = true
 ivy-base = { path = "../ivy-base", version = "0.10.0" }
-ivy-resources = { path = "../ivy-resources", version = "0.10.0" }
+ivy-assets = { path = "../ivy-assets", version = "0.10.0" }
 ordered-float = "3.0.0"
 palette.workspace = true
 rayon = "1.5.2"

@@ -1,16 +1,19 @@
-use crate::context::SharedVulkanContext;
-use crate::descriptors::DescriptorBindable;
-use crate::traits::FromExtent;
-use crate::{buffer, commands::*, Error, Result};
-use crate::{Buffer, BufferAccess};
+use crate::{
+    buffer,
+    commands::*,
+    context::{SharedVulkanContext, VulkanContextService},
+    descriptors::DescriptorBindable,
+    traits::FromExtent,
+    Buffer, BufferAccess, Error, Result,
+};
 use ash::vk::{Extent3D, ImageAspectFlags, ImageView, SharingMode};
+use glam::Vec4;
 use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc};
 use gpu_allocator::MemoryLocation;
+use ivy_assets::{Asset, AssetCache, AssetKey};
 use ivy_base::Extent;
-use ivy_resources::LoadResource;
-use std::borrow::Cow;
 use std::ops::Deref;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use ash::vk;
 
@@ -602,13 +605,40 @@ impl DescriptorBindable for CombinedImageSampler {
     }
 }
 
-impl LoadResource for Texture {
-    type Info = Cow<'static, str>;
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TextureFromPath(pub PathBuf);
 
+impl AssetKey<Texture> for TextureFromPath {
     type Error = Error;
 
-    fn load(resources: &ivy_resources::Resources, path: &Self::Info) -> Result<Self> {
-        let context = resources.get_default::<SharedVulkanContext>()?;
-        Self::load(context.clone(), path.as_ref())
+    fn load(&self, assets: &AssetCache) -> Result<Asset<Texture>> {
+        let context = assets.service::<VulkanContextService>().context();
+        Ok(assets.insert(Texture::load(context, &self.0)?))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TextureFromMemory(pub Vec<u8>);
+
+impl TextureFromMemory {
+    pub fn new(data: Vec<u8>) -> Self {
+        Self(data)
+    }
+
+    pub fn solid(color: [u8; 4]) -> Self {
+        let mut data = Vec::with_capacity(4 * 4);
+        for _ in 0..4 {
+            data.extend_from_slice(&color);
+        }
+        Self(data)
+    }
+}
+
+impl AssetKey<Texture> for TextureFromMemory {
+    type Error = Error;
+
+    fn load(&self, assets: &AssetCache) -> Result<Asset<Texture>> {
+        let context = assets.service::<VulkanContextService>().context();
+        Ok(assets.insert(Texture::from_memory(context, &self.0)?))
     }
 }

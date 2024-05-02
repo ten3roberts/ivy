@@ -2,11 +2,11 @@ use std::{borrow::Cow, slice};
 
 use crate::{Error, Result};
 use ash::vk::{DescriptorSet, ShaderStageFlags};
-use ivy_resources::{Handle, LoadResource, Resources};
+use ivy_assets::{Asset, AssetCache, AssetKey};
 use ivy_vulkan::{
-    context::SharedVulkanContext,
+    context::VulkanContextService,
     descriptors::{DescriptorBuilder, IntoSet},
-    Buffer, Sampler, SamplerInfo, Texture,
+    Buffer, Sampler, SamplerKey, Texture, TextureFromMemory, TextureFromPath,
 };
 
 #[cfg(feature = "serialize")]
@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 pub struct MaterialInfo {
     pub albedo: Cow<'static, str>,
     pub normal: Option<Cow<'static, str>>,
-    pub sampler: SamplerInfo,
+    pub sampler: SamplerKey,
     pub roughness: f32,
     pub metallic: f32,
 }
@@ -39,9 +39,9 @@ impl std::hash::Hash for MaterialInfo {
 /// *Note*: prefer Materials instead to store several materials.
 pub struct Material {
     set: DescriptorSet,
-    albedo: Handle<Texture>,
-    normal: Option<Handle<Texture>>,
-    sampler: Handle<Sampler>,
+    albedo: Asset<Texture>,
+    normal: Option<Asset<Texture>>,
+    sampler: Asset<Sampler>,
     roughness: f32,
     metallic: f32,
     buffer: Buffer,
@@ -50,14 +50,15 @@ pub struct Material {
 impl Material {
     /// Creates a new material with albedo using the provided sampler
     pub fn new(
-        context: &SharedVulkanContext,
-        resources: &Resources,
-        albedo: Handle<Texture>,
-        normal: Option<Handle<Texture>>,
-        sampler: Handle<Sampler>,
+        assets: &AssetCache,
+        albedo: Asset<Texture>,
+        normal: Option<Asset<Texture>>,
+        sampler: Asset<Sampler>,
         roughness: f32,
         metallic: f32,
     ) -> Result<Self> {
+        let context = assets.service::<VulkanContextService>().context();
+
         let buffer = Buffer::new(
             context.clone(),
             ivy_vulkan::BufferUsage::UNIFORM_BUFFER,
@@ -69,20 +70,18 @@ impl Material {
             }],
         )?;
 
-        let vk_sampler = resources.get(sampler)?.sampler();
-
         let set = DescriptorBuilder::new()
             .bind_combined_image_sampler(
                 0,
                 ShaderStageFlags::FRAGMENT,
-                resources.get(albedo)?.image_view(),
-                vk_sampler,
+                albedo.image_view(),
+                sampler.sampler(),
             )
             .bind_combined_image_sampler(
                 1,
                 ShaderStageFlags::FRAGMENT,
-                resources.get(normal.unwrap_or(albedo))?.image_view(),
-                vk_sampler,
+                normal.as_ref().unwrap_or(&albedo).image_view(),
+                sampler.sampler(),
             )
             .bind_buffer(2, ShaderStageFlags::FRAGMENT, &buffer)?
             .build(&context)?;
@@ -99,13 +98,13 @@ impl Material {
     }
 
     #[inline]
-    pub fn albedo(&self) -> Handle<Texture> {
-        self.albedo
+    pub fn albedo(&self) -> &Asset<Texture> {
+        &self.albedo
     }
 
     #[inline]
-    pub fn sampler(&self) -> Handle<Sampler> {
-        self.sampler
+    pub fn sampler(&self) -> &Asset<Sampler> {
+        &self.sampler
     }
 
     /// Get the material's roughness.
@@ -127,30 +126,28 @@ impl Material {
     }
 
     pub fn from_gltf(
-        context: &SharedVulkanContext,
+        assets: &AssetCache,
         material: gltf::Material,
-        textures: &[Handle<Texture>],
-        resources: &Resources,
+        textures: &[Asset<Texture>],
     ) -> Result<Self> {
         let pbr_info = material.pbr_metallic_roughness();
         let albedo = pbr_info.base_color_texture();
         let albedo = if let Some(base_color) = albedo {
-            textures[base_color.texture().index()]
+            textures[base_color.texture().index()].clone()
         } else {
-            resources.default()?
+            TextureFromMemory::solid([255; 4]).load(assets)?
         };
 
         let normal = if let Some(normal) = material.normal_texture() {
-            Some(textures[normal.texture().index()])
+            Some(textures[normal.texture().index()].clone())
         } else {
             None
         };
 
-        let sampler: Handle<Sampler> = resources.load(SamplerInfo::default())??;
+        let sampler: Asset<Sampler> = SamplerKey::default().load(assets)?;
 
         Self::new(
-            context,
-            resources,
+            assets,
             albedo,
             normal,
             sampler,
@@ -160,8 +157,8 @@ impl Material {
     }
 
     /// Get the material's normal.
-    pub fn normal(&self) -> Option<Handle<Texture>> {
-        self.normal
+    pub fn normal(&self) -> Option<&Asset<Texture>> {
+        self.normal.as_ref()
     }
 }
 
@@ -182,29 +179,27 @@ struct MaterialData {
     normal: i32,
 }
 
-impl LoadResource for Material {
-    type Info = MaterialInfo;
-
+impl AssetKey<Material> for MaterialInfo {
     type Error = Error;
 
-    fn load(resources: &Resources, info: &Self::Info) -> Result<Self> {
-        let context = resources.get_default::<SharedVulkanContext>()?;
-        let sampler: Handle<Sampler> = resources.load(info.sampler)??;
-        let albedo = resources.load(info.albedo.clone())??;
-        let normal = if let Some(normal) = info.normal.clone() {
-            Some(resources.load(normal)??)
-        } else {
-            None
-        };
+    fn load(&self, assets: &AssetCache) -> Result<Asset<Material>> {
+        let context = assets.service::<VulkanContextService>().context();
+        let sampler = assets.load(&self.sampler);
+        let albedo = assets.load(&TextureFromPath(self.albedo.as_ref().into()));
 
-        Self::new(
-            &*context,
-            resources,
+        let normal = self
+            .normal
+            .clone()
+            .map(|v| assets.try_load(&TextureFromPath(v.as_ref().into())))
+            .transpose()?;
+
+        Ok(assets.insert(Material::new(
+            assets,
             albedo,
             normal,
             sampler,
-            info.roughness,
-            info.metallic,
-        )
+            self.roughness,
+            self.metallic,
+        )?))
     }
 }

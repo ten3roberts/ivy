@@ -45,7 +45,6 @@ pub use ivy_postprocessing as postprocessing;
 pub use ivy_presets as presets;
 pub use ivy_random as random;
 pub use ivy_rendergraph as rendergraph;
-pub use ivy_resources as resources;
 pub use ivy_ui as ui;
 pub use ivy_vulkan as vulkan;
 pub use ivy_window as window;
@@ -58,9 +57,6 @@ pub use ivy_graphics::{
 pub use ivy_input::{InputAxis, InputState, InputVector, Key};
 pub use ivy_physics::RbBundle;
 pub use ivy_rendergraph::RenderGraph;
-pub use ivy_resources::{
-    CellRef, CellRefMut, DefaultResource, DefaultResourceMut, Handle, Resources,
-};
 pub use ivy_ui::WidgetBundle;
 pub use ivy_vulkan::{ImageLayout, ImageUsage, Texture};
 pub use ivy_window::*;

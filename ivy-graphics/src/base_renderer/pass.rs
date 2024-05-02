@@ -5,7 +5,6 @@ use super::*;
 
 use ash::vk::{DescriptorSet, ShaderStageFlags};
 use flax::{entity_ids, Entity, Fetch, FetchItem, Query, World};
-use ivy_resources::{Handle, HandleUntyped, Resources};
 use ivy_vulkan::{
     context::SharedVulkanContext,
     descriptors::{DescriptorBuilder, IntoSet},
@@ -126,20 +125,14 @@ impl<V: VertexDesc, K: RendererKey, ObjectData: 'static> BaseRendererPass<K, Obj
     /// Builds rendering batches for shaderpass `T` for all objects not yet batched.
     /// Note: [`Self::get_unbatched`] needs to be run before to collect unbatched
     /// entities, this is due to lifetime limitations on world mutations.
-    pub fn build_batches(
-        &mut self,
-        world: &mut World,
-        resources: &Resources,
-        pass_info: &PassInfo,
-    ) -> Result<()> {
+    pub fn build_batches(&mut self, world: &mut World, pass_info: &PassInfo) -> Result<()> {
         let batches = &mut self.batches;
         let object_count = &mut self.object_count;
         // Insert a marker to track this enemy as attached to a batch
         self.unbatched
             .drain(0..)
             .try_for_each(|(e, pass, key)| -> Result<_> {
-                let batch_id =
-                    batches.insert_entity::<ObjectData, V>(resources, &pass, key, pass_info)?;
+                let batch_id = batches.insert_entity::<ObjectData, V>(&pass, key, pass_info)?;
                 *object_count += 1;
 
                 world

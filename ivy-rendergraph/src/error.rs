@@ -21,9 +21,6 @@ pub enum Error {
     #[error("Node read attachment is missing corresponding write attachment for {2:?} required by node {0:?}: {1:?}")]
     MissingWrite(NodeIndex, &'static str, ResourceKind),
 
-    #[error("Resource acquisition error")]
-    Resource(#[from] ivy_resources::Error),
-
     #[error("Invalid node index {0:?}")]
     InvalidNodeIndex(NodeIndex),
 

@@ -14,10 +14,10 @@ readme = "../README.md"
 
 [dependencies]
 ash = "0.36.0"
-glfw = { version = "0.44.0", features = ["vulkan"] }
+glfw.workspace = true
 gpu-allocator = "0.17.0"
 ivy-image = { path = "../ivy-image", version = "0.10.0" }
-ivy-resources = { path = "../ivy-resources", version = "0.10.0" }
+ivy-assets = { path = "../ivy-assets", version = "0.10.0" }
 ivy-base = { path = "../ivy-base", version = "0.10.0" }
 log = "0.4.17"
 parking_lot.workspace = true
@@ -27,6 +27,7 @@ thiserror.workspace = true
 glam.workspace = true
 serde = { workspace = true, optional = true }
 bitflags = "1.3.2"
+tracing.workspace = true
 
 [features]
 default = []

@@ -2,7 +2,6 @@ use flume::Receiver;
 use glam::Vec2;
 use glfw::{Action, Key, MouseButton};
 use ivy_base::{Events, Extent};
-use ivy_resources::Resources;
 use ivy_window::Window;
 
 use crate::events::InputEvent;
@@ -29,17 +28,16 @@ pub struct InputState {
 impl InputState {
     /// Creates a new Input state handler. Queries the default window for size
     /// and cursor position.
-    pub fn new(resources: &Resources, events: &mut Events) -> ivy_resources::Result<Self> {
+    pub fn new(window: &Window, events: &mut Events) -> Self {
         let keys = [false; MAX_KEYS];
         let mouse_buttons = [false; MAX_MOUSE_BUTTONS];
 
         let rx = events.subscribe();
-        let window = resources.get_default::<Window>()?;
 
         let window_size = window.extent();
         let cursor_pos = window.cursor_pos();
 
-        Ok(Self {
+        Self {
             release_unfocus: true,
             rx,
             keys,
@@ -48,7 +46,7 @@ impl InputState {
             window_extent: window_size,
             old_cursor_pos: cursor_pos,
             scroll: Vec2::ZERO,
-        })
+        }
     }
 
     /// Resets the relative scroll and mouse movements and handles incoming window events. Call

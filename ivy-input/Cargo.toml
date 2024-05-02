@@ -14,9 +14,9 @@ description = "Input handling crate for Ivy"
 
 [dependencies]
 flume.workspace = true
-glfw = { version = "0.44.0", features = ["vulkan"] }
+glfw.workspace = true
 ivy-base = { path = "../ivy-base", version = "0.10.0" }
-ivy-resources = { path = "../ivy-resources", version = "0.10.0" }
+ivy-assets = { path = "../ivy-assets", version = "0.10.0" }
 ivy-window = { path = "../ivy-window", version = "0.10.0" }
 flax.workspace = true
 glam.workspace = true
