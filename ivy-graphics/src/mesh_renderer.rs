@@ -1,19 +1,18 @@
 use crate::{
-    BaseRenderer, BatchMarker, BoundingSphere, Camera, Error, MainCamera, Material, Mesh, Renderer,
-    Result, Vertex,
+    batch_id,
+    components::{camera, material, mesh},
+    BaseRenderer, Material, Mesh, Renderer, Result, Vertex,
 };
 use ash::vk::{DescriptorSet, IndexType};
-use glam::{Mat4, Vec4};
-use hecs::{Query, World};
-use ivy_base::{Color, Position, Rotation, Scale, Visible};
-use ivy_resources::{Handle, Resources};
-use ivy_vulkan::{
-    context::SharedVulkanContext, descriptors::IntoSet, shaderpass::ShaderPass, PassInfo,
-};
+use flax::{entity_ids, Component, Fetch, FetchExt, Opt, OptOr, Query, World};
+use glam::{Mat4, Quat, Vec3, Vec4};
+use ivy_assets::{Asset, AssetCache};
+use ivy_base::{color, main_camera, position, rotation, scale, Color, ColorExt, Visible};
+use ivy_vulkan::{context::SharedVulkanContext, descriptors::IntoSet, PassInfo, Shader};
 
-/// A mesh renderer using vkCmdDrawIndirectIndexed and efficient batching.
+/// Draw a static mesh with a material
 pub struct MeshRenderer {
-    base_renderer: BaseRenderer<Key, ObjectData, Vertex>,
+    base_renderer: BaseRenderer<MeshKey, ObjectData, Vertex>,
 }
 
 impl MeshRenderer {
@@ -29,58 +28,56 @@ impl MeshRenderer {
 }
 
 impl Renderer for MeshRenderer {
-    type Error = Error;
-    /// Will draw all entities with a Handle<Material>, Handle<Mesh>, Modelmatrix and Shaderpass `Handle<T>`
-    fn draw<Pass: ShaderPass>(
+    /// Will draw all entities with a Asset<Material>, Asset<Mesh>, Modelmatrix and Shaderpass `Asset<T>`
+    fn draw(
         &mut self,
         world: &mut World,
-        resources: &Resources,
+        assets: &AssetCache,
         cmd: &ivy_vulkan::CommandBuffer,
         sets: &[DescriptorSet],
         pass_info: &PassInfo,
         offsets: &[u32],
         current_frame: usize,
-    ) -> Result<()> {
-        let meshes = resources.fetch::<Mesh>()?;
-        let materials = resources.fetch::<Material>()?;
+        pass: Component<Shader>,
+    ) -> anyhow::Result<()> {
+        let renderpass = self.base_renderer.pass_mut(pass)?;
 
-        let pass = self.base_renderer.pass_mut::<Pass>()?;
-
-        pass.build_batches::<Pass, KeyQuery>(world, resources, pass_info)?;
+        renderpass.build_batches(world, pass_info)?;
         {
-            let mut q = world.query::<&Camera>().with::<MainCamera>();
-            let camera = q.iter().next().unwrap().1;
+            let mut q = Query::new(camera()).with(main_camera());
+            let camera = q.borrow(world).iter().next().unwrap();
 
-            let mut iter = world.query::<(
-                &BatchMarker<ObjectData, Pass>,
-                ObjectDataQuery,
-                &Visible,
-                &BoundingSphere,
-            )>();
-            let iter = iter
-                .iter()
-                .filter_map(|(e, (marker, obj, visible, bound))| {
-                    if visible.is_visible()
-                        && camera.visible(**obj.position, **bound * obj.scale.max_element())
-                    {
-                        Some((e, (marker, obj)))
-                    } else {
-                        None
-                    }
-                });
-
-            pass.update(current_frame, iter)?;
+            renderpass.update(
+                current_frame,
+                Query::new((entity_ids(), batch_id(pass.id()), ObjectDataQuery::new()))
+                    .borrow(world)
+                    .iter()
+                    .map(|(e, &batch_id, obj /* , bound */)| {
+                        // if visible.is_visible()
+                        //     && camera.visible(**obj.position, **bound * obj.scale.max_element())
+                        // {
+                        (e, batch_id, ObjectData::from(obj))
+                        // } else {
+                        //     None
+                        // }
+                    }),
+            )?;
         }
 
-        pass.register::<Pass, KeyQuery, ObjectDataQuery>(world);
-        pass.build_batches::<Pass, KeyQuery>(world, resources, pass_info)?;
+        renderpass.register(world, KeyQuery::new());
 
-        let frame_set = pass.set(current_frame);
+        renderpass.build_batches(world, pass_info)?;
 
-        for batch in pass.batches().iter().filter(|v| v.instance_count() != 0) {
+        let frame_set = renderpass.set(current_frame);
+
+        for batch in renderpass
+            .batches()
+            .iter()
+            .filter(|v| v.instance_count() != 0)
+        {
             let key = batch.key();
 
-            let mesh = meshes.get(key.mesh)?;
+            let mesh = &key.mesh;
 
             cmd.bind_pipeline(batch.pipeline());
 
@@ -97,8 +94,7 @@ impl Renderer for MeshRenderer {
 
             assert_ne!(instance_count, 0);
 
-            if !key.material.is_null() {
-                let material = materials.get(key.material)?;
+            if let Some(material) = &key.material {
                 cmd.bind_descriptor_sets(
                     batch.layout(),
                     sets.len() as u32,
@@ -106,14 +102,13 @@ impl Renderer for MeshRenderer {
                     &[],
                 );
                 cmd.draw_indexed(mesh.index_count(), instance_count, 0, 0, first_instance);
-            } else if !primitives.is_empty() {
+            }
+            if !primitives.is_empty() {
                 primitives.iter().try_for_each(|val| -> Result<()> {
-                    let material = materials.get(val.material)?;
-
                     cmd.bind_descriptor_sets(
                         batch.layout(),
                         sets.len() as u32,
-                        &[frame_set, material.set(current_frame)],
+                        &[frame_set, val.material.set(current_frame)],
                         &[],
                     );
 
@@ -141,44 +136,65 @@ struct ObjectData {
     color: Vec4,
 }
 
-#[derive(Query)]
-struct ObjectDataQuery<'a> {
-    position: &'a Position,
-    rotation: &'a Rotation,
-    scale: &'a Scale,
-    color: Option<&'a Color>,
+#[derive(Fetch)]
+struct ObjectDataQuery {
+    position: Component<Vec3>,
+    rotation: Component<Quat>,
+    scale: Component<Vec3>,
+    color: OptOr<Component<Color>, Color>,
 }
 
-impl<'a> Into<ObjectData> for ObjectDataQuery<'a> {
-    fn into(self) -> ObjectData {
-        ObjectData {
-            model: Mat4::from_translation(**self.position)
-                * Mat4::from_mat3(self.rotation.into_matrix3())
-                * Mat4::from_scale(**self.scale),
-            color: self.color.cloned().unwrap_or(Color::white()).into(),
+impl ObjectDataQuery {
+    fn new() -> Self {
+        Self {
+            position: position(),
+            rotation: rotation(),
+            scale: scale(),
+            color: color().opt_or(Color::new(1.0, 1.0, 1.0, 1.0)),
         }
     }
 }
 
-#[derive(Query, PartialEq, Eq)]
-struct KeyQuery<'a> {
-    mesh: &'a Handle<Mesh>,
-    material: Option<&'a Handle<Material>>,
+impl From<ObjectDataQueryItem<'_>> for ObjectData {
+    fn from(value: ObjectDataQueryItem) -> Self {
+        Self {
+            model: Mat4::from_scale_rotation_translation(
+                *value.scale,
+                *value.rotation,
+                *value.position,
+            ),
+            color: value.color.to_vec4(),
+        }
+    }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct Key {
-    mesh: Handle<Mesh>,
-    material: Handle<Material>,
+#[derive(Fetch)]
+#[fetch(item_derives = [ PartialEq, Eq ])]
+struct KeyQuery {
+    mesh: Component<Asset<Mesh>>,
+    material: Opt<Component<Asset<Material>>>,
 }
 
-impl<'a> crate::KeyQuery for KeyQuery<'a> {
-    type K = Key;
+impl KeyQuery {
+    fn new() -> Self {
+        Self {
+            mesh: mesh(),
+            material: material().opt(),
+        }
+    }
+}
 
-    fn into_key(&self) -> Self::K {
-        Self::K {
-            mesh: *self.mesh,
-            material: self.material.cloned().unwrap_or_default(),
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct MeshKey {
+    mesh: Asset<Mesh>,
+    material: Option<Asset<Material>>,
+}
+
+impl From<KeyQueryItem<'_>> for MeshKey {
+    fn from(value: KeyQueryItem<'_>) -> Self {
+        Self {
+            mesh: value.mesh.clone(),
+            material: value.material.cloned(),
         }
     }
 }

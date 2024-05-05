@@ -1,17 +1,16 @@
 use crate::Result;
-use std::{any::type_name, iter::once, marker::PhantomData, ops::Deref};
+use std::{any::type_name, iter::once};
 
 use anyhow::Context;
-use hecs::{Entity, World};
+use flax::{Component, Entity, World};
 use itertools::Itertools;
-use ivy_graphics::{GpuCameraData, Renderer};
-use ivy_resources::{Handle, Resources, Storage};
+use ivy_assets::{Asset, AssetCache};
+use ivy_graphics::{components::gpu_camera, Renderer};
 use ivy_vulkan::{
     context::SharedVulkanContext,
     descriptors::{DescriptorBuilder, DescriptorSet, MultiDescriptorBindable},
-    shaderpass::ShaderPass,
     vk::{self, ClearValue, ShaderStageFlags},
-    CombinedImageSampler, InputAttachment, PassInfo, Sampler, Texture,
+    CombinedImageSampler, InputAttachment, PassInfo, Sampler, Shader, Texture,
 };
 
 use crate::{AttachmentInfo, Node, NodeKind};
@@ -19,15 +18,15 @@ use crate::{AttachmentInfo, Node, NodeKind};
 pub struct CameraNodeInfo<'a> {
     pub name: &'static str,
     pub color_attachments: Vec<AttachmentInfo>,
-    pub read_attachments: &'a [(Handle<Texture>, Handle<Sampler>)],
-    pub input_attachments: Vec<Handle<Texture>>,
+    pub read_attachments: &'a [(Asset<Texture>, Asset<Sampler>)],
+    pub input_attachments: Vec<Asset<Texture>>,
     pub depth_attachment: Option<AttachmentInfo>,
     pub buffer_reads: Vec<vk::Buffer>,
     pub bindables: &'a [&'a dyn MultiDescriptorBindable],
     pub clear_values: Vec<ClearValue>,
     pub frames_in_flight: usize,
 
-    pub additional: Vec<Handle<Texture>>,
+    pub additional: Vec<Asset<Texture>>,
     pub camera_stage: ShaderStageFlags,
 }
 
@@ -49,54 +48,50 @@ impl<'a> Default for CameraNodeInfo<'a> {
     }
 }
 
-/// A rendergraph node rendering the scene using the provided camera.
-pub struct CameraNode<Pass, R: Renderer> {
+/// Renders the scene with the given mesh pass using the provided camera.
+pub struct CameraNode<R> {
     name: &'static str,
     renderer: R,
-    marker: PhantomData<Pass>,
+    pass: Component<Shader>,
     color_attachments: Vec<AttachmentInfo>,
-    read_attachments: Vec<Handle<Texture>>,
-    input_attachments: Vec<Handle<Texture>>,
+    read_attachments: Vec<Asset<Texture>>,
+    input_attachments: Vec<Asset<Texture>>,
     depth_attachment: Option<AttachmentInfo>,
     buffer_reads: Vec<vk::Buffer>,
     clear_values: Vec<ClearValue>,
     sets: Vec<DescriptorSet>,
 }
 
-impl<Pass, R> CameraNode<Pass, R>
+impl<R> CameraNode<R>
 where
-    Pass: ShaderPass + Storage,
-    R: Renderer + Storage,
-    R::Error: Into<anyhow::Error>,
+    R: Renderer,
 {
-    pub fn new<'a>(
+    pub fn new(
         context: SharedVulkanContext,
         world: &mut World,
-        resources: &Resources,
+        assets: &AssetCache,
         camera: Entity,
         renderer: R,
-        info: CameraNodeInfo<'a>,
+        shaderpass: Component<Shader>,
+        info: CameraNodeInfo<'_>,
     ) -> Result<Self> {
         let combined_image_samplers = info
             .read_attachments
             .iter()
-            .map(|val| -> Result<_> {
-                Ok(CombinedImageSampler::new(
-                    &*resources.get(val.0)?,
-                    &*resources.get(val.1)?,
-                ))
-            })
+            .map(|val| -> Result<_> { Ok(CombinedImageSampler::new(&*val.0, &*val.1)) })
             .collect::<Result<Vec<_>>>()?;
 
         let input_bindabled = info
             .input_attachments
             .iter()
-            .map(|val| -> Result<_> { Ok(InputAttachment::new(resources.get(*val)?.deref())) })
+            .map(|val| -> Result<_> { Ok(InputAttachment::new(&**val)) })
             .collect::<Result<Vec<_>>>()?;
 
-        let camera_buffers = world.get::<GpuCameraData>(camera).unwrap();
+        let gpu_camera = world
+            .get(camera, gpu_camera())
+            .context("Missing GpuCamera component")?;
 
-        let camera_buffers = camera_buffers.buffers();
+        let camera_buffers = gpu_camera.buffers();
         let bindables = once(&camera_buffers)
             .map(|v| (v as &dyn MultiDescriptorBindable, info.camera_stage))
             .chain(
@@ -108,7 +103,7 @@ where
                             .iter()
                             .map(|val| val as &dyn MultiDescriptorBindable),
                     )
-                    .chain(info.bindables.into_iter().cloned())
+                    .chain(info.bindables.iter().cloned())
                     .map(|val| (val, ShaderStageFlags::FRAGMENT)),
             )
             .collect::<Vec<_>>();
@@ -130,12 +125,12 @@ where
             name: info.name,
             sets,
             renderer,
-            marker: PhantomData,
+            pass: shaderpass,
             color_attachments: info.color_attachments,
             read_attachments: info
                 .read_attachments
                 .iter()
-                .map(|val| val.0)
+                .map(|val| val.0.clone())
                 .chain(info.additional)
                 .collect_vec(),
             input_attachments: info.input_attachments,
@@ -146,21 +141,19 @@ where
     }
 }
 
-impl<Pass, R> Node for CameraNode<Pass, R>
+impl<R> Node for CameraNode<R>
 where
-    Pass: ShaderPass + Storage,
-    R: Renderer + Storage,
-    R::Error: Into<anyhow::Error> + Storage,
+    R: 'static + Send + Sync + Renderer,
 {
     fn color_attachments(&self) -> &[AttachmentInfo] {
         &self.color_attachments
     }
 
-    fn read_attachments(&self) -> &[Handle<Texture>] {
+    fn read_attachments(&self) -> &[Asset<Texture>] {
         &self.read_attachments
     }
 
-    fn input_attachments(&self) -> &[Handle<Texture>] {
+    fn input_attachments(&self) -> &[Asset<Texture>] {
         &self.input_attachments
     }
 
@@ -186,27 +179,29 @@ where
 
     fn execute(
         &mut self,
-        world: &mut hecs::World,
-        resources: &ivy_resources::Resources,
+        world: &mut World,
+        assets: &AssetCache,
         cmd: &ivy_vulkan::commands::CommandBuffer,
         pass_info: &PassInfo,
         current_frame: usize,
     ) -> anyhow::Result<()> {
         self.renderer
-            .draw::<Pass>(
+            .draw(
                 world,
-                resources,
+                assets,
                 cmd,
                 &[self.sets[current_frame]],
                 pass_info,
                 &[],
                 current_frame,
+                self.pass,
             )
-            .map_err(|e| e.into())
-            .context(format!(
-                "CameraNode failed to draw using supplied renderer: {:?}",
-                type_name::<R>()
-            ))?;
+            .with_context(|| {
+                format!(
+                    "CameraNode failed to draw using supplied renderer: {:?}",
+                    type_name::<R>()
+                )
+            })?;
 
         Ok(())
     }

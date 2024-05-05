@@ -14,24 +14,22 @@ readme = "./README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.57"
-crossbeam-channel = { version = "0.5.4", optional = true }
-derive-for = "1.2.2"
-derive_more = "0.99.17"
+anyhow.workspace = true
+flume.workspace = true
+tracing.workspace = true
+palette.workspace = true
+glam.workspace = true
+serde = { workspace = true, optional = true }
+flax.workspace = true
+thiserror.workspace = true
+parking_lot.workspace = true
 downcast-rs = "1.2.0"
-flume = "0.10.12"
-hecs = "0.7.6"
-ivy-resources = { path = "../ivy-resources", version = "0.10.0" }
+ivy-assets = { path = "../ivy-assets", version = "0.10.0" }
 ivy-random = { path = "../ivy-random", version = "0.10.0" }
-log = { version = "0.4.17", features = ["std"] }
-palette = "0.6.0"
-thiserror = "1.0.31"
-glam = "0.20.5"
-parking_lot = "0.12.0"
-serde = { version = "1.0.137", features = ["derive"], optional = true }
-hecs-schedule = "0.6.1"
 records = "0.2.0"
 ezy = { version = "0.1.1", features = ["glam"] }
+rand.workspace = true
+rand_distr.workspace = true
 
 [features]
 default = []

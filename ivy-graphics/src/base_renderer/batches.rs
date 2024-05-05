@@ -4,9 +4,10 @@ use std::{
     ops::{Index, IndexMut},
 };
 
-use ivy_resources::{Handle, HandleUntyped, Resources};
+use flax::Component;
+use ivy_assets::Asset;
 use ivy_vulkan::{
-    context::SharedVulkanContext, PassInfo, Pipeline, PipelineInfo, ShaderPass, VertexDesc,
+    context::SharedVulkanContext, PassInfo, Pipeline, PipelineInfo, Shader, VertexDesc,
 };
 
 use crate::{BatchData, BatchMarker, RendererKey, Result};
@@ -20,8 +21,8 @@ pub struct Batches<K> {
     /// Ordered access of batches
     ordered: Vec<BatchId>,
     // Map from key to index in batches
-    batch_map: HashMap<(HandleUntyped, K), BatchId>,
-    pipeline_cache: HashMap<PipelineInfo, Pipeline>,
+    batch_map: HashMap<(Asset<PipelineInfo>, K), BatchId>,
+    pipeline_cache: HashMap<Asset<PipelineInfo>, Pipeline>,
     /// Set to true if any batch has been added or removed.
     /// Is not set if entities withing the batch are modified.
     dirty: bool,
@@ -40,34 +41,38 @@ impl<K: RendererKey> Batches<K> {
         }
     }
 
-    pub fn get_batch<Pass: ShaderPass, V: VertexDesc>(
+    pub fn get_batch<V: VertexDesc>(
         &mut self,
-        resources: &Resources,
-        pass: HandleUntyped,
+        pass: &Shader,
         key: K,
         pass_info: &PassInfo,
     ) -> Result<(BatchId, &mut BatchData<K>)> {
-        let combined_key = (pass, key);
+        let combined_key = (pass.pipeline_info.clone(), key.clone());
         let idx = match self.batch_map.entry(combined_key) {
             Entry::Occupied(entry) => *entry.get(),
             Entry::Vacant(entry) => {
                 // Create the batch
-                let shaderpass = resources.get::<Pass>(Handle::from_untyped(pass))?;
 
-                let info = shaderpass.pipeline();
-                let pipeline = self.pipeline_cache.entry(shaderpass.pipeline().to_owned());
+                let shaderpass = &pass.pipeline_info;
+                let pipeline = self.pipeline_cache.entry(shaderpass.clone());
 
                 let pipeline = match pipeline {
                     Entry::Occupied(entry) => entry.into_mut(),
                     Entry::Vacant(entry) => {
                         // Create pipeline
-                        let pipeline = Pipeline::new::<V>(self.context.clone(), info, pass_info)?;
+                        let pipeline =
+                            Pipeline::new::<V>(self.context.clone(), &shaderpass, pass_info)?;
 
                         entry.insert(pipeline)
                     }
                 };
 
-                let batch = BatchData::new(pipeline.pipeline(), pipeline.layout(), pass, key);
+                let batch = BatchData::new(
+                    pipeline.pipeline(),
+                    pipeline.layout(),
+                    pass.pipeline_info.clone(),
+                    key,
+                );
                 let idx = self.batches.len();
                 self.batches.push(batch);
                 self.dirty = true;
@@ -87,22 +92,19 @@ impl<K: RendererKey> Batches<K> {
         self.batches.get_mut(id as usize)
     }
 
-    pub fn insert_entity<O, Pass: ShaderPass, V: VertexDesc>(
+    pub fn insert_entity<O, V: VertexDesc>(
         &mut self,
-        resources: &Resources,
-        pass: HandleUntyped,
+        pass: &Shader,
         key: K,
         pass_info: &PassInfo,
-    ) -> Result<BatchMarker<O, Pass>> {
+    ) -> Result<BatchId> {
         let frames_in_flight = self.frames_in_flight;
-        let (batch_id, batch) = self.get_batch::<Pass, V>(resources, pass, key, pass_info)?;
+        let (batch_id, batch) = self.get_batch::<V>(pass, key, pass_info)?;
         batch.instance_count += 1;
         batch.max_count += 1;
         batch.set_dirty(frames_in_flight);
-        Ok(BatchMarker {
-            batch_id,
-            marker: PhantomData,
-        })
+
+        Ok(batch_id)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &BatchData<K>> {

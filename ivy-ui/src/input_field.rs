@@ -1,23 +1,37 @@
+use flax::{BoxedSystem, Entity, EntityBuilder, Mutable, Query, QueryBorrow, System};
 use glfw::{Action, Key, Modifiers};
-use hecs::{Bundle, DynamicBundleClone, Entity};
-use hecs_schedule::{Read, SubWorld, Write};
 
-use ivy_base::Events;
+use ivy_base::{Bundle, Events};
 
 use crate::{
-    events::WidgetEvent, Interactive, InteractiveState, Result, Sticky, Text, WidgetEventKind,
+    events::WidgetEvent, input_field, interactive, sticky, text, InteractiveState, Text,
+    WidgetEventKind,
 };
 
 /// A bundle for spawning an input field.
 ///
 /// It is recommended to also include a TextBundle and a ImageBundle, as well as
 /// appropriate passes.
-#[derive(Default, Bundle, Clone, DynamicBundleClone)]
-
+#[derive(Default, Clone)]
 pub struct InputFieldBundle {
-    pub interactive: Interactive,
-    pub sticky: Sticky,
+    // pub interactive: Interactive,
+    // pub sticky: Sticky,
     pub field: InputField,
+}
+
+impl InputFieldBundle {
+    pub fn new(field: InputField) -> Self {
+        Self { field }
+    }
+}
+
+impl Bundle for InputFieldBundle {
+    fn mount(self, entity: &mut EntityBuilder) {
+        entity
+            .set_default(interactive())
+            .set_default(sticky())
+            .set(input_field(), self.field);
+    }
 }
 
 impl Default for InputField {
@@ -39,53 +53,57 @@ impl InputField {
     }
 }
 
-pub fn input_field_system(
-    world: SubWorld<(&mut InputField, &mut Text)>,
-    state: Read<InteractiveState>,
-    reader: impl Iterator<Item = WidgetEvent>,
-    mut events: Write<Events>,
-) -> Result<()> {
-    let focused = match state.focused() {
-        Some(val) => val,
-        None => return Ok(()),
-    };
+pub fn input_field_system(reader: flume::Receiver<WidgetEvent>) -> BoxedSystem {
+    System::builder()
+        .with_query(Query::new((input_field().as_mut(), text().as_mut())))
+        .with_input_mut::<InteractiveState>()
+        .with_input_mut::<Events>()
+        .build(
+            move |mut query: QueryBorrow<(Mutable<InputField>, Mutable<Text>), _>,
+                  state: &mut InteractiveState,
+                  events: &mut Events| {
+                let focused = match state.focused() {
+                    Some(val) => val,
+                    None => return anyhow::Ok(()),
+                };
 
-    let mut query = world.query_one::<(&mut InputField, &mut Text)>(focused)?;
-    let (field, text) = match query.get().ok() {
-        Some(val) => val,
-        None => return Ok(()),
-    };
+                let Ok((field, text)) = query.get(focused) else {
+                    return Ok(());
+                };
 
-    reader.for_each(|event| match event.kind {
-        WidgetEventKind::Focus(false)
-        | WidgetEventKind::Key {
-            key: Key::Enter,
-            action: Action::Press,
-            ..
-        } => {
-            (field.on_submit)(focused, &mut events, text.val());
-        }
-        WidgetEventKind::CharTyped(c) => {
-            text.append(c);
-        }
-        WidgetEventKind::Key {
-            key: Key::Backspace,
-            scancode: _,
-            action: Action::Repeat | Action::Press,
-            mods: Modifiers::Control,
-        } => {
-            text.remove_back_word();
-        }
-        WidgetEventKind::Key {
-            key: Key::Backspace,
-            scancode: _,
-            action: Action::Repeat | Action::Press,
-            mods: _,
-        } => {
-            text.remove_back();
-        }
-        _ => {}
-    });
+                reader.try_iter().for_each(|event| match event.kind {
+                    WidgetEventKind::Focus(false)
+                    | WidgetEventKind::Key {
+                        key: Key::Enter,
+                        action: Action::Press,
+                        ..
+                    } => {
+                        (field.on_submit)(focused, events, text.val());
+                    }
+                    WidgetEventKind::CharTyped(c) => {
+                        text.append(c);
+                    }
+                    WidgetEventKind::Key {
+                        key: Key::Backspace,
+                        scancode: _,
+                        action: Action::Repeat | Action::Press,
+                        mods: Modifiers::Control,
+                    } => {
+                        text.remove_back_word();
+                    }
+                    WidgetEventKind::Key {
+                        key: Key::Backspace,
+                        scancode: _,
+                        action: Action::Repeat | Action::Press,
+                        mods: _,
+                    } => {
+                        text.remove_back();
+                    }
+                    _ => {}
+                });
 
-    Ok(())
+                Ok(())
+            },
+        )
+        .boxed()
 }

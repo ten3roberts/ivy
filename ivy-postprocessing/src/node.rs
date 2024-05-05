@@ -1,19 +1,23 @@
-use std::{marker::PhantomData, ops::Deref};
-
+use flax::World;
+use ivy_assets::{Asset, AssetCache};
 use ivy_graphics::Result;
 use ivy_rendergraph::{AttachmentInfo, Node, NodeKind};
-use ivy_resources::{Handle, Resources};
-use ivy_vulkan::{context::SharedVulkanContext, descriptors::*, vk::ShaderStageFlags, *};
+use ivy_vulkan::{
+    context::{SharedVulkanContext, VulkanContextService},
+    descriptors::*,
+    vk::ShaderStageFlags,
+    *,
+};
 use once_cell::sync::OnceCell;
 
-pub struct PostProcessingNode<Pass> {
+pub struct PostProcessingNode {
     sets: Option<Vec<DescriptorSet>>,
-    read_attachments: Vec<Handle<Texture>>,
-    input_attachments: Vec<Handle<Texture>>,
+    read_attachments: Vec<Asset<Texture>>,
+    input_attachments: Vec<Asset<Texture>>,
     color_attachments: Vec<AttachmentInfo>,
     sampler: Sampler,
-    marker: PhantomData<Pass>,
     pipeline: OnceCell<Pipeline>,
+    shader: Shader,
 }
 
 /// Creates a post processing node that will execute using the default shaderpass of the provided
@@ -21,19 +25,20 @@ pub struct PostProcessingNode<Pass> {
 /// A descriptor for each frame in flight referencing all `read_attachments`, `input_attachments`, and
 /// `bindables` in order are automatically created, and need to be matched in the shader at set
 /// = 0;
-impl<Pass: 'static + ShaderPass> PostProcessingNode<Pass> {
+impl PostProcessingNode {
     pub fn new(
         context: SharedVulkanContext,
-        resources: &Resources,
-        read_attachments: &[Handle<Texture>],
-        input_attachments: &[Handle<Texture>],
+        assets: &AssetCache,
+        read_attachments: &[Asset<Texture>],
+        input_attachments: &[Asset<Texture>],
         bindables: &[&dyn MultiDescriptorBindable],
         color_attachments: &[AttachmentInfo],
         frames_in_flight: usize,
+        shader: Shader,
     ) -> Result<Self> {
         let sampler = Sampler::new(
             context.clone(),
-            &SamplerInfo {
+            &SamplerKey {
                 address_mode: AddressMode::CLAMP_TO_EDGE,
                 mag_filter: FilterMode::LINEAR,
                 min_filter: FilterMode::LINEAR,
@@ -45,17 +50,12 @@ impl<Pass: 'static + ShaderPass> PostProcessingNode<Pass> {
 
         let combined_image_samplers = read_attachments
             .iter()
-            .map(|val| -> Result<_> {
-                Ok(CombinedImageSampler::new(
-                    resources.get(*val)?.deref(),
-                    &sampler,
-                ))
-            })
+            .map(|val| -> Result<_> { Ok(CombinedImageSampler::new(&**val, &sampler)) })
             .collect::<Result<Vec<_>>>()?;
 
         let input_bindabled = input_attachments
             .iter()
-            .map(|val| -> Result<_> { Ok(InputAttachment::new(resources.get(*val)?.deref())) })
+            .map(|val| -> Result<_> { Ok(InputAttachment::new(&**val)) })
             .collect::<Result<Vec<_>>>()?;
 
         let bindables = combined_image_samplers
@@ -87,7 +87,7 @@ impl<Pass: 'static + ShaderPass> PostProcessingNode<Pass> {
             input_attachments: input_attachments.to_owned(),
             color_attachments: color_attachments.to_owned(),
             sampler,
-            marker: PhantomData,
+            shader,
         })
     }
 
@@ -97,16 +97,16 @@ impl<Pass: 'static + ShaderPass> PostProcessingNode<Pass> {
     }
 }
 
-impl<Pass: ShaderPass> Node for PostProcessingNode<Pass> {
+impl Node for PostProcessingNode {
     fn color_attachments(&self) -> &[AttachmentInfo] {
         &self.color_attachments
     }
 
-    fn read_attachments(&self) -> &[Handle<Texture>] {
+    fn read_attachments(&self) -> &[Asset<Texture>] {
         &self.read_attachments
     }
 
-    fn input_attachments(&self) -> &[Handle<Texture>] {
+    fn input_attachments(&self) -> &[Asset<Texture>] {
         &self.input_attachments
     }
 
@@ -124,16 +124,15 @@ impl<Pass: ShaderPass> Node for PostProcessingNode<Pass> {
 
     fn execute(
         &mut self,
-        _: &mut hecs::World,
-        resources: &Resources,
+        _: &mut World,
+        assets: &AssetCache,
         cmd: &ivy_vulkan::commands::CommandBuffer,
         pass_info: &PassInfo,
         current_frame: usize,
     ) -> anyhow::Result<()> {
         let pipeline = self.pipeline.get_or_try_init(|| {
-            let context = resources.get_default::<SharedVulkanContext>()?;
-            let pass = resources.get_default::<Pass>()?;
-            Pipeline::new::<()>(context.clone(), pass.pipeline(), pass_info)
+            let context = assets.service::<VulkanContextService>().context();
+            Pipeline::new::<()>(context.clone(), &self.shader.pipeline_info, pass_info)
         })?;
 
         cmd.bind_pipeline(pipeline);

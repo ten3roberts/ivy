@@ -1,8 +1,8 @@
-use crate::context::SharedVulkanContext;
+use crate::context::{SharedVulkanContext, VulkanContextService};
 use crate::descriptors::DescriptorBindable;
 use crate::{Error, Result, Texture};
 use ash::vk;
-use ivy_resources::LoadResource;
+use ivy_assets::{Asset, AssetKey};
 #[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
 
@@ -50,7 +50,7 @@ impl From<FilterMode> for vk::Filter {
 /// Specification dictating how a sampler is created
 #[derive(Eq, Hash, PartialEq, Debug, Copy, Clone)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
-pub struct SamplerInfo {
+pub struct SamplerKey {
     pub address_mode: AddressMode,
     /// Filter mode used for undersampling when there are fewer texels than pixels,
     /// e.g; scaling up
@@ -68,7 +68,7 @@ pub struct SamplerInfo {
     pub mip_levels: u32,
 }
 
-impl SamplerInfo {
+impl SamplerKey {
     /// Returns a sampler that does not interpolate, useful for pixel art
     pub fn pixelated() -> Self {
         Self {
@@ -81,7 +81,7 @@ impl SamplerInfo {
     }
 }
 
-impl Default for SamplerInfo {
+impl Default for SamplerKey {
     fn default() -> Self {
         Self {
             address_mode: AddressMode::REPEAT,
@@ -101,7 +101,7 @@ pub struct Sampler {
 
 impl Sampler {
     // Creates a new sampler from the specified sampling options
-    pub fn new(context: SharedVulkanContext, info: &SamplerInfo) -> Result<Self> {
+    pub fn new(context: SharedVulkanContext, info: &SamplerKey) -> Result<Self> {
         let anisotropy_enable = if info.anisotropy != 1 {
             vk::TRUE
         } else {
@@ -182,13 +182,13 @@ impl DescriptorBindable for (Texture, Sampler) {
     }
 }
 
-impl LoadResource for Sampler {
-    type Info = SamplerInfo;
-
+impl AssetKey<Sampler> for SamplerKey {
     type Error = Error;
 
-    fn load(resources: &ivy_resources::Resources, info: &Self::Info) -> Result<Self> {
-        let context = resources.get_default::<SharedVulkanContext>()?;
-        Self::new(context.clone(), info)
+    fn load(&self, assets: &ivy_assets::AssetCache) -> Result<Asset<Sampler>> {
+        Ok(assets.insert(Sampler::new(
+            assets.service::<VulkanContextService>().context(),
+            self,
+        )?))
     }
 }

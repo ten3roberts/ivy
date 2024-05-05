@@ -1,5 +1,5 @@
 use super::*;
-use ivy_resources::Resources;
+use ivy_assets::AssetCache;
 
 pub struct AppBuilder {
     app: App,
@@ -18,7 +18,7 @@ impl AppBuilder {
     /// closure to construct the layer takes in the world and events.
     pub fn push_layer<F, T>(mut self, func: F) -> Self
     where
-        F: FnOnce(&mut World, &mut Resources, &mut Events) -> T,
+        F: FnOnce(&mut World, &mut AssetCache, &mut Events) -> T,
         T: 'static + Layer,
     {
         self.app.push_layer(func);
@@ -30,7 +30,7 @@ impl AppBuilder {
     /// is propagated to the callee.
     pub fn try_push_layer<F, T, E>(mut self, func: F) -> Result<Self, E>
     where
-        F: FnOnce(&mut World, &mut Resources, &mut Events) -> Result<T, E>,
+        F: FnOnce(&mut World, &mut AssetCache, &mut Events) -> Result<T, E>,
         T: 'static + Layer,
     {
         self.app.try_push_layer(func)?;
@@ -41,7 +41,7 @@ impl AppBuilder {
     /// closure to construct the layer takes in the world and events.
     pub fn insert_layer<F, T>(mut self, index: usize, func: F) -> Self
     where
-        F: FnOnce(&mut World, &mut Resources, &mut Events) -> T,
+        F: FnOnce(&mut World, &mut AssetCache, &mut Events) -> T,
         T: 'static + Layer,
     {
         self.app.insert_layer(index, func);
@@ -53,7 +53,7 @@ impl AppBuilder {
     /// is propagated to the callee.
     pub fn try_insert_layer<F, T, E>(mut self, index: usize, func: F) -> Result<Self, E>
     where
-        F: FnOnce(&mut World, &mut Resources, &mut Events) -> Result<T, E>,
+        F: FnOnce(&mut World, &mut AssetCache, &mut Events) -> Result<T, E>,
         T: 'static + Layer,
     {
         self.app.try_insert_layer(index, func)?;

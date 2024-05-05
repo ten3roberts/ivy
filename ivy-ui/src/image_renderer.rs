@@ -1,12 +1,10 @@
 use crate::*;
-use glam::{Mat4, Vec2, Vec3, Vec4};
-use hecs::{Query, World};
-use ivy_base::{Color, Position2D, Size2D, Visible};
-use ivy_graphics::{BaseRenderer, BatchMarker, Mesh, Renderer};
-use ivy_resources::{Handle, Resources};
-use ivy_vulkan::{
-    context::SharedVulkanContext, descriptors::*, shaderpass::ShaderPass, vk::IndexType, PassInfo,
-};
+use flax::{entity_ids, Component, Fetch, Query, World};
+use glam::{vec2, vec3, Mat4, Vec2, Vec3, Vec4};
+use ivy_assets::{Asset, AssetCache};
+use ivy_base::{color, position, size, visible, Color, ColorExt};
+use ivy_graphics::{batch_id, BaseRenderer, Mesh, Renderer};
+use ivy_vulkan::{context::SharedVulkanContext, descriptors::*, vk::IndexType, PassInfo, Shader};
 
 /// A mesh renderer using vkCmdDrawIndirectIndexed and efficient batching.
 pub struct ImageRenderer {
@@ -25,10 +23,10 @@ impl ImageRenderer {
 
             // Simple quad
             let vertices = [
-                UIVertex::new(Vec3::new(-1.0, -1.0, 0.0), Vec2::new(0.0, 1.0)),
-                UIVertex::new(Vec3::new(1.0, -1.0, 0.0), Vec2::new(1.0, 1.0)),
-                UIVertex::new(Vec3::new(1.0, 1.0, 0.0), Vec2::new(1.0, 0.0)),
-                UIVertex::new(Vec3::new(-1.0, 1.0, 0.0), Vec2::new(0.0, 0.0)),
+                UIVertex::new(vec3(-1.0, -1.0, 0.0), vec2(0.0, 1.0)),
+                UIVertex::new(vec3(1.0, -1.0, 0.0), vec2(1.0, 1.0)),
+                UIVertex::new(vec3(1.0, 1.0, 0.0), vec2(1.0, 0.0)),
+                UIVertex::new(vec3(-1.0, 1.0, 0.0), vec2(0.0, 0.0)),
             ];
 
             let indices: [u32; 6] = [0, 1, 2, 2, 3, 0];
@@ -46,40 +44,45 @@ impl ImageRenderer {
 }
 
 impl Renderer for ImageRenderer {
-    type Error = Error;
-    /// Will draw all entities with a Handle<Material>, Handle<Mesh>, Modelmatrix and Shaderpass `Handle<T>`
-    fn draw<Pass: ShaderPass>(
+    /// Draw all entities with a material, mesh, and model matrix for the specified shaderpass.
+    fn draw(
         &mut self,
         world: &mut World,
-        resources: &Resources,
+        assets: &AssetCache,
         cmd: &ivy_vulkan::CommandBuffer,
         sets: &[DescriptorSet],
         pass_info: &PassInfo,
         offsets: &[u32],
         current_frame: usize,
-    ) -> Result<()> {
+        shaderpass: Component<Shader>,
+    ) -> anyhow::Result<()> {
+        return Ok(());
         cmd.bind_vertexbuffer(0, self.square.vertex_buffer());
         cmd.bind_indexbuffer(self.square.index_buffer(), IndexType::UINT32, 0);
 
-        let images = resources.fetch::<Image>()?;
+        let pass = self.base_renderer.pass_mut(shaderpass)?;
 
-        let pass = self.base_renderer.pass_mut::<Pass>()?;
+        pass.register(world, KeyQuery::new());
+        pass.build_batches(world, pass_info)?;
 
-        pass.register::<Pass, KeyQuery, ObjectDataQuery>(world);
-        pass.build_batches::<Pass, KeyQuery>(world, resources, pass_info)?;
-
-        let iter = world
-            .query_mut::<(&BatchMarker<ObjectData, Pass>, ObjectDataQuery, &Visible)>()
-            .into_iter()
-            .filter_map(|(e, (marker, obj, visible))| {
+        pass.update(
+            current_frame,
+            Query::new((
+                entity_ids(),
+                batch_id(shaderpass.id()),
+                ObjectDataQuery::new(),
+                visible(),
+            ))
+            .borrow(world)
+            .iter()
+            .filter_map(|(e, &batch_id, obj, visible)| {
                 if visible.is_visible() {
-                    Some((e, (marker, obj)))
+                    Some((e, batch_id, ObjectData::from(obj)))
                 } else {
                     None
                 }
-            });
-
-        pass.update(current_frame, iter)?;
+            }),
+        )?;
 
         pass.sort_batches_if_dirty();
 
@@ -88,7 +91,7 @@ impl Renderer for ImageRenderer {
         for batch in pass.ordered_batches() {
             let key = batch.key();
 
-            let image = images.get(key.image)?;
+            let image = key.image;
 
             cmd.bind_pipeline(batch.pipeline());
 
@@ -117,33 +120,51 @@ struct ObjectData {
     color: Vec4,
 }
 
-#[derive(Query)]
-struct ObjectDataQuery<'a> {
-    position: &'a Position2D,
-    size: &'a Size2D,
-    color: &'a Color,
+#[derive(Fetch)]
+struct ObjectDataQuery {
+    position: Component<Vec3>,
+    size: Component<Vec2>,
+    color: Component<Color>,
 }
 
-impl<'a> Into<ObjectData> for ObjectDataQuery<'a> {
-    fn into(self) -> ObjectData {
-        ObjectData {
-            mvp: Mat4::from_translation(self.position.extend(0.0))
-                * Mat4::from_scale(self.size.extend(1.0)),
-            color: self.color.into(),
+impl ObjectDataQuery {
+    fn new() -> Self {
+        Self {
+            position: position(),
+            size: size(),
+            color: color(),
         }
     }
 }
 
-#[derive(Query, PartialEq)]
-struct KeyQuery<'a> {
-    depth: &'a WidgetDepth,
-    image: &'a Handle<Image>,
+impl<'a> From<ObjectDataQueryItem<'a>> for ObjectData {
+    fn from(value: ObjectDataQueryItem<'_>) -> ObjectData {
+        ObjectData {
+            mvp: Mat4::from_translation(*value.position) * Mat4::from_scale(value.size.extend(1.0)),
+            color: value.color.to_vec4(),
+        }
+    }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Fetch, PartialEq)]
+struct KeyQuery {
+    depth: Component<u32>,
+    image: Component<Asset<Image>>,
+}
+
+impl KeyQuery {
+    pub fn new() -> Self {
+        Self {
+            depth: widget_depth(),
+            image: image(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Key {
-    depth: WidgetDepth,
-    image: Handle<Image>,
+    depth: u32,
+    image: Asset<Image>,
 }
 
 impl PartialOrd for Key {
@@ -158,13 +179,11 @@ impl Ord for Key {
     }
 }
 
-impl<'a> ivy_graphics::KeyQuery for KeyQuery<'a> {
-    type K = Key;
-
-    fn into_key(&self) -> Self::K {
-        Self::K {
-            depth: *self.depth,
-            image: *self.image,
+impl From<KeyQueryItem<'_>> for Key {
+    fn from(item: KeyQueryItem) -> Self {
+        Self {
+            depth: *item.depth,
+            image: item.image.clone(),
         }
     }
 }

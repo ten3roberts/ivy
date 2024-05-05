@@ -1,12 +1,10 @@
 use std::borrow::Cow;
 
-use crate::constraints::Margin;
 use crate::Alignment;
 use crate::Result;
 use crate::WrapStyle;
 use fontdue::layout::{self, GlyphPosition, Layout, TextStyle};
 use glam::{Vec2, Vec3};
-use ivy_base::Size2D;
 use ivy_graphics::NormalizedRect;
 
 use crate::{Font, UIVertex};
@@ -15,9 +13,9 @@ pub struct Text {
     str: Cow<'static, str>,
     layout: Layout,
     dirty: bool,
-    old_bounds: Size2D,
+    old_bounds: Vec2,
     old_wrap: WrapStyle,
-    old_margin: Margin,
+    old_margin: Vec2,
 }
 
 impl Clone for Text {
@@ -46,9 +44,9 @@ impl Text {
             str: str.into(),
             layout,
             dirty: true,
-            old_bounds: Size2D::default(),
+            old_bounds: Vec2::default(),
             old_wrap: WrapStyle::Word,
-            old_margin: Margin::default(),
+            old_margin: Vec2::default(),
         }
     }
 
@@ -88,7 +86,7 @@ impl Text {
     }
 
     /// Gets the last laid out bounds.
-    pub(crate) fn old_bounds(&self) -> Size2D {
+    pub(crate) fn old_bounds(&self) -> Vec2 {
         self.old_bounds
     }
 
@@ -98,7 +96,7 @@ impl Text {
     }
 
     /// Get the text's old margin.
-    pub(crate) fn old_margin(&self) -> Margin {
+    pub(crate) fn old_margin(&self) -> Vec2 {
         self.old_margin
     }
 
@@ -106,10 +104,10 @@ impl Text {
     pub fn layout<'a>(
         &mut self,
         font: &'a Font,
-        bounds: Size2D,
+        bounds: Vec2,
         wrap: WrapStyle,
         alignment: Alignment,
-        margin: Margin,
+        margin: Vec2,
     ) -> Result<TextLayout<'a, std::slice::Iter<GlyphPosition>>> {
         self.old_bounds = bounds;
         self.old_wrap = wrap;
@@ -131,6 +129,7 @@ impl Text {
                 _ => layout::WrapStyle::Letter,
             },
             wrap_hard_breaks: true,
+            line_height: font.size() + 2.0,
         });
 
         self.layout

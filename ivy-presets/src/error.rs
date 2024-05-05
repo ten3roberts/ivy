@@ -4,8 +4,6 @@ use thiserror::Error;
 pub enum Error {
     #[error("Graphics error")]
     Graphics(#[from] ivy_graphics::Error),
-    #[error("Resources error")]
-    Resources(#[from] ivy_resources::Error),
     #[error("Vulkan error")]
     Vulkan(#[from] ivy_vulkan::Error),
     #[error("UI error")]
@@ -15,7 +13,7 @@ pub enum Error {
     RenderGraph(#[from] ivy_rendergraph::Error),
 
     #[error("Failed to get component from entity")]
-    ComponentError(#[from] hecs::ComponentError),
+    EcsError(#[from] flax::Error),
 
     #[error("Failed to find main camera in world")]
     MissingMainCamera,

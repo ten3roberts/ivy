@@ -1,15 +1,15 @@
 use crate::{Error, Result};
+use ivy_assets::{Asset, AssetCache, AssetKey};
 use ivy_base::Extent;
 use ivy_graphics::{NormalizedRect, Rect, TextureAtlas};
-use ivy_resources::{Handle, LoadResource, Resources};
 use ivy_vulkan::{
-    context::SharedVulkanContext,
+    context::{SharedVulkanContext, VulkanContextService},
     descriptors::{DescriptorBuilder, DescriptorSet, IntoSet},
     vk::ShaderStageFlags,
-    AddressMode, FilterMode, Format, ImageUsage, SampleCountFlags, Sampler, SamplerInfo,
+    AddressMode, FilterMode, Format, ImageUsage, SampleCountFlags, Sampler, SamplerKey,
     TextureInfo,
 };
-use std::{borrow::Cow, collections::HashSet, ops::Range};
+use std::borrow::Cow;
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct FontInfo {
@@ -59,8 +59,8 @@ impl Font {
     /// Loads and rasterizes a font from file
     pub fn new(
         context: SharedVulkanContext,
-        resources: &Resources,
-        sampler: Handle<Sampler>,
+        assets: &AssetCache,
+        sampler: Asset<Sampler>,
         info: &FontInfo,
     ) -> Result<Self> {
         let bytes = std::fs::read(info.path.as_ref())
@@ -84,7 +84,7 @@ impl Font {
 
         let atlas = TextureAtlas::new(
             context.clone(),
-            resources,
+            assets,
             &TextureInfo {
                 extent: Extent::new(dimension, dimension),
                 mip_levels: info.mip_levels,
@@ -101,8 +101,8 @@ impl Font {
             .bind_combined_image_sampler(
                 0,
                 ShaderStageFlags::FRAGMENT,
-                resources.get(atlas.texture())?.image_view(),
-                resources.get(sampler)?.sampler(),
+                atlas.texture().image_view(),
+                sampler.sampler(),
             )
             .build(&context)?;
 
@@ -183,23 +183,21 @@ fn nearest_power_2(val: u32) -> u32 {
     result
 }
 
-impl LoadResource for Font {
-    type Info = FontInfo;
-
+impl AssetKey<Font> for FontInfo {
     type Error = Error;
 
-    fn load(resources: &Resources, info: &Self::Info) -> Result<Self> {
-        let context = resources.get_default::<SharedVulkanContext>()?;
+    fn load(&self, assets: &AssetCache) -> Result<Asset<Font>> {
+        let context = assets.service::<VulkanContextService>().context();
 
-        let sampler = resources.load(SamplerInfo {
+        let sampler = assets.load(&SamplerKey {
             address_mode: AddressMode::CLAMP_TO_BORDER,
             mag_filter: FilterMode::LINEAR,
             min_filter: FilterMode::LINEAR,
             unnormalized_coordinates: false,
             anisotropy: 0,
             mip_levels: 1,
-        })??;
+        });
 
-        Self::new(context.clone(), resources, sampler, info)
+        Ok(assets.insert(Font::new(context.clone(), assets, sampler, self)?))
     }
 }

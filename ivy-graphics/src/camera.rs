@@ -1,10 +1,10 @@
 use ash::vk::{DescriptorSet, ShaderStageFlags};
 use derive_more::{AsRef, Deref, From, Into};
+use flax::{entity_ids, BoxedSystem, Component, Mutable, Query, QueryBorrow, System, World};
 use glam::{vec3, Mat4, Vec2, Vec3, Vec4, Vec4Swizzles};
-use hecs::World;
-use hecs_schedule::{Read, SubWorld};
+use itertools::Itertools;
+use ivy_assets::{Asset, AssetCache};
 use ivy_base::{Color, DrawGizmos, Extent, Line, Sphere};
-use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
     context::SharedVulkanContext,
     descriptors::{DescriptorBuilder, IntoSet},
@@ -14,7 +14,10 @@ use ivy_vulkan::{
 #[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
 
-use crate::Result;
+use crate::{
+    components::{camera, gpu_camera},
+    Result,
+};
 
 /// A camera holds a view and projection matrix.
 /// Use a system to update view matrix according to position and rotation.
@@ -128,41 +131,37 @@ pub struct CameraData {
 
 #[derive(AsRef, Deref, Into, From)]
 /// The color attachment of a camera.
-pub struct ColorAttachment(pub Handle<Texture>);
+pub struct ColorAttachment(pub Asset<Texture>);
 
 impl ColorAttachment {
-    pub fn new(texture: Handle<Texture>) -> ColorAttachment {
+    pub fn new(texture: Asset<Texture>) -> ColorAttachment {
         Self(texture)
     }
 }
 
 /// The depth attachment of a camera.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deref, AsRef, Into, From)]
-pub struct DepthAttachment(pub Handle<Texture>);
+#[derive(Clone, PartialEq, Eq, Deref, AsRef, Into, From)]
+pub struct DepthAttachment(pub Asset<Texture>);
 
 impl DepthAttachment {
-    pub fn new(
-        context: SharedVulkanContext,
-        resources: &Resources,
-        extent: Extent,
-    ) -> Result<Self> {
-        Ok(Self(resources.insert(Texture::new(
+    pub fn new(context: SharedVulkanContext, assets: &AssetCache, extent: Extent) -> Result<Self> {
+        Ok(Self(assets.insert(Texture::new(
             context.clone(),
             &TextureInfo::depth(extent),
-        )?)?))
+        )?)))
     }
 
-    pub fn from_handle(texture: Handle<Texture>) -> DepthAttachment {
+    pub fn from_handle(texture: Asset<Texture>) -> DepthAttachment {
         Self(texture)
     }
 }
 
-pub struct GpuCameraData {
+pub struct GpuCamera {
     uniformbuffers: Vec<Buffer>,
     sets: Vec<DescriptorSet>,
 }
 
-impl GpuCameraData {
+impl GpuCamera {
     pub fn new(context: SharedVulkanContext, frames_in_flight: usize) -> Result<Self> {
         let uniformbuffers = (0..frames_in_flight)
             .map(|_| {
@@ -206,6 +205,7 @@ impl GpuCameraData {
         let view = camera.view();
         let position = view.inverse().col(3).xyz();
 
+        // tracing::info!(?camera, %current_frame, "updating gpu camera");
         self.uniformbuffers[current_frame]
             .fill(
                 0,
@@ -222,14 +222,21 @@ impl GpuCameraData {
 
     /// Updates all GPU camera data from the CPU side camera view and projection
     /// matrix. Position is automatically extracted from the camera's view matrix.
-    pub fn update_all_system(
-        world: SubWorld<(&Camera, &mut Self)>,
-        current_frame: Read<usize>,
-    ) -> Result<()> {
-        world
-            .query::<(&Camera, &mut GpuCameraData)>()
-            .iter()
-            .try_for_each(|(_, (camera, gpu_camera))| gpu_camera.update(camera, *current_frame))
+    pub fn update_system() -> BoxedSystem {
+        let query = Query::new((camera(), gpu_camera().as_mut()));
+
+        System::builder()
+            .with_query(query)
+            .with_input::<usize>()
+            .build(
+                |mut query: QueryBorrow<(Component<Camera>, Mutable<GpuCamera>)>,
+                 current_frame: &usize| {
+                    query.iter().for_each(|(camera, gpu_camera)| {
+                        gpu_camera.update(camera, *current_frame).unwrap();
+                    });
+                },
+            )
+            .boxed()
     }
 
     // Creates gpu side data for all camera which do not already have any.
@@ -238,21 +245,21 @@ impl GpuCameraData {
         world: &mut World,
         frames_in_flight: usize,
     ) -> Result<()> {
-        let cameras = world
-            .query_mut::<&Camera>()
-            .without::<GpuCameraData>()
-            .into_iter()
-            .map(|val| val.0)
-            .collect::<Vec<_>>();
+        let mut query = Query::new(entity_ids())
+            .with(camera())
+            .without(gpu_camera());
+        let ids = query.borrow(world).iter().collect_vec();
 
-        cameras.into_iter().try_for_each(|camera| -> Result<()> {
-            let gpu_camera = GpuCameraData::new(context.clone(), frames_in_flight)?;
-            world.insert_one(camera, gpu_camera).map_err(|e| e.into())
+        ids.iter().try_for_each(|&camera| -> Result<()> {
+            let v = GpuCamera::new(context.clone(), frames_in_flight)?;
+            world.set(camera, gpu_camera(), v)?;
+
+            Ok(())
         })
     }
 }
 
-impl IntoSet for GpuCameraData {
+impl IntoSet for GpuCamera {
     fn set(&self, current_frame: usize) -> DescriptorSet {
         self.sets[current_frame]
     }
@@ -413,7 +420,7 @@ impl DrawGizmos for Plane {
             origin: self.norm * self.p,
             radius: 0.1,
         }
-        .draw_gizmos(gizmos, Color::blue());
+        .draw_gizmos(gizmos, Color::new(0.0, 0.0, 1.0, 1.0));
         Line::new(self.norm * self.p, self.norm, 0.01, 1.0).draw_gizmos(gizmos, color);
     }
 }

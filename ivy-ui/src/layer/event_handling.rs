@@ -1,4 +1,4 @@
-use hecs::Entity;
+use flax::Entity;
 use ivy_base::Events;
 
 use crate::{events::WidgetEvent, WidgetEventKind};

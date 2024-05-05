@@ -1,12 +1,12 @@
 use std::{borrow::Cow, slice};
 
 use crate::{Error, Result};
-use ivy_resources::{Handle, LoadResource, Resources};
+use ivy_assets::{Asset, AssetCache, AssetKey};
 use ivy_vulkan::{
-    context::SharedVulkanContext,
+    context::VulkanContextService,
     descriptors::{DescriptorBuilder, DescriptorSet, IntoSet},
     vk::ShaderStageFlags,
-    Sampler, SamplerInfo, Texture,
+    Sampler, SamplerKey, Texture, TextureFromPath,
 };
 
 #[cfg(feature = "serialize")]
@@ -16,24 +16,24 @@ use serde::{Deserialize, Serialize};
 /// component will dictate where and how it will be drawn.
 pub struct Image {
     set: DescriptorSet,
-    texture: Handle<Texture>,
-    sampler: Handle<Sampler>,
+    texture: Asset<Texture>,
+    sampler: Asset<Sampler>,
 }
 
 impl Image {
     pub fn new(
-        resources: &Resources,
-        texture: Handle<Texture>,
-        sampler: Handle<Sampler>,
+        assets: &AssetCache,
+        texture: Asset<Texture>,
+        sampler: Asset<Sampler>,
     ) -> Result<Self> {
-        let context = resources.get_default::<SharedVulkanContext>()?;
+        let context = assets.service::<VulkanContextService>().context();
 
         let set = DescriptorBuilder::new()
             .bind_combined_image_sampler(
                 0,
                 ShaderStageFlags::FRAGMENT,
-                resources.get(texture)?.image_view(),
-                resources.get(sampler)?.sampler(),
+                texture.image_view(),
+                sampler.sampler(),
             )
             .build(&context)?;
 
@@ -45,13 +45,13 @@ impl Image {
     }
 
     /// Get a reference to the image's texture.
-    pub fn texture(&self) -> Handle<Texture> {
-        self.texture
+    pub fn texture(&self) -> &Asset<Texture> {
+        &self.texture
     }
 
     /// Get a reference to the image's sampler.
-    pub fn sampler(&self) -> Handle<Sampler> {
-        self.sampler
+    pub fn sampler(&self) -> &Asset<Sampler> {
+        &self.sampler
     }
 }
 
@@ -69,18 +69,16 @@ impl IntoSet for Image {
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct ImageInfo {
     pub texture: Cow<'static, str>,
-    pub sampler: SamplerInfo,
+    pub sampler: SamplerKey,
 }
 
-impl LoadResource for Image {
-    type Info = ImageInfo;
-
+impl AssetKey<Image> for ImageInfo {
     type Error = Error;
 
-    fn load(resources: &Resources, info: &Self::Info) -> Result<Self> {
-        let texture = resources.load(info.texture.clone())??;
-        let sampler = resources.load(info.sampler)??;
+    fn load(&self, assets: &AssetCache) -> Result<Asset<Image>> {
+        let texture = assets.load(&TextureFromPath(self.texture.as_ref().into()));
+        let sampler = assets.load(&self.sampler);
 
-        Self::new(resources, texture, sampler)
+        Ok(assets.insert(Image::new(assets, texture, sampler)?))
     }
 }

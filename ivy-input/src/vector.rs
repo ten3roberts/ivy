@@ -3,7 +3,7 @@ use std::ops::Deref;
 use glam::Vec3;
 use glfw::Key;
 
-use crate::{Input, InputAxis};
+use crate::{InputState, InputAxis};
 
 /// An input vector is a collection of `InputAxis` for each cardinal direction
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
@@ -27,7 +27,7 @@ impl InputVector {
     }
 
     /// Returns the value of the input vector based on the current input state.
-    pub fn get(&self, input: &impl Deref<Target = Input>) -> Vec3 {
+    pub fn get(&self, input: &impl Deref<Target = InputState>) -> Vec3 {
         Vec3::new(self.x.get(input), self.y.get(input), self.z.get(input))
     }
 }

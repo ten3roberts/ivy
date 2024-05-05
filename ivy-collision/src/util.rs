@@ -1,5 +1,4 @@
 use glam::{Mat4, Vec3};
-use ivy_base::Position;
 
 use crate::{CollisionPrimitive, Ray};
 
@@ -11,8 +10,8 @@ pub const MAX_ITERATIONS: usize = 10;
 #[derive(Default, Debug, Clone, Copy)]
 pub struct SupportPoint {
     pub support: Vec3,
-    pub a: Position,
-    pub b: Position,
+    pub a: Vec3,
+    pub b: Vec3,
 }
 
 /// Returns a point on the minkowski difference given from two colliders, their
@@ -31,7 +30,7 @@ pub fn minkowski_diff<A: CollisionPrimitive, B: CollisionPrimitive>(
     let b = support(b_transform, b_transform_inv, b_coll, -dir);
 
     SupportPoint {
-        support: *a - *b,
+        support: a - b,
         a,
         b,
     }
@@ -43,7 +42,7 @@ pub fn support<T: CollisionPrimitive>(
     transform_inv: &Mat4,
     coll: &T,
     dir: Vec3,
-) -> Position {
+) -> Vec3 {
     transform
         .transform_point3(coll.support(transform_inv.transform_vector3(dir).normalize()))
         .into()
@@ -106,7 +105,7 @@ pub fn max_axis_abs(val: Vec3) -> Vec3 {
 }
 
 pub fn plane_ray(p: Vec3, normal: Vec3, ray: &Ray) -> Vec3 {
-    plane_intersect(p - *ray.origin, normal, ray.dir()) + *ray.origin
+    plane_intersect(p - ray.origin, normal, ray.dir()) + ray.origin
 }
 
 pub fn plane_intersect(p: Vec3, normal: Vec3, dir: Vec3) -> Vec3 {

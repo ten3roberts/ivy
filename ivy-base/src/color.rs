@@ -1,169 +1,107 @@
-use derive_more::*;
-use ezy::Lerp;
 use glam::{Vec3, Vec4};
-use palette::{FromColor, Hsla, Hsva, Srgba};
+pub use palette;
+use palette::{FromColor, Hsla, Hsva, IntoColor, Srgba};
 
 #[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
 
-/// Color/tint of an object
-#[derive(
-    AsRef,
-    Clone,
-    Copy,
-    Debug,
-    Deref,
-    DerefMut,
-    Div,
-    DivAssign,
-    From,
-    Into,
-    Mul,
-    MulAssign,
-    PartialEq,
-)]
-#[repr(transparent)]
-#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
-pub struct Color(pub Srgba);
+pub type Color = Srgba;
 
-impl Color {
-    pub fn rgba(r: f32, g: f32, b: f32, a: f32) -> Self {
-        Self(Srgba::new(r, g, b, a))
-    }
+pub trait ColorExt {
+    fn to_vec3(&self) -> Vec3;
+    fn to_vec4(&self) -> Vec4;
+    fn to_hsva(&self) -> Hsva;
+    fn to_hsla(&self) -> Hsla;
 
-    pub fn rgb(r: f32, g: f32, b: f32) -> Self {
-        Self(Srgba::new(r, g, b, 1.0))
-    }
+    fn from_hsla(h: f32, s: f32, l: f32, a: f32) -> Self;
 
-    pub fn hsla(h: f32, s: f32, l: f32, a: f32) -> Self {
-        Self(Srgba::from_color(Hsla::new(h, s, l, a)))
-    }
+    fn from_hsva(h: f32, s: f32, l: f32, a: f32) -> Self;
 
-    pub fn hsl(h: f32, s: f32, l: f32) -> Self {
-        Self(Srgba::from_color(Hsla::new(h, s, l, 1.0)))
-    }
+    fn red() -> Self;
 
-    pub fn hsva(h: f32, s: f32, v: f32, a: f32) -> Self {
-        Self(Srgba::from_color(Hsva::new(h, s, v, a)))
-    }
+    fn green() -> Self;
 
-    pub fn hsv(h: f32, s: f32, v: f32) -> Self {
-        Self(Srgba::from_color(Hsva::new(h, s, v, 1.0)))
-    }
-    pub fn white() -> Self {
-        Self::rgba(1.0, 1.0, 1.0, 1.0)
-    }
+    fn blue() -> Self;
 
-    pub fn black() -> Self {
-        Self::rgba(0.0, 0.0, 0.0, 1.0)
-    }
+    fn white() -> Self;
 
-    pub fn gray() -> Self {
-        Self::rgba(0.5, 0.5, 0.5, 1.0)
-    }
+    fn black() -> Self;
 
-    pub fn red() -> Self {
-        Self::rgba(1.0, 0.0, 0.0, 1.0)
-    }
+    fn transparent() -> Self;
 
-    pub fn dark_red() -> Self {
-        Self::rgba(0.5, 0.0, 0.0, 1.0)
-    }
-    pub fn green() -> Self {
-        Self::rgba(0.0, 1.0, 0.0, 1.0)
-    }
+    fn yellow() -> Self;
 
-    pub fn dark_green() -> Self {
-        Self::rgba(0.0, 0.0, 0.5, 1.0)
-    }
+    fn cyan() -> Self;
 
-    pub fn blue() -> Self {
-        Self::rgba(0.0, 0.0, 1.0, 1.0)
-    }
-
-    pub fn dark_blue() -> Self {
-        Self::rgba(0.0, 0.5, 0.0, 1.0)
-    }
-
-    pub fn cyan() -> Self {
-        Self::rgba(0.0, 1.0, 1.0, 1.0)
-    }
-
-    pub fn magenta() -> Self {
-        Self::rgba(1.0, 0.0, 1.0, 1.0)
-    }
-
-    pub fn purple() -> Self {
-        Self::rgba(0.5, 0.0, 0.5, 1.0)
-    }
-
-    pub fn orange() -> Self {
-        Self::rgba(1.0, 0.7, 0.0, 1.0)
-    }
-
-    pub fn yellow() -> Self {
-        Self::rgba(1.0, 1.0, 0.0, 1.0)
-    }
+    fn purple() -> Self;
 }
 
-impl From<Vec3> for Color {
-    fn from(v: Vec3) -> Self {
-        Self(Srgba::new(v.x, v.y, v.z, 1.0))
+impl ColorExt for Color {
+    fn to_vec3(&self) -> Vec3 {
+        Vec3::new(self.red, self.green, self.blue)
+    }
+
+    fn to_vec4(&self) -> Vec4 {
+        Vec4::new(self.red, self.green, self.blue, self.alpha)
+    }
+
+    fn to_hsva(&self) -> Hsva {
+        Hsva::from_color(*self)
+    }
+
+    fn to_hsla(&self) -> Hsla {
+        Hsla::from_color(*self)
+    }
+
+    fn from_hsla(h: f32, s: f32, l: f32, a: f32) -> Self {
+        Hsla::new(h, s, l, a).into_color()
+    }
+
+    fn from_hsva(h: f32, s: f32, v: f32, a: f32) -> Self {
+        Hsva::new(h, s, v, a).into_color()
+    }
+
+    // TODO: replace with color scheme from violet
+    fn red() -> Self {
+        Color::new(1.0, 0.0, 0.0, 1.0)
+    }
+
+    fn green() -> Self {
+        Color::new(0.0, 1.0, 0.0, 1.0)
+    }
+
+    fn blue() -> Self {
+        Color::new(0.0, 0.0, 1.0, 1.0)
+    }
+
+    fn white() -> Self {
+        Color::new(1.0, 1.0, 1.0, 1.0)
+    }
+
+    fn black() -> Self {
+        Color::new(0.0, 0.0, 0.0, 1.0)
+    }
+
+    fn transparent() -> Self {
+        Color::new(0.0, 0.0, 0.0, 0.0)
+    }
+
+    fn yellow() -> Self {
+        Color::new(1.0, 1.0, 0.0, 1.0)
+    }
+
+    fn cyan() -> Self {
+        Color::new(0.0, 1.0, 1.0, 1.0)
+    }
+
+    fn purple() -> Self {
+        Color::new(1.0, 0.0, 1.0, 1.0)
     }
 }
+// impl<'a> Lerp<'a> for Color {
+//     type Write = &'a mut Color;
 
-impl From<Color> for Vec4 {
-    fn from(c: Color) -> Self {
-        Vec4::new(c.red, c.green, c.blue, c.alpha)
-    }
-}
-
-impl From<Color> for Vec3 {
-    fn from(c: Color) -> Self {
-        Vec3::new(c.red, c.green, c.blue)
-    }
-}
-
-impl From<Vec4> for Color {
-    fn from(v: Vec4) -> Self {
-        Self(Srgba::new(v.x, v.y, v.z, v.w))
-    }
-}
-
-impl From<&Vec3> for Color {
-    fn from(v: &Vec3) -> Self {
-        Self(Srgba::new(v.x, v.y, v.z, 1.0))
-    }
-}
-
-impl From<&Color> for Vec4 {
-    fn from(c: &Color) -> Self {
-        Vec4::new(c.red, c.green, c.blue, c.alpha)
-    }
-}
-
-impl From<&Color> for Vec3 {
-    fn from(c: &Color) -> Self {
-        Vec3::new(c.red, c.green, c.blue)
-    }
-}
-
-impl From<&Vec4> for Color {
-    fn from(v: &Vec4) -> Self {
-        Self(Srgba::new(v.x, v.y, v.z, v.w))
-    }
-}
-
-impl Default for Color {
-    fn default() -> Self {
-        Self::white()
-    }
-}
-
-impl<'a> Lerp<'a> for Color {
-    type Write = &'a mut Color;
-
-    fn lerp(write: Self::Write, start: &Self, end: &Self, t: f32) {
-        *write = Color::from(Vec4::from(start).lerp(Vec4::from(end), t));
-    }
-}
+//     fn lerp(write: Self::Write, start: &Self, end: &Self, t: f32) {
+//         *write = Color::from(Vec4::from(start).lerp(Vec4::from(end), t));
+//     }
+// }

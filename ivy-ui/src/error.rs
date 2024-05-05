@@ -17,12 +17,9 @@ pub enum Error {
     #[error("Font parsing error: {0:?}")]
     FontParsing(&'static str),
 
-    #[error("UI resource error: {0}")]
-    ResourceError(#[from] ivy_resources::Error),
-
     #[error("Specified glyph {0:?} does not exists in the rasterized font")]
     MissingGlyph(u16),
 
     #[error("UI ecs error: {0}")]
-    EcsError(#[from] hecs_schedule::Error),
+    EcsError(#[from] flax::Error),
 }

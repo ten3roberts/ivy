@@ -2,11 +2,11 @@ use crate::{
     pass::{Pass, PassKind},
     Error, Node, NodeKind,
 };
+use flax::World;
 use hash::Hash;
-use hecs::World;
 use itertools::Itertools;
+use ivy_assets::{Asset, AssetCache};
 use ivy_base::Extent;
-use ivy_resources::{Handle, ResourceCache, Resources};
 use ivy_vulkan::{
     commands::{CommandBuffer, CommandPool},
     context::SharedVulkanContext,
@@ -14,7 +14,7 @@ use ivy_vulkan::{
     vk::{self, CommandBufferUsageFlags, PipelineStageFlags, Semaphore},
     Fence, ImageLayout, RenderPass, Texture,
 };
-use std::{collections::HashMap, hash, ops::Deref};
+use std::{collections::HashMap, hash};
 
 pub type PassIndex = usize;
 pub type NodeIndex = usize;
@@ -37,7 +37,7 @@ pub struct RenderGraph {
 }
 
 impl RenderGraph {
-    /// Creates a new empty rendergraph.
+    /// Creates a new empty render graph.
     pub fn new(context: SharedVulkanContext, frames_in_flight: usize) -> crate::Result<Self> {
         let frames = (0..frames_in_flight)
             .map(|_| FrameData::new(context.clone()).map_err(|e| e.into()))
@@ -114,7 +114,11 @@ impl RenderGraph {
                     EdgeConstructor {
                         nodes,
                         dst: node.0,
-                        reads: node.1.color_attachments().iter().map(|v| v.resource),
+                        reads: node
+                            .1
+                            .color_attachments()
+                            .iter()
+                            .map(|v| v.resource.clone()),
                         kind: EdgeKind::Attachment,
                     }
                     .into_iter()
@@ -132,8 +136,11 @@ impl RenderGraph {
                 )
             })
             .try_for_each(|edge: crate::Result<Edge>| -> crate::Result<_> {
-                let edge = edge?;
-                edges.entry(edge.src).or_insert_with(Vec::new).push(edge);
+                let edge = edge?.clone();
+                edges
+                    .entry(edge.src)
+                    .or_insert_with(Vec::new)
+                    .push(edge.clone());
 
                 dependencies
                     .entry(edge.dst)
@@ -175,10 +182,7 @@ impl RenderGraph {
     }
 
     /// Builds or rebuilds the rendergraph and creates appropriate renderpasses and framebuffers.
-    pub fn build<T>(&mut self, textures: T, extent: Extent) -> crate::Result<()>
-    where
-        T: Deref<Target = ResourceCache<Texture>>,
-    {
+    pub fn build(&mut self, extent: Extent) -> crate::Result<()> {
         let (_edges, dependencies) = self.build_edges()?;
         let (ordered, depths) = topological_sort(&self.nodes, &self.edges)?;
 
@@ -203,15 +207,7 @@ impl RenderGraph {
             println!("New pass: {:?}", key);
             let pass_nodes = group.collect_vec();
 
-            let pass = Pass::new(
-                context,
-                nodes,
-                &textures,
-                &dependencies,
-                pass_nodes,
-                key.1,
-                extent,
-            )?;
+            let pass = Pass::new(context, nodes, &dependencies, pass_nodes, key.1, extent)?;
 
             // Insert pass into slotmap
             let pass_index = passes.len();
@@ -255,7 +251,7 @@ impl RenderGraph {
 
     // Executes the whole rendergraph by starting renderpass recording and filling it using the
     // node execution functions. Submits the resulting commandbuffer.
-    pub fn execute(&mut self, world: &mut World, resources: &Resources) -> crate::Result<()> {
+    pub fn execute(&mut self, world: &mut World, assets: &AssetCache) -> crate::Result<()> {
         // Reset all commandbuffers for this frame
         let frame = &mut self.frames[self.current_frame];
 
@@ -268,7 +264,7 @@ impl RenderGraph {
 
         // Execute all nodes
         passes.iter().try_for_each(|pass| -> crate::Result<()> {
-            pass.execute(world, &cmd, nodes, current_frame, resources, extent)
+            pass.execute(world, assets, &cmd, nodes, current_frame, extent)
         })?;
 
         Ok(())
@@ -396,7 +392,7 @@ fn topological_sort(
     Ok((stack, depths))
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Edge {
     pub src: NodeIndex,
     pub dst: NodeIndex,
@@ -417,9 +413,9 @@ impl std::ops::Deref for Edge {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ResourceKind {
-    Texture(Handle<Texture>),
+    Texture(Asset<Texture>),
     Buffer(vk::Buffer),
 }
 
@@ -429,8 +425,8 @@ impl From<vk::Buffer> for ResourceKind {
     }
 }
 
-impl From<Handle<Texture>> for ResourceKind {
-    fn from(val: Handle<Texture>) -> Self {
+impl From<Asset<Texture>> for ResourceKind {
+    fn from(val: Asset<Texture>) -> Self {
         Self::Texture(val)
     }
 }
@@ -504,7 +500,7 @@ struct EdgeConstructor<'a, I> {
     kind: EdgeKind,
 }
 
-impl<'a, I: Iterator<Item = Handle<Texture>>> Iterator for EdgeConstructor<'a, I> {
+impl<'a, I: Iterator<Item = Asset<Texture>>> Iterator for EdgeConstructor<'a, I> {
     type Item = crate::Result<Edge>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -526,7 +522,7 @@ impl<'a, I: Iterator<Item = Handle<Texture>>> Iterator for EdgeConstructor<'a, I
                             Some(Edge {
                                 src,
                                 dst: self.dst,
-                                resource: read.into(),
+                                resource: read.clone().into(),
                                 layout: write.final_layout,
                                 write_stage: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
                                 read_stage: vk::PipelineStageFlags::FRAGMENT_SHADER,
@@ -541,7 +537,7 @@ impl<'a, I: Iterator<Item = Handle<Texture>>> Iterator for EdgeConstructor<'a, I
                             Some(Edge {
                                 src,
                                 dst: self.dst,
-                                resource: read.into(),
+                                resource: read.clone().into(),
                                 layout: ImageLayout::TRANSFER_DST_OPTIMAL,
                                 write_stage: vk::PipelineStageFlags::TRANSFER,
                                 read_stage: vk::PipelineStageFlags::FRAGMENT_SHADER,
@@ -557,7 +553,7 @@ impl<'a, I: Iterator<Item = Handle<Texture>>> Iterator for EdgeConstructor<'a, I
                             Some(Edge {
                                 src,
                                 dst: self.dst,
-                                resource: read.into(),
+                                resource: read.clone().into(),
                                 layout: write.final_layout,
                                 // Write stage is between
                                 write_stage: vk::PipelineStageFlags::LATE_FRAGMENT_TESTS,

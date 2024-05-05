@@ -16,7 +16,6 @@ members = [
   "ivy-base",
   "ivy-graphics",
   "ivy-input",
-  "ivy-resources",
   "ivy-rendergraph",
   "ivy-image",
   "ivy-ui",
@@ -25,11 +24,38 @@ members = [
   "ivy-physics",
   "ivy-collision",
   "ivy-random",
+  "ivy-assets",
 ]
+
+[workspace.dependencies]
+anyhow = { version = "1.0", features = ["backtrace"] }
+atomic_refcell = "0.1"
+flume = "0.11"
+futures = "0.3"
+itertools = "0.12"
+once_cell = "1.0"
+palette = "0.7"
+parking_lot = "0.12"
+rand = "0.8"
+rand_distr = "0.4"
+slotmap = "1.0"
+smallvec = "1.0"
+thiserror = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "parking_lot"] }
+tracing-tree = "0.3"
+dashmap = "5.0"
+
+serde = { version = "1.0", features = ["derive"] }
+bytemuck = { version = "1.9.1", features = ["derive"] }
+image = { version = "0.24.2", features = ["png", "jpeg"] }
+glam = { version = "0.27", features = ["bytemuck", "rand"] }
+flax = { git = "https://github.com/ten3roberts/flax", features = [ "serde", "derive", "puffin", "rayon" ] }
+
+glfw = { version = "0.44.0", features = ["vulkan"] }
 
 [dependencies]
 ivy-collision = { path = "./ivy-collision", version = "0.10" }
-ivy-templates = { path = "./ivy-templates", version = "0.10" }
 ivy-base = { path = "./ivy-base", version = "0.10" }
 ivy-graphics = { path = "./ivy-graphics", version = "0.10" }
 ivy-image = { path = "./ivy-image", version = "0.10" }
@@ -38,52 +64,52 @@ ivy-physics = { path = "./ivy-physics", version = "0.10" }
 ivy-postprocessing = { path = "./ivy-postprocessing", version = "0.10" }
 ivy-random = { path = "./ivy-random", version = "0.10" }
 ivy-rendergraph = { path = "./ivy-rendergraph", version = "0.10" }
-ivy-resources = { path = "./ivy-resources", version = "0.10" }
+ivy-assets = { path = "./ivy-assets", version = "0.10" }
 ivy-ui = { path = "./ivy-ui", version = "0.10" }
 ivy-vulkan = { path = "./ivy-vulkan", version = "0.10" }
 ivy-presets = { path = "./ivy-presets", version = "0.10" }
 ivy-window = { path = "./ivy-window", version = "0.10" }
+regex = "1.0"
 
-hecs = "0.7.6"
-hecs-schedule = "0.6.1"
-derive_more = "0.99.17"
-bytemuck = { version = "1.9.1", features = ["derive"] }
-image = { version = "0.24.2", features = ["png", "jpeg"] }
+flax.workspace = true
+image.workspace = true
+bytemuck.workspace = true
 
 [dev-dependencies]
-anyhow = "1.0.57"
-atomic_refcell = "0.1.8"
-
-flume = "0.10.12"
-parking_lot = "0.12.0"
-slotmap = "1.0.6"
-hecs = "0.7.6"
-glfw = { version = "0.44.0", features = ["vulkan"] }
-hecs-hierarchy = "0.11.6"
-glam = { version = "0.20.5", features = ["bytemuck"] }
-log = "0.4.17"
-color-eyre = "0.6.1"
-tracing = "0.1.34"
-tokio = { version = "1.18.2", features = ["full"] }
-tracing-tree = "0.2.0"
-tracing-subscriber = "0.3.11"
-futures = "0.3.21"
-winit = "0.26.1"
 wgpu = "0.12.0"
-thiserror = "1.0.31"
+winit = "0.26.1"
+color-eyre = "0.6.1"
+
+glfw.workspace = true
+anyhow.workspace = true
+atomic_refcell.workspace = true
+flax.workspace = true
+flume.workspace = true
+futures.workspace = true
+glam.workspace = true
+parking_lot.workspace = true
+slotmap.workspace = true
+thiserror.workspace = true
+tokio = { version = "1.18.2", features = ["full"] }
+tracing-subscriber.workspace = true
+tracing-tree = "0.3.0"
+tracing.workspace = true
 
 [features]
 default = []
-crossbeam-channel = ["ivy-base/crossbeam-channel"]
 serialize = [
   "ivy-base/serialize",
   "ivy-ui/serialize",
   "ivy-physics/serialize",
   "ivy-vulkan/serialize",
-  "ivy-resources/serialize",
-  "ivy-templates/serialize",
   "ivy-graphics/serialize",
 ]
+
+[profile.dev.package.image]
+opt-level = 3
+
+[profile.dev.package.parking_lot]
+opt-level = 3
 
 [profile.release]
 debug = true

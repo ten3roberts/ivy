@@ -12,14 +12,15 @@ readme = "../README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ivy-vulkan = { path = "../ivy-vulkan", version = "0.10.0" }
 ivy-ui = { path = "../ivy-ui", version = "0.10.0" }
 ivy-base = { path = "../ivy-base", version = "0.10.0" }
+ivy-vulkan = { path = "../ivy-vulkan", version = "0.10.0" }
 ivy-graphics = { path = "../ivy-graphics", version = "0.10.0" }
+ivy-assets = { path = "../ivy-assets", version = "0.10.0" }
 ivy-rendergraph = { path = "../ivy-rendergraph", version = "0.10.0" }
-ivy-resources = { path = "../ivy-resources", version = "0.10.0" }
 ivy-postprocessing = { path = "../ivy-postprocessing", version = "0.10.0" }
-thiserror = "1.0.31"
-records = "0.2.0"
-hecs = "0.7.6"
-slotmap = "1.0.6"
+
+parking_lot.workspace = true
+thiserror.workspace = true
+flax.workspace = true
+slotmap.workspace = true

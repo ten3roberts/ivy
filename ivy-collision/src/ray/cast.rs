@@ -1,20 +1,20 @@
-use std::{marker::PhantomData, slice::Iter};
+use std::slice::Iter;
 
+use flax::{Entity, Fetch, World};
 use glam::{f32, Vec3};
-use hecs::{Entity, Query};
-use hecs_schedule::GenericWorld;
-use ivy_base::{Position, Visible};
 use ordered_float::OrderedFloat;
 use slotmap::SlotMap;
 
 use super::Ray;
-use crate::{Collider, CollisionTreeNode, Contact, Object, ObjectData, ObjectIndex, Visitor};
+use crate::{
+    components::collider, CollisionTreeNode, Contact, Object, ObjectData, ObjectIndex, Visitor,
+};
 
 /// Represents a collider ray intersection.
 /// Data about the ray is not saved.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RayIntersection {
-    pub entity: Entity,
+    pub id: Entity,
     pub contact: Contact,
 }
 
@@ -34,11 +34,14 @@ impl Ord for RayIntersection {
 
 impl RayIntersection {
     pub fn new(entity: Entity, contact: Contact) -> Self {
-        Self { entity, contact }
+        Self {
+            id: entity,
+            contact,
+        }
     }
 
     /// Returns the single ray contact point
-    pub fn point(&self) -> Position {
+    pub fn point(&self) -> Vec3 {
         self.contact.points[0]
     }
 
@@ -54,31 +57,25 @@ impl RayIntersection {
 }
 
 /// Visitor for casting a ray into the collision pruning tree
-pub struct RayCaster<'r, 'w, W, Q> {
-    ray: &'r Ray,
-    world: &'w W,
-    with: PhantomData<Q>,
+pub struct RayCaster<'a, Q> {
+    ray: &'a Ray,
+    world: &'a World,
+    filter: &'a Q,
 }
 
-impl<'r, 'w, Q, W> RayCaster<'r, 'w, W, Q> {
-    pub fn new(ray: &'r Ray, world: &'w W) -> Self {
-        Self {
-            ray,
-            world,
-            with: PhantomData,
-        }
+impl<'a, Q> RayCaster<'a, Q> {
+    pub fn new(ray: &'a Ray, world: &'a World, filter: &'a Q) -> Self {
+        Self { ray, world, filter }
     }
 }
 
-impl<'o, 'r, 'w, W: GenericWorld, N: CollisionTreeNode, Q> Visitor<'o, N>
-    for RayCaster<'r, 'w, W, Q>
-{
-    type Output = RayCastIterator<'r, 'w, 'o, W, Q>;
+impl<'a, N: CollisionTreeNode, Q: 'a> Visitor<'a, N> for RayCaster<'a, Q> {
+    type Output = RayCastIterator<'a, Q>;
 
     fn accept(
         &self,
-        node: &'o N,
-        data: &'o SlotMap<ObjectIndex, ObjectData>,
+        node: &'a N,
+        data: &'a SlotMap<ObjectIndex, ObjectData>,
     ) -> Option<Self::Output> {
         if !node.bounds().check_ray(self.ray) {
             return None;
@@ -90,27 +87,20 @@ impl<'o, 'r, 'w, W: GenericWorld, N: CollisionTreeNode, Q> Visitor<'o, N>
             world: self.world,
             data,
             objects,
-            with: PhantomData,
+            filter: &self.filter,
         })
     }
 }
-pub struct RayCastIterator<'a, 'w, 'o, W, Q> {
+pub struct RayCastIterator<'a, Q> {
     ray: &'a Ray,
-    world: &'w W,
-    objects: Iter<'o, Object>,
-    data: &'o SlotMap<ObjectIndex, ObjectData>,
-    with: PhantomData<Q>,
-}
-
-/// Query required for ray casting
-#[derive(Query)]
-pub struct RayCastQuery<'a> {
-    collider: &'a Collider,
-    visible: &'a Visible,
+    world: &'a World,
+    objects: Iter<'a, Object>,
+    data: &'a SlotMap<ObjectIndex, ObjectData>,
+    filter: &'a Q,
 }
 
 /// Requires collider
-impl<'a, 'w, 'o, W: GenericWorld, Q: Query> Iterator for RayCastIterator<'a, 'w, 'o, W, Q> {
+impl<'a, Q: for<'x> Fetch<'x>> Iterator for RayCastIterator<'a, Q> {
     type Item = RayIntersection;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -122,17 +112,17 @@ impl<'a, 'w, 'o, W: GenericWorld, Q: Query> Iterator for RayCastIterator<'a, 'w,
                 continue;
             }
 
-            let mut query = self
-                .world
-                .try_query_one::<(RayCastQuery, Q)>(object.entity)
-                .expect("Query failed");
+            let query = &(collider(), self.filter);
 
-            if let Ok((q, _)) = query.get() {
-                if q.visible.is_hidden() {
-                    continue;
-                }
+            let entity = self.world.entity(object.entity).unwrap();
 
-                if let Some(contact) = self.ray.intersects(&*q.collider, &data.transform) {
+            if let Some((collider, _)) = entity.query(query).get() {
+                // TODO
+                // if q.visible.is_hidden() {
+                //     continue;
+                // }
+
+                if let Some(contact) = self.ray.intersects(&*collider, &data.transform) {
                     return Some(RayIntersection::new(object.entity, contact));
                 }
             };

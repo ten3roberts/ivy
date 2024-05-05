@@ -1,13 +1,24 @@
-use anyhow::Context;
-use hecs::World;
-use hecs_schedule::Schedule;
-use ivy_base::{Events, Layer};
-use ivy_graphics::{systems, GpuCameraData, GraphicsEvent};
-use ivy_resources::Resources;
-use ivy_vulkan::{context::SharedVulkanContext, device, traits::Backend, Swapchain};
-use ivy_window::Window;
+use std::time::Duration;
 
-use crate::{RenderGraph, Result};
+use anyhow::Context;
+use flax::{Schedule, World};
+use ivy_assets::AssetCache;
+use ivy_base::{engine, Events, Layer};
+use ivy_graphics::{
+    components::{self, swapchain, window},
+    systems, GpuCamera, GraphicsEvent,
+};
+use ivy_vulkan::{
+    context::{SharedVulkanContext, VulkanContextService},
+    device,
+    traits::Backend,
+};
+
+use crate::{components::render_graph, RenderGraph, Result};
+
+pub struct GraphicsDesc {
+    pub frames_in_flight: usize,
+}
 
 /// A layer that abstracts the graphics rendering.  Executes the
 /// default rendergraph handle and properly acquires a swapchain image
@@ -25,51 +36,55 @@ pub struct GraphicsLayer {
 impl GraphicsLayer {
     pub fn new(
         _: &mut World,
-        resources: &Resources,
+        assets: &AssetCache,
         _: &mut Events,
-        frames_in_flight: usize,
+        desc: GraphicsDesc,
     ) -> anyhow::Result<Self> {
-        let context = resources.get_default::<SharedVulkanContext>()?.clone();
+        let context = assets.service::<VulkanContextService>().context();
 
         let schedule = Schedule::builder()
-            .add_system(systems::update_view_matrices)
-            .add_system(systems::add_bounds)
-            .add_system(GpuCameraData::update_all_system)
+            .with_system(systems::update_view_matrices())
+            .with_system(systems::add_bounds_system())
+            .with_system(GpuCamera::update_system())
             .build();
 
         Ok(Self {
             context,
-            frames_in_flight,
             schedule,
+            frames_in_flight: desc.frames_in_flight,
         })
     }
 
     pub fn execute_rendergraph(
         &mut self,
         world: &mut World,
-        resources: &mut Resources,
+        assets: &mut AssetCache,
     ) -> Result<()> {
-        let rendergraph = resources.get_default::<RenderGraph>()?;
+        let render_graph = world
+            .get_mut(engine(), render_graph())
+            .expect("Missing render graph")
+            .clone();
 
-        let mut current_frame = rendergraph.begin()?;
-        resources
-            .get_default_mut::<Swapchain>()?
-            .acquire_next_image(rendergraph.wait_semaphore(current_frame))?;
+        let mut render_graph = render_graph.lock();
 
-        drop(rendergraph);
+        let mut current_frame = render_graph.begin()?;
+        world
+            .get_mut(engine(), swapchain())
+            .unwrap()
+            .acquire_next_image(render_graph.wait_semaphore(current_frame))?;
+
         self.schedule
-            .execute_seq((&mut *world, &mut current_frame, &mut *resources))
+            .execute_seq_with(&mut *world, (&mut current_frame, &mut *assets))
             .unwrap();
 
-        let mut rendergraph = resources.get_default_mut::<RenderGraph>()?;
+        render_graph.execute(world, assets)?;
+        render_graph.end()?;
 
-        rendergraph.execute(world, resources)?;
-        rendergraph.end()?;
-
+        let swapchain = world.get_mut(engine(), components::swapchain()).unwrap();
         // Present results
-        resources.get_default::<Swapchain>()?.present(
+        swapchain.present(
             self.context.present_queue(),
-            &[rendergraph.signal_semaphore(current_frame)],
+            &[render_graph.signal_semaphore(current_frame)],
         )?;
 
         Ok(())
@@ -78,32 +93,31 @@ impl GraphicsLayer {
 impl Layer for GraphicsLayer {
     fn on_update(
         &mut self,
-        world: &mut hecs::World,
-        resources: &mut ivy_resources::Resources,
-        events: &mut ivy_base::Events,
-        _frame_time: std::time::Duration,
+        world: &mut World,
+        assets: &mut AssetCache,
+        events: &mut Events,
+        _frame_time: Duration,
     ) -> anyhow::Result<()> {
         // Ensure gpu side data for cameras
-        GpuCameraData::create_gpu_cameras(&self.context, world, self.frames_in_flight)?;
+        GpuCamera::create_gpu_cameras(&self.context, world, self.frames_in_flight)?;
 
-        let window = resources.get_default::<Window>()?;
-        let extent = window.extent();
-        drop(window);
+        let extent = world.get(engine(), window())?.extent();
 
+        // Window is minimized, no need to render
         if extent.width == 0 || extent.height == 0 {
             return Ok(());
         }
 
-        match self.execute_rendergraph(world, resources) {
+        match self.execute_rendergraph(world, assets) {
             Ok(()) => Ok(()),
             Err(crate::Error::Vulkan(ivy_vulkan::Error::Vulkan(
                 ivy_vulkan::vk::Result::SUBOPTIMAL_KHR
                 | ivy_vulkan::vk::Result::ERROR_OUT_OF_DATE_KHR,
             ))) => {
-                let window = resources.get_default::<Window>()?;
+                let window = world.get(engine(), window())?;
                 eprintln!("Recreating swapchain");
-                resources
-                    .get_default_mut::<Swapchain>()?
+                let swapchain = &mut *world.get_mut(engine(), swapchain())?;
+                swapchain
                     .recreate(window.framebuffer_size())
                     .context("Failed to recreate swapchain")?;
 

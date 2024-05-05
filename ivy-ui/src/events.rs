@@ -4,11 +4,10 @@
 
 use std::convert::TryFrom;
 
-use glfw::{Action, Key, Modifiers, MouseButton, Scancode};
-use hecs::Entity;
-use ivy_base::Position2D;
-use ivy_input::InputEvent;
+use flax::Entity;
 use glam::Vec2;
+use glfw::{Action, Key, Modifiers, MouseButton, Scancode};
+use ivy_input::InputEvent;
 
 /// Event for a clicked ui widget
 #[derive(Debug, Clone, PartialEq)]
@@ -45,7 +44,7 @@ pub enum UIControl {
 /// A subset of input events for UI widgets
 #[derive(Debug, Clone, PartialEq)]
 pub enum WidgetEventKind {
-    CursorPos(Position2D),
+    CursorPos(Vec2),
     Key {
         key: Key,
         scancode: Scancode,

@@ -1,37 +1,42 @@
+use flax::{entity_ids, BoxedSystem, Component, EntityIds, Query, QueryBorrow, System, World};
 use glam::Mat4;
-use hecs_schedule::{CommandBuffer, SubWorld, Write};
-use ivy_base::{Position, Rotation, DEG_180};
-use ivy_resources::{Handle, ResourceView};
+use ivy_assets::Asset;
+use ivy_base::{world_transform, DEG_180};
 
-use crate::{BoundingSphere, Camera, Mesh};
+use crate::{
+    components::{bounding_sphere, camera, mesh},
+    Mesh,
+};
 
 /// Updates the view matrix from camera [ `Position` ] and optional [ `Rotation` ]
-pub fn update_view_matrices(world: SubWorld<(&mut Camera, &Position, &Rotation)>) {
-    world
-        .query::<(&mut Camera, &Position, Option<&Rotation>)>()
-        .into_iter()
-        .for_each(|(_, (camera, position, rotation))| {
-            let view = match rotation {
-                Some(rotation) => (Mat4::from_translation(**position)
-                    * rotation.into_matrix()
-                    * Mat4::from_rotation_y(DEG_180))
-                .inverse(),
+pub fn update_view_matrices() -> BoxedSystem {
+    System::builder()
+        .with_query(Query::new((camera().as_mut(), world_transform())))
+        .for_each(|(camera, transform)| {
+            // tracing::info!(
+            //     transform = ?transform.to_scale_rotation_translation(),
+            //     "updating transform"
+            // );
+            // let view = (Mat4::from_translation(**position)
+            //     * rotation.into_matrix()
+            //     * Mat4::from_rotation_y(DEG_180));
 
-                None => Mat4::from_translation(-**position) * Mat4::from_rotation_y(DEG_180),
-            };
-
-            camera.set_view(view);
+            camera.set_view((*transform * Mat4::from_rotation_y(DEG_180)).inverse());
         })
+        .boxed()
 }
 
-pub fn add_bounds(
-    world: SubWorld<&Handle<Mesh>>,
-    resources: ResourceView<Mesh>,
-    mut cmd: Write<CommandBuffer>,
-) {
-    world
-        .query::<&Handle<Mesh>>()
-        .without::<BoundingSphere>()
-        .iter()
-        .for_each(|(e, mesh)| cmd.insert_one(e, resources.get(*mesh).unwrap().bounds()))
+pub fn add_bounds_system() -> BoxedSystem {
+    System::builder()
+        .with_cmd_mut()
+        .with_query(Query::new((entity_ids(), mesh())).without(bounding_sphere()))
+        .build(
+            |cmd: &mut flax::CommandBuffer,
+             mut query: QueryBorrow<(EntityIds, Component<Asset<Mesh>>), _>| {
+                query.iter().for_each(|(id, mesh)| {
+                    cmd.set(id, bounding_sphere(), mesh.bounds());
+                });
+            },
+        )
+        .boxed()
 }

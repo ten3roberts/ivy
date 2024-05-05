@@ -1,9 +1,9 @@
+use flax::Entity;
 use glam::Vec3;
-use hecs::View;
-use ivy_base::{Events, Position};
+use ivy_base::Events;
 use slotmap::SlotMap;
 
-use crate::{BoundingBox, Collider, Nodes, Object, ObjectData, ObjectIndex};
+use crate::{BoundingBox, Nodes, Object, ObjectData, ObjectIndex};
 
 use super::NodeIndex;
 
@@ -69,7 +69,6 @@ pub trait CollisionTreeNode: 'static + Sized + Send + Sync {
     );
 
     fn check_collisions(
-        colliders: &View<&Collider>,
         events: &Events,
         index: NodeIndex,
         nodes: &Nodes<Self>,
@@ -90,7 +89,7 @@ impl CollisionTreeNode for () {
     }
 
     fn bounds(&self) -> BoundingBox {
-        BoundingBox::new(Vec3::ZERO, Position::zero())
+        BoundingBox::new(Vec3::ZERO, Vec3::ZERO)
     }
 
     fn children(&self) -> &[NodeIndex] {
@@ -107,7 +106,6 @@ impl CollisionTreeNode for () {
     }
 
     fn check_collisions(
-        _: &View<&Collider>,
         _: &Events,
         _: NodeIndex,
         _: &Nodes<Self>,

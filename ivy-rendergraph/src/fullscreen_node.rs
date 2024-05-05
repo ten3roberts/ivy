@@ -1,43 +1,41 @@
 use anyhow::Context;
+use flax::{Component, World};
+use ivy_assets::{Asset, AssetCache};
 use ivy_graphics::Renderer;
-use ivy_resources::{Handle, Storage};
 use ivy_vulkan::{
     descriptors::{DescriptorSet, IntoSet},
-    shaderpass::ShaderPass,
     vk::ClearValue,
-    PassInfo, Texture,
+    PassInfo, Shader, Texture,
 };
-use std::marker::PhantomData;
 
 use crate::{AttachmentInfo, Node, NodeKind};
 
-pub struct FullscreenNode<Pass, T> {
-    renderer: Handle<T>,
-    marker: PhantomData<Pass>,
+pub struct FullscreenNode<T> {
+    renderer: T,
     color_attachments: Vec<AttachmentInfo>,
-    read_attachments: Vec<Handle<Texture>>,
-    input_attachments: Vec<Handle<Texture>>,
+    read_attachments: Vec<Asset<Texture>>,
+    input_attachments: Vec<Asset<Texture>>,
     depth_attachment: Option<AttachmentInfo>,
     clear_values: Vec<ClearValue>,
     sets: Vec<DescriptorSet>,
     set_count: usize,
+    shaderpass: Component<Shader>,
 }
 
-impl<Pass, T> FullscreenNode<Pass, T>
+impl<T> FullscreenNode<T>
 where
-    Pass: ShaderPass + Storage,
-    T: Renderer + Storage,
-    <T as Renderer>::Error: Into<anyhow::Error>,
+    T: Renderer,
 {
     pub fn new(
-        renderer: Handle<T>,
+        renderer: T,
         color_attachments: Vec<AttachmentInfo>,
-        read_attachments: Vec<Handle<Texture>>,
-        input_attachments: Vec<Handle<Texture>>,
+        read_attachments: Vec<Asset<Texture>>,
+        input_attachments: Vec<Asset<Texture>>,
         depth_attachment: Option<AttachmentInfo>,
         clear_values: Vec<ClearValue>,
         sets: Vec<&dyn IntoSet>,
         frames_in_flight: usize,
+        shaderpass: Component<Shader>,
     ) -> Self {
         let set_count = sets.len();
 
@@ -49,7 +47,6 @@ where
 
         Self {
             renderer,
-            marker: PhantomData,
             color_attachments,
             read_attachments,
             input_attachments,
@@ -57,25 +54,24 @@ where
             clear_values,
             sets,
             set_count,
+            shaderpass,
         }
     }
 }
 
-impl<Pass, T> Node for FullscreenNode<Pass, T>
+impl<T> Node for FullscreenNode<T>
 where
-    Pass: ShaderPass + Storage,
-    T: Renderer + Storage,
-    <T as Renderer>::Error: Into<anyhow::Error>,
+    T: 'static + Send + Sync + Renderer,
 {
     fn color_attachments(&self) -> &[AttachmentInfo] {
         &self.color_attachments
     }
 
-    fn read_attachments(&self) -> &[Handle<Texture>] {
+    fn read_attachments(&self) -> &[Asset<Texture>] {
         &self.read_attachments
     }
 
-    fn input_attachments(&self) -> &[Handle<Texture>] {
+    fn input_attachments(&self) -> &[Asset<Texture>] {
         &self.input_attachments
     }
 
@@ -97,25 +93,24 @@ where
 
     fn execute(
         &mut self,
-        world: &mut hecs::World,
-        resources: &ivy_resources::Resources,
+        world: &mut World,
+        assets: &AssetCache,
         cmd: &ivy_vulkan::commands::CommandBuffer,
         pass_info: &PassInfo,
         current_frame: usize,
     ) -> anyhow::Result<()> {
         let offset = self.set_count * current_frame;
-        resources
-            .get_mut(self.renderer)?
-            .draw::<Pass>(
+        self.renderer
+            .draw(
                 world,
-                resources,
+                assets,
                 cmd,
                 &self.sets[offset..offset + self.set_count],
                 pass_info,
                 &[],
                 current_frame,
+                self.shaderpass,
             )
-            .map_err(|e| e.into())
             .context("FullscreenNode failed to draw using supplied renderer")?;
 
         Ok(())

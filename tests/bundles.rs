@@ -1,6 +1,7 @@
-use hecs::EntityBuilder;
-use ivy_engine::{AngularMass, App, Mass, Name, RbBundle, Resitution, Velocity};
-use ivy_base::BuilderExt;
+use flax::{components::name, Entity};
+use glam::vec3;
+use ivy_base::{restitution, EntityBuilderExt};
+use ivy_engine::{App, RbBundle};
 
 #[test]
 fn bundles() {
@@ -8,19 +9,16 @@ fn bundles() {
 
     let world = app.world_mut();
 
-    let entity = EntityBuilder::new()
-        .add_bundle(RbBundle {
-            vel: Velocity::new(1.0, 0.0, 0.0),
-            mass: Mass(5.0),
-            ang_mass: AngularMass(2.0),
+    let entity = Entity::builder()
+        .mount(RbBundle {
+            vel: vec3(1.0, 0.0, 0.0),
+            mass: 5.0,
+            ang_mass: 2.0,
             ..Default::default()
         })
-        .add(Name::new("My Entity"))
+        .set(name(), "My Entity".into())
         .spawn(world);
 
     // Get the `Resitution` component
-    assert_eq!(
-        *world.get::<Resitution>(entity).unwrap(),
-        Resitution::default()
-    );
+    assert_eq!(*world.get(entity, restitution()).unwrap(), 0.0,);
 }

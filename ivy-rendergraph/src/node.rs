@@ -1,29 +1,30 @@
 use anyhow::Context;
-use hecs::World;
+use flax::{Component, World};
+use ivy_assets::{Asset, AssetCache};
 use ivy_graphics::Renderer;
-use ivy_resources::{Handle, Resources};
 use ivy_vulkan::{
-    commands::CommandBuffer, shaderpass::ShaderPass, vk::Buffer, vk::ClearValue, ClearValueExt,
-    ImageLayout, LoadOp, PassInfo, StoreOp, Texture,
+    commands::CommandBuffer,
+    vk::{Buffer, ClearValue},
+    ClearValueExt, ImageLayout, LoadOp, PassInfo, Shader, StoreOp, Texture,
 };
-use std::{any::type_name, marker::PhantomData};
+use std::any::type_name;
 
 /// Represents a node in the renderpass.
-pub trait Node: 'static + Send {
+pub trait Node: 'static + Send + Sync {
     /// Returns the color attachments for this node. Should not be execution heavy function
     fn color_attachments(&self) -> &[AttachmentInfo] {
         &[]
     }
 
-    fn output_attachments(&self) -> &[Handle<Texture>] {
+    fn output_attachments(&self) -> &[Asset<Texture>] {
         &[]
     }
     /// Returns the read attachments for this node. Should not be execution heavy function
-    fn read_attachments(&self) -> &[Handle<Texture>] {
+    fn read_attachments(&self) -> &[Asset<Texture>] {
         &[]
     }
     /// Partially sampled input attachments. Read from the same pixel coord we write to
-    fn input_attachments(&self) -> &[Handle<Texture>] {
+    fn input_attachments(&self) -> &[Asset<Texture>] {
         &[]
     }
     /// Returns the optional depth attachment for this node. Should not be execution heavy function
@@ -53,7 +54,7 @@ pub trait Node: 'static + Send {
     fn execute(
         &mut self,
         world: &mut World,
-        resources: &Resources,
+        assets: &AssetCache,
         cmd: &CommandBuffer,
         pass_info: &PassInfo,
         current_frame: usize,
@@ -79,25 +80,25 @@ pub struct AttachmentInfo {
     pub load_op: LoadOp,
     pub initial_layout: ImageLayout,
     pub final_layout: ImageLayout,
-    pub resource: Handle<Texture>,
+    pub resource: Asset<Texture>,
     pub clear_value: ClearValue,
 }
 
-impl Default for AttachmentInfo {
-    fn default() -> Self {
-        Self {
-            store_op: StoreOp::STORE,
-            load_op: LoadOp::DONT_CARE,
-            initial_layout: ImageLayout::UNDEFINED,
-            final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-            resource: Handle::null(),
-            clear_value: ClearValue::default(),
-        }
-    }
-}
+// impl Default for AttachmentInfo {
+//     fn default() -> Self {
+//         Self {
+//             store_op: StoreOp::STORE,
+//             load_op: LoadOp::DONT_CARE,
+//             initial_layout: ImageLayout::UNDEFINED,
+//             final_layout: ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+//             resource: todo!(),
+//             clear_value: ClearValue::default(),
+//         }
+//     }
+// }
 
 impl AttachmentInfo {
-    pub fn color(resource: Handle<Texture>) -> Self {
+    pub fn color(resource: Asset<Texture>) -> Self {
         Self {
             store_op: StoreOp::STORE,
             load_op: LoadOp::CLEAR,
@@ -108,7 +109,7 @@ impl AttachmentInfo {
         }
     }
 
-    pub fn depth_discard(resource: Handle<Texture>) -> Self {
+    pub fn depth_discard(resource: Asset<Texture>) -> Self {
         Self {
             store_op: StoreOp::DONT_CARE,
             load_op: LoadOp::CLEAR,
@@ -118,7 +119,7 @@ impl AttachmentInfo {
             resource,
         }
     }
-    pub fn depth_store(resource: Handle<Texture>) -> Self {
+    pub fn depth_store(resource: Asset<Texture>) -> Self {
         Self {
             store_op: StoreOp::STORE,
             load_op: LoadOp::CLEAR,
@@ -130,26 +131,24 @@ impl AttachmentInfo {
     }
 }
 
-/// Simple node for rendering a pass in the rendergraph
-pub struct RenderNode<Pass, T> {
-    renderer: Handle<T>,
-    marker: PhantomData<Pass>,
+/// Simple node for rendering a pass in the rendergraph using the provided renderer
+pub struct RenderNode<T> {
+    renderer: T,
+    shaderpass: Component<Shader>,
 }
 
-impl<Pass, T> RenderNode<Pass, T> {
-    pub fn new(renderer: Handle<T>) -> Self {
+impl<T> RenderNode<T> {
+    pub fn new(renderer: T, shaderpass: Component<Shader>) -> Self {
         Self {
             renderer,
-            marker: PhantomData,
+            shaderpass,
         }
     }
 }
 
-impl<Pass, T, E> Node for RenderNode<Pass, T>
+impl<T> Node for RenderNode<T>
 where
-    Pass: ShaderPass,
-    T: 'static + Renderer<Error = E> + Send + Sync,
-    E: Into<anyhow::Error>,
+    T: 'static + Renderer + Send + Sync,
 {
     fn node_kind(&self) -> NodeKind {
         NodeKind::Graphics
@@ -158,20 +157,26 @@ where
     fn execute(
         &mut self,
         world: &mut World,
-        resources: &Resources,
+        assets: &AssetCache,
         cmd: &CommandBuffer,
         pass_info: &PassInfo,
         current_frame: usize,
     ) -> anyhow::Result<()> {
-        resources
-            .get_mut(self.renderer)
-            .with_context(|| format!("Failed to borrow {:?} mutably", type_name::<T>()))?
-            .draw::<Pass>(world, resources, cmd, &[], pass_info, &[], current_frame)
-            .map_err(|e| e.into())
+        self.renderer
+            .draw(
+                world,
+                assets,
+                cmd,
+                &[],
+                pass_info,
+                &[],
+                current_frame,
+                self.shaderpass,
+            )
             .with_context(|| format!("Failed to draw using {:?}", type_name::<T>()))
     }
 
     fn debug_name(&self) -> &'static str {
-        std::any::type_name::<RenderNode<Pass, T>>()
+        std::any::type_name::<RenderNode<T>>()
     }
 }

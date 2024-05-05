@@ -1,19 +1,21 @@
-use std::any;
+use std::{any, sync::ONCE_INIT};
 
-use flume::{Receiver, Sender};
-use hecs::{Entity, Query};
-use hecs_schedule::{CommandBuffer, SubWorld, Write};
-use ivy_base::components::Velocity;
-use ivy_base::{
-    Color, DrawGizmos, Events, Gizmos, Mass, Sleeping, Static, TransformMatrix, TransformQuery,
-    Trigger, Visible,
+use flax::{
+    components::is_static, entity_ids, fetch::Satisfied, sink::Sink, BoxedSystem, CommandBuffer,
+    Component, Entity, Error, Fetch, FetchExt, Mutable, Opt, OptOr, Query, QueryBorrow, System,
+    World,
 };
-use ivy_resources::{DefaultResource, DefaultResourceMut};
-use records::record;
+use flume::{Receiver, Sender};
+use glam::{Mat4, Vec3};
+use ivy_base::{is_trigger, mass, velocity, world_transform, DrawGizmos, Events, Gizmos};
+use palette::Srgba;
 use slotmap::{new_key_type, SlotMap};
 use smallvec::Array;
 
-use crate::{BoundingBox, Collider, ColliderOffset, CollisionPrimitive};
+use crate::{
+    components::{self, collider, collider_offset, tree_index},
+    BoundingBox, Collider, CollisionPrimitive,
+};
 
 mod binary_node;
 mod bvh;
@@ -67,25 +69,21 @@ pub struct CollisionTree<N> {
     objects: SlotMap<ObjectIndex, ObjectData>,
     /// Objects that need to be reinserted into the tree
     popped: Vec<Object>,
-    tx: Sender<Object>,
-    rx: Receiver<Object>,
+    rx: Receiver<ObjectIndex>,
 }
 
 impl<N: CollisionTreeNode> CollisionTree<N> {
-    pub fn new(root: N) -> Self {
+    pub fn new(root: N, despawned: Receiver<ObjectIndex>) -> Self {
         let mut nodes = SlotMap::with_key();
 
         let root = nodes.insert(root);
-
-        let (tx, rx) = flume::unbounded();
 
         Self {
             nodes,
             root,
             objects: SlotMap::with_key(),
             popped: Vec::new(),
-            tx,
-            rx,
+            rx: despawned,
         }
     }
 
@@ -112,38 +110,35 @@ impl<N: CollisionTreeNode> CollisionTree<N> {
         object
     }
 
-    pub fn register(&mut self, world: SubWorld<ObjectQuery>, cmd: &mut CommandBuffer) {
-        for (e, q) in world.native_query().without::<Object>().iter() {
-            let obj: ObjectData = q.into();
-            let object = self.insert(e, obj);
+    /// Registers new entities in the tree
+    pub fn register(&mut self, world: &World, cmd: &mut CommandBuffer) {
+        let mut query = Query::new((entity_ids(), ObjectQuery::new())).without(tree_index());
 
-            let on_drop = OnDrop {
-                object,
-                tx: self.tx.clone(),
-            };
+        for (id, q) in query.borrow(world).iter() {
+            let obj: ObjectData = q.into_object_data();
+            let tree_index = self.insert(id, obj);
+            tracing::info!(?id, ?tree_index.index, "registering entity into tree");
 
-            cmd.insert(e, (object, on_drop))
+            cmd.set(id, components::tree_index(), tree_index.index);
         }
     }
 
     fn handle_despawned(&mut self) -> usize {
-        let objects = &mut self.objects;
         self.rx
             .try_iter()
-            .map(|object| {
-                objects.remove(object.index);
+            .map(|index| {
+                self.objects.remove(index);
             })
             .count()
     }
 
-    pub fn update(
-        &mut self,
-        world: SubWorld<(&Object, ObjectQuery)>,
-    ) -> Result<(), hecs_schedule::Error> {
+    pub fn update(&mut self, world: &World) -> Result<(), Error> {
+        let mut query = Query::new((tree_index(), ObjectQuery::new()));
         // Update object data
-        for (_, (obj, q)) in world.native_query().without::<Static>().iter() {
-            let data: ObjectData = q.into();
-            self.objects[obj.index] = data;
+        for (&index, q) in query.borrow(world).iter() {
+            tracing::info!(?index);
+            let data: ObjectData = q.into_object_data();
+            self.objects[index] = data;
         }
 
         let mut despawned = self.handle_despawned();
@@ -167,15 +162,13 @@ impl<N: CollisionTreeNode> CollisionTree<N> {
     }
 
     #[inline]
+    /// Checks the tree for collisions and dispatches them as events
     pub fn check_collisions<'a, G: Array<Item = &'a ObjectData>>(
         &'a self,
-        world: SubWorld<&Collider>,
+        world: &World,
         events: &mut Events,
-    ) -> hecs_schedule::error::Result<()> {
-        let mut colliders = world.query();
-        let colliders = colliders.view();
-
-        N::check_collisions(&colliders, events, self.root, &self.nodes, &self.objects);
+    ) -> anyhow::Result<()> {
+        N::check_collisions(events, self.root, &self.nodes, &self.objects);
 
         Ok(())
     }
@@ -202,68 +195,159 @@ impl<N: CollisionTreeNode> std::fmt::Debug for CollisionTree<N> {
     }
 }
 
-impl<N: CollisionTreeNode> CollisionTree<N> {
-    pub fn register_system(
-        world: SubWorld<ObjectQuery>,
-        mut cmd: Write<CommandBuffer>,
-        mut tree: DefaultResourceMut<Self>,
-    ) -> hecs_schedule::error::Result<()> {
-        tree.register(world, &mut cmd);
-
-        Ok(())
-    }
-
-    pub fn update_system(
-        world: SubWorld<(&Object, ObjectQuery)>,
-        mut tree: DefaultResourceMut<Self>,
-    ) -> hecs_schedule::error::Result<()> {
-        tree.update(world)
-    }
-
-    pub fn check_collisions_system(
-        world: SubWorld<&Collider>,
-        tree: DefaultResourceMut<Self>,
-        mut events: Write<Events>,
-    ) -> hecs_schedule::error::Result<()>
-    where
-        N: CollisionTreeNode,
-    {
-        tree.check_collisions::<[&ObjectData; 128]>(world, &mut events)?;
-
-        Ok(())
-    }
+pub fn register_system<N: CollisionTreeNode>(state: Component<CollisionTree<N>>) -> BoxedSystem {
+    System::builder()
+        .with_world()
+        .with_cmd_mut()
+        .with_query(Query::new(state.as_mut()))
+        .build(
+            |world: &World,
+             cmd: &mut CommandBuffer,
+             mut query: QueryBorrow<Mutable<CollisionTree<N>>>| {
+                query.iter().for_each(|tree| {
+                    tree.register(world, &mut *cmd);
+                })
+            },
+        )
+        .boxed()
 }
 
-impl<N: CollisionTreeNode + DrawGizmos> CollisionTree<N> {
-    pub fn draw_system(tree: DefaultResource<Self>, mut gizmos: DefaultResourceMut<Gizmos>) {
-        tree.draw_gizmos(&mut gizmos, Color::white())
-    }
+// pub fn draw_system<N: CollisionTreeNode>(state: Component<CollisionTree<N>>) -> BoxedSystem {
+//     System::builder()
+//         .with_world()
+//         .with_cmd_mut()
+//         .with_query(Query::new(state.as_mut()))
+//         .build(
+//             |world: &World,
+//              cmd: &mut CommandBuffer,
+//              mut query: QueryBorrow<Mutable<CollisionTree<N>>>| {
+//                 query.iter().for_each(|tree| {
+//                     tree.register(world, &mut *cmd);
+//                 })
+//             },
+//         )
+//         .boxed()
+// }
+
+pub fn update_system<N: CollisionTreeNode>(state: Component<CollisionTree<N>>) -> BoxedSystem {
+    System::builder()
+        .with_world()
+        .with_query(Query::new(state.as_mut()))
+        .build(
+            |world: &World, mut query: QueryBorrow<Mutable<CollisionTree<N>>>| {
+                query.iter().try_for_each(|tree| {
+                    tree.update(world)?;
+                    anyhow::Ok(())
+                })
+            },
+        )
+        .boxed()
+}
+pub fn check_collisions_system<N: CollisionTreeNode>(
+    state: Component<CollisionTree<N>>,
+) -> BoxedSystem {
+    System::builder()
+        .with_world()
+        .with_input_mut()
+        .with_query(Query::new(state.as_mut()))
+        .build(
+            |world: &World,
+             events: &mut Events,
+             mut query: QueryBorrow<Mutable<CollisionTree<N>>>| {
+                query.iter().try_for_each(|tree| {
+                    tree.check_collisions::<[&ObjectData; 128]>(world, &mut *events)
+                })
+            },
+        )
+        .boxed()
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-#[record]
+// impl<N: CollisionTreeNode> CollisionTree<N> {
+//     pub fn register_system(
+//         &mut self,
+//         world: &World,
+//         mut cmd: &mut CommandBuffer,
+//     ) -> anyhow::Result<()> {
+//         self.register(world, &mut cmd);
+
+//         Ok(())
+//     }
+
+//     pub fn update_system(world: &World, mut tree: DefaultResourceMut<Self>) -> anyhow::Result<()> {
+//         tree.update(world).context("Failed to update tree")
+//     }
+
+//     pub fn check_collisions_system(
+//         world: &World,
+//         tree: DefaultResourceMut<Self>,
+//         mut events: &mut Events,
+//     ) -> anyhow::Result<()>
+//     where
+//         N: CollisionTreeNode,
+//     {
+//         tree.check_collisions::<[&ObjectData; 128]>(world, &mut events)?;
+
+//         Ok(())
+//     }
+// }
+
+// impl<N: CollisionTreeNode + DrawGizmos> CollisionTree<N> {
+//     pub fn draw_system(tree: DefaultResource<Self>, mut gizmos: DefaultResourceMut<Gizmos>) {
+//         tree.draw_gizmos(&mut gizmos, Srgba::new(1.0, 1.0, 1.0, 1.0))
+//     }
+// }
+
+#[derive(Debug, Clone)]
+/// Data contained in each object in the tree.
+///
+/// Copied and retained from the ECS for easy access
+/// TODO: reduce size
 pub struct ObjectData {
+    pub collider: Collider,
     pub bounds: BoundingBox,
     pub extended_bounds: BoundingBox,
-    pub transform: TransformMatrix,
+    pub transform: Mat4,
     pub is_trigger: bool,
-    pub is_visible: bool,
     pub state: NodeState,
     pub movable: bool,
 }
-
-#[derive(Query)]
-pub struct ObjectQuery<'a> {
-    transform: TransformQuery<'a>,
-    mass: Option<&'a Mass>,
-    offset: Option<&'a ColliderOffset>,
-    collider: &'a Collider,
-    is_trigger: Option<&'a Trigger>,
-    is_static: Option<&'a Static>,
-    is_visible: Option<&'a Visible>,
-    is_sleeping: Option<&'a Sleeping>,
-    velocity: Option<&'a Velocity>,
+#[derive(Fetch)]
+pub struct ObjectQuery {
+    transform: Component<Mat4>,
+    mass: Opt<Component<f32>>,
+    collider: Component<Collider>,
+    offset: OptOr<Component<Mat4>, Mat4>,
+    is_static: Satisfied<Component<()>>,
+    is_trigger: Satisfied<Component<()>>,
+    velocity: Component<Vec3>,
 }
+
+impl ObjectQuery {
+    fn new() -> Self {
+        Self {
+            transform: world_transform(),
+            mass: mass().opt(),
+            collider: collider(),
+            offset: collider_offset().opt_or_default(),
+            is_static: is_static().satisfied(),
+            velocity: velocity(),
+            is_trigger: is_trigger().satisfied(),
+        }
+    }
+}
+
+// #[derive(Query)]
+// pub struct ObjectQuery<'a> {
+//     transform: TransformQuery<'a>,
+//     mass: Option<&'a Mass>,
+//     offset: Option<&'a ColliderOffset>,
+//     collider: &'a Collider,
+//     is_trigger: Option<&'a Trigger>,
+//     is_static: Option<&'a Static>,
+//     is_visible: Option<&'a Visible>,
+//     is_sleeping: Option<&'a Sleeping>,
+//     velocity: Option<&'a Velocity>,
+// }
 
 impl ObjectData {
     pub fn is_movable(&self) -> bool {
@@ -271,31 +355,29 @@ impl ObjectData {
     }
 }
 
-impl<'a> Into<ObjectData> for ObjectQuery<'a> {
-    fn into(self) -> ObjectData {
-        let off = self.offset.cloned().unwrap_or_default();
-        let transform = TransformMatrix(*self.transform.into_matrix() * *off);
+impl ObjectQueryItem<'_> {
+    fn into_object_data(self) -> ObjectData {
+        let offset = *self.offset;
+        let transform = *self.transform * offset;
 
         let bounds = self.collider.bounding_box(transform);
-        let extended_bounds = if let Some(vel) = self.velocity {
-            bounds.expand(**vel * 0.1)
-        } else {
-            bounds
-        };
+        let extended_bounds = bounds.expand(*self.velocity * 0.1);
+
         ObjectData {
             bounds,
             extended_bounds,
             transform,
-            is_trigger: self.is_trigger.is_some(),
-            is_visible: self.is_visible.map(|val| val.is_visible()).unwrap_or(true),
-            state: if self.is_sleeping.is_some() {
-                NodeState::Sleeping
-            } else if self.is_static.is_some() {
-                NodeState::Static
-            } else {
-                NodeState::Dynamic
-            },
+            is_trigger: self.is_trigger,
+            state: NodeState::Dynamic,
+            // state: if self.is_sleeping.is_some() {
+            //     NodeState::Sleeping
+            // } else if self.is_static.is_some() {
+            //     NodeState::Static
+            // } else {
+            //     NodeState::Dynamic
+            // },
             movable: self.mass.map(|v| v.is_normal()).unwrap_or(false),
+            collider: self.collider.clone(),
         }
     }
 }
@@ -364,7 +446,41 @@ impl std::ops::Deref for EntityPayload {
 impl<N: CollisionTreeNode + DrawGizmos> DrawGizmos for CollisionTree<N> {
     fn draw_gizmos(&self, mut gizmos: &mut Gizmos, color: ivy_base::Color) {
         gizmos.begin_section(any::type_name::<Self>());
-        self.root
-            .draw_gizmos_recursive(&self.nodes, &mut gizmos, color)
+        self.root.draw_gizmos_recursive(&self.nodes, gizmos, color)
+    }
+}
+
+pub struct DespawnedSubscriber {
+    tx: flume::Sender<ObjectIndex>,
+}
+
+impl DespawnedSubscriber {
+    pub fn new(tx: flume::Sender<ObjectIndex>) -> Self {
+        Self { tx }
+    }
+}
+
+impl flax::events::EventSubscriber for DespawnedSubscriber {
+    fn on_added(&self, storage: &flax::archetype::Storage, event: &flax::events::EventData) {}
+
+    fn on_modified(&self, event: &flax::events::EventData) {}
+
+    fn on_removed(&self, storage: &flax::archetype::Storage, event: &flax::events::EventData) {
+        let values = storage.downcast_ref::<ObjectIndex>();
+        event.slots.iter().map(|slot| {
+            self.tx.send(values[slot]).unwrap();
+        });
+    }
+
+    fn is_connected(&self) -> bool {
+        self.tx.is_connected()
+    }
+
+    fn matches_arch(&self, arch: &flax::archetype::Archetype) -> bool {
+        arch.has(tree_index().key())
+    }
+
+    fn matches_component(&self, desc: flax::component::ComponentDesc) -> bool {
+        desc.key() == tree_index().key()
     }
 }

@@ -1,9 +1,8 @@
 use std::ops::Deref;
 
+use flax::{Fetch, World};
 use glam::{Mat4, Vec3};
-use hecs::Query;
-use hecs_schedule::GenericWorld;
-use ivy_base::{DrawGizmos, Gizmos, Line, Position, TransformMatrix};
+use ivy_base::{DrawGizmos, Gizmos, Line};
 
 mod cast;
 pub use cast::*;
@@ -15,13 +14,14 @@ use crate::{
     CollisionPrimitive, CollisionTree, CollisionTreeNode, Contact, Simplex,
 };
 
+#[derive(Debug, Clone)]
 pub struct Ray {
-    pub(crate) origin: Position,
+    pub(crate) origin: Vec3,
     pub(crate) dir: Vec3,
 }
 
 impl Ray {
-    pub fn new(origin: Position, dir: Vec3) -> Self {
+    pub fn new(origin: Vec3, dir: Vec3) -> Self {
         Self {
             origin,
             dir: dir.normalize_or_zero(),
@@ -38,7 +38,7 @@ impl Ray {
         let a = support(transform, transform_inv, collider, dir);
 
         SupportPoint {
-            support: *a - *self.origin,
+            support: a - self.origin,
             a,
             b: self.origin,
         }
@@ -48,7 +48,7 @@ impl Ray {
     pub fn intersects<T: CollisionPrimitive>(
         &self,
         collider: &T,
-        transform: &TransformMatrix,
+        transform: &Mat4,
     ) -> Option<Contact> {
         // Check if any point is behind ray
 
@@ -98,63 +98,56 @@ impl Ray {
     }
 
     /// Cast the ray into the world and returns the closest intersection
-    pub fn cast_one<'r, 'w, 't, W, N>(
-        &'r self,
-        world: &'w W,
-        tree: &'t CollisionTree<N>,
-    ) -> Option<RayIntersection>
+    pub fn cast_one<W, N>(&self, world: &World, tree: &CollisionTree<N>) -> Option<RayIntersection>
     where
         N: 'static + CollisionTreeNode,
-        W: GenericWorld,
     {
-        tree.query(RayCaster::<W, ()>::new(self, world))
-            .flatten()
-            .min()
+        tree.query(RayCaster::new(self, world, &())).flatten().min()
     }
 
-    pub fn cast<'r, 'w, 't, W, N>(
-        &'r self,
-        world: &'w W,
-        tree: &'t CollisionTree<N>,
-    ) -> TreeQuery<'t, N, RayCaster<'r, 'w, W, ()>>
+    pub fn cast<'a, N, Q>(
+        &'a self,
+        world: &'a World,
+        tree: &'a CollisionTree<N>,
+        filter: &'a Q,
+    ) -> TreeQuery<'a, N, RayCaster<'a, Q>>
     where
         N: CollisionTreeNode,
-        W: GenericWorld,
     {
-        tree.query(RayCaster::new(self, world))
+        tree.query(RayCaster::new(self, world, filter))
     }
     /// Cast the ray into the world and returns the closest intersection
-    pub fn cast_one_with<'r, 'w, 't, Q, T, W, N>(
-        &'r self,
-        world: &'w W,
-        tree: &'t T,
+    pub fn cast_one_with<'a, Q, T, N>(
+        &'a self,
+        world: &'a World,
+        tree: &'a T,
+        filter: &'a Q,
     ) -> Option<RayIntersection>
     where
         T: Deref<Target = CollisionTree<N>>,
         N: 'static + CollisionTreeNode,
-        Q: Query,
-        W: GenericWorld,
+        Q: for<'x> Fetch<'x>,
     {
-        tree.query(RayCaster::<W, Q>::new(self, world))
+        tree.query(RayCaster::<Q>::new(self, world, filter))
             .flatten()
             .min()
     }
 
-    pub fn cast_with<'r, 'w, 't, Q, T, W, N>(
-        &'r self,
-        world: &'w W,
-        tree: &'t T,
-    ) -> TreeQuery<'t, N, RayCaster<'r, 'w, W, Q>>
+    pub fn cast_with<'a, Q, T, N>(
+        &'a self,
+        world: &'a World,
+        tree: &'a T,
+        filter: &'a Q,
+    ) -> TreeQuery<'a, N, RayCaster<'a, Q>>
     where
         T: Deref<Target = CollisionTree<N>>,
         N: 'static + CollisionTreeNode,
-        W: GenericWorld,
     {
-        tree.query(RayCaster::new(self, world))
+        tree.query(RayCaster::new(self, world, filter))
     }
 
     /// Get a reference to the ray's origin.
-    pub fn origin(&self) -> Position {
+    pub fn origin(&self) -> Vec3 {
         self.origin
     }
 
@@ -168,7 +161,7 @@ impl DrawGizmos for Ray {
     fn draw_gizmos(&self, gizmos: &mut Gizmos, color: ivy_base::Color) {
         gizmos.draw(
             Line {
-                origin: *self.origin,
+                origin: self.origin,
                 dir: self.dir,
                 ..Default::default()
             },

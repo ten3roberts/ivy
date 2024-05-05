@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use derive_more::{Deref, DerefMut, Display, From, Into};
 use ezy::Lerp;
 use glam::{Mat4, Vec3};
@@ -16,23 +18,16 @@ impl<'a> Lerp<'a> for ColliderOffset {
 }
 
 /// Generic collider holding any primitive implementing a support function.
+#[derive(Debug, Clone)]
 pub struct Collider {
-    primitive: Box<dyn CollisionPrimitive + Send + Sync>,
-}
-
-impl std::fmt::Debug for Collider {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Collider")
-            .field("max_radius", &self.primitive.max_radius())
-            .finish()
-    }
+    primitive: Arc<dyn CollisionPrimitive + Send + Sync>,
 }
 
 impl Collider {
     /// Creates a new collider from arbitrary collision primitive.
     pub fn new<T: 'static + CollisionPrimitive + Send + Sync>(primitive: T) -> Self {
         Self {
-            primitive: Box::new(primitive),
+            primitive: Arc::new(primitive),
         }
     }
 
@@ -68,14 +63,6 @@ impl CollisionPrimitive for Collider {
     }
 
     fn dyn_clone(&self) -> Box<dyn CollisionPrimitive + Send + Sync> {
-        Box::new(self.clone())
-    }
-}
-
-impl Clone for Collider {
-    fn clone(&self) -> Self {
-        Self {
-            primitive: self.primitive.dyn_clone(),
-        }
+        unimplemented!()
     }
 }

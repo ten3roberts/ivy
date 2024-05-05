@@ -6,6 +6,7 @@ mod error;
 mod layer;
 pub mod systems;
 pub mod util;
+pub mod components;
 
 pub use bundles::*;
 pub use effector::*;

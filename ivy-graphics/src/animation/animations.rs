@@ -1,4 +1,4 @@
-use ivy_resources::Handle;
+use ivy_assets::Asset;
 
 use crate::{Animation, Error, Result};
 
@@ -7,40 +7,40 @@ use crate::{Animation, Error, Result};
 #[derive(Debug, Clone, Default)]
 pub struct AnimationStore {
     // Use a vec due to (usually) small number of animations
-    inner: Vec<(String, Handle<Animation>)>,
+    inner: Vec<(String, Asset<Animation>)>,
 }
 
 impl AnimationStore {
     pub fn new() -> Self {
         Self::default()
     }
-    pub fn insert(&mut self, name: impl Into<String>, animation: Handle<Animation>) {
+    pub fn insert(&mut self, name: impl Into<String>, animation: Asset<Animation>) {
         self.inner.push((name.into(), animation));
     }
 
     /// Find a named animation
-    pub fn find(&self, name: &str) -> Result<Handle<Animation>> {
+    pub fn find(&self, name: &str) -> Result<Asset<Animation>> {
         self.iter()
             .find(|val| val.0 == name)
-            .map(|val| val.1)
+            .map(|val| val.1.clone())
             .ok_or_else(|| Error::MissingAnimation(name.to_string()))
     }
 
-    pub fn iter(&self) -> std::slice::Iter<(String, Handle<Animation>)> {
+    pub fn iter(&self) -> std::slice::Iter<(String, Asset<Animation>)> {
         self.inner.iter()
     }
 
-    pub fn get(&self, index: usize) -> Result<Handle<Animation>> {
+    pub fn get(&self, index: usize) -> Result<Asset<Animation>> {
         self.inner
             .get(index)
-            .map(|val| val.1)
+            .map(|val| val.1.clone())
             .ok_or_else(|| Error::InvalidAnimation(index))
     }
 }
 
 impl<T> From<T> for AnimationStore
 where
-    T: IntoIterator<Item = (String, Handle<Animation>)>,
+    T: IntoIterator<Item = (String, Asset<Animation>)>,
 {
     fn from(val: T) -> Self {
         Self {

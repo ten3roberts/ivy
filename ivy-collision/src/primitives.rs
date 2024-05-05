@@ -1,7 +1,6 @@
 use std::ops::Deref;
 
-use glam::Vec3;
-use ivy_base::{Position, Scale, TransformMatrix};
+use glam::{Mat4, Vec3};
 
 use crate::{CollisionPrimitive, Ray, RayIntersect};
 
@@ -64,12 +63,12 @@ impl CollisionPrimitive for Cube {
 
 impl RayIntersect for Cube {
     // https://www.jcgt.org/published/0007/03/04/paper-lowres.pdf
-    fn check_intersect(&self, transform: &TransformMatrix, ray: &Ray) -> bool {
+    fn check_intersect(&self, transform: &Mat4, ray: &Ray) -> bool {
         let inv = transform.inverse();
         let dir = inv.transform_vector3(ray.dir()).normalize();
         let inv_dir = Vec3::new(1.0 / dir.x, 1.0 / dir.y, 1.0 / dir.z);
 
-        let origin = inv.transform_point3(*ray.origin);
+        let origin = inv.transform_point3(ray.origin);
 
         let t1 = (-self.half_extents - origin) * inv_dir;
         let t2 = (self.half_extents - origin) * inv_dir;
@@ -96,7 +95,7 @@ impl Sphere {
 
     /// Returns true if two uniform spheres overlap.
     #[inline]
-    pub fn overlaps(&self, origin: Position, other: &Self, other_origin: Position) -> bool {
+    pub fn overlaps(&self, origin: Vec3, other: &Self, other_origin: Vec3) -> bool {
         let total_radii = self.radius + other.radius;
 
         (origin - other_origin).length_squared() < total_radii * total_radii
@@ -104,16 +103,16 @@ impl Sphere {
 
     /// Creates a bounding sphere fully enclosign a primitive
     #[inline]
-    pub fn enclose<T: CollisionPrimitive>(collider: &T, scale: Scale) -> Self {
+    pub fn enclose<T: CollisionPrimitive>(collider: &T, scale: Vec3) -> Self {
         Self {
             radius: collider.max_radius() * scale.min_element(),
         }
     }
 
     /// Checks an axis aligned perfect sphere ray intersection
-    pub fn check_aa_intersect(&self, pos: Position, ray: &Ray) -> bool {
+    pub fn check_aa_intersect(&self, pos: Vec3, ray: &Ray) -> bool {
         let dir = ray.dir();
-        let origin = *ray.origin - *pos;
+        let origin = ray.origin - pos;
 
         let a = dir.dot(dir);
 
@@ -148,10 +147,10 @@ impl CollisionPrimitive for Sphere {
 
 impl RayIntersect for Sphere {
     // https://gist.github.com/wwwtyro/beecc31d65d1004f5a9d
-    fn check_intersect(&self, transform: &TransformMatrix, ray: &Ray) -> bool {
+    fn check_intersect(&self, transform: &Mat4, ray: &Ray) -> bool {
         let inv = transform.inverse();
         let dir = inv.transform_vector3(ray.dir()).normalize();
-        let origin = inv.transform_point3(*ray.origin);
+        let origin = inv.transform_point3(ray.origin);
 
         let a = dir.dot(dir);
 

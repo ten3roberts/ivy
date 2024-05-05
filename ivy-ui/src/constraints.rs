@@ -1,186 +1,128 @@
 // use derive_for::*;
-use derive_for::*;
-use derive_more::*;
+use flax::{Component, EntityBuilder, Fetch};
 use glam::Vec2;
-use hecs::{Bundle, Query};
-use ivy_base::{Position2D, Size2D};
-#[cfg(feature = "serialize")]
-use serde::{Deserialize, Serialize};
 
-derive_for!(
-    (
-        Add, AddAssign, AsRef, Clone, Copy, Debug, Default, Deref, DerefMut, Div, DivAssign, From,
-        Into, Mul, MulAssign, Sub, SubAssign,PartialEq,
-    );
-    /// Constrains the position to an offset in pixels from parent origin.
-    #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
-    pub struct AbsoluteOffset(pub Vec2);
-    #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
-    pub struct RelativeOffset(pub Vec2);
-    /// Constrains the size of a widget to a multiple of the parent size. If paired
-    /// with [`Aspect`] width is ignored.
-    /// The aspect ratio of the parent is not preserved, as only the height will be
-    /// considered from the parent. This ensures the window width doesn't stretch UI
-    /// widgets.
-    #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
-    pub struct RelativeSize(pub Vec2);
-    /// Constrains the size of a widget to pixels.
-    #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
-    pub struct AbsoluteSize(pub Vec2);
+use crate::{absolute_offset, absolute_size, aspect, origin, relative_offset, relative_size};
 
-    /// Constrains the widget width to a multiple of height.
-    /// If value is zero the aspect is unconstrained.
-    #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
-    pub struct Aspect(pub f32);
+// impl Origin2D {
+//     pub fn new(x: f32, y: f32) -> Self {
+//         Self(Vec2::new(x, y))
+//     }
 
-    /// The offset of the origin from the center of the sprite.
-    #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
-    pub struct Origin2D(pub Vec2);
+//     pub fn lower_left() -> Self {
+//         Self::new(-1.0, -1.0)
+//     }
 
-    /// Margin for some widgets, like Text
-    #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
-    pub struct Margin(pub Vec2);
-);
+//     pub fn lower_right() -> Self {
+//         Self::new(1.0, -1.0)
+//     }
 
-impl From<AbsoluteOffset> for Position2D {
-    fn from(p: AbsoluteOffset) -> Self {
-        p.0.into()
+//     pub fn upper_right() -> Self {
+//         Self::new(1.0, 1.0)
+//     }
+
+//     pub fn upper_left() -> Self {
+//         Self::new(-1.0, 1.0)
+//     }
+// }
+
+// impl Margin {
+//     pub fn new(x: f32, y: f32) -> Self {
+//         Self(Vec2::new(x, y))
+//     }
+// }
+
+#[derive(Fetch)]
+pub struct ConstraintQuery {
+    pub rel_offset: Component<Vec2>,
+    pub abs_offset: Component<Vec2>,
+    pub rel_size: Component<Vec2>,
+    pub abs_size: Component<Vec2>,
+    pub aspect: Component<f32>,
+    pub origin: Component<Vec2>,
+}
+
+impl ConstraintQuery {
+    pub fn new() -> Self {
+        Self {
+            rel_offset: relative_offset(),
+            abs_offset: absolute_offset(),
+            rel_size: relative_size(),
+            abs_size: absolute_size(),
+            aspect: aspect(),
+            origin: origin(),
+        }
     }
 }
 
-impl AbsoluteOffset {
-    pub fn new(x: f32, y: f32) -> Self {
-        Self(Vec2::new(x, y))
+impl Default for ConstraintQuery {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
-impl From<RelativeOffset> for Position2D {
-    fn from(p: RelativeOffset) -> Self {
-        p.0.into()
-    }
-}
-
-impl RelativeOffset {
-    pub fn new(x: f32, y: f32) -> Self {
-        Self(Vec2::new(x, y))
-    }
-}
-
-impl From<RelativeSize> for Size2D {
-    fn from(s: RelativeSize) -> Self {
-        s.0.into()
-    }
-}
-
-impl RelativeSize {
-    pub fn new(x: f32, y: f32) -> Self {
-        Self(Vec2::new(x, y))
-    }
-}
-
-impl From<AbsoluteSize> for Size2D {
-    fn from(s: AbsoluteSize) -> Self {
-        s.0.into()
-    }
-}
-
-impl AbsoluteSize {
-    pub fn new(x: f32, y: f32) -> Self {
-        Self(Vec2::new(x, y))
-    }
-}
-
-impl Aspect {
-    pub fn new(aspect: f32) -> Self {
-        Self(aspect)
-    }
-}
-
-impl Origin2D {
-    pub fn new(x: f32, y: f32) -> Self {
-        Self(Vec2::new(x, y))
-    }
-
-    pub fn lower_left() -> Self {
-        Self::new(-1.0, -1.0)
-    }
-
-    pub fn lower_right() -> Self {
-        Self::new(1.0, -1.0)
-    }
-
-    pub fn upper_right() -> Self {
-        Self::new(1.0, 1.0)
-    }
-
-    pub fn upper_left() -> Self {
-        Self::new(-1.0, 1.0)
-    }
-}
-
-impl Margin {
-    pub fn new(x: f32, y: f32) -> Self {
-        Self(Vec2::new(x, y))
-    }
-}
-
-#[derive(Query)]
-pub struct ConstraintQuery<'a> {
-    pub rel_offset: &'a RelativeOffset,
-    pub abs_offset: &'a AbsoluteOffset,
-    pub rel_size: &'a RelativeSize,
-    pub abs_size: &'a AbsoluteSize,
-    pub aspect: &'a Aspect,
-    pub origin: &'a Origin2D,
-}
-
-#[derive(Bundle)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct ConstraintBundle {
-    pub rel_offset: RelativeOffset,
-    pub abs_offset: AbsoluteOffset,
-    pub rel_size: RelativeSize,
-    pub abs_size: AbsoluteSize,
-    pub aspect: Aspect,
+    pub rel_offset: Vec2,
+    pub abs_offset: Vec2,
+    pub rel_size: Vec2,
+    pub abs_size: Vec2,
+    pub aspect: f32,
 }
 
-/// Trait for encompassing the different size constraints
-pub trait UISize {
-    fn calculate(&self, parent_size: Size2D) -> Size2D;
-}
-
-impl UISize for AbsoluteSize {
-    fn calculate(&self, _: Size2D) -> Size2D {
-        Size2D(**self)
+impl ConstraintBundle {
+    pub fn mount(&self, entity: &mut EntityBuilder) {
+        entity
+            .set(relative_offset(), self.rel_offset)
+            .set(absolute_offset(), self.abs_offset)
+            .set(relative_size(), self.rel_size)
+            .set(absolute_size(), self.abs_size)
+            .set(aspect(), self.aspect);
     }
 }
 
-impl UISize for RelativeSize {
-    fn calculate(&self, parent_size: Size2D) -> Size2D {
-        Size2D(**self * *parent_size)
-    }
+pub(crate) fn calculate_relative(size: Vec2, parent_size: Vec2) -> Vec2 {
+    size * parent_size
 }
 
-/// Trait for encompassing the different offset constraints
-pub trait UIOffset {
-    fn calculate(&self, parent_size: Size2D) -> Position2D;
-}
+// /// Trait for encompassing the different size constraints
+// pub trait UISize {
+//     fn calculate(&self, parent_size: Size2D) -> Size2D;
+// }
 
-impl UIOffset for AbsoluteOffset {
-    fn calculate(&self, _: Size2D) -> Position2D {
-        Position2D(**self)
-    }
-}
+// impl UISize for Vec2 {
+//     fn calculate(&self, _: Size2D) -> Size2D {
+//         Size2D(**self)
+//     }
+// }
 
-impl UIOffset for RelativeOffset {
-    fn calculate(&self, parent_size: Size2D) -> Position2D {
-        Position2D(**self * *parent_size)
-    }
-}
+// impl UISize for RelativeSize {
+//     fn calculate(&self, parent_size: Size2D) -> Size2D {
+//         Size2D(**self * *parent_size)
+//     }
+// }
 
-impl<'a> ezy::Lerp<'a> for RelativeOffset {
-    type Write = &'a mut RelativeOffset;
+// /// Trait for encompassing the different offset constraints
+// pub trait UIOffset {
+//     fn calculate(&self, parent_size: Size2D) -> Position2D;
+// }
 
-    fn lerp(write: Self::Write, start: &Self, end: &Self, t: f32) {
-        *write = RelativeOffset(start.0.lerp(end.0, t))
-    }
-}
+// impl UIOffset for AbsoluteOffset {
+//     fn calculate(&self, _: Size2D) -> Position2D {
+//         Position2D(**self)
+//     }
+// }
+
+// impl UIOffset for RelativeOffset {
+//     fn calculate(&self, parent_size: Size2D) -> Position2D {
+//         Position2D(**self * *parent_size)
+//     }
+// }
+
+// impl<'a> ezy::Lerp<'a> for RelativeOffset {
+//     type Write = &'a mut RelativeOffset;
+
+//     fn lerp(write: Self::Write, start: &Self, end: &Self, t: f32) {
+//         *write = RelativeOffset(start.0.lerp(end.0, t))
+//     }
+// }

@@ -1,39 +1,39 @@
-use std::{marker::PhantomData, slice::Iter};
+use std::slice::Iter;
 
-use hecs::Query;
-use hecs_schedule::GenericWorld;
-use ivy_base::TransformMatrix;
+use flax::{Fetch, World};
+use glam::Mat4;
 use slotmap::SlotMap;
 
 use crate::{
-    intersect, query::TreeQuery, BoundingBox, Collider, CollisionPrimitive, CollisionTree,
+    components, intersect, query::TreeQuery, BoundingBox, CollisionPrimitive, CollisionTree,
     CollisionTreeNode, Contact, Object, ObjectData, ObjectIndex, Visitor,
 };
 
 /// Performs intersection testing for a provided temporary collider.
 ///
 /// Use with [crate::CollisionTree::query].
-pub struct IntersectVisitor<'a, 'w, W, C, Q = ()> {
+pub struct IntersectVisitor<'a, C, Q> {
     bounds: BoundingBox,
     collider: &'a C,
-    transform: TransformMatrix,
-    world: &'w W,
-    with: PhantomData<Q>,
+    transform: Mat4,
+    world: &'a World,
+    filter: &'a Q,
 }
 
-impl<'a, 'w, W, C, Q> IntersectVisitor<'a, 'w, W, C, Q>
+impl<'a, C, Q> IntersectVisitor<'a, C, Q>
 where
-    W: GenericWorld,
     C: CollisionPrimitive,
-    Q: Query,
 {
-    pub fn new(world: &'w W, collider: &'a C, transform: TransformMatrix) -> Self {
+    pub fn new(world: &'a World, collider: &'a C, transform: Mat4, filter: &'a Q) -> Self
+    where
+        Q: 'a + for<'x> Fetch<'x>,
+    {
         Self {
             bounds: collider.bounding_box(transform),
             collider,
             transform,
             world,
-            with: PhantomData,
+            filter,
         }
     }
 
@@ -45,24 +45,26 @@ where
         tree.query(self)
     }
     /// Returns the first intersection, by no order.
-    pub fn intersection<N: CollisionTreeNode>(self, tree: &'a CollisionTree<N>) -> Option<Contact> {
+    pub fn intersection<N: CollisionTreeNode>(self, tree: &'a CollisionTree<N>) -> Option<Contact>
+    where
+        Q: for<'x> Fetch<'x>,
+    {
         tree.query(self).flatten().next()
     }
 }
 
-impl<'o, 'a, 'w, W: 'a, N, C, Q> Visitor<'o, N> for IntersectVisitor<'a, 'w, W, C, Q>
+impl<'a, N, C, Q> Visitor<'a, N> for IntersectVisitor<'a, C, Q>
 where
-    W: GenericWorld,
     N: CollisionTreeNode,
     C: CollisionPrimitive,
-    Q: Query,
+    Q: 'a,
 {
-    type Output = IntersectIterator<'o, 'a, 'w, W, C, Q>;
+    type Output = IntersectIterator<'a, C, Q>;
 
     fn accept(
         &self,
-        node: &'o N,
-        data: &'o SlotMap<ObjectIndex, ObjectData>,
+        node: &'a N,
+        data: &'a SlotMap<ObjectIndex, ObjectData>,
     ) -> Option<Self::Output> {
         if node.bounds().contains(self.bounds) {
             Some(IntersectIterator {
@@ -72,7 +74,7 @@ where
                 objects: node.objects().iter(),
                 bounds: self.bounds,
                 world: self.world,
-                with: PhantomData,
+                filter: self.filter,
             })
         } else {
             None
@@ -81,21 +83,20 @@ where
 }
 
 /// Iterator for object intersection
-pub struct IntersectIterator<'o, 'a, 'w, W, C, Q> {
+pub struct IntersectIterator<'a, C, Q> {
     bounds: BoundingBox,
     collider: &'a C,
-    objects: Iter<'o, Object>,
-    data: &'o SlotMap<ObjectIndex, ObjectData>,
-    transform: TransformMatrix,
-    world: &'w W,
-    with: PhantomData<Q>,
+    objects: Iter<'a, Object>,
+    data: &'a SlotMap<ObjectIndex, ObjectData>,
+    transform: Mat4,
+    world: &'a World,
+    filter: &'a Q,
 }
 
-impl<'o, 'a, 'w, W, C, Q> Iterator for IntersectIterator<'o, 'a, 'w, W, C, Q>
+impl<'a, C, Q> Iterator for IntersectIterator<'a, C, Q>
 where
-    W: GenericWorld,
     C: CollisionPrimitive,
-    Q: Query,
+    Q: for<'x> Fetch<'x>,
 {
     type Item = Contact;
 
@@ -108,14 +109,16 @@ where
                 continue;
             }
 
-            let mut query = self
+            let entity = self
                 .world
-                .try_query_one::<(&Collider, Q)>(object.entity)
-                .expect("Failed to query entity");
+                .entity(object.entity)
+                .expect("Invalid entity in tree");
 
-            if let Ok((collider, _)) = query.get() {
+            let query = (components::collider(), self.filter);
+
+            if let Some((collider, _)) = entity.query(&query).get() {
                 if let Some(intersection) =
-                    intersect(&data.transform, &self.transform, &*collider, self.collider)
+                    intersect(&data.transform, &self.transform, collider, self.collider)
                 {
                     return Some(intersection);
                 }

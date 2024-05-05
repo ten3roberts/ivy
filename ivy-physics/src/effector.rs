@@ -1,5 +1,5 @@
 use glam::Vec3;
-use ivy_base::{math::Inverse, AngularMass, AngularVelocity, Mass, Position, Velocity};
+use ivy_base::math::Inverse;
 
 /// Manages the forces applied to an entity.
 /// Stored in the entity and is a middle hand for manipulating velocity and
@@ -21,7 +21,7 @@ pub struct Effector {
 }
 
 impl Effector {
-    pub fn new(mass: Mass, ang_mass: AngularMass) -> Self {
+    pub fn new(mass: f32, ang_mass: f32) -> Self {
         Self {
             inv_mass: mass.inv(),
             inv_ang_mass: ang_mass.inv(),
@@ -49,11 +49,11 @@ impl Effector {
         self.instant_dw += other.instant_dw;
     }
 
-    pub fn set_mass(&mut self, mass: Mass) {
+    pub fn set_mass(&mut self, mass: f32) {
         self.inv_mass = mass.inv();
     }
 
-    pub fn set_ang_mass(&mut self, ang_mass: AngularMass) {
+    pub fn set_ang_mass(&mut self, ang_mass: f32) {
         self.inv_ang_mass = ang_mass.inv()
     }
 
@@ -106,13 +106,13 @@ impl Effector {
     }
 
     /// Applies a force at the specified position from center of mass
-    pub fn apply_force_at(&mut self, f: Vec3, at: Position, wake: bool) {
+    pub fn apply_force_at(&mut self, f: Vec3, at: Vec3, wake: bool) {
         self.apply_force(f, wake);
         self.apply_torque(at.cross(f));
     }
 
     /// Applies an impulse at the specified position from center of mass
-    pub fn apply_impulse_at(&mut self, impulse: Vec3, at: Position, wake: bool) {
+    pub fn apply_impulse_at(&mut self, impulse: Vec3, at: Vec3, wake: bool) {
         self.apply_impulse(impulse, wake);
         self.apply_angular_impulse(at.cross(impulse));
     }
@@ -123,7 +123,7 @@ impl Effector {
     }
 
     /// Applies a velocity change at the specified position from center of mass
-    pub fn apply_velocity_change_at(&mut self, dv: Vec3, at: Position, wake: bool) {
+    pub fn apply_velocity_change_at(&mut self, dv: Vec3, at: Vec3, wake: bool) {
         self.apply_velocity_change(dv, wake);
         self.apply_angular_velocity_change(at.cross(dv))
     }
@@ -134,18 +134,18 @@ impl Effector {
 
     /// Returns the total net effect of forces, impulses, and velocity changes
     /// during `dt`. Note, Effector should be clear afterwards.
-    pub fn net_velocity_change(&self, dt: f32) -> Velocity {
-        Velocity(self.dv * dt + self.instant_dv)
+    pub fn net_velocity_change(&self, dt: f32) -> Vec3 {
+        self.dv * dt + self.instant_dv
     }
     /// Returns the total net effect of torques, angular impulses, and angular
     /// velocity changes. Note: Effector should be cleared afterwards.
 
-    pub fn net_angular_velocity_change(&self, dt: f32) -> AngularVelocity {
-        AngularVelocity(self.dw * dt + self.instant_dw)
+    pub fn net_angular_velocity_change(&self, dt: f32) -> Vec3 {
+        self.dw * dt + self.instant_dw
     }
 
     /// Get the effector's translation.
-    pub fn translation(&self) -> Position {
-        Position(self.translation)
+    pub fn translation(&self) -> Vec3 {
+        self.translation
     }
 }

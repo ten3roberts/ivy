@@ -1,24 +1,21 @@
-#![allow(non_snake_case)]
-use std::marker::PhantomData;
+use std::sync::Arc;
 
 use anyhow::Context;
 use ash::vk::DescriptorSet;
-use hecs::World;
-use ivy_resources::{Handle, Resources, Storage};
-use ivy_vulkan::{commands::CommandBuffer, shaderpass::ShaderPass, PassInfo};
+use flax::{Component, World};
+use ivy_assets::AssetCache;
+use ivy_vulkan::{commands::CommandBuffer, PassInfo, Shader};
+use parking_lot::Mutex;
 
-// Generic interface for a renderer.
+// Generic interface provided for the base renderer
+// TODO: remove this trait/simplity and use nodes instead
 pub trait Renderer {
-    type Error: Into<anyhow::Error>;
     // Draws the scene using the pass [`Pass`] and the provided camera.
-    // Note: camera must have gpu side data.
-    fn draw<Pass: ShaderPass>(
+    // NOTE: camera must have gpu side data.
+    fn draw(
         &mut self,
-        // The ecs world
         world: &mut World,
-        // Graphics resources like textures and materials
-        resources: &Resources,
-        // The commandbuffer to record into
+        assets: &AssetCache,
         cmd: &CommandBuffer,
         // Descriptor sets to bind before renderer specific sets
         sets: &[DescriptorSet],
@@ -28,101 +25,38 @@ pub trait Renderer {
         offsets: &[u32],
         // The current swapchain image or backbuffer index
         current_frame: usize,
-    ) -> Result<(), Self::Error>;
+        // TODO: abstract specific rendering into a node and only use renderers as a broader
+        // concept
+        pass: Component<Shader>,
+    ) -> anyhow::Result<()>;
 }
 
-/// Override the pass which is used to draw the renderer
-pub struct WithPass<Pass, R> {
-    renderer: R,
-    pass: PhantomData<Pass>,
-}
-
-impl<Pass, R: Clone> Clone for WithPass<Pass, R> {
-    fn clone(&self) -> Self {
-        Self {
-            renderer: self.renderer.clone(),
-            pass: PhantomData,
-        }
-    }
-}
-
-impl<Pass, R> WithPass<Pass, R>
+impl<T> Renderer for Arc<Mutex<T>>
 where
-    Pass: ShaderPass,
-    R: Renderer,
+    T: Renderer,
 {
-    pub fn new(renderer: R) -> Self {
-        Self {
-            renderer,
-            pass: PhantomData,
-        }
-    }
-}
-
-impl<Pass: ShaderPass, R> Renderer for WithPass<Pass, R>
-where
-    R: Renderer,
-    <R as Renderer>::Error: Into<anyhow::Error>,
-{
-    type Error = R::Error;
-
-    fn draw<Ignored: ShaderPass>(
+    fn draw(
         &mut self,
         world: &mut World,
-        resources: &Resources,
+        assets: &AssetCache,
         cmd: &CommandBuffer,
         sets: &[DescriptorSet],
         pass_info: &PassInfo,
         offsets: &[u32],
         current_frame: usize,
-    ) -> Result<(), Self::Error> {
-        self.renderer.draw::<Pass>(
-            world,
-            resources,
-            cmd,
-            sets,
-            pass_info,
-            offsets,
-            current_frame,
-        )
-    }
-}
-
-impl<E, T> Renderer for Handle<T>
-where
-    E: Into<anyhow::Error>,
-    T: Renderer<Error = E> + Storage,
-{
-    type Error = anyhow::Error;
-
-    fn draw<Pass: ShaderPass>(
-        &mut self,
-        world: &mut World,
-        resources: &Resources,
-        cmd: &CommandBuffer,
-        sets: &[DescriptorSet],
-        pass_info: &PassInfo,
-        offsets: &[u32],
-        current_frame: usize,
-    ) -> Result<(), Self::Error> {
-        resources
-            .get_mut(*self)
-            .with_context(|| {
-                format!(
-                    "Failed to get renderer {:?} from handle",
-                    std::any::type_name::<T>()
-                )
-            })?
-            .draw::<Pass>(
+        pass: Component<Shader>,
+    ) -> anyhow::Result<()> {
+        self.lock()
+            .draw(
                 world,
-                resources,
+                assets,
                 cmd,
                 sets,
                 pass_info,
                 offsets,
                 current_frame,
+                pass,
             )
-            .map_err(|e| e.into())
             .with_context(|| {
                 format!(
                     "Failed to draw using renderer {:?}",
@@ -134,25 +68,24 @@ where
 
 macro_rules! tuple_impl {
     ($($name: ident),*) => {
-        impl<Err: Into<anyhow::Error>, $($name: Renderer<Error = Err> + ivy_resources::Storage),*> Renderer for ($($name,)*) {
-            type Error = anyhow::Error;
+        impl<$($name: Renderer),*> Renderer for ($($name,)*) {
             // Draws the scene using the pass [`Pass`] and the provided camera.
             // Note: camera must have gpu side data.
-            fn draw<Pass: ShaderPass>(
+            fn draw(
                 &mut self,
                 world: &mut World,
-                resources: &Resources,
+                assets: &AssetCache,
                 cmd: &CommandBuffer,
                 sets: &[DescriptorSet],
                 pass_info: &PassInfo,
                 offsets: &[u32],
                 current_frame: usize,
-            ) -> Result<(), Self::Error> {
+                pass: Component<Shader>,
+            ) -> anyhow::Result<()> {
                 #[allow(non_snake_case)]
                 let ($($name,)+) = self;
                 ($($name
-                    .draw::<Pass>(world, resources, cmd, sets, pass_info, offsets, current_frame)
-                    .map_err(|e| e.into())
+                    .draw(world, assets, cmd, sets, pass_info, offsets, current_frame, pass)
                     .with_context(|| {
                         format!(
                             "Failed to draw using renderer {:?}",

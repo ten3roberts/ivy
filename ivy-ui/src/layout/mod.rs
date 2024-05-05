@@ -1,15 +1,11 @@
-use crate::{apply_constraints, update_from, Alignment, Result, Widget};
+use crate::{apply_constraints, children, update_from, Alignment, Result};
+use flax::{EntityRef, World};
 use fontdue::layout::{HorizontalAlign, VerticalAlign};
 use glam::Vec2;
-use hecs::Entity;
-use hecs_hierarchy::Hierarchy;
-use hecs_schedule::GenericWorld;
-use ivy_base::{Position2D, Size2D};
 
 /// UI component for automatically managing placing of children.
 /// Immediate children of a widget with a layout will be placed automatically
 /// and have their position constraints ignored.
-#[records::record]
 #[derive(Clone, Copy)]
 pub struct WidgetLayout {
     kind: LayoutKind,
@@ -24,29 +20,43 @@ pub enum LayoutKind {
 }
 
 impl WidgetLayout {
+    pub fn new(kind: LayoutKind, align: Alignment, spacing: Vec2) -> Self {
+        Self {
+            kind,
+            align,
+            spacing,
+        }
+    }
+
     pub fn update(
         &self,
-        world: &impl GenericWorld,
-        parent: Entity,
-        position: Position2D,
-        size: Size2D,
+        world: &World,
+        parent: &EntityRef,
+        position: Vec2,
+        size: Vec2,
         depth: u32,
         is_visible: bool,
     ) -> Result<()> {
-        let mut iter = world.children::<Widget>(parent);
+        let total_size: Vec2 = parent
+            .get(children())
+            .ok()
+            .iter()
+            .flat_map(|v| v.iter())
+            .map(|&v| world.entity(v).unwrap())
+            .try_fold(Vec2::default(), |acc, child| -> Result<Vec2> {
+                apply_constraints(world, &child, position, size, is_visible)?;
 
-        let total_size: Size2D =
-            iter.try_fold(Size2D::default(), |acc, child| -> Result<Size2D> {
-                apply_constraints(world, child, position, size, is_visible)?;
-
-                let child_size = world.try_get::<Size2D>(child)?;
+                let child_size = child
+                    .get(ivy_base::components::size())
+                    .expect("Missing size");
+                // let child_size = world.try_get::<Vec2>(child)?;
 
                 Ok(acc + *child_size)
             })?;
 
         let total_size = match self.kind {
-            LayoutKind::Horizontal => Size2D::new(total_size.x, size.y),
-            LayoutKind::Vertical => Size2D::new(0.0, total_size.y),
+            LayoutKind::Horizontal => Vec2::new(total_size.x, size.y),
+            LayoutKind::Vertical => Vec2::new(0.0, total_size.y),
         };
 
         let x = match self.align.horizontal {
@@ -61,22 +71,27 @@ impl WidgetLayout {
             VerticalAlign::Bottom => position.y - size.y + total_size.y,
         };
 
-        let mut iter = world.children::<Widget>(parent);
+        let c = parent.get(children()).ok();
+        let mut iter = c
+            .iter()
+            .flat_map(|v| v.iter())
+            .map(|&v| world.entity(v).unwrap());
+
         match self.kind {
             LayoutKind::Horizontal => {
-                let mut cursor = Position2D::new(x, y);
+                let mut cursor = Vec2::new(x, y);
                 iter.try_for_each(|child| -> Result<()> {
-                    apply_constraints(world, child, position, size, is_visible)?;
-                    let mut query = world.try_query_one::<(&mut Position2D, &Size2D)>(child)?;
+                    apply_constraints(world, &child, position, size, is_visible)?;
+                    {
+                        let mut child_position =
+                            child.get_mut(ivy_base::components::position()).unwrap();
+                        let child_size = child.get_copy(ivy_base::components::size()).unwrap();
 
-                    let (child_pos, child_size) = query.get()?;
+                        *child_position = cursor.extend(0.0); //+ Position2D(**child_size);
+                        cursor.x += child_size.x * 2.0 + self.spacing.x;
+                    }
 
-                    *child_pos = cursor; //+ Position2D(**child_size);
-                    cursor.x += child_size.x * 2.0 + self.spacing.x;
-
-                    drop(query);
-
-                    update_from(world, child, depth + 1)?;
+                    update_from(world, &child, depth + 1)?;
                     Ok(())
                 })?
             }
@@ -88,19 +103,26 @@ impl WidgetLayout {
                     HorizontalAlign::Right => -1.0,
                 };
 
-                let mut cursor = Position2D::new(x, y);
+                let mut cursor = Vec2::new(x, y);
                 iter.try_for_each(|child| -> Result<()> {
-                    apply_constraints(world, child, position, size, is_visible)?;
-                    let mut query = world.try_query_one::<(&mut Position2D, &Size2D)>(child)?;
+                    apply_constraints(world, &child, position, size, is_visible)?;
+                    {
+                        let mut child_position =
+                            child.get_mut(ivy_base::components::position()).unwrap();
+                        let child_size = child.get_copy(ivy_base::components::size()).unwrap();
 
-                    let (child_pos, child_size) = query.get()?;
+                        // let mut query = world.try_query_one::<(&mut Position2D, &Size2D)>(child)?;
 
-                    *child_pos = cursor + Position2D::new(child_size.x * offset_x, 0.0);
-                    cursor.y -= child_size.y * 2.0 + self.spacing.y;
+                        // let (child_pos, child_size) = query.get()?;
 
-                    drop(query);
+                        *child_position =
+                            (cursor + Vec2::new(child_size.x * offset_x, 0.0)).extend(0.0);
+                        cursor.y -= child_size.y * 2.0 + self.spacing.y;
+                    }
 
-                    update_from(world, child, depth + 1)?;
+                    // drop(query);
+
+                    update_from(world, &child, depth + 1)?;
                     Ok(())
                 })?
             }

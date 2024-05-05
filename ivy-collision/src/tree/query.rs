@@ -22,6 +22,7 @@ impl<'a, N, V> Iterator for TreeQuery<'a, N, V>
 where
     N: CollisionTreeNode,
     V: Visitor<'a, N>,
+    V::Output: 'a,
 {
     type Item = V::Output;
 

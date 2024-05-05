@@ -9,6 +9,7 @@ mod simplex;
 mod traits;
 mod tree;
 pub mod util;
+pub mod components;
 
 pub use aabb::*;
 pub use collider::*;

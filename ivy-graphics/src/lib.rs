@@ -20,6 +20,7 @@ mod environment;
 mod events;
 mod skinned_mesh_renderer;
 
+pub mod components;
 mod culling;
 pub mod gizmos;
 pub mod icosphere;

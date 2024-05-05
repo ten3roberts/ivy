@@ -1,9 +1,10 @@
 #![allow(non_snake_case)]
 use crate::impl_for_tuples;
+use crate::systems::update_transform_system;
 use crate::Events;
 use anyhow::Context;
-use hecs::World;
-use ivy_resources::Resources;
+use flax::{Schedule, World};
+use ivy_assets::AssetCache;
 use std::time::Duration;
 
 mod fixed;
@@ -21,7 +22,7 @@ pub trait Layer {
     fn on_update(
         &mut self,
         world: &mut World,
-        resources: &mut Resources,
+        assets: &mut AssetCache,
         events: &mut Events,
         frame_time: Duration,
     ) -> anyhow::Result<()>;
@@ -32,10 +33,10 @@ macro_rules! tuple_impl {
         impl<$($name: Layer),*> Layer for ($($name,)*) {
             // Draws the scene using the pass [`Pass`] and the provided camera.
             // Note: camera must have gpu side data.
-            fn on_update(&mut self, world: &mut World, resources: &mut Resources, events: &mut Events, frame_time: Duration) -> anyhow::Result<()> {
+            fn on_update(&mut self, world: &mut World, asset_cache: &mut AssetCache, events: &mut Events, frame_time: Duration) -> anyhow::Result<()> {
                 let ($($name,)+) = self;
 
-                ($($name.on_update(world, resources, events, frame_time).with_context(|| format!("Failed to execute {:?}", std::any::type_name::<$name>()))?), *);
+                ($($name.on_update(world, asset_cache, events, frame_time).with_context(|| format!("Failed to execute {:?}", std::any::type_name::<$name>()))?), *);
 
                 Ok(())
             }
@@ -45,3 +46,28 @@ macro_rules! tuple_impl {
 
 // Implement renderer on tuple of renderers and tuple of render handles
 impl_for_tuples!(tuple_impl);
+
+pub struct EngineLayer {
+    schedule: Schedule,
+}
+
+impl EngineLayer {
+    pub fn new() -> Self {
+        let schedule = Schedule::from([update_transform_system()]);
+        Self { schedule }
+    }
+}
+
+impl Layer for EngineLayer {
+    fn on_update(
+        &mut self,
+        world: &mut World,
+        assets: &mut AssetCache,
+        events: &mut Events,
+        frame_time: Duration,
+    ) -> anyhow::Result<()> {
+        self.schedule.execute_par(world)?;
+
+        Ok(())
+    }
+}

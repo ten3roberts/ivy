@@ -1,6 +1,9 @@
 use crate::{NodeKind, Result};
 use anyhow::Context;
-use ivy_resources::{Handle, Resources};
+use flax::World;
+use ivy_assets::{Asset, AssetCache};
+use ivy_base::engine;
+use ivy_graphics::components::swapchain;
 use ivy_vulkan::{
     context::SharedVulkanContext,
     traits::FromExtent,
@@ -11,27 +14,26 @@ use std::{ops::Deref, slice};
 
 use crate::{AttachmentInfo, Node};
 
-pub struct SwapchainNode {
-    swapchain: Handle<Swapchain>,
-    read_attachment: Handle<Texture>,
-    swapchain_images: Vec<Handle<Texture>>,
+pub struct SwapchainPresentNode {
+    read_attachment: Asset<Texture>,
+    swapchain_images: Vec<Asset<Texture>>,
     // Barrier from renderpass to transfer
     dst_barrier: vk::ImageMemoryBarrier,
     // Barrier from transfer to presentation
     output_barrier: vk::ImageMemoryBarrier,
 }
 
-unsafe impl Send for SwapchainNode {}
-unsafe impl Sync for SwapchainNode {}
+unsafe impl Send for SwapchainPresentNode {}
+unsafe impl Sync for SwapchainPresentNode {}
 
-impl SwapchainNode {
+impl SwapchainPresentNode {
     pub fn new(
+        world: &World,
         context: SharedVulkanContext,
-        resources: &Resources,
-        swapchain: Handle<Swapchain>,
-        read_attachment: Handle<Texture>,
+        assets: &AssetCache,
+        read_attachment: Asset<Texture>,
     ) -> Result<Self> {
-        let swapchain_ref = resources.get(swapchain)?;
+        let swapchain_ref = world.get(engine(), swapchain()).unwrap();
 
         let texture_info = TextureInfo {
             extent: swapchain_ref.extent(),
@@ -47,7 +49,7 @@ impl SwapchainNode {
             .map(|image| -> Result<_> {
                 Texture::from_image(context.clone(), &texture_info, *image, None, 1, 0)
                     .map_err(|e| e.into())
-                    .and_then(|val| resources.insert(val).map_err(|e| e.into()))
+                    .map(|val| assets.insert(val))
             })
             .collect::<Result<Vec<_>>>()?;
 
@@ -87,7 +89,6 @@ impl SwapchainNode {
         };
 
         Ok(Self {
-            swapchain,
             read_attachment,
             swapchain_images,
             dst_barrier,
@@ -96,16 +97,16 @@ impl SwapchainNode {
     }
 }
 
-impl Node for SwapchainNode {
+impl Node for SwapchainPresentNode {
     fn color_attachments(&self) -> &[AttachmentInfo] {
         &[]
     }
 
-    fn read_attachments(&self) -> &[Handle<Texture>] {
+    fn read_attachments(&self) -> &[Asset<Texture>] {
         slice::from_ref(&self.read_attachment)
     }
 
-    fn input_attachments(&self) -> &[Handle<Texture>] {
+    fn input_attachments(&self) -> &[Asset<Texture>] {
         &[]
     }
 
@@ -127,13 +128,13 @@ impl Node for SwapchainNode {
 
     fn execute(
         &mut self,
-        _world: &mut hecs::World,
-        resources: &ivy_resources::Resources,
+        world: &mut World,
+        assets: &AssetCache,
         cmd: &ivy_vulkan::commands::CommandBuffer,
         _: &PassInfo,
         _current_frame: usize,
     ) -> anyhow::Result<()> {
-        let swapchain = resources.get(self.swapchain)?;
+        let swapchain = world.get(engine(), swapchain())?;
         let extent = swapchain.extent();
         let offset = Offset3D::from_extent(extent);
 
@@ -141,9 +142,9 @@ impl Node for SwapchainNode {
             .image_index()
             .context("Failed to get image index from swapchain")?;
 
-        let dst = resources.get(self.swapchain_images[image_index as usize])?;
+        let dst = &self.swapchain_images[image_index as usize];
 
-        let src = resources.get(self.read_attachment)?;
+        let src = &self.read_attachment;
 
         let dst_barrier = vk::ImageMemoryBarrier {
             image: dst.deref().image(),

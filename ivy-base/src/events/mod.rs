@@ -1,5 +1,6 @@
 mod dispatcher;
-pub use dispatcher::{EventSender, MpscSender};
+pub use dispatcher::EventSender;
+use flax::component::ComponentValue;
 
 use std::{
     any::{type_name, TypeId},
@@ -7,8 +8,6 @@ use std::{
     error::Error,
     fmt::Display,
 };
-
-use hecs::Component;
 
 use self::dispatcher::{
     new_event_dispatcher, AnyEventDispatcher, AnyEventSender, ConcreteSender, EventDispatcher,
@@ -180,8 +179,8 @@ impl Default for Events {
 }
 
 // Blanket type for events.
-pub trait Event: Component + Clone {}
-impl<T: Component + Clone> Event for T {}
+pub trait Event: ComponentValue + Clone {}
+impl<T: ComponentValue + Clone> Event for T {}
 
 #[cfg(test)]
 mod tests {

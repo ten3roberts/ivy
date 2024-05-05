@@ -115,6 +115,7 @@ fn rate_physical_device(
         .ok()?
         .is_empty()
     {
+        tracing::warn!(?name, "Device does not support required extensions");
         return None;
     }
 
@@ -160,9 +161,23 @@ fn rate_physical_device(
     score += properties.limits.max_image_dimension3_d as Score;
     score += properties.limits.max_memory_allocation_count as Score;
     score += properties.limits.max_color_attachments as Score;
-    score += properties.limits.max_sampler_allocation_count as Score;
+    // score += properties.limits.max_sampler_allocation_count as Score;
     score += properties.limits.max_bound_descriptor_sets as Score;
     score += properties.limits.max_push_constants_size as Score;
+
+    tracing::info!(?name, ?score, "device score");
+    tracing::info!(
+        "features: {:#?}",
+        (
+            properties.limits.max_image_dimension2_d,
+            properties.limits.max_image_dimension3_d,
+            properties.limits.max_memory_allocation_count,
+            properties.limits.max_color_attachments,
+            properties.limits.max_sampler_allocation_count,
+            properties.limits.max_bound_descriptor_sets,
+            properties.limits.max_push_constants_size
+        )
+    );
 
     Some(PhysicalDeviceInfo {
         physical_device,
@@ -214,6 +229,7 @@ pub fn create(
     surface: Option<(&Surface, SurfaceKHR)>,
     layers: &[&str],
 ) -> Result<(Arc<Device>, PhysicalDeviceInfo)> {
+    tracing::info!("Creating logical device");
     let extensions = DEVICE_EXTENSIONS
         .iter()
         .map(|s| CString::new(*s))
@@ -221,6 +237,7 @@ pub fn create(
         .unwrap();
 
     let pdevice_info = pick_physical_device(instance, surface, &extensions)?;
+    tracing::info!("Selected device: {}", pdevice_info.name);
 
     let mut unique_queue_families = HashSet::new();
     unique_queue_families.insert(pdevice_info.queue_families.graphics().unwrap());
@@ -267,6 +284,8 @@ pub fn create(
         .enabled_extension_names(&extension_names_raw)
         .enabled_layer_names(&layer_names_raw)
         .enabled_features(&enabled_features);
+
+    tracing::info!("Created device");
 
     let device =
         unsafe { instance.create_device(pdevice_info.physical_device, &create_info, None)? };

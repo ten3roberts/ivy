@@ -40,15 +40,14 @@ impl Default for DefaultEnvData {
 }
 
 /// Manages a certain kind of environment data's GPU side buffers
-pub struct EnvironmentManager<Kind = DefaultEnvData> {
+pub struct EnvironmentManager {
     buffers: Vec<Buffer>,
-    marker: PhantomData<Kind>,
 }
 
-impl<EnvData: Copy + Send + Sync> EnvironmentManager<EnvData> {
-    pub fn new(
+impl EnvironmentManager {
+    pub fn new<Data: Copy>(
         context: SharedVulkanContext,
-        env_data: EnvData,
+        env_data: Data,
         frames_in_flight: usize,
     ) -> Result<Self> {
         let buffers = (0..frames_in_flight)
@@ -63,15 +62,12 @@ impl<EnvData: Copy + Send + Sync> EnvironmentManager<EnvData> {
             })
             .collect::<Result<_>>()?;
 
-        Ok(Self {
-            buffers,
-            marker: PhantomData,
-        })
+        Ok(Self { buffers })
     }
 
     /// Changes the value of the environment for this frame.
     /// For proper use, apply changes for all frames in flight succesively
-    pub fn update(&mut self, data: EnvData, current_frame: usize) -> Result<()> {
+    pub fn update<Data>(&mut self, data: Data, current_frame: usize) -> Result<()> {
         self.buffers[current_frame]
             .fill(0, &[data])
             .map_err(|e| e.into())

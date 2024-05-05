@@ -1,16 +1,16 @@
 use crate::{Edge, EdgeKind, Node, NodeIndex, NodeKind, ResourceKind, Result};
-use hecs::World;
+use flax::World;
 use itertools::Itertools;
+use ivy_assets::AssetCache;
 use ivy_base::Extent;
-use ivy_resources::{ResourceCache, Resources};
 use ivy_vulkan::{
     commands::CommandBuffer,
     context::SharedVulkanContext,
     vk::{self, ClearValue, ImageMemoryBarrier},
     AttachmentDescription, AttachmentReference, Framebuffer, ImageLayout, LoadOp, PassInfo,
-    RenderPass, RenderPassInfo, StoreOp, SubpassDependency, SubpassInfo, Texture,
+    RenderPass, RenderPassInfo, StoreOp, SubpassDependency, SubpassInfo,
 };
-use std::{collections::HashMap, iter::repeat, ops::Deref};
+use std::{collections::HashMap, iter::repeat};
 
 pub struct Pass {
     kind: PassKind,
@@ -23,24 +23,20 @@ impl Pass {
     // * They have no full read dependencies to another.
     // * Belong to the same kind and queue.
     // * Have the same dependency level.
-    pub fn new<T>(
+    pub fn new(
         context: &SharedVulkanContext,
         nodes: &Vec<Box<dyn Node>>,
-        textures: &T,
         dependencies: &HashMap<NodeIndex, Vec<Edge>>,
         pass_nodes: Vec<NodeIndex>,
         kind: NodeKind,
         extent: Extent,
-    ) -> Result<Self>
-    where
-        T: Deref<Target = ResourceCache<Texture>>,
-    {
+    ) -> Result<Self> {
         let kind = match kind {
             NodeKind::Graphics => {
-                PassKind::graphics(context, nodes, textures, dependencies, &pass_nodes, extent)?
+                PassKind::graphics(context, nodes, dependencies, &pass_nodes, extent)?
             }
             NodeKind::Transfer => {
-                PassKind::transfer(context, nodes, textures, dependencies, &pass_nodes, extent)?
+                PassKind::transfer(context, nodes, dependencies, &pass_nodes, extent)?
             }
         };
 
@@ -53,10 +49,10 @@ impl Pass {
     pub fn execute(
         &self,
         world: &mut World,
+        assets: &AssetCache,
         cmd: &CommandBuffer,
         nodes: &mut Vec<Box<dyn Node>>,
         current_frame: usize,
-        resources: &Resources,
         extent: Extent,
     ) -> Result<()> {
         match &self.kind {
@@ -78,7 +74,7 @@ impl Pass {
 
                         node.execute(
                             world,
-                            resources,
+                            assets,
                             cmd,
                             &PassInfo {
                                 renderpass: renderpass.renderpass(),
@@ -109,7 +105,7 @@ impl Pass {
 
                 self.nodes.iter().try_for_each(|index| -> Result<_> {
                     nodes[*index]
-                        .execute(world, resources, cmd, &PassInfo::default(), current_frame)
+                        .execute(world, assets, cmd, &PassInfo::default(), current_frame)
                         .map_err(|e| e.into())
                 })?;
             }
@@ -147,17 +143,13 @@ unsafe impl Send for PassKind {}
 unsafe impl Sync for PassKind {}
 
 impl PassKind {
-    fn graphics<T>(
+    fn graphics(
         context: &SharedVulkanContext,
         nodes: &Vec<Box<dyn Node>>,
-        textures: &T,
         dependencies: &HashMap<NodeIndex, Vec<Edge>>,
         pass_nodes: &[NodeIndex],
         extent: Extent,
-    ) -> Result<Self>
-    where
-        T: Deref<Target = ResourceCache<Texture>>,
-    {
+    ) -> Result<Self> {
         println!(
             "Building pass with nodes: {:?}",
             pass_nodes
@@ -260,7 +252,7 @@ impl PassKind {
                     .input_attachments()
                     .iter()
                     .map(|tex| -> Result<_> {
-                        let view = textures.get(*tex)?.image_view();
+                        let view = tex.image_view();
                         Ok(AttachmentReference {
                             attachment: attachments
                                 .iter()
@@ -287,7 +279,7 @@ impl PassKind {
                     .iter()
                     .chain(node.depth_attachment().into_iter())
                 {
-                    let texture = textures.get(attachment.resource)?;
+                    let texture = &attachment.resource;
 
                     attachments.push(texture.image_view());
 
@@ -337,17 +329,13 @@ impl PassKind {
         })
     }
 
-    fn transfer<T>(
+    fn transfer(
         _context: &SharedVulkanContext,
         _nodes: &Vec<Box<dyn Node>>,
-        textures: &T,
         dependencies: &HashMap<NodeIndex, Vec<Edge>>,
         pass_nodes: &[NodeIndex],
         _extent: Extent,
-    ) -> Result<Self>
-    where
-        T: Deref<Target = ResourceCache<Texture>>,
-    {
+    ) -> Result<Self> {
         // Get the dependencies of node.
         let mut src_stage = vk::PipelineStageFlags::default();
 
@@ -356,14 +344,14 @@ impl PassKind {
             .into_iter()
             .flat_map(|val| val.iter())
             .filter_map(|val| {
-                if let ResourceKind::Texture(tex) = val.resource {
+                if let ResourceKind::Texture(tex) = &val.resource {
                     Some((val, tex))
                 } else {
                     None
                 }
             })
             .map(|(edge, texture)| -> Result<_> {
-                let src = textures.get(texture)?;
+                let src = texture;
 
                 let aspect_mask =
                     if edge.read_access == vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE {

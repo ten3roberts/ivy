@@ -1,6 +1,6 @@
 use glam::Vec3;
 
-use crate::{Color, Line, Position, Sphere, DEFAULT_RADIUS};
+use crate::{Color, Line, Sphere, DEFAULT_RADIUS};
 
 use super::Gizmos;
 
@@ -14,18 +14,6 @@ impl DrawGizmos for Vec3 {
         gizmos.draw(
             Sphere {
                 origin: *self,
-                ..Default::default()
-            },
-            color,
-        );
-    }
-}
-
-impl DrawGizmos for Position {
-    fn draw_gizmos(&self, gizmos: &mut Gizmos, color: Color) {
-        gizmos.draw(
-            Sphere {
-                origin: **self,
                 ..Default::default()
             },
             color,

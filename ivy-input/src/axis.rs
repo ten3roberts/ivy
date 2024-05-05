@@ -1,6 +1,6 @@
 use glfw::{Key, MouseButton};
 
-use crate::Input;
+use crate::InputState;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum InputDirection {
@@ -50,13 +50,13 @@ impl InputAxis {
     }
 
     /// Gets the current value of the axis from the input state.
-    pub fn get(&self, input: &Input) -> f32 {
+    pub fn get(&self, input: &InputState) -> f32 {
         match self {
             InputAxis::Keyboard { pos, neg } => {
                 (input.key(*pos) as i32 as f32) - (input.key(*neg) as i32 as f32)
             }
             InputAxis::MouseButton { pos, neg } => {
-                (input.mouse_button(*pos) as i32 as f32) - (input.mouse_button(*neg) as i32 as f32)
+                (input.mouse_button_down(*pos) as i32 as f32) - (input.mouse_button_down(*neg) as i32 as f32)
             }
             InputAxis::Scroll {
                 dir: InputDirection::Horizontal,
