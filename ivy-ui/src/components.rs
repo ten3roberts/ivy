@@ -42,6 +42,7 @@ flax::component! {
 /// Bundle for widgets.
 /// Use further bundles for images and texts
 #[derive(Clone, Debug, Default)]
+#[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
 pub struct WidgetBundle {
     pub abs_offset: Vec2,
     pub rel_offset: Vec2,
@@ -91,7 +92,7 @@ impl Bundle for WidgetBundle {
 /// Bundle for widgets.
 /// Use further bundles for images and texts
 #[derive(Clone, Debug, Default)]
-#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
 pub struct CanvasBundle {
     widget: WidgetBundle,
     pub origin: Vec2,
@@ -191,7 +192,7 @@ impl Bundle for TextBundle {
 }
 
 #[cfg(feature = "serialize")]
-#[derive(Serialize, Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 #[serde(remote = "HorizontalAlign")]
 enum HorizontalAlignDef {
     /// Aligns text to the left of the region defined by the max_width.
@@ -203,7 +204,7 @@ enum HorizontalAlignDef {
 }
 
 #[cfg(feature = "serialize")]
-#[derive(Serialize, Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 #[serde(remote = "VerticalAlign")]
 enum VerticalAlignDef {
     /// Aligns text to the top of the region defined by the max_height.
@@ -215,7 +216,7 @@ enum VerticalAlignDef {
 }
 
 #[derive(Clone, Copy, PartialEq)]
-#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
 pub struct Alignment {
     #[cfg_attr(feature = "serialize", serde(with = "HorizontalAlignDef"))]
     pub horizontal: HorizontalAlign,
@@ -265,7 +266,7 @@ impl Default for Alignment {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
 pub enum WrapStyle {
     /// Text flows outside bounds.
     Overflow,
