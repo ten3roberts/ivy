@@ -49,7 +49,7 @@ dashmap = "5.0"
 serde = { version = "1.0", features = ["derive"] }
 bytemuck = { version = "1.9.1", features = ["derive"] }
 image = { version = "0.24.2", features = ["png", "jpeg"] }
-glam = { version = "0.20", features = ["bytemuck", "rand"] }
+glam = { version = "0.27", features = ["bytemuck", "rand"] }
 flax = { git = "https://github.com/ten3roberts/flax", features = [ "serde", "derive", "puffin", "rayon" ] }
 
 glfw = { version = "0.44.0", features = ["vulkan"] }

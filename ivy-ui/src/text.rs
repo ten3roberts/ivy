@@ -129,6 +129,7 @@ impl Text {
                 _ => layout::WrapStyle::Letter,
             },
             wrap_hard_breaks: true,
+            line_height: font.size() + 2.0,
         });
 
         self.layout
