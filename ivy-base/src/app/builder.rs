@@ -1,67 +1,37 @@
+use self::driver::{DefaultDriver, Driver};
+
 use super::*;
-use ivy_assets::AssetCache;
 
 pub struct AppBuilder {
     app: App,
+    driver: Box<dyn Driver>,
 }
 
 impl AppBuilder {
     pub fn new() -> Self {
-        Self { app: App::new() }
+        Self {
+            app: App::new(),
+            driver: Box::new(DefaultDriver {}),
+        }
     }
 
     pub fn build(self) -> App {
         self.app
     }
 
-    /// Pushes a layer from the provided init closure to to the top of the layer stack. The provided
-    /// closure to construct the layer takes in the world and events.
-    pub fn push_layer<F, T>(mut self, func: F) -> Self
-    where
-        F: FnOnce(&mut World, &mut AssetCache, &mut Events) -> T,
-        T: 'static + Layer,
-    {
-        self.app.push_layer(func);
+    pub fn run(mut self) -> anyhow::Result<()> {
+        self.app.run(&mut *self.driver)
+    }
+
+    pub fn with_driver(mut self, driver: impl 'static + Driver) -> Self {
+        self.driver = Box::new(driver);
         self
     }
 
     /// Pushes a layer from the provided init closure to to the top of the layer stack. The provided
-    /// closure to construct the layer takes in the world and events, and may return an error which
-    /// is propagated to the callee.
-    pub fn try_push_layer<F, T, E>(mut self, func: F) -> Result<Self, E>
-    where
-        F: FnOnce(&mut World, &mut AssetCache, &mut Events) -> Result<T, E>,
-        T: 'static + Layer,
-    {
-        self.app.try_push_layer(func)?;
-        Ok(self)
-    }
-
-    /// Inserts a layer from the provided init closure to to the top of the layer stack. The provided
     /// closure to construct the layer takes in the world and events.
-    pub fn insert_layer<F, T>(mut self, index: usize, func: F) -> Self
-    where
-        F: FnOnce(&mut World, &mut AssetCache, &mut Events) -> T,
-        T: 'static + Layer,
-    {
-        self.app.insert_layer(index, func);
-        self
-    }
-
-    /// Inserts a layer from the provided init closure to to the top of the layer stack. The provided
-    /// closure to construct the layer takes in the world and events, and may return an error which
-    /// is propagated to the callee.
-    pub fn try_insert_layer<F, T, E>(mut self, index: usize, func: F) -> Result<Self, E>
-    where
-        F: FnOnce(&mut World, &mut AssetCache, &mut Events) -> Result<T, E>,
-        T: 'static + Layer,
-    {
-        self.app.try_insert_layer(index, func)?;
-        Ok(self)
-    }
-
-    pub fn set_event_cleanup_time(mut self, duration: Duration) -> Self {
-        self.app.event_cleanup_time = duration;
+    pub fn with_layer<T: Layer>(mut self, layer: T) -> Self {
+        self.app.push_layer(layer);
         self
     }
 }

@@ -1,5 +1,5 @@
 use flax::{Component, Debuggable, EntityBuilder, Fetch, Mutable};
-use glam::{Mat4, Quat, Vec2, Vec3, Vec4Swizzles};
+use glam::{Mat4, Quat, Vec2, Vec3};
 mod connections;
 mod physics;
 pub use connections::*;

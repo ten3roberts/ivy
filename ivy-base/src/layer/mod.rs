@@ -1,51 +1,71 @@
 #![allow(non_snake_case)]
-use crate::impl_for_tuples;
+use crate::app::TickEvent;
 use crate::systems::update_transform_system;
 use crate::Events;
+use crate::{impl_for_tuples, App};
 use anyhow::Context;
+use downcast_rs::{impl_downcast, Downcast};
 use flax::{Schedule, World};
 use ivy_assets::AssetCache;
 use std::time::Duration;
 
+pub mod events;
 mod fixed;
 mod layer_stack;
 
 pub use fixed::*;
 pub use layer_stack::*;
 
+use self::events::{EventRegisterContext, EventRegistry};
+
+// impl<T, L> LayerDesc for L::Desc
+// where
+//     L: Layer<Desc = T>,
+// {
+//     type Layer = L;
+
+//     fn register(self, world: &mut World, assets: &AssetCache) -> anyhow::Result<Self::Layer> {
+//         L::register(self, world, assets, EventRegisterContext::default())
+//     }
+// }
+
 /// A layer represents an ordered abstraction of execution logic. Layers are ordered and run in
 /// order.
-pub trait Layer {
-    /// Called for each iteration of the application event loop.
-    /// The layer can return an error.
-    /// frame_time: The duration between this and the last application frame.
-    fn on_update(
+pub trait Layer: 'static {
+    /// Description of the layer to add
+    fn register(
         &mut self,
         world: &mut World,
-        assets: &mut AssetCache,
-        events: &mut Events,
-        frame_time: Duration,
+        assets: &AssetCache,
+        events: EventRegisterContext<Self>,
+    ) -> anyhow::Result<()>
+    where
+        Self: Sized;
+}
+
+pub trait LayerDyn: 'static + Downcast {
+    fn register_dyn(
+        &mut self,
+        world: &mut World,
+        assets: &AssetCache,
+        events: &mut EventRegistry,
+        index: usize,
     ) -> anyhow::Result<()>;
 }
 
-macro_rules! tuple_impl {
-    ($($name: ident),*) => {
-        impl<$($name: Layer),*> Layer for ($($name,)*) {
-            // Draws the scene using the pass [`Pass`] and the provided camera.
-            // Note: camera must have gpu side data.
-            fn on_update(&mut self, world: &mut World, asset_cache: &mut AssetCache, events: &mut Events, frame_time: Duration) -> anyhow::Result<()> {
-                let ($($name,)+) = self;
+impl_downcast!(LayerDyn);
 
-                ($($name.on_update(world, asset_cache, events, frame_time).with_context(|| format!("Failed to execute {:?}", std::any::type_name::<$name>()))?), *);
-
-                Ok(())
-            }
-        }
+impl<T: Layer> LayerDyn for T {
+    fn register_dyn(
+        &mut self,
+        world: &mut World,
+        assets: &AssetCache,
+        events: &mut EventRegistry,
+        index: usize,
+    ) -> anyhow::Result<()> {
+        self.register(world, assets, EventRegisterContext::new(events, index))
     }
 }
-
-// Implement renderer on tuple of renderers and tuple of render handles
-impl_for_tuples!(tuple_impl);
 
 pub struct EngineLayer {
     schedule: Schedule,
@@ -53,20 +73,25 @@ pub struct EngineLayer {
 
 impl EngineLayer {
     pub fn new() -> Self {
-        let schedule = Schedule::from([update_transform_system()]);
+        let schedule = Schedule::builder()
+            .with_system(update_transform_system())
+            .build();
+
         Self { schedule }
     }
 }
 
 impl Layer for EngineLayer {
-    fn on_update(
+    fn register(
         &mut self,
         world: &mut World,
-        assets: &mut AssetCache,
-        events: &mut Events,
-        frame_time: Duration,
+        assets: &AssetCache,
+        mut events: EventRegisterContext<Self>,
     ) -> anyhow::Result<()> {
-        self.schedule.execute_par(world)?;
+        events.subscribe(|this, world, assets, event: &TickEvent| {
+            this.schedule.execute_par(world)?;
+            Ok(())
+        });
 
         Ok(())
     }

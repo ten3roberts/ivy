@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 mod movement;
 
-use std::{fmt::Display, time::Duration};
+use std::{fmt::Display, ops::DerefMut, time::Duration};
 
 use anyhow::Context;
 use collision::{components::collider, util::project_plane, BvhNode, Collider, Cube, Ray, Sphere};
@@ -12,18 +12,16 @@ use flax::{
 use flume::Receiver;
 use glam::{vec2, vec3, Quat, Vec2, Vec2Swizzles, Vec3};
 use glfw::{CursorMode, Key, MouseButton, WindowEvent};
-use graphics::{
-    components::{bounding_sphere, camera, light_source},
-    layer::{WindowLayer, WindowLayerInfo},
-};
+use graphics::components::{bounding_sphere, camera, light_source};
 use input::components::input_state;
 use ivy_assets::{Asset, AssetCache};
 use ivy_engine::{base::*, graphics::*, input::*, ui::*, vulkan::*, *};
+use ivy_wgpu::layer::GraphicsLayerDesc;
 use movement::{move_system, mover, Mover};
 use physics::{
     components::{collision_state, collision_tree, effector},
     connections::draw_connections,
-    PhysicsLayer, PhysicsLayerInfo,
+    PhysicsLayerDesc,
 };
 use presets::{
     default_geometry_shader, default_gizmo_shader, default_image_shader,
@@ -32,7 +30,6 @@ use presets::{
 };
 use random::rand::SeedableRng;
 use random::{rand::rngs::StdRng, Random};
-use rendergraph::{GraphicsDesc, GraphicsLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 use vulkan::vk::{CullModeFlags, PresentModeKHR};
 
@@ -61,47 +58,33 @@ fn main() -> anyhow::Result<()> {
         ..Default::default()
     };
 
-    let mut app = App::builder()
-        .push_layer(|_, _, _| EngineLayer::new())
-        .try_push_layer(|w, r, _| WindowLayer::new(w, r, WindowLayerInfo { window, swapchain }))?
-        .try_push_layer(|w, r, e| -> anyhow::Result<_> {
-            Ok((UILayer::new(w, r, e)?, ReactiveLayer::<Color>::new(w, r, e)))
-        })?
-        .try_push_layer(|w, r, e| -> anyhow::Result<_> {
-            Ok(FixedTimeStep::new(
-                20.ms(),
-                (
-                    PhysicsLayer::new(
-                        w,
-                        r,
-                        e,
-                        PhysicsLayerInfo {
-                            tree_root: CollisionNode::new(
-                                collision::BoundingBox::new(Vec3::ONE * 200.0, Vec3::ZERO),
-                                Default::default(),
-                            ),
-                            gravity: vec3(0.0, -9.81, 0.0),
-                            debug: true,
-                        },
-                    )?,
-                    LogicLayer::new(w, r, e)?,
-                ),
-            ))
-        })?
-        .try_push_layer(|w, r, e| {
-            GraphicsLayer::new(
-                w,
-                r,
-                e,
-                GraphicsDesc {
-                    frames_in_flight: FRAMES_IN_FLIGHT,
-                },
-            )
-        })?
-        .try_push_layer(|w, r, e| DebugLayer::new(w, r, e, 100.ms()))?
-        .build();
+    let result = App::builder()
+        .with_layer(EngineLayerDesc)?
+        .with_layer(WindowLayerDesc { window, swapchain })?
+        // .push_layer(FixedTimeStepDefinition(
+        //     20.ms(),
+        //     (
+        //         PhysicsLayerDesc::new(
+        //             Vec3::Y * -9.80,
+        //             CollisionNode::new(
+        //                 collision::BoundingBox::new(Vec3::ONE * 200.0, Vec3::ZERO),
+        //                 Default::default(),
+        //             ),
+        //             false,
+        //         ),
+        //         LogicLayerDesc,
+        //     ),
+        // ))?
+        .with_layer(GraphicsLayerDesc)?
+        .with_layer(DebugLayerDesc)?
+        .run();
 
-    app.run().context("Failed to run application")
+    if let Err(err) = result {
+        tracing::error!("{err:?}");
+        return Err(err);
+    }
+
+    Ok(())
 }
 
 fn setup_graphics(world: &mut World, assets: &AssetCache) -> anyhow::Result<AssetPack> {
@@ -352,6 +335,8 @@ struct Entities {
     canvas: Entity,
 }
 
+struct LogicLayerDesc;
+
 struct LogicLayer {
     camera_euler: Vec3,
 
@@ -359,94 +344,30 @@ struct LogicLayer {
 
     schedule: Schedule,
 
-    window_events: Receiver<WindowEvent>,
-    graphics_events: Receiver<GraphicsEvent>,
+    // window_events: Receiver<WindowEvent>,
+    // graphics_events: Receiver<GraphicsEvent>,
     assets: AssetPack,
     entities: Entities,
 }
 
 impl LogicLayer {
-    pub fn new(
-        world: &mut World,
-        assets: &mut AssetCache,
-        events: &mut Events,
-    ) -> anyhow::Result<Self> {
-        let input = InputState::new(
-            &world
-                .get(engine(), ivy_graphics::components::window())
-                .unwrap(),
-            events,
-        );
-
-        let input_vector = InputVector::new(
-            InputAxis::keyboard(Key::A, Key::D),
-            InputAxis::keyboard(Key::Space, Key::LeftControl),
-            InputAxis::keyboard(Key::W, Key::S),
-        );
-
-        let mut builder = EntityBuilder::new();
-
-        let camera = builder
-            .mount(TransformBundle {
-                pos: vec3(0.0, 0.0, -7.0),
-                ..Default::default()
-            })
-            .mount(RbBundle::default())
-            .set(main_camera(), ())
-            .set(
-                camera(),
-                Camera::perspective(1.0, input.window_extent().aspect(), 0.1, 100.0),
-            )
-            .set(
-                mover(),
-                Mover::new(input_vector, Default::default(), 5.0, true),
-            )
-            .spawn(world);
-
-        let canvas = EntityBuilder::new()
-            .mount(CanvasBundle::new(input.window_extent()))
-            .spawn(world);
-
-        let asset_pack = setup_graphics(world, assets).context("Failed to setup graphics")?;
-
-        let entities = setup_objects(world, &assets, &asset_pack, camera, canvas)?;
-
-        setup_ui(world, &assets, &asset_pack)?;
-
-        let window_events = events.subscribe();
-        let graphics_events = events.subscribe();
-
-        world.set(engine(), input_state(), input)?;
-        let schedule = Schedule::from([move_system(), update_input_state_system()]);
-
-        Ok(Self {
-            camera_euler: Vec3::ZERO,
-            entities,
-            assets: asset_pack,
-            window_events,
-            graphics_events,
-            cursor_mode: CursorMode::Normal,
-            schedule,
-        })
-    }
-
     pub fn handle_events(&mut self, world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
         // let window = resources.get_default_mut::<Window>()?;
 
-        for event in self.window_events.try_iter() {
-            if let WindowEvent::Scroll(_, scroll) = event {
-                let mut mover = world.get_mut(self.entities.camera, mover())?;
-                mover.speed = (mover.speed + scroll as f32 * 0.2).clamp(0.1, 20.0);
-            }
-        }
+        // for event in self.window_events.try_iter() {
+        //     if let WindowEvent::Scroll(_, scroll) = event {
+        //         let mut mover = world.get_mut(self.entities.camera, mover())?;
+        //         mover.speed = (mover.speed + scroll as f32 * 0.2).clamp(0.1, 20.0);
+        //     }
+        // }
 
-        for event in self.graphics_events.try_iter() {
-            match event {
-                GraphicsEvent::SwapchainRecreation => {
-                    setup_graphics(world, assets)?;
-                }
-            }
-        }
+        // for event in self.graphics_events.try_iter() {
+        //     match event {
+        //         GraphicsEvent::SwapchainRecreation => {
+        //             setup_graphics(world, assets)?;
+        //         }
+        //     }
+        // }
         Ok(())
     }
 }
@@ -458,6 +379,67 @@ fn update_input_state_system() -> BoxedSystem {
             input.handle_events();
         })
         .boxed()
+}
+
+impl LayerDesc for LogicLayerDesc {
+    type Layer = LogicLayer;
+
+    fn register(self, world: &mut World, assets: &AssetCache) -> anyhow::Result<Self::Layer> {
+        // let input = InputState::new(
+        //     &world
+        //         .get(engine(), ivy_graphics::components::window())
+        //         .unwrap(),
+        //     events,
+        // );
+
+        // let input_vector = InputVector::new(
+        //     InputAxis::keyboard(Key::A, Key::D),
+        //     InputAxis::keyboard(Key::Space, Key::LeftControl),
+        //     InputAxis::keyboard(Key::W, Key::S),
+        // );
+
+        let mut builder = EntityBuilder::new();
+
+        let camera = builder
+            .mount(TransformBundle {
+                pos: vec3(0.0, 0.0, -7.0),
+                ..Default::default()
+            })
+            .mount(RbBundle::default())
+            .set(main_camera(), ())
+            .set(camera(), Camera::perspective(1.0, 1.0, 0.1, 100.0))
+            // .set(
+            //     mover(),
+            //     Mover::new(input_vector, Default::default(), 5.0, true),
+            // )
+            .spawn(world);
+
+        let canvas = EntityBuilder::new()
+            // .mount(CanvasBundle::new(input.window_extent()))
+            .spawn(world);
+
+        let asset_pack = setup_graphics(world, assets).context("Failed to setup graphics")?;
+
+        let entities = setup_objects(world, assets, &asset_pack, camera, canvas)?;
+
+        setup_ui(world, assets, &asset_pack)?;
+
+        // let window_events = events.subscribe();
+        // let graphics_events = events.subscribe();
+
+        // world.set(engine(), input_state(), input)?;
+        let schedule = Schedule::from([move_system(), update_input_state_system()]);
+
+        Ok(LogicLayer {
+            camera_euler: Vec3::ZERO,
+            entities,
+            assets: asset_pack,
+            // window_events,
+            // graphics_events,
+            cursor_mode: CursorMode::Normal,
+            schedule,
+        })
+    }
 }
 
 impl Layer for LogicLayer {
@@ -896,6 +878,23 @@ impl DebugLayer {
     }
 }
 
+struct DebugLayerDesc;
+
+impl LayerDesc for DebugLayerDesc {
+    type Layer = DebugLayer;
+
+    fn register(self, _: &mut World, _: &AssetCache) -> anyhow::Result<Self::Layer> {
+        Ok(DebugLayer {
+            elapsed: Clock::new(),
+            last_status: Clock::new(),
+            frequency: 100.ms(),
+            min: Duration::from_secs(u64::MAX),
+            max: Duration::from_secs(u64::MIN),
+            framecount: 0,
+        })
+    }
+}
+
 impl Layer for DebugLayer {
     fn on_update(
         &mut self,
@@ -931,18 +930,6 @@ impl Layer for DebugLayer {
                     .first()
                     .context("No main camera")?,
             };
-
-            // world
-            //     .query_mut::<(&mut Text, &DisplayDebugReport)>()
-            //     .into_iter()
-            //     .for_each(|(_, (text, _))| {
-            //         let val = text.val_mut();
-            //         let val = val.to_mut();
-
-            //         val.clear();
-
-            //         write!(val, "{}", &report).expect("Failed to write into string");
-            //     });
 
             tracing::debug!("{:?}", report.framerate);
 

@@ -6,7 +6,7 @@ use std::{
 use flax::World;
 use glfw::{Glfw, WindowEvent};
 use ivy_assets::AssetCache;
-use ivy_base::{engine, AppEvent, Events, Layer};
+use ivy_base::{engine, Events, Layer};
 use ivy_input::InputEvent;
 use ivy_vulkan::{context::VulkanContextService, Swapchain, SwapchainInfo, VulkanContext};
 use ivy_window::{Window, WindowInfo};
@@ -16,18 +16,9 @@ use crate::components;
 
 /// Customize behaviour of the window layer
 #[derive(Debug, Clone, PartialEq)]
-pub struct WindowLayerInfo {
+pub struct WindowLayerDesc {
     pub window: WindowInfo,
     pub swapchain: SwapchainInfo,
-}
-
-impl Default for WindowLayerInfo {
-    fn default() -> Self {
-        Self {
-            window: WindowInfo::default(),
-            swapchain: SwapchainInfo::default(),
-        }
-    }
 }
 
 /// Window and swapchain abstractions layer.
@@ -43,7 +34,7 @@ impl WindowLayer {
     pub fn new(
         world: &mut World,
         assets: &AssetCache,
-        info: WindowLayerInfo,
+        info: WindowLayerDesc,
     ) -> anyhow::Result<Self> {
         let glfw = Arc::new(RwLock::new(glfw::init(glfw::FAIL_ON_ERRORS)?));
         let (window, events) = Window::new(glfw.clone(), info.window)?;
@@ -61,25 +52,41 @@ impl WindowLayer {
     }
 }
 
-impl Layer for WindowLayer {
-    fn on_update(
-        &mut self,
-        _world: &mut World,
-        _: &mut AssetCache,
-        events: &mut Events,
-        _frame_time: Duration,
-    ) -> anyhow::Result<()> {
-        self.glfw.write().poll_events();
+// impl LayerDesc for WindowLayerDesc {
+//     type Layer = WindowLayer;
 
-        for (_, event) in glfw::flush_messages(&self.events) {
-            if let WindowEvent::Close = event {
-                events.send(AppEvent::Exit);
-            }
+//     fn register(self, world: &mut World, assets: &AssetCache) -> anyhow::Result<Self::Layer> {
+//         let glfw = Arc::new(RwLock::new(glfw::init(glfw::FAIL_ON_ERRORS)?));
+//         let (window, events) = Window::new(glfw.clone(), self.window)?;
 
-            let input_event = InputEvent::from(event);
-            events.send(input_event);
-        }
+//         let context = Arc::new(VulkanContext::new(&window)?);
 
-        Ok(())
-    }
-}
+//         let swapchain = Swapchain::new(context.clone(), &window, self.swapchain)?;
+
+//         assets.register_service(VulkanContextService::new(context));
+
+//         world.set(engine(), components::window(), window)?;
+//         world.set(engine(), components::swapchain(), swapchain)?;
+
+//         Ok(WindowLayer { glfw, events })
+//     }
+// }
+
+// impl Layer for WindowLayer {
+//     fn on_update(
+//         &mut self,
+//         _world: &mut World,
+//         _: &mut AssetCache,
+//         events: &mut Events,
+//         _frame_time: Duration,
+//     ) -> anyhow::Result<()> {
+//         self.glfw.write().poll_events();
+
+//         for (_, event) in glfw::flush_messages(&self.events) {
+//             let input_event = InputEvent::from(event);
+//             events.send(input_event);
+//         }
+
+//         Ok(())
+//     }
+// }
