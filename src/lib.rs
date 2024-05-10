@@ -47,6 +47,7 @@ pub use ivy_random as random;
 pub use ivy_rendergraph as rendergraph;
 pub use ivy_ui as ui;
 pub use ivy_vulkan as vulkan;
+pub use ivy_wgpu;
 pub use ivy_window as window;
 
 pub use ivy_base::{components::*, App, Extent, Gizmos, IntoDuration, Layer, Static};

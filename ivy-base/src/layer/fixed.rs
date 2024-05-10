@@ -1,8 +1,5 @@
 use std::time::Duration;
 
-use flax::World;
-use ivy_assets::AssetCache;
-
 use crate::Layer;
 
 const MAX_ITERATIONS: f64 = 10.0;
@@ -24,27 +21,4 @@ impl<T: Layer> FixedTimeStep<T> {
     }
 }
 
-impl<T: Layer> Layer for FixedTimeStep<T> {
-    fn on_update(
-        &mut self,
-        world: &mut World,
-        assets: &mut AssetCache,
-        events: &mut crate::Events,
-        frame_time: Duration,
-    ) -> anyhow::Result<()> {
-        let ft_s = frame_time.as_secs_f64();
-
-        let dt = self.timestep.as_secs_f64();
-
-        self.acc = (self.acc + ft_s).min(dt * MAX_ITERATIONS);
-
-        while self.acc > 0.0 {
-            self.layers
-                .on_update(world, assets, events, self.timestep)?;
-
-            self.acc -= dt;
-        }
-
-        Ok(())
-    }
-}
+pub struct FixedTimeStepDesc<T>(pub Duration, pub T);

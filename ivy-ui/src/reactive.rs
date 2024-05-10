@@ -81,17 +81,30 @@ impl<T> ReactiveLayer<T> {
     }
 }
 
-impl<T: 'static + Copy + Send + Sync> Layer for ReactiveLayer<T> {
-    fn on_update(
-        &mut self,
-        world: &mut World,
-        _: &mut AssetCache,
-        _: &mut ivy_base::Events,
-        _: std::time::Duration,
-    ) -> anyhow::Result<()> {
-        systems::reactive_system::<T, _>(world, self.rx.try_iter()).context(format!(
-            "Failed to execute reactive layer for {:?}",
-            std::any::type_name::<T>()
-        ))
-    }
-}
+// pub struct ReactiveLayerDefinition;
+
+// impl LayerDesc for ReactiveLayerDefinition {
+//     type Layer = ReactiveLayer<()>;
+
+//     fn register(self, _: &mut World, _: &AssetCache) -> anyhow::Result<Self::Layer> {
+//         todo!()
+//     }
+// }
+
+// impl<T> Layer for ReactiveLayer<T>
+// where
+//     T: 'static + Copy + Send + Sync,
+// {
+//     fn on_update(
+//         &mut self,
+//         world: &mut World,
+//         _: &mut AssetCache,
+//         _: &mut ivy_base::Events,
+//         _: std::time::Duration,
+//     ) -> anyhow::Result<()> {
+//         systems::reactive_system::<T, _>(world, self.rx.try_iter()).context(format!(
+//             "Failed to execute reactive layer for {:?}",
+//             std::any::type_name::<T>()
+//         ))
+//     }
+// }

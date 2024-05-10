@@ -2,7 +2,6 @@ use core::f32;
 
 use flax::Debuggable;
 use glam::Vec3;
-use ivy_random::Random;
 #[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
 

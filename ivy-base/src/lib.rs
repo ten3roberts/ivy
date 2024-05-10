@@ -28,7 +28,7 @@
 //! required. Gizmos could just as well be rendered in text or an Ncurses like
 //! interface.
 
-mod app;
+pub mod app;
 mod color;
 pub mod components;
 mod dir;
@@ -36,7 +36,7 @@ mod events;
 pub mod extensions;
 mod extent;
 pub mod gizmos;
-mod layer;
+pub mod layer;
 pub mod macros;
 pub mod math;
 mod systems;
@@ -45,7 +45,7 @@ mod updatable;
 
 use std::f32::consts::PI;
 
-pub use app::{App, AppBuilder, AppEvent};
+pub use app::{driver, App, AppBuilder, AppEvent};
 pub use color::*;
 pub use components::*;
 pub use dir::*;

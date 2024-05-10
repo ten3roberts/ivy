@@ -1,7 +1,12 @@
 mod builder;
-mod event;
+pub mod driver;
+pub mod event;
 
-use std::time::Duration;
+use std::{
+    any::{Any, TypeId},
+    collections::HashMap,
+    time::Duration,
+};
 
 pub use builder::*;
 pub use event::*;
@@ -10,26 +15,29 @@ use flax::World;
 use flume::Receiver;
 
 use crate::{
-    layer::{Layer, LayerStack},
-    Clock, Events, Gizmos, IntoDuration,
+    layer::events::{Event, EventDispatcher, EventRegisterContext, EventRegistry},
+    Events, Layer, LayerDyn,
 };
 
 use ivy_assets::AssetCache;
 
+use self::driver::Driver;
+
 pub struct App {
     name: String,
 
-    layers: LayerStack,
+    layers: Vec<Box<dyn LayerDyn>>,
+    /// Event bus for layers
+    pub event_registry: EventRegistry,
 
-    asset_cache: AssetCache,
-    world: World,
-    events: Events,
+    pub assets: AssetCache,
+    pub world: World,
+    #[deprecated(note = "Use ECS instead")]
+    pub events: Events,
 
     rx: Receiver<AppEvent>,
 
     running: bool,
-
-    event_cleanup_time: Duration,
 }
 
 impl App {
@@ -44,13 +52,13 @@ impl App {
 
         Self {
             name: "Ivy".into(),
-            layers: LayerStack::new(),
+            layers: Default::default(),
+            event_registry: Default::default(),
             world: World::new(),
-            asset_cache,
+            assets: asset_cache,
             events,
             rx,
             running: false,
-            event_cleanup_time: 60.0.secs(),
         }
     }
 
@@ -58,46 +66,35 @@ impl App {
         AppBuilder::new()
     }
 
-    /// Enters the main application event loop and runs the layers.
-    pub fn run(&mut self) -> anyhow::Result<()> {
-        eprintln!("Running app");
-        self.running = true;
-
-        let mut frame_clock = Clock::new();
-
-        let mut event_cleanup = Clock::new();
-
-        // Update layers
-        while self.running {
-            if event_cleanup.elapsed() > self.event_cleanup_time {
-                event_cleanup.reset();
-                self.events.cleanup();
-            }
-
-            let frame_time = frame_clock.reset();
-            let world = &mut self.world;
-            let asset_cache = &mut self.asset_cache;
-            let events = &mut self.events;
-
-            for layer in self.layers.iter_mut() {
-                if let Err(err) = layer.on_update(world, asset_cache, events, frame_time) {
-                    tracing::error!("Error in layer: {:?}", err);
-                    return Err(err);
-                }
-            }
-
-            // Read all events sent by application
-            self.handle_events();
-        }
-        Ok(())
+    pub fn tick(&mut self, delta: Duration) -> anyhow::Result<()> {
+        self.event_registry.emit(
+            &mut self.layers,
+            &mut self.world,
+            &mut self.assets,
+            &TickEvent,
+        )
     }
 
-    pub fn handle_events(&mut self) {
-        for event in self.rx.try_iter() {
-            match event {
-                AppEvent::Exit => self.running = false,
-            }
+    pub fn init(&mut self) -> anyhow::Result<()> {
+        for (index, layer) in &mut self.layers.iter_mut().enumerate() {
+            layer.register_dyn(
+                &mut self.world,
+                &self.assets,
+                &mut self.event_registry,
+                index,
+            )?;
         }
+
+        self.event_registry.emit(
+            &mut self.layers,
+            &mut self.world,
+            &mut self.assets,
+            &InitEvent,
+        )
+    }
+
+    pub fn run(&mut self, driver: &mut (impl Driver + ?Sized)) -> anyhow::Result<()> {
+        driver.enter(self)
     }
 
     /// Return a reference to the application's name.
@@ -105,52 +102,8 @@ impl App {
         &self.name
     }
 
-    /// Pushes a layer from the provided init closure to to the top of the layer stack. The provided
-    /// closure to construct the layer takes in the world and events.
-    pub fn push_layer<F, T>(&mut self, func: F)
-    where
-        F: FnOnce(&mut World, &mut AssetCache, &mut Events) -> T,
-        T: 'static + Layer,
-    {
-        let layer = func(&mut self.world, &mut self.asset_cache, &mut self.events);
-        self.layers.push(layer);
-    }
-
-    /// Pushes a layer from the provided init closure to to the top of the layer stack. The provided
-    /// closure to construct the layer takes in the world and events, and may return an error which
-    /// is propagated to the callee.
-    pub fn try_push_layer<F, T, E>(&mut self, func: F) -> Result<(), E>
-    where
-        F: FnOnce(&mut World, &mut AssetCache, &mut Events) -> Result<T, E>,
-        T: 'static + Layer,
-    {
-        let layer = func(&mut self.world, &mut self.asset_cache, &mut self.events)?;
-        self.layers.push(layer);
-        Ok(())
-    }
-
-    /// Inserts a layer from the provided init closure to to the top of the layer stack. The provided
-    /// closure to construct the layer takes in the world and events.
-    pub fn insert_layer<F, T>(&mut self, index: usize, func: F)
-    where
-        F: FnOnce(&mut World, &mut AssetCache, &mut Events) -> T,
-        T: 'static + Layer,
-    {
-        let layer = func(&mut self.world, &mut self.asset_cache, &mut self.events);
-        self.layers.insert(index, layer);
-    }
-
-    /// Pushes a layer from the provided init closure to to the top of the layer stack. The provided
-    /// closure to construct the layer takes in the world and events, and may return an error which
-    /// is propagated to the callee.
-    pub fn try_insert_layer<F, T, E>(&mut self, index: usize, func: F) -> Result<(), E>
-    where
-        F: FnOnce(&mut World, &mut AssetCache, &mut Events) -> Result<T, E>,
-        T: 'static + Layer,
-    {
-        let layer = func(&mut self.world, &mut self.asset_cache, &mut self.events)?;
-        self.layers.insert(index, layer);
-        Ok(())
+    pub fn push_layer<T: Layer>(&mut self, layer: T) {
+        self.layers.push(Box::new(layer));
     }
 
     /// Get a mutable reference to the app's world.
@@ -165,12 +118,18 @@ impl App {
 
     /// Get a mutable reference to the app's asset_cache.
     pub fn asset_cache_mut(&mut self) -> &mut AssetCache {
-        &mut self.asset_cache
+        &mut self.assets
     }
 
     /// Get a reference to the app's world.
     pub fn world(&self) -> &World {
         &self.world
+    }
+
+    /// Emits an event to all layers.
+    pub fn emit<T: Event>(&mut self, event: T) -> anyhow::Result<()> {
+        self.event_registry
+            .emit(&mut self.layers, &mut self.world, &mut self.assets, &event)
     }
 
     /// Get a reference to the app's events.
@@ -180,7 +139,7 @@ impl App {
 
     /// Get a reference to the app's asset_cache.
     pub fn asset_cache(&self) -> &AssetCache {
-        &self.asset_cache
+        &self.assets
     }
 }
 
