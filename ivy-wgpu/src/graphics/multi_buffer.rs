@@ -80,7 +80,7 @@ where
         tracing::debug!(?size, "grow");
         self.allocator.grow_to(size);
 
-        self.buffer.resize(gpu, self.allocator.total_size());
+        self.buffer.resize(gpu, self.allocator.total_size(), true);
     }
 
     pub fn allocate(&mut self, len: usize) -> Option<SubBuffer<T>> {

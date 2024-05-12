@@ -1,7 +1,7 @@
 use std::{
     marker::PhantomData,
     mem::{self, size_of},
-    ops::{Bound, RangeBounds},
+    ops::{Bound, Deref, RangeBounds},
 };
 
 use bytemuck::Pod;
@@ -19,6 +19,14 @@ pub struct TypedBuffer<T> {
     len: usize,
     label: String,
     _marker: PhantomData<T>,
+}
+
+impl<T> Deref for TypedBuffer<T> {
+    type Target = Buffer;
+
+    fn deref(&self) -> &Self::Target {
+        &self.buffer
+    }
 }
 
 impl<T> TypedBuffer<T>
@@ -97,7 +105,7 @@ where
         queue.write_buffer(self.buffer(), offset, bytemuck::cast_slice(data));
     }
 
-    pub fn resize(&mut self, gpu: &Gpu, new_len: usize) {
+    pub fn resize(&mut self, gpu: &Gpu, new_len: usize, preserve_contents: bool) {
         tracing::debug!(?new_len, "resize");
         let mut encoder = gpu
             .device
@@ -112,19 +120,22 @@ where
             mapped_at_creation: false,
         });
 
-        encoder.copy_buffer_to_buffer(
-            self.buffer(),
-            0,
-            &buffer,
-            0,
-            self.len() as u64 * mem::size_of::<T>() as u64,
-        );
+        if preserve_contents {
+            encoder.copy_buffer_to_buffer(
+                self.buffer(),
+                0,
+                &buffer,
+                0,
+                self.len() as u64 * mem::size_of::<T>() as u64,
+            );
 
-        gpu.queue.submit([encoder.finish()]);
+            gpu.queue.submit([encoder.finish()]);
+        }
 
         self.len = new_len;
         self.buffer = buffer;
     }
+
     pub fn slice(&self, bounds: impl RangeBounds<usize>) -> BufferSlice<'_> {
         let start = match bounds.start_bound() {
             Bound::Included(&bound) => Bound::Included(bound as u64 * size_of::<T>() as u64),

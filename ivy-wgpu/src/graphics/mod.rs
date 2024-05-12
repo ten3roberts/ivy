@@ -6,6 +6,7 @@ pub mod multi_buffer;
 pub mod shader;
 pub mod texture;
 pub mod typed_buffer;
+pub mod material;
 
 pub use bind_groups::{BindGroupBuilder, BindGroupLayoutBuilder};
 pub use gpu::{Gpu, Surface};

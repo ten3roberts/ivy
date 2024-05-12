@@ -85,6 +85,16 @@ pub struct TransformBundle {
     pub scale: Vec3,
 }
 
+impl TransformBundle {
+    pub fn new(pos: Vec3, rotation: Quat, scale: Vec3) -> Self {
+        Self {
+            pos,
+            rotation,
+            scale,
+        }
+    }
+}
+
 impl Default for TransformBundle {
     fn default() -> Self {
         Self {
