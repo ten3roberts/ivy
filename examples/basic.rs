@@ -1,7 +1,13 @@
-use flax::World;
+use flax::{Entity, World};
+use glam::{Mat4, Quat, Vec3};
 use ivy_assets::AssetCache;
-use ivy_base::{app::TickEvent, layer::events::EventRegisterContext, App, Layer};
-use ivy_wgpu::{driver::WinitDriver, events::KeyboardInput, layer::GraphicsLayer};
+use ivy_base::{
+    app::TickEvent, layer::events::EventRegisterContext, main_camera, App, EngineLayer,
+    EntityBuilderExt, Layer, TransformBundle,
+};
+use ivy_wgpu::{
+    components::projection_matrix, driver::WinitDriver, events::KeyboardInput, layer::GraphicsLayer,
+};
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
 
@@ -13,6 +19,7 @@ pub fn main() -> anyhow::Result<()> {
 
     if let Err(err) = App::builder()
         .with_driver(WinitDriver::new())
+        .with_layer(EngineLayer::new())
         .with_layer(GraphicsLayer::new())
         .with_layer(LogicLayer::new())
         .run()
@@ -49,6 +56,15 @@ impl Layer for LogicLayer {
             tracing::info!(?event);
             Ok(())
         });
+
+        Entity::builder()
+            .mount(TransformBundle::new(Vec3::ZERO, Quat::IDENTITY, Vec3::ONE))
+            .set(main_camera(), ())
+            .set(
+                projection_matrix(),
+                Mat4::orthographic_lh(-100.0, 100.0, -100.0, 100.0, 0.1, 1000.0),
+            )
+            .spawn(world);
 
         Ok(())
     }

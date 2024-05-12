@@ -1,3 +1,6 @@
+use std::path::PathBuf;
+
+use ivy_assets::AssetKey;
 use wgpu::{TextureView, TextureViewDescriptor};
 
 use super::Gpu;
@@ -72,5 +75,21 @@ impl Texture {
 
     pub fn view(&self, desc: &TextureViewDescriptor) -> TextureView {
         self.texture.create_view(desc)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct TextureFromPath(pub PathBuf);
+
+impl AssetKey<Texture> for TextureFromPath {
+    type Error = image::ImageError;
+
+    fn load(
+        &self,
+        assets: &ivy_assets::AssetCache,
+    ) -> Result<ivy_assets::Asset<Texture>, Self::Error> {
+        let image = image::open(&self.0)?;
+
+        Ok(assets.insert(Texture::from_image(&assets.service(), &image)))
     }
 }

@@ -24,7 +24,8 @@ members = [
   "ivy-physics",
   "ivy-collision",
   "ivy-random",
-  "ivy-assets", "ivy-wgpu",
+  "ivy-assets",
+  "ivy-wgpu",
 ]
 
 [workspace.dependencies]
