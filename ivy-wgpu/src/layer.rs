@@ -1,12 +1,14 @@
 use std::{
+    borrow::BorrowMut,
     sync::Arc,
     time::{Duration, Instant},
 };
 
-use flax::World;
+use flax::{Entity, World};
+use glam::{Quat, Vec3};
 use ivy_assets::AssetCache;
-use ivy_base::{driver::Driver, App, Events, Layer};
-use wgpu::hal::GetAccelerationStructureBuildSizesDescriptor;
+use ivy_base::{driver::Driver, App, EntityBuilderExt, Events, Layer, TransformBundle};
+use wgpu::{hal::GetAccelerationStructureBuildSizesDescriptor, ShaderStages};
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
@@ -17,7 +19,11 @@ use winit::{
 
 use crate::{
     events::{ApplicationReady, RedrawEvent, ResizedEvent},
-    renderer::Renderer,
+    graphics::{
+        material::Material, shader::ShaderDesc, texture::TextureFromPath, BindGroupLayoutBuilder,
+        Mesh, Shader, Vertex, VertexDesc,
+    },
+    renderer::{RenderObjectBundle, Renderer},
     Gpu,
 };
 
@@ -45,6 +51,8 @@ impl GraphicsLayer {
 
         assets.register_service(gpu.clone());
 
+        self.setup_objects(&gpu, world, assets, surface.surface_format())?;
+
         self.renderer = Some(Renderer::new(gpu, surface));
 
         Ok(())
@@ -65,6 +73,51 @@ impl GraphicsLayer {
         } else {
             tracing::warn!("renderer not initialized");
         }
+
+        Ok(())
+    }
+
+    fn setup_objects(
+        &self,
+        gpu: &Gpu,
+        world: &mut World,
+        assets: &AssetCache,
+        surface_format: wgpu::TextureFormat,
+    ) -> anyhow::Result<()> {
+        let shader = assets.insert(Shader::new(
+            gpu,
+            &ShaderDesc {
+                label: "diffuse shader",
+                source: include_str!("../../assets/shaders/diffuse.wgsl"),
+                format: surface_format,
+                vertex_layouts: &[Vertex::layout()],
+                layouts: &[
+                    &BindGroupLayoutBuilder::new("globals")
+                        .bind_uniform_buffer(ShaderStages::VERTEX)
+                        .build(gpu),
+                    &BindGroupLayoutBuilder::new("renderer")
+                        .bind_storage_buffer(ShaderStages::VERTEX)
+                        .build(gpu),
+                    &BindGroupLayoutBuilder::new("material")
+                        .bind_sampler(ShaderStages::FRAGMENT)
+                        .bind_texture(ShaderStages::FRAGMENT)
+                        .build(gpu),
+                ],
+            },
+        ));
+
+        let mesh = assets.insert(Mesh::quad(gpu));
+
+        let material = assets.insert(Material::new(
+            gpu,
+            assets.load(&TextureFromPath("assets/textures/statue.jpg".into())),
+        ));
+
+        tracing::info!("created entity");
+        let entity = Entity::builder()
+            .mount(RenderObjectBundle::new(mesh, material, shader))
+            .mount(TransformBundle::new(Vec3::Z, Quat::IDENTITY, Vec3::ONE))
+            .spawn(world);
 
         Ok(())
     }
