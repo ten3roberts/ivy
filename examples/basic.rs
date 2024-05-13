@@ -62,7 +62,7 @@ impl Layer for LogicLayer {
             .set(main_camera(), ())
             .set(
                 projection_matrix(),
-                Mat4::orthographic_lh(-100.0, 100.0, -100.0, 100.0, 0.1, 1000.0),
+                Mat4::orthographic_lh(-5.0, 5.0, -5.0, 5.0, 0.1, 1000.0),
             )
             .spawn(world);
 
