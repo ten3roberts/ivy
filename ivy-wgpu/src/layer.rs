@@ -1,29 +1,13 @@
-use std::{
-    borrow::BorrowMut,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::sync::Arc;
 
-use flax::{Entity, World};
-use glam::{Quat, Vec3};
+use flax::World;
 use ivy_assets::AssetCache;
-use ivy_base::{driver::Driver, App, EntityBuilderExt, Events, Layer, TransformBundle};
-use wgpu::{hal::GetAccelerationStructureBuildSizesDescriptor, ShaderStages};
-use winit::{
-    application::ApplicationHandler,
-    dpi::PhysicalSize,
-    event::WindowEvent,
-    event_loop::ActiveEventLoop,
-    window::{Window, WindowAttributes, WindowId},
-};
+use ivy_base::Layer;
+use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
     events::{ApplicationReady, RedrawEvent, ResizedEvent},
-    graphics::{
-        material::Material, shader::ShaderDesc, texture::TextureFromPath, BindGroupLayoutBuilder,
-        Mesh, Shader, Vertex, VertexDesc,
-    },
-    renderer::{RenderObjectBundle, Renderer},
+    renderer::Renderer,
     Gpu,
 };
 
@@ -51,17 +35,15 @@ impl GraphicsLayer {
 
         assets.register_service(gpu.clone());
 
-        self.setup_objects(&gpu, world, assets, surface.surface_format())?;
-
         self.renderer = Some(Renderer::new(gpu, surface));
 
         Ok(())
     }
 
-    fn on_draw(&mut self, world: &mut World) -> Result<(), anyhow::Error> {
+    fn on_draw(&mut self, assets: &AssetCache, world: &mut World) -> Result<(), anyhow::Error> {
         if let Some(renderer) = &mut self.renderer {
             renderer.update(world);
-            renderer.draw(world)?;
+            renderer.draw(assets)?;
         }
 
         Ok(())
@@ -73,51 +55,6 @@ impl GraphicsLayer {
         } else {
             tracing::warn!("renderer not initialized");
         }
-
-        Ok(())
-    }
-
-    fn setup_objects(
-        &self,
-        gpu: &Gpu,
-        world: &mut World,
-        assets: &AssetCache,
-        surface_format: wgpu::TextureFormat,
-    ) -> anyhow::Result<()> {
-        let shader = assets.insert(Shader::new(
-            gpu,
-            &ShaderDesc {
-                label: "diffuse shader",
-                source: include_str!("../../assets/shaders/diffuse.wgsl"),
-                format: surface_format,
-                vertex_layouts: &[Vertex::layout()],
-                layouts: &[
-                    &BindGroupLayoutBuilder::new("globals")
-                        .bind_uniform_buffer(ShaderStages::VERTEX)
-                        .build(gpu),
-                    &BindGroupLayoutBuilder::new("renderer")
-                        .bind_storage_buffer(ShaderStages::VERTEX)
-                        .build(gpu),
-                    &BindGroupLayoutBuilder::new("material")
-                        .bind_sampler(ShaderStages::FRAGMENT)
-                        .bind_texture(ShaderStages::FRAGMENT)
-                        .build(gpu),
-                ],
-            },
-        ));
-
-        let mesh = assets.insert(Mesh::quad(gpu));
-
-        let material = assets.insert(Material::new(
-            gpu,
-            assets.load(&TextureFromPath("assets/textures/statue.jpg".into())),
-        ));
-
-        tracing::info!("created entity");
-        let entity = Entity::builder()
-            .mount(RenderObjectBundle::new(mesh, material, shader))
-            .mount(TransformBundle::new(Vec3::Z, Quat::IDENTITY, Vec3::ONE))
-            .spawn(world);
 
         Ok(())
     }
@@ -145,7 +82,7 @@ impl Layer for GraphicsLayer {
             },
         );
 
-        events.subscribe(|this, world, _, RedrawEvent| this.on_draw(world));
+        events.subscribe(|this, world, assets, RedrawEvent| this.on_draw(assets, world));
         events.subscribe(|this, world, _, ResizedEvent { physical_size }| {
             this.on_resize(world, *physical_size)
         });

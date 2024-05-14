@@ -1,20 +1,24 @@
+use std::{arch::global_asm, collections::HashMap};
+
 use bytemuck::Zeroable;
 use flax::{FetchExt, Query, World};
 use glam::Mat4;
-use ivy_assets::Asset;
+use ivy_assets::{map::AssetMap, Asset, AssetCache, AssetKey};
 use ivy_base::{main_camera, world_transform, Bundle};
 use wgpu::{
     naga::ShaderStage, util::RenderEncoder, BindGroup, BindGroupLayout, BufferUsages, Operations,
-    RenderPass, RenderPassColorAttachment, ShaderStages,
+    RenderPass, RenderPassColorAttachment, ShaderStages, TextureFormat,
 };
 use winit::dpi::PhysicalSize;
 
 use crate::{
     components::{material, mesh, projection_matrix, shader},
     graphics::{
-        material::Material, shader, BindGroupBuilder, BindGroupLayoutBuilder, Mesh, Shader,
-        Surface, TypedBuffer,
+        material::Material, shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, Mesh,
+        Shader, Surface, TypedBuffer, Vertex, VertexDesc,
     },
+    material::MaterialDesc,
+    mesh::MeshDesc,
     Gpu,
 };
 
@@ -29,7 +33,7 @@ pub struct Renderer {
 impl Renderer {
     pub fn new(gpu: Gpu, surface: Surface) -> Self {
         Self {
-            mesh_renderer: MeshRenderer::new(&gpu),
+            mesh_renderer: MeshRenderer::new(&gpu, surface.surface_format()),
             globals: Globals::new(&gpu),
             surface,
             gpu,
@@ -60,7 +64,7 @@ impl Renderer {
         self.mesh_renderer.collect(world);
     }
 
-    pub fn draw(&mut self, world: &mut World) -> anyhow::Result<()> {
+    pub fn draw(&mut self, assets: &AssetCache) -> anyhow::Result<()> {
         let output = self.surface.get_current_texture()?;
 
         let view = output.texture.create_view(&Default::default());
@@ -89,7 +93,7 @@ impl Renderer {
             });
 
             self.mesh_renderer
-                .draw(&self.gpu, &self.globals, &mut render_pass);
+                .draw(&self.gpu, assets, &self.globals, &mut render_pass);
         }
 
         self.gpu.queue.submit([encoder.finish()]);
@@ -101,9 +105,9 @@ impl Renderer {
 }
 
 pub struct RenderObject {
-    mesh: Asset<Mesh>,
-    material: Asset<Material>,
-    shader: Asset<Shader>,
+    mesh: Asset<MeshDesc>,
+    material: Asset<MaterialDesc>,
+    shader: Asset<crate::shader::ShaderDesc>,
 }
 
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -119,10 +123,16 @@ pub struct MeshRenderer {
 
     bind_group_layout: BindGroupLayout,
     bind_group: BindGroup,
+
+    pub meshes: AssetMap<MeshDesc, Asset<Mesh>>,
+    pub shaders: AssetMap<crate::shader::ShaderDesc, Shader>,
+    pub materials: AssetMap<MaterialDesc, Asset<Material>>,
+
+    surface_format: TextureFormat,
 }
 
 impl MeshRenderer {
-    fn new(gpu: &Gpu) -> Self {
+    fn new(gpu: &Gpu, surface_format: TextureFormat) -> Self {
         let bind_group_layout = BindGroupLayoutBuilder::new("ObjectBuffer")
             .bind_storage_buffer(ShaderStages::VERTEX)
             .build(gpu);
@@ -144,6 +154,10 @@ impl MeshRenderer {
             object_buffer,
             bind_group_layout,
             bind_group,
+            meshes: Default::default(),
+            shaders: Default::default(),
+            materials: Default::default(),
+            surface_format,
         }
     }
 
@@ -181,26 +195,97 @@ impl MeshRenderer {
         }
     }
 
-    fn draw<'a>(&'a mut self, gpu: &Gpu, globals: &'a Globals, render_pass: &mut RenderPass<'a>) {
+    fn draw<'a>(
+        &'a mut self,
+        gpu: &Gpu,
+        assets: &AssetCache,
+        globals: &'a Globals,
+        render_pass: &mut RenderPass<'a>,
+    ) {
         self.resize_object_buffer(gpu, self.object_data.len());
 
         render_pass.set_bind_group(0, &globals.bind_group, &[]);
 
         self.object_buffer.write(&gpu.queue, 0, &self.object_data);
 
-        tracing::info!("drawing {} objects", self.render_objects.len());
-        for (i, render_object) in self.render_objects.iter().enumerate() {
-            render_pass.set_pipeline(render_object.shader.pipeline());
-            render_object.mesh.bind(render_pass);
-            render_pass.set_bind_group(1, &self.bind_group, &[]);
-            render_pass.set_bind_group(2, render_object.material.bind_group(), &[]);
-
-            render_pass.draw_indexed(
-                0..render_object.mesh.index_count(),
-                0,
-                (i as u32)..(i as u32 + 1),
-            );
+        for object in &self.render_objects {
+            let mesh = {
+                self.meshes
+                    .entry(&object.mesh)
+                    .or_insert_with(|| assets.load(&*object.mesh))
+            };
+            let material = {
+                self.materials
+                    .entry(&object.material)
+                    .or_insert_with(|| assets.load(&*object.material))
+            };
+            let shader = {
+                let layouts: &[&BindGroupLayout] =
+                    &[&globals.layout, &self.bind_group_layout, &material.layout()];
+                self.shaders.entry(&object.shader).or_insert_with(|| {
+                    Shader::new(
+                        gpu,
+                        &ShaderDesc {
+                            label: object.shader.label(),
+                            source: object.shader.source(),
+                            format: self.surface_format,
+                            vertex_layouts: &[Vertex::layout()],
+                            layouts,
+                        },
+                    )
+                })
+            };
         }
+
+        tracing::info!("drawing {} objects", self.render_objects.len());
+        for (i, object) in self.render_objects.iter().enumerate() {
+            let mesh = self.meshes.get(&object.mesh).unwrap();
+            let material = self.materials.get(&object.material).unwrap();
+            let shader = self.shaders.get(&object.shader).unwrap();
+
+            render_pass.set_pipeline(shader.pipeline());
+            mesh.bind(render_pass);
+            render_pass.set_bind_group(1, &self.bind_group, &[]);
+            render_pass.set_bind_group(2, material.bind_group(), &[]);
+
+            render_pass.draw_indexed(0..mesh.index_count(), 0, (i as u32)..(i as u32 + 1));
+        }
+    }
+
+    fn get_mesh(&mut self, assets: &AssetCache, mesh: &Asset<MeshDesc>) -> &Asset<Mesh> {
+        self.meshes
+            .entry(mesh)
+            .or_insert_with(|| assets.load(&**mesh))
+    }
+
+    fn get_shader(
+        &mut self,
+        gpu: &Gpu,
+        shader: &Asset<crate::shader::ShaderDesc>,
+        layouts: &[&BindGroupLayout],
+    ) -> &Shader {
+        self.shaders.entry(shader).or_insert_with(|| {
+            Shader::new(
+                gpu,
+                &ShaderDesc {
+                    label: shader.label(),
+                    source: shader.source(),
+                    format: self.surface_format,
+                    vertex_layouts: &[Vertex::layout()],
+                    layouts,
+                },
+            )
+        })
+    }
+
+    fn get_material(
+        &mut self,
+        assets: &AssetCache,
+        material: Asset<MaterialDesc>,
+    ) -> &Asset<Material> {
+        self.materials
+            .entry(&material)
+            .or_insert_with(|| assets.load(&*material))
     }
 }
 
@@ -243,13 +328,17 @@ impl Globals {
 }
 
 pub struct RenderObjectBundle {
-    pub mesh: Asset<Mesh>,
-    pub material: Asset<Material>,
-    pub shader: Asset<Shader>,
+    pub mesh: Asset<MeshDesc>,
+    pub material: Asset<MaterialDesc>,
+    pub shader: Asset<crate::shader::ShaderDesc>,
 }
 
 impl RenderObjectBundle {
-    pub fn new(mesh: Asset<Mesh>, material: Asset<Material>, shader: Asset<Shader>) -> Self {
+    pub fn new(
+        mesh: Asset<MeshDesc>,
+        material: Asset<MaterialDesc>,
+        shader: Asset<crate::shader::ShaderDesc>,
+    ) -> Self {
         Self {
             mesh,
             material,

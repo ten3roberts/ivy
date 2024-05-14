@@ -9,6 +9,7 @@ pub struct Material {
     pub diffuse: Asset<Texture>,
     bind_group: wgpu::BindGroup,
     sampler: Sampler,
+    layout: wgpu::BindGroupLayout,
 }
 
 impl Material {
@@ -32,6 +33,7 @@ impl Material {
             diffuse,
             bind_group,
             sampler,
+            layout,
         }
     }
 
@@ -41,5 +43,9 @@ impl Material {
 
     pub fn sampler(&self) -> &Sampler {
         &self.sampler
+    }
+
+    pub fn layout(&self) -> &wgpu::BindGroupLayout {
+        &self.layout
     }
 }
