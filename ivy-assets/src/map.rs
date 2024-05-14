@@ -3,12 +3,12 @@ use slotmap::{secondary, SecondaryMap};
 use super::{Asset, AssetId};
 
 /// Associates handles with locally owned data
-pub struct HandleMap<K, V> {
+pub struct AssetMap<K, V> {
     inner: SecondaryMap<AssetId, V>,
     _marker: std::marker::PhantomData<K>,
 }
 
-impl<K, V> HandleMap<K, V> {
+impl<K, V> AssetMap<K, V> {
     pub fn new() -> Self {
         Self {
             inner: SecondaryMap::new(),
@@ -71,7 +71,7 @@ impl<'a, 'h, K, V> Entry<'a, 'h, K, V> {
     }
 }
 
-impl<K, V> Default for HandleMap<K, V> {
+impl<K, V> Default for AssetMap<K, V> {
     fn default() -> Self {
         Self::new()
     }

@@ -3,6 +3,8 @@ use wgpu::{
     util::DeviceExt, vertex_attr_array, Buffer, RenderPass, VertexAttribute, VertexBufferLayout,
 };
 
+use crate::mesh::{MeshData, MeshDesc};
+
 use super::Gpu;
 
 #[repr(C)]
@@ -97,18 +99,8 @@ impl Mesh {
         }
     }
 
-    /// Creates a new mesh with dimensions 1x1
-    pub fn quad(gpu: &Gpu) -> Self {
-        let vertices = [
-            Vertex::new(vec3(0.0, 0.0, 0.0), vec2(0.0, 1.0), Vec3::ONE),
-            Vertex::new(vec3(1.0, 0.0, 0.0), vec2(1.0, 1.0), Vec3::ONE),
-            Vertex::new(vec3(1.0, 1.0, 0.0), vec2(1.0, 0.0), Vec3::ONE),
-            Vertex::new(vec3(0.0, 1.0, 0.0), vec2(0.0, 0.0), Vec3::ONE),
-        ];
-
-        let indices = [0, 1, 2, 2, 3, 0];
-
-        Self::new(gpu, &vertices, &indices)
+    pub fn from_data(gpu: &Gpu, data: &MeshData) -> Self {
+        Self::new(gpu, data.vertices(), data.indices())
     }
 
     pub fn bind<'a>(&'a self, render_pass: &mut RenderPass<'a>) {

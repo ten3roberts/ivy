@@ -3,8 +3,11 @@ pub mod driver;
 pub mod events;
 pub mod graphics;
 pub mod layer;
+pub mod material;
+pub mod mesh;
 pub mod mesh_buffer;
 pub mod renderer;
-mod texture;
+pub mod shader;
+pub mod texture;
 
 pub use graphics::Gpu;

@@ -40,7 +40,7 @@ impl std::fmt::Debug for AssetCache {
     }
 }
 
-pub type KeyMap<K, V> = DashMap<K, WeakHandle<V>>;
+type KeyMap<K, V> = DashMap<K, WeakHandle<V>>;
 
 /// Stores assets which are accessible through handles
 struct AssetCacheInner {
