@@ -16,7 +16,7 @@ pub struct ApplicationReady(pub(crate) Arc<Window>);
 pub struct RedrawEvent;
 
 #[derive(Debug, Clone)]
-pub(crate) struct ResizedEvent {
+pub struct ResizedEvent {
     pub physical_size: PhysicalSize<u32>,
 }
 

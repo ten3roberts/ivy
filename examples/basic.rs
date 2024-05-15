@@ -1,17 +1,15 @@
-use flax::{Entity, World};
+use flax::{Entity, Query, World};
 use glam::{vec3, Mat4, Quat, Vec3};
 use ivy_assets::AssetCache;
 use ivy_base::{
     app::{InitEvent, TickEvent},
     layer::events::EventRegisterContext,
-    main_camera,
-    palette::angle::FromAngle,
-    rotation, App, EngineLayer, EntityBuilderExt, Layer, TransformBundle,
+    main_camera, rotation, App, EngineLayer, EntityBuilderExt, Layer, TransformBundle,
 };
 use ivy_wgpu::{
     components::projection_matrix,
     driver::WinitDriver,
-    events::KeyboardInput,
+    events::ResizedEvent,
     layer::GraphicsLayer,
     material::MaterialDesc,
     mesh::{MeshData, MeshDesc},
@@ -79,13 +77,17 @@ impl LogicLayer {
                 material.clone(),
                 shader.clone(),
             ))
-            .mount(TransformBundle::new(Vec3::Z, Quat::IDENTITY, Vec3::ONE))
+            .mount(TransformBundle::new(
+                vec3(0.0, 0.0, 2.0),
+                Quat::IDENTITY,
+                Vec3::ONE,
+            ))
             .spawn(world);
 
         let entity = Entity::builder()
             .mount(RenderObjectBundle::new(mesh, material2, shader))
             .mount(TransformBundle::new(
-                vec3(1.0, 0.0, 1.0),
+                vec3(1.0, 0.0, 2.0),
                 Quat::from_euler(glam::EulerRot::ZYX, 1.0, 0.0, 0.0),
                 Vec3::ONE,
             ))
@@ -111,19 +113,31 @@ impl Layer for LogicLayer {
             let t = start_time.elapsed().as_secs_f32();
             if let Some(entity) = this.entity {
                 world
-                    .set(entity, rotation(), Quat::from_axis_angle(Vec3::Z, t))
+                    .set(entity, rotation(), Quat::from_axis_angle(Vec3::Y, t))
                     .unwrap();
             }
+            Ok(())
+        });
+
+        events.subscribe(|_, world, _, resized: &ResizedEvent| {
+            if let Some(main_camera) = Query::new(projection_matrix().as_mut())
+                .with(main_camera())
+                .borrow(world)
+                .first()
+            {
+                let aspect =
+                    resized.physical_size.width as f32 / resized.physical_size.height as f32;
+                tracing::info!(%aspect);
+                *main_camera = Mat4::perspective_lh(1.0, aspect, 0.1, 1000.0);
+            }
+
             Ok(())
         });
 
         Entity::builder()
             .mount(TransformBundle::new(Vec3::ZERO, Quat::IDENTITY, Vec3::ONE))
             .set(main_camera(), ())
-            .set(
-                projection_matrix(),
-                Mat4::orthographic_lh(-5.0, 5.0, -5.0, 5.0, 0.1, 1000.0),
-            )
+            .set_default(projection_matrix())
             .spawn(world);
 
         Ok(())
