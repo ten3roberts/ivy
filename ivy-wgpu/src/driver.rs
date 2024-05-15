@@ -186,7 +186,6 @@ impl<'a> WinitEventHandler<'a> {
             WindowEvent::ThemeChanged(_) => {}
             WindowEvent::Occluded(_) => {}
             WindowEvent::RedrawRequested => {
-                tracing::info!("drawing");
                 self.app.emit(RedrawEvent)?;
                 self.window.as_mut().unwrap().request_redraw();
             }
