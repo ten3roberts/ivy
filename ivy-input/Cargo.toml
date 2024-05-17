@@ -20,3 +20,4 @@ ivy-assets = { path = "../ivy-assets", version = "0.10.0" }
 ivy-window = { path = "../ivy-window", version = "0.10.0" }
 flax.workspace = true
 glam.workspace = true
+winit.workspace = true
