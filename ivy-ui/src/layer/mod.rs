@@ -5,9 +5,8 @@ use glam::Vec2;
 use ivy_assets::AssetCache;
 use ivy_base::{engine, size, Events, Layer};
 use ivy_graphics::components::window;
-use ivy_input::InputEvent;
 
-use crate::{canvas, handle_events, input_field_system, update_system, UIControl};
+use crate::{canvas, input_field_system, update_system, UIControl};
 mod event_handling;
 pub use event_handling::*;
 
@@ -26,15 +25,15 @@ impl UILayer {
         assets: &AssetCache,
         events: &mut Events,
     ) -> anyhow::Result<Self> {
-        let (tx, window_rx) = flume::unbounded();
-        events
-            .intercept(tx)
-            .context("Failed to intercept InputEvent for UI")?;
-        let control_rx = events.subscribe();
+        // let (tx, window_rx) = flume::unbounded();
+        // events
+        //     .intercept(tx)
+        //     .context("Failed to intercept InputEvent for UI")?;
+        // let control_rx = events.subscribe();
         let input_field_rx = events.subscribe();
 
         let schedule = Schedule::builder()
-            .with_system(handle_events_system(window_rx, control_rx))
+            // .with_system(handle_events_system(window_rx, control_rx))
             .with_system(input_field_system(input_field_rx))
             .build();
 
@@ -95,29 +94,29 @@ impl UILayer {
 //     }
 // }
 
-fn handle_events_system(
-    input_events: flume::Receiver<InputEvent>,
-    control_events: flume::Receiver<UIControl>,
-) -> BoxedSystem {
-    System::builder()
-        .with_world_mut()
-        .with_input_mut::<Events>()
-        .with_input_mut::<InteractiveState>()
-        .with_input::<Vec2>()
-        .build(
-            move |world: &mut World,
-                  events: &mut Events,
-                  state: &mut InteractiveState,
-                  &cursor_pos: &Vec2| {
-                handle_events(
-                    world,
-                    events,
-                    state,
-                    cursor_pos,
-                    input_events.try_iter(),
-                    control_events.try_iter(),
-                )
-            },
-        )
-        .boxed()
-}
+// fn handle_events_system(
+//     input_events: flume::Receiver<InputEvent>,
+//     control_events: flume::Receiver<UIControl>,
+// ) -> BoxedSystem {
+//     System::builder()
+//         .with_world_mut()
+//         .with_input_mut::<Events>()
+//         .with_input_mut::<InteractiveState>()
+//         .with_input::<Vec2>()
+//         .build(
+//             move |world: &mut World,
+//                   events: &mut Events,
+//                   state: &mut InteractiveState,
+//                   &cursor_pos: &Vec2| {
+//                 handle_events(
+//                     world,
+//                     events,
+//                     state,
+//                     cursor_pos,
+//                     input_events.try_iter(),
+//                     control_events.try_iter(),
+//                 )
+//             },
+//         )
+//         .boxed()
+// }

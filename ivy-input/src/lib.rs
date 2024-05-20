@@ -1,16 +1,19 @@
 pub mod components;
+pub mod error;
 mod events;
 mod input;
-mod types;
+pub mod layer;
+pub mod types;
 mod vector;
 
-use std::collections::HashMap;
+use std::{collections::HashMap, mem, ops::Mul};
 
-use flax::Component;
+use flax::{component::ComponentValue, Component, EntityRef};
 use glam::{Vec2, Vec3};
 
-pub use events::*;
 pub use input::*;
+use ivy_base::layer::events::Event;
+use types::{CursorMoved, InputEvent, KeyboardInput, MouseInput};
 pub use vector::*;
 use winit::{
     event::{ElementState, KeyEvent, MouseButton},
@@ -18,7 +21,7 @@ use winit::{
 };
 
 pub struct InputState {
-    activations: Vec<Activation>,
+    activations: Vec<ActionKind>,
 }
 
 impl InputState {
@@ -28,103 +31,122 @@ impl InputState {
         }
     }
 
-    pub fn add(&mut self, activation: Activation) -> &mut Self {
-        self.activations.push(activation);
+    pub fn with_action(mut self, activation: impl Into<ActionKind>) -> Self {
+        self.activations.push(activation.into());
         self
     }
-}
 
-pub enum Activation {
-    Scalar(ActivationMapping<f32>),
-    Vector2(ActivationMapping<Vec2>),
-    Vector3(ActivationMapping<Vec3>),
-}
+    pub fn apply(&mut self, event: &InputEvent) {
+        for activation in self.activations.iter_mut() {
+            match activation {
+                ActionKind::Scalar(mapping) => mapping.apply(event),
+                ActionKind::Vector2(mapping) => mapping.apply(event),
+                ActionKind::Vector3(mapping) => mapping.apply(event),
+            }
+        }
+    }
 
-impl From<ActivationMapping<f32>> for Activation {
-    fn from(mapping: ActivationMapping<f32>) -> Self {
-        Self::Scalar(mapping)
+    pub fn update(&mut self, entity: &EntityRef) -> anyhow::Result<()> {
+        for activation in &mut self.activations {
+            match activation {
+                ActionKind::Scalar(m) => {
+                    m.update(entity)?;
+                }
+                ActionKind::Vector2(m) => {
+                    m.update(entity)?;
+                }
+                ActionKind::Vector3(m) => {
+                    m.update(entity)?;
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 
-impl From<ActivationMapping<Vec2>> for Activation {
-    fn from(mapping: ActivationMapping<Vec2>) -> Self {
-        Self::Vector2(mapping)
+impl Default for InputState {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
-impl From<ActivationMapping<Vec3>> for Activation {
-    fn from(mapping: ActivationMapping<Vec3>) -> Self {
-        Self::Vector3(mapping)
+pub enum ActionKind {
+    Scalar(Action<f32>),
+    Vector2(Action<Vec2>),
+    Vector3(Action<Vec3>),
+}
+
+impl From<Action<f32>> for ActionKind {
+    fn from(v: Action<f32>) -> Self {
+        Self::Scalar(v)
     }
 }
 
-pub struct ActivationMapping<T> {
-    bindings: HashMap<InputKind, (Box<dyn Binding<T, Input = InputEvent>>, T)>,
+impl From<Action<Vec2>> for ActionKind {
+    fn from(v: Action<Vec2>) -> Self {
+        Self::Vector2(v)
+    }
 }
 
-impl<T: Stimulus> ActivationMapping<T> {
-    pub fn new() -> Self {
+impl From<Action<Vec3>> for ActionKind {
+    fn from(v: Action<Vec3>) -> Self {
+        Self::Vector3(v)
+    }
+}
+
+pub struct Action<T> {
+    target: Component<T>,
+    bindings: HashMap<InputKind, Box<dyn Binding<T, Input = InputEvent>>>,
+}
+
+impl<T: ComponentValue + Stimulus> Action<T> {
+    pub fn new(target: Component<T>) -> Self {
         Self {
             bindings: HashMap::new(),
+            target,
         }
     }
 
     pub fn add(&mut self, action: impl 'static + Binding<T, Input = InputEvent>) -> &mut Self {
         self.bindings.insert(
             action.binding(),
-            (
-                Box::new(action) as Box<dyn Binding<T, Input = InputEvent>>,
-                T::ZERO,
-            ),
+            Box::new(action) as Box<dyn Binding<T, Input = InputEvent>>,
         );
         self
     }
 
-    fn apply(&mut self, event: InputEvent) {
+    fn apply(&mut self, event: &InputEvent) {
         if let Some(binding) = self.bindings.get_mut(&event.to_kind()) {
-            binding.1 = binding.0.apply(&event);
+            binding.apply(event);
         }
     }
 
-    fn get_stimulus(&self) -> T {
+    fn get_stimulus(&mut self) -> T {
         self.bindings
-            .values()
-            .fold(T::ZERO, |acc, (_, value)| acc.combine(value))
+            .values_mut()
+            .fold(T::ZERO, |acc, binding| acc.combine(&binding.read()))
+    }
+
+    fn update(&mut self, entity: &EntityRef) -> Result<(), error::MissingTargetError>
+    where
+        T: PartialEq,
+    {
+        entity
+            .update_dedup(self.target, self.get_stimulus())
+            .ok_or_else(|| error::MissingTargetError {
+                target: self.target.desc(),
+                entity: entity.id(),
+            })
     }
 }
 
-pub trait Binding<T> {
+pub trait Binding<T>: Send + Sync {
     type Input;
 
-    fn apply(&self, input: &Self::Input) -> T;
+    fn apply(&mut self, input: &Self::Input);
+    fn read(&mut self) -> T;
     fn binding(&self) -> InputKind;
-}
-
-pub enum InputEvent {
-    Key {
-        key: Key,
-        state: ElementState,
-    },
-    MouseButton {
-        button: MouseButton,
-        state: ElementState,
-    },
-    CursorPos(Vec2),
-}
-
-impl InputEvent {
-    fn to_kind(&self) -> InputKind {
-        match self {
-            InputEvent::Key { key, .. } => InputKind::Key(key.clone()),
-            InputEvent::MouseButton { button, .. } => InputKind::MouseButton(*button),
-            InputEvent::CursorPos(_) => InputKind::CursorPos,
-        }
-    }
-}
-
-pub enum InputEvent2D {
-    CursorPos(Vec2),
-    Scroll(Vec2),
 }
 
 pub struct Decompose<B, Axis> {
@@ -135,10 +157,34 @@ pub struct Decompose<B, Axis> {
 impl<B: Binding<Vec2>> Binding<f32> for Decompose<B, Axis2> {
     type Input = B::Input;
 
-    fn apply(&self, input: &Self::Input) -> f32 {
+    fn apply(&mut self, input: &Self::Input) {
+        self.binding.apply(input);
+    }
+
+    fn read(&mut self) -> f32 {
         match self.axis {
-            Axis2::X => self.binding.apply(input).x,
-            Axis2::Y => self.binding.apply(input).y,
+            Axis2::X => self.binding.read().x,
+            Axis2::Y => self.binding.read().y,
+        }
+    }
+
+    fn binding(&self) -> InputKind {
+        self.binding.binding()
+    }
+}
+
+impl<B: Binding<Vec3>> Binding<f32> for Decompose<B, Axis3> {
+    type Input = B::Input;
+
+    fn apply(&mut self, input: &Self::Input) {
+        self.binding.apply(input)
+    }
+
+    fn read(&mut self) -> f32 {
+        match self.axis {
+            Axis3::X => self.binding.read().x,
+            Axis3::Y => self.binding.read().y,
+            Axis3::Z => self.binding.read().z,
         }
     }
 
@@ -152,14 +198,97 @@ pub struct Compose<B, Axis> {
     axis: Axis,
 }
 
-impl<B: Binding<Vec2>> Binding<Vec2> for Compose<B, Axis2> {
+impl<B, Axis> Compose<B, Axis> {
+    pub fn new(binding: B, axis: Axis) -> Self {
+        Self { binding, axis }
+    }
+}
+
+impl<B: Binding<f32>> Binding<Vec2> for Compose<B, Axis2> {
     type Input = B::Input;
 
-    fn apply(&self, input: &Self::Input) -> Vec2 {
+    fn apply(&mut self, input: &Self::Input) {
+        self.binding.apply(input)
+    }
+
+    fn read(&mut self) -> Vec2 {
         match self.axis {
-            Axis2::X => Vec2::X * self.binding.apply(input),
-            Axis2::Y => Vec2::Y * self.binding.apply(input),
+            Axis2::X => Vec2::new(self.binding.read(), 0.0),
+            Axis2::Y => Vec2::new(0.0, self.binding.read()),
         }
+    }
+
+    fn binding(&self) -> InputKind {
+        self.binding.binding()
+    }
+}
+
+impl<B: Binding<f32>> Binding<Vec2> for Compose<B, Vec2> {
+    type Input = B::Input;
+
+    fn apply(&mut self, input: &Self::Input) {
+        self.binding.apply(input)
+    }
+
+    fn read(&mut self) -> Vec2 {
+        self.axis * self.binding.read()
+    }
+
+    fn binding(&self) -> InputKind {
+        self.binding.binding()
+    }
+}
+
+impl<B: Binding<f32>> Binding<Vec3> for Compose<B, Vec3> {
+    type Input = B::Input;
+
+    fn apply(&mut self, input: &Self::Input) {
+        self.binding.apply(input)
+    }
+
+    fn read(&mut self) -> Vec3 {
+        self.axis * self.binding.read()
+    }
+
+    fn binding(&self) -> InputKind {
+        self.binding.binding()
+    }
+}
+
+impl<B: Binding<f32>> Binding<Vec3> for Compose<B, Axis3> {
+    type Input = B::Input;
+
+    fn apply(&mut self, input: &Self::Input) {
+        self.binding.apply(input)
+    }
+
+    fn read(&mut self) -> Vec3 {
+        match self.axis {
+            Axis3::X => Vec3::X * self.binding.read(),
+            Axis3::Y => Vec3::Y * self.binding.read(),
+            Axis3::Z => Vec3::Z * self.binding.read(),
+        }
+    }
+
+    fn binding(&self) -> InputKind {
+        self.binding.binding()
+    }
+}
+
+pub struct Amplitude<B, T> {
+    binding: B,
+    amplitude: T,
+}
+
+impl<B: Binding<T>, T: Send + Sync + Copy + Mul<Output = T>> Binding<T> for Amplitude<B, T> {
+    type Input = B::Input;
+
+    fn apply(&mut self, input: &Self::Input) {
+        self.binding.apply(input)
+    }
+
+    fn read(&mut self) -> T {
+        self.binding.read() * self.amplitude
     }
 
     fn binding(&self) -> InputKind {
@@ -171,21 +300,37 @@ impl<B: Binding<Vec2>> Binding<Vec2> for Compose<B, Axis2> {
 pub enum InputKind {
     Key(Key),
     MouseButton(MouseButton),
-    CursorPos,
+    CursorMoved,
 }
 
 pub struct KeyBinding {
+    pressed: bool,
     key: Key<SmolStr>,
+}
+
+impl KeyBinding {
+    pub fn new(key: Key<SmolStr>) -> Self {
+        Self {
+            key,
+            pressed: false,
+        }
+    }
 }
 
 impl Binding<f32> for KeyBinding {
     type Input = InputEvent;
 
-    fn apply(&self, input: &Self::Input) -> f32 {
+    fn apply(&mut self, input: &Self::Input) {
         match input {
-            InputEvent::Key { key, state } if key == &self.key => state.is_pressed() as i32 as f32,
+            InputEvent::Key(KeyboardInput { key, state, .. }) if key == &self.key => {
+                self.pressed = state.is_pressed();
+            }
             _ => panic!("Invalid input event"),
         }
+    }
+
+    fn read(&mut self) -> f32 {
+        self.pressed as i32 as f32
     }
 
     fn binding(&self) -> InputKind {
@@ -194,23 +339,63 @@ impl Binding<f32> for KeyBinding {
 }
 
 pub struct MouseButtonBinding {
+    pressed: bool,
     button: MouseButton,
 }
 
 impl Binding<f32> for MouseButtonBinding {
     type Input = InputEvent;
 
-    fn apply(&self, input: &Self::Input) -> f32 {
+    fn apply(&mut self, input: &Self::Input) {
         match input {
-            InputEvent::MouseButton { button, state } if button == &self.button => {
-                state.is_pressed() as i32 as f32
+            InputEvent::MouseButton(MouseInput { button, state, .. }) if button == &self.button => {
+                self.pressed = state.is_pressed();
             }
             _ => panic!("Invalid input event"),
         }
     }
 
+    fn read(&mut self) -> f32 {
+        self.pressed as i32 as f32
+    }
+
     fn binding(&self) -> InputKind {
         InputKind::MouseButton(self.button)
+    }
+}
+
+pub struct CursorMovement {
+    value: Vec2,
+}
+
+impl CursorMovement {
+    pub fn new() -> Self {
+        Self { value: Vec2::ZERO }
+    }
+}
+
+impl Default for CursorMovement {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Binding<Vec2> for CursorMovement {
+    type Input = InputEvent;
+
+    fn apply(&mut self, input: &Self::Input) {
+        match input {
+            &InputEvent::CursorMoved(delta) => self.value += delta,
+            _ => panic!("Invalid input event"),
+        }
+    }
+
+    fn read(&mut self) -> Vec2 {
+        mem::take(&mut self.value)
+    }
+
+    fn binding(&self) -> InputKind {
+        InputKind::CursorMoved
     }
 }
 
@@ -234,7 +419,7 @@ impl Stimulus for f32 {
     const ZERO: Self = 0.0;
 
     fn combine(&self, other: &Self) -> Self {
-        self.max(*other)
+        self + other
     }
 }
 
@@ -242,7 +427,7 @@ impl Stimulus for Vec2 {
     const ZERO: Self = Vec2::ZERO;
 
     fn combine(&self, other: &Self) -> Self {
-        self.max(*other)
+        *self + *other
     }
 }
 
@@ -250,51 +435,86 @@ impl Stimulus for Vec3 {
     const ZERO: Self = Vec3::ZERO;
 
     fn combine(&self, other: &Self) -> Self {
-        self.max(*other)
+        *self + *other
     }
 }
+
+pub trait BindingExt<V> {
+    fn compose<T>(self, axis: T) -> Compose<Self, T>
+    where
+        Self: Sized,
+    {
+        Compose::new(self, axis)
+    }
+
+    fn decompose<T>(self, axis: T) -> Decompose<Self, T>
+    where
+        Self: Sized,
+    {
+        Decompose {
+            binding: self,
+            axis,
+        }
+    }
+
+    fn amplitude<T>(self, amplitude: T) -> Amplitude<Self, T>
+    where
+        Self: Sized,
+    {
+        Amplitude {
+            binding: self,
+            amplitude,
+        }
+    }
+}
+
+impl<T, V> BindingExt<V> for T where T: Binding<V> {}
 
 #[cfg(test)]
 mod test {
     use winit::{event::ElementState, keyboard::Key};
 
-    use crate::{ActivationMapping, InputEvent, InputState, KeyBinding};
+    use crate::{types::KeyboardInput, Action, InputEvent, InputState, KeyBinding};
 
     #[test]
     fn input_state() {
-        let mut activation = ActivationMapping::new();
+        flax::component! {
+            target: f32,
+        }
+        let mut activation = Action::new(target());
+
         activation
-            .add(KeyBinding {
-                key: Key::Character("A".into()),
-            })
-            .add(KeyBinding {
-                key: Key::Character("B".into()),
-            });
+            .add(KeyBinding::new(Key::Character("A".into())))
+            .add(KeyBinding::new(Key::Character("B".into())));
 
-        activation.apply(InputEvent::Key {
+        activation.apply(&InputEvent::Key(KeyboardInput {
             key: Key::Character("A".into()),
             state: ElementState::Pressed,
-        });
+            modifiers: Default::default(),
+        }));
 
         assert_eq!(activation.get_stimulus(), 1.0);
 
-        activation.apply(InputEvent::Key {
+        activation.apply(&InputEvent::Key(KeyboardInput {
             key: Key::Character("B".into()),
             state: ElementState::Pressed,
-        });
+            modifiers: Default::default(),
+        }));
 
         assert_eq!(activation.get_stimulus(), 1.0);
 
-        activation.apply(InputEvent::Key {
+        activation.apply(&InputEvent::Key(KeyboardInput {
             key: Key::Character("A".into()),
             state: ElementState::Released,
-        });
+            modifiers: Default::default(),
+        }));
 
         assert_eq!(activation.get_stimulus(), 1.0);
-        activation.apply(InputEvent::Key {
+        activation.apply(&InputEvent::Key(KeyboardInput {
             key: Key::Character("B".into()),
             state: ElementState::Released,
-        });
+            modifiers: Default::default(),
+        }));
 
         assert_eq!(activation.get_stimulus(), 0.0);
     }

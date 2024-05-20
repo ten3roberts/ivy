@@ -7,7 +7,6 @@ use std::convert::TryFrom;
 use flax::Entity;
 use glam::Vec2;
 use glfw::{Action, Key, Modifiers, MouseButton, Scancode};
-use ivy_input::InputEvent;
 
 /// Event for a clicked ui widget
 #[derive(Debug, Clone, PartialEq)]
@@ -75,37 +74,37 @@ pub enum WidgetEventKind {
     },
 }
 
-impl TryFrom<InputEvent> for WidgetEventKind {
-    type Error = InputEvent;
+// impl TryFrom<InputEvent> for WidgetEventKind {
+//     type Error = InputEvent;
 
-    fn try_from(value: InputEvent) -> Result<Self, Self::Error> {
-        match value {
-            InputEvent::Key {
-                key,
-                scancode,
-                action,
-                mods,
-            } => Ok(Self::Key {
-                key,
-                scancode,
-                action,
-                mods,
-            }),
-            InputEvent::CursorPos(val) => Ok(Self::CursorPos(val)),
-            InputEvent::Scroll(val) => Ok(Self::Scroll(val)),
-            InputEvent::CharTyped(val) => Ok(Self::CharTyped(val)),
-            InputEvent::CharModifiers { c, mods } => Ok(Self::CharModifiers { c, mods }),
-            InputEvent::Focus(val) => Ok(Self::Focus(val)),
-            InputEvent::MouseButton {
-                button,
-                action,
-                mods,
-            } => Ok(Self::MouseButton {
-                button,
-                action,
-                mods,
-            }),
-            other => Err(other),
-        }
-    }
-}
+//     fn try_from(value: InputEvent) -> Result<Self, Self::Error> {
+//         match value {
+//             InputEvent::Key {
+//                 key,
+//                 scancode,
+//                 action,
+//                 mods,
+//             } => Ok(Self::Key {
+//                 key,
+//                 scancode,
+//                 action,
+//                 mods,
+//             }),
+//             InputEvent::CursorPos(val) => Ok(Self::CursorPos(val)),
+//             InputEvent::Scroll(val) => Ok(Self::Scroll(val)),
+//             InputEvent::CharTyped(val) => Ok(Self::CharTyped(val)),
+//             InputEvent::CharModifiers { c, mods } => Ok(Self::CharModifiers { c, mods }),
+//             InputEvent::Focus(val) => Ok(Self::Focus(val)),
+//             InputEvent::MouseButton {
+//                 button,
+//                 action,
+//                 mods,
+//             } => Ok(Self::MouseButton {
+//                 button,
+//                 action,
+//                 mods,
+//             }),
+//             other => Err(other),
+//         }
+//     }
+// }
