@@ -10,7 +10,6 @@ use glam::{Mat4, Vec2, Vec3Swizzles};
 use glfw::Action;
 use ivy_base::{position, size, visible, Events, Visible};
 use ivy_graphics::components::camera;
-use ivy_input::InputEvent;
 
 use crate::{constraints::ConstraintQuery, *};
 
@@ -130,108 +129,6 @@ pub fn reactive_system<T: 'static + Copy + Send + Sync, I: Iterator<Item = Widge
     events: I,
 ) -> Result<()> {
     Ok(())
-}
-
-pub fn handle_events(
-    world: &mut World,
-    mut events: &mut Events,
-    state: &mut InteractiveState,
-    cursor_pos: Vec2,
-    intercepted_events: impl Iterator<Item = InputEvent>,
-    control_events: impl Iterator<Item = UIControl>,
-) {
-    control_events.for_each(|event| match event {
-        UIControl::Focus(widget) => state.set_focus(widget, true, &mut events),
-    });
-
-    let hovered = intersect_widget(&*world, cursor_pos);
-
-    let sticky = hovered
-        .map(|val| world.has(val, sticky()))
-        .unwrap_or_default();
-
-    for event in intercepted_events {
-        let event = InputEvent::from(event);
-
-        state.set_hovered(hovered, &mut events);
-
-        let event = match event {
-            // Mouse was clicked on a ui element
-            InputEvent::MouseButton {
-                button,
-                action: Action::Press,
-                mods,
-            } => {
-                state.set_focus(hovered, sticky, &mut events);
-
-                // Swallow or forward event
-                if let Some(widget) = hovered {
-                    let entity = world.entity(widget).unwrap();
-
-                    if let Ok(click) = entity.get(on_click()) {
-                        click.0(entity, &mut events);
-                    }
-
-                    events.send(WidgetEvent::new(
-                        widget,
-                        WidgetEventKind::MouseButton {
-                            button,
-                            action: Action::Press,
-                            mods,
-                        },
-                    ));
-
-                    None
-                } else {
-                    Some(InputEvent::MouseButton {
-                        button,
-                        action: Action::Press,
-                        mods,
-                    })
-                }
-            }
-            InputEvent::MouseButton {
-                button,
-                action: Action::Release,
-                mods,
-            } if state.focused().is_some() => {
-                // Mouse was released on the same widget
-                if let Some(hovered) = hovered {
-                    if Some(hovered) == state.focused() {
-                        events.send(WidgetEvent::new(
-                            hovered,
-                            WidgetEventKind::MouseButton {
-                                button,
-                                action: Action::Release,
-                                mods,
-                            },
-                        ));
-                    }
-                }
-
-                // Send unfocus event if widget is not sticky
-                if !state.sticky() {
-                    state.set_focus(None, false, &mut events);
-                }
-
-                None
-            }
-            // If a widget is focused and all else was handled, forward all events
-            event if state.focused().is_some() => match event.try_into() {
-                Ok(val) => {
-                    events.send(WidgetEvent::new(state.focused().unwrap(), val));
-                    None
-                }
-                Err(val) => Some(val),
-            },
-
-            event => Some(event),
-        };
-
-        if let Some(event) = event {
-            events.intercepted_send(event);
-        }
-    }
 }
 
 /// Returns the first widget that intersects the postiion

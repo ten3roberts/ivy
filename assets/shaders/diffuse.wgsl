@@ -37,7 +37,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     var out: VertexOutput;
     let object = objects[in.instance];
     // out.pos = globals.proj * globals.view * object.world_matrix * vec4<f32>(in.pos, 1.0);
-    out.pos =  globals.proj * object.world_matrix * vec4<f32>(in.pos, 1.0);
+    out.pos = globals.proj * globals.view * object.world_matrix * vec4<f32>(in.pos, 1.0);
     out.tex_coord = in.tex_coord;
 
     return out;

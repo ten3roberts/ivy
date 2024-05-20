@@ -1,17 +1,19 @@
 use std::{sync::Arc, time::Instant};
 
-use glam::vec2;
+use glam::{vec2, Vec2};
 use ivy_base::{driver::Driver, App};
+use ivy_input::types::{
+    CursorEntered, CursorLeft, CursorMoved, InputEvent, KeyboardInput, MouseInput, ScrollInput,
+};
 use winit::{
     application::ApplicationHandler,
+    dpi::PhysicalPosition,
     event::{Modifiers, WindowEvent},
     event_loop::{ActiveEventLoop, EventLoop},
-    window::{Window, WindowId},
+    window::{CursorGrabMode, Window, WindowId},
 };
 
-use crate::events::{
-    ApplicationReady, CursorMoved, KeyboardInput, MouseInput, RedrawEvent, ResizedEvent,
-};
+use crate::events::{ApplicationReady, RedrawEvent, ResizedEvent};
 
 pub struct WinitDriver {}
 
@@ -30,6 +32,7 @@ impl Driver for WinitDriver {
             current_time: Instant::now(),
             window: None,
             modifiers: Default::default(),
+            scale_factor: 0.0,
         })?;
 
         Ok(())
@@ -41,6 +44,7 @@ pub struct WinitEventHandler<'a> {
     app: &'a mut App,
     window: Option<Arc<Window>>,
     modifiers: winit::keyboard::ModifiersState,
+    scale_factor: f64,
 }
 
 impl<'a> ApplicationHandler for WinitEventHandler<'a> {
@@ -63,12 +67,7 @@ impl<'a> ApplicationHandler for WinitEventHandler<'a> {
         self.window = Some(window);
     }
 
-    fn window_event(
-        &mut self,
-        event_loop: &ActiveEventLoop,
-        window_id: WindowId,
-        event: WindowEvent,
-    ) {
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
         if let Err(err) = self.process_event(event_loop, event) {
             tracing::error!("Error processing event: {:?}", err);
             event_loop.exit();
@@ -81,7 +80,7 @@ impl<'a> ApplicationHandler for WinitEventHandler<'a> {
         self.current_time = new_time;
 
         if let Err(err) = self.app.tick(delta) {
-            tracing::error!("Error ticking app: {:?}", err);
+            tracing::error!("{err:?}");
             event_loop.exit();
         }
     }
@@ -94,9 +93,11 @@ impl<'a> WinitEventHandler<'a> {
         event: WindowEvent,
     ) -> anyhow::Result<()> {
         match event {
-            WindowEvent::ActivationTokenDone { serial, token } => todo!(),
+            WindowEvent::ActivationTokenDone {
+                serial: _,
+                token: _,
+            } => todo!(),
             WindowEvent::Resized(size) => {
-                tracing::info!(?size, "resize");
                 self.app.emit(ResizedEvent {
                     physical_size: size,
                 })?;
@@ -115,13 +116,11 @@ impl<'a> WinitEventHandler<'a> {
                 event,
                 is_synthetic,
             } => {
-                let event = KeyboardInput {
+                self.app.emit(KeyboardInput {
                     modifiers: self.modifiers,
                     key: event.logical_key,
                     state: event.state,
-                };
-
-                self.app.emit(event)?;
+                })?;
             }
             WindowEvent::ModifiersChanged(mods) => {
                 self.modifiers = mods.state();
@@ -136,13 +135,27 @@ impl<'a> WinitEventHandler<'a> {
                     position: vec2(position.x, position.y),
                 })?;
             }
-            WindowEvent::CursorEntered { device_id } => {}
-            WindowEvent::CursorLeft { device_id } => {}
+            WindowEvent::CursorEntered { device_id: _ } => {
+                self.app.emit(CursorEntered)?;
+            }
+            WindowEvent::CursorLeft { device_id: _ } => {
+                self.app.emit(CursorLeft)?;
+            }
             WindowEvent::MouseWheel {
                 device_id,
                 delta,
                 phase,
-            } => todo!(),
+            } => {
+                self.app.emit(ScrollInput {
+                    delta: match delta {
+                        winit::event::MouseScrollDelta::LineDelta(x, y) => vec2(x, y) * 4.0,
+                        winit::event::MouseScrollDelta::PixelDelta(v) => {
+                            let v = v.to_logical(self.scale_factor);
+                            vec2(v.x, v.y)
+                        }
+                    },
+                })?;
+            }
             WindowEvent::MouseInput {
                 device_id,
                 state,
@@ -182,7 +195,9 @@ impl<'a> WinitEventHandler<'a> {
             WindowEvent::ScaleFactorChanged {
                 scale_factor,
                 inner_size_writer,
-            } => {}
+            } => {
+                self.scale_factor = scale_factor;
+            }
             WindowEvent::ThemeChanged(_) => {}
             WindowEvent::Occluded(_) => {}
             WindowEvent::RedrawRequested => {

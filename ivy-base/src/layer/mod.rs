@@ -81,6 +81,12 @@ impl EngineLayer {
     }
 }
 
+impl Default for EngineLayer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Layer for EngineLayer {
     fn register(
         &mut self,
@@ -88,7 +94,7 @@ impl Layer for EngineLayer {
         assets: &AssetCache,
         mut events: EventRegisterContext<Self>,
     ) -> anyhow::Result<()> {
-        events.subscribe(|this, world, assets, event: &TickEvent| {
+        events.subscribe(|this, world, assets, _: &TickEvent| {
             this.schedule.execute_par(world)?;
             Ok(())
         });

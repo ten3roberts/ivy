@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 ivy-base = { path = "../ivy-base" }
 ivy-assets = { path = "../ivy-assets" }
+ivy-input = { path = "../ivy-input" }
 
 winit.workspace = true
 wgpu.workspace = true

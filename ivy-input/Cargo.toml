@@ -21,3 +21,6 @@ ivy-window = { path = "../ivy-window", version = "0.10.0" }
 flax.workspace = true
 glam.workspace = true
 winit.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+thiserror.workspace = true

@@ -740,7 +740,7 @@ dependencies = [
 [[package]]
 name = "flax"
 version = "0.7.1"
-source = "git+https://github.com/ten3roberts/flax#96c32705e1c3f260a1966f3226e2eed58e620426"
+source = "git+https://github.com/ten3roberts/flax#b0aca5923dd65d90b5d028ab4b1502d5e41d404f"
 dependencies = [
  "anyhow",
  "atomic_refcell",
@@ -760,7 +760,7 @@ dependencies = [
 [[package]]
 name = "flax-derive"
 version = "0.7.1"
-source = "git+https://github.com/ten3roberts/flax#96c32705e1c3f260a1966f3226e2eed58e620426"
+source = "git+https://github.com/ten3roberts/flax#b0aca5923dd65d90b5d028ab4b1502d5e41d404f"
 dependencies = [
  "itertools 0.11.0",
  "proc-macro-crate",
@@ -1379,6 +1379,7 @@ dependencies = [
 name = "ivy-input"
 version = "0.10.3"
 dependencies = [
+ "anyhow",
  "flax",
  "flume",
  "glam",
@@ -1386,6 +1387,8 @@ dependencies = [
  "ivy-assets",
  "ivy-base",
  "ivy-window",
+ "thiserror",
+ "tracing",
  "winit",
 ]
 
@@ -1527,6 +1530,7 @@ dependencies = [
  "itertools 0.12.1",
  "ivy-assets",
  "ivy-base",
+ "ivy-input",
  "puffin",
  "puffin_http",
  "tracing",
@@ -1649,7 +1653,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c2a198fb6b0eada2a8df47933734e6d35d350665a33a3593d7164fa52c75c19"
 dependencies = [
  "cfg-if",
- "windows-targets 0.52.5",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
