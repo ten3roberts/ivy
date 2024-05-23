@@ -6,7 +6,7 @@ use ivy_base::{app::TickEvent, Layer};
 
 use crate::{
     components::input_state,
-    types::{CursorDelta, CursorLeft, CursorMoved, KeyboardInput, MouseInput},
+    types::{MouseMotion, CursorLeft, CursorMoved, KeyboardInput, MouseInput},
     InputEvent, InputState,
 };
 
@@ -66,7 +66,7 @@ impl Layer for InputLayer {
             Ok(())
         });
 
-        events.subscribe(|this, world, _, event: &CursorDelta| {
+        events.subscribe(|this, world, _, event: &MouseMotion| {
             this.handle_event(world, &InputEvent::CursorDelta(event.delta));
 
             Ok(())
