@@ -1,10 +1,13 @@
-use std::{sync::Arc, time::Instant};
+use std::{collections::HashMap, sync::Arc, time::Instant};
 
+use flax::{components::name, Entity};
 use glam::{vec2, Vec2};
 use ivy_base::{driver::Driver, App};
 use ivy_input::types::{
-    CursorEntered, CursorLeft, CursorMoved, InputEvent, KeyboardInput, MouseInput, ScrollInput,
+    CursorDelta, CursorEntered, CursorLeft, CursorMoved, InputEvent, KeyboardInput, MouseInput,
+    ScrollInput,
 };
+use tracing::Instrument;
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalPosition,
@@ -13,7 +16,10 @@ use winit::{
     window::{CursorGrabMode, Window, WindowId},
 };
 
-use crate::events::{ApplicationReady, RedrawEvent, ResizedEvent};
+use crate::{
+    components::{main_window, window},
+    events::{ApplicationReady, RedrawEvent, ResizedEvent},
+};
 
 pub struct WinitDriver {}
 
@@ -30,9 +36,10 @@ impl Driver for WinitDriver {
         event_loop.run_app(&mut WinitEventHandler {
             app,
             current_time: Instant::now(),
-            window: None,
+            windows: Default::default(),
             modifiers: Default::default(),
             scale_factor: 0.0,
+            last_cursor_pos: None,
         })?;
 
         Ok(())
@@ -42,9 +49,10 @@ impl Driver for WinitDriver {
 pub struct WinitEventHandler<'a> {
     current_time: Instant,
     app: &'a mut App,
-    window: Option<Arc<Window>>,
+    windows: HashMap<WindowId, Entity>,
     modifiers: winit::keyboard::ModifiersState,
     scale_factor: f64,
+    last_cursor_pos: Option<Vec2>,
 }
 
 impl<'a> ApplicationHandler for WinitEventHandler<'a> {
@@ -57,6 +65,20 @@ impl<'a> ApplicationHandler for WinitEventHandler<'a> {
                 .unwrap(),
         );
 
+        let entity = Entity::builder()
+            .set(name(), "MainWindow".into())
+            .set(
+                crate::components::window(),
+                WindowHandle {
+                    window: window.clone(),
+                    cursor_lock: Default::default(),
+                },
+            )
+            .set_default(main_window())
+            .spawn(&mut self.app.world);
+
+        self.scale_factor = window.scale_factor();
+
         self.app.init().unwrap();
 
         if let Err(err) = self.app.emit(ApplicationReady(window.clone())) {
@@ -64,11 +86,11 @@ impl<'a> ApplicationHandler for WinitEventHandler<'a> {
             event_loop.exit();
         }
 
-        self.window = Some(window);
+        self.windows.insert(window.id(), entity);
     }
 
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
-        if let Err(err) = self.process_event(event_loop, event) {
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, wid: WindowId, event: WindowEvent) {
+        if let Err(err) = self.process_event(event_loop, event, self.windows[&wid]) {
             tracing::error!("Error processing event: {:?}", err);
             event_loop.exit();
         }
@@ -91,6 +113,7 @@ impl<'a> WinitEventHandler<'a> {
         &mut self,
         event_loop: &ActiveEventLoop,
         event: WindowEvent,
+        window_id: Entity,
     ) -> anyhow::Result<()> {
         match event {
             WindowEvent::ActivationTokenDone {
@@ -130,15 +153,41 @@ impl<'a> WinitEventHandler<'a> {
                 device_id: _,
                 position,
             } => {
-                let position = position.to_logical(1.0);
+                let logical_pos = position.to_logical(1.0);
                 self.app.emit(CursorMoved {
-                    position: vec2(position.x, position.y),
+                    position: vec2(logical_pos.x, logical_pos.y),
                 })?;
+
+                if let Some(last) = &mut self.last_cursor_pos {
+                    let delta = vec2(logical_pos.x, logical_pos.y) - *last;
+                    self.app.emit(CursorDelta { delta })?;
+                }
+
+                self.last_cursor_pos = Some(vec2(logical_pos.x, logical_pos.y));
+
+                {
+                    tracing::info!(?logical_pos);
+                    let window = &mut *self
+                        .app
+                        .world
+                        .get_mut(window_id, crate::components::window())
+                        .unwrap();
+
+                    window.cursor_lock.cursor_moved(&window.window, position);
+                    if window.cursor_lock.manual_lock {
+                        tracing::info!(%self.scale_factor);
+                        let locked_position =
+                            window.cursor_lock.last_pos.to_logical(self.scale_factor);
+
+                        self.last_cursor_pos = Some(vec2(locked_position.x, locked_position.y));
+                    }
+                }
             }
             WindowEvent::CursorEntered { device_id: _ } => {
                 self.app.emit(CursorEntered)?;
             }
             WindowEvent::CursorLeft { device_id: _ } => {
+                self.last_cursor_pos = None;
                 self.app.emit(CursorLeft)?;
             }
             WindowEvent::MouseWheel {
@@ -202,10 +251,61 @@ impl<'a> WinitEventHandler<'a> {
             WindowEvent::Occluded(_) => {}
             WindowEvent::RedrawRequested => {
                 self.app.emit(RedrawEvent)?;
-                self.window.as_mut().unwrap().request_redraw();
+                let window = self
+                    .app
+                    .world
+                    .get_mut(window_id, crate::components::window())
+                    .unwrap();
+
+                window.window.request_redraw();
             }
         }
 
         Ok(())
+    }
+}
+
+#[derive(Default)]
+struct CursorLock {
+    last_pos: PhysicalPosition<f64>,
+    manual_lock: bool,
+}
+
+impl CursorLock {
+    fn cursor_moved(&mut self, window: &Window, pos: PhysicalPosition<f64>) {
+        if self.manual_lock {
+            window.set_cursor_position(self.last_pos).unwrap();
+        } else {
+            self.last_pos = pos;
+        }
+    }
+
+    pub fn set_cursor_lock(&mut self, window: &Window, lock: bool) {
+        if lock {
+            if window.set_cursor_grab(CursorGrabMode::Locked).is_err() {
+                window.set_cursor_grab(CursorGrabMode::Confined).unwrap();
+                self.manual_lock = true;
+            }
+        } else {
+            self.manual_lock = false;
+            window.set_cursor_grab(CursorGrabMode::None).unwrap();
+        }
+
+        window.set_cursor_visible(!lock);
+    }
+}
+
+pub struct WindowHandle {
+    window: Arc<Window>,
+    cursor_lock: CursorLock,
+}
+
+impl WindowHandle {
+    pub fn window(&self) -> &Window {
+        &self.window
+    }
+
+    pub fn set_cursor_lock(&mut self, lock: bool) {
+        self.cursor_lock.set_cursor_lock(&self.window, lock)
     }
 }

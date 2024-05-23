@@ -301,6 +301,7 @@ pub enum InputKind {
     Key(Key),
     MouseButton(MouseButton),
     CursorMoved,
+    CursorDelta,
 }
 
 pub struct KeyBinding {
@@ -341,6 +342,15 @@ impl Binding<f32> for KeyBinding {
 pub struct MouseButtonBinding {
     pressed: bool,
     button: MouseButton,
+}
+
+impl MouseButtonBinding {
+    pub fn new(button: MouseButton) -> Self {
+        Self {
+            button,
+            pressed: false,
+        }
+    }
 }
 
 impl Binding<f32> for MouseButtonBinding {
@@ -385,7 +395,7 @@ impl Binding<Vec2> for CursorMovement {
 
     fn apply(&mut self, input: &Self::Input) {
         match input {
-            &InputEvent::CursorMoved(delta) => self.value += delta,
+            &InputEvent::CursorDelta(delta) => self.value += delta,
             _ => panic!("Invalid input event"),
         }
     }
@@ -395,7 +405,7 @@ impl Binding<Vec2> for CursorMovement {
     }
 
     fn binding(&self) -> InputKind {
-        InputKind::CursorMoved
+        InputKind::CursorDelta
     }
 }
 

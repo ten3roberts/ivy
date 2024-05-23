@@ -10,6 +10,7 @@ pub struct ShaderDesc<'a> {
     pub format: TextureFormat,
     pub vertex_layouts: &'a [VertexBufferLayout<'static>],
     pub layouts: &'a [&'a BindGroupLayout],
+    pub depth_format: Option<TextureFormat>,
 }
 
 /// Represents a graphics shader
@@ -70,7 +71,13 @@ impl Shader {
                     // Requires Features::CONSERVATIVE_RASTERIZATION
                     conservative: false,
                 },
-                depth_stencil: None,
+                depth_stencil: desc.depth_format.map(|format| wgpu::DepthStencilState {
+                    format,
+                    depth_write_enabled: true,
+                    depth_compare: wgpu::CompareFunction::Less,
+                    stencil: Default::default(),
+                    bias: Default::default(),
+                }),
                 multisample: wgpu::MultisampleState {
                     count: 1,                         // 2.
                     mask: !0,                         // 3.

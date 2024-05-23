@@ -1,9 +1,10 @@
-use flax::{component, Debuggable};
+use flax::{component, Debuggable, Entity};
 use glam::Mat4;
 use ivy_assets::Asset;
 
 use crate::{
-    graphics::texture::Texture, material::MaterialDesc, mesh::MeshDesc, shader::ShaderDesc,
+    driver::WindowHandle, graphics::texture::Texture, material::MaterialDesc, mesh::MeshDesc,
+    shader::ShaderDesc,
 };
 
 component! {
@@ -15,4 +16,8 @@ component! {
     pub mesh: Asset<MeshDesc>,
     pub material: Asset<MaterialDesc>,
     pub shader: Asset<ShaderDesc>,
+
+    pub main_window: (),
+
+    pub window: WindowHandle,
 }

@@ -20,6 +20,11 @@ pub struct CursorMoved {
 }
 
 #[derive(Debug, Clone)]
+pub struct CursorDelta {
+    pub delta: Vec2,
+}
+
+#[derive(Debug, Clone)]
 pub struct MouseInput {
     pub modifiers: ModifiersState,
     pub button: MouseButton,
@@ -31,6 +36,7 @@ pub enum InputEvent {
     Key(KeyboardInput),
     MouseButton(MouseInput),
     CursorMoved(Vec2),
+    CursorDelta(Vec2),
 }
 
 #[derive(Debug, Clone)]
@@ -46,6 +52,7 @@ pub struct ScrollInput {
 impl Event for KeyboardInput {}
 impl Event for MouseInput {}
 impl Event for CursorMoved {}
+impl Event for CursorDelta {}
 impl Event for ScrollInput {}
 
 impl Event for CursorLeft {}
@@ -57,6 +64,7 @@ impl InputEvent {
             InputEvent::Key(v) => InputKind::Key(v.key.clone()),
             InputEvent::MouseButton(v) => InputKind::MouseButton(v.button),
             InputEvent::CursorMoved(_) => InputKind::CursorMoved,
+            InputEvent::CursorDelta(_) => InputKind::CursorDelta,
         }
     }
 }

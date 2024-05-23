@@ -6,20 +6,18 @@ use ivy_base::{app::TickEvent, Layer};
 
 use crate::{
     components::input_state,
-    types::{CursorLeft, CursorMoved, KeyboardInput, MouseInput},
+    types::{CursorDelta, CursorLeft, CursorMoved, KeyboardInput, MouseInput},
     InputEvent, InputState,
 };
 
 pub struct InputLayer {
     query: Query<(EntityRefs, Mutable<InputState>)>,
-    last_cursor_pos: Option<glam::Vec2>,
 }
 
 impl InputLayer {
     pub fn new() -> Self {
         Self {
             query: Query::new((entity_refs(), input_state().as_mut())),
-            last_cursor_pos: None,
         }
     }
 
@@ -63,18 +61,14 @@ impl Layer for InputLayer {
         });
 
         events.subscribe(|this, world, _, event: &CursorMoved| {
-            if let Some(last_cursor_pos) = this.last_cursor_pos {
-                let delta = event.position - last_cursor_pos;
-                this.handle_event(world, &InputEvent::CursorMoved(delta));
-            }
-
-            this.last_cursor_pos = Some(event.position);
+            this.handle_event(world, &InputEvent::CursorMoved(event.position));
 
             Ok(())
         });
 
-        events.subscribe(|this, _, _, event: &CursorLeft| {
-            this.last_cursor_pos = None;
+        events.subscribe(|this, world, _, event: &CursorDelta| {
+            this.handle_event(world, &InputEvent::CursorDelta(event.delta));
+
             Ok(())
         });
 
