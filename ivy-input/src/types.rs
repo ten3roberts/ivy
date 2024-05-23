@@ -20,7 +20,7 @@ pub struct CursorMoved {
 }
 
 #[derive(Debug, Clone)]
-pub struct CursorDelta {
+pub struct MouseMotion {
     pub delta: Vec2,
 }
 
@@ -52,7 +52,7 @@ pub struct ScrollInput {
 impl Event for KeyboardInput {}
 impl Event for MouseInput {}
 impl Event for CursorMoved {}
-impl Event for CursorDelta {}
+impl Event for MouseMotion {}
 impl Event for ScrollInput {}
 
 impl Event for CursorLeft {}

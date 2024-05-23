@@ -4,7 +4,7 @@ use flax::{components::name, Entity};
 use glam::{vec2, Vec2};
 use ivy_base::{driver::Driver, App};
 use ivy_input::types::{
-    CursorDelta, CursorEntered, CursorLeft, CursorMoved, InputEvent, KeyboardInput, MouseInput,
+    CursorEntered, CursorLeft, CursorMoved, InputEvent, KeyboardInput, MouseInput, MouseMotion,
     ScrollInput,
 };
 use tracing::Instrument;
@@ -96,6 +96,18 @@ impl<'a> ApplicationHandler for WinitEventHandler<'a> {
         }
     }
 
+    fn device_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        device_id: winit::event::DeviceId,
+        event: winit::event::DeviceEvent,
+    ) {
+        if let Err(err) = self.process_device_event(event_loop, event) {
+            tracing::error!("Error processing device event: {:?}", err);
+            event_loop.exit();
+        }
+    }
+
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         let new_time = Instant::now();
         let delta = new_time.duration_since(self.current_time);
@@ -153,35 +165,20 @@ impl<'a> WinitEventHandler<'a> {
                 device_id: _,
                 position,
             } => {
+                tracing::info!(?position, "cursor moved");
                 let logical_pos = position.to_logical(1.0);
                 self.app.emit(CursorMoved {
                     position: vec2(logical_pos.x, logical_pos.y),
                 })?;
 
-                if let Some(last) = &mut self.last_cursor_pos {
-                    let delta = vec2(logical_pos.x, logical_pos.y) - *last;
-                    self.app.emit(CursorDelta { delta })?;
-                }
+                tracing::info!(?logical_pos);
+                let window = &mut *self
+                    .app
+                    .world
+                    .get_mut(window_id, crate::components::window())
+                    .unwrap();
 
-                self.last_cursor_pos = Some(vec2(logical_pos.x, logical_pos.y));
-
-                {
-                    tracing::info!(?logical_pos);
-                    let window = &mut *self
-                        .app
-                        .world
-                        .get_mut(window_id, crate::components::window())
-                        .unwrap();
-
-                    window.cursor_lock.cursor_moved(&window.window, position);
-                    if window.cursor_lock.manual_lock {
-                        tracing::info!(%self.scale_factor);
-                        let locked_position =
-                            window.cursor_lock.last_pos.to_logical(self.scale_factor);
-
-                        self.last_cursor_pos = Some(vec2(locked_position.x, locked_position.y));
-                    }
-                }
+                window.cursor_lock.cursor_moved(&window.window, position);
             }
             WindowEvent::CursorEntered { device_id: _ } => {
                 self.app.emit(CursorEntered)?;
@@ -259,6 +256,28 @@ impl<'a> WinitEventHandler<'a> {
 
                 window.window.request_redraw();
             }
+        }
+
+        Ok(())
+    }
+
+    fn process_device_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        event: winit::event::DeviceEvent,
+    ) -> anyhow::Result<()> {
+        match event {
+            winit::event::DeviceEvent::Added => {}
+            winit::event::DeviceEvent::Removed => {}
+            winit::event::DeviceEvent::MouseMotion { delta } => {
+                self.app.emit(MouseMotion {
+                    delta: vec2(delta.0 as _, delta.1 as _),
+                })?;
+            }
+            winit::event::DeviceEvent::MouseWheel { delta } => {}
+            winit::event::DeviceEvent::Motion { axis, value } => {}
+            winit::event::DeviceEvent::Button { button, state } => {}
+            winit::event::DeviceEvent::Key(_) => {}
         }
 
         Ok(())
