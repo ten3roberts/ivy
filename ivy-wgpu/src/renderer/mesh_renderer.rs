@@ -133,6 +133,7 @@ impl MeshRenderer {
                             format: self.surface_format,
                             vertex_layouts: &[Vertex::layout()],
                             layouts,
+                            depth_format: Some(TextureFormat::Depth24Plus),
                         },
                     )
                 })
@@ -152,41 +153,5 @@ impl MeshRenderer {
 
             render_pass.draw_indexed(0..mesh.index_count(), 0, (i as u32)..(i as u32 + 1));
         }
-    }
-
-    fn get_mesh(&mut self, assets: &AssetCache, mesh: &Asset<MeshDesc>) -> &Asset<Mesh> {
-        self.meshes
-            .entry(mesh)
-            .or_insert_with(|| assets.load(&**mesh))
-    }
-
-    fn get_shader(
-        &mut self,
-        gpu: &Gpu,
-        shader: &Asset<crate::shader::ShaderDesc>,
-        layouts: &[&BindGroupLayout],
-    ) -> &Shader {
-        self.shaders.entry(shader).or_insert_with(|| {
-            Shader::new(
-                gpu,
-                &ShaderDesc {
-                    label: shader.label(),
-                    source: shader.source(),
-                    format: self.surface_format,
-                    vertex_layouts: &[Vertex::layout()],
-                    layouts,
-                },
-            )
-        })
-    }
-
-    fn get_material(
-        &mut self,
-        assets: &AssetCache,
-        material: Asset<MaterialDesc>,
-    ) -> &Asset<Material> {
-        self.materials
-            .entry(&material)
-            .or_insert_with(|| assets.load(&*material))
     }
 }

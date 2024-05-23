@@ -8,16 +8,17 @@ use glam::Mat4;
 use ivy_assets::{map::AssetMap, Asset, AssetCache, AssetKey};
 use ivy_base::{main_camera, world_transform, Bundle};
 use wgpu::{
-    naga::ShaderStage, util::RenderEncoder, BindGroup, BindGroupLayout, BufferUsages, Operations,
-    RenderPass, RenderPassColorAttachment, ShaderStages, TextureFormat,
+    hal::TextureUses, naga::ShaderStage, util::RenderEncoder, BindGroup, BindGroupLayout,
+    BufferUsages, Extent3d, Operations, RenderPass, RenderPassColorAttachment, ShaderStages,
+    TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
 };
 use winit::dpi::PhysicalSize;
 
 use crate::{
     components::{material, mesh, projection_matrix, shader},
     graphics::{
-        material::Material, shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, Mesh,
-        Shader, Surface, TypedBuffer, Vertex, VertexDesc,
+        material::Material, shader::ShaderDesc, texture::Texture, BindGroupBuilder,
+        BindGroupLayoutBuilder, Mesh, Shader, Surface, TypedBuffer, Vertex, VertexDesc,
     },
     material::MaterialDesc,
     mesh::MeshDesc,
@@ -32,6 +33,7 @@ pub struct Renderer {
     surface: Surface,
     mesh_renderer: MeshRenderer,
     globals: Globals,
+    depth_texture: Option<wgpu::TextureView>,
 }
 
 impl Renderer {
@@ -41,11 +43,32 @@ impl Renderer {
             globals: Globals::new(&gpu),
             surface,
             gpu,
+            depth_texture: None,
         }
     }
 
     pub fn resize(&mut self, new_size: PhysicalSize<u32>) {
         self.surface.resize(&self.gpu, new_size);
+
+        self.depth_texture =
+            Some(Self::create_depth_texture(&self.gpu, new_size).create_view(&Default::default()));
+    }
+
+    fn create_depth_texture(gpu: &Gpu, size: PhysicalSize<u32>) -> wgpu::Texture {
+        gpu.device.create_texture(&TextureDescriptor {
+            label: "depth".into(),
+            size: Extent3d {
+                width: size.width,
+                height: size.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Depth24Plus,
+            usage: TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        })
     }
 
     pub fn update(&mut self, world: &World) {
@@ -91,7 +114,17 @@ impl Renderer {
                         store: wgpu::StoreOp::Store,
                     },
                 })],
-                depth_stencil_attachment: None,
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: self
+                        .depth_texture
+                        .as_ref()
+                        .expect("renderer has no surface size"),
+                    depth_ops: Some(Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });

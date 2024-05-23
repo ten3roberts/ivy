@@ -1,20 +1,24 @@
 use std::time::Instant;
 
-use flax::{component, BoxedSystem, Entity, Query, Schedule, System, World};
+use flax::{
+    component, BoxedSystem, Component, Entity, FetchExt, Mutable, Query, QueryBorrow, Schedule,
+    System, World,
+};
 use glam::{vec3, EulerRot, Mat4, Quat, Vec2, Vec3};
 use ivy_assets::AssetCache;
 use ivy_base::{
     app::{InitEvent, TickEvent},
+    engine,
     layer::events::EventRegisterContext,
     main_camera, position, rotation, App, EngineLayer, EntityBuilderExt, Layer, TransformBundle,
 };
 use ivy_input::{
     components::input_state, layer::InputLayer, types::Key, Action, Axis3, BindingExt, Compose,
-    CursorMovement, InputState, KeyBinding,
+    CursorMovement, InputState, KeyBinding, MouseButtonBinding,
 };
 use ivy_wgpu::{
-    components::projection_matrix,
-    driver::WinitDriver,
+    components::{main_window, projection_matrix, window},
+    driver::{WindowHandle, WinitDriver},
     events::ResizedEvent,
     layer::GraphicsLayer,
     material::MaterialDesc,
@@ -42,6 +46,7 @@ pub fn main() -> anyhow::Result<()> {
         .with_layer(LogicLayer::new())
         .with_layer(Update::new(
             Schedule::builder()
+                .with_system(cursor_lock_system())
                 .with_system(update_camera_rotation_system())
                 .with_system(read_input_rotation_system())
                 .build(),
@@ -162,6 +167,13 @@ impl Layer for LogicLayer {
         let mut rotate_action = Action::new(rotation_input());
         rotate_action.add(CursorMovement::new().amplitude(Vec2::ONE * 0.001));
 
+        let mut pan_action = Action::new(pan_active());
+        pan_action
+            .add(KeyBinding::new(Key::Character("q".into())))
+            .add(MouseButtonBinding::new(
+                ivy_input::types::MouseButton::Right,
+            ));
+
         Entity::builder()
             .mount(TransformBundle::new(Vec3::ZERO, Quat::IDENTITY, Vec3::ONE))
             .set(main_camera(), ())
@@ -170,11 +182,13 @@ impl Layer for LogicLayer {
                 input_state(),
                 InputState::new()
                     .with_action(move_action)
-                    .with_action(rotate_action),
+                    .with_action(rotate_action)
+                    .with_action(pan_action),
             )
             .set_default(movement())
             .set_default(rotation_input())
             .set_default(euler_rotation())
+            .set_default(pan_active())
             .set(camera_speed(), 1.0)
             .spawn(world);
 
@@ -273,10 +287,28 @@ impl Layer for FixedUpdate {
 }
 
 component! {
+    pan_active: f32,
     rotation_input: Vec2,
     euler_rotation: Vec3,
     movement: Vec3,
     camera_speed: f32,
+}
+
+fn cursor_lock_system() -> BoxedSystem {
+    System::builder()
+        .with_query(Query::new(pan_active()))
+        .with_query(Query::new(window().as_mut()).with(main_window()))
+        .build(
+            |mut query: QueryBorrow<Component<f32>>,
+             mut window: QueryBorrow<Mutable<WindowHandle>, _>| {
+                query.iter().for_each(|&pan_active| {
+                    if let Some(window) = window.first() {
+                        window.set_cursor_lock(pan_active > 0.0);
+                    }
+                });
+            },
+        )
+        .boxed()
 }
 
 fn read_input_rotation_system() -> BoxedSystem {
