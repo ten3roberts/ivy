@@ -85,7 +85,8 @@ impl LogicLayer {
             include_str!("../assets/shaders/diffuse.wgsl"),
         ));
 
-        let mesh = assets.insert(MeshDesc::content(assets.insert(MeshData::quad())));
+        let quad_mesh = assets.insert(MeshDesc::content(assets.insert(MeshData::quad())));
+        let cube_mesh = assets.insert(MeshDesc::content(assets.insert(MeshData::cube())));
 
         let material = assets.insert(MaterialDesc::new(TextureDesc::path(
             "assets/textures/statue.jpg",
@@ -97,7 +98,7 @@ impl LogicLayer {
 
         Entity::builder()
             .mount(RenderObjectBundle::new(
-                mesh.clone(),
+                quad_mesh.clone(),
                 material.clone(),
                 shader.clone(),
             ))
@@ -109,7 +110,7 @@ impl LogicLayer {
             .spawn(world);
 
         let entity = Entity::builder()
-            .mount(RenderObjectBundle::new(mesh, material2, shader))
+            .mount(RenderObjectBundle::new(cube_mesh, material2, shader))
             .mount(TransformBundle::new(
                 vec3(1.0, 0.0, 2.0),
                 Quat::from_euler(glam::EulerRot::ZYX, 1.0, 0.0, 0.0),
