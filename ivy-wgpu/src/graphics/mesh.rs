@@ -1,11 +1,15 @@
+use std::iter::repeat;
+
 use glam::{vec2, vec3, Vec2, Vec3, Vec4};
+use itertools::izip;
+use ivy_assets::{Asset, AssetCache};
 use wgpu::{
     util::DeviceExt, vertex_attr_array, Buffer, RenderPass, VertexAttribute, VertexBufferLayout,
 };
 
 use crate::mesh::{MeshData, MeshDesc};
 
-use super::Gpu;
+use super::{material::Material, Gpu};
 
 #[repr(C)]
 #[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Debug, Clone)]
@@ -66,15 +70,28 @@ impl VertexDesc for Vertex2d {
 }
 
 #[derive(Debug)]
+pub struct Primitive {
+    pub first_index: u32,
+    pub index_count: u32,
+    pub material: Asset<Material>,
+}
+
+#[derive(Debug)]
 pub struct Mesh {
     vertex_count: u32,
     index_count: u32,
     vertex_buffer: Buffer,
     index_buffer: Buffer,
+    primitives: Option<Vec<Primitive>>,
 }
 
 impl Mesh {
-    pub fn new(gpu: &Gpu, vertices: &[Vertex], indices: &[u32]) -> Self {
+    pub fn new(
+        gpu: &Gpu,
+        vertices: &[Vertex],
+        indices: &[u32],
+        primitives: Option<Vec<Primitive>>,
+    ) -> Self {
         let vertex_buffer = gpu
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -96,11 +113,8 @@ impl Mesh {
             index_count: indices.len() as u32,
             vertex_buffer,
             index_buffer,
+            primitives,
         }
-    }
-
-    pub fn from_data(gpu: &Gpu, data: &MeshData) -> Self {
-        Self::new(gpu, data.vertices(), data.indices())
     }
 
     pub fn bind<'a>(&'a self, render_pass: &mut RenderPass<'a>) {
@@ -114,5 +128,64 @@ impl Mesh {
 
     pub fn vertex_count(&self) -> u32 {
         self.vertex_count
+    }
+
+    pub(crate) fn from_gltf(
+        gpu: &Gpu,
+        assets: &AssetCache,
+        mesh: gltf::Mesh,
+        buffer_data: &[gltf::buffer::Data],
+        materials: &[Asset<Material>],
+    ) -> Self {
+        let mut vertices = Vec::new();
+        let mut indices = Vec::new();
+
+        let mut primitives = Vec::new();
+
+        for p in mesh.primitives() {
+            let reader = p.reader(|buffer| Some(&buffer_data[buffer.index()]));
+
+            let first_index = indices.len() as u32;
+            let offset = vertices.len() as u32;
+            indices.extend(
+                reader
+                    .read_indices()
+                    .into_iter()
+                    .flat_map(|val| val.into_u32())
+                    .map(|val| val + offset),
+            );
+
+            let index_count = indices.len() as u32 - first_index;
+
+            let pos = reader
+                .read_positions()
+                .into_iter()
+                .flatten()
+                .map(Vec3::from);
+
+            let normals = reader.read_normals().into_iter().flatten().map(Vec3::from);
+
+            let texcoord = reader
+                .read_tex_coords(0)
+                .into_iter()
+                .flat_map(|val| val.into_f32())
+                .map(Vec2::from);
+
+            vertices.extend(
+                izip!(pos, normals, texcoord, repeat(Vec3::ZERO))
+                    .map(|(pos, normal, textcoord, tangent)| Vertex::new(pos, textcoord, normal)),
+            );
+
+            // Keep track of which materials map to which part of the index buffer
+            if let Some(material) = materials.get(p.material().index().unwrap_or(0)) {
+                primitives.push(Primitive {
+                    first_index,
+                    index_count,
+                    material: material.clone(),
+                });
+            }
+        }
+
+        todo!()
     }
 }

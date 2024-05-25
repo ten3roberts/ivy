@@ -1,9 +1,13 @@
 use std::convert::Infallible;
 
 use glam::{vec2, vec3, Vec3};
+use itertools::Itertools;
 use ivy_assets::{Asset, AssetKey};
 
-use crate::graphics::{Mesh, Vertex};
+use crate::{
+    graphics::{Mesh, Vertex},
+    material::MaterialDesc,
+};
 
 /// Cpu side mesh descriptor
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -31,22 +35,58 @@ impl AssetKey<Mesh> for MeshDesc {
     ) -> Result<ivy_assets::Asset<Mesh>, Self::Error> {
         let mesh = match self {
             MeshDesc::Path(_) => todo!(),
-            MeshDesc::Content(v) => Mesh::from_data(&*assets.service(), v),
+            MeshDesc::Content(v) => Mesh::new(
+                &assets.service(),
+                v.vertices(),
+                v.indices(),
+                v.primitives.as_ref().map(|v| {
+                    v.iter()
+                        .map(|v| crate::graphics::mesh::Primitive {
+                            first_index: v.first_index,
+                            index_count: v.index_count,
+                            material: assets.load(&v.material),
+                        })
+                        .collect_vec()
+                }),
+            ),
         };
 
         Ok(assets.insert(mesh))
     }
 }
 
+pub struct Primitive {
+    pub first_index: u32,
+    pub index_count: u32,
+    pub material: Asset<MaterialDesc>,
+}
+
 /// CPU created mesh data
 pub struct MeshData {
     vertices: Box<[Vertex]>,
     indices: Box<[u32]>,
+    primitives: Option<Vec<Primitive>>,
 }
 
 impl MeshData {
     pub fn new(vertices: Box<[Vertex]>, indices: Box<[u32]>) -> Self {
-        Self { vertices, indices }
+        Self {
+            vertices,
+            indices,
+            primitives: None,
+        }
+    }
+
+    pub fn new_with_primitives(
+        vertices: Box<[Vertex]>,
+        indices: Box<[u32]>,
+        primitives: Vec<Primitive>,
+    ) -> Self {
+        Self {
+            vertices,
+            indices,
+            primitives: Some(primitives),
+        }
     }
 
     pub fn vertices(&self) -> &[Vertex] {
@@ -70,6 +110,7 @@ impl MeshData {
         Self {
             vertices: vertices.to_vec().into_boxed_slice(),
             indices: indices.to_vec().into_boxed_slice(),
+            primitives: None,
         }
     }
 
@@ -93,6 +134,7 @@ impl MeshData {
         Self {
             vertices: vertices.to_vec().into_boxed_slice(),
             indices: indices.to_vec().into_boxed_slice(),
+            primitives: None,
         }
     }
 }

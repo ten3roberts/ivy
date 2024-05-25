@@ -190,7 +190,7 @@ impl Layer for LogicLayer {
             .set_default(rotation_input())
             .set_default(euler_rotation())
             .set_default(pan_active())
-            .set(camera_speed(), 1.0)
+            .set(camera_speed(), 2.0)
             .spawn(world);
 
         Ok(())
@@ -314,9 +314,13 @@ fn cursor_lock_system() -> BoxedSystem {
 
 fn read_input_rotation_system() -> BoxedSystem {
     System::builder()
-        .with_query(Query::new((euler_rotation().as_mut(), rotation_input())))
-        .for_each(|(rotation, rotation_input)| {
-            *rotation += vec3(rotation_input.y, rotation_input.x, 0.0);
+        .with_query(Query::new((
+            euler_rotation().as_mut(),
+            rotation_input(),
+            pan_active(),
+        )))
+        .for_each(|(rotation, rotation_input, &pan_active)| {
+            *rotation += pan_active * vec3(rotation_input.y, rotation_input.x, 0.0);
         })
         .boxed()
 }

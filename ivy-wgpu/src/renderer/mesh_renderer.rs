@@ -110,20 +110,19 @@ impl MeshRenderer {
         self.object_buffer.write(&gpu.queue, 0, &self.object_data);
 
         for object in &self.render_objects {
-            {
-                self.meshes
-                    .entry(&object.mesh)
-                    .or_insert_with(|| assets.load(&*object.mesh))
-            };
+            self.meshes
+                .entry(&object.mesh)
+                .or_insert_with(|| assets.load(&*object.mesh));
+
             let material = {
                 self.materials
                     .entry(&object.material)
-                    .or_insert_with(|| assets.load(&*object.material))
+                    .or_insert_with(|| assets.load(&object.material))
             };
 
             {
                 let layouts: &[&BindGroupLayout] =
-                    &[&globals.layout, &self.bind_group_layout, &material.layout()];
+                    &[&globals.layout, &self.bind_group_layout, material.layout()];
                 self.shaders.entry(&object.shader).or_insert_with(|| {
                     Shader::new(
                         gpu,

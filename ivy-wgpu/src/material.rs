@@ -13,7 +13,7 @@ impl MaterialDesc {
     }
 }
 
-impl AssetKey<Material> for MaterialDesc {
+impl AssetKey<Material> for Asset<MaterialDesc> {
     type Error = anyhow::Error;
 
     fn load(&self, assets: &ivy_assets::AssetCache) -> Result<Asset<Material>, Self::Error> {
