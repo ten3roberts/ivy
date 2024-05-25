@@ -1,6 +1,6 @@
-use std::{hash::Hash, path::Path};
+use std::{hash::Hash, io, path::Path};
 
-use crate::{Asset, AssetCache, AssetKey};
+use crate::{service::FileSystemMapService, Asset, AssetCache, AssetKey};
 
 impl<V, P> AssetKey<V> for P
 where
@@ -15,6 +15,30 @@ where
     }
 }
 
+pub trait AssetFromPathExt {
+    type Error: 'static + From<io::Error>;
+
+    fn load(path: &Path, assets: &AssetCache) -> Result<Asset<Self>, Self::Error>;
+}
+
+impl<V> AssetKey<V> for Path
+where
+    V: AssetFromPathExt,
+{
+    type Error = V::Error;
+
+    fn load(&self, assets: &AssetCache) -> Result<Asset<V>, Self::Error> {
+        V::load(self, assets)
+    }
+}
+
+impl AssetFromPathExt for Vec<u8> {
+    type Error = io::Error;
+
+    fn load(path: &Path, assets: &AssetCache) -> Result<Asset<Self>, Self::Error> {
+        Ok(assets.insert(assets.service::<FileSystemMapService>().load_bytes(path)?))
+    }
+}
 // i
 // impl<K> Loadable<K> for Bytes
 // where

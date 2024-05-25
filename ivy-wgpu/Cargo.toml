@@ -23,3 +23,4 @@ puffin_http.workspace = true
 flume.workspace = true
 itertools.workspace = true
 futures.workspace = true
+gltf.workspace = true

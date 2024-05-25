@@ -1,6 +1,7 @@
-use std::path::PathBuf;
+use std::{convert::Infallible, path::PathBuf};
 
-use ivy_assets::AssetKey;
+use image::{DynamicImage, ImageBuffer};
+use ivy_assets::{Asset, AssetCache, AssetKey};
 use wgpu::{TextureView, TextureViewDescriptor};
 
 use super::Gpu;
@@ -91,5 +92,19 @@ impl AssetKey<Texture> for TextureFromPath {
         let image = image::open(&self.0)?;
 
         Ok(assets.insert(Texture::from_image(&assets.service(), &image)))
+    }
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct TextureFromColor(pub [u8; 4]);
+
+impl AssetKey<Texture> for TextureFromColor {
+    type Error = Infallible;
+
+    fn load(&self, assets: &AssetCache) -> Result<Asset<Texture>, Infallible> {
+        Ok(assets.insert(Texture::from_image(
+            &assets.service(),
+            &DynamicImage::ImageRgba8(ImageBuffer::from_pixel(32, 32, image::Rgba(self.0))),
+        )))
     }
 }

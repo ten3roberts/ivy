@@ -9,5 +9,6 @@ pub mod mesh_buffer;
 pub mod renderer;
 pub mod shader;
 pub mod texture;
+pub mod gltf;
 
 pub use graphics::Gpu;
