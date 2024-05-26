@@ -13,8 +13,8 @@ component! {
 
     pub projection_matrix: Mat4 => [ Debuggable ],
 
-    pub mesh: Asset<MeshDesc>,
-    pub material: Asset<MaterialDesc>,
+    pub mesh: MeshDesc,
+    pub material: MaterialDesc,
     pub shader: Asset<ShaderDesc>,
 
     pub main_window: (),

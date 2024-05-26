@@ -142,8 +142,8 @@ impl Renderer {
 }
 
 pub struct RenderObject {
-    mesh: Asset<MeshDesc>,
-    material: Asset<MaterialDesc>,
+    mesh: MeshDesc,
+    material: MaterialDesc,
     shader: Asset<crate::shader::ShaderDesc>,
 }
 
@@ -191,15 +191,15 @@ impl Globals {
 }
 
 pub struct RenderObjectBundle {
-    pub mesh: Asset<MeshDesc>,
-    pub material: Asset<MaterialDesc>,
+    pub mesh: MeshDesc,
+    pub material: MaterialDesc,
     pub shader: Asset<crate::shader::ShaderDesc>,
 }
 
 impl RenderObjectBundle {
     pub fn new(
-        mesh: Asset<MeshDesc>,
-        material: Asset<MaterialDesc>,
+        mesh: MeshDesc,
+        material: MaterialDesc,
         shader: Asset<crate::shader::ShaderDesc>,
     ) -> Self {
         Self {

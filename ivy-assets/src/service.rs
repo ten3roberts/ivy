@@ -36,8 +36,8 @@ impl Default for FileSystemMapService {
 }
 
 impl FileSystemMapService {
-    pub fn new(root: PathBuf) -> Self {
-        Self { root }
+    pub fn new(root: impl Into<PathBuf>) -> Self {
+        Self { root: root.into() }
     }
 
     pub fn load_bytes(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, std::io::Error> {

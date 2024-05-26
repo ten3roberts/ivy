@@ -1,9 +1,10 @@
-use std::path::Path;
+use std::{ops::Deref, path::Path};
 
 use gltf::Gltf;
 use image::{DynamicImage, Rgba32FImage, RgbaImage};
 use itertools::Itertools;
 use ivy_assets::{Asset, AssetCache, AssetKey};
+use ivy_gltf::{DocumentData, GltfMaterial, GltfMesh};
 
 use crate::{
     graphics::{
@@ -11,58 +12,9 @@ use crate::{
         texture::{Texture, TextureFromPath},
         Mesh,
     },
+    material::MaterialData,
     Gpu,
 };
-
-/// An in memory representation of a gltf document
-struct DocumentData {
-    document: gltf::Document,
-    // buffer_data: Vec<gltf::buffer::Data>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct GltfImageData {
-    data: Asset<DocumentData>,
-    index: usize,
-}
-
-pub struct GltfMesh {
-    data: Asset<DocumentData>,
-    index: usize,
-}
-
-pub struct GltfMaterial {
-    data: Asset<DocumentData>,
-    index: usize,
-}
-
-pub struct GltfNode {
-    data: Asset<DocumentData>,
-    index: usize,
-}
-
-impl DocumentData {
-    pub fn new(assets: &AssetCache, path: impl AsRef<Path>) -> anyhow::Result<Self> {
-        let bytes: Asset<Vec<u8>> = assets.load(path.as_ref());
-
-        let gltf = Gltf::from_slice(&bytes)?;
-
-        let buffer_data: Vec<_> = gltf
-            .document
-            .buffers()
-            .map(|v| {
-                tracing::info!(?v, "import buffer");
-                // TODO: load using assets
-                gltf::buffer::Data::from_source(v.source(), None)
-            })
-            .try_collect()?;
-
-        Ok(Self {
-            document: gltf.document,
-            // buffer_data,
-        })
-    }
-}
 
 /// Contains the gltf data
 pub struct Document {
@@ -72,22 +24,13 @@ pub struct Document {
 }
 
 impl Document {
-    pub fn new(gpu: &Gpu, assets: &AssetCache, data: &Gltf) -> anyhow::Result<Self> {
-        let buffer_data: Vec<_> = data
-            .document
-            .buffers()
-            .map(|v| {
-                tracing::info!(?v, "import buffer");
-                gltf::buffer::Data::from_source(v.source(), None)
-            })
-            .try_collect()?;
-
+    fn new(gpu: &Gpu, assets: &AssetCache, data: &DocumentData) -> anyhow::Result<Self> {
         let textures: Vec<_> = data
             .document
             .images()
             .map(|v| {
                 tracing::info!(?v, "import image");
-                let image = gltf::image::Data::from_source(v.source(), None, &buffer_data)?;
+                let image = gltf::image::Data::from_source(v.source(), None, data.buffer_data())?;
 
                 let image: DynamicImage = match image.format {
                     gltf::image::Format::R8 => todo!(),
@@ -119,7 +62,15 @@ impl Document {
         let meshes: Vec<_> = data
             .document
             .meshes()
-            .map(|mesh| assets.insert(Mesh::from_gltf(gpu, assets, mesh, &buffer_data, &materials)))
+            .map(|mesh| {
+                assets.insert(Mesh::from_gltf(
+                    gpu,
+                    assets,
+                    mesh,
+                    data.buffer_data(),
+                    &materials,
+                ))
+            })
             .collect_vec();
 
         Ok(Self {
@@ -127,5 +78,57 @@ impl Document {
             meshes,
             materials,
         })
+    }
+}
+
+impl AssetKey<Document> for Asset<ivy_gltf::Document> {
+    type Error = anyhow::Error;
+
+    fn load(&self, assets: &AssetCache) -> Result<Asset<Document>, Self::Error> {
+        Ok(assets.insert(Document::new(&assets.service(), assets, self.data())?))
+    }
+}
+
+impl AssetKey<Document> for Asset<ivy_gltf::DocumentData> {
+    type Error = anyhow::Error;
+
+    fn load(&self, assets: &AssetCache) -> Result<Asset<Document>, Self::Error> {
+        Ok(assets.insert(Document::new(&assets.service(), assets, &self)?))
+    }
+}
+
+impl AssetKey<Mesh> for GltfMesh {
+    type Error = anyhow::Error;
+
+    fn load(&self, assets: &AssetCache) -> Result<Asset<Mesh>, Self::Error> {
+        let document: Asset<Document> = assets.try_load(self.data())?;
+
+        document.meshes.get(self.index()).cloned().ok_or_else(|| {
+            anyhow::anyhow!(
+                "mesh index out of bounds: {} >= {}",
+                self.index(),
+                document.meshes.len()
+            )
+        })
+    }
+}
+
+impl AssetKey<Material> for GltfMaterial {
+    type Error = anyhow::Error;
+
+    fn load(&self, assets: &AssetCache) -> Result<Asset<Material>, Self::Error> {
+        let document: Asset<Document> = assets.try_load(self.data())?;
+
+        document
+            .materials
+            .get(self.index())
+            .cloned()
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "material index out of bounds: {} >= {}",
+                    self.index(),
+                    document.materials.len()
+                )
+            })
     }
 }

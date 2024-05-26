@@ -1318,6 +1318,7 @@ dependencies = [
  "ivy-assets",
  "ivy-base",
  "ivy-collision",
+ "ivy-gltf",
  "ivy-graphics",
  "ivy-image",
  "ivy-input",
@@ -1338,6 +1339,18 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tracing-tree",
+]
+
+[[package]]
+name = "ivy-gltf"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "glam",
+ "gltf",
+ "itertools 0.13.0",
+ "ivy-assets",
+ "tracing",
 ]
 
 [[package]]
@@ -1540,6 +1553,7 @@ dependencies = [
  "itertools 0.13.0",
  "ivy-assets",
  "ivy-base",
+ "ivy-gltf",
  "ivy-input",
  "puffin",
  "puffin_http",

@@ -9,6 +9,7 @@ edition = "2021"
 ivy-base = { path = "../ivy-base" }
 ivy-assets = { path = "../ivy-assets" }
 ivy-input = { path = "../ivy-input" }
+ivy-gltf = { path = "../ivy-gltf" }
 
 winit.workspace = true
 wgpu.workspace = true

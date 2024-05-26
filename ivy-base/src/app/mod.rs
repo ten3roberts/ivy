@@ -19,7 +19,7 @@ use crate::{
     Events, Layer, LayerDyn,
 };
 
-use ivy_assets::AssetCache;
+use ivy_assets::{service::FileSystemMapService, AssetCache};
 
 use self::driver::Driver;
 
@@ -47,6 +47,7 @@ impl App {
         let (tx, rx) = flume::unbounded();
         events.subscribe_custom(tx);
         let asset_cache = AssetCache::new();
+        asset_cache.register_service(FileSystemMapService::new("./assets"));
 
         // asset_cache.insert(Gizmos::default());
 

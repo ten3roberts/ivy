@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use bytemuck::Zeroable;
 use flax::{FetchExt, Query, World};
 use ivy_assets::{map::AssetMap, Asset, AssetCache};
@@ -25,9 +27,9 @@ pub struct MeshRenderer {
     bind_group_layout: BindGroupLayout,
     bind_group: BindGroup,
 
-    pub meshes: AssetMap<MeshDesc, Asset<Mesh>>,
+    pub meshes: HashMap<MeshDesc, Asset<Mesh>>,
     pub shaders: AssetMap<crate::shader::ShaderDesc, Shader>,
-    pub materials: AssetMap<MaterialDesc, Asset<Material>>,
+    pub materials: HashMap<MaterialDesc, Asset<Material>>,
 
     surface_format: TextureFormat,
 }
@@ -111,12 +113,12 @@ impl MeshRenderer {
 
         for object in &self.render_objects {
             self.meshes
-                .entry(&object.mesh)
-                .or_insert_with(|| assets.load(&*object.mesh));
+                .entry(object.mesh.clone())
+                .or_insert_with(|| assets.load(&object.mesh));
 
             let material = {
                 self.materials
-                    .entry(&object.material)
+                    .entry(object.material.clone())
                     .or_insert_with(|| assets.load(&object.material))
             };
 
