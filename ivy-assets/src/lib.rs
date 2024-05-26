@@ -14,6 +14,7 @@ pub mod fs;
 mod handle;
 pub mod map;
 pub mod service;
+use fs::AssetFromPathExt;
 pub use handle::Asset;
 use image::{DynamicImage, ImageError, ImageResult};
 use service::Service;
@@ -89,11 +90,12 @@ impl AssetCache {
     where
         K: ?Sized + AssetKey<V>,
         V: 'static + Send + Sync,
+        K::Error: std::fmt::Debug,
     {
         match self.try_load(key) {
             Ok(v) => v,
-            Err(_) => {
-                unreachable!()
+            Err(err) => {
+                panic!("Failed to load asset: {err:?}")
             }
         }
     }
@@ -181,11 +183,11 @@ pub trait AssetKey<V>: StoredKey {
     fn load(&self, assets: &AssetCache) -> Result<Asset<V>, Self::Error>;
 }
 
-impl AssetKey<DynamicImage> for Path {
+impl AssetFromPathExt for DynamicImage {
     type Error = ImageError;
 
-    fn load(&self, assets: &AssetCache) -> ImageResult<Asset<DynamicImage>> {
-        Ok(assets.insert(image::open(self)?))
+    fn load(path: &Path, assets: &AssetCache) -> ImageResult<Asset<Self>> {
+        Ok(assets.insert(image::open(path)?))
     }
 }
 

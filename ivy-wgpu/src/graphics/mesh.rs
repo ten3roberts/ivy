@@ -186,6 +186,6 @@ impl Mesh {
             }
         }
 
-        todo!()
+        Self::new(gpu, &vertices, &indices, Some(primitives))
     }
 }

@@ -3,6 +3,7 @@ use std::convert::Infallible;
 use glam::{vec2, vec3, Vec3};
 use itertools::Itertools;
 use ivy_assets::{Asset, AssetKey};
+use ivy_gltf::{GltfMesh, GltfMeshRef};
 
 use crate::{
     graphics::{Mesh, Vertex},
@@ -12,13 +13,31 @@ use crate::{
 /// Cpu side mesh descriptor
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MeshDesc {
-    Path(String),
+    Gltf(GltfMesh),
     Content(Asset<MeshData>),
 }
 
+impl From<GltfMeshRef<'_>> for MeshDesc {
+    fn from(v: GltfMeshRef) -> Self {
+        Self::Gltf(v.into())
+    }
+}
+
+impl From<GltfMesh> for MeshDesc {
+    fn from(v: GltfMesh) -> Self {
+        Self::Gltf(v)
+    }
+}
+
+impl From<Asset<MeshData>> for MeshDesc {
+    fn from(v: Asset<MeshData>) -> Self {
+        Self::Content(v)
+    }
+}
+
 impl MeshDesc {
-    pub fn path(path: impl Into<String>) -> Self {
-        Self::Path(path.into())
+    pub fn gltf(mesh: impl Into<GltfMesh>) -> Self {
+        Self::Gltf(mesh.into())
     }
 
     pub fn content(content: Asset<MeshData>) -> Self {
@@ -27,38 +46,40 @@ impl MeshDesc {
 }
 
 impl AssetKey<Mesh> for MeshDesc {
-    type Error = Infallible;
+    type Error = anyhow::Error;
 
     fn load(
         &self,
         assets: &ivy_assets::AssetCache,
     ) -> Result<ivy_assets::Asset<Mesh>, Self::Error> {
-        let mesh = match self {
-            MeshDesc::Path(_) => todo!(),
-            MeshDesc::Content(v) => Mesh::new(
-                &assets.service(),
-                v.vertices(),
-                v.indices(),
-                v.primitives.as_ref().map(|v| {
-                    v.iter()
-                        .map(|v| crate::graphics::mesh::Primitive {
-                            first_index: v.first_index,
-                            index_count: v.index_count,
-                            material: assets.load(&v.material),
-                        })
-                        .collect_vec()
-                }),
-            ),
-        };
+        match self {
+            MeshDesc::Gltf(mesh) => assets.try_load(mesh).map_err(Into::into),
+            MeshDesc::Content(v) => {
+                let mesh = Mesh::new(
+                    &assets.service(),
+                    v.vertices(),
+                    v.indices(),
+                    v.primitives.as_ref().map(|v| {
+                        v.iter()
+                            .map(|v| crate::graphics::mesh::Primitive {
+                                first_index: v.first_index,
+                                index_count: v.index_count,
+                                material: assets.load(&v.material),
+                            })
+                            .collect_vec()
+                    }),
+                );
 
-        Ok(assets.insert(mesh))
+                Ok(assets.insert(mesh))
+            }
+        }
     }
 }
 
 pub struct Primitive {
     pub first_index: u32,
     pub index_count: u32,
-    pub material: Asset<MaterialDesc>,
+    pub material: MaterialDesc,
 }
 
 /// CPU created mesh data

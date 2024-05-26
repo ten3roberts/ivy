@@ -12,6 +12,7 @@ use ivy_base::{
     layer::events::EventRegisterContext,
     main_camera, position, rotation, App, EngineLayer, EntityBuilderExt, Layer, TransformBundle,
 };
+use ivy_gltf::Document;
 use ivy_input::{
     components::input_state, layer::InputLayer, types::Key, Action, Axis3, BindingExt, Compose,
     CursorMovement, InputState, KeyBinding, MouseButtonBinding,
@@ -21,7 +22,7 @@ use ivy_wgpu::{
     driver::{WindowHandle, WinitDriver},
     events::ResizedEvent,
     layer::GraphicsLayer,
-    material::MaterialDesc,
+    material::{MaterialData, MaterialDesc},
     mesh::{MeshData, MeshDesc},
     renderer::RenderObjectBundle,
     shader::ShaderDesc,
@@ -79,22 +80,58 @@ impl LogicLayer {
         Self { entity: None }
     }
 
-    fn setup_objects(&mut self, world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
+    fn setup_assets(&mut self, world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
+        let document = Document::new(assets, "models/shapes.glb")?;
+
         let shader = assets.insert(ShaderDesc::new(
             "diffuse",
             include_str!("../assets/shaders/diffuse.wgsl"),
         ));
 
-        let quad_mesh = assets.insert(MeshDesc::content(assets.insert(MeshData::quad())));
-        let cube_mesh = assets.insert(MeshDesc::content(assets.insert(MeshData::cube())));
+        for node in document.nodes() {
+            tracing::info!(?node);
+        }
 
-        let material = assets.insert(MaterialDesc::new(TextureDesc::path(
+        for mesh in document.meshes() {
+            tracing::info!(?mesh);
+        }
+
+        for material in document.materials() {
+            tracing::info!(?material);
+        }
+
+        Entity::builder()
+            .mount(RenderObjectBundle::new(
+                document.find_mesh("Sphere").unwrap().into(),
+                document.material(0).unwrap().into(),
+                shader.clone(),
+            ))
+            .mount(TransformBundle::new(
+                vec3(0.0, 0.0, 2.0),
+                Quat::IDENTITY,
+                Vec3::ONE,
+            ))
+            .spawn(world);
+        Ok(())
+    }
+
+    fn setup_objects(&mut self, world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
+        self.setup_assets(world, assets)?;
+        let shader = assets.insert(ShaderDesc::new(
+            "diffuse",
+            include_str!("../assets/shaders/diffuse.wgsl"),
+        ));
+
+        let quad_mesh = MeshDesc::content(assets.insert(MeshData::quad()));
+        let cube_mesh = MeshDesc::content(assets.insert(MeshData::cube()));
+
+        let material = MaterialDesc::content(assets.insert(MaterialData::new(TextureDesc::path(
             "assets/textures/statue.jpg",
-        )));
+        ))));
 
-        let material2 = assets.insert(MaterialDesc::new(TextureDesc::path(
+        let material2 = MaterialDesc::content(assets.insert(MaterialData::new(TextureDesc::path(
             "assets/textures/grid.png",
-        )));
+        ))));
 
         Entity::builder()
             .mount(RenderObjectBundle::new(

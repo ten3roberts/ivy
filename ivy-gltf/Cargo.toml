@@ -1,0 +1,14 @@
+[package]
+name = "ivy-gltf"
+version = "0.1.0"
+edition = "2021"
+description = "Gltf asset management for Ivy"
+
+[dependencies]
+ivy-assets = { path = "../ivy-assets" }
+
+anyhow.workspace = true
+gltf.workspace = true
+glam.workspace = true
+tracing.workspace = true
+itertools.workspace = true

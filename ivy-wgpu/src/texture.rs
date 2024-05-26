@@ -33,9 +33,9 @@ impl AssetKey<Texture> for TextureDesc {
         let texture = match self {
             TextureDesc::Path(v) => {
                 let image = image::open(v)?;
-                Texture::from_image(&*gpu, &image)
+                Texture::from_image(&gpu, &image)
             }
-            TextureDesc::Content(v) => Texture::from_image(&*gpu, v),
+            TextureDesc::Content(v) => Texture::from_image(&gpu, v),
         };
 
         Ok(assets.insert(texture))
