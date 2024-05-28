@@ -1,10 +1,12 @@
+pub mod node;
+
 use std::{ops::Deref, path::Path};
 
 use gltf::Gltf;
 use image::{DynamicImage, Rgba32FImage, RgbaImage};
 use itertools::Itertools;
 use ivy_assets::{Asset, AssetCache, AssetKey};
-use ivy_gltf::{DocumentData, GltfMaterial, GltfMesh};
+use ivy_gltf::{DocumentData, GltfMaterial, GltfMesh, GltfPrimitive, GltfPrimitiveRef};
 
 use crate::{
     graphics::{
@@ -18,7 +20,7 @@ use crate::{
 
 /// Contains the gltf data
 pub struct Document {
-    meshes: Vec<Asset<Mesh>>,
+    mesh_primitives: Vec<Vec<Asset<Mesh>>>,
     materials: Vec<Asset<Material>>,
     images: Vec<Asset<Texture>>,
 }
@@ -59,23 +61,23 @@ impl Document {
             .map(|v| anyhow::Ok(assets.insert(Material::from_gltf(gpu, assets, v, &textures)?)))
             .try_collect()?;
 
-        let meshes: Vec<_> = data
+        let mesh_primitives: Vec<_> = data
             .document
             .meshes()
             .map(|mesh| {
-                assets.insert(Mesh::from_gltf(
-                    gpu,
-                    assets,
-                    mesh,
-                    data.buffer_data(),
-                    &materials,
-                ))
+                tracing::info!(?mesh, "loading mesh");
+                mesh.primitives()
+                    .map(|primitive| {
+                        tracing::info!(?primitive, "loading primitive");
+                        assets.insert(Mesh::from_gltf(gpu, assets, &primitive, data.buffer_data()))
+                    })
+                    .collect_vec()
             })
             .collect_vec();
 
         Ok(Self {
             images: textures,
-            meshes,
+            mesh_primitives,
             materials,
         })
     }
@@ -97,19 +99,19 @@ impl AssetKey<Document> for Asset<ivy_gltf::DocumentData> {
     }
 }
 
-impl AssetKey<Mesh> for GltfMesh {
+impl AssetKey<Mesh> for GltfPrimitive {
     type Error = anyhow::Error;
 
     fn load(&self, assets: &AssetCache) -> Result<Asset<Mesh>, Self::Error> {
         let document: Asset<Document> = assets.try_load(self.data())?;
 
-        document.meshes.get(self.index()).cloned().ok_or_else(|| {
-            anyhow::anyhow!(
-                "mesh index out of bounds: {} >= {}",
-                self.index(),
-                document.meshes.len()
-            )
-        })
+        document
+            .mesh_primitives
+            .get(self.material().index())
+            .ok_or_else(|| anyhow::anyhow!("mesh out of bounds: {}", self.index(),))?
+            .get(self.index())
+            .ok_or_else(|| anyhow::anyhow!("mesh primitive out of bounds: {}", self.index(),))
+            .cloned()
     }
 }
 

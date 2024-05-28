@@ -1327,6 +1327,7 @@ dependencies = [
  "ivy-presets",
  "ivy-random",
  "ivy-rendergraph",
+ "ivy-scene",
  "ivy-ui",
  "ivy-vulkan",
  "ivy-wgpu",
@@ -1346,6 +1347,7 @@ name = "ivy-gltf"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "flax",
  "glam",
  "gltf",
  "itertools 0.13.0",
@@ -1491,6 +1493,17 @@ dependencies = [
  "parking_lot",
  "slotmap",
  "thiserror",
+]
+
+[[package]]
+name = "ivy-scene"
+version = "0.1.0"
+dependencies = [
+ "flax",
+ "ivy-assets",
+ "ivy-base",
+ "ivy-gltf",
+ "ivy-wgpu",
 ]
 
 [[package]]

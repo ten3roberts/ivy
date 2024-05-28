@@ -1,7 +1,7 @@
 use std::iter::repeat;
 
 use glam::{vec2, vec3, Vec2, Vec3, Vec4};
-use itertools::izip;
+use itertools::{izip, Itertools};
 use ivy_assets::{Asset, AssetCache};
 use wgpu::{
     util::DeviceExt, vertex_attr_array, Buffer, RenderPass, VertexAttribute, VertexBufferLayout,
@@ -76,22 +76,19 @@ pub struct Primitive {
     pub material: Asset<Material>,
 }
 
+/// Flat mesh of vertices and indices
+///
+/// For Gltf, contains the vertices and indices of *all* primitives.
 #[derive(Debug)]
 pub struct Mesh {
     vertex_count: u32,
     index_count: u32,
     vertex_buffer: Buffer,
     index_buffer: Buffer,
-    primitives: Option<Vec<Primitive>>,
 }
 
 impl Mesh {
-    pub fn new(
-        gpu: &Gpu,
-        vertices: &[Vertex],
-        indices: &[u32],
-        primitives: Option<Vec<Primitive>>,
-    ) -> Self {
+    pub fn new(gpu: &Gpu, vertices: &[Vertex], indices: &[u32]) -> Self {
         let vertex_buffer = gpu
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -113,7 +110,6 @@ impl Mesh {
             index_count: indices.len() as u32,
             vertex_buffer,
             index_buffer,
-            primitives,
         }
     }
 
@@ -133,59 +129,35 @@ impl Mesh {
     pub(crate) fn from_gltf(
         gpu: &Gpu,
         assets: &AssetCache,
-        mesh: gltf::Mesh,
+        primitive: &gltf::Primitive,
         buffer_data: &[gltf::buffer::Data],
-        materials: &[Asset<Material>],
     ) -> Self {
-        let mut vertices = Vec::new();
-        let mut indices = Vec::new();
+        let reader = primitive.reader(|buffer| Some(&buffer_data[buffer.index()]));
 
-        let mut primitives = Vec::new();
+        let indices = reader
+            .read_indices()
+            .into_iter()
+            .flat_map(|val| val.into_u32())
+            .collect_vec();
 
-        for p in mesh.primitives() {
-            let reader = p.reader(|buffer| Some(&buffer_data[buffer.index()]));
+        let pos = reader
+            .read_positions()
+            .into_iter()
+            .flatten()
+            .map(Vec3::from);
 
-            let first_index = indices.len() as u32;
-            let offset = vertices.len() as u32;
-            indices.extend(
-                reader
-                    .read_indices()
-                    .into_iter()
-                    .flat_map(|val| val.into_u32())
-                    .map(|val| val + offset),
-            );
+        let normals = reader.read_normals().into_iter().flatten().map(Vec3::from);
 
-            let index_count = indices.len() as u32 - first_index;
+        let texcoord = reader
+            .read_tex_coords(0)
+            .into_iter()
+            .flat_map(|val| val.into_f32())
+            .map(Vec2::from);
 
-            let pos = reader
-                .read_positions()
-                .into_iter()
-                .flatten()
-                .map(Vec3::from);
+        let vertices = izip!(pos, normals, texcoord, repeat(Vec3::ZERO))
+            .map(|(pos, normal, textcoord, tangent)| Vertex::new(pos, textcoord, normal))
+            .collect_vec();
 
-            let normals = reader.read_normals().into_iter().flatten().map(Vec3::from);
-
-            let texcoord = reader
-                .read_tex_coords(0)
-                .into_iter()
-                .flat_map(|val| val.into_f32())
-                .map(Vec2::from);
-
-            vertices.extend(
-                izip!(pos, normals, texcoord, repeat(Vec3::ZERO))
-                    .map(|(pos, normal, textcoord, tangent)| Vertex::new(pos, textcoord, normal)),
-            );
-
-            // Keep track of which materials map to which part of the index buffer
-            if let Some(material) = materials.get(p.material().index().unwrap_or(0)) {
-                primitives.push(Primitive {
-                    first_index,
-                    index_count,
-                    material: material.clone(),
-                });
-            }
-        }
-
-        Self::new(gpu, &vertices, &indices, Some(primitives))
+        Self::new(gpu, &vertices, &indices)
     }
 }
