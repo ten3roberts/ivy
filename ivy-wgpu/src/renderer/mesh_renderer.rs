@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 
 use bytemuck::Zeroable;
-use flax::{FetchExt, Query, World};
+use flax::{components::child_of, FetchExt, Query, World};
 use ivy_assets::{map::AssetMap, Asset, AssetCache};
 use ivy_base::world_transform;
 use wgpu::{BindGroup, BindGroupLayout, BufferUsages, RenderPass, ShaderStages, TextureFormat};
 
 use crate::{
-    components::{material, mesh, shader},
+    components::{material, mesh, mesh_primitive, shader},
     graphics::{
         material::Material, shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, Mesh,
         Shader, TypedBuffer, Vertex, VertexDesc,
@@ -85,7 +85,7 @@ impl MeshRenderer {
             mesh().cloned(),
             material().cloned(),
             shader().cloned(),
-            world_transform().copied(),
+            world_transform().copied().traverse(mesh_primitive),
         ));
 
         for (mesh, material, shader, transform) in &mut query.borrow(world) {

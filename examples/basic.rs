@@ -17,8 +17,9 @@ use ivy_input::{
     components::input_state, layer::InputLayer, types::Key, Action, Axis3, BindingExt, Compose,
     CursorMovement, InputState, KeyBinding, MouseButtonBinding,
 };
+use ivy_scene::GltfNodeExt;
 use ivy_wgpu::{
-    components::{main_window, projection_matrix, window},
+    components::{main_window, material, projection_matrix, window},
     driver::{WindowHandle, WinitDriver},
     events::ResizedEvent,
     layer::GraphicsLayer,
@@ -100,18 +101,23 @@ impl LogicLayer {
             tracing::info!(?material);
         }
 
-        Entity::builder()
-            .mount(RenderObjectBundle::new(
-                document.find_mesh("Sphere").unwrap().into(),
-                document.material(0).unwrap().into(),
-                shader.clone(),
-            ))
-            .mount(TransformBundle::new(
-                vec3(0.0, 0.0, 2.0),
-                Quat::IDENTITY,
-                Vec3::ONE,
-            ))
-            .spawn(world);
+        for x in 0..10 {
+            for y in 0..10 {
+                for z in 0..10 {
+                    document
+                        .node(0)
+                        .unwrap()
+                        .mount(assets, &mut Entity::builder())
+                        .mount(TransformBundle::new(
+                            vec3(x as f32 * 2.5, y as f32 * 2.5, 5.0 + z as f32 * 2.5),
+                            Quat::IDENTITY,
+                            Vec3::ONE,
+                        ))
+                        .spawn(world);
+                }
+            }
+        }
+
         Ok(())
     }
 

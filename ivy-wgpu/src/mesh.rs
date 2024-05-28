@@ -3,7 +3,7 @@ use std::convert::Infallible;
 use glam::{vec2, vec3, Vec3};
 use itertools::Itertools;
 use ivy_assets::{Asset, AssetKey};
-use ivy_gltf::{GltfMesh, GltfMeshRef};
+use ivy_gltf::{GltfMesh, GltfMeshRef, GltfPrimitive, GltfPrimitiveRef};
 
 use crate::{
     graphics::{Mesh, Vertex},
@@ -13,18 +13,18 @@ use crate::{
 /// Cpu side mesh descriptor
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MeshDesc {
-    Gltf(GltfMesh),
+    Gltf(GltfPrimitive),
     Content(Asset<MeshData>),
 }
 
-impl From<GltfMeshRef<'_>> for MeshDesc {
-    fn from(v: GltfMeshRef) -> Self {
+impl From<GltfPrimitiveRef<'_>> for MeshDesc {
+    fn from(v: GltfPrimitiveRef) -> Self {
         Self::Gltf(v.into())
     }
 }
 
-impl From<GltfMesh> for MeshDesc {
-    fn from(v: GltfMesh) -> Self {
+impl From<GltfPrimitive> for MeshDesc {
+    fn from(v: GltfPrimitive) -> Self {
         Self::Gltf(v)
     }
 }
@@ -36,7 +36,7 @@ impl From<Asset<MeshData>> for MeshDesc {
 }
 
 impl MeshDesc {
-    pub fn gltf(mesh: impl Into<GltfMesh>) -> Self {
+    pub fn gltf(mesh: impl Into<GltfPrimitive>) -> Self {
         Self::Gltf(mesh.into())
     }
 
@@ -55,20 +55,7 @@ impl AssetKey<Mesh> for MeshDesc {
         match self {
             MeshDesc::Gltf(mesh) => assets.try_load(mesh).map_err(Into::into),
             MeshDesc::Content(v) => {
-                let mesh = Mesh::new(
-                    &assets.service(),
-                    v.vertices(),
-                    v.indices(),
-                    v.primitives.as_ref().map(|v| {
-                        v.iter()
-                            .map(|v| crate::graphics::mesh::Primitive {
-                                first_index: v.first_index,
-                                index_count: v.index_count,
-                                material: assets.load(&v.material),
-                            })
-                            .collect_vec()
-                    }),
-                );
+                let mesh = Mesh::new(&assets.service(), v.vertices(), v.indices());
 
                 Ok(assets.insert(mesh))
             }
@@ -86,28 +73,11 @@ pub struct Primitive {
 pub struct MeshData {
     vertices: Box<[Vertex]>,
     indices: Box<[u32]>,
-    primitives: Option<Vec<Primitive>>,
 }
 
 impl MeshData {
     pub fn new(vertices: Box<[Vertex]>, indices: Box<[u32]>) -> Self {
-        Self {
-            vertices,
-            indices,
-            primitives: None,
-        }
-    }
-
-    pub fn new_with_primitives(
-        vertices: Box<[Vertex]>,
-        indices: Box<[u32]>,
-        primitives: Vec<Primitive>,
-    ) -> Self {
-        Self {
-            vertices,
-            indices,
-            primitives: Some(primitives),
-        }
+        Self { vertices, indices }
     }
 
     pub fn vertices(&self) -> &[Vertex] {
@@ -131,7 +101,6 @@ impl MeshData {
         Self {
             vertices: vertices.to_vec().into_boxed_slice(),
             indices: indices.to_vec().into_boxed_slice(),
-            primitives: None,
         }
     }
 
@@ -155,7 +124,6 @@ impl MeshData {
         Self {
             vertices: vertices.to_vec().into_boxed_slice(),
             indices: indices.to_vec().into_boxed_slice(),
-            primitives: None,
         }
     }
 }

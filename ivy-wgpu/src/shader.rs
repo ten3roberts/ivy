@@ -1,11 +1,13 @@
+use std::borrow::Cow;
+
 /// Describes a shader
 pub struct ShaderDesc {
-    label: String,
-    source: String,
+    pub label: String,
+    pub source: Cow<'static, str>,
 }
 
 impl ShaderDesc {
-    pub fn new(label: impl Into<String>, source: impl Into<String>) -> Self {
+    pub fn new(label: impl Into<String>, source: impl Into<Cow<'static, str>>) -> Self {
         Self {
             label: label.into(),
             source: source.into(),

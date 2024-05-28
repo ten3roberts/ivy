@@ -1,7 +1,10 @@
+pub mod components;
+
+use flax::EntityBuilder;
 use itertools::Itertools;
 use std::{collections::HashMap, path::Path};
 
-use gltf::Gltf;
+use gltf::{Gltf, Primitive};
 use ivy_assets::{Asset, AssetCache, AssetKey, StoredKey};
 
 /// An in memory representation of a gltf document and binary buffer data
@@ -18,6 +21,38 @@ pub struct DocumentData {
 impl DocumentData {
     pub fn buffer_data(&self) -> &[gltf::buffer::Data] {
         &self.buffer_data
+    }
+
+    fn mesh(&self, index: usize) -> Option<gltf::Mesh<'_>> {
+        self.gltf.document.meshes().nth(index)
+    }
+
+    fn meshes(&self) -> impl Iterator<Item = gltf::Mesh<'_>> + '_ {
+        self.gltf.document.meshes()
+    }
+
+    fn material(&self, index: usize) -> Option<gltf::Material<'_>> {
+        self.gltf.document.materials().nth(index)
+    }
+
+    fn materials(&self) -> impl Iterator<Item = gltf::Material<'_>> + '_ {
+        self.gltf.document.materials()
+    }
+
+    fn node(&self, index: usize) -> Option<gltf::Node<'_>> {
+        self.gltf.document.nodes().nth(index)
+    }
+
+    fn nodes(&self) -> impl Iterator<Item = gltf::Node<'_>> + '_ {
+        self.gltf.document.nodes()
+    }
+
+    fn primitive(&self, index: usize) -> Option<Primitive<'_>> {
+        self.mesh(index).and_then(|v| v.primitives().next())
+    }
+
+    fn primitives(&self) -> impl Iterator<Item = Primitive<'_>> + '_ {
+        self.meshes().flat_map(|v| v.primitives())
     }
 }
 
@@ -85,7 +120,6 @@ impl Document {
         self.data.meshes().enumerate().map(|(i, v)| GltfMeshRef {
             data: &self.data,
             index: i,
-            name: v.name(),
         })
     }
 
@@ -96,7 +130,6 @@ impl Document {
             .map(|(i, v)| GltfMaterialRef {
                 data: &self.data,
                 index: i,
-                name: v.name(),
             })
     }
 
@@ -104,7 +137,6 @@ impl Document {
         self.data.nodes().enumerate().map(|(i, v)| GltfNodeRef {
             data: &self.data,
             index: i,
-            name: v.name(),
         })
     }
 
@@ -116,7 +148,6 @@ impl Document {
         self.data.meshes().nth(index).map(|v| GltfMeshRef {
             data: &self.data,
             index,
-            name: v.name(),
         })
     }
 
@@ -124,7 +155,6 @@ impl Document {
         self.data.materials().nth(index).map(|v| GltfMaterialRef {
             data: &self.data,
             index,
-            name: v.name(),
         })
     }
 
@@ -132,7 +162,6 @@ impl Document {
         self.data.nodes().nth(index).map(|v| GltfNodeRef {
             data: &self.data,
             index,
-            name: v.name(),
         })
     }
 
@@ -159,21 +188,61 @@ impl Document {
     }
 }
 
+pub struct GltfPrimitiveRef<'a> {
+    data: &'a Asset<DocumentData>,
+    primitive: Primitive<'a>,
+}
+
+impl<'a> GltfPrimitiveRef<'a> {
+    pub fn material(&self) -> GltfMaterialRef {
+        GltfMaterialRef {
+            data: self.data,
+            index: self.primitive.material().index().unwrap(),
+        }
+    }
+}
+
+impl From<GltfPrimitiveRef<'_>> for GltfPrimitive {
+    fn from(v: GltfPrimitiveRef) -> Self {
+        Self {
+            data: v.data.clone(),
+            index: v.primitive.index(),
+        }
+    }
+}
+
 /// References a mesh in a gltf document
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct GltfMeshRef<'a> {
     data: &'a Asset<DocumentData>,
     index: usize,
-    name: Option<&'a str>,
 }
 
 impl<'a> GltfMeshRef<'a> {
-    pub fn data(&self) -> &Asset<DocumentData> {
-        self.data
+    pub fn name(&self) -> Option<&str> {
+        self.data.mesh(self.index).unwrap().name()
     }
 
-    pub fn name(&self) -> Option<&str> {
-        self.name
+    fn from_gltf(data: &'a Asset<DocumentData>, mesh: gltf::Mesh<'a>) -> Self {
+        Self {
+            data,
+            index: mesh.index(),
+        }
+    }
+
+    pub fn primitives(&self) -> impl Iterator<Item = GltfPrimitiveRef<'a>> {
+        self.data
+            .mesh(self.index)
+            .unwrap()
+            .primitives()
+            .map(|v| GltfPrimitiveRef {
+                data: self.data,
+                primitive: v,
+            })
+    }
+
+    pub fn data(&self) -> &Asset<DocumentData> {
+        self.data
     }
 }
 
@@ -182,16 +251,19 @@ impl<'a> GltfMeshRef<'a> {
 pub struct GltfMaterialRef<'a> {
     data: &'a Asset<DocumentData>,
     index: usize,
-    name: Option<&'a str>,
 }
 
 impl<'a> GltfMaterialRef<'a> {
     pub fn name(&self) -> Option<&str> {
-        self.name
+        self.data.material(self.index).unwrap().name()
     }
 
     pub fn data(&self) -> &Asset<DocumentData> {
         self.data
+    }
+
+    pub fn index(&self) -> usize {
+        self.index
     }
 }
 
@@ -200,20 +272,66 @@ impl<'a> GltfMaterialRef<'a> {
 pub struct GltfNodeRef<'a> {
     data: &'a Asset<DocumentData>,
     index: usize,
-    name: Option<&'a str>,
 }
 
 impl<'a> GltfNodeRef<'a> {
+    pub fn name(&self) -> Option<&str> {
+        self.data.node(self.index).and_then(|v| v.name())
+    }
+
     pub fn index(&self) -> usize {
         self.index
     }
 
-    pub fn name(&self) -> Option<&str> {
-        self.name
+    pub fn data(&self) -> &Asset<DocumentData> {
+        self.data
+    }
+
+    pub fn mesh(&'a self) -> Option<GltfMeshRef<'a>> {
+        let node = self.data.node(self.index).unwrap();
+        Some(GltfMeshRef::from_gltf(self.data, node.mesh()?))
+    }
+
+    pub fn children(&'a self) -> impl Iterator<Item = GltfNodeRef<'a>> {
+        self.data
+            .node(self.index)
+            .unwrap()
+            .children()
+            .map(move |v| GltfNodeRef {
+                data: self.data,
+                index: v.index(),
+            })
+    }
+}
+
+/// References a mesh primitive in a gltf document
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct GltfPrimitive {
+    data: Asset<DocumentData>,
+    index: usize,
+}
+
+// TODO: macro for all these
+impl GltfPrimitive {
+    pub fn index(&self) -> usize {
+        self.index
     }
 
     pub fn data(&self) -> &Asset<DocumentData> {
-        self.data
+        &self.data
+    }
+
+    pub fn material(&self) -> GltfMaterialRef {
+        GltfMaterialRef {
+            data: &self.data,
+            index: self
+                .data
+                .primitive(self.index())
+                .unwrap()
+                .material()
+                .index()
+                .unwrap(),
+        }
     }
 }
 
@@ -225,6 +343,10 @@ pub struct GltfMesh {
 }
 
 impl GltfMesh {
+    pub fn name(&self) -> Option<&str> {
+        self.data.mesh(self.index).and_then(|v| v.name())
+    }
+
     pub fn index(&self) -> usize {
         self.index
     }
@@ -242,6 +364,10 @@ pub struct GltfMaterial {
 }
 
 impl GltfMaterial {
+    pub fn name(&self) -> Option<&str> {
+        self.data.material(self.index).and_then(|v| v.name())
+    }
+
     pub fn index(&self) -> usize {
         self.index
     }
@@ -256,6 +382,43 @@ impl GltfMaterial {
 pub struct GltfNode {
     data: Asset<DocumentData>,
     index: usize,
+}
+
+impl GltfNode {
+    pub fn name(&self) -> Option<&str> {
+        self.data.node(self.index).and_then(|v| v.name())
+    }
+
+    pub fn data(&self) -> &DocumentData {
+        &self.data
+    }
+
+    pub fn index(&self) -> usize {
+        self.index
+    }
+
+    pub fn get_ref(&self) -> GltfNodeRef {
+        GltfNodeRef {
+            data: &self.data,
+            index: self.index,
+        }
+    }
+
+    pub fn mesh(&self) -> Option<GltfMeshRef<'_>> {
+        let node = self.data.node(self.index).unwrap();
+        Some(GltfMeshRef::from_gltf(&self.data, node.mesh()?))
+    }
+
+    pub fn children(&self) -> impl Iterator<Item = GltfNodeRef> {
+        self.data
+            .node(self.index)
+            .unwrap()
+            .children()
+            .map(move |v| GltfNodeRef {
+                data: &self.data,
+                index: v.index(),
+            })
+    }
 }
 
 impl From<GltfMeshRef<'_>> for GltfMesh {

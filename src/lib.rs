@@ -46,6 +46,7 @@ pub use ivy_postprocessing as postprocessing;
 pub use ivy_presets as presets;
 pub use ivy_random as random;
 pub use ivy_rendergraph as rendergraph;
+pub use ivy_scene as scene;
 pub use ivy_ui as ui;
 pub use ivy_vulkan as vulkan;
 pub use ivy_wgpu;

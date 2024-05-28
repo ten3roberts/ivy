@@ -1,0 +1,13 @@
+[package]
+name = "ivy-scene"
+version = "0.1.0"
+edition = "2021"
+description = "Scenes and cross libary scene management for the Ivy game engine"
+
+[dependencies]
+ivy-base = { path = "../ivy-base" }
+ivy-wgpu = { path = "../ivy-wgpu" }
+ivy-gltf = { path = "../ivy-gltf" }
+ivy-assets = { path = "../ivy-assets" }
+
+flax.workspace = true

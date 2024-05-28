@@ -12,3 +12,4 @@ gltf.workspace = true
 glam.workspace = true
 tracing.workspace = true
 itertools.workspace = true
+flax.workspace = true
