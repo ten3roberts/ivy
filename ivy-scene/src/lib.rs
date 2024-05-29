@@ -1,6 +1,6 @@
 use flax::{components::child_of, Entity, EntityBuilder};
 use ivy_assets::AssetCache;
-use ivy_base::EntityBuilderExt;
+use ivy_base::{EntityBuilderExt, TransformBundle};
 use ivy_gltf::{GltfNode, GltfNodeRef};
 use ivy_wgpu::{components::mesh_primitive, renderer::RenderObjectBundle, shaders::PbrShaderKey};
 
@@ -32,7 +32,8 @@ impl GltfNodeExt for GltfNodeRef<'_> {
             }
         }
 
-        // TODO: transform
+        let (position, rotation, scale) = self.transform();
+        entity.mount(TransformBundle::new(position, rotation, scale));
 
         for child in self.children() {
             entity.attach(child_of, child.mount(assets, &mut Entity::builder()));
