@@ -1,6 +1,7 @@
 pub mod components;
 
 use flax::EntityBuilder;
+use glam::{Quat, Vec3};
 use itertools::Itertools;
 use std::{collections::HashMap, path::Path};
 
@@ -195,9 +196,14 @@ impl<'a> GltfPrimitiveRef<'a> {
         Self { data, value, mesh }
     }
 
+    #[inline]
+    pub fn mesh_index(&self) -> usize {
+        self.mesh.index()
+    }
+
     /// **Note**: Refers to the index inside the mesh, not globally
-    pub fn index(&self) -> (usize, usize) {
-        (self.mesh.index(), self.value.index())
+    pub fn index(&self) -> usize {
+        self.value.index()
     }
 
     pub fn material(&self) -> GltfMaterialRef<'a> {
@@ -226,11 +232,9 @@ impl<'a> GltfMeshRef<'a> {
     }
 
     pub fn primitives(&self) -> impl Iterator<Item = GltfPrimitiveRef<'a>> + '_ {
-        self.value.primitives().map(|v| GltfPrimitiveRef {
-            data: self.data,
-            value: v,
-            mesh: self.clone(),
-        })
+        self.value
+            .primitives()
+            .map(|v| GltfPrimitiveRef::new(&self.data, v, self.clone()))
     }
 }
 
@@ -285,6 +289,11 @@ impl<'a> GltfNodeRef<'a> {
             .unwrap()
             .children()
             .map(move |v| GltfNodeRef::new(self.data, v))
+    }
+
+    pub fn transform(&self) -> (Vec3, Quat, Vec3) {
+        let (pos, rot, scale) = self.value.transform().decomposed();
+        (pos.into(), Quat::from_array(rot), scale.into())
     }
 }
 
@@ -427,7 +436,7 @@ impl From<GltfPrimitiveRef<'_>> for GltfPrimitive {
     fn from(v: GltfPrimitiveRef) -> Self {
         Self {
             data: v.data.clone(),
-            index: v.index(),
+            index: (v.mesh_index(), v.index()),
         }
     }
 }
