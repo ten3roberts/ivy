@@ -95,7 +95,7 @@ impl AssetKey<Document> for Asset<ivy_gltf::DocumentData> {
     type Error = anyhow::Error;
 
     fn load(&self, assets: &AssetCache) -> Result<Asset<Document>, Self::Error> {
-        Ok(assets.insert(Document::new(&assets.service(), assets, &self)?))
+        Ok(assets.insert(Document::new(&assets.service(), assets, self)?))
     }
 }
 
@@ -107,8 +107,8 @@ impl AssetKey<Mesh> for GltfPrimitive {
 
         document
             .mesh_primitives
-            .get(self.material().index())
-            .ok_or_else(|| anyhow::anyhow!("mesh out of bounds: {}", self.index(),))?
+            .get(self.mesh_index())
+            .ok_or_else(|| anyhow::anyhow!("mesh out of bounds: {}", self.mesh_index(),))?
             .get(self.index())
             .ok_or_else(|| anyhow::anyhow!("mesh primitive out of bounds: {}", self.index(),))
             .cloned()
