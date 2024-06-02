@@ -15,12 +15,13 @@ use crate::{
         Mesh,
     },
     material::MaterialData,
+    mesh::MeshData,
     Gpu,
 };
 
 /// Contains the gltf data
 pub struct Document {
-    mesh_primitives: Vec<Vec<Asset<Mesh>>>,
+    mesh_primitives: Vec<Vec<Asset<MeshData>>>,
     materials: Vec<Asset<Material>>,
     images: Vec<Asset<Texture>>,
 }
@@ -69,7 +70,7 @@ impl Document {
                 mesh.primitives()
                     .map(|primitive| {
                         tracing::info!(?primitive, "loading primitive");
-                        assets.insert(Mesh::from_gltf(gpu, assets, &primitive, data.buffer_data()))
+                        assets.insert(MeshData::from_gltf(assets, &primitive, data.buffer_data()))
                     })
                     .collect_vec()
             })
@@ -99,10 +100,10 @@ impl AssetKey<Document> for Asset<ivy_gltf::DocumentData> {
     }
 }
 
-impl AssetKey<Mesh> for GltfPrimitive {
+impl AssetKey<MeshData> for GltfPrimitive {
     type Error = anyhow::Error;
 
-    fn load(&self, assets: &AssetCache) -> Result<Asset<Mesh>, Self::Error> {
+    fn load(&self, assets: &AssetCache) -> Result<Asset<MeshData>, Self::Error> {
         let document: Asset<Document> = assets.try_load(self.data())?;
 
         document

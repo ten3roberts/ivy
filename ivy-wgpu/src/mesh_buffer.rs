@@ -28,6 +28,7 @@ pub struct MeshHandle {
     id: u64,
     vb: SubBuffer<Vertex>,
     ib: SubBuffer<u32>,
+    index_count: usize,
     on_drop: Arc<Mutex<DroppedList>>,
 }
 
@@ -62,6 +63,10 @@ impl MeshHandle {
 
     pub fn ib(&self) -> SubBuffer<u32> {
         self.ib
+    }
+
+    pub fn index_count(&self) -> usize {
+        self.index_count
     }
 }
 
@@ -106,12 +111,9 @@ impl MeshBuffer {
 
     /// Allocate a mesh in the buffer
     pub fn allocate(&mut self, gpu: &Gpu, vertex_count: usize, index_count: usize) -> MeshHandle {
-        self.allocate_exact(
-            gpu,
-            vertex_count.next_power_of_two(),
-            index_count.next_power_of_two(),
-        )
+        self.allocate_exact(gpu, vertex_count, index_count)
     }
+
     pub fn allocate_exact(
         &mut self,
         gpu: &Gpu,
@@ -144,6 +146,7 @@ impl MeshBuffer {
             vb,
             ib,
             on_drop: self.dropped.clone(),
+            index_count,
         }
     }
 

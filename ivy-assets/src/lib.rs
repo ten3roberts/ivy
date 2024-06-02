@@ -14,6 +14,7 @@ pub mod fs;
 mod handle;
 pub mod map;
 pub mod service;
+pub mod stored;
 use fs::AssetFromPathExt;
 pub use handle::Asset;
 use image::{DynamicImage, ImageError, ImageResult};

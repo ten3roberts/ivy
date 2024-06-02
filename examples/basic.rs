@@ -233,7 +233,7 @@ impl Layer for LogicLayer {
             .set_default(rotation_input())
             .set_default(euler_rotation())
             .set_default(pan_active())
-            .set(camera_speed(), 2.0)
+            .set(camera_speed(), 5.0)
             .spawn(world);
 
         Ok(())

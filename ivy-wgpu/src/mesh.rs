@@ -1,8 +1,8 @@
-use std::convert::Infallible;
+use std::{convert::Infallible, iter::repeat};
 
-use glam::{vec2, vec3, Vec3};
-use itertools::Itertools;
-use ivy_assets::{Asset, AssetKey};
+use glam::{vec2, vec3, Vec2, Vec3};
+use itertools::{izip, Itertools};
+use ivy_assets::{Asset, AssetCache, AssetKey};
 use ivy_gltf::{GltfMesh, GltfMeshRef, GltfPrimitive, GltfPrimitiveRef};
 
 use crate::{
@@ -43,25 +43,32 @@ impl MeshDesc {
     pub fn content(content: Asset<MeshData>) -> Self {
         Self::Content(content)
     }
-}
 
-impl AssetKey<Mesh> for MeshDesc {
-    type Error = anyhow::Error;
-
-    fn load(
-        &self,
-        assets: &ivy_assets::AssetCache,
-    ) -> Result<ivy_assets::Asset<Mesh>, Self::Error> {
+    pub fn load_data(&self, assets: &AssetCache) -> anyhow::Result<Asset<MeshData>> {
         match self {
-            MeshDesc::Gltf(mesh) => assets.try_load(mesh).map_err(Into::into),
-            MeshDesc::Content(v) => {
-                let mesh = Mesh::new(&assets.service(), v.vertices(), v.indices());
-
-                Ok(assets.insert(mesh))
-            }
+            MeshDesc::Gltf(mesh) => assets.try_load(mesh),
+            MeshDesc::Content(v) => Ok(v.clone()),
         }
     }
 }
+
+// impl AssetKey<Mesh> for MeshDesc {
+//     type Error = anyhow::Error;
+
+//     fn load(
+//         &self,
+//         assets: &ivy_assets::AssetCache,
+//     ) -> Result<ivy_assets::Asset<Mesh>, Self::Error> {
+//         match self {
+//             MeshDesc::Gltf(mesh) => assets.try_load(mesh).map_err(Into::into),
+//             MeshDesc::Content(v) => {
+//                 let mesh = Mesh::new(&assets.service(), v.vertices(), v.indices());
+
+//                 Ok(assets.insert(mesh))
+//             }
+//         }
+//     }
+// }
 
 pub struct Primitive {
     pub first_index: u32,
@@ -125,5 +132,39 @@ impl MeshData {
             vertices: vertices.to_vec().into_boxed_slice(),
             indices: indices.to_vec().into_boxed_slice(),
         }
+    }
+
+    pub(crate) fn from_gltf(
+        assets: &AssetCache,
+        primitive: &gltf::Primitive,
+        buffer_data: &[gltf::buffer::Data],
+    ) -> Self {
+        let reader = primitive.reader(|buffer| Some(&buffer_data[buffer.index()]));
+
+        let indices = reader
+            .read_indices()
+            .into_iter()
+            .flat_map(|val| val.into_u32())
+            .collect_vec();
+
+        let pos = reader
+            .read_positions()
+            .into_iter()
+            .flatten()
+            .map(Vec3::from);
+
+        let normals = reader.read_normals().into_iter().flatten().map(Vec3::from);
+
+        let texcoord = reader
+            .read_tex_coords(0)
+            .into_iter()
+            .flat_map(|val| val.into_f32())
+            .map(Vec2::from);
+
+        let vertices = izip!(pos, normals, texcoord, repeat(Vec3::ZERO))
+            .map(|(pos, normal, textcoord, _tangent)| Vertex::new(pos, textcoord, normal))
+            .collect_vec();
+
+        Self::new(vertices.into_boxed_slice(), indices.into_boxed_slice())
     }
 }

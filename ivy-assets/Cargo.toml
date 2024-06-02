@@ -12,3 +12,4 @@ dashmap.workspace = true
 slotmap.workspace = true
 tracing.workspace = true
 parking_lot.workspace = true
+flume.workspace = true

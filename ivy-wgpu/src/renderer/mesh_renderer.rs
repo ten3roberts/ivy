@@ -1,4 +1,7 @@
-use std::collections::{BTreeMap, HashMap};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::{Arc, Weak},
+};
 
 use bytemuck::Zeroable;
 use flax::{
@@ -7,22 +10,24 @@ use flax::{
     CommandBuffer, Component, Fetch, FetchExt, Query, World,
 };
 use glam::Mat4;
-use ivy_assets::{map::AssetMap, Asset, AssetCache};
+use ivy_assets::{map::AssetMap, stored::Handle, Asset, AssetCache};
 use ivy_base::{palette::IntoColor, world_transform};
 use slab::Slab;
 use wgpu::{
-    naga::back::spv::ZeroInitializeWorkgroupMemoryMode, util::RenderEncoder, BindGroup,
-    BindGroupLayout, BufferUsages, RenderPass, ShaderStages, TextureFormat,
+    core::instance::IsSurfaceSupportedError, BindGroup, BindGroupLayout, BufferUsages, RenderPass,
+    ShaderStages, TextureFormat,
 };
 
 use crate::{
     components::{material, mesh, mesh_primitive, shader},
     graphics::{
-        material::Material, shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, Mesh,
-        Shader, TypedBuffer, Vertex, VertexDesc,
+        allocator::Allocation, material::Material, shader::ShaderDesc, BindGroupBuilder,
+        BindGroupLayoutBuilder, Mesh, Shader, TypedBuffer, Vertex, VertexDesc,
     },
     material::MaterialDesc,
     mesh::MeshDesc,
+    mesh_buffer::{MeshBuffer, MeshHandle},
+    renderer::RendererStore,
     Gpu,
 };
 
@@ -41,13 +46,13 @@ struct Batch {
     first_instance: u32,
     instance_capacity: u32,
 
-    mesh: Asset<Mesh>,
+    mesh: Arc<MeshHandle>,
     material: Asset<Material>,
-    shader: Asset<Shader>,
+    shader: Handle<Shader>,
 }
 
 impl Batch {
-    pub fn new(mesh: Asset<Mesh>, material: Asset<Material>, shader: Asset<Shader>) -> Self {
+    pub fn new(mesh: Arc<MeshHandle>, material: Asset<Material>, shader: Handle<Shader>) -> Self {
         Self {
             instance_count: 0,
             first_instance: 0,
@@ -68,19 +73,15 @@ impl Batch {
         gpu: &Gpu,
         assets: &AssetCache,
         globals: &'a Globals,
+        store: &'a RendererStore,
         render_pass: &mut RenderPass<'a>,
     ) {
-        render_pass.set_pipeline(self.shader.pipeline());
-        render_pass.set_vertex_buffer(0, self.mesh.vertex_buffer().slice(..));
-        render_pass.set_index_buffer(
-            self.mesh.index_buffer().slice(..),
-            wgpu::IndexFormat::Uint32,
-        );
-
+        render_pass.set_pipeline(store.shaders[&self.shader].pipeline());
         render_pass.set_bind_group(2, self.material.bind_group(), &[]);
+        let index_offset = self.mesh.ib().offset() as u32;
 
         render_pass.draw_indexed(
-            0..self.mesh.index_count(),
+            index_offset..index_offset + self.mesh.index_count() as u32,
             0,
             self.first_instance..(self.first_instance + self.instance_count),
         );
@@ -112,8 +113,8 @@ pub struct MeshRenderer {
     bind_group_layout: BindGroupLayout,
     bind_group: BindGroup,
 
-    pub meshes: HashMap<MeshDesc, Asset<Mesh>>,
-    pub shaders: AssetMap<crate::shader::ShaderDesc, Asset<Shader>>,
+    pub meshes: HashMap<MeshDesc, Weak<MeshHandle>>,
+    pub shaders: AssetMap<crate::shader::ShaderDesc, Handle<Shader>>,
     pub materials: HashMap<MaterialDesc, Asset<Material>>,
 
     surface_format: TextureFormat,
@@ -122,10 +123,11 @@ pub struct MeshRenderer {
     batch_map: BTreeMap<BatchKey, BatchId>,
 
     object_query: Query<(
-        Component<BatchId>,
         Component<usize>,
         <ObjectDataQuery as TransformFetch<Modified>>::Output,
     )>,
+
+    mesh_buffer: MeshBuffer,
 }
 
 impl MeshRenderer {
@@ -156,11 +158,8 @@ impl MeshRenderer {
             surface_format,
             batches: Default::default(),
             batch_map: Default::default(),
-            object_query: Query::new((
-                batch_id(),
-                object_index(),
-                ObjectDataQuery::new().modified(),
-            )),
+            object_query: Query::new((object_index(), ObjectDataQuery::new().modified())),
+            mesh_buffer: MeshBuffer::new(gpu, "mesh_buffer", 4),
         }
     }
 
@@ -183,6 +182,7 @@ impl MeshRenderer {
         assets: &AssetCache,
         gpu: &Gpu,
         globals: &Globals,
+        store: &mut RendererStore,
         cmd: &mut CommandBuffer,
     ) {
         let mut query = Query::new((
@@ -205,11 +205,36 @@ impl MeshRenderer {
             let batch_id = *self.batch_map.entry(key).or_insert_with_key(|k| {
                 tracing::info!(?k, "creating new batch");
                 // TODO: local storage
-                let mesh = assets.load(&k.mesh);
+
+                let mut load_mesh = |v: &MeshDesc| {
+                    let data = v.load_data(assets).unwrap();
+                    Arc::new(
+                        self.mesh_buffer
+                            .insert(gpu, data.vertices(), data.indices()),
+                    )
+                };
+
+                let mesh = match self.meshes.entry(k.mesh.clone()) {
+                    std::collections::hash_map::Entry::Occupied(mut v) => {
+                        if let Some(mesh) = v.get().upgrade() {
+                            mesh
+                        } else {
+                            let handle = load_mesh(v.key());
+                            v.insert(Arc::downgrade(&handle));
+                            handle
+                        }
+                    }
+                    std::collections::hash_map::Entry::Vacant(v) => {
+                        let handle = load_mesh(v.key());
+                        v.insert(Arc::downgrade(&handle));
+                        handle
+                    }
+                };
+
                 let material = assets.load(&k.material);
 
                 let shader = self.shaders.entry(&k.shader).or_insert_with(|| {
-                    assets.insert(Shader::new(
+                    store.shaders.insert(Shader::new(
                         gpu,
                         &ShaderDesc {
                             label: k.shader.label(),
@@ -266,14 +291,14 @@ impl MeshRenderer {
 
         let mut total_found = 0;
 
-        self.object_data
-            .resize(total_registered as _, Zeroable::zeroed());
+        self.object_data.resize(cursor as _, Zeroable::zeroed());
         for (batch_id, object_index, item) in &mut query.borrow(world) {
             let batch = &mut self.batches[*batch_id];
             let index = batch.first_instance + batch.instance_count;
             *object_index = index as usize;
             batch.instance_count += 1;
             total_found += 1;
+            assert!(total_found <= total_registered);
             self.object_data[index as usize] = ObjectData {
                 transform: item.transform,
             };
@@ -285,11 +310,15 @@ impl MeshRenderer {
     }
 
     fn update_object_data(&mut self, world: &World, gpu: &Gpu) {
-        for (&batch_id, &object_index, item) in &mut self.object_query.borrow(world) {
+        let mut total = 0;
+        for (&object_index, item) in &mut self.object_query.borrow(world) {
+            total += 1;
             self.object_data[object_index] = ObjectData {
                 transform: item.transform,
             };
         }
+
+        tracing::info!(count = total, "update object");
 
         self.object_buffer.write(&gpu.queue, 0, &self.object_data);
     }
@@ -299,10 +328,11 @@ impl MeshRenderer {
         world: &mut World,
         assets: &AssetCache,
         gpu: &Gpu,
+        store: &mut RendererStore,
         globals: &Globals,
     ) {
         let mut cmd = CommandBuffer::new();
-        self.collect_unbatched(world, assets, gpu, globals, &mut cmd);
+        self.collect_unbatched(world, assets, gpu, globals, store, &mut cmd);
         self.update_object_data(world, gpu);
         // self.render_objects.clear();
         // self.object_data.clear();
@@ -326,9 +356,10 @@ impl MeshRenderer {
 
     pub fn draw<'a>(
         &'a mut self,
-        gpu: &Gpu,
         assets: &AssetCache,
+        gpu: &Gpu,
         globals: &'a Globals,
+        store: &'a RendererStore,
         render_pass: &mut RenderPass<'a>,
     ) {
         // self.resize_object_buffer(gpu, self.object_data.len());
@@ -338,11 +369,14 @@ impl MeshRenderer {
         self.object_buffer.write(&gpu.queue, 0, &self.object_data);
 
         tracing::info!("drawing {} batches", self.batch_map.len());
+
+        self.mesh_buffer.bind(render_pass);
+
         render_pass.set_bind_group(1, &self.bind_group, &[]);
         for batch_id in self.batch_map.values() {
             let batch = &self.batches[*batch_id];
             tracing::info!(instance_count = batch.instance_count, "drawing batch");
-            batch.draw(gpu, assets, globals, render_pass)
+            batch.draw(gpu, assets, globals, store, render_pass)
         }
 
         // for (i, object) in self.render_objects.iter().enumerate() {
