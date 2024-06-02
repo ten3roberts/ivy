@@ -1,10 +1,19 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use bytemuck::Zeroable;
-use flax::{components::child_of, FetchExt, Query, World};
+use flax::{
+    entity_ids,
+    fetch::{Copied, Modified, Source, TransformFetch, Traverse},
+    CommandBuffer, Component, Fetch, FetchExt, Query, World,
+};
+use glam::Mat4;
 use ivy_assets::{map::AssetMap, Asset, AssetCache};
-use ivy_base::world_transform;
-use wgpu::{BindGroup, BindGroupLayout, BufferUsages, RenderPass, ShaderStages, TextureFormat};
+use ivy_base::{palette::IntoColor, world_transform};
+use slab::Slab;
+use wgpu::{
+    naga::back::spv::ZeroInitializeWorkgroupMemoryMode, util::RenderEncoder, BindGroup,
+    BindGroupLayout, BufferUsages, RenderPass, ShaderStages, TextureFormat,
+};
 
 use crate::{
     components::{material, mesh, mesh_primitive, shader},
@@ -19,8 +28,84 @@ use crate::{
 
 use super::{Globals, ObjectData, RenderObject};
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct BatchKey {
+    pub shader: Asset<crate::shader::ShaderDesc>,
+    pub material: MaterialDesc,
+    pub mesh: MeshDesc,
+}
+
+/// A single rendering batch of similar objects
+struct Batch {
+    instance_count: u32,
+    first_instance: u32,
+    instance_capacity: u32,
+
+    mesh: Asset<Mesh>,
+    material: Asset<Material>,
+    shader: Asset<Shader>,
+}
+
+impl Batch {
+    pub fn new(mesh: Asset<Mesh>, material: Asset<Material>, shader: Asset<Shader>) -> Self {
+        Self {
+            instance_count: 0,
+            first_instance: 0,
+            mesh,
+            material,
+            shader,
+            instance_capacity: 0,
+        }
+    }
+
+    pub fn register(&mut self) -> bool {
+        self.instance_count += 1;
+        self.instance_count > self.instance_capacity
+    }
+
+    pub fn draw<'a>(
+        &'a self,
+        gpu: &Gpu,
+        assets: &AssetCache,
+        globals: &'a Globals,
+        render_pass: &mut RenderPass<'a>,
+    ) {
+        render_pass.set_pipeline(self.shader.pipeline());
+        render_pass.set_vertex_buffer(0, self.mesh.vertex_buffer().slice(..));
+        render_pass.set_index_buffer(
+            self.mesh.index_buffer().slice(..),
+            wgpu::IndexFormat::Uint32,
+        );
+
+        render_pass.set_bind_group(2, self.material.bind_group(), &[]);
+
+        render_pass.draw_indexed(
+            0..self.mesh.index_count(),
+            0,
+            self.first_instance..(self.first_instance + self.instance_count),
+        );
+    }
+}
+
+#[derive(Fetch)]
+#[fetch(transforms = [ Modified ])]
+struct ObjectDataQuery {
+    transform: Source<Copied<Component<Mat4>>, Traverse>,
+}
+
+impl ObjectDataQuery {
+    pub fn new() -> Self {
+        Self {
+            transform: world_transform().copied().traverse(mesh_primitive),
+        }
+    }
+}
+
 pub struct MeshRenderer {
-    render_objects: Vec<RenderObject>,
+    /// All the objects registered
+    /// |****-|**---|**|
+    ///
+    /// Sorted by each batch
     object_data: Vec<ObjectData>,
     object_buffer: TypedBuffer<ObjectData>,
 
@@ -28,10 +113,19 @@ pub struct MeshRenderer {
     bind_group: BindGroup,
 
     pub meshes: HashMap<MeshDesc, Asset<Mesh>>,
-    pub shaders: AssetMap<crate::shader::ShaderDesc, Shader>,
+    pub shaders: AssetMap<crate::shader::ShaderDesc, Asset<Shader>>,
     pub materials: HashMap<MaterialDesc, Asset<Material>>,
 
     surface_format: TextureFormat,
+
+    batches: Slab<Batch>,
+    batch_map: BTreeMap<BatchKey, BatchId>,
+
+    object_query: Query<(
+        Component<BatchId>,
+        Component<usize>,
+        <ObjectDataQuery as TransformFetch<Modified>>::Output,
+    )>,
 }
 
 impl MeshRenderer {
@@ -52,7 +146,6 @@ impl MeshRenderer {
             .build(gpu, &bind_group_layout);
 
         Self {
-            render_objects: Vec::new(),
             object_data: Vec::new(),
             object_buffer,
             bind_group_layout,
@@ -61,6 +154,13 @@ impl MeshRenderer {
             shaders: Default::default(),
             materials: Default::default(),
             surface_format,
+            batches: Default::default(),
+            batch_map: Default::default(),
+            object_query: Query::new((
+                batch_id(),
+                object_index(),
+                ObjectDataQuery::new().modified(),
+            )),
         }
     }
 
@@ -77,25 +177,151 @@ impl MeshRenderer {
             .build(gpu, &self.bind_group_layout);
     }
 
-    pub fn collect(&mut self, world: &World) {
-        self.render_objects.clear();
-        self.object_data.clear();
-
+    pub fn collect_unbatched(
+        &mut self,
+        world: &mut World,
+        assets: &AssetCache,
+        gpu: &Gpu,
+        globals: &Globals,
+        cmd: &mut CommandBuffer,
+    ) {
         let mut query = Query::new((
+            entity_ids(),
             mesh().cloned(),
             material().cloned(),
             shader().cloned(),
-            world_transform().copied().traverse(mesh_primitive),
-        ));
+            ObjectDataQuery::new(),
+        ))
+        .without(object_index());
 
-        for (mesh, material, shader, transform) in &mut query.borrow(world) {
-            self.render_objects.push(RenderObject {
+        let mut needs_reallocation = false;
+        for (id, mesh, material, shader, item) in &mut query.borrow(world) {
+            let key = BatchKey {
                 mesh,
                 material,
                 shader,
+            };
+
+            let batch_id = *self.batch_map.entry(key).or_insert_with_key(|k| {
+                tracing::info!(?k, "creating new batch");
+                // TODO: local storage
+                let mesh = assets.load(&k.mesh);
+                let material = assets.load(&k.material);
+
+                let shader = self.shaders.entry(&k.shader).or_insert_with(|| {
+                    assets.insert(Shader::new(
+                        gpu,
+                        &ShaderDesc {
+                            label: k.shader.label(),
+                            source: k.shader.source(),
+                            format: self.surface_format,
+                            vertex_layouts: &[Vertex::layout()],
+                            layouts: &[&globals.layout, &self.bind_group_layout, material.layout()],
+                            depth_format: Some(TextureFormat::Depth24Plus),
+                        },
+                    ))
+                });
+
+                self.batches
+                    .insert(Batch::new(mesh, material, shader.clone()))
             });
-            self.object_data.push(ObjectData { transform });
+
+            cmd.set(id, object_index(), usize::MAX)
+                .set(id, self::batch_id(), batch_id);
+
+            let batch = &mut self.batches[batch_id];
+
+            let index = batch.first_instance + batch.instance_count;
+            let object_data = ObjectData {
+                transform: item.transform,
+            };
+
+            needs_reallocation |= batch.register();
         }
+
+        if needs_reallocation {
+            tracing::info!("reallocating object buffer");
+            cmd.apply(world).unwrap();
+            // TODO: only update positions for new objects
+            self.reallocate_object_buffer(world, gpu);
+        }
+    }
+
+    fn reallocate_object_buffer(&mut self, world: &World, gpu: &Gpu) {
+        let mut cursor = 0;
+        let mut total_registered = 0;
+
+        for (_, batch) in self.batches.iter_mut() {
+            let cap = batch.instance_count.next_power_of_two();
+            total_registered += batch.instance_count;
+            // Will be restored later
+            batch.instance_count = 0;
+
+            batch.first_instance = cursor;
+            batch.instance_capacity = cap;
+            cursor += cap;
+        }
+
+        let mut query = Query::new((batch_id(), object_index().as_mut(), ObjectDataQuery::new()));
+
+        let mut total_found = 0;
+
+        self.object_data
+            .resize(total_registered as _, Zeroable::zeroed());
+        for (batch_id, object_index, item) in &mut query.borrow(world) {
+            let batch = &mut self.batches[*batch_id];
+            let index = batch.first_instance + batch.instance_count;
+            *object_index = index as usize;
+            batch.instance_count += 1;
+            total_found += 1;
+            self.object_data[index as usize] = ObjectData {
+                transform: item.transform,
+            };
+        }
+
+        assert_eq!(total_registered, total_found);
+
+        self.resize_object_buffer(gpu, cursor as usize)
+    }
+
+    fn update_object_data(&mut self, world: &World, gpu: &Gpu) {
+        for (&batch_id, &object_index, item) in &mut self.object_query.borrow(world) {
+            self.object_data[object_index] = ObjectData {
+                transform: item.transform,
+            };
+        }
+
+        self.object_buffer.write(&gpu.queue, 0, &self.object_data);
+    }
+
+    pub fn collect(
+        &mut self,
+        world: &mut World,
+        assets: &AssetCache,
+        gpu: &Gpu,
+        globals: &Globals,
+    ) {
+        let mut cmd = CommandBuffer::new();
+        self.collect_unbatched(world, assets, gpu, globals, &mut cmd);
+        self.update_object_data(world, gpu);
+        // self.render_objects.clear();
+        // self.object_data.clear();
+
+        // let mut query = Query::new((
+        //     mesh().cloned(),
+        //     material().cloned(),
+        //     shader().cloned(),
+        //     world_transform().copied().traverse(mesh_primitive),
+        // ));
+
+        // for (mesh, material, shader, transform) in &mut query.borrow(world) {
+        //     self.render_objects.push(RenderObject {
+        //         mesh,
+        //         material,
+        //         shader,
+        //     });
+        //     self.object_data.push(ObjectData { transform });
+        // }
     }
 
     pub fn draw<'a>(
@@ -105,54 +331,38 @@ impl MeshRenderer {
         globals: &'a Globals,
         render_pass: &mut RenderPass<'a>,
     ) {
-        self.resize_object_buffer(gpu, self.object_data.len());
+        // self.resize_object_buffer(gpu, self.object_data.len());
 
         render_pass.set_bind_group(0, &globals.bind_group, &[]);
 
         self.object_buffer.write(&gpu.queue, 0, &self.object_data);
 
-        for object in &self.render_objects {
-            self.meshes
-                .entry(object.mesh.clone())
-                .or_insert_with(|| assets.load(&object.mesh));
-
-            let material = {
-                self.materials
-                    .entry(object.material.clone())
-                    .or_insert_with(|| assets.load(&object.material))
-            };
-
-            {
-                let layouts: &[&BindGroupLayout] =
-                    &[&globals.layout, &self.bind_group_layout, material.layout()];
-                self.shaders.entry(&object.shader).or_insert_with(|| {
-                    Shader::new(
-                        gpu,
-                        &ShaderDesc {
-                            label: object.shader.label(),
-                            source: object.shader.source(),
-                            format: self.surface_format,
-                            vertex_layouts: &[Vertex::layout()],
-                            layouts,
-                            depth_format: Some(TextureFormat::Depth24Plus),
-                        },
-                    )
-                })
-            };
+        tracing::info!("drawing {} batches", self.batch_map.len());
+        render_pass.set_bind_group(1, &self.bind_group, &[]);
+        for batch_id in self.batch_map.values() {
+            let batch = &self.batches[*batch_id];
+            tracing::info!(instance_count = batch.instance_count, "drawing batch");
+            batch.draw(gpu, assets, globals, render_pass)
         }
 
-        tracing::debug!("drawing {} objects", self.render_objects.len());
-        for (i, object) in self.render_objects.iter().enumerate() {
-            let mesh = self.meshes.get(&object.mesh).unwrap();
-            let material = self.materials.get(&object.material).unwrap();
-            let shader = self.shaders.get(&object.shader).unwrap();
+        // for (i, object) in self.render_objects.iter().enumerate() {
+        //     let mesh = self.meshes.get(&object.mesh).unwrap();
+        //     let material = self.materials.get(&object.material).unwrap();
+        //     let shader = self.shaders.get(&object.shader).unwrap();
 
-            render_pass.set_pipeline(shader.pipeline());
-            mesh.bind(render_pass);
-            render_pass.set_bind_group(1, &self.bind_group, &[]);
-            render_pass.set_bind_group(2, material.bind_group(), &[]);
+        //     render_pass.set_pipeline(shader.pipeline());
+        //     mesh.bind(render_pass);
+        //     render_pass.set_bind_group(1, &self.bind_group, &[]);
+        //     render_pass.set_bind_group(2, material.bind_group(), &[]);
 
-            render_pass.draw_indexed(0..mesh.index_count(), 0, (i as u32)..(i as u32 + 1));
-        }
+        //     render_pass.draw_indexed(0..mesh.index_count(), 0, (i as u32)..(i as u32 + 1));
+        // }
     }
+}
+
+type BatchId = usize;
+
+flax::component! {
+    batch_id: BatchId,
+    object_index: usize,
 }

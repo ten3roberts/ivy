@@ -160,4 +160,12 @@ impl Mesh {
 
         Self::new(gpu, &vertices, &indices)
     }
+
+    pub fn vertex_buffer(&self) -> &Buffer {
+        &self.vertex_buffer
+    }
+
+    pub fn index_buffer(&self) -> &Buffer {
+        &self.index_buffer
+    }
 }

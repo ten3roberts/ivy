@@ -49,6 +49,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "parking_lot"]
 tracing-tree = "0.3"
 dashmap = "5.0"
 gltf = "1.0"
+slab = "0.4"
 
 serde = { version = "1.0", features = ["derive"] }
 bytemuck = { version = "1.9.1", features = ["derive"] }
