@@ -126,41 +126,6 @@ impl Mesh {
         self.vertex_count
     }
 
-    pub(crate) fn from_gltf(
-        gpu: &Gpu,
-        assets: &AssetCache,
-        primitive: &gltf::Primitive,
-        buffer_data: &[gltf::buffer::Data],
-    ) -> Self {
-        let reader = primitive.reader(|buffer| Some(&buffer_data[buffer.index()]));
-
-        let indices = reader
-            .read_indices()
-            .into_iter()
-            .flat_map(|val| val.into_u32())
-            .collect_vec();
-
-        let pos = reader
-            .read_positions()
-            .into_iter()
-            .flatten()
-            .map(Vec3::from);
-
-        let normals = reader.read_normals().into_iter().flatten().map(Vec3::from);
-
-        let texcoord = reader
-            .read_tex_coords(0)
-            .into_iter()
-            .flat_map(|val| val.into_f32())
-            .map(Vec2::from);
-
-        let vertices = izip!(pos, normals, texcoord, repeat(Vec3::ZERO))
-            .map(|(pos, normal, textcoord, tangent)| Vertex::new(pos, textcoord, normal))
-            .collect_vec();
-
-        Self::new(gpu, &vertices, &indices)
-    }
-
     pub fn vertex_buffer(&self) -> &Buffer {
         &self.vertex_buffer
     }

@@ -1251,6 +1251,7 @@ version = "0.10.0"
 dependencies = [
  "atomic_refcell",
  "dashmap",
+ "flume",
  "image",
  "parking_lot",
  "slotmap",

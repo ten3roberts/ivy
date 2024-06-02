@@ -5,7 +5,7 @@ use std::{arch::global_asm, collections::HashMap};
 use bytemuck::Zeroable;
 use flax::{FetchExt, Query, World};
 use glam::Mat4;
-use ivy_assets::{map::AssetMap, Asset, AssetCache, AssetKey};
+use ivy_assets::{map::AssetMap, stored::Store, Asset, AssetCache, AssetKey};
 use ivy_base::{main_camera, world_transform, Bundle};
 use wgpu::{
     hal::TextureUses, naga::ShaderStage, util::RenderEncoder, BindGroup, BindGroupLayout,
@@ -34,6 +34,7 @@ pub struct Renderer {
     mesh_renderer: MeshRenderer,
     globals: Globals,
     depth_texture: Option<wgpu::TextureView>,
+    store: RendererStore,
 }
 
 impl Renderer {
@@ -44,6 +45,7 @@ impl Renderer {
             surface,
             gpu,
             depth_texture: None,
+            store: Default::default(),
         }
     }
 
@@ -89,7 +91,7 @@ impl Renderer {
         }
 
         self.mesh_renderer
-            .collect(world, assets, &self.gpu, &self.globals);
+            .collect(world, assets, &self.gpu, &mut self.store, &self.globals);
     }
 
     pub fn draw(&mut self, assets: &AssetCache) -> anyhow::Result<()> {
@@ -130,8 +132,13 @@ impl Renderer {
                 occlusion_query_set: None,
             });
 
-            self.mesh_renderer
-                .draw(&self.gpu, assets, &self.globals, &mut render_pass);
+            self.mesh_renderer.draw(
+                assets,
+                &self.gpu,
+                &self.globals,
+                &self.store,
+                &mut render_pass,
+            );
         }
 
         self.gpu.queue.submit([encoder.finish()]);
@@ -217,5 +224,27 @@ impl Bundle for RenderObjectBundle {
             .set(mesh(), self.mesh)
             .set(material(), self.material)
             .set(shader(), self.shader);
+    }
+}
+
+pub struct RendererStore {
+    pub materials: Store<Material>,
+    pub shaders: Store<Shader>,
+    pub bind_groups: Store<BindGroup>,
+}
+
+impl RendererStore {
+    pub fn new() -> Self {
+        Self {
+            materials: Store::new(),
+            shaders: Store::new(),
+            bind_groups: Store::new(),
+        }
+    }
+}
+
+impl Default for RendererStore {
+    fn default() -> Self {
+        Self::new()
     }
 }
