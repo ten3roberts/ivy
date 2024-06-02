@@ -42,7 +42,7 @@ impl GraphicsLayer {
 
     fn on_draw(&mut self, assets: &AssetCache, world: &mut World) -> Result<(), anyhow::Error> {
         if let Some(renderer) = &mut self.renderer {
-            renderer.update(world);
+            renderer.update(world, assets);
             renderer.draw(assets)?;
         }
 

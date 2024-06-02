@@ -25,3 +25,4 @@ flume.workspace = true
 itertools.workspace = true
 futures.workspace = true
 gltf.workspace = true
+slab.workspace = true

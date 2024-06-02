@@ -71,7 +71,7 @@ impl Renderer {
         })
     }
 
-    pub fn update(&mut self, world: &World) {
+    pub fn update(&mut self, world: &mut World, assets: &AssetCache) {
         tracing::debug!("updating renderer");
         if let Some((world_transform, &projection)) =
             Query::new((world_transform(), projection_matrix()))
@@ -88,7 +88,8 @@ impl Renderer {
                 .write(&self.gpu.queue, 0, &[GlobalData { view, projection }]);
         }
 
-        self.mesh_renderer.collect(world);
+        self.mesh_renderer
+            .collect(world, assets, &self.gpu, &self.globals);
     }
 
     pub fn draw(&mut self, assets: &AssetCache) -> anyhow::Result<()> {
