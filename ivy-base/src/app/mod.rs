@@ -2,20 +2,15 @@ mod builder;
 pub mod driver;
 pub mod event;
 
-use std::{
-    any::{Any, TypeId},
-    collections::HashMap,
-    time::Duration,
-};
+use std::time::Duration;
 
 pub use builder::*;
 pub use event::*;
 
 use flax::World;
-use flume::Receiver;
 
 use crate::{
-    layer::events::{Event, EventDispatcher, EventRegisterContext, EventRegistry},
+    layer::events::{Event, EventRegistry},
     Events, Layer, LayerDyn,
 };
 
@@ -35,21 +30,15 @@ pub struct App {
     #[deprecated(note = "Use ECS instead")]
     pub events: Events,
 
-    rx: Receiver<AppEvent>,
-
     running: bool,
 }
 
 impl App {
     pub fn new() -> Self {
-        let mut events = Events::new();
+        let events = Events::new();
 
-        let (tx, rx) = flume::unbounded();
-        events.subscribe_custom(tx);
         let asset_cache = AssetCache::new();
         asset_cache.register_service(FileSystemMapService::new("./assets"));
-
-        // asset_cache.insert(Gizmos::default());
 
         Self {
             name: "Ivy".into(),
@@ -58,7 +47,6 @@ impl App {
             world: World::new(),
             assets: asset_cache,
             events,
-            rx,
             running: false,
         }
     }
@@ -72,7 +60,7 @@ impl App {
             &mut self.layers,
             &mut self.world,
             &mut self.assets,
-            &TickEvent,
+            &TickEvent(delta),
         )
     }
 

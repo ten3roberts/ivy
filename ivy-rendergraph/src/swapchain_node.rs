@@ -8,7 +8,7 @@ use ivy_vulkan::{
     context::SharedVulkanContext,
     traits::FromExtent,
     vk::{self, ImageBlit, ImageSubresourceLayers, Offset3D, PipelineStageFlags},
-    ImageLayout, ImageUsage, PassInfo, SampleCountFlags, Swapchain, Texture, TextureInfo,
+    ImageLayout, ImageUsage, PassInfo, SampleCountFlags, Texture, TextureInfo,
 };
 use std::{ops::Deref, slice};
 

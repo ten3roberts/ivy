@@ -1,4 +1,4 @@
-use std::{any, sync::ONCE_INIT};
+use std::any;
 
 use flax::{
     components::is_static, entity_ids, fetch::Satisfied, sink::Sink, BoxedSystem, CommandBuffer,
@@ -8,7 +8,6 @@ use flax::{
 use flume::{Receiver, Sender};
 use glam::{Mat4, Vec3};
 use ivy_base::{is_trigger, mass, velocity, world_transform, DrawGizmos, Events, Gizmos};
-use palette::Srgba;
 use slotmap::{new_key_type, SlotMap};
 use smallvec::Array;
 
@@ -25,7 +24,6 @@ pub mod query;
 mod traits;
 mod visitor;
 
-pub use binary_node::*;
 pub use bvh::*;
 pub use index::*;
 pub use intersect_visitor::*;
@@ -165,7 +163,7 @@ impl<N: CollisionTreeNode> CollisionTree<N> {
     /// Checks the tree for collisions and dispatches them as events
     pub fn check_collisions<'a, G: Array<Item = &'a ObjectData>>(
         &'a self,
-        world: &World,
+        _: &World,
         events: &mut Events,
     ) -> anyhow::Result<()> {
         N::check_collisions(events, self.root, &self.nodes, &self.objects);
@@ -444,7 +442,7 @@ impl std::ops::Deref for EntityPayload {
 }
 
 impl<N: CollisionTreeNode + DrawGizmos> DrawGizmos for CollisionTree<N> {
-    fn draw_gizmos(&self, mut gizmos: &mut Gizmos, color: ivy_base::Color) {
+    fn draw_gizmos(&self, gizmos: &mut Gizmos, color: ivy_base::Color) {
         gizmos.begin_section(any::type_name::<Self>());
         self.root.draw_gizmos_recursive(&self.nodes, gizmos, color)
     }
@@ -461,13 +459,13 @@ impl DespawnedSubscriber {
 }
 
 impl flax::events::EventSubscriber for DespawnedSubscriber {
-    fn on_added(&self, storage: &flax::archetype::Storage, event: &flax::events::EventData) {}
+    fn on_added(&self, _: &flax::archetype::Storage, _: &flax::events::EventData) {}
 
-    fn on_modified(&self, event: &flax::events::EventData) {}
+    fn on_modified(&self, _: &flax::events::EventData) {}
 
     fn on_removed(&self, storage: &flax::archetype::Storage, event: &flax::events::EventData) {
         let values = storage.downcast_ref::<ObjectIndex>();
-        event.slots.iter().map(|slot| {
+        event.slots.iter().for_each(|slot| {
             self.tx.send(values[slot]).unwrap();
         });
     }

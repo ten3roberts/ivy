@@ -1,21 +1,13 @@
 pub mod node;
 
-use std::{ops::Deref, path::Path};
-
-use gltf::Gltf;
-use image::{DynamicImage, Rgba32FImage, RgbaImage};
+use image::{DynamicImage, RgbaImage};
 use itertools::Itertools;
 use ivy_assets::{Asset, AssetCache, AssetKey};
-use ivy_gltf::{DocumentData, GltfMaterial, GltfMesh, GltfPrimitive, GltfPrimitiveRef};
+use ivy_gltf::{DocumentData, GltfPrimitive};
 
 use crate::{
-    material::MaterialData,
     mesh::MeshData,
-    types::{
-        material::Material,
-        texture::{Texture, TextureFromPath},
-        Mesh,
-    },
+    types::{material::Material, texture::Texture},
     Gpu,
 };
 

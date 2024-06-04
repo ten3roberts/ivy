@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use crate::Layer;
 
-const MAX_ITERATIONS: f64 = 10.0;
+// const MAX_ITERATIONS: f64 = 10.0;
 
 /// Abstracts a layer executing other layers at a fixed timestep.
 pub struct FixedTimeStep<T: Layer> {

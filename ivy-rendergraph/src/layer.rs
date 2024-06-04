@@ -1,12 +1,9 @@
-use std::time::Duration;
-
-use anyhow::Context;
 use flax::{Schedule, World};
 use ivy_assets::AssetCache;
-use ivy_base::{engine, Events, Layer};
+use ivy_base::engine;
 use ivy_graphics::{
     components::{self, swapchain, window},
-    systems, GpuCamera, GraphicsEvent,
+    systems, GpuCamera,
 };
 use ivy_vulkan::{
     context::{SharedVulkanContext, VulkanContextService},

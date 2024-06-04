@@ -4,20 +4,18 @@ use flax::{components::name, Entity};
 use glam::{vec2, Vec2};
 use ivy_base::{driver::Driver, App};
 use ivy_input::types::{
-    CursorEntered, CursorLeft, CursorMoved, InputEvent, KeyboardInput, MouseInput, MouseMotion,
-    ScrollInput,
+    CursorEntered, CursorLeft, CursorMoved, KeyboardInput, MouseInput, MouseMotion, ScrollInput,
 };
-use tracing::Instrument;
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalPosition,
-    event::{Modifiers, WindowEvent},
+    event::WindowEvent,
     event_loop::{ActiveEventLoop, EventLoop},
     window::{CursorGrabMode, Window, WindowId},
 };
 
 use crate::{
-    components::{main_window, window},
+    components::main_window,
     events::{ApplicationReady, RedrawEvent, ResizedEvent},
 };
 
@@ -26,6 +24,12 @@ pub struct WinitDriver {}
 impl WinitDriver {
     pub fn new() -> Self {
         Self {}
+    }
+}
+
+impl Default for WinitDriver {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

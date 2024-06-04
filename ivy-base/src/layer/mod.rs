@@ -1,13 +1,9 @@
 #![allow(non_snake_case)]
 use crate::app::TickEvent;
 use crate::systems::update_transform_system;
-use crate::Events;
-use crate::{impl_for_tuples, App};
-use anyhow::Context;
 use downcast_rs::{impl_downcast, Downcast};
 use flax::{Schedule, World};
 use ivy_assets::AssetCache;
-use std::time::Duration;
 
 pub mod events;
 mod fixed;
@@ -90,11 +86,11 @@ impl Default for EngineLayer {
 impl Layer for EngineLayer {
     fn register(
         &mut self,
-        world: &mut World,
-        assets: &AssetCache,
+        _: &mut World,
+        _: &AssetCache,
         mut events: EventRegisterContext<Self>,
     ) -> anyhow::Result<()> {
-        events.subscribe(|this, world, assets, _: &TickEvent| {
+        events.subscribe(|this, world, _, _: &TickEvent| {
             this.schedule.execute_par(world)?;
             Ok(())
         });
