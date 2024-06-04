@@ -3,10 +3,7 @@ use flax::World;
 use ivy_assets::{Asset, AssetCache};
 use ivy_vulkan::{
     traits::FromExtent,
-    vk::{
-        self, ImageAspectFlags, ImageBlit, ImageSubresourceLayers,
-        Offset3D, PipelineStageFlags,
-    },
+    vk::{self, ImageAspectFlags, ImageBlit, ImageSubresourceLayers, Offset3D, PipelineStageFlags},
     ImageLayout, PassInfo, Texture,
 };
 use std::slice;
@@ -137,7 +134,7 @@ impl Node for TransferNode {
     fn execute(
         &mut self,
         _world: &mut World,
-        assets: &AssetCache,
+        _: &AssetCache,
         cmd: &ivy_vulkan::commands::CommandBuffer,
         _: &PassInfo,
         _current_frame: usize,

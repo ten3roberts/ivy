@@ -11,12 +11,9 @@ use flax::{
 };
 use glam::Mat4;
 use ivy_assets::{map::AssetMap, stored::Handle, Asset, AssetCache};
-use ivy_base::{world_transform};
+use ivy_base::world_transform;
 use slab::Slab;
-use wgpu::{
-    BindGroup, BindGroupLayout, BufferUsages, RenderPass,
-    ShaderStages, TextureFormat,
-};
+use wgpu::{BindGroup, BindGroupLayout, BufferUsages, RenderPass, ShaderStages, TextureFormat};
 
 use crate::{
     components::{material, mesh, mesh_primitive, shader},
@@ -25,8 +22,8 @@ use crate::{
     mesh_buffer::{MeshBuffer, MeshHandle},
     renderer::RendererStore,
     types::{
-        material::Material, shader::ShaderDesc, BindGroupBuilder,
-        BindGroupLayoutBuilder, Shader, TypedBuffer, Vertex, VertexDesc,
+        material::Material, shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, Shader,
+        TypedBuffer, Vertex, VertexDesc,
     },
     Gpu,
 };
@@ -70,9 +67,9 @@ impl Batch {
 
     pub fn draw<'a>(
         &'a self,
-        gpu: &Gpu,
-        assets: &AssetCache,
-        globals: &'a Globals,
+        _: &Gpu,
+        _: &AssetCache,
+        _: &'a Globals,
         store: &'a RendererStore,
         render_pass: &mut RenderPass<'a>,
     ) {
@@ -190,12 +187,11 @@ impl MeshRenderer {
             mesh().cloned(),
             material().cloned(),
             shader().cloned(),
-            ObjectDataQuery::new(),
         ))
         .without(object_index());
 
         let mut needs_reallocation = false;
-        for (id, mesh, material, shader, item) in &mut query.borrow(world) {
+        for (id, mesh, material, shader) in &mut query.borrow(world) {
             let key = BatchKey {
                 mesh,
                 material,
@@ -255,11 +251,6 @@ impl MeshRenderer {
                 .set(id, self::batch_id(), batch_id);
 
             let batch = &mut self.batches[batch_id];
-
-            let index = batch.first_instance + batch.instance_count;
-            let object_data = ObjectData {
-                transform: item.transform,
-            };
 
             needs_reallocation |= batch.register();
         }

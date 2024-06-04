@@ -5,7 +5,7 @@ use itertools::Itertools;
 use std::{collections::HashMap, path::Path};
 
 use gltf::{Gltf, Mesh};
-use ivy_assets::{Asset, AssetCache, AssetKey};
+use ivy_assets::{Asset, AssetCache};
 
 /// An in memory representation of a gltf document and binary buffer data
 pub struct DocumentData {

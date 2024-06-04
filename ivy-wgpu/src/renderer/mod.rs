@@ -1,13 +1,11 @@
 pub mod mesh_renderer;
 
-
 use flax::{Query, World};
 use glam::Mat4;
 use ivy_assets::{stored::Store, Asset, AssetCache};
 use ivy_base::{main_camera, world_transform, Bundle};
 use wgpu::{
-    util::RenderEncoder, BindGroup,
-    BufferUsages, Extent3d, Operations, RenderPassColorAttachment, ShaderStages,
+    BindGroup, BufferUsages, Extent3d, Operations, RenderPassColorAttachment, ShaderStages,
     TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
 };
 use winit::dpi::PhysicalSize;
@@ -17,8 +15,7 @@ use crate::{
     material::MaterialDesc,
     mesh::MeshDesc,
     types::{
-        material::Material, BindGroupBuilder,
-        BindGroupLayoutBuilder, Shader, Surface, TypedBuffer,
+        material::Material, BindGroupBuilder, BindGroupLayoutBuilder, Shader, Surface, TypedBuffer,
     },
     Gpu,
 };
@@ -145,12 +142,6 @@ impl Renderer {
 
         Ok(())
     }
-}
-
-pub struct RenderObject {
-    mesh: MeshDesc,
-    material: MaterialDesc,
-    shader: Asset<crate::shader::ShaderDesc>,
 }
 
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]

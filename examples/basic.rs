@@ -1,25 +1,23 @@
 use std::time::Instant;
 
 use flax::{
-    component, BoxedSystem, Component, Entity, FetchExt, Mutable, Query, QueryBorrow, Schedule,
-    System, World,
+    component, BoxedSystem, Component, Entity, Mutable, Query, QueryBorrow, Schedule, System, World,
 };
 use glam::{vec3, EulerRot, Mat4, Quat, Vec2, Vec3};
 use ivy_assets::AssetCache;
 use ivy_base::{
     app::{InitEvent, TickEvent},
-    engine,
     layer::events::EventRegisterContext,
     main_camera, position, rotation, App, EngineLayer, EntityBuilderExt, Layer, TransformBundle,
 };
 use ivy_gltf::Document;
 use ivy_input::{
-    components::input_state, layer::InputLayer, types::Key, Action, Axis3, BindingExt, Compose,
+    components::input_state, layer::InputLayer, types::Key, Action, Axis3, BindingExt,
     CursorMovement, InputState, KeyBinding, MouseButtonBinding,
 };
 use ivy_scene::GltfNodeExt;
 use ivy_wgpu::{
-    components::{main_window, material, projection_matrix, window},
+    components::{main_window, projection_matrix, window},
     driver::{WindowHandle, WinitDriver},
     events::ResizedEvent,
     layer::GraphicsLayer,
@@ -83,11 +81,6 @@ impl LogicLayer {
 
     fn setup_assets(&mut self, world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
         let document = Document::new(assets, "models/shapes.glb")?;
-
-        let shader = assets.insert(ShaderDesc::new(
-            "diffuse",
-            include_str!("../assets/shaders/diffuse.wgsl"),
-        ));
 
         for node in document.nodes() {
             tracing::info!(?node);
@@ -171,7 +164,7 @@ impl Layer for LogicLayer {
     fn register(
         &mut self,
         world: &mut World,
-        assets: &AssetCache,
+        _: &AssetCache,
         mut events: EventRegisterContext<Self>,
     ) -> anyhow::Result<()> {
         events.subscribe(|this, world, assets, InitEvent| this.setup_objects(world, assets));

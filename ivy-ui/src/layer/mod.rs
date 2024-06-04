@@ -1,9 +1,8 @@
 #![allow(non_snake_case)]
-use flax::{BoxedSystem, Schedule, World};
+use flax::World;
 use ivy_assets::AssetCache;
-use ivy_base::{Events};
+use ivy_base::Events;
 
-use crate::{input_field_system, update_system};
 mod event_handling;
 pub use event_handling::*;
 
@@ -11,34 +10,14 @@ pub use event_handling::*;
 /// Handles raw input events and filters them through the UI system, and then
 /// through the world in the form of [`ivy-input::InputEvent`]s.
 pub struct UILayer {
-    state: InteractiveState,
-    update_canvas: BoxedSystem,
-    schedule: Schedule,
+    // state: InteractiveState,
+    // update_canvas: BoxedSystem,
+    // schedule: Schedule,
 }
 
 impl UILayer {
-    pub fn new(
-        world: &mut World,
-        assets: &AssetCache,
-        events: &mut Events,
-    ) -> anyhow::Result<Self> {
-        // let (tx, window_rx) = flume::unbounded();
-        // events
-        //     .intercept(tx)
-        //     .context("Failed to intercept InputEvent for UI")?;
-        // let control_rx = events.subscribe();
-        let input_field_rx = events.subscribe();
-
-        let schedule = Schedule::builder()
-            // .with_system(handle_events_system(window_rx, control_rx))
-            .with_system(input_field_system(input_field_rx))
-            .build();
-
-        Ok(Self {
-            state: InteractiveState::default(),
-            schedule,
-            update_canvas: update_system(),
-        })
+    pub fn new(_: &mut World, _: &AssetCache, _: &mut Events) -> anyhow::Result<Self> {
+        Ok(Self {})
     }
 }
 

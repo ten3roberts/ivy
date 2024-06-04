@@ -20,26 +20,6 @@ pub(crate) struct ResolveObject {
 }
 
 impl ResolveObject {
-    pub(crate) fn new(
-        pos: Vec3,
-        vel: Vec3,
-        ang_vel: Vec3,
-        resitution: f32,
-        mass: f32,
-        ang_mass: f32,
-        friction: f32,
-    ) -> Self {
-        Self {
-            pos,
-            vel,
-            ang_vel,
-            resitution,
-            mass,
-            ang_mass,
-            friction,
-        }
-    }
-
     pub fn from_entity(entity: &EntityRef) -> Result<Self, MissingComponent> {
         Ok(Self {
             pos: entity.get(world_transform())?.transform_point3(Vec3::ZERO),

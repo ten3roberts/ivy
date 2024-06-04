@@ -1,10 +1,12 @@
+#![allow(dead_code)]
+
 use crate::*;
-use flax::{entity_ids, Component, Fetch, Query, World};
+use flax::{Component, Fetch, World};
 use glam::{vec2, vec3, Mat4, Vec2, Vec3, Vec4};
 use ivy_assets::{Asset, AssetCache};
-use ivy_base::{color, position, size, visible, Color, ColorExt};
-use ivy_graphics::{batch_id, BaseRenderer, Mesh, Renderer};
-use ivy_vulkan::{context::SharedVulkanContext, descriptors::*, vk::IndexType, PassInfo, Shader};
+use ivy_base::{color, position, size, Color, ColorExt};
+use ivy_graphics::{BaseRenderer, Mesh, Renderer};
+use ivy_vulkan::{context::SharedVulkanContext, descriptors::*, PassInfo, Shader};
 
 /// A mesh renderer using vkCmdDrawIndirectIndexed and efficient batching.
 pub struct ImageRenderer {
@@ -47,69 +49,69 @@ impl Renderer for ImageRenderer {
     /// Draw all entities with a material, mesh, and model matrix for the specified shaderpass.
     fn draw(
         &mut self,
-        world: &mut World,
-        assets: &AssetCache,
-        cmd: &ivy_vulkan::CommandBuffer,
-        sets: &[DescriptorSet],
-        pass_info: &PassInfo,
-        offsets: &[u32],
-        current_frame: usize,
-        shaderpass: Component<Shader>,
+        _: &mut World,
+        _: &AssetCache,
+        _: &ivy_vulkan::CommandBuffer,
+        _: &[DescriptorSet],
+        _: &PassInfo,
+        _: &[u32],
+        _: usize,
+        _: Component<Shader>,
     ) -> anyhow::Result<()> {
-        return Ok(());
-        cmd.bind_vertexbuffer(0, self.square.vertex_buffer());
-        cmd.bind_indexbuffer(self.square.index_buffer(), IndexType::UINT32, 0);
+        todo!();
+        // cmd.bind_vertexbuffer(0, self.square.vertex_buffer());
+        // cmd.bind_indexbuffer(self.square.index_buffer(), IndexType::UINT32, 0);
 
-        let pass = self.base_renderer.pass_mut(shaderpass)?;
+        // let pass = self.base_renderer.pass_mut(shaderpass)?;
 
-        pass.register(world, KeyQuery::new());
-        pass.build_batches(world, pass_info)?;
+        // pass.register(world, KeyQuery::new());
+        // pass.build_batches(world, pass_info)?;
 
-        pass.update(
-            current_frame,
-            Query::new((
-                entity_ids(),
-                batch_id(shaderpass.id()),
-                ObjectDataQuery::new(),
-                visible(),
-            ))
-            .borrow(world)
-            .iter()
-            .filter_map(|(e, &batch_id, obj, visible)| {
-                if visible.is_visible() {
-                    Some((e, batch_id, ObjectData::from(obj)))
-                } else {
-                    None
-                }
-            }),
-        )?;
+        // pass.update(
+        //     current_frame,
+        //     Query::new((
+        //         entity_ids(),
+        //         batch_id(shaderpass.id()),
+        //         ObjectDataQuery::new(),
+        //         visible(),
+        //     ))
+        //     .borrow(world)
+        //     .iter()
+        //     .filter_map(|(e, &batch_id, obj, visible)| {
+        //         if visible.is_visible() {
+        //             Some((e, batch_id, ObjectData::from(obj)))
+        //         } else {
+        //             None
+        //         }
+        //     }),
+        // )?;
 
-        pass.sort_batches_if_dirty();
+        // pass.sort_batches_if_dirty();
 
-        let frame_set = pass.set(current_frame);
+        // let frame_set = pass.set(current_frame);
 
-        for batch in pass.ordered_batches() {
-            let key = batch.key();
+        // for batch in pass.ordered_batches() {
+        //     let key = batch.key();
 
-            let image = key.image;
+        //     let image = key.image;
 
-            cmd.bind_pipeline(batch.pipeline());
+        //     cmd.bind_pipeline(batch.pipeline());
 
-            if !sets.is_empty() {
-                cmd.bind_descriptor_sets(batch.layout(), 0, sets, offsets);
-            }
+        //     if !sets.is_empty() {
+        //         cmd.bind_descriptor_sets(batch.layout(), 0, sets, offsets);
+        //     }
 
-            cmd.bind_descriptor_sets(
-                batch.layout(),
-                sets.len() as u32,
-                &[frame_set, image.set(0)],
-                &[],
-            );
+        //     cmd.bind_descriptor_sets(
+        //         batch.layout(),
+        //         sets.len() as u32,
+        //         &[frame_set, image.set(0)],
+        //         &[],
+        //     );
 
-            cmd.draw_indexed(6, batch.instance_count(), 0, 0, batch.first_instance());
-        }
+        //     cmd.draw_indexed(6, batch.instance_count(), 0, 0, batch.first_instance());
+        // }
 
-        Ok(())
+        // Ok(())
     }
 }
 
@@ -169,7 +171,7 @@ struct Key {
 
 impl PartialOrd for Key {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.depth.partial_cmp(&other.depth)
+        Some(self.cmp(other))
     }
 }
 

@@ -1,13 +1,8 @@
 use flax::{Schedule, World};
 use ivy_assets::AssetCache;
 use ivy_base::engine;
-use ivy_graphics::{
-    components::{self, swapchain},
-};
-use ivy_vulkan::{
-    context::{SharedVulkanContext},
-    device,
-};
+use ivy_graphics::components::{self, swapchain};
+use ivy_vulkan::{context::SharedVulkanContext, device};
 
 use crate::{components::render_graph, Result};
 
@@ -62,6 +57,10 @@ impl GraphicsLayer {
         )?;
 
         Ok(())
+    }
+
+    pub fn frames_in_flight(&self) -> usize {
+        self.frames_in_flight
     }
 }
 

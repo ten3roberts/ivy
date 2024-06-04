@@ -112,7 +112,7 @@ impl Document {
     {
         let path = path.as_ref();
         let Gltf { document, blob } =
-            Gltf::open(path).map_err(|e| Error::GltfImport(e, Some(path.to_owned().into())))?;
+            Gltf::open(path).map_err(|e| Error::GltfImport(e, Some(path.to_owned())))?;
 
         let buffers = import_buffer_data(&document, blob, path)?;
 
@@ -201,9 +201,9 @@ impl Document {
                     skinned_mesh: node
                         .mesh()
                         .and_then(|mesh| skinned_meshes[mesh.index()].clone()),
-                    pos: Vec3::from(position).into(),
-                    rot: Quat::from_array(rotation).into(),
-                    scale: Vec3::from(scale).into(),
+                    pos: Vec3::from(position),
+                    rot: Quat::from_array(rotation),
+                    scale: Vec3::from(scale),
                     children: node.children().map(|val| val.index()).collect(),
                 }
             })
@@ -265,13 +265,6 @@ impl Document {
 
         Ok(self.node(index))
     }
-}
-
-pub struct NodeBundle {
-    pos: Vec3,
-    rot: Quat,
-    scale: Vec3,
-    mesh: Asset<Mesh>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]

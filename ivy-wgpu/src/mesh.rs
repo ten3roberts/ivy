@@ -1,14 +1,11 @@
-use std::{iter::repeat};
+use std::iter::repeat;
 
 use glam::{vec2, vec3, Vec2, Vec3};
 use itertools::{izip, Itertools};
 use ivy_assets::{Asset, AssetCache};
 use ivy_gltf::{GltfPrimitive, GltfPrimitiveRef};
 
-use crate::{
-    material::MaterialDesc,
-    types::{Vertex},
-};
+use crate::{material::MaterialDesc, types::Vertex};
 
 /// Cpu side mesh descriptor
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -135,7 +132,7 @@ impl MeshData {
     }
 
     pub(crate) fn from_gltf(
-        assets: &AssetCache,
+        _: &AssetCache,
         primitive: &gltf::Primitive,
         buffer_data: &[gltf::buffer::Data],
     ) -> Self {

@@ -9,7 +9,7 @@ use crate::{Error, JointTarget, Result};
 pub struct Joint {
     /// Transform vertex to bone space when no animation is applied
     pub inverse_bind_matrix: Mat4,
-    pub local_bind_transform: JointTarget,
+    pub(crate) local_bind_transform: JointTarget,
     pub children: SmallVec<[usize; 4]>,
 }
 

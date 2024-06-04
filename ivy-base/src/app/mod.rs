@@ -35,18 +35,17 @@ pub struct App {
 
 impl App {
     pub fn new() -> Self {
-        let events = Events::new();
-
         let asset_cache = AssetCache::new();
         asset_cache.register_service(FileSystemMapService::new("./assets"));
 
+        #[allow(deprecated)]
         Self {
             name: "Ivy".into(),
             layers: Default::default(),
             event_registry: Default::default(),
             world: World::new(),
             assets: asset_cache,
-            events,
+            events: Events::new(),
             running: false,
         }
     }
@@ -102,6 +101,7 @@ impl App {
 
     /// Get a mutable reference to the app's events.
     pub fn events_mut(&mut self) -> &mut Events {
+        #[allow(deprecated)]
         &mut self.events
     }
 
@@ -123,6 +123,7 @@ impl App {
 
     /// Get a reference to the app's events.
     pub fn events(&self) -> &Events {
+        #[allow(deprecated)]
         &self.events
     }
 

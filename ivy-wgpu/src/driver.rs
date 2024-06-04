@@ -103,7 +103,7 @@ impl<'a> ApplicationHandler for WinitEventHandler<'a> {
     fn device_event(
         &mut self,
         event_loop: &ActiveEventLoop,
-        device_id: winit::event::DeviceId,
+        _: winit::event::DeviceId,
         event: winit::event::DeviceEvent,
     ) {
         if let Err(err) = self.process_device_event(event_loop, event) {
@@ -150,11 +150,7 @@ impl<'a> WinitEventHandler<'a> {
             WindowEvent::Focused(focus) => {
                 tracing::info!(?focus, "focus");
             }
-            WindowEvent::KeyboardInput {
-                device_id,
-                event,
-                is_synthetic,
-            } => {
+            WindowEvent::KeyboardInput { event, .. } => {
                 self.app.emit(KeyboardInput {
                     modifiers: self.modifiers,
                     key: event.logical_key,
@@ -191,11 +187,7 @@ impl<'a> WinitEventHandler<'a> {
                 self.last_cursor_pos = None;
                 self.app.emit(CursorLeft)?;
             }
-            WindowEvent::MouseWheel {
-                device_id,
-                delta,
-                phase,
-            } => {
+            WindowEvent::MouseWheel { delta, .. } => {
                 self.app.emit(ScrollInput {
                     delta: match delta {
                         winit::event::MouseScrollDelta::LineDelta(x, y) => vec2(x, y) * 4.0,
@@ -206,45 +198,41 @@ impl<'a> WinitEventHandler<'a> {
                     },
                 })?;
             }
-            WindowEvent::MouseInput {
-                device_id,
-                state,
-                button,
-            } => self.app.emit(MouseInput {
+            WindowEvent::MouseInput { state, button, .. } => self.app.emit(MouseInput {
                 modifiers: self.modifiers,
                 button,
                 state,
             })?,
             WindowEvent::PinchGesture {
-                device_id,
-                delta,
-                phase,
+                device_id: _,
+                delta: _,
+                phase: _,
             } => todo!(),
             WindowEvent::PanGesture {
-                device_id,
-                delta,
-                phase,
+                device_id: _,
+                delta: _,
+                phase: _,
             } => todo!(),
-            WindowEvent::DoubleTapGesture { device_id } => todo!(),
+            WindowEvent::DoubleTapGesture { device_id: _ } => todo!(),
             WindowEvent::RotationGesture {
-                device_id,
-                delta,
-                phase,
+                device_id: _,
+                delta: _,
+                phase: _,
             } => todo!(),
             WindowEvent::TouchpadPressure {
-                device_id,
-                pressure,
-                stage,
+                device_id: _,
+                pressure: _,
+                stage: _,
             } => todo!(),
             WindowEvent::AxisMotion {
-                device_id,
-                axis,
-                value,
+                device_id: _,
+                axis: _,
+                value: _,
             } => {}
             WindowEvent::Touch(_) => todo!(),
             WindowEvent::ScaleFactorChanged {
                 scale_factor,
-                inner_size_writer,
+                inner_size_writer: _,
             } => {
                 self.scale_factor = scale_factor;
             }
@@ -267,7 +255,7 @@ impl<'a> WinitEventHandler<'a> {
 
     fn process_device_event(
         &mut self,
-        event_loop: &ActiveEventLoop,
+        _: &ActiveEventLoop,
         event: winit::event::DeviceEvent,
     ) -> anyhow::Result<()> {
         match event {
@@ -278,9 +266,12 @@ impl<'a> WinitEventHandler<'a> {
                     delta: vec2(delta.0 as _, delta.1 as _),
                 })?;
             }
-            winit::event::DeviceEvent::MouseWheel { delta } => {}
-            winit::event::DeviceEvent::Motion { axis, value } => {}
-            winit::event::DeviceEvent::Button { button, state } => {}
+            winit::event::DeviceEvent::MouseWheel { delta: _ } => {}
+            winit::event::DeviceEvent::Motion { axis: _, value: _ } => {}
+            winit::event::DeviceEvent::Button {
+                button: _,
+                state: _,
+            } => {}
             winit::event::DeviceEvent::Key(_) => {}
         }
 

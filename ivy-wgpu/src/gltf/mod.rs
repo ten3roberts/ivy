@@ -74,6 +74,18 @@ impl Document {
             materials,
         })
     }
+
+    pub fn images(&self) -> &[Asset<Texture>] {
+        &self.images
+    }
+
+    pub fn materials(&self) -> &[Asset<Material>] {
+        &self.materials
+    }
+
+    pub fn mesh_primitives(&self) -> &[Vec<Asset<MeshData>>] {
+        &self.mesh_primitives
+    }
 }
 
 impl AssetKey<Document> for Asset<ivy_gltf::Document> {

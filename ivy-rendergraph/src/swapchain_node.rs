@@ -129,7 +129,7 @@ impl Node for SwapchainPresentNode {
     fn execute(
         &mut self,
         world: &mut World,
-        assets: &AssetCache,
+        _: &AssetCache,
         cmd: &ivy_vulkan::commands::CommandBuffer,
         _: &PassInfo,
         _current_frame: usize,

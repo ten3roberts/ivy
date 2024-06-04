@@ -183,7 +183,6 @@ impl AssetKey<Material> for MaterialInfo {
     type Error = Error;
 
     fn load(&self, assets: &AssetCache) -> Result<Asset<Material>> {
-        let context = assets.service::<VulkanContextService>().context();
         let sampler = assets.load(&self.sampler);
         let albedo = assets.load(&TextureFromPath(self.albedo.as_ref().into()));
 

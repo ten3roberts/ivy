@@ -28,15 +28,15 @@ impl PhysicsLayerDesc {
 }
 
 pub struct PhysicsLayer {
-    gravity: Vec3,
-    debug: bool,
-    schedule: Schedule,
+    pub gravity: Vec3,
+    pub debug: bool,
+    pub schedule: Schedule,
 }
 
 impl PhysicsLayer {
     pub fn new(
         world: &mut World,
-        assets: &AssetCache,
+        _: &AssetCache,
         events: &mut Events,
         info: PhysicsLayerDesc,
     ) -> anyhow::Result<Self> {

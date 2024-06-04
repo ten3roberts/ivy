@@ -8,7 +8,7 @@ use ash::vk::{BlendFactor, CullModeFlags, DescriptorSet, IndexType, ShaderStageF
 use flax::{Component, Query, World};
 use glam::Vec3;
 use ivy_assets::AssetCache;
-use ivy_base::{main_camera, position, rotation, WorldExt};
+use ivy_base::{main_camera, position, rotation};
 use ivy_vulkan::{
     context::{SharedVulkanContext, VulkanContextService},
     descriptors::{DescriptorBuilder, IntoSet},
@@ -178,7 +178,6 @@ impl Renderer for LightRenderer {
         current_frame: usize,
         _pass: Component<Shader>,
     ) -> anyhow::Result<()> {
-        let camera = world.by_tag(main_camera()).unwrap();
         let (&camera_pos, &camera_rot) = Query::new((position(), rotation()))
             .with(main_camera())
             .borrow(world)
@@ -251,8 +250,3 @@ struct LightData {
 }
 
 impl std::cmp::Eq for LightData {}
-
-#[repr(C)]
-struct LightSceneData {
-    num_lights: u32,
-}
