@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 
-use flax::{component, EntityRef};
 use glam::{vec2, IVec2, Vec2};
 use glfw::{Action, Key, Modifiers, MouseButton, Scancode, WindowEvent};
 use ivy_base::Extent;

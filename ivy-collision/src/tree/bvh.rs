@@ -1,4 +1,4 @@
-use flax::{component::ComponentValue, Entity};
+use flax::{component::ComponentValue};
 use glam::Vec3;
 use ivy_base::{Color, Cube, DrawGizmos, Events, Gizmos};
 use ordered_float::OrderedFloat;

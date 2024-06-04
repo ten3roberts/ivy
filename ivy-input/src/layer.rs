@@ -6,7 +6,7 @@ use ivy_base::{app::TickEvent, Layer};
 
 use crate::{
     components::input_state,
-    types::{MouseMotion, CursorLeft, CursorMoved, KeyboardInput, MouseInput},
+    types::{MouseMotion, CursorMoved, KeyboardInput, MouseInput},
     InputEvent, InputState,
 };
 

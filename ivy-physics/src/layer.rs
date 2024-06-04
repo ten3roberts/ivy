@@ -4,11 +4,10 @@ use crate::{
     },
     systems::{self, resolve_collisions_system, CollisionState},
 };
-use anyhow::Context;
 use flax::{Entity, Schedule, World};
 use glam::Vec3;
 use ivy_assets::AssetCache;
-use ivy_base::{engine, gizmos, Color, ColorExt, DrawGizmos, Events, Layer};
+use ivy_base::{engine, Events};
 use ivy_collision::{BvhNode, CollisionTree, DespawnedSubscriber};
 
 #[derive(Default, Debug, Clone)]

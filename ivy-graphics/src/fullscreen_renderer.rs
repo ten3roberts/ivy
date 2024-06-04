@@ -1,11 +1,10 @@
-use std::collections::btree_map::Entry;
 
-use crate::{Renderer, Result};
+use crate::{Renderer};
 use ash::vk::DescriptorSet;
 use flax::{Component, World};
 use ivy_assets::AssetCache;
 use ivy_vulkan::{
-    context::{SharedVulkanContext, VulkanContextService},
+    context::{VulkanContextService},
     PassInfo, Pipeline, PipelineInfo, Shader,
 };
 

@@ -1,7 +1,7 @@
 use flax::Debuggable;
-use glam::{Mat4, Vec3};
+use glam::{Mat4};
 
-use crate::{BvhNode, Collider, CollisionTree, CollisionTreeNode, ObjectIndex};
+use crate::{Collider, ObjectIndex};
 
 flax::component! {
     pub collider: Collider => [ Debuggable ],

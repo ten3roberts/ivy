@@ -1,4 +1,4 @@
-use std::{borrow::BorrowMut, sync::Arc};
+use std::{sync::Arc};
 
 use flax::World;
 use ivy_assets::{Asset, AssetCache};
@@ -6,8 +6,7 @@ use ivy_base::{engine, main_camera, Extent, WorldExt};
 use ivy_graphics::{
     components::{depth_attachment, swapchain},
     gizmos::GizmoRenderer,
-    shaders::*,
-    DepthAttachment, EnvData, FullscreenRenderer, GpuCamera, MainCamera, MeshRenderer,
+    shaders::*, EnvData, FullscreenRenderer, GpuCamera, MeshRenderer,
     SkinnedMeshRenderer,
 };
 use ivy_postprocessing::pbr::{setup_pbr_nodes, PBRInfo};
@@ -17,9 +16,9 @@ use ivy_rendergraph::{
 };
 use ivy_ui::{canvas, ImageRenderer, TextRenderer, TextUpdateNode};
 use ivy_vulkan::{
-    context::{SharedVulkanContext, VulkanContextService},
+    context::{VulkanContextService},
     vk::{ClearValue, CullModeFlags},
-    ImageLayout, ImageUsage, LoadOp, PipelineInfo, Shader, StoreOp, Swapchain, Texture,
+    ImageLayout, ImageUsage, LoadOp, PipelineInfo, Shader, StoreOp, Texture,
     TextureInfo,
 };
 use parking_lot::Mutex;

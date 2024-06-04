@@ -1,14 +1,14 @@
 use crate::{
     batch_id,
-    components::{animator, material, mesh, skin, skinned_mesh},
-    Allocator, Animator, BaseRenderer, BatchMarker, BufferAllocation, Error, Material, Renderer,
-    Result, Skin, SkinnedMesh, SkinnedVertex,
+    components::{animator, material, skin, skinned_mesh},
+    Allocator, BaseRenderer, BufferAllocation, Material, Renderer,
+    Result, SkinnedMesh, SkinnedVertex,
 };
 use ash::vk::{DescriptorSet, IndexType, ShaderStageFlags};
 use flax::{entity_ids, CommandBuffer, Component, Fetch, FetchExt, Opt, OptOr, Query, World};
 use glam::{Mat4, Vec4};
 use ivy_assets::{Asset, AssetCache};
-use ivy_base::{color, Color, ColorExt, TransformQuery, Visible};
+use ivy_base::{color, Color, ColorExt, TransformQuery};
 use ivy_vulkan::{
     context::SharedVulkanContext, descriptors::IntoSet, device, Buffer, BufferUsage, PassInfo,
     Shader,

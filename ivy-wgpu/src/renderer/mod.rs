@@ -1,15 +1,13 @@
 pub mod mesh_renderer;
 
-use std::{arch::global_asm, collections::HashMap};
 
-use bytemuck::Zeroable;
-use flax::{FetchExt, Query, World};
+use flax::{Query, World};
 use glam::Mat4;
-use ivy_assets::{map::AssetMap, stored::Store, Asset, AssetCache, AssetKey};
+use ivy_assets::{stored::Store, Asset, AssetCache};
 use ivy_base::{main_camera, world_transform, Bundle};
 use wgpu::{
-    hal::TextureUses, naga::ShaderStage, util::RenderEncoder, BindGroup, BindGroupLayout,
-    BufferUsages, Extent3d, Operations, RenderPass, RenderPassColorAttachment, ShaderStages,
+    util::RenderEncoder, BindGroup,
+    BufferUsages, Extent3d, Operations, RenderPassColorAttachment, ShaderStages,
     TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
 };
 use winit::dpi::PhysicalSize;
@@ -19,8 +17,8 @@ use crate::{
     material::MaterialDesc,
     mesh::MeshDesc,
     types::{
-        material::Material, shader::ShaderDesc, texture::Texture, BindGroupBuilder,
-        BindGroupLayoutBuilder, Mesh, Shader, Surface, TypedBuffer, Vertex, VertexDesc,
+        material::Material, BindGroupBuilder,
+        BindGroupLayoutBuilder, Shader, Surface, TypedBuffer,
     },
     Gpu,
 };

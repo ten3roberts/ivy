@@ -2,7 +2,6 @@
 //! Window events are captured and forwarded to input events if no UI element
 //! captured it.
 
-use std::convert::TryFrom;
 
 use flax::Entity;
 use glam::Vec2;

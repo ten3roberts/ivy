@@ -2,13 +2,11 @@ use flax::{Schedule, World};
 use ivy_assets::AssetCache;
 use ivy_base::engine;
 use ivy_graphics::{
-    components::{self, swapchain, window},
-    systems, GpuCamera,
+    components::{self, swapchain},
 };
 use ivy_vulkan::{
-    context::{SharedVulkanContext, VulkanContextService},
+    context::{SharedVulkanContext},
     device,
-    traits::Backend,
 };
 
 use crate::{components::render_graph, Result};

@@ -1,12 +1,11 @@
 use std::{
     sync::{mpsc, Arc},
-    time::Duration,
 };
 
 use flax::World;
 use glfw::{Glfw, WindowEvent};
 use ivy_assets::AssetCache;
-use ivy_base::{engine, Events, Layer};
+use ivy_base::{engine};
 use ivy_vulkan::{context::VulkanContextService, Swapchain, SwapchainInfo, VulkanContext};
 use ivy_window::{Window, WindowInfo};
 use parking_lot::RwLock;

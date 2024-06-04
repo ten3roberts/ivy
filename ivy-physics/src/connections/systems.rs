@@ -1,11 +1,10 @@
 use crate::{components::effector, Effector, Result};
 use flax::{
-    fetch::{entity_refs, EntityRefs, Satisfied},
+    fetch::{entity_refs, EntityRefs},
     BoxedSystem, CommandBuffer, Dfs, EntityRef, FetchExt, Query, QueryBorrow, System, World,
 };
 use ivy_base::{
     connection, is_static, position_offset, rotation_offset, world_transform, Color, ColorExt, Gizmos,
-    Static, TransformQuery,
 };
 
 use super::*;
@@ -80,7 +79,7 @@ fn update_subtree(world: &World, cmd: &mut CommandBuffer, parent: EntityRef) -> 
         .try_for_each(|(child, connection)| {
             // let child = world.entity(child).unwrap();
 
-            let mut query = (
+            let query = (
                 position_offset(),
                 rotation_offset(),
                 TransformQueryMut::new(),

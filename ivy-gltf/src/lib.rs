@@ -1,12 +1,11 @@
 pub mod components;
 
-use flax::EntityBuilder;
 use glam::{Quat, Vec3};
 use itertools::Itertools;
 use std::{collections::HashMap, path::Path};
 
-use gltf::{Gltf, Mesh, Primitive};
-use ivy_assets::{Asset, AssetCache, AssetKey, StoredKey};
+use gltf::{Gltf, Mesh};
+use ivy_assets::{Asset, AssetCache, AssetKey};
 
 /// An in memory representation of a gltf document and binary buffer data
 pub struct DocumentData {

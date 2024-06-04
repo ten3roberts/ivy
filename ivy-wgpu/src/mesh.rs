@@ -1,13 +1,13 @@
-use std::{convert::Infallible, iter::repeat};
+use std::{iter::repeat};
 
 use glam::{vec2, vec3, Vec2, Vec3};
 use itertools::{izip, Itertools};
-use ivy_assets::{Asset, AssetCache, AssetKey};
-use ivy_gltf::{GltfMesh, GltfMeshRef, GltfPrimitive, GltfPrimitiveRef};
+use ivy_assets::{Asset, AssetCache};
+use ivy_gltf::{GltfPrimitive, GltfPrimitiveRef};
 
 use crate::{
     material::MaterialDesc,
-    types::{Mesh, Vertex},
+    types::{Vertex},
 };
 
 /// Cpu side mesh descriptor

@@ -1,12 +1,9 @@
 #![allow(non_snake_case)]
-use anyhow::Context;
-use flax::{BoxedSystem, Query, Schedule, System, World};
-use glam::Vec2;
+use flax::{BoxedSystem, Schedule, World};
 use ivy_assets::AssetCache;
-use ivy_base::{engine, size, Events, Layer};
-use ivy_graphics::components::window;
+use ivy_base::{Events};
 
-use crate::{canvas, input_field_system, update_system, UIControl};
+use crate::{input_field_system, update_system};
 mod event_handling;
 pub use event_handling::*;
 

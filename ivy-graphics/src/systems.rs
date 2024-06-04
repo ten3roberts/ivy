@@ -1,4 +1,4 @@
-use flax::{entity_ids, BoxedSystem, Component, EntityIds, Query, QueryBorrow, System, World};
+use flax::{entity_ids, BoxedSystem, Component, EntityIds, Query, QueryBorrow, System};
 use glam::Mat4;
 use ivy_assets::Asset;
 use ivy_base::{world_transform, DEG_180};
