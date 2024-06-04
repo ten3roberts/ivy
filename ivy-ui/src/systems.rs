@@ -1,14 +1,11 @@
-use std::convert::TryInto;
 
-use crate::{events::WidgetEvent, InteractiveState, Result};
-use anyhow::Context;
+use crate::{events::WidgetEvent, Result};
 use flax::{
     components::child_of, entity_ids, fetch::entity_refs, BoxedSystem, Entity, EntityRef, FetchExt,
     Query, System, World,
 };
 use glam::{Mat4, Vec2, Vec3Swizzles};
-use glfw::Action;
-use ivy_base::{position, size, visible, Events, Visible};
+use ivy_base::{position, size, visible, Visible};
 use ivy_graphics::components::camera;
 
 use crate::{constraints::ConstraintQuery, *};

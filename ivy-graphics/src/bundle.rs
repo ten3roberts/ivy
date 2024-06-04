@@ -4,7 +4,6 @@ use ivy_assets::Asset;
 use ivy_base::{
     color, position, rotation, scale, visible, world_transform, Bundle, Color, Visible,
 };
-use tracing::field::Visit;
 
 use crate::{
     components::{material, mesh},

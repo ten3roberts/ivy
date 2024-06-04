@@ -3,8 +3,7 @@ use std::collections::BTreeMap;
 use crate::{
     bundles::*,
     collision::{resolve_collision, ResolveObject},
-    components::{self, collision_state, effector, gravity_state, physics_state, PhysicsState},
-    Effector, Result,
+    components::{collision_state, effector, gravity_state, physics_state, PhysicsState}, Result,
 };
 use flax::{
     BoxedSystem, Component, Entity, EntityRef, FetchExt, Mutable, Query, QueryBorrow, System, World,
@@ -15,7 +14,7 @@ use ivy_base::{
     angular_velocity, connection, engine, friction, gravity_influence, position, restitution,
     rotation, sleeping, velocity,
 };
-use ivy_collision::{util::TOLERANCE, Collision, Contact};
+use ivy_collision::{Collision, Contact};
 
 const BATCH_SIZE: u32 = 64;
 

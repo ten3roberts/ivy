@@ -11,10 +11,10 @@ use flax::{
 };
 use glam::Mat4;
 use ivy_assets::{map::AssetMap, stored::Handle, Asset, AssetCache};
-use ivy_base::{palette::IntoColor, world_transform};
+use ivy_base::{world_transform};
 use slab::Slab;
 use wgpu::{
-    core::instance::IsSurfaceSupportedError, BindGroup, BindGroupLayout, BufferUsages, RenderPass,
+    BindGroup, BindGroupLayout, BufferUsages, RenderPass,
     ShaderStages, TextureFormat,
 };
 
@@ -25,13 +25,13 @@ use crate::{
     mesh_buffer::{MeshBuffer, MeshHandle},
     renderer::RendererStore,
     types::{
-        allocator::Allocation, material::Material, shader::ShaderDesc, BindGroupBuilder,
-        BindGroupLayoutBuilder, Mesh, Shader, TypedBuffer, Vertex, VertexDesc,
+        material::Material, shader::ShaderDesc, BindGroupBuilder,
+        BindGroupLayoutBuilder, Shader, TypedBuffer, Vertex, VertexDesc,
     },
     Gpu,
 };
 
-use super::{Globals, ObjectData, RenderObject};
+use super::{Globals, ObjectData};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct BatchKey {

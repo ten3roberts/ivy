@@ -1,4 +1,3 @@
-use std::marker::PhantomData;
 
 use glam::Vec3;
 use ivy_vulkan::{context::SharedVulkanContext, Buffer, BufferAccess::Mapped, BufferUsage};

@@ -11,7 +11,7 @@ use ivy_vulkan::{
     context::SharedVulkanContext,
     descriptors::MultiDescriptorBindable,
     vk::{ClearValue, ImageAspectFlags, ShaderStageFlags},
-    AddressMode, ClearValueExt, FilterMode, Format, ImageLayout, ImageUsage, LoadOp, Sampler,
+    AddressMode, ClearValueExt, FilterMode, Format, ImageLayout, ImageUsage, LoadOp,
     SamplerKey, Shader, StoreOp, Texture, TextureInfo,
 };
 

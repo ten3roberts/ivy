@@ -9,7 +9,7 @@ use ivy_vulkan::{
     context::SharedVulkanContext,
     descriptors::{DescriptorSet, IntoSet},
     vk::{
-        self, AccessFlags, AttachmentSampleCountInfoAMD, BufferCopy, BufferMemoryBarrier, IndexType,
+        self, AccessFlags, BufferCopy, BufferMemoryBarrier, IndexType,
     },
     BufferAccess, BufferUsage, PassInfo, Shader,
 };
@@ -20,7 +20,7 @@ use std::{mem::size_of, sync::Arc};
 use crate::WrapStyle;
 use crate::{alignment, font, margin, text, wrap, Font, UIVertex};
 use crate::{Alignment, Text};
-use crate::{Error, Result};
+use crate::{Result};
 use ivy_base::{color, position, size, visible, Color, ColorExt};
 
 flax::component! {

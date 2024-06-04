@@ -1,12 +1,11 @@
 use std::marker::PhantomData;
 
-use anyhow::Context;
 use flax::World;
 use flume::Receiver;
 use ivy_assets::AssetCache;
-use ivy_base::{Events, Layer};
+use ivy_base::{Events};
 
-use crate::{events::WidgetEvent, systems, WidgetEventKind};
+use crate::{events::WidgetEvent, WidgetEventKind};
 
 #[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};

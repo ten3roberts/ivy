@@ -1,4 +1,3 @@
-use std::convert::Infallible;
 
 use image::{DynamicImage, ImageError};
 use ivy_assets::{Asset, AssetKey};

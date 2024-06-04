@@ -4,7 +4,7 @@ use ivy_assets::{Asset, AssetCache};
 use ivy_vulkan::{
     traits::FromExtent,
     vk::{
-        self, AttachmentSampleCountInfoAMD, ImageAspectFlags, ImageBlit, ImageSubresourceLayers,
+        self, ImageAspectFlags, ImageBlit, ImageSubresourceLayers,
         Offset3D, PipelineStageFlags,
     },
     ImageLayout, PassInfo, Texture,
