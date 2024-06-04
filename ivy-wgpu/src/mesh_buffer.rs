@@ -4,7 +4,7 @@ use itertools::Itertools;
 use wgpu::{BufferUsages, RenderPass};
 
 use super::{
-    graphics::{
+    types::{
         multi_buffer::{MultiBuffer, SubBuffer},
         Vertex,
     },

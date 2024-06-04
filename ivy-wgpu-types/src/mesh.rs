@@ -1,13 +1,8 @@
-use std::iter::repeat;
-
-use glam::{vec2, vec3, Vec2, Vec3, Vec4};
-use itertools::{izip, Itertools};
-use ivy_assets::{Asset, AssetCache};
+use glam::{Vec2, Vec3};
+use ivy_assets::Asset;
 use wgpu::{
     util::DeviceExt, vertex_attr_array, Buffer, RenderPass, VertexAttribute, VertexBufferLayout,
 };
-
-use crate::mesh::{MeshData, MeshDesc};
 
 use super::{material::Material, Gpu};
 

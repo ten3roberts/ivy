@@ -1,4 +1,4 @@
-use ivy_assets::{Asset, AssetCache};
+use ivy_assets::{Asset, AssetCache, AssetKey};
 use wgpu::{Sampler, SamplerDescriptor, ShaderStages};
 
 use crate::Gpu;
@@ -52,7 +52,7 @@ impl Material {
         &self.layout
     }
 
-    pub(crate) fn from_gltf(
+    pub fn from_gltf(
         gpu: &Gpu,
         assets: &AssetCache,
         material: gltf::Material,
