@@ -32,7 +32,7 @@ pub mod app;
 mod color;
 pub mod components;
 mod dir;
-mod events;
+pub mod events;
 pub mod extensions;
 mod extent;
 pub mod gizmos;
@@ -55,7 +55,6 @@ pub use extent::*;
 pub use gizmos::*;
 pub use layer::*;
 pub use time::*;
-pub use updatable::*;
 
 /// 45 degrees in radians
 pub const DEG_45: f32 = PI / 4.0;

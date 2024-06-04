@@ -1,6 +1,6 @@
-use flax::{component, EntityRef};
+use flax::component;
 
-use crate::{InputEvent, InputState};
+use crate::InputState;
 
 component! {
     // pub on_input_event: Box<dyn Send + Sync + Fn(EntityRef, InputEvent)>,

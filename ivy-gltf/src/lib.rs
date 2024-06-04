@@ -52,7 +52,7 @@ impl DocumentData {
         self.mesh(index.0).and_then(|v| v.primitives().nth(index.1))
     }
 
-    fn primitives(&self) -> impl Iterator<Item = gltf::Primitive<'_>> + '_ {
+    pub fn primitives(&self) -> impl Iterator<Item = gltf::Primitive<'_>> + '_ {
         self.meshes().flat_map(|v| v.primitives())
     }
 }

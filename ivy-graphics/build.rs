@@ -2,23 +2,11 @@ use anyhow::{Context, Result};
 use shaderc::ShaderKind;
 use std::{
     env,
-    error::Error,
     ffi::OsString,
     fs,
     path::{Path, PathBuf},
     slice,
 };
-
-#[derive(Debug)]
-struct CompilationFailure(PathBuf);
-
-impl Error for CompilationFailure {}
-
-impl std::fmt::Display for CompilationFailure {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Failed to compile resource: {}", self.0.display())
-    }
-}
 
 fn rerun_if_changed<P: AsRef<Path>>(path: P) {
     let path = path.as_ref();

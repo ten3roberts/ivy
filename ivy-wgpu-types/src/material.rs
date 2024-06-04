@@ -1,10 +1,10 @@
-use ivy_assets::{Asset, AssetCache, AssetKey};
+use ivy_assets::{Asset, AssetCache};
 use wgpu::{Sampler, SamplerDescriptor, ShaderStages};
 
 use crate::Gpu;
 
 use super::{
-    texture::{Texture, TextureFromColor, TextureFromPath},
+    texture::{Texture, TextureFromColor},
     BindGroupBuilder, BindGroupLayoutBuilder,
 };
 

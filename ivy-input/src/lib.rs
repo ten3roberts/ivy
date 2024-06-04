@@ -1,7 +1,6 @@
 pub mod components;
 pub mod error;
 mod events;
-mod input;
 pub mod layer;
 pub mod types;
 mod vector;
@@ -11,12 +10,9 @@ use std::{collections::HashMap, mem, ops::Mul};
 use flax::{component::ComponentValue, Component, EntityRef};
 use glam::{Vec2, Vec3};
 
-pub use input::*;
-use ivy_base::layer::events::Event;
-use types::{CursorMoved, InputEvent, KeyboardInput, MouseInput};
-pub use vector::*;
+use types::{InputEvent, KeyboardInput, MouseInput};
 use winit::{
-    event::{ElementState, KeyEvent, MouseButton},
+    event::MouseButton,
     keyboard::{Key, SmolStr},
 };
 
@@ -484,7 +480,7 @@ impl<T, V> BindingExt<V> for T where T: Binding<V> {}
 mod test {
     use winit::{event::ElementState, keyboard::Key};
 
-    use crate::{types::KeyboardInput, Action, InputEvent, InputState, KeyBinding};
+    use crate::{types::KeyboardInput, Action, InputEvent, KeyBinding};
 
     #[test]
     fn input_state() {

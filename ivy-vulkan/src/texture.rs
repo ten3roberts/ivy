@@ -7,7 +7,6 @@ use crate::{
     Buffer, BufferAccess, Error, Result,
 };
 use ash::vk::{Extent3D, ImageAspectFlags, ImageView, SharingMode};
-use glam::Vec4;
 use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc};
 use gpu_allocator::MemoryLocation;
 use ivy_assets::{Asset, AssetCache, AssetKey};
