@@ -1,27 +1,25 @@
 use anyhow::Context;
 use flax::{entity_ids, Component, Fetch, Mutable, Query, World};
-use glam::{Mat4, Vec2, Vec3, Vec4};
+use glam::{Mat4, Vec2, Vec4};
 use ivy_assets::{Asset, AssetCache};
-use ivy_graphics::{batch_id, Allocator, BaseRenderer, BufferAllocation, Mesh, Renderer};
+use ivy_base::size;
+use ivy_graphics::{Allocator, BaseRenderer, BufferAllocation, Mesh, Renderer};
 use ivy_rendergraph::Node;
 use ivy_vulkan::{
     commands::CommandBuffer,
     context::SharedVulkanContext,
-    descriptors::{DescriptorSet, IntoSet},
-    vk::{
-        self, AccessFlags, BufferCopy, BufferMemoryBarrier, IndexType,
-    },
+    descriptors::DescriptorSet,
+    vk::{self, AccessFlags, BufferCopy, BufferMemoryBarrier},
     BufferAccess, BufferUsage, PassInfo, Shader,
 };
 use ivy_vulkan::{device, Buffer};
 use parking_lot::Mutex;
 use std::{mem::size_of, sync::Arc};
 
+use crate::Result;
 use crate::WrapStyle;
 use crate::{alignment, font, margin, text, wrap, Font, UIVertex};
 use crate::{Alignment, Text};
-use crate::{Result};
-use ivy_base::{color, position, size, visible, Color, ColorExt};
 
 flax::component! {
     block: BufferAllocation<Marker>,
@@ -300,74 +298,74 @@ impl TextRenderer {
 impl Renderer for TextRenderer {
     fn draw(
         &mut self,
-        world: &mut World,
-        assets: &AssetCache,
-        cmd: &ivy_vulkan::CommandBuffer,
-        sets: &[DescriptorSet],
-        pass_info: &PassInfo,
-        offsets: &[u32],
-        current_frame: usize,
-        shaderpass: Component<Shader>,
+        _: &mut World,
+        _: &AssetCache,
+        _: &ivy_vulkan::CommandBuffer,
+        _: &[DescriptorSet],
+        _: &PassInfo,
+        _: &[u32],
+        _: usize,
+        _: Component<Shader>,
     ) -> anyhow::Result<()> {
         return Ok(());
-        cmd.bind_vertexbuffer(0, self.mesh.vertex_buffer());
-        cmd.bind_indexbuffer(self.mesh.index_buffer(), IndexType::UINT32, 0);
+        // cmd.bind_vertexbuffer(0, self.mesh.vertex_buffer());
+        // cmd.bind_indexbuffer(self.mesh.index_buffer(), IndexType::UINT32, 0);
 
-        let pass = self.base_renderer.pass_mut(shaderpass)?;
-        {
-            pass.register(world, KeyQuery::new());
-            pass.build_batches(world, pass_info)?;
-            pass.update(
-                current_frame,
-                Query::new((
-                    entity_ids(),
-                    batch_id(shaderpass.id()),
-                    ObjectDataQuery::new(),
-                    visible(),
-                ))
-                .borrow(world)
-                .iter()
-                .filter_map(|(id, &marker, object, visible)| {
-                    if visible.is_visible() {
-                        Some((id, marker, ObjectData::from(object)))
-                    } else {
-                        None
-                    }
-                }),
-            )?;
-        }
+        // let pass = self.base_renderer.pass_mut(shaderpass)?;
+        // {
+        //     pass.register(world, KeyQuery::new());
+        //     pass.build_batches(world, pass_info)?;
+        //     pass.update(
+        //         current_frame,
+        //         Query::new((
+        //             entity_ids(),
+        //             batch_id(shaderpass.id()),
+        //             ObjectDataQuery::new(),
+        //             visible(),
+        //         ))
+        //         .borrow(world)
+        //         .iter()
+        //         .filter_map(|(id, &marker, object, visible)| {
+        //             if visible.is_visible() {
+        //                 Some((id, marker, ObjectData::from(object)))
+        //             } else {
+        //                 None
+        //             }
+        //         }),
+        //     )?;
+        // }
 
-        let frame_set = pass.set(current_frame);
+        // let frame_set = pass.set(current_frame);
 
-        let object_buffer = pass.object_buffer(current_frame);
-        let object_data = object_buffer
-            .mapped_slice::<ObjectData>()
-            .expect("Non mappable object data buffer");
+        // let object_buffer = pass.object_buffer(current_frame);
+        // let object_data = object_buffer
+        //     .mapped_slice::<ObjectData>()
+        //     .expect("Non mappable object data buffer");
 
-        for batch in pass.batches().iter() {
-            let key = batch.key();
+        // for batch in pass.batches().iter() {
+        //     let key = batch.key();
 
-            cmd.bind_pipeline(batch.pipeline());
+        //     cmd.bind_pipeline(batch.pipeline());
 
-            if !sets.is_empty() {
-                cmd.bind_descriptor_sets(batch.layout(), 0, sets, offsets);
-            }
+        //     if !sets.is_empty() {
+        //         cmd.bind_descriptor_sets(batch.layout(), 0, sets, offsets);
+        //     }
 
-            cmd.bind_descriptor_sets(
-                batch.layout(),
-                sets.len() as u32,
-                &[frame_set, key.font.set(0)],
-                &[],
-            );
+        //     cmd.bind_descriptor_sets(
+        //         batch.layout(),
+        //         sets.len() as u32,
+        //         &[frame_set, key.font.set(0)],
+        //         &[],
+        //     );
 
-            for id in batch.ids() {
-                let data = &object_data[id as usize];
+        //     for id in batch.ids() {
+        //         let data = &object_data[id as usize];
 
-                cmd.draw_indexed(data.len * 6, 1, data.offset * 6, 0, id);
-            }
-        }
+        //         cmd.draw_indexed(data.len * 6, 1, data.offset * 6, 0, id);
+        //     }
+        // }
 
-        Ok(())
+        // Ok(())
     }
 }
 
@@ -380,66 +378,18 @@ struct ObjectData {
     len: u32,
 }
 
-#[derive(Fetch)]
-struct ObjectDataQuery {
-    position: Component<Vec3>,
-    color: Component<Color>,
-    text: Component<Text>,
-    block: Component<BufferAllocation<Marker>>,
-}
-
-impl ObjectDataQuery {
-    pub fn new() -> Self {
-        Self {
-            position: position(),
-            color: color(),
-            text: text(),
-            block: block(),
-        }
-    }
-}
-
-impl<'a> From<ObjectDataQueryItem<'a>> for ObjectData {
-    fn from(value: ObjectDataQueryItem) -> ObjectData {
-        ObjectData {
-            mvp: Mat4::from_translation(*value.position),
-            color: value.color.to_vec4(),
-            offset: value.block.offset() as u32,
-            len: value.text.len() as u32,
-        }
-    }
-}
-
-#[derive(Fetch)]
-struct KeyQuery {
-    font: Component<Asset<Font>>,
-}
-
-impl KeyQuery {
-    fn new() -> Self {
-        Self { font: font() }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Key {
     font: Asset<Font>,
 }
 
-impl<'a> From<KeyQueryItem<'a>> for Key {
-    fn from(value: KeyQueryItem) -> Self {
-        Self {
-            font: value.font.clone(),
-        }
-    }
-}
 pub struct TextUpdateNode {
     text_renderer: Arc<Mutex<TextRenderer>>,
     buffer: vk::Buffer,
 }
 
 impl TextUpdateNode {
-    pub fn new(assets: &AssetCache, text_renderer: Arc<Mutex<TextRenderer>>) -> Result<Self> {
+    pub fn new(_: &AssetCache, text_renderer: Arc<Mutex<TextRenderer>>) -> Result<Self> {
         let buffer = text_renderer.lock().vertex_buffer();
 
         Ok(Self {

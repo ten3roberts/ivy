@@ -1,13 +1,13 @@
 use crate::{
     batch_id,
-    components::{camera, material, mesh},
+    components::{material, mesh},
     BaseRenderer, Material, Mesh, Renderer, Result, Vertex,
 };
 use ash::vk::{DescriptorSet, IndexType};
 use flax::{entity_ids, Component, Fetch, FetchExt, Opt, OptOr, Query, World};
 use glam::{Mat4, Quat, Vec3, Vec4};
 use ivy_assets::{Asset, AssetCache};
-use ivy_base::{color, main_camera, position, rotation, scale, Color, ColorExt};
+use ivy_base::{color, position, rotation, scale, Color, ColorExt};
 use ivy_vulkan::{context::SharedVulkanContext, descriptors::IntoSet, PassInfo, Shader};
 
 /// Draw a static mesh with a material
@@ -32,7 +32,7 @@ impl Renderer for MeshRenderer {
     fn draw(
         &mut self,
         world: &mut World,
-        assets: &AssetCache,
+        _: &AssetCache,
         cmd: &ivy_vulkan::CommandBuffer,
         sets: &[DescriptorSet],
         pass_info: &PassInfo,
@@ -44,9 +44,6 @@ impl Renderer for MeshRenderer {
 
         renderpass.build_batches(world, pass_info)?;
         {
-            let mut q = Query::new(camera()).with(main_camera());
-            let camera = q.borrow(world).iter().next().unwrap();
-
             renderpass.update(
                 current_frame,
                 Query::new((entity_ids(), batch_id(pass.id()), ObjectDataQuery::new()))

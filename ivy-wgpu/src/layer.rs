@@ -26,7 +26,7 @@ impl GraphicsLayer {
 
     fn on_application_ready(
         &mut self,
-        world: &mut World,
+        _: &mut World,
         assets: &AssetCache,
         window: Arc<Window>,
     ) -> Result<(), anyhow::Error> {
@@ -69,8 +69,8 @@ impl Default for GraphicsLayer {
 impl Layer for GraphicsLayer {
     fn register(
         &mut self,
-        world: &mut World,
-        assets: &AssetCache,
+        _: &mut World,
+        _: &AssetCache,
         mut events: ivy_base::layer::events::EventRegisterContext<Self>,
     ) -> anyhow::Result<()>
     where

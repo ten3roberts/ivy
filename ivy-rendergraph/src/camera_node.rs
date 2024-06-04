@@ -69,7 +69,7 @@ where
     pub fn new(
         context: SharedVulkanContext,
         world: &mut World,
-        assets: &AssetCache,
+        _: &AssetCache,
         camera: Entity,
         renderer: R,
         shaderpass: Component<Shader>,

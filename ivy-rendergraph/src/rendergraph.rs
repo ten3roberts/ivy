@@ -199,7 +199,7 @@ impl RenderGraph {
         passes.clear();
 
         // Build all graphics nodes
-        let groups = ordered.iter().cloned().group_by(|node| {
+        let groups = ordered.iter().cloned().chunk_by(|node| {
             return (depths[node], nodes[*node].node_kind());
         });
 

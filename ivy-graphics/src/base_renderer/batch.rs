@@ -4,8 +4,6 @@ use ash::vk::{Pipeline, PipelineLayout};
 use ivy_assets::Asset;
 use ivy_vulkan::PipelineInfo;
 
-use super::{BatchId, ObjectId};
-
 /// A batch contains objects of the same shaderpass and material.
 pub struct BatchData<K> {
     pipeline: Pipeline,
@@ -94,27 +92,6 @@ impl<O> BatchData<O> {
         self.dirty = count;
     }
 }
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-struct ObjectBufferMarker<K> {
-    /// Index into the object buffer
-    id: ObjectId,
-    marker: PhantomData<K>,
-}
-
-/// Marker is send + sync
-unsafe impl<K> Send for ObjectBufferMarker<K> {}
-unsafe impl<K> Sync for ObjectBufferMarker<K> {}
-
-/// Marks the entity as already being batched for this shaderpasss with the batch index and object buffer index.
-pub struct BatchMarker<Obj, Pass> {
-    pub(crate) batch_id: BatchId,
-    pub(crate) marker: PhantomData<(Obj, Pass)>,
-}
-
-/// Marker is send + sync
-unsafe impl<Obj, Pass> Sync for BatchMarker<Obj, Pass> {}
-unsafe impl<Obj, Pass> Send for BatchMarker<Obj, Pass> {}
 
 pub struct BatchIdIterator<Obj> {
     pub max: u32,

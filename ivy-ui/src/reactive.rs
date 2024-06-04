@@ -1,9 +1,8 @@
 use std::marker::PhantomData;
 
 use flax::World;
-use flume::Receiver;
 use ivy_assets::AssetCache;
-use ivy_base::{Events};
+use ivy_base::Events;
 
 use crate::{events::WidgetEvent, WidgetEventKind};
 
@@ -65,16 +64,12 @@ impl<T: Copy> Reactive<T> {
 
 /// Layer abstraction for updating reactive components.
 pub struct ReactiveLayer<T> {
-    rx: Receiver<WidgetEvent>,
     marker: PhantomData<T>,
 }
 
 impl<T> ReactiveLayer<T> {
-    pub fn new(_world: &mut World, _resources: &mut AssetCache, events: &mut Events) -> Self {
-        let (tx, rx) = flume::unbounded();
-        events.subscribe_custom(tx);
+    pub fn new(_world: &mut World, _resources: &mut AssetCache, _: &mut Events) -> Self {
         Self {
-            rx,
             marker: PhantomData,
         }
     }

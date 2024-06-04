@@ -28,7 +28,7 @@ pub struct PostProcessingNode {
 impl PostProcessingNode {
     pub fn new(
         context: SharedVulkanContext,
-        assets: &AssetCache,
+        _: &AssetCache,
         read_attachments: &[Asset<Texture>],
         input_attachments: &[Asset<Texture>],
         bindables: &[&dyn MultiDescriptorBindable],

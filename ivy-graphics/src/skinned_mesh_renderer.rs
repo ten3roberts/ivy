@@ -1,8 +1,8 @@
 use crate::{
     batch_id,
     components::{animator, material, skin, skinned_mesh},
-    Allocator, BaseRenderer, BufferAllocation, Material, Renderer,
-    Result, SkinnedMesh, SkinnedVertex,
+    Allocator, BaseRenderer, BufferAllocation, Material, Renderer, Result, SkinnedMesh,
+    SkinnedVertex,
 };
 use ash::vk::{DescriptorSet, IndexType, ShaderStageFlags};
 use flax::{entity_ids, CommandBuffer, Component, Fetch, FetchExt, Opt, OptOr, Query, World};
@@ -155,8 +155,6 @@ impl Renderer for SkinnedMeshRenderer {
         current_frame: usize,
         pass: Component<Shader>,
     ) -> anyhow::Result<()> {
-        return Ok(());
-
         self.register_entities(world, assets)?;
         self.update_joints(world, current_frame)?;
 
@@ -170,11 +168,11 @@ impl Renderer for SkinnedMeshRenderer {
             Query::new((entity_ids(), batch_id(pass.id()), ObjectDataQuery::new()))
                 .borrow(world)
                 .iter()
-                .filter_map(|(e, &batch_id, obj /* , bound */)| {
+                .map(|(e, &batch_id, obj /* , bound */)| {
                     // if visible.is_visible()
                     //     && camera.visible(**obj.position, **bound * obj.scale.max_element())
                     // {
-                    Some((e, batch_id, ObjectData::from(obj)))
+                    (e, batch_id, ObjectData::from(obj))
                     // } else {
                     //     None
                     // }
@@ -187,7 +185,7 @@ impl Renderer for SkinnedMeshRenderer {
         for batch in renderpass.batches().iter() {
             let key = batch.key();
 
-            let mesh = key.mesh;
+            let mesh = key.mesh.clone();
 
             cmd.bind_pipeline(batch.pipeline());
 
@@ -202,7 +200,7 @@ impl Renderer for SkinnedMeshRenderer {
             let instance_count = batch.instance_count();
             let first_instance = batch.first_instance();
 
-            if let Some(material) = key.material {
+            if let Some(material) = key.material.clone() {
                 cmd.bind_descriptor_sets(
                     batch.layout(),
                     sets.len() as u32,

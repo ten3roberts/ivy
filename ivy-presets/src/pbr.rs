@@ -1,4 +1,4 @@
-use std::{sync::Arc};
+use std::sync::Arc;
 
 use flax::World;
 use ivy_assets::{Asset, AssetCache};
@@ -6,8 +6,8 @@ use ivy_base::{engine, main_camera, Extent, WorldExt};
 use ivy_graphics::{
     components::{depth_attachment, swapchain},
     gizmos::GizmoRenderer,
-    shaders::*, EnvData, FullscreenRenderer, GpuCamera, MeshRenderer,
-    SkinnedMeshRenderer,
+    shaders::*,
+    EnvData, GpuCamera, MeshRenderer, SkinnedMeshRenderer,
 };
 use ivy_postprocessing::pbr::{setup_pbr_nodes, PBRInfo};
 use ivy_rendergraph::{
@@ -16,10 +16,9 @@ use ivy_rendergraph::{
 };
 use ivy_ui::{canvas, ImageRenderer, TextRenderer, TextUpdateNode};
 use ivy_vulkan::{
-    context::{VulkanContextService},
+    context::VulkanContextService,
     vk::{ClearValue, CullModeFlags},
-    ImageLayout, ImageUsage, LoadOp, PipelineInfo, Shader, StoreOp, Texture,
-    TextureInfo,
+    ImageLayout, ImageUsage, LoadOp, PipelineInfo, Shader, StoreOp, Texture, TextureInfo,
 };
 use parking_lot::Mutex;
 
@@ -85,8 +84,6 @@ impl PBRRendering {
         let mut rendergraph = RenderGraph::new(context.clone(), frames_in_flight)?;
 
         // Setup renderers
-        let fullscreen_renderer =
-            FullscreenRenderer::new((*info.post_processing_shader.pipeline_info).clone());
 
         let gizmo_renderer =
             GizmoRenderer::new(context.clone(), (*info.gizmo_shader.pipeline_info).clone())?;
@@ -308,6 +305,10 @@ pub struct PipelinesInfo {
 impl PipelinesInfo {
     pub fn new(cull_mode: CullModeFlags) -> Self {
         Self { cull_mode }
+    }
+
+    pub fn cull_mode(&self) -> CullModeFlags {
+        self.cull_mode
     }
 }
 

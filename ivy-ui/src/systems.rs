@@ -1,8 +1,6 @@
-
 use crate::{events::WidgetEvent, Result};
 use flax::{
-    components::child_of, entity_ids, fetch::entity_refs, BoxedSystem, Entity, EntityRef, FetchExt,
-    Query, System, World,
+    components::child_of, fetch::entity_refs, BoxedSystem, EntityRef, Query, System, World,
 };
 use glam::{Mat4, Vec2, Vec3Swizzles};
 use ivy_base::{position, size, visible, Visible};
@@ -42,7 +40,7 @@ pub(crate) fn update_from(world: &World, entity: &EntityRef, depth: u32) -> Resu
         //     world.try_query_one::<(&Position2D, &Size2D, &mut WidgetDepth, &mut Visible)>(parent)?;
 
         // let (position, size, curr_depth, visible) = query.get()?;
-        *cur_depth = depth.into();
+        *cur_depth = depth;
         (*position, *size, *visible)
     };
 
@@ -64,7 +62,7 @@ pub(crate) fn update_from(world: &World, entity: &EntityRef, depth: u32) -> Resu
 
 /// Applies the constraints associated to entity and uses the given parent.
 pub(crate) fn apply_constraints(
-    world: &World,
+    _: &World,
     entity: &EntityRef,
     parent_pos: Vec2,
     parent_size: Vec2,
@@ -109,7 +107,7 @@ pub(crate) fn apply_constraints(
 }
 
 /// Updates the canvas view and projection
-pub fn update_canvas(world: &World, canvas: &EntityRef) -> Result<()> {
+pub fn update_canvas(_: &World, canvas: &EntityRef) -> Result<()> {
     let query = &(camera().as_mut(), size().as_mut(), position().as_mut());
 
     let mut query = canvas.query(query);
@@ -122,32 +120,8 @@ pub fn update_canvas(world: &World, canvas: &EntityRef) -> Result<()> {
 }
 
 pub fn reactive_system<T: 'static + Copy + Send + Sync, I: Iterator<Item = WidgetEvent>>(
-    world: &World,
-    events: I,
+    _: &World,
+    _: I,
 ) -> Result<()> {
     Ok(())
-}
-
-/// Returns the first widget that intersects the postiion
-fn intersect_widget(world: &World, point: Vec2) -> Option<Entity> {
-    Query::new((entity_ids(), position(), size(), widget_depth(), visible()))
-        .with(interactive())
-        .borrow(world)
-        .iter()
-        .filter_map(|(id, pos, size, depth, visible)| {
-            if visible.is_visible() && box_intersection(pos.xy(), *size, point) {
-                Some((id, depth))
-            } else {
-                None
-            }
-        })
-        .max_by_key(|v| v.1)
-        .map(|v| v.0)
-}
-
-fn box_intersection(pos: Vec2, size: Vec2, point: Vec2) -> bool {
-    point.x > pos.x - size.x
-        && point.x < pos.x + size.x
-        && point.y > pos.y - size.y
-        && point.y < pos.y + size.y
 }
