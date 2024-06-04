@@ -16,12 +16,12 @@ use winit::dpi::PhysicalSize;
 
 use crate::{
     components::{material, mesh, projection_matrix, shader},
-    graphics::{
+    material::MaterialDesc,
+    mesh::MeshDesc,
+    types::{
         material::Material, shader::ShaderDesc, texture::Texture, BindGroupBuilder,
         BindGroupLayoutBuilder, Mesh, Shader, Surface, TypedBuffer, Vertex, VertexDesc,
     },
-    material::MaterialDesc,
-    mesh::MeshDesc,
     Gpu,
 };
 

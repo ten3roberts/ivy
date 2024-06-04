@@ -1332,6 +1332,7 @@ dependencies = [
  "ivy-ui",
  "ivy-vulkan",
  "ivy-wgpu",
+ "ivy-wgpu-types",
  "ivy-window",
  "parking_lot",
  "regex",
@@ -1569,6 +1570,30 @@ dependencies = [
  "ivy-base",
  "ivy-gltf",
  "ivy-input",
+ "ivy-wgpu-types",
+ "puffin",
+ "puffin_http",
+ "slab",
+ "tracing",
+ "wgpu",
+ "winit",
+]
+
+[[package]]
+name = "ivy-wgpu-types"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytemuck",
+ "flax",
+ "flume",
+ "futures",
+ "glam",
+ "gltf",
+ "image",
+ "itertools 0.13.0",
+ "ivy-assets",
+ "ivy-base",
  "puffin",
  "puffin_http",
  "slab",

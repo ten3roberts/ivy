@@ -3,7 +3,7 @@ use std::convert::Infallible;
 use image::{DynamicImage, ImageError};
 use ivy_assets::{Asset, AssetKey};
 
-use crate::graphics::texture::Texture;
+use crate::types::texture::Texture;
 
 /// Describes a texture
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]

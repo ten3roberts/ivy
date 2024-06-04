@@ -20,14 +20,14 @@ use wgpu::{
 
 use crate::{
     components::{material, mesh, mesh_primitive, shader},
-    graphics::{
-        allocator::Allocation, material::Material, shader::ShaderDesc, BindGroupBuilder,
-        BindGroupLayoutBuilder, Mesh, Shader, TypedBuffer, Vertex, VertexDesc,
-    },
     material::MaterialDesc,
     mesh::MeshDesc,
     mesh_buffer::{MeshBuffer, MeshHandle},
     renderer::RendererStore,
+    types::{
+        allocator::Allocation, material::Material, shader::ShaderDesc, BindGroupBuilder,
+        BindGroupLayoutBuilder, Mesh, Shader, TypedBuffer, Vertex, VertexDesc,
+    },
     Gpu,
 };
 

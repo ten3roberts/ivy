@@ -1,7 +1,7 @@
 use ivy_assets::{Asset, AssetKey};
 use ivy_gltf::{GltfMaterial, GltfMaterialRef};
 
-use crate::{graphics::material::Material, texture::TextureDesc};
+use crate::{texture::TextureDesc, types::material::Material};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MaterialDesc {
@@ -53,7 +53,16 @@ impl AssetKey<Material> for MaterialDesc {
 
     fn load(&self, assets: &ivy_assets::AssetCache) -> Result<Asset<Material>, Self::Error> {
         match self {
-            MaterialDesc::Gltf(v) => assets.try_load(v).map_err(Into::into),
+            MaterialDesc::Gltf(v) => {
+                let document = assets.try_load(v.data())?;
+                let material = document
+                    .materials
+                    .get(v.index())
+                    .ok_or_else(|| anyhow::anyhow!("material out of bounds: {}", v.index(),))?
+                    .clone();
+
+                Ok(material)
+            }
             MaterialDesc::Content(v) => {
                 let diffuse = assets.try_load(&v.diffuse)?;
                 Ok(assets.insert(Material::new(&assets.service(), diffuse)))

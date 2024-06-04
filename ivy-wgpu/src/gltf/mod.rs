@@ -9,21 +9,21 @@ use ivy_assets::{Asset, AssetCache, AssetKey};
 use ivy_gltf::{DocumentData, GltfMaterial, GltfMesh, GltfPrimitive, GltfPrimitiveRef};
 
 use crate::{
-    graphics::{
+    material::MaterialData,
+    mesh::MeshData,
+    types::{
         material::Material,
         texture::{Texture, TextureFromPath},
         Mesh,
     },
-    material::MaterialData,
-    mesh::MeshData,
     Gpu,
 };
 
 /// Contains the gltf data
 pub struct Document {
-    mesh_primitives: Vec<Vec<Asset<MeshData>>>,
-    materials: Vec<Asset<Material>>,
-    images: Vec<Asset<Texture>>,
+    pub(crate) mesh_primitives: Vec<Vec<Asset<MeshData>>>,
+    pub(crate) materials: Vec<Asset<Material>>,
+    pub(crate) images: Vec<Asset<Texture>>,
 }
 
 impl Document {
@@ -113,25 +113,5 @@ impl AssetKey<MeshData> for GltfPrimitive {
             .get(self.index())
             .ok_or_else(|| anyhow::anyhow!("mesh primitive out of bounds: {}", self.index(),))
             .cloned()
-    }
-}
-
-impl AssetKey<Material> for GltfMaterial {
-    type Error = anyhow::Error;
-
-    fn load(&self, assets: &AssetCache) -> Result<Asset<Material>, Self::Error> {
-        let document: Asset<Document> = assets.try_load(self.data())?;
-
-        document
-            .materials
-            .get(self.index())
-            .cloned()
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "material index out of bounds: {} >= {}",
-                    self.index(),
-                    document.materials.len()
-                )
-            })
     }
 }

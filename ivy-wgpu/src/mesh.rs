@@ -6,8 +6,8 @@ use ivy_assets::{Asset, AssetCache, AssetKey};
 use ivy_gltf::{GltfMesh, GltfMeshRef, GltfPrimitive, GltfPrimitiveRef};
 
 use crate::{
-    graphics::{Mesh, Vertex},
     material::MaterialDesc,
+    types::{Mesh, Vertex},
 };
 
 /// Cpu side mesh descriptor

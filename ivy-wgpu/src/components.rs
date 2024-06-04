@@ -3,8 +3,8 @@ use glam::Mat4;
 use ivy_assets::Asset;
 
 use crate::{
-    driver::WindowHandle, graphics::texture::Texture, material::MaterialDesc, mesh::MeshDesc,
-    shader::ShaderDesc,
+    driver::WindowHandle, material::MaterialDesc, mesh::MeshDesc, shader::ShaderDesc,
+    types::texture::Texture,
 };
 
 component! {
