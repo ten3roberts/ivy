@@ -7,6 +7,7 @@ pub mod material;
 pub mod mesh;
 pub mod mesh_buffer;
 pub mod renderer;
+pub mod rendergraph;
 pub mod shader;
 pub mod shaders;
 pub mod texture;

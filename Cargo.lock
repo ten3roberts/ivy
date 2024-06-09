@@ -1574,7 +1574,9 @@ dependencies = [
  "puffin",
  "puffin_http",
  "slab",
+ "slotmap",
  "tracing",
+ "tracing-subscriber",
  "wgpu",
  "winit",
 ]
