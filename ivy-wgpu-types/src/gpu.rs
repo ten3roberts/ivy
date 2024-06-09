@@ -22,9 +22,7 @@ impl Gpu {
     }
 
     /// Creates a new Gpu instance with a surface.
-    pub async fn with_surface(window: Arc<Window>) -> (Self, Surface) {
-        tracing::info!("creating with surface");
-
+    pub async fn headless() -> Self {
         #[cfg(not(target_arch = "wasm32"))]
         let backends = Backends::all();
 
@@ -39,12 +37,54 @@ impl Gpu {
             ..Default::default()
         });
 
-        tracing::info!("creating surface");
+        let adapter = instance
+            .request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::default(),
+                compatible_surface: None,
+                force_fallback_adapter: false,
+            })
+            .await
+            .expect("Failed to find an appropriate adapter");
 
-        // # Safety
-        //
-        // The surface needs to live as long as the window that created it.
-        // State owns the window so this should be safe.
+        let (device, queue) = adapter
+            .request_device(
+                &wgpu::DeviceDescriptor {
+                    required_features: wgpu::Features::empty(),
+                    // WebGL doesn't support all of wgpu's features, so if
+                    // we're building for the web we'll have to disable some.
+                    required_limits: if cfg!(target_arch = "wasm32") {
+                        wgpu::Limits::downlevel_webgl2_defaults()
+                    } else {
+                        wgpu::Limits::default()
+                    },
+                    label: None,
+                },
+                None, // Trace path
+            )
+            .await
+            .unwrap();
+
+        Self {
+            device: Arc::new(device),
+            queue: Arc::new(queue),
+        }
+    }
+    /// Creates a new Gpu instance with a surface.
+    pub async fn with_surface(window: Arc<Window>) -> (Self, Surface) {
+        #[cfg(not(target_arch = "wasm32"))]
+        let backends = Backends::all();
+
+        #[cfg(target_arch = "wasm32")]
+        let backends = Backends::GL;
+
+        tracing::info!(?backends);
+
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends,
+            dx12_shader_compiler: Default::default(),
+            ..Default::default()
+        });
+
         let surface = instance.create_surface(window).unwrap();
 
         let adapter = instance
@@ -91,8 +131,6 @@ impl Gpu {
             view_formats: vec![],
             ..surface.get_default_config(&adapter, 0, 0).unwrap()
         };
-
-        // surface.configure(&device, &config);
 
         (
             Self {

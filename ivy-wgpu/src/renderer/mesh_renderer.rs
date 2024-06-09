@@ -309,8 +309,6 @@ impl MeshRenderer {
             };
         }
 
-        tracing::info!(count = total, "update object");
-
         self.object_buffer.write(&gpu.queue, 0, &self.object_data);
     }
 
@@ -359,14 +357,14 @@ impl MeshRenderer {
 
         self.object_buffer.write(&gpu.queue, 0, &self.object_data);
 
-        tracing::info!("drawing {} batches", self.batch_map.len());
+        tracing::trace!("drawing {} batches", self.batch_map.len());
 
         self.mesh_buffer.bind(render_pass);
 
         render_pass.set_bind_group(1, &self.bind_group, &[]);
         for batch_id in self.batch_map.values() {
             let batch = &self.batches[*batch_id];
-            tracing::info!(instance_count = batch.instance_count, "drawing batch");
+            tracing::trace!(instance_count = batch.instance_count, "drawing batch");
             batch.draw(gpu, assets, globals, store, render_pass)
         }
 
