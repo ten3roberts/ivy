@@ -82,18 +82,6 @@ impl LogicLayer {
     fn setup_assets(&mut self, world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
         let document = Document::new(assets, "models/shapes.glb")?;
 
-        for node in document.nodes() {
-            tracing::info!(?node);
-        }
-
-        for mesh in document.meshes() {
-            tracing::info!(?mesh);
-        }
-
-        for material in document.materials() {
-            tracing::info!(?material);
-        }
-
         for x in 0..10 {
             for y in 0..10 {
                 for z in 0..10 {

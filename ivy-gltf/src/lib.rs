@@ -78,7 +78,6 @@ impl Document {
             .document
             .buffers()
             .map(|v| {
-                tracing::info!(?v, "import buffer");
                 // TODO: load using assets
                 gltf::buffer::Data::from_source_and_blob(v.source(), None, &mut gltf.blob)
             })

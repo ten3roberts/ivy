@@ -1,5 +1,6 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, collections::HashMap};
 
+use itertools::Itertools;
 use ivy_wgpu_types::Gpu;
 use slotmap::{SecondaryMap, SlotMap};
 use wgpu::{
@@ -7,7 +8,23 @@ use wgpu::{
     TextureFormat, TextureUsages,
 };
 
-use super::{Dependency, Node};
+use super::{Dependency, Node, ResourceHandle};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct Range {
+    start: u32,
+    end: u32,
+}
+
+impl Range {
+    fn new(start: u32, end: u32) -> Self {
+        Self { start, end }
+    }
+
+    fn overlaps(&self, other: Self) -> bool {
+        self.start < other.end && self.end > other.start
+    }
+}
 
 slotmap::new_key_type! {
     pub struct TextureHandle;
@@ -28,6 +45,62 @@ pub struct BufferDesc {
     pub size: u64,
     /// Extra usage flags for e.g; map read
     pub usage: BufferUsages,
+}
+
+type BucketId = usize;
+
+pub struct Bucket<T> {
+    desc: T,
+    lifetimes: Vec<Range>,
+}
+
+impl<T> Bucket<T> {
+    pub fn overlaps(&self, lifetime: Range) -> bool {
+        self.lifetimes.iter().any(|v| v.overlaps(lifetime))
+    }
+}
+
+trait SubResource {
+    type Desc: Clone;
+    fn is_compatible(desc: &Self::Desc, other: &Self::Desc) -> bool;
+    fn create(gpu: &Gpu, desc: Self::Desc) -> Self;
+}
+
+pub struct SubResources<Handle: slotmap::Key, Data: SubResource> {
+    handles: SlotMap<Handle, Data::Desc>,
+    bucket_map: SecondaryMap<Handle, BucketId>,
+    buckets: Vec<Bucket<Data::Desc>>,
+}
+
+impl<Handle: slotmap::Key, Data: SubResource> SubResources<Handle, Data> {
+    fn insert(&mut self, desc: Data::Desc) -> Handle {
+        self.handles.insert(desc)
+    }
+
+    fn allocate_data(&mut self, gpu: &Gpu, lifetimes: HashMap<ResourceHandle, Range>)
+    where
+        Handle: Into<ResourceHandle>,
+    {
+        for (handle, desc) in &self.handles {
+            let lifetime = *lifetimes.get(&handle.into()).unwrap();
+            // Find suitable bucket
+            let bucket_id = self
+                .buckets
+                .iter_mut()
+                .find_position(|v| Data::is_compatible(desc, &v.desc) && !v.overlaps(lifetime));
+
+            if let Some((bucket_id, bucket)) = bucket_id {
+                bucket.lifetimes.push(lifetime);
+                self.bucket_map.insert(handle, bucket_id);
+            } else {
+                self.bucket_map.insert(handle, self.buckets.len());
+                self.buckets.push(Bucket {
+                    desc: desc.clone(),
+                    lifetimes: vec![lifetime],
+                })
+            }
+        }
+    }
 }
 
 pub struct Resources {

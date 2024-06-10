@@ -1,7 +1,8 @@
 mod resources;
 pub use resources::*;
+use slotmap::SecondaryMap;
 
-use std::collections::HashMap;
+use std::collections::{btree_map::Range, HashMap};
 
 use itertools::Itertools;
 use ivy_wgpu_types::Gpu;
@@ -11,6 +12,7 @@ pub struct RenderGraph {
     nodes: Vec<Box<dyn Node>>,
     order: Option<Vec<usize>>,
     resources: Resources,
+    expected_lifetimes: HashMap<ResourceHandle, Range<u32>>,
 }
 
 pub struct NodeExecutionContext<'a> {
@@ -97,6 +99,7 @@ impl RenderGraph {
             nodes: Vec::new(),
             order: None,
             resources: Default::default(),
+            expected_lifetimes: Default::default(),
         }
     }
 
@@ -104,9 +107,11 @@ impl RenderGraph {
         self.nodes.push(Box::new(node));
     }
 
-    pub fn allocate_resources(&mut self, gpu: &Gpu) {
-        self.resources.allocate_textures(&self.nodes, gpu);
-        self.resources.allocate_buffers(&self.nodes, gpu);
+    fn allocate_resources(&mut self, gpu: &Gpu) {
+        self.resources
+            .allocate_textures(&self.nodes, self.expected_lifetimes, gpu);
+        self.resources
+            .allocate_buffers(&self.nodes, self.expected_lifetimes, gpu);
     }
 
     fn build(&mut self) {
@@ -114,12 +119,23 @@ impl RenderGraph {
             .nodes
             .iter()
             .enumerate()
-            .flat_map(|v| {
-                v.1.write_dependencies()
+            .flat_map(|(idx, v)| {
+                v.write_dependencies()
                     .iter()
-                    .map(move |d| (d.as_handle(), v.0))
+                    .map(move |d| (d.as_handle(), idx))
             })
             .collect();
+
+        let reads = self
+            .nodes
+            .iter()
+            .enumerate()
+            .flat_map(|(idx, v)| {
+                v.read_dependencies()
+                    .iter()
+                    .map(move |v| (v.as_handle(), idx))
+            })
+            .into_group_map();
 
         let dependencies = self
             .nodes
@@ -134,7 +150,28 @@ impl RenderGraph {
             })
             .into_group_map();
 
-        let order = topo_sort(&self.nodes, &dependencies);
+        let TopoResult {
+            order,
+            dependency_levels,
+        } = topo_sort(&self.nodes, &dependencies);
+
+        self.expected_lifetimes.clear();
+        for (resource, node) in writes {
+            let reads = reads.get(&resource).map(Vec::as_slice).unwrap_or_default();
+
+            let open = dependency_levels[node];
+            let close = reads
+                .iter()
+                .map(|&node| {
+                    let dep_level = dependency_levels[node];
+                    assert!(dep_level > open);
+                    dep_level
+                })
+                .max()
+                .unwrap_or(open);
+
+            self.expected_lifetimes.insert(resource, open..close)
+        }
 
         self.order = Some(order);
     }
@@ -170,9 +207,16 @@ impl Default for RenderGraph {
     }
 }
 
-fn topo_sort(nodes: &[Box<dyn Node>], edges: &HashMap<usize, Vec<usize>>) -> Vec<usize> {
+struct TopoResult {
+    order: Vec<usize>,
+    dependency_levels: Vec<u32>,
+}
+
+fn topo_sort(nodes: &[Box<dyn Node>], edges: &HashMap<usize, Vec<usize>>) -> TopoResult {
     let mut visited = vec![VisitedState::None; nodes.len()];
     let mut result = Vec::new();
+
+    let mut dependency_levels = vec![0u32; nodes.len()];
 
     #[derive(Clone, Copy)]
     enum VisitedState {
@@ -185,34 +229,47 @@ fn topo_sort(nodes: &[Box<dyn Node>], edges: &HashMap<usize, Vec<usize>>) -> Vec
         edges: &HashMap<usize, Vec<usize>>,
         visited: &mut Vec<VisitedState>,
         result: &mut Vec<usize>,
+        dependency_levels: &mut [u32],
         node: usize,
-    ) {
+    ) -> u32 {
         match visited[node] {
             VisitedState::None => {}
             VisitedState::Pending => {
                 panic!("cyclic dependency");
             }
             VisitedState::Visited => {
-                return;
+                return dependency_levels[node];
             }
         }
 
         visited[node] = VisitedState::Pending;
-
+        let mut max_height = 0;
         for &outgoing in edges.get(&node).into_iter().flatten() {
-            visit(edges, visited, result, outgoing)
+            max_height =
+                max_height.max(visit(edges, visited, result, dependency_levels, outgoing) + 1);
         }
 
         visited[node] = VisitedState::Visited;
 
-        result.push(node)
+        dependency_levels[node] = max_height;
+        result.push(node);
+        max_height
     }
 
     for node in 0..nodes.len() {
-        visit(edges, &mut visited, &mut result, node)
+        visit(
+            edges,
+            &mut visited,
+            &mut result,
+            &mut dependency_levels,
+            node,
+        );
     }
 
-    result
+    TopoResult {
+        order: result,
+        dependency_levels,
+    }
 }
 
 #[cfg(test)]
