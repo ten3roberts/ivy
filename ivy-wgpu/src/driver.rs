@@ -165,13 +165,11 @@ impl<'a> WinitEventHandler<'a> {
                 device_id: _,
                 position,
             } => {
-                tracing::info!(?position, "cursor moved");
                 let logical_pos = position.to_logical(1.0);
                 self.app.emit(CursorMoved {
                     position: vec2(logical_pos.x, logical_pos.y),
                 })?;
 
-                tracing::info!(?logical_pos);
                 let window = &mut *self
                     .app
                     .world

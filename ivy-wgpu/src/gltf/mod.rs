@@ -24,7 +24,6 @@ impl Document {
             .document
             .images()
             .map(|v| {
-                tracing::info!(?v, "import image");
                 let image = gltf::image::Data::from_source(v.source(), None, data.buffer_data())?;
 
                 let image: DynamicImage = match image.format {
@@ -58,10 +57,8 @@ impl Document {
             .document
             .meshes()
             .map(|mesh| {
-                tracing::info!(?mesh, "loading mesh");
                 mesh.primitives()
                     .map(|primitive| {
-                        tracing::info!(?primitive, "loading primitive");
                         assets.insert(MeshData::from_gltf(assets, &primitive, data.buffer_data()))
                     })
                     .collect_vec()
