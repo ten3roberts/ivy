@@ -12,7 +12,7 @@ pub struct RenderGraph {
     nodes: Vec<Box<dyn Node>>,
     order: Option<Vec<usize>>,
     resources: Resources,
-    expected_lifetimes: HashMap<ResourceHandle, Range<u32>>,
+    expected_lifetimes: HashMap<ResourceHandle, Lifetime>,
 }
 
 pub struct NodeExecutionContext<'a> {
@@ -109,9 +109,10 @@ impl RenderGraph {
 
     fn allocate_resources(&mut self, gpu: &Gpu) {
         self.resources
-            .allocate_textures(&self.nodes, self.expected_lifetimes, gpu);
+            .allocate_textures(&self.nodes, gpu, &self.expected_lifetimes);
+
         self.resources
-            .allocate_buffers(&self.nodes, self.expected_lifetimes, gpu);
+            .allocate_buffers(&self.nodes, gpu, &self.expected_lifetimes);
     }
 
     fn build(&mut self) {
@@ -156,6 +157,7 @@ impl RenderGraph {
         } = topo_sort(&self.nodes, &dependencies);
 
         self.expected_lifetimes.clear();
+        tracing::info!(?writes, "writes");
         for (resource, node) in writes {
             let reads = reads.get(&resource).map(Vec::as_slice).unwrap_or_default();
 
@@ -170,7 +172,9 @@ impl RenderGraph {
                 .max()
                 .unwrap_or(open);
 
-            self.expected_lifetimes.insert(resource, open..close)
+            tracing::info!(?resource, lifetime = ?open..close, "lifetime");
+            self.expected_lifetimes
+                .insert(resource, Lifetime::new(open, close));
         }
 
         self.order = Some(order);
@@ -178,7 +182,8 @@ impl RenderGraph {
 
     pub fn execute(&mut self, gpu: &Gpu, queue: &Queue) -> anyhow::Result<()> {
         if self.order.is_none() {
-            self.build()
+            self.build();
+            self.allocate_resources(gpu);
         }
 
         let order = self.order.as_ref().unwrap();
@@ -416,6 +421,70 @@ mod test {
             }
         }
 
+        struct WriteIntoTexture {
+            buffer: BufferHandle,
+            texture: TextureHandle,
+            read_dependencies: Vec<Dependency>,
+            write_dependencies: Vec<Dependency>,
+        }
+
+        impl WriteIntoTexture {
+            fn new(buffer: BufferHandle, texture: TextureHandle) -> Self {
+                Self {
+                    buffer,
+                    texture,
+                    read_dependencies: vec![Dependency::buffer(buffer, BufferUsages::MAP_READ)],
+                    write_dependencies: vec![Dependency::texture(
+                        texture,
+                        TextureUsages::COPY_DST | TextureUsages::COPY_SRC,
+                    )],
+                }
+            }
+        }
+
+        impl Node for WriteIntoTexture {
+            fn label(&self) -> &str {
+                "PostProcess"
+            }
+
+            fn draw(&self, ctx: NodeExecutionContext) -> anyhow::Result<()> {
+                let texture = ctx.resources.get_texture_data(self.texture);
+                let buffer = ctx.resources.get_buffer_data(self.buffer);
+
+                // ctx.encoder.copy_buffer_to_texture(
+                //     ImageCopyBuffer {
+                //         buffer,
+                //         layout: ImageDataLayout {
+                //             offset: 0,
+                //             bytes_per_row: Some(256),
+                //             rows_per_image: Some(256),
+                //         },
+                //     },
+                //     ImageCopyTexture {
+                //         texture,
+                //         mip_level: 0,
+                //         origin: Default::default(),
+                //         aspect: wgpu::TextureAspect::All,
+                //     },
+                //     Extent3d {
+                //         width: 256,
+                //         height: 256,
+                //         depth_or_array_layers: 1,
+                //     },
+                // );
+
+                Ok(())
+            }
+
+            fn read_dependencies(&self) -> &[Dependency] {
+                &self.read_dependencies
+            }
+
+            fn write_dependencies(&self) -> &[Dependency] {
+                &self.write_dependencies
+            }
+        }
+
         let mut render_graph = RenderGraph::new();
 
         let extent = Extent3d {
@@ -426,6 +495,15 @@ mod test {
 
         let texture = render_graph.resources.insert_texture(TextureDesc {
             label: "src_texture".into(),
+            extent,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::R8Uint,
+            mip_level_count: 1,
+            sample_count: 1,
+        });
+
+        let texture2 = render_graph.resources.insert_texture(TextureDesc {
+            label: "texture_2".into(),
             extent,
             dimension: TextureDimension::D2,
             format: TextureFormat::R8Uint,
@@ -451,7 +529,8 @@ mod test {
             texture,
         ));
 
-        render_graph.allocate_resources(&gpu);
+        render_graph.add_node(WriteIntoTexture::new(buffer, texture2));
+
         render_graph.execute(&gpu, &gpu.queue).unwrap();
 
         let (ready_tx, ready_rx) = futures::channel::oneshot::channel();
