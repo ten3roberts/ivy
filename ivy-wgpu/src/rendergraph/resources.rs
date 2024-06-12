@@ -11,17 +11,17 @@ use wgpu::{
 use super::{Dependency, Node, ResourceHandle};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct Range {
+pub(crate) struct Lifetime {
     start: u32,
     end: u32,
 }
 
-impl Range {
-    fn new(start: u32, end: u32) -> Self {
+impl Lifetime {
+    pub(crate) fn new(start: u32, end: u32) -> Self {
         Self { start, end }
     }
 
-    fn overlaps(&self, other: Self) -> bool {
+    pub(crate) fn overlaps(&self, other: Self) -> bool {
         self.start < other.end && self.end > other.start
     }
 }
@@ -31,6 +31,7 @@ slotmap::new_key_type! {
     pub struct BufferHandle;
 }
 
+#[derive(Debug, Clone)]
 pub struct TextureDesc {
     pub label: Cow<'static, str>,
     pub extent: wgpu::Extent3d,
@@ -49,84 +50,125 @@ pub struct BufferDesc {
 
 type BucketId = usize;
 
-pub struct Bucket<T> {
+struct Bucket<T> {
     desc: T,
-    lifetimes: Vec<Range>,
+    lifetimes: Vec<Lifetime>,
 }
 
 impl<T> Bucket<T> {
-    pub fn overlaps(&self, lifetime: Range) -> bool {
+    fn overlaps(&self, lifetime: Lifetime) -> bool {
         self.lifetimes.iter().any(|v| v.overlaps(lifetime))
     }
 }
 
 trait SubResource {
-    type Desc: Clone;
-    fn is_compatible(desc: &Self::Desc, other: &Self::Desc) -> bool;
-    fn create(gpu: &Gpu, desc: Self::Desc) -> Self;
+    type Desc<'a>: Clone;
+    fn is_compatible(desc: &Self::Desc<'_>, other: &Self::Desc<'_>) -> bool;
+    fn create(gpu: &Gpu, desc: Self::Desc<'_>) -> Self;
 }
 
-pub struct SubResources<Handle: slotmap::Key, Data: SubResource> {
-    handles: SlotMap<Handle, Data::Desc>,
-    bucket_map: SecondaryMap<Handle, BucketId>,
-    buckets: Vec<Bucket<Data::Desc>>,
-}
+impl SubResource for Texture {
+    type Desc<'a> = TextureDescriptor<'a>;
 
-impl<Handle: slotmap::Key, Data: SubResource> SubResources<Handle, Data> {
-    fn insert(&mut self, desc: Data::Desc) -> Handle {
-        self.handles.insert(desc)
+    fn is_compatible(desc: &Self::Desc<'_>, other: &Self::Desc<'_>) -> bool {
+        desc.size == other.size
+            && desc.dimension == other.dimension
+            && desc.format == other.format
+            && desc.mip_level_count == other.mip_level_count
+            && desc.sample_count == other.sample_count
     }
 
-    fn allocate_data(&mut self, gpu: &Gpu, lifetimes: HashMap<ResourceHandle, Range>)
-    where
+    fn create(gpu: &Gpu, desc: Self::Desc<'_>) -> Self {
+        gpu.device.create_texture(&desc)
+    }
+}
+
+impl SubResource for Buffer {
+    type Desc<'a> = BufferDescriptor<'a>;
+
+    fn is_compatible(desc: &Self::Desc<'_>, other: &Self::Desc<'_>) -> bool {
+        desc.size == other.size
+    }
+
+    fn create(gpu: &Gpu, desc: Self::Desc<'_>) -> Self {
+        gpu.device.create_buffer(&desc)
+    }
+}
+
+struct ResourceAllocator<Handle: slotmap::Key, Data: SubResource> {
+    bucket_map: SecondaryMap<Handle, BucketId>,
+    bucket_data: Vec<Data>,
+}
+
+impl<Handle: slotmap::Key, Data: SubResource> ResourceAllocator<Handle, Data> {
+    fn new() -> Self {
+        Self {
+            bucket_map: Default::default(),
+            bucket_data: Default::default(),
+        }
+    }
+
+    fn get(&self, handle: Handle) -> Option<&Data> {
+        Some(&self.bucket_data[*self.bucket_map.get(handle)?])
+    }
+
+    fn reserve_resources<'a, I: Iterator<Item = (Handle, Data::Desc<'a>, Lifetime)>>(
+        &mut self,
+        gpu: &Gpu,
+        resources: I,
+    ) where
         Handle: Into<ResourceHandle>,
     {
-        for (handle, desc) in &self.handles {
-            let lifetime = *lifetimes.get(&handle.into()).unwrap();
+        let mut buckets: Vec<Bucket<Data::Desc<'a>>> = Vec::new();
+
+        self.bucket_map.clear();
+
+        for (handle, desc, lifetime) in resources {
             // Find suitable bucket
-            let bucket_id = self
-                .buckets
+            let bucket_id = buckets
                 .iter_mut()
-                .find_position(|v| Data::is_compatible(desc, &v.desc) && !v.overlaps(lifetime));
+                .find_position(|v| Data::is_compatible(&desc, &v.desc) && !v.overlaps(lifetime));
 
             if let Some((bucket_id, bucket)) = bucket_id {
                 bucket.lifetimes.push(lifetime);
                 self.bucket_map.insert(handle, bucket_id);
             } else {
-                self.bucket_map.insert(handle, self.buckets.len());
-                self.buckets.push(Bucket {
+                self.bucket_map.insert(handle, buckets.len());
+                buckets.push(Bucket {
                     desc: desc.clone(),
                     lifetimes: vec![lifetime],
                 })
             }
         }
+
+        tracing::info!("Allocating {} resources", buckets.len());
+
+        self.bucket_data = buckets
+            .iter()
+            .map(|bucket| Data::create(gpu, bucket.desc.clone()))
+            .collect_vec();
     }
 }
 
 pub struct Resources {
     textures: SlotMap<TextureHandle, TextureDesc>,
-    texture_data: SecondaryMap<TextureHandle, Texture>,
     buffers: SlotMap<BufferHandle, BufferDesc>,
-    buffer_data: SecondaryMap<BufferHandle, Buffer>,
-    // buffers: Slab<Buffer>,
+    texture_data: ResourceAllocator<TextureHandle, Texture>,
+    buffer_data: ResourceAllocator<BufferHandle, Buffer>,
 }
 
 impl Resources {
     pub fn new() -> Self {
         Self {
             textures: Default::default(),
-            texture_data: Default::default(),
             buffers: Default::default(),
-            buffer_data: Default::default(),
+            texture_data: ResourceAllocator::new(),
+            buffer_data: ResourceAllocator::new(),
         }
     }
 
     pub fn insert_texture(&mut self, texture: TextureDesc) -> TextureHandle {
         self.textures.insert(texture)
-    }
-
-    pub fn insert_texture_data(&mut self, key: TextureHandle, data: Texture) {
-        self.texture_data.insert(key, data);
     }
 
     pub fn get_texture_data(&self, key: TextureHandle) -> &Texture {
@@ -136,16 +178,16 @@ impl Resources {
     pub fn insert_buffer(&mut self, buffer: BufferDesc) -> BufferHandle {
         self.buffers.insert(buffer)
     }
-
-    pub fn insert_buffer_data(&mut self, key: BufferHandle, data: Buffer) {
-        self.buffer_data.insert(key, data);
-    }
-
     pub fn get_buffer_data(&self, key: BufferHandle) -> &Buffer {
         self.buffer_data.get(key).unwrap()
     }
 
-    pub fn allocate_textures(&mut self, nodes: &[Box<dyn Node>], gpu: &Gpu) {
+    pub(crate) fn allocate_textures(
+        &mut self,
+        nodes: &[Box<dyn Node>],
+        gpu: &Gpu,
+        lifetimes: &HashMap<ResourceHandle, Lifetime>,
+    ) {
         let mut usages = SecondaryMap::default();
 
         nodes
@@ -162,28 +204,35 @@ impl Resources {
                 }
             });
 
-        for (handle, desc) in &self.textures {
-            let Some(&usage) = usages.get(handle) else {
-                continue;
-            };
+        let iter = self.textures.iter().filter_map(|(handle, desc)| {
+            let lf = lifetimes[&handle.into()];
+            let usage = *usages.get(handle)?;
 
-            tracing::info!(?handle, ?usage, "creating texture for resource");
-            let texture = gpu.device.create_texture(&TextureDescriptor {
-                label: desc.label.as_ref().into(),
-                size: desc.extent,
-                mip_level_count: desc.mip_level_count,
-                sample_count: desc.sample_count,
-                dimension: desc.dimension,
-                format: desc.format,
-                usage,
-                view_formats: &[],
-            });
+            Some((
+                handle,
+                TextureDescriptor {
+                    label: None,
+                    size: desc.extent,
+                    mip_level_count: desc.mip_level_count,
+                    sample_count: desc.sample_count,
+                    dimension: desc.dimension,
+                    format: desc.format,
+                    usage,
+                    view_formats: &[],
+                },
+                lf,
+            ))
+        });
 
-            self.texture_data.insert(handle, texture);
-        }
+        self.texture_data.reserve_resources(gpu, iter);
     }
 
-    pub fn allocate_buffers(&mut self, nodes: &[Box<dyn Node>], gpu: &Gpu) {
+    pub(crate) fn allocate_buffers(
+        &mut self,
+        nodes: &[Box<dyn Node>],
+        gpu: &Gpu,
+        lifetimes: &HashMap<ResourceHandle, Lifetime>,
+    ) {
         let mut usages = SecondaryMap::default();
 
         nodes
@@ -200,21 +249,23 @@ impl Resources {
                 }
             });
 
-        for (handle, desc) in &self.buffers {
-            let Some(&usage) = usages.get(handle) else {
-                continue;
-            };
+        let iter = self.buffers.iter().filter_map(|(handle, desc)| {
+            let lf = lifetimes[&handle.into()];
+            let usage = *usages.get(handle)?;
 
-            tracing::info!(?handle, ?usage, "creating texture for resource");
-            let buffer = gpu.device.create_buffer(&BufferDescriptor {
-                label: desc.label.as_ref().into(),
-                size: desc.size,
-                usage: desc.usage | usage,
-                mapped_at_creation: false,
-            });
+            Some((
+                handle,
+                BufferDescriptor {
+                    label: desc.label.as_ref().into(),
+                    size: desc.size,
+                    usage: desc.usage | usage,
+                    mapped_at_creation: false,
+                },
+                lf,
+            ))
+        });
 
-            self.buffer_data.insert(handle, buffer);
-        }
+        self.buffer_data.reserve_resources(gpu, iter);
     }
 }
 
