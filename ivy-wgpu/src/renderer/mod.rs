@@ -1,12 +1,15 @@
 pub mod mesh_renderer;
 
-use flax::{Query, World};
-use glam::Mat4;
-use ivy_assets::{stored::Store, Asset, AssetCache};
+use std::any::type_name;
+
+use flax::Query;
+use glam::{Mat4, UVec2};
+use ivy_assets::{stored::Store, Asset};
 use ivy_base::{main_camera, world_transform, Bundle};
 use wgpu::{
-    BindGroup, BufferUsages, Extent3d, Operations, RenderPassColorAttachment, ShaderStages,
-    TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
+    BindGroup, BufferUsages, Extent3d, ImageCopyTexture, Operations, RenderPassColorAttachment,
+    RenderPassDescriptor, ShaderStages, SurfaceTexture, TextureDescriptor, TextureDimension,
+    TextureFormat, TextureUsages,
 };
 use winit::dpi::PhysicalSize;
 
@@ -14,6 +17,7 @@ use crate::{
     components::{material, mesh, projection_matrix, shader},
     material::MaterialDesc,
     mesh::MeshDesc,
+    rendergraph::{Dependency, Node, NodeExecutionContext, TextureHandle},
     types::{
         material::Material, BindGroupBuilder, BindGroupLayoutBuilder, Shader, Surface, TypedBuffer,
     },
@@ -22,33 +26,111 @@ use crate::{
 
 use self::mesh_renderer::MeshRenderer;
 
-// TODO: rendergraph with surface publish node
-pub struct Renderer {
-    gpu: Gpu,
+pub struct SwapchainSurfaceNode {
     surface: Surface,
+    final_color: TextureHandle,
+    current_surface_texture: Option<SurfaceTexture>,
+    size: UVec2,
+}
+
+impl SwapchainSurfaceNode {
+    pub fn new(final_color: TextureHandle, surface: Surface, size: UVec2) -> Self {
+        Self {
+            surface,
+            final_color,
+            size,
+            current_surface_texture: None,
+        }
+    }
+}
+
+impl Node for SwapchainSurfaceNode {
+    fn label(&self) -> &str {
+        type_name::<Self>()
+    }
+
+    fn draw(&mut self, ctx: crate::rendergraph::NodeExecutionContext) -> anyhow::Result<()> {
+        let final_color = ctx.resources.get_texture_data(self.final_color);
+        let output = self.surface.get_current_texture()?;
+
+        // ctx.encoder.create_renderpass(&RenderPassDescriptor {
+        //     label: "surface_pass"
+        //     color_attachments: todo!(),
+        //     depth_stencil_attachment: todo!(),
+        //     timestamp_writes: todo!(),
+        //     occlusion_query_set: todo!(),
+        // });
+        ctx.encoder.copy_texture_to_texture(
+            ImageCopyTexture {
+                texture: final_color,
+                mip_level: 0,
+                origin: Default::default(),
+                aspect: wgpu::TextureAspect::All,
+            },
+            ImageCopyTexture {
+                texture: &output.texture,
+                mip_level: 0,
+                origin: Default::default(),
+                aspect: wgpu::TextureAspect::All,
+            },
+            Extent3d {
+                width: self.size.x,
+                height: self.size.y,
+                depth_or_array_layers: 1,
+            },
+        );
+
+        self.current_surface_texture = Some(output);
+
+        Ok(())
+    }
+
+    fn finish(&mut self) -> anyhow::Result<()> {
+        if let Some(output) = self.current_surface_texture.take() {
+            output.present()
+        }
+
+        Ok(())
+    }
+
+    fn read_dependencies(&self) -> Vec<Dependency> {
+        vec![Dependency::texture(
+            self.final_color,
+            TextureUsages::COPY_SRC,
+        )]
+    }
+
+    fn write_dependencies(&self) -> Vec<Dependency> {
+        vec![]
+    }
+}
+
+// TODO: rendergraph with surface publish node
+pub struct CameraNode {
     mesh_renderer: MeshRenderer,
     globals: Globals,
     depth_texture: Option<wgpu::TextureView>,
     store: RendererStore,
+    output: TextureHandle,
 }
 
-impl Renderer {
-    pub fn new(gpu: Gpu, surface: Surface) -> Self {
+impl CameraNode {
+    pub fn new(gpu: &Gpu, output: TextureHandle, size: PhysicalSize<u32>) -> Self {
+        let depth_texture = Self::create_depth_texture(gpu, size).create_view(&Default::default());
         Self {
-            mesh_renderer: MeshRenderer::new(&gpu, surface.surface_format()),
+            mesh_renderer: MeshRenderer::new(&gpu),
             globals: Globals::new(&gpu),
-            surface,
-            gpu,
-            depth_texture: None,
+            depth_texture: Some(depth_texture),
             store: Default::default(),
+            output,
         }
     }
 
     pub fn resize(&mut self, new_size: PhysicalSize<u32>) {
-        self.surface.resize(&self.gpu, new_size);
+        // self.surface.resize(&self.gpu, new_size);
 
-        self.depth_texture =
-            Some(Self::create_depth_texture(&self.gpu, new_size).create_view(&Default::default()));
+        // self.depth_texture =
+        //     Some(Self::create_depth_texture(&self.gpu, new_size).create_view(&Default::default()));
     }
 
     fn create_depth_texture(gpu: &Gpu, size: PhysicalSize<u32>) -> wgpu::Texture {
@@ -68,12 +150,12 @@ impl Renderer {
         })
     }
 
-    pub fn update(&mut self, world: &mut World, assets: &AssetCache) {
+    pub fn update(&mut self, ctx: &mut NodeExecutionContext, format: TextureFormat) {
         tracing::debug!("updating renderer");
         if let Some((world_transform, &projection)) =
             Query::new((world_transform(), projection_matrix()))
                 .with(main_camera())
-                .borrow(world)
+                .borrow(ctx.world)
                 .first()
         {
             let view = world_transform.inverse();
@@ -82,65 +164,81 @@ impl Renderer {
 
             self.globals
                 .buffer
-                .write(&self.gpu.queue, 0, &[GlobalData { view, projection }]);
+                .write(&ctx.gpu.queue, 0, &[GlobalData { view, projection }]);
         }
 
-        self.mesh_renderer
-            .collect(world, assets, &self.gpu, &mut self.store, &self.globals);
+        self.mesh_renderer.update(
+            ctx.world,
+            ctx.assets,
+            &ctx.gpu,
+            &mut self.store,
+            &self.globals,
+            format,
+        );
+    }
+}
+
+impl Node for CameraNode {
+    fn label(&self) -> &str {
+        type_name::<Self>()
     }
 
-    pub fn draw(&mut self, assets: &AssetCache) -> anyhow::Result<()> {
-        let output = self.surface.get_current_texture()?;
+    fn draw(&mut self, mut ctx: crate::rendergraph::NodeExecutionContext) -> anyhow::Result<()> {
+        let output = ctx.resources.get_texture_data(self.output);
 
-        let view = output.texture.create_view(&Default::default());
+        self.update(&mut ctx, output.format());
 
-        let mut encoder = self.gpu.device.create_command_encoder(&Default::default());
-
-        {
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: "main_renderpass".into(),
-                color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.0,
-                            g: 0.1,
-                            b: 0.1,
-                            a: 1.0,
-                        }),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: self
-                        .depth_texture
-                        .as_ref()
-                        .expect("renderer has no surface size"),
-                    depth_ops: Some(Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: wgpu::StoreOp::Store,
+        let output_view = output.create_view(&Default::default());
+        let mut render_pass = ctx.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: "main_renderpass".into(),
+            color_attachments: &[Some(RenderPassColorAttachment {
+                view: &output_view,
+                resolve_target: None,
+                ops: Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                        r: 0.0,
+                        g: 0.1,
+                        b: 0.1,
+                        a: 1.0,
                     }),
-                    stencil_ops: None,
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: self
+                    .depth_texture
+                    .as_ref()
+                    .expect("renderer has no surface size"),
+                depth_ops: Some(Operations {
+                    load: wgpu::LoadOp::Clear(1.0),
+                    store: wgpu::StoreOp::Store,
                 }),
-                timestamp_writes: None,
-                occlusion_query_set: None,
-            });
+                stencil_ops: None,
+            }),
+            timestamp_writes: None,
+            occlusion_query_set: None,
+        });
 
-            self.mesh_renderer.draw(
-                assets,
-                &self.gpu,
-                &self.globals,
-                &self.store,
-                &mut render_pass,
-            );
-        }
-
-        self.gpu.queue.submit([encoder.finish()]);
-
-        output.present();
+        self.mesh_renderer.draw(
+            &ctx.assets,
+            &ctx.gpu,
+            &self.globals,
+            &self.store,
+            &mut render_pass,
+        );
 
         Ok(())
+    }
+
+    fn read_dependencies(&self) -> Vec<Dependency> {
+        vec![]
+    }
+
+    fn write_dependencies(&self) -> Vec<Dependency> {
+        vec![Dependency::texture(
+            self.output,
+            TextureUsages::RENDER_ATTACHMENT,
+        )]
     }
 }
 

@@ -1342,6 +1342,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tracing-tree",
+ "wgpu",
 ]
 
 [[package]]

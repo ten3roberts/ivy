@@ -192,9 +192,13 @@ impl Resources {
 
         nodes
             .iter()
-            .flat_map(|v| v.read_dependencies().iter().chain(v.write_dependencies()))
+            .flat_map(|v| {
+                v.read_dependencies()
+                    .into_iter()
+                    .chain(v.write_dependencies())
+            })
             .for_each(|v| {
-                if let &Dependency::Texture { handle, usage } = v {
+                if let Dependency::Texture { handle, usage } = v {
                     let current_usage = usages
                         .entry(handle)
                         .unwrap()
@@ -237,9 +241,13 @@ impl Resources {
 
         nodes
             .iter()
-            .flat_map(|v| v.read_dependencies().iter().chain(v.write_dependencies()))
+            .flat_map(|v| {
+                v.read_dependencies()
+                    .into_iter()
+                    .chain(v.write_dependencies())
+            })
             .for_each(|v| {
-                if let &Dependency::Buffer { handle, usage } = v {
+                if let Dependency::Buffer { handle, usage } = v {
                     let current_usage = usages
                         .entry(handle)
                         .unwrap()

@@ -3,30 +3,46 @@ use std::sync::Arc;
 use flax::World;
 use ivy_assets::AssetCache;
 use ivy_base::Layer;
+use ivy_wgpu_types::Surface;
 use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
     events::{ApplicationReady, RedrawEvent, ResizedEvent},
-    renderer::Renderer,
+    rendergraph::{self, RenderGraph},
     Gpu,
 };
+
+pub type CreateRenderGraphFunc =
+    Box<dyn FnMut(&mut World, &Gpu, Surface) -> anyhow::Result<RenderGraph>>;
+
+struct RenderingState {
+    gpu: Gpu,
+    rendergraph: RenderGraph,
+}
 
 /// Graphics layer
 ///
 /// Manages window and rendering
 pub struct GraphicsLayer {
-    renderer: Option<Renderer>,
+    rendering_state: Option<RenderingState>,
+    create_rendergraph: CreateRenderGraphFunc,
 }
 
 impl GraphicsLayer {
     /// Create a new graphics layer
-    pub fn new() -> Self {
-        Self { renderer: None }
+    pub fn new(
+        create_rendergraph: impl 'static
+            + FnMut(&mut World, &Gpu, Surface) -> anyhow::Result<RenderGraph>,
+    ) -> Self {
+        Self {
+            rendering_state: None,
+            create_rendergraph: Box::new(create_rendergraph),
+        }
     }
 
     fn on_application_ready(
         &mut self,
-        _: &mut World,
+        world: &mut World,
         assets: &AssetCache,
         window: Arc<Window>,
     ) -> Result<(), anyhow::Error> {
@@ -35,34 +51,36 @@ impl GraphicsLayer {
 
         assets.register_service(gpu.clone());
 
-        self.renderer = Some(Renderer::new(gpu, surface));
+        tracing::info!("initializing rendergraph");
+        let rendergraph = (self.create_rendergraph)(world, &gpu, surface)?;
+        self.rendering_state = Some(RenderingState { gpu, rendergraph });
 
         Ok(())
     }
 
     fn on_draw(&mut self, assets: &AssetCache, world: &mut World) -> Result<(), anyhow::Error> {
-        if let Some(renderer) = &mut self.renderer {
-            renderer.update(world, assets);
-            renderer.draw(assets)?;
+        if let Some(state) = &mut self.rendering_state {
+            state
+                .rendergraph
+                .execute(&state.gpu, &state.gpu.queue, world, assets)?;
         }
+
+        // if let Some(renderer) = &mut self.renderer {
+        //     renderer.update(world, assets);
+        //     renderer.draw(assets)?;
+        // }
 
         Ok(())
     }
 
     fn on_resize(&mut self, _: &mut World, physical_size: PhysicalSize<u32>) -> anyhow::Result<()> {
-        if let Some(renderer) = &mut self.renderer {
-            renderer.resize(physical_size);
-        } else {
-            tracing::warn!("renderer not initialized");
-        }
+        // if let Some(renderer) = &mut self.renderer {
+        //     renderer.resize(physical_size);
+        // } else {
+        //     tracing::warn!("renderer not initialized");
+        // }
 
         Ok(())
-    }
-}
-
-impl Default for GraphicsLayer {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

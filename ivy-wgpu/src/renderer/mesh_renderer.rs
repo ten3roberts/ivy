@@ -114,8 +114,6 @@ pub struct MeshRenderer {
     pub shaders: AssetMap<crate::shader::ShaderDesc, Handle<Shader>>,
     pub materials: HashMap<MaterialDesc, Asset<Material>>,
 
-    surface_format: TextureFormat,
-
     batches: Slab<Batch>,
     batch_map: BTreeMap<BatchKey, BatchId>,
 
@@ -128,7 +126,7 @@ pub struct MeshRenderer {
 }
 
 impl MeshRenderer {
-    pub fn new(gpu: &Gpu, surface_format: TextureFormat) -> Self {
+    pub fn new(gpu: &Gpu) -> Self {
         let bind_group_layout = BindGroupLayoutBuilder::new("ObjectBuffer")
             .bind_storage_buffer(ShaderStages::VERTEX)
             .build(gpu);
@@ -152,7 +150,6 @@ impl MeshRenderer {
             meshes: Default::default(),
             shaders: Default::default(),
             materials: Default::default(),
-            surface_format,
             batches: Default::default(),
             batch_map: Default::default(),
             object_query: Query::new((object_index(), ObjectDataQuery::new().modified())),
@@ -181,6 +178,7 @@ impl MeshRenderer {
         globals: &Globals,
         store: &mut RendererStore,
         cmd: &mut CommandBuffer,
+        format: TextureFormat,
     ) {
         let mut query = Query::new((
             entity_ids(),
@@ -235,7 +233,7 @@ impl MeshRenderer {
                         &ShaderDesc {
                             label: k.shader.label(),
                             source: k.shader.source(),
-                            format: self.surface_format,
+                            format,
                             vertex_layouts: &[Vertex::layout()],
                             layouts: &[&globals.layout, &self.bind_group_layout, material.layout()],
                             depth_format: Some(TextureFormat::Depth24Plus),
@@ -312,35 +310,18 @@ impl MeshRenderer {
         self.object_buffer.write(&gpu.queue, 0, &self.object_data);
     }
 
-    pub fn collect(
+    pub fn update(
         &mut self,
         world: &mut World,
         assets: &AssetCache,
         gpu: &Gpu,
         store: &mut RendererStore,
         globals: &Globals,
+        format: TextureFormat,
     ) {
         let mut cmd = CommandBuffer::new();
-        self.collect_unbatched(world, assets, gpu, globals, store, &mut cmd);
+        self.collect_unbatched(world, assets, gpu, globals, store, &mut cmd, format);
         self.update_object_data(world, gpu);
-        // self.render_objects.clear();
-        // self.object_data.clear();
-
-        // let mut query = Query::new((
-        //     mesh().cloned(),
-        //     material().cloned(),
-        //     shader().cloned(),
-        //     world_transform().copied().traverse(mesh_primitive),
-        // ));
-
-        // for (mesh, material, shader, transform) in &mut query.borrow(world) {
-        //     self.render_objects.push(RenderObject {
-        //         mesh,
-        //         material,
-        //         shader,
-        //     });
-        //     self.object_data.push(ObjectData { transform });
-        // }
     }
 
     pub fn draw<'a>(
@@ -351,8 +332,6 @@ impl MeshRenderer {
         store: &'a RendererStore,
         render_pass: &mut RenderPass<'a>,
     ) {
-        // self.resize_object_buffer(gpu, self.object_data.len());
-
         render_pass.set_bind_group(0, &globals.bind_group, &[]);
 
         self.object_buffer.write(&gpu.queue, 0, &self.object_data);
@@ -367,19 +346,6 @@ impl MeshRenderer {
             tracing::trace!(instance_count = batch.instance_count, "drawing batch");
             batch.draw(gpu, assets, globals, store, render_pass)
         }
-
-        // for (i, object) in self.render_objects.iter().enumerate() {
-        //     let mesh = self.meshes.get(&object.mesh).unwrap();
-        //     let material = self.materials.get(&object.material).unwrap();
-        //     let shader = self.shaders.get(&object.shader).unwrap();
-
-        //     render_pass.set_pipeline(shader.pipeline());
-        //     mesh.bind(render_pass);
-        //     render_pass.set_bind_group(1, &self.bind_group, &[]);
-        //     render_pass.set_bind_group(2, material.bind_group(), &[]);
-
-        //     render_pass.draw_indexed(0..mesh.index_count(), 0, (i as u32)..(i as u32 + 1));
-        // }
     }
 }
 
