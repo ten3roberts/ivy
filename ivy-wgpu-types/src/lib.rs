@@ -13,3 +13,4 @@ pub use gpu::{Gpu, Surface};
 pub use mesh::{Mesh, Vertex, Vertex2d, VertexDesc};
 pub use shader::Shader;
 pub use typed_buffer::TypedBuffer;
+pub use winit::dpi::PhysicalSize;

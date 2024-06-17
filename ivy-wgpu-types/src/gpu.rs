@@ -85,6 +85,7 @@ impl Gpu {
             ..Default::default()
         });
 
+        let window_size = window.inner_size();
         let surface = instance.create_surface(window).unwrap();
 
         let adapter = instance
@@ -124,13 +125,17 @@ impl Gpu {
             .unwrap_or_else(|| surface_caps.formats[0]);
 
         let config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
             present_mode: wgpu::PresentMode::AutoNoVsync,
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
-            ..surface.get_default_config(&adapter, 0, 0).unwrap()
+            ..surface
+                .get_default_config(&adapter, window_size.width, window_size.height)
+                .unwrap()
         };
+
+        surface.configure(&device, &config);
 
         (
             Self {
@@ -140,7 +145,7 @@ impl Gpu {
             Surface {
                 surface,
                 config,
-                size: None,
+                size: window_size,
             },
         )
     }
@@ -150,7 +155,7 @@ impl Gpu {
     // }
 }
 pub struct Surface {
-    size: Option<PhysicalSize<u32>>,
+    size: PhysicalSize<u32>,
     surface: wgpu::Surface<'static>,
     config: SurfaceConfiguration,
 }
@@ -166,7 +171,7 @@ impl Surface {
 
     pub fn resize(&mut self, gpu: &Gpu, new_size: PhysicalSize<u32>) {
         tracing::info_span!("resize", ?new_size);
-        if Some(new_size) == self.size {
+        if new_size == self.size {
             tracing::info!(size=?new_size, "Duplicate resize message ignored");
             return;
         }
@@ -175,15 +180,11 @@ impl Surface {
             // self.size = new_size;
             self.config.width = new_size.width;
             self.config.height = new_size.height;
-            self.size = Some(new_size);
+            self.size = new_size;
             self.reconfigure(gpu);
         } else {
-            self.size = None;
+            self.size = new_size;
         }
-    }
-
-    pub fn has_size(&self) -> bool {
-        self.size.is_some()
     }
 
     pub fn reconfigure(&mut self, gpu: &Gpu) {
@@ -194,7 +195,7 @@ impl Surface {
         self.config.format
     }
 
-    pub fn size(&self) -> Option<PhysicalSize<u32>> {
+    pub fn size(&self) -> PhysicalSize<u32> {
         self.size
     }
 }

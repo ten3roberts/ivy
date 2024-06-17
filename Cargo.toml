@@ -107,6 +107,7 @@ tokio = { version = "1.18.2", features = ["full"] }
 tracing-subscriber.workspace = true
 tracing-tree = "0.3.0"
 tracing.workspace = true
+wgpu.workspace = true
 
 [features]
 default = []

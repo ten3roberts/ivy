@@ -1,8 +1,9 @@
 mod resources;
+use flax::World;
+use ivy_assets::AssetCache;
 pub use resources::*;
-use slotmap::SecondaryMap;
 
-use std::collections::{btree_map::Range, HashMap};
+use std::collections::HashMap;
 
 use itertools::Itertools;
 use ivy_wgpu_types::Gpu;
@@ -11,21 +12,27 @@ use wgpu::{BufferUsages, CommandEncoder, Queue, TextureUsages};
 pub struct RenderGraph {
     nodes: Vec<Box<dyn Node>>,
     order: Option<Vec<usize>>,
-    resources: Resources,
+    pub resources: Resources,
     expected_lifetimes: HashMap<ResourceHandle, Lifetime>,
 }
 
 pub struct NodeExecutionContext<'a> {
+    pub gpu: &'a Gpu,
     pub resources: &'a Resources,
     pub queue: &'a Queue,
     pub encoder: &'a mut CommandEncoder,
+    pub assets: &'a AssetCache,
+    pub world: &'a mut World,
 }
 
 pub trait Node: 'static {
     fn label(&self) -> &str;
-    fn draw(&self, ctx: NodeExecutionContext) -> anyhow::Result<()>;
-    fn read_dependencies(&self) -> &[Dependency];
-    fn write_dependencies(&self) -> &[Dependency];
+    fn draw(&mut self, ctx: NodeExecutionContext) -> anyhow::Result<()>;
+    fn read_dependencies(&self) -> Vec<Dependency>;
+    fn write_dependencies(&self) -> Vec<Dependency>;
+    fn finish(&mut self) -> anyhow::Result<()> {
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -122,7 +129,7 @@ impl RenderGraph {
             .enumerate()
             .flat_map(|(idx, v)| {
                 v.write_dependencies()
-                    .iter()
+                    .into_iter()
                     .map(move |d| (d.as_handle(), idx))
             })
             .collect();
@@ -133,7 +140,7 @@ impl RenderGraph {
             .enumerate()
             .flat_map(|(idx, v)| {
                 v.read_dependencies()
-                    .iter()
+                    .into_iter()
                     .map(move |v| (v.as_handle(), idx))
             })
             .into_group_map();
@@ -144,7 +151,7 @@ impl RenderGraph {
             .enumerate()
             .flat_map(|(node_idx, node)| {
                 let writes = &writes;
-                node.read_dependencies().iter().map(move |v| {
+                node.read_dependencies().into_iter().map(move |v| {
                     let write_idx = *writes.get(&v.as_handle()).unwrap();
                     (node_idx, write_idx)
                 })
@@ -180,7 +187,13 @@ impl RenderGraph {
         self.order = Some(order);
     }
 
-    pub fn execute(&mut self, gpu: &Gpu, queue: &Queue) -> anyhow::Result<()> {
+    pub fn execute(
+        &mut self,
+        gpu: &Gpu,
+        queue: &Queue,
+        world: &mut World,
+        assets: &AssetCache,
+    ) -> anyhow::Result<()> {
         if self.order.is_none() {
             self.build();
             self.allocate_resources(gpu);
@@ -194,13 +207,21 @@ impl RenderGraph {
             let node = &mut self.nodes[idx];
             tracing::info!(?idx, label = node.label(), "executing node");
             node.draw(NodeExecutionContext {
+                gpu,
                 resources: &self.resources,
                 queue,
                 encoder: &mut encoder,
+                assets,
+                world,
             })?;
         }
 
         queue.submit([encoder.finish()]);
+
+        for &idx in order {
+            let node = &mut self.nodes[idx];
+            node.finish()?;
+        }
 
         Ok(())
     }
@@ -299,16 +320,11 @@ mod test {
         struct WriteToTexture {
             buffer: TypedBuffer<u8>,
             write: TextureHandle,
-            write_dependencies: Vec<Dependency>,
         }
 
         impl WriteToTexture {
             fn new(buffer: TypedBuffer<u8>, write: TextureHandle) -> Self {
-                Self {
-                    buffer,
-                    write,
-                    write_dependencies: vec![Dependency::texture(write, TextureUsages::COPY_DST)],
-                }
+                Self { buffer, write }
             }
         }
 
@@ -317,7 +333,7 @@ mod test {
                 "WriteToTexture"
             }
 
-            fn draw(&self, ctx: NodeExecutionContext) -> anyhow::Result<()> {
+            fn draw(&mut self, ctx: NodeExecutionContext) -> anyhow::Result<()> {
                 let texture = ctx.resources.get_texture_data(self.write);
 
                 ctx.encoder.copy_buffer_to_texture(
@@ -345,20 +361,18 @@ mod test {
                 Ok(())
             }
 
-            fn read_dependencies(&self) -> &[crate::rendergraph::Dependency] {
-                &[]
+            fn read_dependencies(&self) -> Vec<Dependency> {
+                vec![]
             }
 
-            fn write_dependencies(&self) -> &[crate::rendergraph::Dependency] {
-                &self.write_dependencies
+            fn write_dependencies(&self) -> Vec<Dependency> {
+                vec![Dependency::texture(self.write, TextureUsages::COPY_DST)]
             }
         }
 
         struct ReadFromTexture {
             read_texture: TextureHandle,
             write_buffer: BufferHandle,
-            read_dependencies: Vec<Dependency>,
-            write_dependencies: Vec<Dependency>,
         }
 
         impl ReadFromTexture {
@@ -366,14 +380,6 @@ mod test {
                 Self {
                     read_texture,
                     write_buffer,
-                    read_dependencies: vec![Dependency::texture(
-                        read_texture,
-                        TextureUsages::COPY_SRC,
-                    )],
-                    write_dependencies: vec![Dependency::buffer(
-                        write_buffer,
-                        BufferUsages::COPY_DST,
-                    )],
                 }
             }
         }
@@ -383,7 +389,7 @@ mod test {
                 "ReadFromTexture"
             }
 
-            fn draw(&self, ctx: NodeExecutionContext) -> anyhow::Result<()> {
+            fn draw(&mut self, ctx: NodeExecutionContext) -> anyhow::Result<()> {
                 let texture = ctx.resources.get_texture_data(self.read_texture);
                 let buffer = ctx.resources.get_buffer_data(self.write_buffer);
 
@@ -412,33 +418,29 @@ mod test {
                 Ok(())
             }
 
-            fn read_dependencies(&self) -> &[crate::rendergraph::Dependency] {
-                &self.read_dependencies
+            fn read_dependencies(&self) -> Vec<Dependency> {
+                vec![Dependency::texture(
+                    self.read_texture,
+                    TextureUsages::COPY_SRC,
+                )]
             }
 
-            fn write_dependencies(&self) -> &[crate::rendergraph::Dependency] {
-                &self.write_dependencies
+            fn write_dependencies(&self) -> Vec<Dependency> {
+                vec![Dependency::buffer(
+                    self.write_buffer,
+                    BufferUsages::COPY_DST,
+                )]
             }
         }
 
         struct WriteIntoTexture {
             buffer: BufferHandle,
             texture: TextureHandle,
-            read_dependencies: Vec<Dependency>,
-            write_dependencies: Vec<Dependency>,
         }
 
         impl WriteIntoTexture {
             fn new(buffer: BufferHandle, texture: TextureHandle) -> Self {
-                Self {
-                    buffer,
-                    texture,
-                    read_dependencies: vec![Dependency::buffer(buffer, BufferUsages::MAP_READ)],
-                    write_dependencies: vec![Dependency::texture(
-                        texture,
-                        TextureUsages::COPY_DST | TextureUsages::COPY_SRC,
-                    )],
-                }
+                Self { buffer, texture }
             }
         }
 
@@ -447,7 +449,7 @@ mod test {
                 "PostProcess"
             }
 
-            fn draw(&self, ctx: NodeExecutionContext) -> anyhow::Result<()> {
+            fn draw(&mut self, ctx: NodeExecutionContext) -> anyhow::Result<()> {
                 let texture = ctx.resources.get_texture_data(self.texture);
                 let buffer = ctx.resources.get_buffer_data(self.buffer);
 
@@ -476,12 +478,15 @@ mod test {
                 Ok(())
             }
 
-            fn read_dependencies(&self) -> &[Dependency] {
-                &self.read_dependencies
+            fn read_dependencies(&self) -> Vec<Dependency> {
+                vec![Dependency::buffer(self.buffer, BufferUsages::MAP_READ)]
             }
 
-            fn write_dependencies(&self) -> &[Dependency] {
-                &self.write_dependencies
+            fn write_dependencies(&self) -> Vec<Dependency> {
+                vec![Dependency::texture(
+                    self.texture,
+                    TextureUsages::COPY_DST | TextureUsages::COPY_SRC,
+                )]
             }
         }
 
@@ -531,7 +536,14 @@ mod test {
 
         render_graph.add_node(WriteIntoTexture::new(buffer, texture2));
 
-        render_graph.execute(&gpu, &gpu.queue).unwrap();
+        render_graph
+            .execute(
+                &gpu,
+                &gpu.queue,
+                &mut Default::default(),
+                &Default::default(),
+            )
+            .unwrap();
 
         let (ready_tx, ready_rx) = futures::channel::oneshot::channel();
 

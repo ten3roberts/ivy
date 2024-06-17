@@ -1,9 +1,10 @@
 use std::time::Instant;
 
+use color_eyre::owo_colors::OwoColorize;
 use flax::{
     component, BoxedSystem, Component, Entity, Mutable, Query, QueryBorrow, Schedule, System, World,
 };
-use glam::{vec3, EulerRot, Mat4, Quat, Vec2, Vec3};
+use glam::{uvec2, vec3, EulerRot, Mat4, Quat, Vec2, Vec3};
 use ivy_assets::AssetCache;
 use ivy_base::{
     app::{InitEvent, TickEvent},
@@ -23,10 +24,13 @@ use ivy_wgpu::{
     layer::GraphicsLayer,
     material::{MaterialData, MaterialDesc},
     mesh::{MeshData, MeshDesc},
-    renderer::RenderObjectBundle,
+    renderer::{CameraNode, RenderObjectBundle, SwapchainSurfaceNode},
+    rendergraph::RenderGraph,
     shader::ShaderDesc,
     texture::TextureDesc,
+    Gpu,
 };
+use ivy_wgpu_types::Surface;
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
 
@@ -38,10 +42,40 @@ pub fn main() -> anyhow::Result<()> {
 
     let dt = 0.02;
 
+    let create_rendergraph = |_world: &mut World, gpu: &Gpu, surface: Surface| {
+        let size = surface.size();
+        let mut render_graph = RenderGraph::new();
+
+        let final_color =
+            render_graph
+                .resources
+                .insert_texture(ivy_wgpu::rendergraph::TextureDesc {
+                    label: "final_color".into(),
+                    extent: wgpu::Extent3d {
+                        width: size.width,
+                        height: size.height,
+                        depth_or_array_layers: 1,
+                    },
+                    dimension: wgpu::TextureDimension::D2,
+                    format: surface.surface_config().format,
+                    mip_level_count: 1,
+                    sample_count: 1,
+                });
+
+        render_graph.add_node(CameraNode::new(gpu, final_color, size));
+        render_graph.add_node(SwapchainSurfaceNode::new(
+            final_color,
+            surface,
+            uvec2(size.width, size.height),
+        ));
+
+        Ok(render_graph)
+    };
+
     if let Err(err) = App::builder()
         .with_driver(WinitDriver::new())
         .with_layer(EngineLayer::new())
-        .with_layer(GraphicsLayer::new())
+        .with_layer(GraphicsLayer::new(create_rendergraph))
         .with_layer(InputLayer::new())
         .with_layer(LogicLayer::new())
         .with_layer(Update::new(
