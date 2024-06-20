@@ -1,6 +1,5 @@
-use std::time::Instant;
+use std::{cell::RefCell, rc::Rc, time::Instant};
 
-use color_eyre::owo_colors::OwoColorize;
 use flax::{
     component, BoxedSystem, Component, Entity, Mutable, Query, QueryBorrow, Schedule, System, World,
 };
@@ -9,7 +8,9 @@ use ivy_assets::AssetCache;
 use ivy_base::{
     app::{InitEvent, TickEvent},
     layer::events::EventRegisterContext,
-    main_camera, position, rotation, App, EngineLayer, EntityBuilderExt, Layer, TransformBundle,
+    main_camera,
+    palette::Srgb,
+    position, rotation, App, EngineLayer, EntityBuilderExt, Layer, TransformBundle,
 };
 use ivy_gltf::Document;
 use ivy_input::{
@@ -18,21 +19,23 @@ use ivy_input::{
 };
 use ivy_scene::GltfNodeExt;
 use ivy_wgpu::{
-    components::{main_window, projection_matrix, window},
+    components::{light, main_window, projection_matrix, window},
     driver::{WindowHandle, WinitDriver},
     events::ResizedEvent,
     layer::GraphicsLayer,
+    light::PointLight,
     material::{MaterialData, MaterialDesc},
     mesh::{MeshData, MeshDesc},
-    renderer::{CameraNode, RenderObjectBundle, SwapchainSurfaceNode},
+    renderer::{CameraNode, RenderObjectBundle, SurfacePresentNode},
     rendergraph::RenderGraph,
     shader::ShaderDesc,
     texture::TextureDesc,
     Gpu,
 };
-use ivy_wgpu_types::Surface;
+use ivy_wgpu_types::{PhysicalSize, Surface};
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
+use wgpu::Extent3d;
 
 pub fn main() -> anyhow::Result<()> {
     registry()
@@ -44,32 +47,60 @@ pub fn main() -> anyhow::Result<()> {
 
     let create_rendergraph = |_world: &mut World, gpu: &Gpu, surface: Surface| {
         let size = surface.size();
+
         let mut render_graph = RenderGraph::new();
 
+        let extent = wgpu::Extent3d {
+            width: size.width,
+            height: size.height,
+            depth_or_array_layers: 1,
+        };
         let final_color =
             render_graph
                 .resources
                 .insert_texture(ivy_wgpu::rendergraph::TextureDesc {
                     label: "final_color".into(),
-                    extent: wgpu::Extent3d {
-                        width: size.width,
-                        height: size.height,
-                        depth_or_array_layers: 1,
-                    },
+                    extent,
                     dimension: wgpu::TextureDimension::D2,
                     format: surface.surface_config().format,
                     mip_level_count: 1,
-                    sample_count: 1,
+                    sample_count: 4,
                 });
 
-        render_graph.add_node(CameraNode::new(gpu, final_color, size));
-        render_graph.add_node(SwapchainSurfaceNode::new(
-            final_color,
-            surface,
-            uvec2(size.width, size.height),
-        ));
+        let depth_texture =
+            render_graph
+                .resources
+                .insert_texture(ivy_wgpu::rendergraph::TextureDesc {
+                    label: "depth_texture".into(),
+                    extent,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: wgpu::TextureFormat::Depth24Plus,
+                    mip_level_count: 1,
+                    sample_count: 4,
+                });
 
-        Ok(render_graph)
+        let surface = Rc::new(RefCell::new(surface));
+        render_graph.add_node(CameraNode::new(gpu, depth_texture, final_color));
+        render_graph.add_node(SurfacePresentNode::new(final_color, surface.clone()));
+
+        let on_resize =
+            move |gpu: &Gpu, render_graph: &mut RenderGraph, size: PhysicalSize<u32>| {
+                let new_extent = Extent3d {
+                    width: size.width,
+                    height: size.height,
+                    depth_or_array_layers: 1,
+                };
+
+                surface.borrow_mut().resize(&gpu, size);
+
+                render_graph.resources.get_texture_mut(final_color).extent = new_extent;
+                render_graph.resources.get_texture_mut(depth_texture).extent = new_extent;
+            };
+
+        Ok((
+            render_graph,
+            Box::new(on_resize) as Box<dyn FnMut(&Gpu, &mut RenderGraph, PhysicalSize<u32>)>,
+        ))
     };
 
     if let Err(err) = App::builder()
@@ -174,6 +205,16 @@ impl LogicLayer {
                 Quat::from_euler(glam::EulerRot::ZYX, 1.0, 0.0, 0.0),
                 Vec3::ONE,
             ))
+            .spawn(world);
+
+        Entity::builder()
+            .mount(TransformBundle::default().with_position(vec3(0.0, 20.0, 0.0)))
+            .set(light(), PointLight::new(Srgb::new(0.0, 1.0, 1.0), 10.0))
+            .spawn(world);
+
+        Entity::builder()
+            .mount(TransformBundle::default().with_position(vec3(10.0, 10.0, 0.0)))
+            .set(light(), PointLight::new(Srgb::new(1.0, 0.0, 0.0), 10.0))
             .spawn(world);
 
         self.entity = Some(entity);

@@ -13,11 +13,14 @@ use crate::{
 };
 
 pub type CreateRenderGraphFunc =
-    Box<dyn FnMut(&mut World, &Gpu, Surface) -> anyhow::Result<RenderGraph>>;
+    Box<dyn FnMut(&mut World, &Gpu, Surface) -> anyhow::Result<(RenderGraph, OnResizeFunc)>>;
+
+pub type OnResizeFunc = Box<dyn FnMut(&Gpu, &mut RenderGraph, PhysicalSize<u32>)>;
 
 struct RenderingState {
     gpu: Gpu,
     rendergraph: RenderGraph,
+    on_resize: OnResizeFunc,
 }
 
 /// Graphics layer
@@ -32,7 +35,7 @@ impl GraphicsLayer {
     /// Create a new graphics layer
     pub fn new(
         create_rendergraph: impl 'static
-            + FnMut(&mut World, &Gpu, Surface) -> anyhow::Result<RenderGraph>,
+            + FnMut(&mut World, &Gpu, Surface) -> anyhow::Result<(RenderGraph, OnResizeFunc)>,
     ) -> Self {
         Self {
             rendering_state: None,
@@ -52,8 +55,12 @@ impl GraphicsLayer {
         assets.register_service(gpu.clone());
 
         tracing::info!("initializing rendergraph");
-        let rendergraph = (self.create_rendergraph)(world, &gpu, surface)?;
-        self.rendering_state = Some(RenderingState { gpu, rendergraph });
+        let (rendergraph, on_resize) = (self.create_rendergraph)(world, &gpu, surface)?;
+        self.rendering_state = Some(RenderingState {
+            gpu,
+            rendergraph,
+            on_resize,
+        });
 
         Ok(())
     }
@@ -74,6 +81,9 @@ impl GraphicsLayer {
     }
 
     fn on_resize(&mut self, _: &mut World, physical_size: PhysicalSize<u32>) -> anyhow::Result<()> {
+        if let Some(state) = &mut self.rendering_state {
+            (state.on_resize)(&state.gpu, &mut state.rendergraph, physical_size);
+        }
         // if let Some(renderer) = &mut self.renderer {
         //     renderer.resize(physical_size);
         // } else {

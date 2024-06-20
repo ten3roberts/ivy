@@ -79,7 +79,7 @@ impl Shader {
                     bias: Default::default(),
                 }),
                 multisample: wgpu::MultisampleState {
-                    count: 1,                         // 2.
+                    count: 4,                         // 2.
                     mask: !0,                         // 3.
                     alpha_to_coverage_enabled: false, // 4.
                 },
