@@ -93,6 +93,24 @@ impl TransformBundle {
             scale,
         }
     }
+
+    /// Set the position
+    pub fn with_position(mut self, position: Vec3) -> Self {
+        self.pos = position;
+        self
+    }
+
+    /// Set the rotation
+    pub fn with_rotation(mut self, rotation: Quat) -> Self {
+        self.rotation = rotation;
+        self
+    }
+
+    /// Set the scale
+    pub fn with_scale(mut self, scale: Vec3) -> Self {
+        self.scale = scale;
+        self
+    }
 }
 
 impl Default for TransformBundle {

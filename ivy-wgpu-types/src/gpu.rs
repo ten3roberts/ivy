@@ -125,7 +125,7 @@ impl Gpu {
             .unwrap_or_else(|| surface_caps.formats[0]);
 
         let config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::RENDER_ATTACHMENT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
             present_mode: wgpu::PresentMode::AutoNoVsync,
             alpha_mode: surface_caps.alpha_modes[0],
@@ -181,6 +181,7 @@ impl Surface {
             self.config.width = new_size.width;
             self.config.height = new_size.height;
             self.size = new_size;
+            tracing::info!("reconfigure surface {:#?}", self.config);
             self.reconfigure(gpu);
         } else {
             self.size = new_size;

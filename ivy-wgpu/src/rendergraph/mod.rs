@@ -1,9 +1,10 @@
 mod resources;
 use flax::World;
 use ivy_assets::AssetCache;
+use ivy_base::Extent;
 pub use resources::*;
 
-use std::collections::HashMap;
+use std::{collections::HashMap, mem};
 
 use itertools::Itertools;
 use ivy_wgpu_types::Gpu;
@@ -194,8 +195,12 @@ impl RenderGraph {
         world: &mut World,
         assets: &AssetCache,
     ) -> anyhow::Result<()> {
+        let _span = tracing::info_span!("execute").entered();
         if self.order.is_none() {
             self.build();
+        }
+
+        if mem::take(&mut self.resources.dirty) {
             self.allocate_resources(gpu);
         }
 
@@ -205,7 +210,6 @@ impl RenderGraph {
 
         for &idx in order {
             let node = &mut self.nodes[idx];
-            tracing::info!(?idx, label = node.label(), "executing node");
             node.draw(NodeExecutionContext {
                 gpu,
                 resources: &self.resources,
@@ -452,28 +456,6 @@ mod test {
             fn draw(&mut self, ctx: NodeExecutionContext) -> anyhow::Result<()> {
                 let texture = ctx.resources.get_texture_data(self.texture);
                 let buffer = ctx.resources.get_buffer_data(self.buffer);
-
-                // ctx.encoder.copy_buffer_to_texture(
-                //     ImageCopyBuffer {
-                //         buffer,
-                //         layout: ImageDataLayout {
-                //             offset: 0,
-                //             bytes_per_row: Some(256),
-                //             rows_per_image: Some(256),
-                //         },
-                //     },
-                //     ImageCopyTexture {
-                //         texture,
-                //         mip_level: 0,
-                //         origin: Default::default(),
-                //         aspect: wgpu::TextureAspect::All,
-                //     },
-                //     Extent3d {
-                //         width: 256,
-                //         height: 256,
-                //         depth_or_array_layers: 1,
-                //     },
-                // );
 
                 Ok(())
             }

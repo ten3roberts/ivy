@@ -151,6 +151,7 @@ impl<Handle: slotmap::Key, Data: SubResource> ResourceAllocator<Handle, Data> {
 }
 
 pub struct Resources {
+    pub(crate) dirty: bool,
     textures: SlotMap<TextureHandle, TextureDesc>,
     buffers: SlotMap<BufferHandle, BufferDesc>,
     texture_data: ResourceAllocator<TextureHandle, Texture>,
@@ -160,6 +161,7 @@ pub struct Resources {
 impl Resources {
     pub fn new() -> Self {
         Self {
+            dirty: false,
             textures: Default::default(),
             buffers: Default::default(),
             texture_data: ResourceAllocator::new(),
@@ -168,7 +170,17 @@ impl Resources {
     }
 
     pub fn insert_texture(&mut self, texture: TextureDesc) -> TextureHandle {
+        self.dirty = true;
         self.textures.insert(texture)
+    }
+
+    pub fn get_texture_mut(&mut self, handle: TextureHandle) -> &mut TextureDesc {
+        self.dirty = true;
+        &mut self.textures[handle]
+    }
+
+    pub fn get_texture(&self, handle: TextureHandle) -> &TextureDesc {
+        &self.textures[handle]
     }
 
     pub fn get_texture_data(&self, key: TextureHandle) -> &Texture {
@@ -176,6 +188,7 @@ impl Resources {
     }
 
     pub fn insert_buffer(&mut self, buffer: BufferDesc) -> BufferHandle {
+        self.dirty = true;
         self.buffers.insert(buffer)
     }
     pub fn get_buffer_data(&self, key: BufferHandle) -> &Buffer {
@@ -209,7 +222,10 @@ impl Resources {
             });
 
         let iter = self.textures.iter().filter_map(|(handle, desc)| {
-            let lf = lifetimes[&handle.into()];
+            let Some(&lf) = lifetimes.get(&handle.into()) else {
+                panic!("No entry for {:?}", self.textures[handle]);
+            };
+
             let usage = *usages.get(handle)?;
 
             Some((

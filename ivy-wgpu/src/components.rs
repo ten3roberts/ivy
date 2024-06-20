@@ -3,8 +3,8 @@ use glam::Mat4;
 use ivy_assets::Asset;
 
 use crate::{
-    driver::WindowHandle, material::MaterialDesc, mesh::MeshDesc, shader::ShaderDesc,
-    types::texture::Texture,
+    driver::WindowHandle, light::PointLight, material::MaterialDesc, mesh::MeshDesc,
+    shader::ShaderDesc, types::texture::Texture,
 };
 
 component! {
@@ -22,4 +22,6 @@ component! {
     pub main_window: (),
 
     pub window: WindowHandle,
+
+    pub light: PointLight,
 }
