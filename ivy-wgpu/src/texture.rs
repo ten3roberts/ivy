@@ -1,14 +1,20 @@
+use image::DynamicImage;
+use ivy_assets::{Asset, AssetCache, AssetKey};
+use ivy_wgpu_types::texture::{texture_from_image, TextureFromColor};
+use wgpu::{Texture, TextureFormat};
 
-use image::{DynamicImage, ImageError};
-use ivy_assets::{Asset, AssetKey};
-
-use crate::types::texture::Texture;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TextureKind {
+    Srgba,
+    Uniform,
+}
 
 /// Describes a texture
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TextureDesc {
     Path(String),
     Content(Asset<DynamicImage>),
+    Color(image::Rgba<u8>),
 }
 
 impl TextureDesc {
@@ -19,24 +25,50 @@ impl TextureDesc {
     pub fn content(content: Asset<DynamicImage>) -> Self {
         Self::Content(content)
     }
-}
 
-impl AssetKey<Texture> for TextureDesc {
-    type Error = ImageError;
+    pub fn default_normal() -> Self {
+        Self::Color(image::Rgba([127, 127, 255, 255]))
+    }
 
-    fn load(
+    pub fn load(
         &self,
-        assets: &ivy_assets::AssetCache,
-    ) -> Result<ivy_assets::Asset<Texture>, Self::Error> {
-        let gpu = assets.service();
-        let texture = match self {
-            TextureDesc::Path(v) => {
-                let image = image::open(v)?;
-                Texture::from_image(&gpu, &image)
-            }
-            TextureDesc::Content(v) => Texture::from_image(&gpu, v),
+        assets: &AssetCache,
+        kind: TextureKind,
+    ) -> Result<Asset<Texture>, image::ImageError> {
+        let format = match kind {
+            TextureKind::Srgba => TextureFormat::Rgba8UnormSrgb,
+            TextureKind::Uniform => TextureFormat::Rgba8Unorm,
         };
 
-        Ok(assets.insert(texture))
+        let gpu = assets.service();
+
+        match self {
+            TextureDesc::Path(v) => {
+                let image = image::open(v)?;
+                Ok(assets.insert(texture_from_image(&gpu, &image, format)))
+            }
+            TextureDesc::Content(v) => Ok(assets.insert(texture_from_image(&gpu, v, format))),
+            TextureDesc::Color(v) => Ok(assets.load(&TextureFromColor { color: v.0, format })),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct TextureAndKindDesc {
+    texture: TextureDesc,
+    kind: TextureKind,
+}
+
+impl TextureAndKindDesc {
+    pub(crate) fn new(texture: TextureDesc, kind: TextureKind) -> Self {
+        Self { texture, kind }
+    }
+}
+
+impl AssetKey<Texture> for TextureAndKindDesc {
+    type Error = image::ImageError;
+
+    fn load(&self, assets: &AssetCache) -> Result<Asset<Texture>, Self::Error> {
+        self.texture.load(assets, self.kind)
     }
 }

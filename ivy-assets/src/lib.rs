@@ -200,9 +200,6 @@ mod tests {
 
     #[test]
     fn asset_cache() {
-        #[derive(Hash, Eq, PartialEq, Clone, Debug)]
-        struct Key(String);
-
         impl AssetKey<()> for Path {
             type Error = Infallible;
 

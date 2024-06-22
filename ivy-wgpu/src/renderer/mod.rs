@@ -1,68 +1,62 @@
 pub mod mesh_renderer;
 
-use std::{any::type_name, cell::RefCell, rc::Rc};
+use std::any::type_name;
 
 use flax::Query;
-use glam::{vec3, Mat4, UVec2, Vec3, Vec4};
+use glam::{vec3, Mat4, Vec3, Vec4};
 use itertools::Itertools;
 use ivy_assets::{stored::Store, Asset};
-use ivy_base::{main_camera, world_transform, Bundle, ColorExt};
+use ivy_base::{main_camera, world_transform, Bundle};
 use wgpu::{
-    BindGroup, BufferUsages, Extent3d, ImageCopyTexture, Operations, RenderPassColorAttachment,
-    RenderPassDescriptor, ShaderStages, SurfaceTexture, TextureDescriptor, TextureDimension,
-    TextureFormat, TextureUsages,
+    BindGroup, BufferUsages, Operations, RenderPassColorAttachment, RenderPassDescriptor,
+    ShaderStages, TextureFormat, TextureUsages,
 };
-use winit::dpi::PhysicalSize;
 
 use crate::{
     components::{light, material, mesh, projection_matrix, shader},
-    material::MaterialDesc,
-    mesh::MeshDesc,
+    material::Material,
+    material_desc::MaterialDesc,
+    mesh_desc::MeshDesc,
     rendergraph::{Dependency, Node, NodeExecutionContext, TextureHandle},
-    types::{
-        material::Material, BindGroupBuilder, BindGroupLayoutBuilder, Shader, Surface, TypedBuffer,
-    },
+    types::{BindGroupBuilder, BindGroupLayoutBuilder, Shader, TypedBuffer},
     Gpu,
 };
 
 use self::mesh_renderer::MeshRenderer;
 
-pub struct SurfacePresentNode {
-    surface: Rc<RefCell<Surface>>,
+pub struct MsaaResolve {
     final_color: TextureHandle,
-    current_surface_texture: Option<SurfaceTexture>,
+    resolve_target: TextureHandle,
 }
 
-impl SurfacePresentNode {
-    pub fn new(final_color: TextureHandle, surface: Rc<RefCell<Surface>>) -> Self {
+impl MsaaResolve {
+    pub fn new(final_color: TextureHandle, resolve_target: TextureHandle) -> Self {
         Self {
-            surface,
             final_color,
-            current_surface_texture: None,
+            resolve_target,
         }
     }
 }
 
-impl Node for SurfacePresentNode {
+impl Node for MsaaResolve {
     fn label(&self) -> &str {
         type_name::<Self>()
     }
 
     fn draw(&mut self, ctx: crate::rendergraph::NodeExecutionContext) -> anyhow::Result<()> {
         let final_color = ctx
-            .resources
-            .get_texture_data(self.final_color)
+            .get_texture(self.final_color)
             .create_view(&Default::default());
 
-        let surface = &mut *self.surface.borrow_mut();
-        let output = surface.get_current_texture()?;
-        let output_view = output.texture.create_view(&Default::default());
+        let resolve_target = ctx
+            .get_texture(self.resolve_target)
+            .create_view(&Default::default());
 
         ctx.encoder.begin_render_pass(&RenderPassDescriptor {
             label: "surface_pass".into(),
             color_attachments: &[Some(RenderPassColorAttachment {
                 view: &final_color,
-                resolve_target: Some(&output_view),
+                resolve_target: Some(&resolve_target),
                 ops: Operations {
                     load: wgpu::LoadOp::Load,
                     store: wgpu::StoreOp::Store,
@@ -71,17 +65,6 @@ impl Node for SurfacePresentNode {
             depth_stencil_attachment: None,
             ..Default::default()
         });
-
-        self.current_surface_texture = Some(output);
-
-        Ok(())
-    }
-
-    fn finish(&mut self) -> anyhow::Result<()> {
-        if let Some(output) = self.current_surface_texture.take() {
-            tracing::info!("presenting");
-            output.present()
-        }
 
         Ok(())
     }
@@ -94,7 +77,10 @@ impl Node for SurfacePresentNode {
     }
 
     fn write_dependencies(&self) -> Vec<Dependency> {
-        vec![]
+        vec![Dependency::texture(
+            self.resolve_target,
+            TextureUsages::RENDER_ATTACHMENT,
+        )]
     }
 }
 
@@ -128,9 +114,16 @@ impl CameraNode {
         {
             let view = world_transform.inverse();
 
-            self.globals
-                .buffer
-                .write(&ctx.gpu.queue, 0, &[GlobalData { view, projection }]);
+            self.globals.buffer.write(
+                &ctx.gpu.queue,
+                0,
+                &[GlobalData {
+                    view,
+                    projection,
+                    camera_pos: world_transform.transform_point3(Vec3::ZERO),
+                    padding: 0.0,
+                }],
+            );
         }
 
         {
@@ -168,10 +161,9 @@ impl Node for CameraNode {
     }
 
     fn draw(&mut self, mut ctx: crate::rendergraph::NodeExecutionContext) -> anyhow::Result<()> {
-        let output = ctx.resources.get_texture_data(self.output);
+        let output = ctx.get_texture(self.output);
         let depth_view = ctx
-            .resources
-            .get_texture_data(self.depth_texture)
+            .get_texture(self.depth_texture)
             .create_view(&Default::default());
 
         self.update(&mut ctx, output.format());
@@ -238,6 +230,8 @@ pub struct ObjectData {
 pub struct GlobalData {
     view: Mat4,
     projection: Mat4,
+    camera_pos: Vec3,
+    padding: f32,
 }
 
 #[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
@@ -257,7 +251,7 @@ pub struct Globals {
 impl Globals {
     fn new(gpu: &Gpu) -> Globals {
         let layout = BindGroupLayoutBuilder::new("Globals")
-            .bind_uniform_buffer(ShaderStages::VERTEX)
+            .bind_uniform_buffer(ShaderStages::VERTEX | ShaderStages::FRAGMENT)
             .bind_uniform_buffer(ShaderStages::FRAGMENT)
             .build(gpu);
 

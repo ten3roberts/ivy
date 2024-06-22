@@ -1,21 +1,18 @@
 pub mod node;
 
-use image::{DynamicImage, RgbaImage};
+use image::{DynamicImage, ImageBuffer, RgbImage, RgbaImage};
 use itertools::Itertools;
 use ivy_assets::{Asset, AssetCache, AssetKey};
 use ivy_gltf::{DocumentData, GltfPrimitive};
+use wgpu::Texture;
 
-use crate::{
-    mesh::MeshData,
-    types::{material::Material, texture::Texture},
-    Gpu,
-};
+use crate::{material::Material, mesh_desc::MeshData, Gpu};
 
 /// Contains the gltf data
 pub struct Document {
     pub(crate) mesh_primitives: Vec<Vec<Asset<MeshData>>>,
     pub(crate) materials: Vec<Asset<Material>>,
-    pub(crate) images: Vec<Asset<Texture>>,
+    pub(crate) images: Vec<Asset<DynamicImage>>,
 }
 
 impl Document {
@@ -29,7 +26,11 @@ impl Document {
                 let image: DynamicImage = match image.format {
                     gltf::image::Format::R8 => todo!(),
                     gltf::image::Format::R8G8 => todo!(),
-                    gltf::image::Format::R8G8B8 => todo!(),
+                    gltf::image::Format::R8G8B8 => {
+                        RgbImage::from_raw(image.width, image.height, image.pixels)
+                            .unwrap()
+                            .into()
+                    }
                     gltf::image::Format::R8G8B8A8 => {
                         RgbaImage::from_raw(image.width, image.height, image.pixels)
                             .unwrap()
@@ -37,13 +38,33 @@ impl Document {
                     }
                     gltf::image::Format::R16 => todo!(),
                     gltf::image::Format::R16G16 => todo!(),
-                    gltf::image::Format::R16G16B16 => todo!(),
+                    gltf::image::Format::R16G16B16 => {
+                        let pixels = image
+                            .pixels
+                            .chunks_exact(6)
+                            .flat_map(|v| {
+                                let r = u16::from_le_bytes([v[0], v[1]]);
+                                let g = u16::from_le_bytes([v[2], v[3]]);
+                                let b = u16::from_le_bytes([v[4], v[5]]);
+
+                                [r, g, b]
+                            })
+                            .collect::<Vec<_>>();
+
+                        ImageBuffer::<image::Rgb<u16>, _>::from_raw(
+                            image.width,
+                            image.height,
+                            pixels,
+                        )
+                        .unwrap()
+                        .into()
+                    }
                     gltf::image::Format::R16G16B16A16 => todo!(),
                     gltf::image::Format::R32G32B32FLOAT => todo!(),
                     gltf::image::Format::R32G32B32A32FLOAT => todo!(),
                 };
 
-                anyhow::Ok(assets.insert(Texture::from_image(gpu, &image)))
+                anyhow::Ok(assets.insert(image))
             })
             .try_collect()?;
 
@@ -56,24 +77,24 @@ impl Document {
         let mesh_primitives: Vec<_> = data
             .document
             .meshes()
-            .map(|mesh| {
+            .map(|mesh| -> anyhow::Result<Vec<_>> {
                 mesh.primitives()
                     .map(|primitive| {
-                        assets.insert(MeshData::from_gltf(assets, &primitive, data.buffer_data()))
+                        Ok(assets.insert(MeshData::from_gltf(
+                            assets,
+                            &primitive,
+                            data.buffer_data(),
+                        )?))
                     })
-                    .collect_vec()
+                    .try_collect()
             })
-            .collect_vec();
+            .try_collect()?;
 
         Ok(Self {
             images: textures,
             mesh_primitives,
             materials,
         })
-    }
-
-    pub fn images(&self) -> &[Asset<Texture>] {
-        &self.images
     }
 
     pub fn materials(&self) -> &[Asset<Material>] {

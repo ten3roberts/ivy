@@ -3,14 +3,11 @@ use glam::Mat4;
 use ivy_assets::Asset;
 
 use crate::{
-    driver::WindowHandle, light::PointLight, material::MaterialDesc, mesh::MeshDesc,
-    shader::ShaderDesc, types::texture::Texture,
+    driver::WindowHandle, light::PointLight, material_desc::MaterialDesc, mesh_desc::MeshDesc,
+    shader::ShaderDesc,
 };
 
 component! {
-    /// The gpu texture to use for rendering
-    pub(crate) texture: Asset<Texture>,
-
     pub projection_matrix: Mat4 => [ Debuggable ],
 
     pub mesh: MeshDesc,

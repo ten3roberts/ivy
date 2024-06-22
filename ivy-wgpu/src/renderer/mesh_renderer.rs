@@ -9,7 +9,8 @@ use flax::{
     fetch::{Copied, Modified, Source, TransformFetch, Traverse},
     CommandBuffer, Component, Fetch, FetchExt, Query, World,
 };
-use glam::Mat4;
+use glam::{Mat4, Vec4Swizzles};
+use itertools::Itertools;
 use ivy_assets::{map::AssetMap, stored::Handle, Asset, AssetCache};
 use ivy_base::world_transform;
 use slab::Slab;
@@ -17,14 +18,13 @@ use wgpu::{BindGroup, BindGroupLayout, BufferUsages, RenderPass, ShaderStages, T
 
 use crate::{
     components::{material, mesh, mesh_primitive, shader},
-    material::MaterialDesc,
-    mesh::MeshDesc,
+    material::Material,
+    material_desc::MaterialDesc,
+    mesh::{Vertex, VertexDesc},
     mesh_buffer::{MeshBuffer, MeshHandle},
+    mesh_desc::MeshDesc,
     renderer::RendererStore,
-    types::{
-        material::Material, shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, Shader,
-        TypedBuffer, Vertex, VertexDesc,
-    },
+    types::{shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, Shader, TypedBuffer},
     Gpu,
 };
 
@@ -202,6 +202,16 @@ impl MeshRenderer {
 
                 let mut load_mesh = |v: &MeshDesc| {
                     let data = v.load_data(assets).unwrap();
+                    assert!(
+                        data.vertices()
+                            .iter()
+                            .all(|v| v.tangent.xyz().length() > 0.0),
+                        "{:?}",
+                        data.vertices()
+                            .iter()
+                            .map(|v| v.tangent.length())
+                            .collect_vec()
+                    );
                     Arc::new(
                         self.mesh_buffer
                             .insert(gpu, data.vertices(), data.indices()),
@@ -225,7 +235,7 @@ impl MeshRenderer {
                     }
                 };
 
-                let material = assets.load(&k.material);
+                let material: Asset<Material> = assets.load(&k.material);
 
                 let shader = self.shaders.entry(&k.shader).or_insert_with(|| {
                     store.shaders.insert(Shader::new(

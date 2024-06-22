@@ -31,8 +31,43 @@ slotmap::new_key_type! {
     pub struct BufferHandle;
 }
 
+#[derive(Debug)]
+pub enum TextureDesc {
+    External,
+    Managed(ManagedTextureDesc),
+}
+
+impl From<ManagedTextureDesc> for TextureDesc {
+    fn from(v: ManagedTextureDesc) -> Self {
+        Self::Managed(v)
+    }
+}
+
+impl TextureDesc {
+    pub fn managed(texture: ManagedTextureDesc) -> Self {
+        Self::Managed(texture)
+    }
+
+    pub fn as_managed(&self) -> Option<&ManagedTextureDesc> {
+        if let Self::Managed(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_managed_mut(&mut self) -> Option<&mut ManagedTextureDesc> {
+        if let Self::Managed(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+}
+
+/// Texture data is managed by the render graph
 #[derive(Debug, Clone)]
-pub struct TextureDesc {
+pub struct ManagedTextureDesc {
     pub label: Cow<'static, str>,
     pub extent: wgpu::Extent3d,
     pub dimension: TextureDimension,
@@ -112,7 +147,7 @@ impl<Handle: slotmap::Key, Data: SubResource> ResourceAllocator<Handle, Data> {
         Some(&self.bucket_data[*self.bucket_map.get(handle)?])
     }
 
-    fn reserve_resources<'a, I: Iterator<Item = (Handle, Data::Desc<'a>, Lifetime)>>(
+    fn allocate_resources<'a, I: Iterator<Item = (Handle, Data::Desc<'a>, Lifetime)>>(
         &mut self,
         gpu: &Gpu,
         resources: I,
@@ -152,9 +187,11 @@ impl<Handle: slotmap::Key, Data: SubResource> ResourceAllocator<Handle, Data> {
 
 pub struct Resources {
     pub(crate) dirty: bool,
+
     textures: SlotMap<TextureHandle, TextureDesc>,
+    managed_texture_data: ResourceAllocator<TextureHandle, Texture>,
+
     buffers: SlotMap<BufferHandle, BufferDesc>,
-    texture_data: ResourceAllocator<TextureHandle, Texture>,
     buffer_data: ResourceAllocator<BufferHandle, Buffer>,
 }
 
@@ -164,14 +201,14 @@ impl Resources {
             dirty: false,
             textures: Default::default(),
             buffers: Default::default(),
-            texture_data: ResourceAllocator::new(),
+            managed_texture_data: ResourceAllocator::new(),
             buffer_data: ResourceAllocator::new(),
         }
     }
 
-    pub fn insert_texture(&mut self, texture: TextureDesc) -> TextureHandle {
+    pub fn insert_texture(&mut self, texture: impl Into<TextureDesc>) -> TextureHandle {
         self.dirty = true;
-        self.textures.insert(texture)
+        self.textures.insert(texture.into())
     }
 
     pub fn get_texture_mut(&mut self, handle: TextureHandle) -> &mut TextureDesc {
@@ -183,8 +220,11 @@ impl Resources {
         &self.textures[handle]
     }
 
-    pub fn get_texture_data(&self, key: TextureHandle) -> &Texture {
-        self.texture_data.get(key).unwrap()
+    pub(super) fn get_texture_data(&self, key: TextureHandle) -> &Texture {
+        match self.textures.get(key).unwrap() {
+            TextureDesc::External => panic!("Must use external resources"),
+            TextureDesc::Managed(_) => self.managed_texture_data.get(key).unwrap(),
+        }
     }
 
     pub fn insert_buffer(&mut self, buffer: BufferDesc) -> BufferHandle {
@@ -222,6 +262,8 @@ impl Resources {
             });
 
         let iter = self.textures.iter().filter_map(|(handle, desc)| {
+            let desc = desc.as_managed()?;
+
             let Some(&lf) = lifetimes.get(&handle.into()) else {
                 panic!("No entry for {:?}", self.textures[handle]);
             };
@@ -244,7 +286,7 @@ impl Resources {
             ))
         });
 
-        self.texture_data.reserve_resources(gpu, iter);
+        self.managed_texture_data.allocate_resources(gpu, iter);
     }
 
     pub(crate) fn allocate_buffers(
@@ -289,7 +331,7 @@ impl Resources {
             ))
         });
 
-        self.buffer_data.reserve_resources(gpu, iter);
+        self.buffer_data.allocate_resources(gpu, iter);
     }
 }
 

@@ -1,167 +1,135 @@
-use std::iter::repeat;
+use glam::{Vec2, Vec3, Vec4};
+use ivy_assets::Asset;
+use wgpu::{
+    util::DeviceExt, vertex_attr_array, Buffer, RenderPass, VertexAttribute, VertexBufferLayout,
+};
 
-use glam::{vec2, vec3, Vec2, Vec3};
-use itertools::{izip, Itertools};
-use ivy_assets::{Asset, AssetCache};
-use ivy_gltf::{GltfPrimitive, GltfPrimitiveRef};
+use crate::material::Material;
 
-use crate::{material::MaterialDesc, types::Vertex};
+use super::Gpu;
 
-/// Cpu side mesh descriptor
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum MeshDesc {
-    Gltf(GltfPrimitive),
-    Content(Asset<MeshData>),
+#[repr(C)]
+#[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Debug, Clone)]
+pub struct Vertex {
+    pub pos: Vec3,
+    pub tex_coord: Vec2,
+    pub normal: Vec3,
+    pub tangent: Vec4,
 }
 
-impl From<GltfPrimitiveRef<'_>> for MeshDesc {
-    fn from(v: GltfPrimitiveRef) -> Self {
-        Self::Gltf(v.into())
-    }
+pub trait VertexDesc {
+    fn layout() -> VertexBufferLayout<'static>;
 }
 
-impl From<GltfPrimitive> for MeshDesc {
-    fn from(v: GltfPrimitive) -> Self {
-        Self::Gltf(v)
+impl Vertex {
+    pub const fn new(pos: Vec3, tex_coord: Vec2, normal: Vec3) -> Self {
+        Self {
+            pos,
+            tex_coord,
+            normal,
+            tangent: Vec4::ZERO,
+        }
     }
 }
+impl VertexDesc for Vertex {
+    fn layout() -> VertexBufferLayout<'static> {
+        static ATTRIBUTES: &[VertexAttribute] =
+            &vertex_attr_array![0 => Float32x3, 1 => Float32x2, 2 => Float32x3, 3 => Float32x4];
 
-impl From<Asset<MeshData>> for MeshDesc {
-    fn from(v: Asset<MeshData>) -> Self {
-        Self::Content(v)
-    }
-}
-
-impl MeshDesc {
-    pub fn gltf(mesh: impl Into<GltfPrimitive>) -> Self {
-        Self::Gltf(mesh.into())
-    }
-
-    pub fn content(content: Asset<MeshData>) -> Self {
-        Self::Content(content)
-    }
-
-    pub fn load_data(&self, assets: &AssetCache) -> anyhow::Result<Asset<MeshData>> {
-        match self {
-            MeshDesc::Gltf(mesh) => assets.try_load(mesh),
-            MeshDesc::Content(v) => Ok(v.clone()),
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: ATTRIBUTES,
         }
     }
 }
 
-// impl AssetKey<Mesh> for MeshDesc {
-//     type Error = anyhow::Error;
+#[repr(C)]
+#[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Debug, Clone)]
+pub struct Vertex2d {
+    pos: Vec2,
+    tex_coord: Vec2,
+}
 
-//     fn load(
-//         &self,
-//         assets: &ivy_assets::AssetCache,
-//     ) -> Result<ivy_assets::Asset<Mesh>, Self::Error> {
-//         match self {
-//             MeshDesc::Gltf(mesh) => assets.try_load(mesh).map_err(Into::into),
-//             MeshDesc::Content(v) => {
-//                 let mesh = Mesh::new(&assets.service(), v.vertices(), v.indices());
+impl Vertex2d {
+    pub const fn new(pos: Vec2, tex_coord: Vec2) -> Self {
+        Self { pos, tex_coord }
+    }
+}
+impl VertexDesc for Vertex2d {
+    fn layout() -> VertexBufferLayout<'static> {
+        static ATTRIBUTES: &[VertexAttribute] = &vertex_attr_array![0 => Float32x3, 1 => Float32x2];
 
-//                 Ok(assets.insert(mesh))
-//             }
-//         }
-//     }
-// }
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: ATTRIBUTES,
+        }
+    }
+}
 
+#[derive(Debug)]
 pub struct Primitive {
     pub first_index: u32,
     pub index_count: u32,
-    pub material: MaterialDesc,
+    pub material: Asset<Material>,
 }
 
-/// CPU created mesh data
-pub struct MeshData {
-    vertices: Box<[Vertex]>,
-    indices: Box<[u32]>,
+/// Flat mesh of vertices and indices
+///
+/// For Gltf, contains the vertices and indices of *all* primitives.
+#[derive(Debug)]
+pub struct Mesh {
+    vertex_count: u32,
+    index_count: u32,
+    vertex_buffer: Buffer,
+    index_buffer: Buffer,
 }
 
-impl MeshData {
-    pub fn new(vertices: Box<[Vertex]>, indices: Box<[u32]>) -> Self {
-        Self { vertices, indices }
-    }
+impl Mesh {
+    pub fn new(gpu: &Gpu, vertices: &[Vertex], indices: &[u32]) -> Self {
+        let vertex_buffer = gpu
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Vertex Buffer"),
+                contents: bytemuck::cast_slice(vertices),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
 
-    pub fn vertices(&self) -> &[Vertex] {
-        &self.vertices
-    }
-
-    pub fn indices(&self) -> &[u32] {
-        &self.indices
-    }
-
-    pub fn quad() -> Self {
-        let vertices = [
-            Vertex::new(vec3(-0.5, -0.5, 0.0), vec2(0.0, 1.0), Vec3::ONE),
-            Vertex::new(vec3(0.5, -0.5, 0.0), vec2(1.0, 1.0), Vec3::ONE),
-            Vertex::new(vec3(0.5, 0.5, 0.0), vec2(1.0, 0.0), Vec3::ONE),
-            Vertex::new(vec3(-0.5, 0.5, 0.0), vec2(0.0, 0.0), Vec3::ONE),
-        ];
-
-        let indices = [0, 1, 2, 2, 3, 0];
+        let index_buffer = gpu
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Index Buffer"),
+                contents: bytemuck::cast_slice(indices),
+                usage: wgpu::BufferUsages::INDEX,
+            });
 
         Self {
-            vertices: vertices.to_vec().into_boxed_slice(),
-            indices: indices.to_vec().into_boxed_slice(),
+            vertex_count: vertices.len() as u32,
+            index_count: indices.len() as u32,
+            vertex_buffer,
+            index_buffer,
         }
     }
 
-    pub fn cube() -> Self {
-        let vertices = [
-            Vertex::new(vec3(-0.5, -0.5, -0.5), vec2(0.0, 1.0), Vec3::ONE),
-            Vertex::new(vec3(0.5, -0.5, -0.5), vec2(1.0, 1.0), Vec3::ONE),
-            Vertex::new(vec3(0.5, 0.5, -0.5), vec2(1.0, 0.0), Vec3::ONE),
-            Vertex::new(vec3(-0.5, 0.5, -0.5), vec2(0.0, 0.0), Vec3::ONE),
-            Vertex::new(vec3(-0.5, -0.5, 0.5), vec2(0.0, 1.0), Vec3::ONE),
-            Vertex::new(vec3(0.5, -0.5, 0.5), vec2(1.0, 1.0), Vec3::ONE),
-            Vertex::new(vec3(0.5, 0.5, 0.5), vec2(1.0, 0.0), Vec3::ONE),
-            Vertex::new(vec3(-0.5, 0.5, 0.5), vec2(0.0, 0.0), Vec3::ONE),
-        ];
-
-        let indices = [
-            0, 1, 2, 2, 3, 0, 1, 5, 6, 6, 2, 1, 5, 4, 7, 7, 6, 5, 4, 0, 3, 3, 7, 4, 3, 2, 6, 6, 7,
-            3, 4, 5, 1, 1, 0, 4,
-        ];
-
-        Self {
-            vertices: vertices.to_vec().into_boxed_slice(),
-            indices: indices.to_vec().into_boxed_slice(),
-        }
+    pub fn bind<'a>(&'a self, render_pass: &mut RenderPass<'a>) {
+        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
     }
 
-    pub(crate) fn from_gltf(
-        _: &AssetCache,
-        primitive: &gltf::Primitive,
-        buffer_data: &[gltf::buffer::Data],
-    ) -> Self {
-        let reader = primitive.reader(|buffer| Some(&buffer_data[buffer.index()]));
+    pub fn index_count(&self) -> u32 {
+        self.index_count
+    }
 
-        let indices = reader
-            .read_indices()
-            .into_iter()
-            .flat_map(|val| val.into_u32())
-            .collect_vec();
+    pub fn vertex_count(&self) -> u32 {
+        self.vertex_count
+    }
 
-        let pos = reader
-            .read_positions()
-            .into_iter()
-            .flatten()
-            .map(Vec3::from);
+    pub fn vertex_buffer(&self) -> &Buffer {
+        &self.vertex_buffer
+    }
 
-        let normals = reader.read_normals().into_iter().flatten().map(Vec3::from);
-
-        let texcoord = reader
-            .read_tex_coords(0)
-            .into_iter()
-            .flat_map(|val| val.into_f32())
-            .map(Vec2::from);
-
-        let vertices = izip!(pos, normals, texcoord, repeat(Vec3::ZERO))
-            .map(|(pos, normal, textcoord, _tangent)| Vertex::new(pos, textcoord, normal))
-            .collect_vec();
-
-        Self::new(vertices.into_boxed_slice(), indices.into_boxed_slice())
+    pub fn index_buffer(&self) -> &Buffer {
+        &self.index_buffer
     }
 }

@@ -177,9 +177,9 @@ impl Surface {
         }
 
         if new_size.width > 0 && new_size.height > 0 {
-            // self.size = new_size;
             self.config.width = new_size.width;
             self.config.height = new_size.height;
+
             self.size = new_size;
             tracing::info!("reconfigure surface {:#?}", self.config);
             self.reconfigure(gpu);
