@@ -28,6 +28,7 @@ futures.workspace = true
 gltf.workspace = true
 slab.workspace = true
 slotmap.workspace = true
+mikktspace.workspace = true
 
 [dev-dependencies]
 tracing-subscriber.workspace = true

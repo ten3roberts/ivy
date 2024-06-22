@@ -1,9 +1,9 @@
-use std::{cell::RefCell, rc::Rc, time::Instant};
+use std::time::Instant;
 
 use flax::{
     component, BoxedSystem, Component, Entity, Mutable, Query, QueryBorrow, Schedule, System, World,
 };
-use glam::{uvec2, vec3, EulerRot, Mat4, Quat, Vec2, Vec3};
+use glam::{vec3, EulerRot, Mat4, Quat, Vec2, Vec3};
 use ivy_assets::AssetCache;
 use ivy_base::{
     app::{InitEvent, TickEvent},
@@ -24,12 +24,11 @@ use ivy_wgpu::{
     events::ResizedEvent,
     layer::GraphicsLayer,
     light::PointLight,
-    material::{MaterialData, MaterialDesc},
-    mesh::{MeshData, MeshDesc},
-    renderer::{CameraNode, RenderObjectBundle, SurfacePresentNode},
-    rendergraph::RenderGraph,
-    shader::ShaderDesc,
-    texture::TextureDesc,
+    material_desc::{MaterialData, MaterialDesc},
+    mesh_desc::{MeshData, MeshDesc},
+    renderer::{CameraNode, MsaaResolve, RenderObjectBundle},
+    rendergraph::{ExternalResources, ManagedTextureDesc, RenderGraph, TextureDesc},
+    shaders::PbrShaderKey,
     Gpu,
 };
 use ivy_wgpu_types::{PhysicalSize, Surface};
@@ -40,73 +39,21 @@ use wgpu::Extent3d;
 pub fn main() -> anyhow::Result<()> {
     registry()
         .with(EnvFilter::from_default_env())
-        .with(HierarchicalLayer::default().with_indent_lines(true))
+        .with(
+            HierarchicalLayer::default()
+                .with_indent_lines(true)
+                .with_deferred_spans(true),
+        )
         .init();
 
     let dt = 0.02;
 
-    let create_rendergraph = |_world: &mut World, gpu: &Gpu, surface: Surface| {
-        let size = surface.size();
-
-        let mut render_graph = RenderGraph::new();
-
-        let extent = wgpu::Extent3d {
-            width: size.width,
-            height: size.height,
-            depth_or_array_layers: 1,
-        };
-        let final_color =
-            render_graph
-                .resources
-                .insert_texture(ivy_wgpu::rendergraph::TextureDesc {
-                    label: "final_color".into(),
-                    extent,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: surface.surface_config().format,
-                    mip_level_count: 1,
-                    sample_count: 4,
-                });
-
-        let depth_texture =
-            render_graph
-                .resources
-                .insert_texture(ivy_wgpu::rendergraph::TextureDesc {
-                    label: "depth_texture".into(),
-                    extent,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: wgpu::TextureFormat::Depth24Plus,
-                    mip_level_count: 1,
-                    sample_count: 4,
-                });
-
-        let surface = Rc::new(RefCell::new(surface));
-        render_graph.add_node(CameraNode::new(gpu, depth_texture, final_color));
-        render_graph.add_node(SurfacePresentNode::new(final_color, surface.clone()));
-
-        let on_resize =
-            move |gpu: &Gpu, render_graph: &mut RenderGraph, size: PhysicalSize<u32>| {
-                let new_extent = Extent3d {
-                    width: size.width,
-                    height: size.height,
-                    depth_or_array_layers: 1,
-                };
-
-                surface.borrow_mut().resize(&gpu, size);
-
-                render_graph.resources.get_texture_mut(final_color).extent = new_extent;
-                render_graph.resources.get_texture_mut(depth_texture).extent = new_extent;
-            };
-
-        Ok((
-            render_graph,
-            Box::new(on_resize) as Box<dyn FnMut(&Gpu, &mut RenderGraph, PhysicalSize<u32>)>,
-        ))
-    };
-
     if let Err(err) = App::builder()
         .with_driver(WinitDriver::new())
         .with_layer(EngineLayer::new())
-        .with_layer(GraphicsLayer::new(create_rendergraph))
+        .with_layer(GraphicsLayer::new(|world, gpu, surface| {
+            Ok(RenderGraphRenderer::new(world, gpu, surface))
+        }))
         .with_layer(InputLayer::new())
         .with_layer(LogicLayer::new())
         .with_layer(Update::new(
@@ -147,77 +94,112 @@ impl LogicLayer {
     fn setup_assets(&mut self, world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
         let document = Document::new(assets, "models/shapes.glb")?;
 
-        for x in 0..10 {
-            for y in 0..10 {
-                for z in 0..10 {
-                    document
-                        .node(0)
-                        .unwrap()
-                        .mount(assets, &mut Entity::builder())
-                        .mount(TransformBundle::new(
-                            vec3(x as f32 * 2.5, y as f32 * 2.5, 5.0 + z as f32 * 2.5),
-                            Quat::IDENTITY,
-                            Vec3::ONE,
-                        ))
-                        .spawn(world);
-                }
-            }
+        // for x in 0..10 {
+        //     for y in 0..10 {
+        //         for z in 0..10 {
+        //             document
+        //                 .node(0)
+        //                 .unwrap()
+        //                 .mount(assets, &mut Entity::builder())
+        //                 .mount(TransformBundle::new(
+        //                     vec3(x as f32 * 2.5, y as f32 * 2.5, 5.0 + z as f32 * 2.5),
+        //                     Quat::IDENTITY,
+        //                     Vec3::ONE,
+        //                 ))
+        //                 .spawn(world);
+        //         }
+        //     }
+        // }
+
+        let document = Document::new(assets, "models/sphere.glb")?;
+        for (i, node) in ["Sphere", "SphereMetal", "SphereGold"].iter().enumerate() {
+            document
+                .find_node(node)
+                .unwrap()
+                .mount(assets, &mut Entity::builder())
+                .mount(TransformBundle::new(
+                    vec3(i as f32 * 3.0, 0.0, 0.0),
+                    Quat::IDENTITY,
+                    Vec3::ONE,
+                ))
+                .spawn(world);
         }
+
+        let document = Document::new(assets, "models/crystal.glb")?;
+
+        document
+            .node(0)
+            .unwrap()
+            .mount(assets, &mut Entity::builder())
+            .mount(TransformBundle::new(
+                vec3(5.0, 0.0, 5.0),
+                Quat::IDENTITY,
+                Vec3::ONE,
+            ))
+            .spawn(world);
 
         Ok(())
     }
 
     fn setup_objects(&mut self, world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
         self.setup_assets(world, assets)?;
-        let shader = assets.insert(ShaderDesc::new(
-            "diffuse",
-            include_str!("../assets/shaders/diffuse.wgsl"),
-        ));
+        let shader = assets.load(&PbrShaderKey);
 
         let quad_mesh = MeshDesc::content(assets.insert(MeshData::quad()));
         let cube_mesh = MeshDesc::content(assets.insert(MeshData::cube()));
 
-        let material = MaterialDesc::content(assets.insert(MaterialData::new(TextureDesc::path(
-            "assets/textures/statue.jpg",
-        ))));
+        // let material = MaterialDesc::content(assets.insert(MaterialData::new(
+        //     ivy_wgpu::texture::TextureDesc::path("assets/textures/statue.jpg"),
+        //     ivy_wgpu::texture::TextureDesc::default_normal(),
+        //     0.4,
+        //     0.0,
+        // )));
 
-        let material2 = MaterialDesc::content(assets.insert(MaterialData::new(TextureDesc::path(
-            "assets/textures/grid.png",
-        ))));
+        // let material2 = MaterialDesc::content(assets.insert(MaterialData::new(
+        //     ivy_wgpu::texture::TextureDesc::path("assets/textures/grid.png"),
+        //     ivy_wgpu::texture::TextureDesc::default_normal(),
+        //     0.4,
+        //     0.0,
+        // )));
+
+        // Entity::builder()
+        //     .mount(RenderObjectBundle::new(
+        //         quad_mesh.clone(),
+        //         material.clone(),
+        //         shader.clone(),
+        //     ))
+        //     .mount(TransformBundle::new(
+        //         vec3(0.0, 0.0, 2.0),
+        //         Quat::IDENTITY,
+        //         Vec3::ONE,
+        //     ))
+        //     .spawn(world);
+
+        // let entity = Entity::builder()
+        //     .mount(RenderObjectBundle::new(cube_mesh, material2, shader))
+        //     .mount(TransformBundle::new(
+        //         vec3(1.0, 0.0, 2.0),
+        //         Quat::from_euler(glam::EulerRot::ZYX, 1.0, 0.0, 0.0),
+        //         Vec3::ONE,
+        //     ))
+        //     .spawn(world);
 
         Entity::builder()
-            .mount(RenderObjectBundle::new(
-                quad_mesh.clone(),
-                material.clone(),
-                shader.clone(),
-            ))
-            .mount(TransformBundle::new(
-                vec3(0.0, 0.0, 2.0),
-                Quat::IDENTITY,
-                Vec3::ONE,
-            ))
+            .mount(TransformBundle::default().with_position(vec3(0.0, 100.0, 0.0)))
+            .set(light(), PointLight::new(Srgb::new(1.0, 1.0, 1.0), 100000.0))
             .spawn(world);
 
-        let entity = Entity::builder()
-            .mount(RenderObjectBundle::new(cube_mesh, material2, shader))
-            .mount(TransformBundle::new(
-                vec3(1.0, 0.0, 2.0),
-                Quat::from_euler(glam::EulerRot::ZYX, 1.0, 0.0, 0.0),
-                Vec3::ONE,
-            ))
-            .spawn(world);
+        // Entity::builder()
+        //     .mount(TransformBundle::default().with_position(vec3(0.0, 20.0, 0.0)))
+        //     .set(light(), PointLight::new(Srgb::new(0.0, 1.0, 1.0), 50.0))
+        //     .spawn(world);
 
-        Entity::builder()
-            .mount(TransformBundle::default().with_position(vec3(0.0, 20.0, 0.0)))
-            .set(light(), PointLight::new(Srgb::new(0.0, 1.0, 1.0), 10.0))
-            .spawn(world);
+        // Entity::builder()
+        //     .mount(TransformBundle::default().with_position(vec3(10.0, 10.0, 0.0)))
+        //     .set(light(), PointLight::new(Srgb::new(1.0, 0.0, 0.0), 40.0))
+        //     .spawn(world);
 
-        Entity::builder()
-            .mount(TransformBundle::default().with_position(vec3(10.0, 10.0, 0.0)))
-            .set(light(), PointLight::new(Srgb::new(1.0, 0.0, 0.0), 10.0))
-            .spawn(world);
-
-        self.entity = Some(entity);
+        // self.entity = Some(entity);
 
         Ok(())
     }
@@ -237,7 +219,7 @@ impl Layer for LogicLayer {
             let t = start_time.elapsed().as_secs_f32();
             if let Some(entity) = this.entity {
                 world
-                    .set(entity, rotation(), Quat::from_axis_angle(Vec3::Y, t))
+                    .set(entity, rotation(), Quat::from_axis_angle(Vec3::X, t))
                     .unwrap();
             }
             Ok(())
@@ -445,4 +427,103 @@ fn movement_system(dt: f32) -> BoxedSystem {
             *position += *rotation * movement * camera_speed * dt;
         })
         .boxed()
+}
+
+struct RenderGraphRenderer {
+    render_graph: RenderGraph,
+    surface: Surface,
+    depth_texture: ivy_wgpu::rendergraph::TextureHandle,
+    final_color: ivy_wgpu::rendergraph::TextureHandle,
+    surface_texture: ivy_wgpu::rendergraph::TextureHandle,
+}
+
+impl RenderGraphRenderer {
+    pub fn new(_world: &mut World, gpu: &Gpu, surface: Surface) -> Self {
+        let size = surface.size();
+
+        let mut render_graph = RenderGraph::new();
+
+        let extent = wgpu::Extent3d {
+            width: size.width,
+            height: size.height,
+            depth_or_array_layers: 1,
+        };
+
+        let final_color = render_graph.resources.insert_texture(ManagedTextureDesc {
+            label: "final_color".into(),
+            extent,
+            dimension: wgpu::TextureDimension::D2,
+            format: surface.surface_config().format,
+            mip_level_count: 1,
+            sample_count: 4,
+        });
+
+        let depth_texture = render_graph.resources.insert_texture(ManagedTextureDesc {
+            label: "depth_texture".into(),
+            extent,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Depth24Plus,
+            mip_level_count: 1,
+            sample_count: 4,
+        });
+
+        let surface_texture = render_graph.resources.insert_texture(TextureDesc::External);
+
+        render_graph.add_node(CameraNode::new(gpu, depth_texture, final_color));
+        render_graph.add_node(MsaaResolve::new(final_color, surface_texture));
+
+        Self {
+            render_graph,
+            surface,
+            final_color,
+            surface_texture,
+            depth_texture,
+        }
+    }
+}
+
+impl ivy_wgpu::layer::Renderer for RenderGraphRenderer {
+    fn draw(
+        &mut self,
+        world: &mut World,
+        assets: &AssetCache,
+        gpu: &Gpu,
+        queue: &wgpu::Queue,
+    ) -> anyhow::Result<()> {
+        let surface_texture = self.surface.get_current_texture()?;
+
+        let mut external_resources = ExternalResources::new();
+        external_resources.insert_texture(self.surface_texture, &surface_texture.texture);
+
+        self.render_graph
+            .draw(gpu, queue, world, assets, &external_resources)?;
+
+        surface_texture.present();
+
+        Ok(())
+    }
+
+    fn on_resize(&mut self, gpu: &Gpu, size: PhysicalSize<u32>) {
+        let new_extent = Extent3d {
+            width: size.width,
+            height: size.height,
+            depth_or_array_layers: 1,
+        };
+
+        self.surface.resize(gpu, size);
+
+        self.render_graph
+            .resources
+            .get_texture_mut(self.final_color)
+            .as_managed_mut()
+            .unwrap()
+            .extent = new_extent;
+
+        self.render_graph
+            .resources
+            .get_texture_mut(self.depth_texture)
+            .as_managed_mut()
+            .unwrap()
+            .extent = new_extent;
+    }
 }

@@ -1,14 +1,14 @@
 mod resources;
 use flax::World;
 use ivy_assets::AssetCache;
-use ivy_base::Extent;
 pub use resources::*;
+use slotmap::SecondaryMap;
 
 use std::{collections::HashMap, mem};
 
 use itertools::Itertools;
 use ivy_wgpu_types::Gpu;
-use wgpu::{BufferUsages, CommandEncoder, Queue, TextureUsages};
+use wgpu::{BufferUsages, CommandEncoder, Queue, Texture, TextureUsages};
 
 pub struct RenderGraph {
     nodes: Vec<Box<dyn Node>>,
@@ -24,6 +24,16 @@ pub struct NodeExecutionContext<'a> {
     pub encoder: &'a mut CommandEncoder,
     pub assets: &'a AssetCache,
     pub world: &'a mut World,
+    external_resources: &'a ExternalResources<'a>,
+}
+
+impl<'a> NodeExecutionContext<'a> {
+    pub fn get_texture(&self, handle: TextureHandle) -> &'a Texture {
+        match self.external_resources.external_textures.get(handle) {
+            Some(v) => v,
+            None => self.resources.get_texture_data(handle),
+        }
+    }
 }
 
 pub trait Node: 'static {
@@ -31,9 +41,6 @@ pub trait Node: 'static {
     fn draw(&mut self, ctx: NodeExecutionContext) -> anyhow::Result<()>;
     fn read_dependencies(&self) -> Vec<Dependency>;
     fn write_dependencies(&self) -> Vec<Dependency>;
-    fn finish(&mut self) -> anyhow::Result<()> {
-        Ok(())
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -188,14 +195,16 @@ impl RenderGraph {
         self.order = Some(order);
     }
 
-    pub fn execute(
+    pub fn draw(
         &mut self,
         gpu: &Gpu,
         queue: &Queue,
         world: &mut World,
         assets: &AssetCache,
+        external_resources: &ExternalResources,
     ) -> anyhow::Result<()> {
-        let _span = tracing::info_span!("execute").entered();
+        let _span = tracing::info_span!("RenderGraph::draw").entered();
+
         if self.order.is_none() {
             self.build();
         }
@@ -217,15 +226,11 @@ impl RenderGraph {
                 encoder: &mut encoder,
                 assets,
                 world,
+                external_resources,
             })?;
         }
 
         queue.submit([encoder.finish()]);
-
-        for &idx in order {
-            let node = &mut self.nodes[idx];
-            node.finish()?;
-        }
 
         Ok(())
     }
@@ -234,6 +239,21 @@ impl RenderGraph {
 impl Default for RenderGraph {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[derive(Default)]
+pub struct ExternalResources<'a> {
+    external_textures: SecondaryMap<TextureHandle, &'a Texture>,
+}
+
+impl<'a> ExternalResources<'a> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn insert_texture(&mut self, handle: TextureHandle, texture: &'a Texture) {
+        self.external_textures.insert(handle, texture);
     }
 }
 
@@ -311,8 +331,8 @@ mod test {
     };
 
     use crate::rendergraph::{
-        BufferDesc, BufferHandle, Dependency, Node, NodeExecutionContext, RenderGraph, TextureDesc,
-        TextureHandle,
+        BufferDesc, BufferHandle, Dependency, ManagedTextureDesc, Node, NodeExecutionContext,
+        RenderGraph, TextureDesc, TextureHandle,
     };
 
     #[test]
@@ -480,7 +500,7 @@ mod test {
             depth_or_array_layers: 1,
         };
 
-        let texture = render_graph.resources.insert_texture(TextureDesc {
+        let texture = render_graph.resources.insert_texture(ManagedTextureDesc {
             label: "src_texture".into(),
             extent,
             dimension: TextureDimension::D2,
@@ -489,7 +509,7 @@ mod test {
             sample_count: 1,
         });
 
-        let texture2 = render_graph.resources.insert_texture(TextureDesc {
+        let texture2 = render_graph.resources.insert_texture(ManagedTextureDesc {
             label: "texture_2".into(),
             extent,
             dimension: TextureDimension::D2,
@@ -519,10 +539,11 @@ mod test {
         render_graph.add_node(WriteIntoTexture::new(buffer, texture2));
 
         render_graph
-            .execute(
+            .draw(
                 &gpu,
                 &gpu.queue,
                 &mut Default::default(),
+                &Default::default(),
                 &Default::default(),
             )
             .unwrap();

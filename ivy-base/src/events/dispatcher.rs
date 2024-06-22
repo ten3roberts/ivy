@@ -54,6 +54,15 @@ where
     }
 }
 
+impl<T> Default for EventDispatcher<T>
+where
+    T: Event,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T: Event> AnyEventDispatcher for EventDispatcher<T> {
     fn cleanup(&mut self) {
         self.subscribers.retain(|val| !val.sender.is_disconnected())

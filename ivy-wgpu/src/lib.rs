@@ -3,15 +3,17 @@ pub mod driver;
 pub mod events;
 pub mod gltf;
 pub mod layer;
+pub mod light;
 pub mod material;
+pub mod material_desc;
 pub mod mesh;
 pub mod mesh_buffer;
+pub mod mesh_desc;
 pub mod renderer;
 pub mod rendergraph;
 pub mod shader;
 pub mod shaders;
 pub mod texture;
-pub mod light;
 
 pub use ivy_wgpu_types as types;
 pub use ivy_wgpu_types::Gpu;
