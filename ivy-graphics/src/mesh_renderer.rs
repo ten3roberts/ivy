@@ -7,7 +7,7 @@ use ash::vk::{DescriptorSet, IndexType};
 use flax::{entity_ids, Component, Fetch, FetchExt, Opt, OptOr, Query, World};
 use glam::{Mat4, Quat, Vec3, Vec4};
 use ivy_assets::{Asset, AssetCache};
-use ivy_base::{color, position, rotation, scale, Color, ColorExt};
+use ivy_core::{color, position, rotation, scale, Color, ColorExt};
 use ivy_vulkan::{context::SharedVulkanContext, descriptors::IntoSet, PassInfo, Shader};
 
 /// Draw a static mesh with a material

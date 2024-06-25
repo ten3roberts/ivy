@@ -2,7 +2,7 @@ use std::ops::Deref;
 
 use flax::{Fetch, World};
 use glam::{Mat4, Vec3};
-use ivy_base::{DrawGizmos, Gizmos, Line};
+use ivy_core::{DrawGizmos, Gizmos, Line};
 
 mod cast;
 pub use cast::*;
@@ -158,7 +158,7 @@ impl Ray {
 }
 
 impl DrawGizmos for Ray {
-    fn draw_gizmos(&self, gizmos: &mut Gizmos, color: ivy_base::Color) {
+    fn draw_gizmos(&self, gizmos: &mut Gizmos, color: ivy_core::Color) {
         gizmos.draw(
             Line {
                 origin: self.origin,

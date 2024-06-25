@@ -20,7 +20,7 @@ ezy = { version = "0.1.1", features = ["glam"] }
 flax.workspace = true
 flume.workspace = true
 glam.workspace = true
-ivy-base = { path = "../ivy-base", version = "0.10.0" }
+ivy-core = { path = "../ivy-core", version = "0.10.0" }
 ivy-assets = { path = "../ivy-assets", version = "0.10.0" }
 ordered-float = "3.0.0"
 palette.workspace = true

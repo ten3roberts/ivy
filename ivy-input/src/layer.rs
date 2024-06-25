@@ -2,7 +2,7 @@ use flax::{
     fetch::{entity_refs, EntityRefs},
     Mutable, Query,
 };
-use ivy_base::{app::TickEvent, Layer};
+use ivy_core::{app::TickEvent, Layer};
 
 use crate::{
     components::input_state,
@@ -45,7 +45,7 @@ impl Layer for InputLayer {
         &mut self,
         _: &mut flax::World,
         _: &ivy_assets::AssetCache,
-        mut events: ivy_base::layer::events::EventRegisterContext<Self>,
+        mut events: ivy_core::layer::events::EventRegisterContext<Self>,
     ) -> anyhow::Result<()>
     where
         Self: Sized,

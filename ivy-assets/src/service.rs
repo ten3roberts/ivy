@@ -1,6 +1,8 @@
 use std::fs::File;
-use std::io::Read;
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
+
+use thiserror::Error;
 
 /// A service is registered with the asset cache and is used to load assets.
 pub trait Service: 'static + Send + Sync + Downcast {}
@@ -20,7 +22,15 @@ impl<T: Service> Downcast for T {
     }
 }
 
-// Some default services
+#[derive(Debug, Error)]
+#[error("Failed to load asset from {path:?}")]
+pub struct FsAssetError {
+    path: PathBuf,
+    #[source]
+    error: io::Error,
+}
+
+/// Load assets from a configured asset root
 pub struct FileSystemMapService {
     pub root: PathBuf,
 }
@@ -40,17 +50,33 @@ impl FileSystemMapService {
         Self { root: root.into() }
     }
 
-    pub fn load_bytes(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, std::io::Error> {
-        let mut file = File::open(self.root.join(path))?;
-        let mut bytes = Vec::new();
-        file.read_to_end(&mut bytes)?;
-        Ok(bytes)
+    pub fn load_bytes(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsAssetError> {
+        let path = path.as_ref();
+        let inner = || {
+            let mut file = File::open(self.root.join(path))?;
+            let mut bytes = Vec::new();
+            file.read_to_end(&mut bytes)?;
+            Ok(bytes)
+        };
+
+        inner().map_err(|err| FsAssetError {
+            path: path.into(),
+            error: err,
+        })
     }
 
-    pub fn load_string(&self, path: impl AsRef<Path>) -> Result<String, std::io::Error> {
-        let mut file = File::open(self.root.join(path))?;
-        let mut string = String::new();
-        file.read_to_string(&mut string)?;
-        Ok(string)
+    pub fn load_string(&self, path: impl AsRef<Path>) -> Result<String, FsAssetError> {
+        let path = path.as_ref();
+        let inner = || {
+            let mut file = File::open(self.root.join(path))?;
+            let mut string = String::new();
+            file.read_to_string(&mut string)?;
+            Ok(string)
+        };
+
+        inner().map_err(|err| FsAssetError {
+            path: path.into(),
+            error: err,
+        })
     }
 }

@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc, time::Instant};
 
 use flax::{components::name, Entity};
 use glam::{vec2, Vec2};
-use ivy_base::{driver::Driver, App};
+use ivy_core::{driver::Driver, App};
 use ivy_input::types::{
     CursorEntered, CursorLeft, CursorMoved, KeyboardInput, MouseInput, MouseMotion, ScrollInput,
 };
@@ -34,7 +34,7 @@ impl Default for WinitDriver {
 }
 
 impl Driver for WinitDriver {
-    fn enter(&mut self, app: &mut ivy_base::App) -> anyhow::Result<()> {
+    fn enter(&mut self, app: &mut ivy_core::App) -> anyhow::Result<()> {
         let event_loop = EventLoop::new()?;
 
         event_loop.run_app(&mut WinitEventHandler {

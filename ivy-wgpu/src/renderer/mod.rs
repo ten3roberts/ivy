@@ -6,7 +6,7 @@ use flax::Query;
 use glam::{vec3, Mat4, Vec3, Vec4};
 use itertools::Itertools;
 use ivy_assets::{stored::Store, Asset};
-use ivy_base::{main_camera, world_transform, Bundle};
+use ivy_core::{main_camera, world_transform, Bundle};
 use wgpu::{
     BindGroup, BufferUsages, Operations, RenderPassColorAttachment, RenderPassDescriptor,
     ShaderStages, TextureFormat, TextureUsages,

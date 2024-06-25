@@ -8,7 +8,7 @@ use ash::vk::{BlendFactor, CullModeFlags, DescriptorSet, IndexType, ShaderStageF
 use flax::{Component, Query, World};
 use glam::Vec3;
 use ivy_assets::AssetCache;
-use ivy_base::{main_camera, position, rotation};
+use ivy_core::{main_camera, position, rotation};
 use ivy_vulkan::{
     context::{SharedVulkanContext, VulkanContextService},
     descriptors::{DescriptorBuilder, IntoSet},

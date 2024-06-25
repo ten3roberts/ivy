@@ -3,7 +3,7 @@ use flax::{Entity, EntityBuilder, EntityRef, World};
 pub use fontdue::layout::{HorizontalAlign, VerticalAlign};
 use glam::Vec2;
 use ivy_assets::Asset;
-use ivy_base::{color, position, size, visible, Bundle, Color, Events, Visible};
+use ivy_core::{color, position, size, visible, Bundle, Color, Events, Visible};
 use ivy_graphics::components::camera;
 use std::borrow::Cow;
 

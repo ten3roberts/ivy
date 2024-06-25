@@ -1258,33 +1258,15 @@ checksum = "49f1f14873335454500d59611f1cf4a4b0f786f9ac11f4312a78e4cf2566695b"
 name = "ivy-assets"
 version = "0.10.0"
 dependencies = [
+ "anyhow",
  "atomic_refcell",
  "dashmap",
  "flume",
+ "futures",
  "image",
+ "ivy-profiling",
  "parking_lot",
  "slotmap",
- "tracing",
-]
-
-[[package]]
-name = "ivy-base"
-version = "0.10.3"
-dependencies = [
- "anyhow",
- "downcast-rs",
- "ezy",
- "flax",
- "flume",
- "glam",
- "ivy-assets",
- "ivy-random",
- "palette",
- "parking_lot",
- "rand",
- "rand_distr",
- "records",
- "serde",
  "thiserror",
  "tracing",
 ]
@@ -1302,12 +1284,37 @@ dependencies = [
  "flume",
  "glam",
  "ivy-assets",
- "ivy-base",
+ "ivy-core",
  "ordered-float",
  "palette",
  "rayon",
  "slotmap",
  "smallvec",
+ "tracing",
+]
+
+[[package]]
+name = "ivy-core"
+version = "0.10.3"
+dependencies = [
+ "anyhow",
+ "downcast-rs",
+ "ezy",
+ "flax",
+ "flume",
+ "glam",
+ "ivy-assets",
+ "ivy-profiling",
+ "ivy-random",
+ "palette",
+ "parking_lot",
+ "puffin",
+ "puffin_http",
+ "rand",
+ "rand_distr",
+ "records",
+ "serde",
+ "thiserror",
  "tracing",
 ]
 
@@ -1326,8 +1333,8 @@ dependencies = [
  "glfw",
  "image",
  "ivy-assets",
- "ivy-base",
  "ivy-collision",
+ "ivy-core",
  "ivy-gltf",
  "ivy-graphics",
  "ivy-image",
@@ -1383,7 +1390,7 @@ dependencies = [
  "gltf",
  "itertools 0.13.0",
  "ivy-assets",
- "ivy-base",
+ "ivy-core",
  "ivy-image",
  "ivy-input",
  "ivy-vulkan",
@@ -1421,7 +1428,7 @@ dependencies = [
  "glam",
  "glfw",
  "ivy-assets",
- "ivy-base",
+ "ivy-core",
  "ivy-window",
  "thiserror",
  "tracing",
@@ -1437,8 +1444,8 @@ dependencies = [
  "flume",
  "glam",
  "ivy-assets",
- "ivy-base",
  "ivy-collision",
+ "ivy-core",
  "ivy-graphics",
  "ivy-random",
  "rayon",
@@ -1457,7 +1464,7 @@ dependencies = [
  "glam",
  "itertools 0.13.0",
  "ivy-assets",
- "ivy-base",
+ "ivy-core",
  "ivy-graphics",
  "ivy-rendergraph",
  "ivy-vulkan",
@@ -1470,7 +1477,7 @@ version = "0.10.3"
 dependencies = [
  "flax",
  "ivy-assets",
- "ivy-base",
+ "ivy-core",
  "ivy-graphics",
  "ivy-postprocessing",
  "ivy-rendergraph",
@@ -1479,6 +1486,13 @@ dependencies = [
  "parking_lot",
  "slotmap",
  "thiserror",
+]
+
+[[package]]
+name = "ivy-profiling"
+version = "0.1.0"
+dependencies = [
+ "puffin",
 ]
 
 [[package]]
@@ -1498,7 +1512,7 @@ dependencies = [
  "glam",
  "itertools 0.13.0",
  "ivy-assets",
- "ivy-base",
+ "ivy-core",
  "ivy-graphics",
  "ivy-vulkan",
  "ivy-window",
@@ -1513,7 +1527,7 @@ version = "0.1.0"
 dependencies = [
  "flax",
  "ivy-assets",
- "ivy-base",
+ "ivy-core",
  "ivy-gltf",
  "ivy-wgpu",
 ]
@@ -1530,7 +1544,7 @@ dependencies = [
  "glam",
  "glfw",
  "ivy-assets",
- "ivy-base",
+ "ivy-core",
  "ivy-graphics",
  "ivy-image",
  "ivy-input",
@@ -1552,7 +1566,7 @@ dependencies = [
  "glfw",
  "gpu-allocator 0.17.0",
  "ivy-assets",
- "ivy-base",
+ "ivy-core",
  "ivy-image",
  "log",
  "parking_lot",
@@ -1577,7 +1591,7 @@ dependencies = [
  "image",
  "itertools 0.13.0",
  "ivy-assets",
- "ivy-base",
+ "ivy-core",
  "ivy-gltf",
  "ivy-input",
  "ivy-wgpu-types",
@@ -1606,7 +1620,7 @@ dependencies = [
  "image",
  "itertools 0.13.0",
  "ivy-assets",
- "ivy-base",
+ "ivy-core",
  "puffin",
  "puffin_http",
  "slab",
@@ -1622,7 +1636,7 @@ dependencies = [
  "ash 0.36.0+1.3.206",
  "glam",
  "glfw",
- "ivy-base",
+ "ivy-core",
  "ivy-vulkan",
  "parking_lot",
  "thiserror",

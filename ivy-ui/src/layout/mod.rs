@@ -47,7 +47,7 @@ impl WidgetLayout {
                 apply_constraints(world, &child, position, size, is_visible)?;
 
                 let child_size = child
-                    .get(ivy_base::components::size())
+                    .get(ivy_core::components::size())
                     .expect("Missing size");
                 // let child_size = world.try_get::<Vec2>(child)?;
 
@@ -84,8 +84,8 @@ impl WidgetLayout {
                     apply_constraints(world, &child, position, size, is_visible)?;
                     {
                         let mut child_position =
-                            child.get_mut(ivy_base::components::position()).unwrap();
-                        let child_size = child.get_copy(ivy_base::components::size()).unwrap();
+                            child.get_mut(ivy_core::components::position()).unwrap();
+                        let child_size = child.get_copy(ivy_core::components::size()).unwrap();
 
                         *child_position = cursor.extend(0.0); //+ Position2D(**child_size);
                         cursor.x += child_size.x * 2.0 + self.spacing.x;
@@ -108,8 +108,8 @@ impl WidgetLayout {
                     apply_constraints(world, &child, position, size, is_visible)?;
                     {
                         let mut child_position =
-                            child.get_mut(ivy_base::components::position()).unwrap();
-                        let child_size = child.get_copy(ivy_base::components::size()).unwrap();
+                            child.get_mut(ivy_core::components::position()).unwrap();
+                        let child_size = child.get_copy(ivy_core::components::size()).unwrap();
 
                         // let mut query = world.try_query_one::<(&mut Position2D, &Size2D)>(child)?;
 

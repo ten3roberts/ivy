@@ -2,7 +2,7 @@ use crate::{Edge, EdgeKind, Node, NodeIndex, NodeKind, ResourceKind, Result};
 use flax::World;
 use itertools::Itertools;
 use ivy_assets::AssetCache;
-use ivy_base::Extent;
+use ivy_core::Extent;
 use ivy_vulkan::{
     commands::CommandBuffer,
     context::SharedVulkanContext,

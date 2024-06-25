@@ -12,7 +12,7 @@ readme = "../README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ivy-base = { path = "../ivy-base", version = "0.10.0" }
+ivy-core = { path = "../ivy-core", version = "0.10.0" }
 ivy-random = { path = "../ivy-random", version = "0.10.0" }
 ivy-graphics = { path = "../ivy-graphics", version = "0.10.0" }
 ivy-collision = { path = "../ivy-collision", version = "0.10.0" }

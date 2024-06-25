@@ -1,0 +1,10 @@
+[package]
+name = "ivy-profiling"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+puffin = { workspace = true, optional = true }
+
+[features]
+profile_with_puffin = [ "puffin" ]

@@ -1,6 +1,6 @@
 use flax::{component::ComponentValue};
 use glam::Vec3;
-use ivy_base::{Color, Cube, DrawGizmos, Events, Gizmos};
+use ivy_core::{Color, Cube, DrawGizmos, Events, Gizmos};
 use ordered_float::OrderedFloat;
 use palette::{
     named::{BLUE, GREEN, YELLOW},

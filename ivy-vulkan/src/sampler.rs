@@ -2,7 +2,7 @@ use crate::context::{SharedVulkanContext, VulkanContextService};
 use crate::descriptors::DescriptorBindable;
 use crate::{Error, Result, Texture};
 use ash::vk;
-use ivy_assets::{Asset, AssetKey};
+use ivy_assets::{Asset, AssetDesc};
 #[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
 
@@ -182,7 +182,7 @@ impl DescriptorBindable for (Texture, Sampler) {
     }
 }
 
-impl AssetKey<Sampler> for SamplerKey {
+impl AssetDesc<Sampler> for SamplerKey {
     type Error = Error;
 
     fn load(&self, assets: &ivy_assets::AssetCache) -> Result<Asset<Sampler>> {

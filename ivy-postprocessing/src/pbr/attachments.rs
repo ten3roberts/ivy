@@ -1,5 +1,5 @@
 use ivy_assets::{Asset, AssetCache};
-use ivy_base::Extent;
+use ivy_core::Extent;
 use ivy_graphics::Result;
 use ivy_vulkan::{
     context::SharedVulkanContext, Format, ImageUsage, SampleCountFlags, Texture, TextureInfo,

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use ivy_base::layer::events::Event;
+use ivy_core::layer::events::Event;
 use winit::{dpi::PhysicalSize, window::Window};
 
 #[derive(Debug, Clone)]

@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use flax::World;
 use ivy_assets::AssetCache;
-use ivy_base::Events;
+use ivy_core::Events;
 
 use crate::{events::WidgetEvent, WidgetEventKind};
 
@@ -93,7 +93,7 @@ impl<T> ReactiveLayer<T> {
 //         &mut self,
 //         world: &mut World,
 //         _: &mut AssetCache,
-//         _: &mut ivy_base::Events,
+//         _: &mut ivy_core::Events,
 //         _: std::time::Duration,
 //     ) -> anyhow::Result<()> {
 //         systems::reactive_system::<T, _>(world, self.rx.try_iter()).context(format!(

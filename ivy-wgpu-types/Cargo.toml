@@ -5,7 +5,7 @@ edition = "2021"
 description = "Lower level abstractions and non-coupled types for Ivy"
 
 [dependencies]
-ivy-base = { path = "../ivy-base" }
+ivy-core = { path = "../ivy-core" }
 ivy-assets = { path = "../ivy-assets" }
 
 winit.workspace = true

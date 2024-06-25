@@ -1,7 +1,7 @@
 use flax::EntityBuilder;
 use glam::{Quat, Vec3};
 use ivy_assets::Asset;
-use ivy_base::{
+use ivy_core::{
     color, position, rotation, scale, visible, world_transform, Bundle, Color, Visible,
 };
 
@@ -11,7 +11,7 @@ use crate::{
 };
 
 /// Represents a bundle for anything that can be rendererd into the 3D world.
-/// **Note**: This bundle is a superset of [`ivy_base::TransformBundle`] and the
+/// **Note**: This bundle is a superset of [`ivy_core::TransformBundle`] and the
 /// transform bundle is thus superflous.
 /// By default, the material is taken from the mesh if available. It is valid
 /// for the material to be null, howver, I no materials exists in mesh the

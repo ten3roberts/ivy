@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use glam::{vec2, IVec2, Vec2};
 use glfw::{Action, Key, Modifiers, MouseButton, Scancode, WindowEvent};
-use ivy_base::Extent;
+use ivy_core::Extent;
 
 /// Window input events
 #[derive(Debug, Clone, PartialEq)]

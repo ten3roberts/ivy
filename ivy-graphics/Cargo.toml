@@ -27,7 +27,7 @@ glam.workspace = true
 flume.workspace = true
 thiserror.workspace = true
 anyhow.workspace = true
-ivy-base = { path = "../ivy-base", version = "0.10.0" }
+ivy-core = { path = "../ivy-core", version = "0.10.0" }
 ivy-image = { path = "../ivy-image", version = "0.10.0" }
 ivy-input = { path = "../ivy-input", version = "0.10.0" }
 ivy-assets = { path = "../ivy-assets", version = "0.10.0" }

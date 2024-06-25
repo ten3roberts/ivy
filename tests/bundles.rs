@@ -1,6 +1,6 @@
 use flax::{components::name, Entity};
 use glam::vec3;
-use ivy_base::{restitution, EntityBuilderExt};
+use ivy_core::{restitution, EntityBuilderExt};
 use ivy_engine::{App, RbBundle};
 
 #[test]

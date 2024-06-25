@@ -1,6 +1,6 @@
 use std::convert::Infallible;
 
-use ivy_assets::{Asset, AssetKey};
+use ivy_assets::{Asset, AssetDesc};
 
 use crate::shader::ShaderDesc;
 
@@ -8,7 +8,7 @@ use crate::shader::ShaderDesc;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PbrShaderKey;
 
-impl AssetKey<ShaderDesc> for PbrShaderKey {
+impl AssetDesc<ShaderDesc> for PbrShaderKey {
     type Error = Infallible;
 
     fn load(&self, assets: &ivy_assets::AssetCache) -> Result<Asset<ShaderDesc>, Self::Error> {

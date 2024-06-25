@@ -11,7 +11,7 @@ use flax::{
 };
 use flume::Receiver;
 use glam::Quat;
-use ivy_base::{
+use ivy_core::{
     angular_velocity, connection, engine, friction, gravity_influence, position, restitution,
     rotation, sleeping, velocity,
 };

@@ -6,7 +6,7 @@ use flax::World;
 use hash::Hash;
 use itertools::Itertools;
 use ivy_assets::{Asset, AssetCache};
-use ivy_base::Extent;
+use ivy_core::Extent;
 use ivy_vulkan::{
     commands::{CommandBuffer, CommandPool},
     context::SharedVulkanContext,

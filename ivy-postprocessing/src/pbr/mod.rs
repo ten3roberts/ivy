@@ -1,7 +1,7 @@
 use flax::{Component, Entity, World};
 use itertools::Itertools;
 use ivy_assets::{Asset, AssetCache};
-use ivy_base::Extent;
+use ivy_core::Extent;
 use ivy_graphics::{
     DepthAttachment, EnvData, EnvironmentManager, FullscreenRenderer, GpuCamera, LightRenderer,
     MeshRenderer, Renderer,

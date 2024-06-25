@@ -73,7 +73,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
     let normal = normalize((object.world_matrix * vec4(in.normal, 0)).xyz);
     let tangent = normalize((object.world_matrix * vec4(in.tangent.xyz, 0)).xyz);
-    let bitangent = normalize(cross(in.normal, in.tangent.xyz)) * in.tangent.w;
+    let bitangent = normalize(cross(in.tangent.xyz, in.normal)) * in.tangent.w;
 
     let tbn = transpose(mat3x3(tangent, bitangent, normal));
 
@@ -189,7 +189,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
         let light_pos = tbn * light.position;
 
-        luminance += pbr_luminance(in.tangent_pos, tangent_camera_dir, albedo.rgb, vec3(0f, 0f, 1f), metallic, roughness, light_pos, light.color);
+        luminance += pbr_luminance(in.tangent_pos, tangent_camera_dir, albedo.rgb, tangent_normal, metallic, roughness, light_pos, light.color);
     }
 
     return vec4(luminance, 1);

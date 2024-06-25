@@ -1,5 +1,5 @@
 use glam::Vec3;
-use ivy_base::Events;
+use ivy_core::Events;
 use slotmap::SlotMap;
 
 use crate::{BoundingBox, Nodes, Object, ObjectData, ObjectIndex};

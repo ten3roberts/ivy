@@ -7,7 +7,7 @@ use crate::{
 use flax::{Entity, Schedule, World};
 use glam::Vec3;
 use ivy_assets::AssetCache;
-use ivy_base::{engine, Events};
+use ivy_core::{engine, Events};
 use ivy_collision::{BvhNode, CollisionTree, DespawnedSubscriber};
 
 #[derive(Default, Debug, Clone)]
@@ -192,7 +192,7 @@ impl PhysicsLayer {
 //         desc: Self::Desc,
 //         world: &mut World,
 //         assets: &AssetCache,
-//         events: ivy_base::layer::events::EventRegisterContext<Self>,
+//         events: ivy_core::layer::events::EventRegisterContext<Self>,
 //     ) -> anyhow::Result<Self>
 //     where
 //         Self: Sized,
