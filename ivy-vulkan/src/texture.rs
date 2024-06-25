@@ -9,8 +9,8 @@ use crate::{
 use ash::vk::{Extent3D, ImageAspectFlags, ImageView, SharingMode};
 use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc};
 use gpu_allocator::MemoryLocation;
-use ivy_assets::{Asset, AssetCache, AssetKey};
-use ivy_base::Extent;
+use ivy_assets::{Asset, AssetCache, AssetDesc};
+use ivy_core::Extent;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
@@ -607,7 +607,7 @@ impl DescriptorBindable for CombinedImageSampler {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TextureFromPath(pub PathBuf);
 
-impl AssetKey<Texture> for TextureFromPath {
+impl AssetDesc<Texture> for TextureFromPath {
     type Error = Error;
 
     fn load(&self, assets: &AssetCache) -> Result<Asset<Texture>> {
@@ -633,7 +633,7 @@ impl TextureFromMemory {
     }
 }
 
-impl AssetKey<Texture> for TextureFromMemory {
+impl AssetDesc<Texture> for TextureFromMemory {
     type Error = Error;
 
     fn load(&self, assets: &AssetCache) -> Result<Asset<Texture>> {

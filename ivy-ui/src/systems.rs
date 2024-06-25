@@ -3,7 +3,7 @@ use flax::{
     components::child_of, fetch::entity_refs, BoxedSystem, EntityRef, Query, System, World,
 };
 use glam::{Mat4, Vec2, Vec3Swizzles};
-use ivy_base::{position, size, visible, Visible};
+use ivy_core::{position, size, visible, Visible};
 use ivy_graphics::components::camera;
 
 use crate::{constraints::ConstraintQuery, *};

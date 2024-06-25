@@ -4,7 +4,7 @@ use crate::*;
 use flax::{Component, Fetch, World};
 use glam::{vec2, vec3, Mat4, Vec2, Vec3, Vec4};
 use ivy_assets::{Asset, AssetCache};
-use ivy_base::{color, position, size, Color, ColorExt};
+use ivy_core::{color, position, size, Color, ColorExt};
 use ivy_graphics::{BaseRenderer, Mesh, Renderer};
 use ivy_vulkan::{context::SharedVulkanContext, descriptors::*, PassInfo, Shader};
 

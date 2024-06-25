@@ -1,6 +1,6 @@
 use flax::{Schedule, World};
 use ivy_assets::AssetCache;
-use ivy_base::engine;
+use ivy_core::engine;
 use ivy_graphics::components::{self, swapchain};
 use ivy_vulkan::{context::SharedVulkanContext, device};
 

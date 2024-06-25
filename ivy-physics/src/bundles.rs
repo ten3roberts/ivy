@@ -1,7 +1,7 @@
 //! This module contains bundles and queries suitable for physics.
 use flax::{Component, EntityBuilder, Fetch, Mutable};
 use glam::Vec3;
-use ivy_base::{angular_mass, angular_velocity, friction, mass, restitution, velocity, Bundle};
+use ivy_core::{angular_mass, angular_velocity, friction, mass, restitution, velocity, Bundle};
 
 use crate::components::effector;
 

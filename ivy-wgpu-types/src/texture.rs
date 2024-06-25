@@ -1,7 +1,7 @@
 use std::{convert::Infallible, path::PathBuf};
 
 use image::{DynamicImage, ImageBuffer};
-use ivy_assets::{Asset, AssetCache, AssetKey};
+use ivy_assets::{Asset, AssetCache, AssetDesc};
 use wgpu::{Texture, TextureFormat, TextureView, TextureViewDescriptor};
 
 use super::Gpu;
@@ -80,7 +80,7 @@ impl TextureFromPath {
     }
 }
 
-impl AssetKey<Texture> for TextureFromPath {
+impl AssetDesc<Texture> for TextureFromPath {
     type Error = image::ImageError;
 
     fn load(
@@ -96,7 +96,7 @@ impl AssetKey<Texture> for TextureFromPath {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct DefaultNormalTexture;
 
-impl AssetKey<Texture> for DefaultNormalTexture {
+impl AssetDesc<Texture> for DefaultNormalTexture {
     type Error = Infallible;
 
     fn load(&self, assets: &AssetCache) -> Result<Asset<Texture>, Self::Error> {
@@ -113,7 +113,7 @@ pub struct TextureFromColor {
     pub format: TextureFormat,
 }
 
-impl AssetKey<Texture> for TextureFromColor {
+impl AssetDesc<Texture> for TextureFromColor {
     type Error = Infallible;
 
     fn load(&self, assets: &AssetCache) -> Result<Asset<Texture>, Infallible> {

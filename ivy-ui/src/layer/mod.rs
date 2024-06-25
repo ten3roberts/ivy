@@ -1,7 +1,7 @@
 #![allow(non_snake_case)]
 use flax::World;
 use ivy_assets::AssetCache;
-use ivy_base::Events;
+use ivy_core::Events;
 
 mod event_handling;
 pub use event_handling::*;

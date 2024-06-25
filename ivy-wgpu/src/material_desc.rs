@@ -1,5 +1,5 @@
 use image::Rgba;
-use ivy_assets::{Asset, AssetKey};
+use ivy_assets::{Asset, AssetDesc};
 use ivy_gltf::{GltfMaterial, GltfMaterialRef};
 
 use crate::{
@@ -62,7 +62,7 @@ impl MaterialData {
     }
 }
 
-impl AssetKey<Material> for MaterialDesc {
+impl AssetDesc<Material> for MaterialDesc {
     type Error = anyhow::Error;
 
     fn load(&self, assets: &ivy_assets::AssetCache) -> Result<Asset<Material>, Self::Error> {

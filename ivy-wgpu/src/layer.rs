@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use flax::World;
 use ivy_assets::AssetCache;
-use ivy_base::Layer;
+use ivy_core::Layer;
 use ivy_wgpu_types::Surface;
 use wgpu::Queue;
 use winit::{dpi::PhysicalSize, window::Window};
@@ -104,7 +104,7 @@ impl Layer for GraphicsLayer {
         &mut self,
         _: &mut World,
         _: &AssetCache,
-        mut events: ivy_base::layer::events::EventRegisterContext<Self>,
+        mut events: ivy_core::layer::events::EventRegisterContext<Self>,
     ) -> anyhow::Result<()>
     where
         Self: Sized,

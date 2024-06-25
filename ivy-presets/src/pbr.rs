@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use flax::World;
 use ivy_assets::{Asset, AssetCache};
-use ivy_base::{engine, main_camera, Extent, WorldExt};
+use ivy_core::{engine, main_camera, Extent, WorldExt};
 use ivy_graphics::{
     components::{depth_attachment, swapchain},
     gizmos::GizmoRenderer,

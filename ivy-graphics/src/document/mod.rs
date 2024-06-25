@@ -4,12 +4,12 @@ use crate::{
 };
 use flax::{components::child_of, EntityBuilder};
 use gltf::Gltf;
-use ivy_assets::{Asset, AssetCache, AssetKey};
+use ivy_assets::{Asset, AssetCache, AssetDesc};
 use smallvec::SmallVec;
 use std::{ops::Deref, path::Path, path::PathBuf};
 
 use glam::*;
-use ivy_base::{position, position_offset, rotation, rotation_offset, scale, visible, Visible};
+use ivy_core::{position, position_offset, rotation, rotation_offset, scale, visible, Visible};
 use ivy_vulkan::{
     context::{SharedVulkanContext, VulkanContextService},
     Texture,
@@ -270,7 +270,7 @@ impl Document {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DocumentFromPath(pub PathBuf);
 
-impl AssetKey<Document> for DocumentFromPath {
+impl AssetDesc<Document> for DocumentFromPath {
     type Error = Error;
 
     fn load(&self, assets: &AssetCache) -> Result<Asset<Document>> {

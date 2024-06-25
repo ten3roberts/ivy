@@ -6,6 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+ivy-profiling = { path = "../ivy-profiling/" }
+
 atomic_refcell.workspace = true
 image.workspace = true
 dashmap.workspace = true
@@ -13,3 +15,6 @@ slotmap.workspace = true
 tracing.workspace = true
 parking_lot.workspace = true
 flume.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+futures.workspace = true

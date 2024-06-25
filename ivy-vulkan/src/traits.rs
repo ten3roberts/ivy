@@ -3,7 +3,7 @@ use ash::{
     vk::{self, SurfaceKHR},
     Instance,
 };
-use ivy_base::Extent;
+use ivy_core::Extent;
 
 pub trait IntoExtent {
     fn into_extent(&self) -> Extent;

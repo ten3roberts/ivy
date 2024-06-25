@@ -1,6 +1,6 @@
 use flax::{components::child_of, Entity, EntityBuilder};
 use ivy_assets::AssetCache;
-use ivy_base::{EntityBuilderExt, TransformBundle};
+use ivy_core::{EntityBuilderExt, TransformBundle};
 use ivy_gltf::{GltfNode, GltfNodeRef};
 use ivy_wgpu::{components::mesh_primitive, renderer::RenderObjectBundle, shaders::PbrShaderKey};
 

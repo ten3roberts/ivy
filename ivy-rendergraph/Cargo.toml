@@ -15,7 +15,7 @@ description = "Easy to use declarative rendergraph for vulkan and Ivy"
 [dependencies]
 anyhow.workspace = true
 itertools.workspace = true
-ivy-base = { path = "../ivy-base", version = "0.10.0" }
+ivy-core = { path = "../ivy-core", version = "0.10.0" }
 ivy-graphics = { path = "../ivy-graphics", version = "0.10.0" }
 ivy-assets = { path = "../ivy-assets", version = "0.10.0" }
 ivy-vulkan = { path = "../ivy-vulkan", version = "0.10.0" }

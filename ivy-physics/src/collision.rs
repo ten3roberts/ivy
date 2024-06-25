@@ -1,6 +1,6 @@
 use flax::{error::MissingComponent, EntityRef};
 use glam::Vec3;
-use ivy_base::{
+use ivy_core::{
     angular_mass, angular_velocity, friction, mass, math::Inverse, restitution, velocity,
     world_transform,
 };

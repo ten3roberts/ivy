@@ -45,6 +45,8 @@ impl Material {
 
         let sampler = gpu.device.create_sampler(&SamplerDescriptor {
             label: "material_sampler".into(),
+            min_filter: wgpu::FilterMode::Linear,
+            mag_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
 
@@ -146,6 +148,7 @@ impl Material {
 
         tracing::info!(
             metallic_roughness = pbr.metallic_roughness_texture().is_some(),
+            normal_map = material.normal_texture().is_some(),
             roughness_factor = pbr.roughness_factor(),
             metallic_factor = pbr.metallic_factor(),
             "gltf material"

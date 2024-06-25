@@ -1,5 +1,5 @@
 use glam::Vec2;
-use ivy_base::layer::events::Event;
+use ivy_core::layer::events::Event;
 pub use winit::{
     event::{ElementState, MouseButton},
     keyboard::{Key, ModifiersState},

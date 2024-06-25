@@ -5,12 +5,14 @@ use flax::{
 };
 use glam::{vec3, EulerRot, Mat4, Quat, Vec2, Vec3};
 use ivy_assets::AssetCache;
-use ivy_base::{
+use ivy_core::{
     app::{InitEvent, TickEvent},
     layer::events::EventRegisterContext,
     main_camera,
     palette::Srgb,
-    position, rotation, App, EngineLayer, EntityBuilderExt, Layer, TransformBundle,
+    position,
+    profiling::ProfilingLayer,
+    rotation, App, EngineLayer, EntityBuilderExt, Layer, TransformBundle,
 };
 use ivy_gltf::Document;
 use ivy_input::{
@@ -51,6 +53,7 @@ pub fn main() -> anyhow::Result<()> {
     if let Err(err) = App::builder()
         .with_driver(WinitDriver::new())
         .with_layer(EngineLayer::new())
+        .with_layer(ProfilingLayer::new())
         .with_layer(GraphicsLayer::new(|world, gpu, surface| {
             Ok(RenderGraphRenderer::new(world, gpu, surface))
         }))
@@ -111,32 +114,34 @@ impl LogicLayer {
         //     }
         // }
 
-        let document = Document::new(assets, "models/sphere.glb")?;
-        for (i, node) in ["Sphere", "SphereMetal", "SphereGold"].iter().enumerate() {
-            document
-                .find_node(node)
-                .unwrap()
-                .mount(assets, &mut Entity::builder())
-                .mount(TransformBundle::new(
-                    vec3(i as f32 * 3.0, 0.0, 0.0),
-                    Quat::IDENTITY,
-                    Vec3::ONE,
-                ))
-                .spawn(world);
-        }
+        // let document = Document::new(assets, "models/sphere.glb")?;
+        // for (i, node) in ["Sphere", "SphereMetal", "SphereGold"].iter().enumerate() {
+        //     document
+        //         .find_node(node)
+        //         .unwrap()
+        //         .mount(assets, &mut Entity::builder())
+        //         .mount(TransformBundle::new(
+        //             vec3(i as f32 * 3.0, 0.0, 0.0),
+        //             Quat::IDENTITY,
+        //             Vec3::ONE,
+        //         ))
+        //         .spawn(world);
+        // }
 
-        let document = Document::new(assets, "models/crystal.glb")?;
+        let document = Document::new(assets, "models/Sphere.glb")?;
 
-        document
+        let root = document
             .node(0)
             .unwrap()
             .mount(assets, &mut Entity::builder())
             .mount(TransformBundle::new(
-                vec3(5.0, 0.0, 5.0),
+                vec3(0.0, 0.0, 5.0),
                 Quat::IDENTITY,
                 Vec3::ONE,
             ))
             .spawn(world);
+
+        self.entity = Some(root);
 
         Ok(())
     }
@@ -219,7 +224,7 @@ impl Layer for LogicLayer {
             let t = start_time.elapsed().as_secs_f32();
             if let Some(entity) = this.entity {
                 world
-                    .set(entity, rotation(), Quat::from_axis_angle(Vec3::X, t))
+                    .set(entity, rotation(), Quat::from_axis_angle(Vec3::Y, t * 0.2))
                     .unwrap();
             }
             Ok(())

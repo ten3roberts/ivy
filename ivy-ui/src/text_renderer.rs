@@ -2,7 +2,7 @@ use anyhow::Context;
 use flax::{entity_ids, Component, Fetch, Mutable, Query, World};
 use glam::{Mat4, Vec2, Vec4};
 use ivy_assets::{Asset, AssetCache};
-use ivy_base::size;
+use ivy_core::size;
 use ivy_graphics::{Allocator, BaseRenderer, BufferAllocation, Mesh, Renderer};
 use ivy_rendergraph::Node;
 use ivy_vulkan::{

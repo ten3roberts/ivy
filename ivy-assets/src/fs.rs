@@ -1,56 +1,45 @@
 use std::{hash::Hash, io, path::Path};
 
-use crate::{service::FileSystemMapService, Asset, AssetCache, AssetKey};
+use crate::{
+    service::{FileSystemMapService, FsAssetError},
+    Asset, AssetCache, AssetDesc,
+};
 
-impl<V, P> AssetKey<V> for P
+impl<V, P> AssetDesc<V> for P
 where
-    Path: AssetKey<V>,
-    P: 'static + Send + Sync + Eq + Hash + AsRef<Path> + Clone,
+    Path: AssetDesc<V>,
+    P: 'static + Send + Sync + Eq + Hash + AsRef<Path> + Clone + std::fmt::Debug,
     V: 'static + Send + Sync,
 {
-    type Error = <Path as AssetKey<V>>::Error;
+    type Error = <Path as AssetDesc<V>>::Error;
 
     fn load(&self, assets: &AssetCache) -> Result<Asset<V>, Self::Error> {
         assets.try_load(self.as_ref())
     }
 }
 
+/// Helper trait for assets that can load directly from a path
 pub trait AssetFromPathExt {
-    type Error: 'static + From<io::Error>;
+    type Error: 'static + From<FsAssetError>;
 
-    fn load(path: &Path, assets: &AssetCache) -> Result<Asset<Self>, Self::Error>;
+    fn load_from_path(path: &Path, assets: &AssetCache) -> Result<Asset<Self>, Self::Error>;
 }
 
-impl<V> AssetKey<V> for Path
+impl<V> AssetDesc<V> for Path
 where
     V: AssetFromPathExt,
 {
     type Error = V::Error;
 
     fn load(&self, assets: &AssetCache) -> Result<Asset<V>, Self::Error> {
-        V::load(self, assets)
+        V::load_from_path(self, assets)
     }
 }
 
 impl AssetFromPathExt for Vec<u8> {
-    type Error = io::Error;
+    type Error = FsAssetError;
 
-    fn load(path: &Path, assets: &AssetCache) -> Result<Asset<Self>, Self::Error> {
+    fn load_from_path(path: &Path, assets: &AssetCache) -> Result<Asset<Self>, Self::Error> {
         Ok(assets.insert(assets.service::<FileSystemMapService>().load_bytes(path)?))
     }
 }
-// i
-// impl<K> Loadable<K> for Bytes
-// where
-//     K: AssetKey,
-//     K: AsRef<Path>,
-// {
-//     type Error = std::io::Error;
-
-//     fn load(key: K, assets: &AssetCache) -> Result<Self, Self::Error>
-//     where
-//         Self: Sized,
-//     {
-//         Ok(std::fs::read(key.as_ref())?.into())
-//     }
-// }

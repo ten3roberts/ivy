@@ -2,7 +2,7 @@ use crate::{NodeKind, Result};
 use anyhow::Context;
 use flax::World;
 use ivy_assets::{Asset, AssetCache};
-use ivy_base::engine;
+use ivy_core::engine;
 use ivy_graphics::components::swapchain;
 use ivy_vulkan::{
     context::SharedVulkanContext,

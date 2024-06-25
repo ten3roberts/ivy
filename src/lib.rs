@@ -34,7 +34,7 @@
 //!
 //! See the documentation for [`ivy-core::Layer`]
 
-pub use ivy_base as base;
+pub use ivy_core as base;
 /// Rexports
 pub use ivy_collision as collision;
 pub use ivy_gltf;
@@ -52,7 +52,7 @@ pub use ivy_vulkan as vulkan;
 pub use ivy_wgpu;
 pub use ivy_window as window;
 
-pub use ivy_base::{components::*, App, Extent, Gizmos, IntoDuration, Layer, Static};
+pub use ivy_core::{components::*, App, Extent, Gizmos, IntoDuration, Layer, Static};
 pub use ivy_collision::{Collider, CollisionTree, Contact, Cube, RayIntersect, Sphere};
 pub use ivy_graphics::{
     layer::*, Camera, Document, MainCamera, Mesh, MeshRenderer, PointLight, TextureAtlas,

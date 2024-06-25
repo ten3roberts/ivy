@@ -1,5 +1,5 @@
 use futures::stream::PollNext;
-use ivy_base::palette::{Srgb, Srgba};
+use ivy_core::palette::{Srgb, Srgba};
 
 use crate::renderer::LightData;
 

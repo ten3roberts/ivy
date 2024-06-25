@@ -1,5 +1,5 @@
 use glam::Vec3;
-use ivy_base::math::Inverse;
+use ivy_core::math::Inverse;
 
 /// Manages the forces applied to an entity.
 /// Stored in the entity and is a middle hand for manipulating velocity and

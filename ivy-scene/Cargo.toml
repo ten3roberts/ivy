@@ -5,7 +5,7 @@ edition = "2021"
 description = "Scenes and cross libary scene management for the Ivy game engine"
 
 [dependencies]
-ivy-base = { path = "../ivy-base" }
+ivy-core = { path = "../ivy-core" }
 ivy-wgpu = { path = "../ivy-wgpu" }
 ivy-gltf = { path = "../ivy-gltf" }
 ivy-assets = { path = "../ivy-assets" }

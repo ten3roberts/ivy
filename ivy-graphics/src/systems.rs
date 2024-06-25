@@ -1,7 +1,7 @@
 use flax::{entity_ids, BoxedSystem, Component, EntityIds, Query, QueryBorrow, System};
 use glam::Mat4;
 use ivy_assets::Asset;
-use ivy_base::{world_transform, DEG_180};
+use ivy_core::{world_transform, DEG_180};
 
 use crate::{
     components::{bounding_sphere, camera, mesh},

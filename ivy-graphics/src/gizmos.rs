@@ -2,7 +2,7 @@ use ash::vk::{DescriptorSet, IndexType, ShaderStageFlags};
 use flax::{Component, World};
 use glam::{Mat4, Vec3, Vec4};
 use ivy_assets::AssetCache;
-use ivy_base::{engine, gizmos, ColorExt};
+use ivy_core::{engine, gizmos, ColorExt};
 use ivy_vulkan::{
     context::{SharedVulkanContext, VulkanContextService},
     PassInfo, Pipeline, PipelineInfo, Shader,
@@ -63,7 +63,7 @@ impl Renderer for GizmoRenderer {
 
         for gizmo in gizmos.sections().iter().flat_map(|val| val.1) {
             match gizmo {
-                ivy_base::GizmoPrimitive::Sphere {
+                ivy_core::GizmoPrimitive::Sphere {
                     origin,
                     color,
                     radius,
@@ -83,7 +83,7 @@ impl Renderer for GizmoRenderer {
 
                     cmd.draw_indexed(6, 1, 0, 0, 0);
                 }
-                ivy_base::GizmoPrimitive::Line {
+                ivy_core::GizmoPrimitive::Line {
                     origin,
                     color,
                     dir,

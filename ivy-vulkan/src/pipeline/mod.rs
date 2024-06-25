@@ -5,7 +5,7 @@ use ash::vk::{
     BlendFactor, BlendOp, ColorComponentFlags, Extent2D, PipelineColorBlendAttachmentState,
     PipelineLayout, PrimitiveTopology, PushConstantRange,
 };
-use ivy_base::Extent;
+use ivy_core::Extent;
 use smallvec::SmallVec;
 use std::borrow::Cow;
 use std::ffi::CString;

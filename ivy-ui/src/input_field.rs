@@ -1,7 +1,7 @@
 use flax::{BoxedSystem, Entity, EntityBuilder, Mutable, Query, QueryBorrow, System};
 use glfw::{Action, Key, Modifiers};
 
-use ivy_base::{Bundle, Events};
+use ivy_core::{Bundle, Events};
 
 use crate::{
     events::WidgetEvent, input_field, interactive, sticky, text, InteractiveState, Text,

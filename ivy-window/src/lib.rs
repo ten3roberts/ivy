@@ -4,7 +4,7 @@ use error::*;
 use ash::vk::{Handle, SurfaceKHR};
 use glam::Vec2;
 use glfw::{ClientApiHint, CursorMode, Glfw, WindowEvent, WindowHint};
-use ivy_base::Extent;
+use ivy_core::Extent;
 use ivy_vulkan::traits::Backend;
 use parking_lot::RwLock;
 #[cfg(feature = "serialize")]

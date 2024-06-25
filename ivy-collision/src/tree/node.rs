@@ -4,7 +4,7 @@ use std::{
 };
 
 use hecs::Entity;
-use ivy_base::TransformMatrix;
+use ivy_core::TransformMatrix;
 use glam::Vec3;
 
 use super::*;

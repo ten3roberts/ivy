@@ -12,7 +12,7 @@ use flax::{
 use glam::{Mat4, Vec4Swizzles};
 use itertools::Itertools;
 use ivy_assets::{map::AssetMap, stored::Handle, Asset, AssetCache};
-use ivy_base::world_transform;
+use ivy_core::world_transform;
 use slab::Slab;
 use wgpu::{BindGroup, BindGroupLayout, BufferUsages, RenderPass, ShaderStages, TextureFormat};
 

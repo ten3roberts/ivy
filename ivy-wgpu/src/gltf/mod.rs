@@ -2,7 +2,8 @@ pub mod node;
 
 use image::{DynamicImage, ImageBuffer, RgbImage, RgbaImage};
 use itertools::Itertools;
-use ivy_assets::{Asset, AssetCache, AssetKey};
+use ivy_assets::{Asset, AssetCache, AssetDesc};
+use ivy_core::profiling::{profile_function, profile_scope};
 use ivy_gltf::{DocumentData, GltfPrimitive};
 use wgpu::Texture;
 
@@ -17,10 +18,13 @@ pub struct Document {
 
 impl Document {
     fn new(gpu: &Gpu, assets: &AssetCache, data: &DocumentData) -> anyhow::Result<Self> {
+        profile_function!();
+
         let textures: Vec<_> = data
             .document
             .images()
             .map(|v| {
+                profile_scope!("load_texture");
                 let image = gltf::image::Data::from_source(v.source(), None, data.buffer_data())?;
 
                 let image: DynamicImage = match image.format {
@@ -71,13 +75,17 @@ impl Document {
         let materials: Vec<_> = data
             .document
             .materials()
-            .map(|v| anyhow::Ok(assets.insert(Material::from_gltf(gpu, assets, v, &textures)?)))
+            .map(|v| {
+                profile_scope!("load_material");
+                anyhow::Ok(assets.insert(Material::from_gltf(gpu, assets, v, &textures)?))
+            })
             .try_collect()?;
 
         let mesh_primitives: Vec<_> = data
             .document
             .meshes()
             .map(|mesh| -> anyhow::Result<Vec<_>> {
+                profile_scope!("load_mesh_primitive");
                 mesh.primitives()
                     .map(|primitive| {
                         Ok(assets.insert(MeshData::from_gltf(
@@ -106,7 +114,7 @@ impl Document {
     }
 }
 
-impl AssetKey<Document> for Asset<ivy_gltf::Document> {
+impl AssetDesc<Document> for Asset<ivy_gltf::Document> {
     type Error = anyhow::Error;
 
     fn load(&self, assets: &AssetCache) -> Result<Asset<Document>, Self::Error> {
@@ -114,7 +122,7 @@ impl AssetKey<Document> for Asset<ivy_gltf::Document> {
     }
 }
 
-impl AssetKey<Document> for Asset<ivy_gltf::DocumentData> {
+impl AssetDesc<Document> for Asset<ivy_gltf::DocumentData> {
     type Error = anyhow::Error;
 
     fn load(&self, assets: &AssetCache) -> Result<Asset<Document>, Self::Error> {
@@ -122,7 +130,7 @@ impl AssetKey<Document> for Asset<ivy_gltf::DocumentData> {
     }
 }
 
-impl AssetKey<MeshData> for GltfPrimitive {
+impl AssetDesc<MeshData> for GltfPrimitive {
     type Error = anyhow::Error;
 
     fn load(&self, assets: &AssetCache) -> Result<Asset<MeshData>, Self::Error> {

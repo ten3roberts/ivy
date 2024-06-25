@@ -1,5 +1,5 @@
 use glam::{Mat4, Quat, Vec3};
-use ivy_base::{ConnectionKind, TransformQueryMutItem};
+use ivy_core::{ConnectionKind, TransformQueryMutItem};
 
 mod systems;
 pub use systems::*;

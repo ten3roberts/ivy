@@ -1,5 +1,5 @@
 use image::DynamicImage;
-use ivy_assets::{Asset, AssetCache, AssetKey};
+use ivy_assets::{Asset, AssetCache, AssetDesc};
 use ivy_wgpu_types::texture::{texture_from_image, TextureFromColor};
 use wgpu::{Texture, TextureFormat};
 
@@ -65,7 +65,7 @@ impl TextureAndKindDesc {
     }
 }
 
-impl AssetKey<Texture> for TextureAndKindDesc {
+impl AssetDesc<Texture> for TextureAndKindDesc {
     type Error = image::ImageError;
 
     fn load(&self, assets: &AssetCache) -> Result<Asset<Texture>, Self::Error> {

@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ivy-base = { path = "../ivy-base" }
+ivy-core = { path = "../ivy-core" }
 ivy-wgpu-types = { path = "../ivy-wgpu-types" }
 ivy-assets = { path = "../ivy-assets" }
 ivy-input = { path = "../ivy-input" }

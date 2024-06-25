@@ -8,7 +8,7 @@ use ash::vk::{DescriptorSet, IndexType, ShaderStageFlags};
 use flax::{entity_ids, CommandBuffer, Component, Fetch, FetchExt, Opt, OptOr, Query, World};
 use glam::{Mat4, Vec4};
 use ivy_assets::{Asset, AssetCache};
-use ivy_base::{color, Color, ColorExt, TransformQuery};
+use ivy_core::{color, Color, ColorExt, TransformQuery};
 use ivy_vulkan::{
     context::SharedVulkanContext, descriptors::IntoSet, device, Buffer, BufferUsage, PassInfo,
     Shader,
