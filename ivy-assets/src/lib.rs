@@ -2,10 +2,12 @@ use std::{
     any::{Any, TypeId},
     borrow::Borrow,
     collections::HashMap,
+    fmt::Debug,
     hash::Hash,
     ops::Deref,
     path::Path,
     sync::Arc,
+    time::Instant,
 };
 
 use dashmap::DashMap;
@@ -16,16 +18,18 @@ mod handle;
 pub mod map;
 pub mod service;
 pub mod stored;
-use fs::AssetFromPathExt;
+use fs::AssetFromPath;
 use futures::{
     future::{BoxFuture, Shared, WeakShared},
     Future, FutureExt,
 };
 pub use handle::Asset;
 use image::{DynamicImage, ImageError, ImageResult};
+use parking_lot::{Mutex, MutexGuard, RwLock, RwLockReadGuard};
 use service::Service;
 use stored::Handle;
 use thiserror::Error;
+use tracing::Instrument;
 
 use self::{cell::AssetCell, handle::WeakHandle};
 
@@ -43,7 +47,7 @@ pub struct AssetCache {
     inner: Arc<AssetCacheInner>,
 }
 
-impl std::fmt::Debug for AssetCache {
+impl Debug for AssetCache {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AssetCache").finish()
     }
@@ -71,7 +75,7 @@ struct AssetCacheInner {
     pending_keys: DashMap<TypeId, Box<dyn Any + Send + Sync>>,
     keys: DashMap<TypeId, Box<dyn Any + Send + Sync>>,
     cells: DashMap<TypeId, Box<dyn Any + Send + Sync>>,
-    services: DashMap<TypeId, Box<dyn Service>>,
+    services: RwLock<HashMap<TypeId, Box<dyn Service + Send>>>,
 }
 
 impl AssetCache {
@@ -80,7 +84,7 @@ impl AssetCache {
             inner: Arc::new(AssetCacheInner {
                 keys: DashMap::new(),
                 cells: DashMap::new(),
-                services: DashMap::new(),
+                services: Default::default(),
                 pending_keys: DashMap::new(),
             }),
         }
@@ -114,16 +118,13 @@ impl AssetCache {
     }
 
     #[track_caller]
-    pub fn load<K, V>(&self, key: &K) -> Asset<V>
+    pub fn load<V>(&self, key: &(impl AssetDesc<V> + ?Sized)) -> Asset<V>
     where
-        K: ?Sized + AssetDesc<V>,
         V: 'static + Send + Sync,
-        K::Error: Into<anyhow::Error>,
     {
         match self.try_load(key) {
             Ok(v) => v,
             Err(err) => {
-                let err = err.into();
                 panic!("{err:?}");
             }
         }
@@ -134,45 +135,41 @@ impl AssetCache {
         K: ?Sized + AsyncAssetDesc<V>,
         V: 'static + Send + Sync,
     {
-        ivy_profiling::profile_function!(format!("{desc:?}"));
-
-        let _span = tracing::debug_span!(
-            "AssetCache::try_load_async",
-            key = std::any::type_name::<K>()
-        )
-        .entered();
+        // ivy_profiling::profile_function!(format!("{desc:?}"));
 
         if let Some(handle) = self.get_async(desc) {
             return Ok(handle);
         }
 
-        let mut pending = self
-            .inner
-            .pending_keys
-            .entry(TypeId::of::<K::Stored>())
-            .or_insert_with(|| Box::new(PendingKeyMap::<K, V>::new()));
+        {
+            let pending = self.inner.pending_keys.get(&TypeId::of::<K::Stored>());
+            if let Some(pending) = pending {
+                let pending = pending.downcast_ref::<PendingKeyMap<K, V>>().unwrap();
 
-        let pending_ref = pending.downcast_mut::<PendingKeyMap<K, V>>().unwrap();
-
-        let stored = desc.to_stored();
-
-        if let Some(pending) = pending_ref.get(desc) {
-            if let Some(pending) = WeakShared::upgrade(&pending) {
-                return pending.await;
+                if let Some(fut) = pending.get(desc).and_then(|v| WeakShared::upgrade(&v)) {
+                    let value = fut.await;
+                    return value;
+                }
             }
         }
 
         // Load the asset and insert it to get a handle
         let assets = self.clone();
+        let stored = desc.to_stored();
+        let desc_debug = format!("{desc:?}");
         let desc = desc.to_stored();
 
         let fut = async move {
+            let start = Instant::now();
             let assets = assets;
             let value = desc
                 .borrow()
-                .load(&assets)
+                .create(&assets)
+                .instrument(tracing::info_span!("load_asset", desc =%desc_debug))
                 .await
                 .map_err(|v| SharedError(Arc::new(v)))?;
+
+            tracing::info!(duration=?start.elapsed(), desc=%desc_debug, "loaded asset");
 
             assets
                 .inner
@@ -188,12 +185,32 @@ impl AssetCache {
         .boxed()
         .shared();
 
-        pending_ref.insert(stored, fut.downgrade().unwrap());
+        {
+            let mut pending = self
+                .inner
+                .pending_keys
+                .entry(TypeId::of::<K::Stored>())
+                .or_insert_with(|| Box::new(PendingKeyMap::<K, V>::new()));
 
-        drop(pending);
+            let pending = pending.downcast_mut::<PendingKeyMap<K, V>>().unwrap();
+            pending.insert(stored, fut.downgrade().unwrap());
+        }
+
         fut.await
     }
 
+    pub async fn load_async<V>(&self, key: &(impl AsyncAssetDesc<V> + ?Sized)) -> Asset<V>
+    where
+        V: 'static + Send + Sync,
+    {
+        match self.try_load_async(key).await {
+            Ok(v) => v,
+            Err(err) => {
+                let err = err.0;
+                panic!("{err:?}");
+            }
+        }
+    }
     pub fn get<K, V>(&self, key: &K) -> Option<Asset<V>>
     where
         K: ?Sized + AssetDesc<V>,
@@ -244,20 +261,18 @@ impl AssetCache {
     pub fn register_service<S: Service>(&self, service: S) {
         self.inner
             .services
+            .write()
             .insert(TypeId::of::<S>(), Box::new(service));
     }
 
-    pub fn service<S: Service>(&self) -> impl Deref<Target = S> + '_ {
-        self.inner
-            .services
-            .get(&TypeId::of::<S>())
-            .expect("Service not found")
-            .map(|service| {
-                service
-                    .as_any()
-                    .downcast_ref::<S>()
-                    .expect("Service type mismatch")
-            })
+    pub fn service<S: Service>(&self) -> impl Deref<Target = S> + '_ + Send {
+        RwLockReadGuard::map(self.inner.services.read(), |v| {
+            v.get(&TypeId::of::<S>())
+                .expect("Service not found")
+                .as_any()
+                .downcast_ref::<S>()
+                .expect("Service type mismatch")
+        })
     }
 }
 
@@ -288,22 +303,22 @@ where
 ///
 /// This trait is implemented for `Path`, `str` and `String` by default to load assets from the
 /// filesystem using the provided [`FsProvider`].
-pub trait AssetDesc<V>: StoredKey + std::fmt::Debug {
-    type Error: 'static;
+pub trait AssetDesc<V>: StoredKey + Debug {
+    type Error: 'static + Debug;
 
     fn load(&self, assets: &AssetCache) -> Result<Asset<V>, Self::Error>;
 }
 
-pub trait AsyncAssetDesc<V>: StoredKey + std::fmt::Debug + Send + Sync {
-    type Error: Send + Sync + 'static;
+pub trait AsyncAssetDesc<V>: StoredKey + Debug + Send + Sync {
+    type Error: Send + Sync + 'static + Debug;
 
-    fn load(
+    fn create(
         &self,
         assets: &AssetCache,
     ) -> impl Future<Output = Result<Asset<V>, Self::Error>> + Send;
 }
 
-impl AssetFromPathExt for DynamicImage {
+impl AssetFromPath for DynamicImage {
     type Error = anyhow::Error;
 
     fn load_from_path(path: &Path, assets: &AssetCache) -> anyhow::Result<Asset<Self>> {
@@ -315,15 +330,20 @@ impl AssetFromPathExt for DynamicImage {
 mod tests {
     use std::{convert::Infallible, path::Path};
 
+    use crate::service::FsAssetError;
+
     use super::*;
 
     #[test]
     fn asset_cache() {
-        impl AssetDesc<()> for Path {
-            type Error = Infallible;
+        impl AssetFromPath for () {
+            type Error = FsAssetError;
 
-            fn load(&self, assets: &AssetCache) -> Result<Asset<()>, Infallible> {
-                eprintln!("Loading {:?}", self);
+            fn load_from_path(
+                path: &Path,
+                assets: &AssetCache,
+            ) -> Result<Asset<Self>, Self::Error> {
+                eprintln!("Loading {:?}", path);
                 Ok(assets.insert(()))
             }
         }
@@ -375,7 +395,7 @@ mod tests {
         impl AsyncAssetDesc<()> for str {
             type Error = Infallible;
 
-            async fn load(&self, assets: &AssetCache) -> Result<Asset<()>, Infallible> {
+            async fn create(&self, assets: &AssetCache) -> Result<Asset<()>, Infallible> {
                 eprintln!("Loading {:?}", self);
                 YieldOnce { yielded: false }.await;
 
@@ -396,8 +416,14 @@ mod tests {
         use futures::future::FutureExt;
         assert!((&mut pending1).now_or_never().is_none());
         let content2 = pending2.now_or_never().unwrap().unwrap();
-        // let content = pending1.await.unwrap();
+        let content = pending1.now_or_never().unwrap().unwrap();
+        assert!(Arc::ptr_eq(content.as_arc(), content2.as_arc()));
 
-        // assert!(Arc::ptr_eq(content.as_arc(), content2.as_arc()));
+        let pending3 = assets
+            .try_load_async::<_, ()>("Foo")
+            .now_or_never()
+            .unwrap()
+            .unwrap();
+        assert!(Arc::ptr_eq(content.as_arc(), pending3.as_arc()));
     }
 }

@@ -6,6 +6,7 @@ description = "Gltf asset management for Ivy"
 
 [dependencies]
 ivy-assets = { path = "../ivy-assets" }
+ivy-profiling = { path = "../ivy-profiling" }
 
 anyhow.workspace = true
 gltf.workspace = true
@@ -13,3 +14,6 @@ glam.workspace = true
 tracing.workspace = true
 itertools.workspace = true
 flax.workspace = true
+image.workspace = true
+async-std.workspace = true
+futures.workspace = true

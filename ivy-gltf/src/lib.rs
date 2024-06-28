@@ -1,7 +1,13 @@
 pub mod components;
 
+use futures::StreamExt;
+use futures::TryStreamExt;
 use glam::{Quat, Vec3};
+use image::{DynamicImage, ImageBuffer, RgbImage, RgbaImage};
 use itertools::Itertools;
+use ivy_assets::fs::AsyncAssetFromPath;
+use ivy_profiling::profile_scope;
+use std::sync::Arc;
 use std::{collections::HashMap, path::Path};
 
 use gltf::{Gltf, Mesh};
@@ -14,7 +20,8 @@ pub struct DocumentData {
     named_materials: HashMap<String, usize>,
     named_nodes: HashMap<String, usize>,
 
-    buffer_data: Vec<gltf::buffer::Data>,
+    buffer_data: Arc<Vec<gltf::buffer::Data>>,
+    images: Vec<Asset<DynamicImage>>,
     // buffer_data: Vec<gltf::buffer::Data>,
 }
 
@@ -54,6 +61,10 @@ impl DocumentData {
     pub fn primitives(&self) -> impl Iterator<Item = gltf::Primitive<'_>> + '_ {
         self.meshes().flat_map(|v| v.primitives())
     }
+
+    pub fn images(&self) -> &[Asset<DynamicImage>] {
+        &self.images
+    }
 }
 
 pub struct Document {
@@ -69,8 +80,8 @@ impl std::ops::Deref for DocumentData {
 }
 
 impl Document {
-    pub fn new(assets: &AssetCache, path: impl AsRef<Path>) -> anyhow::Result<Self> {
-        let bytes: Asset<Vec<u8>> = assets.load(path.as_ref());
+    async fn load(assets: &AssetCache, path: impl AsRef<Path>) -> anyhow::Result<Self> {
+        let bytes: Asset<Vec<u8>> = assets.try_load_async(path.as_ref()).await?;
 
         let mut gltf = Gltf::from_slice(&bytes)?;
 
@@ -82,6 +93,22 @@ impl Document {
                 gltf::buffer::Data::from_source_and_blob(v.source(), None, &mut gltf.blob)
             })
             .try_collect()?;
+
+        let buffer_data = Arc::new(buffer_data);
+
+        let images: Vec<_> = futures::stream::iter(gltf.images())
+            .map(|v| {
+                let image = gltf::image::Data::from_source(v.source(), None, &buffer_data);
+                async {
+                    let image = image?;
+                    let image = async_std::task::spawn_blocking(|| load_image(image)).await?;
+                    anyhow::Ok(assets.insert(image))
+                }
+            })
+            .boxed()
+            .buffered(4)
+            .try_collect()
+            .await?;
 
         let named_meshes = gltf
             .document
@@ -107,10 +134,11 @@ impl Document {
         Ok(Self {
             data: assets.insert(DocumentData {
                 gltf,
-                buffer_data,
                 named_meshes,
                 named_materials,
                 named_nodes,
+                buffer_data,
+                images,
             }),
         })
     }
@@ -177,6 +205,55 @@ impl Document {
     }
 }
 
+fn load_image(image: gltf::image::Data) -> Result<DynamicImage, anyhow::Error> {
+    profile_scope!("load_texture");
+
+    let image: DynamicImage = match image.format {
+        gltf::image::Format::R8 => todo!(),
+        gltf::image::Format::R8G8 => todo!(),
+        gltf::image::Format::R8G8B8 => RgbImage::from_raw(image.width, image.height, image.pixels)
+            .unwrap()
+            .into(),
+        gltf::image::Format::R8G8B8A8 => {
+            RgbaImage::from_raw(image.width, image.height, image.pixels)
+                .unwrap()
+                .into()
+        }
+        gltf::image::Format::R16 => todo!(),
+        gltf::image::Format::R16G16 => todo!(),
+        gltf::image::Format::R16G16B16 => {
+            let pixels = image
+                .pixels
+                .chunks_exact(6)
+                .flat_map(|v| {
+                    let r = u16::from_le_bytes([v[0], v[1]]);
+                    let g = u16::from_le_bytes([v[2], v[3]]);
+                    let b = u16::from_le_bytes([v[4], v[5]]);
+
+                    [r, g, b]
+                })
+                .collect::<Vec<_>>();
+
+            ImageBuffer::<image::Rgb<u16>, _>::from_raw(image.width, image.height, pixels)
+                .unwrap()
+                .into()
+        }
+        gltf::image::Format::R16G16B16A16 => todo!(),
+        gltf::image::Format::R32G32B32FLOAT => todo!(),
+        gltf::image::Format::R32G32B32A32FLOAT => todo!(),
+    };
+
+    Ok(image)
+}
+
+impl AsyncAssetFromPath for Document {
+    type Error = anyhow::Error;
+
+    async fn load_from_path(path: &Path, assets: &AssetCache) -> Result<Asset<Self>, Self::Error> {
+        Document::load(assets, path).await.map(|v| assets.insert(v))
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct GltfPrimitiveRef<'a> {
     data: &'a Asset<DocumentData>,
@@ -232,7 +309,7 @@ impl<'a> GltfMeshRef<'a> {
     pub fn primitives(&self) -> impl Iterator<Item = GltfPrimitiveRef<'a>> + '_ {
         self.value
             .primitives()
-            .map(|v| GltfPrimitiveRef::new(&self.data, v, self.clone()))
+            .map(|v| GltfPrimitiveRef::new(self.data, v, self.clone()))
     }
 }
 

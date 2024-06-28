@@ -1,4 +1,8 @@
-use std::{collections::HashMap, sync::Arc, time::Instant};
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use flax::{components::name, Entity};
 use glam::{vec2, Vec2};
@@ -15,7 +19,7 @@ use winit::{
 };
 
 use crate::{
-    components::main_window,
+    components::{main_window, window},
     events::{ApplicationReady, RedrawEvent, ResizedEvent},
 };
 
@@ -44,6 +48,8 @@ impl Driver for WinitDriver {
             modifiers: Default::default(),
             scale_factor: 0.0,
             last_cursor_pos: None,
+            stats: AppStats::new(16),
+            main_window: Default::default(),
         })?;
 
         Ok(())
@@ -57,6 +63,8 @@ pub struct WinitEventHandler<'a> {
     modifiers: winit::keyboard::ModifiersState,
     scale_factor: f64,
     last_cursor_pos: Option<Vec2>,
+    stats: AppStats,
+    main_window: Option<Entity>,
 }
 
 impl<'a> ApplicationHandler for WinitEventHandler<'a> {
@@ -91,6 +99,7 @@ impl<'a> ApplicationHandler for WinitEventHandler<'a> {
         }
 
         self.windows.insert(window.id(), entity);
+        self.main_window = Some(entity);
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, wid: WindowId, event: WindowEvent) {
@@ -116,6 +125,16 @@ impl<'a> ApplicationHandler for WinitEventHandler<'a> {
         let new_time = Instant::now();
         let delta = new_time.duration_since(self.current_time);
         self.current_time = new_time;
+        self.stats.record_frame(delta);
+
+        if let Some(w) = self.main_window {
+            let handle = self.app.world.get(w, window()).unwrap();
+            let report = self.stats.report();
+            handle.window.set_title(&format!(
+                "Ivy - {:>4.1?} {:>4.1?} {:>4.1?}",
+                report.min_frame_time, report.average_frame_time, report.max_frame_time,
+            ))
+        }
 
         if let Err(err) = self.app.tick(delta) {
             tracing::error!("{err:?}");
@@ -320,4 +339,63 @@ impl WindowHandle {
     pub fn set_cursor_lock(&mut self, lock: bool) {
         self.cursor_lock.set_cursor_lock(&self.window, lock)
     }
+}
+
+struct AppStats {
+    frames: Vec<AppFrame>,
+    max_frames: usize,
+}
+
+impl AppStats {
+    pub fn new(max_frames: usize) -> Self {
+        Self {
+            frames: Vec::with_capacity(max_frames),
+            max_frames,
+        }
+    }
+
+    fn record_frame(&mut self, frame_time: Duration) {
+        if self.frames.len() >= self.max_frames {
+            self.frames.remove(0);
+        }
+        self.frames.push(AppFrame { frame_time });
+    }
+
+    fn report(&self) -> StatsReport {
+        let average = self
+            .frames
+            .iter()
+            .map(|f| f.frame_time)
+            .sum::<Duration>()
+            .div_f32(self.frames.len() as f32);
+
+        let min = self
+            .frames
+            .iter()
+            .map(|f| f.frame_time)
+            .min()
+            .unwrap_or_default();
+        let max = self
+            .frames
+            .iter()
+            .map(|f| f.frame_time)
+            .max()
+            .unwrap_or_default();
+
+        StatsReport {
+            average_frame_time: average,
+            min_frame_time: min,
+            max_frame_time: max,
+        }
+    }
+}
+
+pub struct StatsReport {
+    pub average_frame_time: Duration,
+    pub min_frame_time: Duration,
+    pub max_frame_time: Duration,
+}
+
+struct AppFrame {
+    frame_time: Duration,
 }

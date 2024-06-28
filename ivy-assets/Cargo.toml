@@ -13,8 +13,9 @@ image.workspace = true
 dashmap.workspace = true
 slotmap.workspace = true
 tracing.workspace = true
-parking_lot.workspace = true
+parking_lot = { workspace = true, features = ["send_guard"]}
 flume.workspace = true
 thiserror.workspace = true
 anyhow.workspace = true
 futures.workspace = true
+async-std.workspace = true
