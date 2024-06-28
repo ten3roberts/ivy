@@ -1,6 +1,7 @@
 #![allow(non_snake_case)]
-use crate::app::TickEvent;
 use crate::systems::update_transform_system;
+use crate::{app::TickEvent, systems::apply_async_commandbuffers};
+use crate::{async_commandbuffer, engine, AsyncCommandBuffer};
 use downcast_rs::{impl_downcast, Downcast};
 use flax::{Schedule, World};
 use ivy_assets::AssetCache;
@@ -64,15 +65,18 @@ impl<T: Layer> LayerDyn for T {
 
 pub struct EngineLayer {
     schedule: Schedule,
+    cmd: AsyncCommandBuffer,
 }
 
 impl EngineLayer {
     pub fn new() -> Self {
+        let cmd = AsyncCommandBuffer::new();
         let schedule = Schedule::builder()
+            .with_system(apply_async_commandbuffers(cmd.clone()))
             .with_system(update_transform_system())
             .build();
 
-        Self { schedule }
+        Self { cmd, schedule }
     }
 }
 
@@ -85,10 +89,12 @@ impl Default for EngineLayer {
 impl Layer for EngineLayer {
     fn register(
         &mut self,
-        _: &mut World,
+        world: &mut World,
         _: &AssetCache,
         mut events: EventRegisterContext<Self>,
     ) -> anyhow::Result<()> {
+        world.set(engine(), async_commandbuffer(), self.cmd.clone())?;
+
         events.subscribe(|this, world, _, _: &TickEvent| {
             this.schedule.execute_par(world)?;
             Ok(())

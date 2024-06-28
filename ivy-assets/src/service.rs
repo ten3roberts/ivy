@@ -1,7 +1,9 @@
+use std::convert::Infallible;
 use std::fs::File;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
+use futures::AsyncReadExt;
 use thiserror::Error;
 
 /// A service is registered with the asset cache and is used to load assets.
@@ -28,6 +30,12 @@ pub struct FsAssetError {
     path: PathBuf,
     #[source]
     error: io::Error,
+}
+
+impl From<Infallible> for FsAssetError {
+    fn from(_: Infallible) -> Self {
+        unreachable!()
+    }
 }
 
 /// Load assets from a configured asset root
@@ -75,6 +83,39 @@ impl FileSystemMapService {
         };
 
         inner().map_err(|err| FsAssetError {
+            path: path.into(),
+            error: err,
+        })
+    }
+
+    pub async fn load_bytes_async(
+        &self,
+        path: impl AsRef<Path> + Send,
+    ) -> Result<Vec<u8>, FsAssetError> {
+        let path = path.as_ref();
+        let inner = async {
+            let mut file = async_std::fs::File::open(self.root.join(path)).await?;
+            let mut bytes = Vec::new();
+            file.read_to_end(&mut bytes).await?;
+            Ok(bytes)
+        };
+
+        inner.await.map_err(|err| FsAssetError {
+            path: path.into(),
+            error: err,
+        })
+    }
+
+    pub async fn load_string_async(&self, path: impl AsRef<Path>) -> Result<String, FsAssetError> {
+        let path = path.as_ref();
+        let inner = async {
+            let mut file = async_std::fs::File::open(self.root.join(path)).await?;
+            let mut string = String::new();
+            file.read_to_string(&mut string).await?;
+            Ok(string)
+        };
+
+        inner.await.map_err(|err| FsAssetError {
             path: path.into(),
             error: err,
         })

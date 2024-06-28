@@ -1,6 +1,10 @@
+use std::sync::Arc;
+
 use flax::{
-    component::ComponentValue, entity_ids, Component, EntityBuilder, EntityRef, Query, World,
+    component::ComponentValue, entity_ids, CommandBuffer, Component, EntityBuilder, EntityRef,
+    Query, World,
 };
+use parking_lot::{Mutex, MutexGuard};
 
 pub trait WorldExt {
     /// Finds an entity by name
@@ -39,5 +43,28 @@ impl EntityBuilderExt for EntityBuilder {
     fn mount<T: Bundle>(&mut self, bundle: T) -> &mut Self {
         bundle.mount(self);
         self
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AsyncCommandBuffer {
+    cmd: Arc<Mutex<CommandBuffer>>,
+}
+
+impl AsyncCommandBuffer {
+    pub fn new() -> Self {
+        Self {
+            cmd: Arc::new(Mutex::new(CommandBuffer::new())),
+        }
+    }
+
+    pub fn lock(&self) -> MutexGuard<CommandBuffer> {
+        self.cmd.lock()
+    }
+}
+
+impl Default for AsyncCommandBuffer {
+    fn default() -> Self {
+        Self::new()
     }
 }

@@ -1,12 +1,14 @@
 use std::time::Instant;
 
 use flax::{
-    component, BoxedSystem, Component, Entity, Mutable, Query, QueryBorrow, Schedule, System, World,
+    component, BoxedSystem, Component, Entity, EntityBuilder, Mutable, Query, QueryBorrow,
+    Schedule, System, World,
 };
 use glam::{vec3, EulerRot, Mat4, Quat, Vec2, Vec3};
-use ivy_assets::AssetCache;
+use ivy_assets::{Asset, AssetCache};
 use ivy_core::{
     app::{InitEvent, TickEvent},
+    async_commandbuffer, engine,
     layer::events::EventRegisterContext,
     main_camera,
     palette::Srgb,
@@ -26,14 +28,12 @@ use ivy_wgpu::{
     events::ResizedEvent,
     layer::GraphicsLayer,
     light::PointLight,
-    material_desc::{MaterialData, MaterialDesc},
-    mesh_desc::{MeshData, MeshDesc},
-    renderer::{CameraNode, MsaaResolve, RenderObjectBundle},
+    renderer::{CameraNode, MsaaResolve},
     rendergraph::{ExternalResources, ManagedTextureDesc, RenderGraph, TextureDesc},
-    shaders::PbrShaderKey,
     Gpu,
 };
 use ivy_wgpu_types::{PhysicalSize, Surface};
+use tracing::Instrument;
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
 use wgpu::Extent3d;
@@ -44,7 +44,8 @@ pub fn main() -> anyhow::Result<()> {
         .with(
             HierarchicalLayer::default()
                 .with_indent_lines(true)
-                .with_deferred_spans(true),
+                .with_deferred_spans(true)
+                .with_span_retrace(true),
         )
         .init();
 
@@ -79,9 +80,7 @@ pub fn main() -> anyhow::Result<()> {
     }
 }
 
-pub struct LogicLayer {
-    entity: Option<Entity>,
-}
+pub struct LogicLayer {}
 
 impl Default for LogicLayer {
     fn default() -> Self {
@@ -91,120 +90,54 @@ impl Default for LogicLayer {
 
 impl LogicLayer {
     pub fn new() -> Self {
-        Self { entity: None }
+        Self {}
     }
 
     fn setup_assets(&mut self, world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
-        let document = Document::new(assets, "models/shapes.glb")?;
+        let cmd = world.get(engine(), async_commandbuffer()).unwrap().clone();
+        let assets = assets.clone();
 
-        // for x in 0..10 {
-        //     for y in 0..10 {
-        //         for z in 0..10 {
-        //             document
-        //                 .node(0)
-        //                 .unwrap()
-        //                 .mount(assets, &mut Entity::builder())
-        //                 .mount(TransformBundle::new(
-        //                     vec3(x as f32 * 2.5, y as f32 * 2.5, 5.0 + z as f32 * 2.5),
-        //                     Quat::IDENTITY,
-        //                     Vec3::ONE,
-        //                 ))
-        //                 .spawn(world);
-        //         }
-        //     }
-        // }
+        async_std::task::spawn(
+            async move {
+                let document: Asset<Document> = assets.load_async("models/Sphere.glb").await;
+                tracing::info!("finished loading document");
 
-        // let document = Document::new(assets, "models/sphere.glb")?;
-        // for (i, node) in ["Sphere", "SphereMetal", "SphereGold"].iter().enumerate() {
-        //     document
-        //         .find_node(node)
-        //         .unwrap()
-        //         .mount(assets, &mut Entity::builder())
-        //         .mount(TransformBundle::new(
-        //             vec3(i as f32 * 3.0, 0.0, 0.0),
-        //             Quat::IDENTITY,
-        //             Vec3::ONE,
-        //         ))
-        //         .spawn(world);
-        // }
+                let root: EntityBuilder = document
+                    .node(0)
+                    .unwrap()
+                    .mount(&assets, &mut Entity::builder())
+                    .mount(TransformBundle::new(
+                        vec3(0.0, 0.0, 5.0),
+                        Quat::IDENTITY,
+                        Vec3::ONE,
+                    ))
+                    .into();
 
-        let document = Document::new(assets, "models/Sphere.glb")?;
-
-        let root = document
-            .node(0)
-            .unwrap()
-            .mount(assets, &mut Entity::builder())
-            .mount(TransformBundle::new(
-                vec3(0.0, 0.0, 5.0),
-                Quat::IDENTITY,
-                Vec3::ONE,
-            ))
-            .spawn(world);
-
-        self.entity = Some(root);
+                cmd.lock().spawn(root);
+            }
+            .instrument(tracing::info_span!("load_assets")),
+        );
 
         Ok(())
     }
 
     fn setup_objects(&mut self, world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
         self.setup_assets(world, assets)?;
-        let shader = assets.load(&PbrShaderKey);
-
-        let quad_mesh = MeshDesc::content(assets.insert(MeshData::quad()));
-        let cube_mesh = MeshDesc::content(assets.insert(MeshData::cube()));
-
-        // let material = MaterialDesc::content(assets.insert(MaterialData::new(
-        //     ivy_wgpu::texture::TextureDesc::path("assets/textures/statue.jpg"),
-        //     ivy_wgpu::texture::TextureDesc::default_normal(),
-        //     0.4,
-        //     0.0,
-        // )));
-
-        // let material2 = MaterialDesc::content(assets.insert(MaterialData::new(
-        //     ivy_wgpu::texture::TextureDesc::path("assets/textures/grid.png"),
-        //     ivy_wgpu::texture::TextureDesc::default_normal(),
-        //     0.4,
-        //     0.0,
-        // )));
 
         // Entity::builder()
-        //     .mount(RenderObjectBundle::new(
-        //         quad_mesh.clone(),
-        //         material.clone(),
-        //         shader.clone(),
-        //     ))
-        //     .mount(TransformBundle::new(
-        //         vec3(0.0, 0.0, 2.0),
-        //         Quat::IDENTITY,
-        //         Vec3::ONE,
-        //     ))
-        //     .spawn(world);
-
-        // let entity = Entity::builder()
-        //     .mount(RenderObjectBundle::new(cube_mesh, material2, shader))
-        //     .mount(TransformBundle::new(
-        //         vec3(1.0, 0.0, 2.0),
-        //         Quat::from_euler(glam::EulerRot::ZYX, 1.0, 0.0, 0.0),
-        //         Vec3::ONE,
-        //     ))
+        //     .mount(TransformBundle::default().with_position(vec3(0.0, 100.0, 0.0)))
+        //     .set(light(), PointLight::new(Srgb::new(1.0, 1.0, 1.0), 100000.0))
         //     .spawn(world);
 
         Entity::builder()
-            .mount(TransformBundle::default().with_position(vec3(0.0, 100.0, 0.0)))
-            .set(light(), PointLight::new(Srgb::new(1.0, 1.0, 1.0), 100000.0))
+            .mount(TransformBundle::default().with_position(vec3(0.0, 20.0, 0.0)))
+            .set(light(), PointLight::new(Srgb::new(0.0, 1.0, 1.0), 5000.0))
             .spawn(world);
 
-        // Entity::builder()
-        //     .mount(TransformBundle::default().with_position(vec3(0.0, 20.0, 0.0)))
-        //     .set(light(), PointLight::new(Srgb::new(0.0, 1.0, 1.0), 50.0))
-        //     .spawn(world);
-
-        // Entity::builder()
-        //     .mount(TransformBundle::default().with_position(vec3(10.0, 10.0, 0.0)))
-        //     .set(light(), PointLight::new(Srgb::new(1.0, 0.0, 0.0), 40.0))
-        //     .spawn(world);
-
-        // self.entity = Some(entity);
+        Entity::builder()
+            .mount(TransformBundle::default().with_position(vec3(10.0, 10.0, 0.0)))
+            .set(light(), PointLight::new(Srgb::new(1.0, 0.0, 0.0), 4000.0))
+            .spawn(world);
 
         Ok(())
     }
@@ -218,17 +151,6 @@ impl Layer for LogicLayer {
         mut events: EventRegisterContext<Self>,
     ) -> anyhow::Result<()> {
         events.subscribe(|this, world, assets, InitEvent| this.setup_objects(world, assets));
-
-        let start_time = std::time::Instant::now();
-        events.subscribe(move |this, world, _, _: &TickEvent| {
-            let t = start_time.elapsed().as_secs_f32();
-            if let Some(entity) = this.entity {
-                world
-                    .set(entity, rotation(), Quat::from_axis_angle(Vec3::Y, t * 0.2))
-                    .unwrap();
-            }
-            Ok(())
-        });
 
         events.subscribe(|_, world, _, resized: &ResizedEvent| {
             if let Some(main_camera) = Query::new(projection_matrix().as_mut())
