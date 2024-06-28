@@ -3,7 +3,8 @@ use std::borrow::Cow;
 use wgpu::{
     BindGroup, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry,
     BindingResource, BindingType, Buffer, BufferBindingType, Sampler, SamplerBindingType,
-    ShaderStages, TextureSampleType, TextureView, TextureViewDimension,
+    ShaderStages, StorageTextureAccess, TextureFormat, TextureSampleType, TextureView,
+    TextureViewDimension,
 };
 
 use crate::Gpu;
@@ -42,6 +43,22 @@ impl BindGroupLayoutBuilder {
                 sample_type: TextureSampleType::Float { filterable: true },
                 view_dimension: TextureViewDimension::D2,
                 multisampled: false,
+            },
+        )
+    }
+
+    pub fn bind_storage_texture(
+        &mut self,
+        visibility: ShaderStages,
+        access: StorageTextureAccess,
+        format: TextureFormat,
+    ) -> &mut Self {
+        self.bind(
+            visibility,
+            BindingType::StorageTexture {
+                access,
+                format,
+                view_dimension: TextureViewDimension::D2,
             },
         )
     }

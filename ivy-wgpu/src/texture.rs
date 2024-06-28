@@ -1,6 +1,9 @@
-use image::DynamicImage;
+use image::{DynamicImage, GenericImageView};
 use ivy_assets::{Asset, AssetCache, AssetDesc};
-use ivy_wgpu_types::texture::{texture_from_image, TextureFromColor};
+use ivy_wgpu_types::{
+    texture::{max_mip_levels, texture_from_image, TextureFromColor, TextureFromImageDesc},
+    Gpu,
+};
 use wgpu::{Texture, TextureFormat};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -45,9 +48,27 @@ impl TextureDesc {
         match self {
             TextureDesc::Path(v) => {
                 let image = image::open(v)?;
-                Ok(assets.insert(texture_from_image(&gpu, &image, format)))
+                Ok(assets.insert(texture_from_image(
+                    &gpu,
+                    assets,
+                    &image,
+                    TextureFromImageDesc {
+                        label: v.clone().into(),
+                        format,
+                        ..Default::default()
+                    },
+                )))
             }
-            TextureDesc::Content(v) => Ok(assets.insert(texture_from_image(&gpu, v, format))),
+            TextureDesc::Content(image) => Ok(assets.insert(texture_from_image(
+                &gpu,
+                assets,
+                image,
+                TextureFromImageDesc {
+                    label: "content".into(),
+                    format,
+                    ..Default::default()
+                },
+            ))),
             TextureDesc::Color(v) => Ok(assets.load(&TextureFromColor { color: v.0, format })),
         }
     }

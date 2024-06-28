@@ -65,6 +65,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "parking_lot"]
 tracing-tree = "0.3"
 wgpu = "0.20"
 winit = "0.30"
+rayon = "1.0"
 
 [dependencies]
 ivy-collision = { path = "./ivy-collision", version = "0.10" }

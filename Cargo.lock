@@ -1861,6 +1861,7 @@ dependencies = [
  "mikktspace",
  "puffin",
  "puffin_http",
+ "rayon",
  "slab",
  "slotmap",
  "tracing",
@@ -1888,6 +1889,7 @@ dependencies = [
  "puffin_http",
  "slab",
  "tracing",
+ "tracing-subscriber",
  "wgpu",
  "winit",
 ]
