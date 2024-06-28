@@ -103,9 +103,9 @@ impl Material {
         let albedo = pbr
             .base_color_texture()
             .map(|info| {
-                let index = info.texture().index();
+                let texture = textures[info.texture().index()].clone();
                 assets.load(&TextureAndKindDesc::new(
-                    TextureDesc::Content(textures[index].clone()),
+                    TextureDesc::Content(texture),
                     TextureKind::Srgba,
                 ))
             })

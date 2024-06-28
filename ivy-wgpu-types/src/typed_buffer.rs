@@ -7,8 +7,8 @@ use std::{
 use bytemuck::Pod;
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
-    Buffer, BufferDescriptor, BufferSlice, BufferUsages, CommandEncoder, CommandEncoderDescriptor,
-    Queue,
+    Buffer, BufferAsyncError, BufferDescriptor, BufferSlice, BufferUsages, BufferView,
+    CommandEncoder, CommandEncoderDescriptor, MapMode, Queue,
 };
 
 use crate::Gpu;
@@ -150,6 +150,29 @@ where
         };
 
         self.buffer.slice((start, end))
+    }
+
+    pub async fn map(
+        &self,
+        gpu: &Gpu,
+        bounds: impl RangeBounds<u64>,
+    ) -> Result<BufferView, BufferAsyncError> {
+        let slice = self.buffer.slice(bounds);
+        let (tx, rx) = futures::channel::oneshot::channel();
+
+        tracing::info!("mapping");
+        slice.map_async(MapMode::Read, move |result| {
+            tracing::debug!("mapped buffer");
+            tx.send(result).ok();
+        });
+
+        tracing::info!("polling");
+        gpu.device.poll(wgpu::MaintainBase::Wait);
+
+        rx.await.unwrap()?;
+
+        let view = slice.get_mapped_range();
+        Ok(view)
     }
 
     pub fn buffer(&self) -> &Buffer {
