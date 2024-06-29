@@ -11,15 +11,17 @@ use wgpu::{
     TextureViewDescriptor,
 };
 
-use crate::{compute::MipLevelPipeline, BindGroupBuilder, TypedBuffer};
+use crate::{mipmap::generate_mipmaps, BindGroupBuilder, TypedBuffer};
 
 use super::Gpu;
 
+#[derive(Debug, Clone)]
 pub struct TextureFromImageDesc {
     pub label: Cow<'static, str>,
     pub format: TextureFormat,
     pub mip_level_count: Option<u32>,
     pub usage: TextureUsages,
+    pub generate_mipmaps: bool,
 }
 
 impl Default for TextureFromImageDesc {
@@ -29,6 +31,7 @@ impl Default for TextureFromImageDesc {
             format: TextureFormat::Rgba8UnormSrgb,
             mip_level_count: None,
             usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
+            generate_mipmaps: true,
         }
     }
 }
@@ -43,6 +46,8 @@ pub fn texture_from_image(
     image: &image::DynamicImage,
     desc: TextureFromImageDesc,
 ) -> Texture {
+    let _span = tracing::info_span!("texture_from_image", label = %desc.label).entered();
+
     let image = image.to_rgba8();
     let dimensions = image.dimensions();
 
@@ -56,126 +61,52 @@ pub fn texture_from_image(
         .mip_level_count
         .unwrap_or_else(|| max_mip_levels(dimensions.0, dimensions.1));
 
+    let mut usage = TextureUsages::COPY_DST | desc.usage;
+
+    if desc.generate_mipmaps {
+        usage |= TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING;
+    }
     let texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
         size,
         mip_level_count,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format: desc.format,
-        usage: desc.usage | TextureUsages::COPY_DST,
+        usage,
         label: Some(desc.label.as_ref()),
         view_formats: &[TextureFormat::Rgba8Unorm],
     });
 
-    let mut mip_level_images = vec![image];
+    // Write to the texture
+    gpu.queue.write_texture(
+        // Tells wgpu where to copy the pixel data
+        wgpu::ImageCopyTexture {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        // The actual pixel data
+        &image,
+        // The layout of the texture
+        wgpu::ImageDataLayout {
+            offset: 0,
+            bytes_per_row: Some(size.width * desc.format.block_copy_size(None).unwrap()),
+            rows_per_image: Some(size.height),
+        },
+        size,
+    );
 
-    assert!(mip_level_count > 0);
-    for level in 1..mip_level_count {
-        tracing::info!(level, "computing mip level");
-        let prev = &mip_level_images[level as usize - 1];
-        assert!(prev.width() >= 1 && prev.height() >= 2);
-        let image = image::imageops::resize(
-            prev,
-            prev.width() / 2,
-            prev.height() / 2,
-            image::imageops::FilterType::Triangle,
-        );
-
-        mip_level_images.push(image);
-    }
-
-    let mut mipped_size = size;
-    for level in 0..mip_level_count {
-        // Write to the texture
-        gpu.queue.write_texture(
-            // Tells wgpu where to copy the pixel data
-            wgpu::ImageCopyTexture {
-                texture: &texture,
-                mip_level: level,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            // The actual pixel data
-            &mip_level_images[level as usize],
-            // The layout of the texture
-            wgpu::ImageDataLayout {
-                offset: 0,
-                bytes_per_row: Some(mipped_size.width * desc.format.block_copy_size(None).unwrap()),
-                rows_per_image: Some(mipped_size.height),
-            },
-            mipped_size,
-        );
-
-        mipped_size.width = mipped_size.width.max(1) / 2;
-        mipped_size.height = mipped_size.height.max(1) / 2;
-    }
+    generate_mipmaps(gpu, &texture, mip_level_count);
 
     texture
 }
 
-fn generate_mip_levels(
+pub async fn read_texture(
     gpu: &Gpu,
-    assets: &AssetCache,
-    extent: Extent3d,
     texture: &Texture,
-    mip_level_count: u32,
-) {
-    let pipeline = assets.load(&MipLevelPipeline);
-
-    let bind_group_layout = pipeline.get_bind_group_layout(0);
-
-    let bind_groups = (1..mip_level_count)
-        .map(|level| {
-            let input = texture.create_view(&TextureViewDescriptor {
-                mip_level_count: Some(1),
-                base_mip_level: level - 1,
-                format: Some(TextureFormat::Rgba8Unorm),
-                ..Default::default()
-            });
-
-            let output = texture.create_view(&TextureViewDescriptor {
-                mip_level_count: Some(1),
-                base_mip_level: level,
-                format: Some(TextureFormat::Rgba8Unorm),
-                ..Default::default()
-            });
-            BindGroupBuilder::new("mipmap_generator")
-                .bind_texture(&input)
-                .bind_texture(&output)
-                .build(gpu, &bind_group_layout)
-        })
-        .collect_vec();
-
-    let invocation_count = uvec2(extent.width / 2, extent.height / 2);
-    let workgroups_per_dim = 8;
-    let workgroup_count = (invocation_count + workgroups_per_dim - 1) / workgroups_per_dim;
-    tracing::info!(%workgroup_count, "dispatching workgroups");
-
-    let mut encoder = gpu
-        .device
-        .create_command_encoder(&CommandEncoderDescriptor {
-            label: "compute_mipmaps".into(),
-        });
-
-    {
-        let mut compute_pass = encoder.begin_compute_pass(&ComputePassDescriptor {
-            label: "compute_mipmaps".into(),
-            timestamp_writes: None,
-        });
-
-        for (level, bind_group) in (1..mip_level_count).zip(&bind_groups) {
-            compute_pass.set_pipeline(&pipeline);
-            tracing::info!("computing level");
-            compute_pass.set_bind_group(0, bind_group, &[]);
-
-            compute_pass.dispatch_workgroups(workgroup_count.x, workgroup_count.y, 1);
-        }
-    }
-
-    gpu.queue.submit([encoder.finish()]);
-}
-
-async fn read_texture(gpu: &Gpu, texture: &Texture, mip_level: u32) -> anyhow::Result<RgbaImage> {
+    mip_level: u32,
+) -> anyhow::Result<RgbaImage> {
     anyhow::ensure!(
         mip_level < texture.mip_level_count(),
         "Mip level out of range"
