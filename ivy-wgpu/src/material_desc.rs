@@ -1,11 +1,9 @@
 use image::Rgba;
 use ivy_assets::{Asset, AssetDesc};
 use ivy_gltf::{GltfMaterial, GltfMaterialRef};
+use wgpu::TextureFormat;
 
-use crate::{
-    material::Material,
-    texture::{TextureDesc, TextureKind},
-};
+use crate::{material::Material, texture::TextureDesc};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MaterialDesc {
@@ -78,13 +76,13 @@ impl AssetDesc<Material> for MaterialDesc {
                 Ok(material)
             }
             MaterialDesc::Content(v) => {
-                let albedo = v.albedo.load(assets, TextureKind::Srgba)?;
-                let normal = v.normal.load(assets, TextureKind::Uniform)?;
+                let albedo = v.albedo.load(assets, TextureFormat::Rgba8UnormSrgb)?;
+                let normal = v.normal.load(assets, TextureFormat::Rgba8Unorm)?;
                 let metallic_roughness = v
                     .metallic_roughness
                     .as_ref()
                     .unwrap_or_else(|| &TextureDesc::Color(Rgba([255, 255, 255, 255])))
-                    .load(assets, TextureKind::Uniform)?;
+                    .load(assets, TextureFormat::Rgba8Unorm)?;
 
                 Ok(assets.insert(Material::new(
                     &assets.service(),

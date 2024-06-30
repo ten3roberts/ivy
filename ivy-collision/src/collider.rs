@@ -12,8 +12,8 @@ pub struct ColliderOffset(pub Mat4);
 impl<'a> Lerp<'a> for ColliderOffset {
     type Write = &'a mut Self;
 
-    fn lerp(write: Self::Write, start: &Self, end: &Self, t: f32) {
-        Mat4::lerp(&mut write.0, start, end, t)
+    fn lerp(_write: Self::Write, _start: &Self, _end: &Self, _t: f32) {
+        unimplemented!()
     }
 }
 

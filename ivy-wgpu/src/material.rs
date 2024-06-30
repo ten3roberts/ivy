@@ -1,10 +1,10 @@
 use image::DynamicImage;
 use ivy_assets::{Asset, AssetCache};
 use ivy_wgpu_types::{texture::TextureFromColor, BindGroupBuilder, BindGroupLayoutBuilder};
-use wgpu::{BufferUsages, Sampler, SamplerDescriptor, ShaderStages, Texture};
+use wgpu::{BufferUsages, Sampler, SamplerDescriptor, ShaderStages, Texture, TextureFormat};
 
 use crate::{
-    texture::{TextureAndKindDesc, TextureDesc, TextureKind},
+    texture::{TextureAndKindDesc, TextureDesc},
     types::{texture::DefaultNormalTexture, Gpu, TypedBuffer},
 };
 
@@ -43,6 +43,7 @@ impl Material {
             .bind_uniform_buffer(ShaderStages::FRAGMENT)
             .build(gpu);
 
+        // TODO: asset
         let sampler = gpu.device.create_sampler(&SamplerDescriptor {
             label: "material_sampler".into(),
             min_filter: wgpu::FilterMode::Linear,
@@ -106,13 +107,13 @@ impl Material {
                 let texture = textures[info.texture().index()].clone();
                 assets.load(&TextureAndKindDesc::new(
                     TextureDesc::Content(texture),
-                    TextureKind::Srgba,
+                    TextureFormat::Rgba8UnormSrgb,
                 ))
             })
             .unwrap_or_else(|| {
                 assets.load(&TextureFromColor {
                     color: pbr.base_color_factor().map(|v| (v * 255.0) as u8),
-                    format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                    format: TextureFormat::Rgba8UnormSrgb,
                 })
             });
 
@@ -122,7 +123,7 @@ impl Material {
                 let index = info.texture().index();
                 assets.load(&TextureAndKindDesc::new(
                     TextureDesc::Content(textures[index].clone()),
-                    TextureKind::Uniform,
+                    TextureFormat::Rgba8Unorm,
                 ))
             })
             .unwrap_or_else(|| assets.load(&DefaultNormalTexture));
@@ -136,13 +137,13 @@ impl Material {
                 let index = info.texture().index();
                 assets.load(&TextureAndKindDesc::new(
                     TextureDesc::Content(textures[index].clone()),
-                    TextureKind::Uniform,
+                    TextureFormat::Rgba8Unorm,
                 ))
             })
             .unwrap_or_else(|| {
                 assets.load(&TextureFromColor {
                     color: [0, 255, 255, 0],
-                    format: wgpu::TextureFormat::R8Unorm,
+                    format: TextureFormat::Rgba8Unorm,
                 })
             });
 

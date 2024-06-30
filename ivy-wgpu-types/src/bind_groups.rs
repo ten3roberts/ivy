@@ -47,6 +47,17 @@ impl BindGroupLayoutBuilder {
         )
     }
 
+    pub fn bind_texture_cube(&mut self, visibility: ShaderStages) -> &mut Self {
+        self.bind(
+            visibility,
+            BindingType::Texture {
+                sample_type: TextureSampleType::Float { filterable: true },
+                view_dimension: TextureViewDimension::Cube,
+                multisampled: false,
+            },
+        )
+    }
+
     pub fn bind_storage_texture(
         &mut self,
         visibility: ShaderStages,

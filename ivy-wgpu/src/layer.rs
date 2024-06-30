@@ -12,7 +12,8 @@ use crate::{
     Gpu,
 };
 
-type OnInitFunc = Box<dyn FnOnce(&mut World, &Gpu, Surface) -> anyhow::Result<Box<dyn Renderer>>>;
+type OnInitFunc =
+    Box<dyn FnOnce(&mut World, &AssetCache, &Gpu, Surface) -> anyhow::Result<Box<dyn Renderer>>>;
 
 /// Responsible for rendering the frame
 pub trait Renderer {
@@ -42,12 +43,12 @@ pub struct GraphicsLayer {
 impl GraphicsLayer {
     /// Create a new graphics layer
     pub fn new<R: 'static + Renderer>(
-        mut on_init: impl 'static + FnMut(&mut World, &Gpu, Surface) -> anyhow::Result<R>,
+        mut on_init: impl 'static + FnMut(&mut World, &AssetCache, &Gpu, Surface) -> anyhow::Result<R>,
     ) -> Self {
         Self {
             rendering_state: None,
-            on_init: Some(Box::new(move |world, gpu, surface| {
-                Ok(Box::new(on_init(world, gpu, surface)?))
+            on_init: Some(Box::new(move |world, assets, gpu, surface| {
+                Ok(Box::new(on_init(world, assets, gpu, surface)?))
             })),
         }
     }
@@ -64,7 +65,7 @@ impl GraphicsLayer {
         assets.register_service(gpu.clone());
 
         tracing::info!("initializing rendergraph");
-        let renderer = (self.on_init.take().unwrap())(world, &gpu, surface)?;
+        let renderer = (self.on_init.take().unwrap())(world, assets, &gpu, surface)?;
         self.rendering_state = Some(RenderingState { gpu, renderer });
 
         Ok(())

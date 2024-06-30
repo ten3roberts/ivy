@@ -5,6 +5,7 @@ use flax::{
     Schedule, System, World,
 };
 use glam::{vec3, EulerRot, Mat4, Quat, Vec2, Vec3};
+use image::DynamicImage;
 use ivy_assets::{Asset, AssetCache};
 use ivy_core::{
     app::{InitEvent, TickEvent},
@@ -21,6 +22,7 @@ use ivy_input::{
     components::input_state, layer::InputLayer, types::Key, Action, Axis3, BindingExt,
     CursorMovement, InputState, KeyBinding, MouseButtonBinding,
 };
+use ivy_postprocessing::{hdri::process_hdri, skybox::SkyboxRenderer};
 use ivy_scene::GltfNodeExt;
 use ivy_wgpu::{
     components::{light, main_window, projection_matrix, window},
@@ -28,7 +30,7 @@ use ivy_wgpu::{
     events::ResizedEvent,
     layer::GraphicsLayer,
     light::PointLight,
-    renderer::{CameraNode, MsaaResolve},
+    renderer::{mesh_renderer::MeshRenderer, CameraNode, MsaaResolve},
     rendergraph::{ExternalResources, ManagedTextureDesc, RenderGraph, TextureDesc},
     Gpu,
 };
@@ -36,7 +38,7 @@ use ivy_wgpu_types::{PhysicalSize, Surface};
 use tracing::Instrument;
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
-use wgpu::Extent3d;
+use wgpu::{Extent3d, TextureFormat};
 
 pub fn main() -> anyhow::Result<()> {
     registry()
@@ -55,8 +57,8 @@ pub fn main() -> anyhow::Result<()> {
         .with_driver(WinitDriver::new())
         .with_layer(EngineLayer::new())
         .with_layer(ProfilingLayer::new())
-        .with_layer(GraphicsLayer::new(|world, gpu, surface| {
-            Ok(RenderGraphRenderer::new(world, gpu, surface))
+        .with_layer(GraphicsLayer::new(|world, assets, gpu, surface| {
+            Ok(RenderGraphRenderer::new(world, assets, gpu, surface))
         }))
         .with_layer(InputLayer::new())
         .with_layer(LogicLayer::new())
@@ -130,13 +132,8 @@ impl LogicLayer {
         //     .spawn(world);
 
         Entity::builder()
-            .mount(TransformBundle::default().with_position(vec3(0.0, 20.0, 0.0)))
-            .set(light(), PointLight::new(Srgb::new(0.0, 1.0, 1.0), 5000.0))
-            .spawn(world);
-
-        Entity::builder()
-            .mount(TransformBundle::default().with_position(vec3(10.0, 10.0, 0.0)))
-            .set(light(), PointLight::new(Srgb::new(1.0, 0.0, 0.0), 4000.0))
+            .mount(TransformBundle::default().with_position(vec3(0.0, 50.0, 0.0)))
+            .set(light(), PointLight::new(Srgb::new(1.0, 1.0, 1.0), 10000.0))
             .spawn(world);
 
         Ok(())
@@ -365,8 +362,27 @@ struct RenderGraphRenderer {
 }
 
 impl RenderGraphRenderer {
-    pub fn new(_world: &mut World, gpu: &Gpu, surface: Surface) -> Self {
+    pub fn new(_world: &mut World, assets: &AssetCache, gpu: &Gpu, surface: Surface) -> Self {
         let size = surface.size();
+
+        let image: Asset<DynamicImage> =
+            assets.load("ivy-postprocessing/hdrs/lauter_waterfall_4k.hdr");
+
+        let mut encoder = gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("hdri_encoder"),
+            });
+
+        let skybox = process_hdri(
+            gpu,
+            &mut encoder,
+            assets,
+            &image,
+            TextureFormat::Rgba16Float,
+        );
+
+        gpu.queue.submit(std::iter::once(encoder.finish()));
 
         let mut render_graph = RenderGraph::new();
 
@@ -396,7 +412,14 @@ impl RenderGraphRenderer {
 
         let surface_texture = render_graph.resources.insert_texture(TextureDesc::External);
 
-        render_graph.add_node(CameraNode::new(gpu, depth_texture, final_color));
+        let camera_renderer = (SkyboxRenderer::new(gpu, skybox), MeshRenderer::new(gpu));
+
+        render_graph.add_node(CameraNode::new(
+            gpu,
+            depth_texture,
+            final_color,
+            camera_renderer,
+        ));
         render_graph.add_node(MsaaResolve::new(final_color, surface_texture));
 
         Self {

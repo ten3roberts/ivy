@@ -108,7 +108,7 @@ impl AssetCache {
 
         self.inner
             .keys
-            .entry(TypeId::of::<K::Stored>())
+            .entry(TypeId::of::<(K::Stored, V)>())
             .or_insert_with(|| Box::<KeyMap<K::Stored, V>>::default())
             .downcast_mut::<KeyMap<K::Stored, V>>()
             .unwrap()
@@ -174,7 +174,7 @@ impl AssetCache {
             assets
                 .inner
                 .keys
-                .entry(TypeId::of::<K::Stored>())
+                .entry(TypeId::of::<(K::Stored, V)>())
                 .or_insert_with(|| Box::<KeyMap<K::Stored, V>>::default())
                 .downcast_mut::<KeyMap<K::Stored, V>>()
                 .unwrap()
@@ -217,7 +217,7 @@ impl AssetCache {
         V: 'static + Send + Sync,
     {
         // Keys of K
-        let keys = self.inner.keys.get(&TypeId::of::<K::Stored>())?;
+        let keys = self.inner.keys.get(&TypeId::of::<(K::Stored, V)>())?;
 
         let handle = keys
             .downcast_ref::<KeyMap<K::Stored, V>>()
@@ -234,7 +234,7 @@ impl AssetCache {
         V: 'static + Send + Sync,
     {
         // Keys of K
-        let keys = self.inner.keys.get(&TypeId::of::<K::Stored>())?;
+        let keys = self.inner.keys.get(&TypeId::of::<(K::Stored, V)>())?;
 
         let handle = keys
             .downcast_ref::<KeyMap<K::Stored, V>>()

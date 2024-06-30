@@ -179,6 +179,7 @@ impl MipMapGenerator {
 }
 
 pub fn generate_mipmaps(gpu: &Gpu, texture: &Texture, mip_count: u32) {
+    puffin::profile_function!();
     let mut encoder = gpu.device.create_command_encoder(&Default::default());
 
     MipMapGenerator::generate_mipmaps(&mut encoder, &gpu.device, texture, mip_count);
@@ -210,13 +211,17 @@ fn load_mips() {
                 usage: TextureUsages::COPY_SRC
                     | TextureUsages::TEXTURE_BINDING
                     | TextureUsages::RENDER_ATTACHMENT,
+                generate_mipmaps: true,
             },
-        );
+        )
+        .unwrap();
 
         generate_mipmaps(&gpu, &texture, texture.mip_level_count());
 
         tracing::info!("reading back texture");
-        let mip = read_texture(&gpu, &texture, 3).await.unwrap();
+        let mip = read_texture(&gpu, &texture, 3, 0, image::ColorType::Rgba8)
+            .await
+            .unwrap();
 
         mip.save("../assets/textures/mip_output.png").unwrap();
     });

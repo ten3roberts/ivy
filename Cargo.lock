@@ -372,12 +372,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "349f9b6a179ed607305526ca489b34ad0a41aed5f7980fa90eb03160b69598fb"
 
 [[package]]
-name = "bit_field"
-version = "0.10.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc827186963e592360843fb5ba4b973e145841266c1357f7180c43526f2e5b61"
-
-[[package]]
 name = "bitflags"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -431,9 +425,9 @@ checksum = "64fa3c856b712db6612c019f14756e64e4bcea13337a6b33b696333a9eaa2d06"
 
 [[package]]
 name = "bytemuck"
-version = "1.15.0"
+version = "1.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d6d68c57235a3a081186990eca2867354726650f42f7516ca50c28d6281fd15"
+checksum = "b236fc92302c97ed75b38da1f4917b5cdda4984745740f153a5d3059e48d725e"
 dependencies = [
  "bytemuck_derive",
 ]
@@ -714,12 +708,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "248e3bacc7dc6baa3b21e405ee045c3047101a49145e7e9eca583ab4c2ca5345"
 
 [[package]]
-name = "crunchy"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a81dae078cea95a014a339291cec439d2f232ebe854a9d672b796c6afafa9b7"
-
-[[package]]
 name = "cty"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -744,11 +732,12 @@ dependencies = [
 
 [[package]]
 name = "dashmap"
-version = "5.5.3"
+version = "6.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "978747c1d849a7d2ee5e8adc0159961c48fb7e5db2f06af6723b80123bb53856"
+checksum = "804c8821570c3f8b70230c2ba75ffa5c0f9a4189b9a432b6656c536712acae28"
 dependencies = [
  "cfg-if",
+ "crossbeam-utils",
  "hashbrown 0.14.5",
  "lock_api",
  "once_cell",
@@ -869,22 +858,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "exr"
-version = "1.72.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "887d93f60543e9a9362ef8a21beedd0a833c5d9610e18c67abe15a5963dcb1a4"
-dependencies = [
- "bit_field",
- "flume",
- "half",
- "lebe",
- "miniz_oxide",
- "rayon-core",
- "smallvec",
- "zune-inflate",
-]
-
-[[package]]
 name = "eyre"
 version = "0.6.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -900,7 +873,7 @@ version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "42ea8549cc3b09619954f2e4f9d52939557c03eb0c9551eed6390f9abe6cc6aa"
 dependencies = [
- "glam",
+ "glam 0.27.0",
 ]
 
 [[package]]
@@ -1165,16 +1138,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gif"
-version = "0.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3fb2d69b19215e18bb912fa30f7ce15846e301408695e44e0ef719f1da9e19f2"
-dependencies = [
- "color_quant",
- "weezl",
-]
-
-[[package]]
 name = "gimli"
 version = "0.28.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1196,6 +1159,12 @@ name = "glam"
 version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e05e7e6723e3455f4818c7b26e855439f7546cf617ef669d1adedb8669e5cb9"
+
+[[package]]
+name = "glam"
+version = "0.28.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "779ae4bf7e8421cf91c0b3b64e7e8b40b862fba4d393f59150042de7c4965a94"
 dependencies = [
  "bytemuck",
  "rand",
@@ -1258,7 +1227,7 @@ dependencies = [
  "base64",
  "byteorder",
  "gltf-json",
- "image",
+ "image 0.24.9",
  "lazy_static",
  "serde_json",
  "urlencoding",
@@ -1363,16 +1332,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "half"
-version = "2.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6dd08c532ae367adf81c312a4580bc67f1d0fe8bc9c460520283f4c0ff277888"
-dependencies = [
- "cfg-if",
- "crunchy",
-]
-
-[[package]]
 name = "hashbrown"
 version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1427,13 +1386,24 @@ dependencies = [
  "bytemuck",
  "byteorder",
  "color_quant",
- "exr",
- "gif",
  "jpeg-decoder",
  "num-traits",
  "png",
- "qoi",
- "tiff",
+]
+
+[[package]]
+name = "image"
+version = "0.25.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd54d660e773627692c524beaad361aca785a4f9f5730ce91f42aabe5bce3d11"
+dependencies = [
+ "bytemuck",
+ "byteorder",
+ "num-traits",
+ "png",
+ "rayon",
+ "zune-core",
+ "zune-jpeg",
 ]
 
 [[package]]
@@ -1521,7 +1491,7 @@ dependencies = [
  "dashmap",
  "flume",
  "futures",
- "image",
+ "image 0.25.1",
  "ivy-profiling",
  "parking_lot",
  "slotmap",
@@ -1540,7 +1510,7 @@ dependencies = [
  "ezy",
  "flax",
  "flume",
- "glam",
+ "glam 0.28.0",
  "ivy-assets",
  "ivy-core",
  "ordered-float",
@@ -1560,7 +1530,7 @@ dependencies = [
  "ezy",
  "flax",
  "flume",
- "glam",
+ "glam 0.28.0",
  "ivy-assets",
  "ivy-profiling",
  "ivy-random",
@@ -1588,9 +1558,9 @@ dependencies = [
  "flax",
  "flume",
  "futures",
- "glam",
+ "glam 0.28.0",
  "glfw",
- "image",
+ "image 0.25.1",
  "ivy-assets",
  "ivy-collision",
  "ivy-core",
@@ -1600,7 +1570,6 @@ dependencies = [
  "ivy-input",
  "ivy-physics",
  "ivy-postprocessing",
- "ivy-presets",
  "ivy-random",
  "ivy-rendergraph",
  "ivy-scene",
@@ -1628,9 +1597,9 @@ dependencies = [
  "async-std",
  "flax",
  "futures",
- "glam",
+ "glam 0.28.0",
  "gltf",
- "image",
+ "image 0.25.1",
  "itertools 0.13.0",
  "ivy-assets",
  "ivy-profiling",
@@ -1648,7 +1617,7 @@ dependencies = [
  "derive_more",
  "flax",
  "flume",
- "glam",
+ "glam 0.28.0",
  "glfw",
  "gltf",
  "itertools 0.13.0",
@@ -1688,7 +1657,7 @@ dependencies = [
  "anyhow",
  "flax",
  "flume",
- "glam",
+ "glam 0.28.0",
  "glfw",
  "ivy-assets",
  "ivy-core",
@@ -1705,7 +1674,7 @@ dependencies = [
  "anyhow",
  "flax",
  "flume",
- "glam",
+ "glam 0.28.0",
  "ivy-assets",
  "ivy-collision",
  "ivy-core",
@@ -1723,32 +1692,20 @@ name = "ivy-postprocessing"
 version = "0.10.3"
 dependencies = [
  "anyhow",
+ "async-std",
+ "bytemuck",
  "flax",
- "glam",
+ "futures",
+ "glam 0.28.0",
+ "image 0.25.1",
  "itertools 0.13.0",
  "ivy-assets",
  "ivy-core",
- "ivy-graphics",
- "ivy-rendergraph",
- "ivy-vulkan",
+ "ivy-wgpu",
  "once_cell",
-]
-
-[[package]]
-name = "ivy-presets"
-version = "0.10.3"
-dependencies = [
- "flax",
- "ivy-assets",
- "ivy-core",
- "ivy-graphics",
- "ivy-postprocessing",
- "ivy-rendergraph",
- "ivy-ui",
- "ivy-vulkan",
- "parking_lot",
- "slotmap",
- "thiserror",
+ "tracing",
+ "tracing-subscriber",
+ "wgpu",
 ]
 
 [[package]]
@@ -1762,7 +1719,7 @@ dependencies = [
 name = "ivy-random"
 version = "0.10.3"
 dependencies = [
- "glam",
+ "glam 0.27.0",
  "rand",
 ]
 
@@ -1772,7 +1729,7 @@ version = "0.10.3"
 dependencies = [
  "anyhow",
  "flax",
- "glam",
+ "glam 0.28.0",
  "itertools 0.13.0",
  "ivy-assets",
  "ivy-core",
@@ -1804,7 +1761,7 @@ dependencies = [
  "flax",
  "flume",
  "fontdue",
- "glam",
+ "glam 0.28.0",
  "glfw",
  "ivy-assets",
  "ivy-core",
@@ -1825,7 +1782,7 @@ version = "0.10.3"
 dependencies = [
  "ash 0.36.0+1.3.206",
  "bitflags 1.3.2",
- "glam",
+ "glam 0.28.0",
  "glfw",
  "gpu-allocator 0.17.0",
  "ivy-assets",
@@ -1849,9 +1806,9 @@ dependencies = [
  "flax",
  "flume",
  "futures",
- "glam",
+ "glam 0.28.0",
  "gltf",
- "image",
+ "image 0.25.1",
  "itertools 0.13.0",
  "ivy-assets",
  "ivy-core",
@@ -1879,9 +1836,9 @@ dependencies = [
  "flax",
  "flume",
  "futures",
- "glam",
+ "glam 0.28.0",
  "gltf",
- "image",
+ "image 0.25.1",
  "itertools 0.13.0",
  "ivy-assets",
  "ivy-core",
@@ -1899,7 +1856,7 @@ name = "ivy-window"
 version = "0.10.3"
 dependencies = [
  "ash 0.36.0+1.3.206",
- "glam",
+ "glam 0.27.0",
  "glfw",
  "ivy-core",
  "ivy-vulkan",
@@ -1944,9 +1901,6 @@ name = "jpeg-decoder"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f5d4a7da358eff58addd2877a45865158f0d78c911d43a5784ceb7bbf52833b0"
-dependencies = [
- "rayon",
-]
 
 [[package]]
 name = "js-sys"
@@ -1988,12 +1942,6 @@ name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
-
-[[package]]
-name = "lebe"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03087c2bad5e1034e8cace5926dec053fb3790248370865f5117a7d0213354c8"
 
 [[package]]
 name = "libc"
@@ -2745,15 +2693,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "qoi"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f6d64c71eb498fe9eae14ce4ec935c555749aef511cca85b5568910d6e48001"
-dependencies = [
- "bytemuck",
-]
-
-[[package]]
 name = "quick-xml"
 version = "0.31.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3333,17 +3272,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tiff"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba1310fcea54c6a9a4fd1aad794ecc02c31682f6bfbecdf460bf19533eed1e3e"
-dependencies = [
- "flate2",
- "jpeg-decoder",
- "weezl",
-]
-
-[[package]]
 name = "tiny-skia"
 version = "0.11.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3796,12 +3724,6 @@ dependencies = [
  "js-sys",
  "wasm-bindgen",
 ]
-
-[[package]]
-name = "weezl"
-version = "0.1.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "53a85b86a771b1c87058196170769dd264f66c0782acf1ae6cc51bfd64b39082"
 
 [[package]]
 name = "wgpu"
@@ -4322,10 +4244,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "zune-inflate"
-version = "0.2.54"
+name = "zune-core"
+version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "73ab332fe2f6680068f3582b16a24f90ad7096d5d39b974d1c0aff0125116f02"
+checksum = "3f423a2c17029964870cfaabb1f13dfab7d092a62a29a89264f4d36990ca414a"
+
+[[package]]
+name = "zune-jpeg"
+version = "0.4.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec866b44a2a1fd6133d363f073ca1b179f438f99e7e5bfb1e33f7181facfe448"
 dependencies = [
- "simd-adler32",
+ "zune-core",
 ]

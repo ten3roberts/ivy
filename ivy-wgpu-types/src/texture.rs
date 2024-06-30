@@ -2,12 +2,12 @@ use std::{borrow::Cow, convert::Infallible, path::PathBuf};
 
 use anyhow::Context;
 use glam::uvec2;
-use image::{DynamicImage, GenericImageView, ImageBuffer, RgbaImage};
+use image::{ColorType, DynamicImage, GenericImageView, ImageBuffer, Rgba, RgbaImage};
 use itertools::Itertools;
 use ivy_assets::{Asset, AssetCache, AssetDesc};
 use wgpu::{
     BufferUsages, CommandEncoderDescriptor, ComputePassDescriptor, Extent3d, ImageCopyBuffer,
-    ImageCopyTexture, ImageDataLayout, Texture, TextureFormat, TextureUsages,
+    ImageCopyTexture, ImageDataLayout, Origin3d, Texture, TextureFormat, TextureUsages,
     TextureViewDescriptor,
 };
 
@@ -45,10 +45,10 @@ pub fn texture_from_image(
     assets: &AssetCache,
     image: &image::DynamicImage,
     desc: TextureFromImageDesc,
-) -> Texture {
+) -> anyhow::Result<Texture> {
     let _span = tracing::info_span!("texture_from_image", label = %desc.label).entered();
 
-    let image = image.to_rgba8();
+    let image = normalize_image_format(image, desc.format)?;
     let dimensions = image.dimensions();
 
     let size = wgpu::Extent3d {
@@ -74,8 +74,10 @@ pub fn texture_from_image(
         format: desc.format,
         usage,
         label: Some(desc.label.as_ref()),
-        view_formats: &[TextureFormat::Rgba8Unorm],
+        view_formats: &[],
     });
+
+    tracing::info!( color_format = ?image.color(), "loading image of format");
 
     // Write to the texture
     gpu.queue.write_texture(
@@ -87,7 +89,7 @@ pub fn texture_from_image(
             aspect: wgpu::TextureAspect::All,
         },
         // The actual pixel data
-        &image,
+        image.as_bytes(),
         // The layout of the texture
         wgpu::ImageDataLayout {
             offset: 0,
@@ -97,16 +99,34 @@ pub fn texture_from_image(
         size,
     );
 
-    generate_mipmaps(gpu, &texture, mip_level_count);
+    if desc.generate_mipmaps {
+        generate_mipmaps(gpu, &texture, mip_level_count);
+    }
 
-    texture
+    Ok(texture)
+}
+
+fn normalize_image_format(
+    image: &DynamicImage,
+    format: TextureFormat,
+) -> anyhow::Result<DynamicImage> {
+    let image = match format {
+        TextureFormat::Rgba8Unorm => image.to_rgba8().into(),
+        TextureFormat::Rgba8UnormSrgb => image.to_rgba8().into(),
+        TextureFormat::Rgba16Unorm => image.to_rgba16().into(),
+        _ => anyhow::bail!("image loading from format {format:?} is not supported"),
+    };
+
+    Ok(image)
 }
 
 pub async fn read_texture(
     gpu: &Gpu,
     texture: &Texture,
     mip_level: u32,
-) -> anyhow::Result<RgbaImage> {
+    array_layer: u32,
+    format: ColorType,
+) -> anyhow::Result<DynamicImage> {
     anyhow::ensure!(
         mip_level < texture.mip_level_count(),
         "Mip level out of range"
@@ -137,7 +157,11 @@ pub async fn read_texture(
         ImageCopyTexture {
             texture,
             mip_level,
-            origin: Default::default(),
+            origin: Origin3d {
+                x: 0,
+                y: 0,
+                z: array_layer,
+            },
             aspect: Default::default(),
         },
         ImageCopyBuffer {
@@ -155,8 +179,26 @@ pub async fn read_texture(
 
     let mapped = buffer.map(gpu, ..).await.unwrap();
 
-    let image = image::RgbaImage::from_vec(extent.width, extent.height, mapped.to_vec())
-        .context("Failed to create image from buffer")?;
+    let image = match format {
+        ColorType::Rgba8 => {
+            image::RgbaImage::from_vec(extent.width, extent.height, mapped.to_vec())
+                .map(DynamicImage::from)
+        }
+        ColorType::Rgba16 => ImageBuffer::<Rgba<u16>, _>::from_vec(
+            extent.width,
+            extent.height,
+            mapped
+                .chunks_exact(2)
+                .map(|v| {
+                    let [l, h] = v else { unreachable!() };
+                    u16::from_le_bytes([*l, *h])
+                })
+                .collect_vec(),
+        )
+        .map(Into::into),
+        _ => anyhow::bail!("unsupported color type"),
+    }
+    .context("Failed to create image from buffer")?;
 
     Ok(image)
 }
@@ -192,16 +234,19 @@ impl AssetDesc<Texture> for TextureFromPath {
     ) -> Result<ivy_assets::Asset<Texture>, Self::Error> {
         let image = image::open(&self.path)?;
 
-        Ok(assets.insert(texture_from_image(
-            &assets.service(),
-            assets,
-            &image,
-            TextureFromImageDesc {
-                label: self.path.display().to_string().into(),
-                format: self.format,
-                ..Default::default()
-            },
-        )))
+        Ok(assets.insert(
+            texture_from_image(
+                &assets.service(),
+                assets,
+                &image,
+                TextureFromImageDesc {
+                    label: self.path.display().to_string().into(),
+                    format: self.format,
+                    ..Default::default()
+                },
+            )
+            .unwrap(),
+        ))
     }
 }
 
@@ -229,48 +274,19 @@ impl AssetDesc<Texture> for TextureFromColor {
     type Error = Infallible;
 
     fn load(&self, assets: &AssetCache) -> Result<Asset<Texture>, Infallible> {
-        Ok(assets.insert(texture_from_image(
-            &assets.service(),
-            assets,
-            &DynamicImage::ImageRgba8(ImageBuffer::from_pixel(32, 32, image::Rgba(self.color))),
-            TextureFromImageDesc {
-                format: self.format,
-                mip_level_count: Some(1),
-                label: "TextureFromColor".into(),
-                ..Default::default()
-            },
-        )))
+        Ok(assets.insert(
+            texture_from_image(
+                &assets.service(),
+                assets,
+                &DynamicImage::ImageRgba8(ImageBuffer::from_pixel(32, 32, image::Rgba(self.color))),
+                TextureFromImageDesc {
+                    format: self.format,
+                    mip_level_count: Some(1),
+                    label: "TextureFromColor".into(),
+                    ..Default::default()
+                },
+            )
+            .unwrap(),
+        ))
     }
-}
-
-#[test]
-fn load_mips() {
-    tracing_subscriber::fmt::init();
-    futures::executor::block_on(async {
-        tracing::info!("loading image");
-        let image = image::open("../assets/textures/statue.jpg").unwrap();
-
-        let gpu = Gpu::headless().await;
-
-        let assets = AssetCache::new();
-        assets.register_service(gpu.clone());
-
-        tracing::info!("creating image");
-        let texture = texture_from_image(
-            &gpu,
-            &assets,
-            &image,
-            TextureFromImageDesc {
-                label: "test_image".into(),
-                format: TextureFormat::Rgba8UnormSrgb,
-                mip_level_count: None,
-                usage: TextureUsages::COPY_SRC,
-            },
-        );
-
-        tracing::info!("reading back texture");
-        let mip = read_texture(&gpu, &texture, 2).await.unwrap();
-
-        mip.save("../assets/textures/mip_output.png").unwrap();
-    });
 }
