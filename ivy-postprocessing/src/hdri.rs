@@ -1,0 +1,233 @@
+//! Image based lighting for environment lighting
+
+use glam::{Mat4, Vec3};
+use image::{DynamicImage, ImageBuffer, Rgb};
+use itertools::Itertools;
+use ivy_assets::AssetCache;
+use ivy_core::{DEG_45, DEG_90};
+use ivy_wgpu::{
+    types::{BindGroupBuilder, BindGroupLayoutBuilder, TypedBuffer},
+    Gpu,
+};
+use wgpu::{
+    vertex_attr_array, BufferUsages, Color, ColorTargetState, CommandEncoder, Extent3d,
+    FragmentState, IndexFormat, LoadOp, Operations, PipelineLayoutDescriptor, PrimitiveState,
+    RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor, SamplerDescriptor,
+    ShaderModuleDescriptor, ShaderSource, ShaderStages, StoreOp, TextureDescriptor, TextureFormat,
+    TextureUsages, TextureViewDescriptor, TextureViewDimension, VertexBufferLayout, VertexState,
+    VertexStepMode,
+};
+
+pub struct EnvironmentMapMode {}
+
+pub fn process_hdri(
+    gpu: &Gpu,
+    encoder: &mut CommandEncoder,
+    assets: &AssetCache,
+    source: &DynamicImage,
+    format: TextureFormat,
+) -> wgpu::Texture {
+    let source_hdri = ivy_wgpu::types::texture::texture_from_image(
+        gpu,
+        assets,
+        source,
+        ivy_wgpu::types::texture::TextureFromImageDesc {
+            label: "hdri".into(),
+            format: TextureFormat::Rgba8UnormSrgb,
+            mip_level_count: Some(1),
+            usage: TextureUsages::TEXTURE_BINDING,
+            generate_mipmaps: false,
+        },
+    )
+    .unwrap();
+
+    let proj = Mat4::perspective_lh(DEG_90, 1.0, 0.1, 10.0);
+    let camera_data = [
+        proj * Mat4::look_at_lh(Vec3::ZERO, Vec3::X, Vec3::Y),
+        proj * Mat4::look_at_lh(Vec3::ZERO, -Vec3::X, Vec3::Y),
+        proj * Mat4::look_at_lh(Vec3::ZERO, Vec3::Y, -Vec3::Z),
+        proj * Mat4::look_at_lh(Vec3::ZERO, -Vec3::Y, Vec3::Z),
+        proj * Mat4::look_at_lh(Vec3::ZERO, Vec3::Z, Vec3::Y),
+        proj * Mat4::look_at_lh(Vec3::ZERO, -Vec3::Z, Vec3::Y),
+    ];
+
+    let bind_group_layout = BindGroupLayoutBuilder::new("hdri")
+        .bind_uniform_buffer(ShaderStages::VERTEX)
+        .bind_sampler(ShaderStages::FRAGMENT)
+        .bind_texture(ShaderStages::FRAGMENT)
+        .build(gpu);
+
+    let sampler = gpu.device.create_sampler(&SamplerDescriptor {
+        label: "material_sampler".into(),
+        min_filter: wgpu::FilterMode::Linear,
+        mag_filter: wgpu::FilterMode::Linear,
+
+        address_mode_u: wgpu::AddressMode::ClampToEdge,
+        address_mode_v: wgpu::AddressMode::ClampToEdge,
+        address_mode_w: wgpu::AddressMode::ClampToEdge,
+        ..Default::default()
+    });
+
+    let mut buffers = vec![];
+    let bind_groups = camera_data.map(|v| {
+        let data = TypedBuffer::<Mat4>::new(gpu, "hdri_camera_data", BufferUsages::UNIFORM, &[v]);
+
+        tracing::info!(%v);
+        let bind_group = BindGroupBuilder::new("hdri")
+            .bind_buffer(&data)
+            .bind_sampler(&sampler)
+            .bind_texture(&source_hdri.create_view(&Default::default()))
+            .build(gpu, &bind_group_layout);
+
+        buffers.push(data);
+
+        bind_group
+    });
+
+    let module = gpu.device.create_shader_module(ShaderModuleDescriptor {
+        label: None,
+        source: ShaderSource::Wgsl(include_str!("../shaders/equirect_project.wgsl").into()),
+    });
+
+    let layout = gpu
+        .device
+        .create_pipeline_layout(&PipelineLayoutDescriptor {
+            label: "hdri_project".into(),
+            bind_group_layouts: &[&bind_group_layout],
+            push_constant_ranges: &[],
+        });
+
+    let vertex = VertexState {
+        module: &module,
+        entry_point: "vs_main",
+        compilation_options: Default::default(),
+        buffers: &[VertexBufferLayout {
+            array_stride: 12,
+            step_mode: VertexStepMode::Vertex,
+            attributes: &vertex_attr_array![0 => Float32x3],
+        }],
+    };
+
+    let fragment_state = FragmentState {
+        module: &module,
+        entry_point: "fs_main",
+        compilation_options: Default::default(),
+        targets: &[Some(ColorTargetState {
+            format,
+            blend: None,
+            write_mask: Default::default(),
+        })],
+    };
+
+    let pipeline = gpu
+        .device
+        .create_render_pipeline(&RenderPipelineDescriptor {
+            label: Some("hdr_project_pipeline"),
+            layout: Some(&layout),
+            vertex,
+            primitive: PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                front_face: wgpu::FrontFace::Cw,
+                cull_mode: None,
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: Default::default(),
+            fragment: Some(fragment_state),
+            multiview: None,
+        });
+
+    let vb = cube_vertices(gpu);
+    let ib = cube_indices(gpu);
+
+    const CUBE_MAP_SIZE: Extent3d = Extent3d {
+        width: 1024,
+        height: 1024,
+        depth_or_array_layers: 6,
+    };
+
+    let output = gpu.device.create_texture(&TextureDescriptor {
+        label: "hdr_cubemap".into(),
+        size: CUBE_MAP_SIZE,
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format,
+        usage: TextureUsages::RENDER_ATTACHMENT
+            | TextureUsages::TEXTURE_BINDING
+            | TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+
+    let sides = (0..6)
+        .map(|side| {
+            output.create_view(&TextureViewDescriptor {
+                base_array_layer: side,
+                array_layer_count: Some(1),
+                dimension: Some(TextureViewDimension::D2),
+                ..Default::default()
+            })
+        })
+        .collect_vec();
+
+    for (side, bind_group) in sides.iter().zip(bind_groups) {
+        let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+            label: None,
+            color_attachments: &[Some(RenderPassColorAttachment {
+                view: side,
+                resolve_target: None,
+                ops: Operations {
+                    load: LoadOp::Clear(Color::BLACK),
+                    store: StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            ..Default::default()
+        });
+
+        tracing::info!("drawing side");
+
+        render_pass.set_pipeline(&pipeline);
+        render_pass.set_vertex_buffer(0, vb.slice(..));
+        render_pass.set_index_buffer(ib.slice(..), IndexFormat::Uint16);
+        render_pass.set_bind_group(0, &bind_group, &[]);
+
+        render_pass.draw_indexed(0..36, 0, 0..1);
+    }
+
+    output
+}
+
+fn cube_vertices(gpu: &Gpu) -> TypedBuffer<Vec3> {
+    TypedBuffer::new(
+        gpu,
+        "cube_vertices",
+        BufferUsages::VERTEX,
+        &[
+            Vec3::new(-1.0, -1.0, -1.0),
+            Vec3::new(1.0, -1.0, -1.0),
+            Vec3::new(1.0, 1.0, -1.0),
+            Vec3::new(-1.0, 1.0, -1.0),
+            Vec3::new(-1.0, -1.0, 1.0),
+            Vec3::new(1.0, -1.0, 1.0),
+            Vec3::new(1.0, 1.0, 1.0),
+            Vec3::new(-1.0, 1.0, 1.0),
+        ],
+    )
+}
+
+fn cube_indices(gpu: &Gpu) -> TypedBuffer<u16> {
+    TypedBuffer::new(
+        gpu,
+        "cube_indices",
+        BufferUsages::INDEX,
+        &[
+            0, 1, 2, 2, 3, 0, // front
+            1, 5, 6, 6, 2, 1, // right
+            7, 6, 5, 5, 4, 7, // back
+            4, 0, 3, 3, 7, 4, // left
+            4, 5, 1, 1, 0, 4, // bottom
+            3, 2, 6, 6, 7, 3, // top
+        ],
+    )
+}

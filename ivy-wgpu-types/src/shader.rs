@@ -11,6 +11,7 @@ pub struct ShaderDesc<'a> {
     pub vertex_layouts: &'a [VertexBufferLayout<'static>],
     pub layouts: &'a [&'a BindGroupLayout],
     pub depth_format: Option<TextureFormat>,
+    pub sample_count: u32,
 }
 
 /// Represents a graphics shader
@@ -63,7 +64,7 @@ impl Shader {
                     topology: wgpu::PrimitiveTopology::TriangleList, // 1.
                     strip_index_format: None,
                     front_face: wgpu::FrontFace::Cw, // 2.
-                    cull_mode: Some(wgpu::Face::Back),
+                    cull_mode: None,                 //Some(wgpu::Face::Back),
                     // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
                     polygon_mode: wgpu::PolygonMode::Fill,
                     // Requires Features::DEPTH_CLIP_CONTROL
@@ -74,12 +75,12 @@ impl Shader {
                 depth_stencil: desc.depth_format.map(|format| wgpu::DepthStencilState {
                     format,
                     depth_write_enabled: true,
-                    depth_compare: wgpu::CompareFunction::Less,
+                    depth_compare: wgpu::CompareFunction::LessEqual,
                     stencil: Default::default(),
                     bias: Default::default(),
                 }),
                 multisample: wgpu::MultisampleState {
-                    count: 4,                         // 2.
+                    count: desc.sample_count,         // 2.
                     mask: !0,                         // 3.
                     alpha_to_coverage_enabled: false, // 4.
                 },

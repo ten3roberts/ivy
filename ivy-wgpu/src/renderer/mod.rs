@@ -2,14 +2,14 @@ pub mod mesh_renderer;
 
 use std::any::type_name;
 
-use flax::Query;
+use flax::{Query, World};
 use glam::{vec3, Mat4, Vec3, Vec4};
 use itertools::Itertools;
-use ivy_assets::{stored::Store, Asset};
+use ivy_assets::{stored::Store, Asset, AssetCache};
 use ivy_core::{main_camera, world_transform, Bundle};
 use wgpu::{
-    BindGroup, BufferUsages, Operations, RenderPassColorAttachment, RenderPassDescriptor,
-    ShaderStages, TextureFormat, TextureUsages,
+    BindGroup, BufferUsages, Operations, RenderPass, RenderPassColorAttachment,
+    RenderPassDescriptor, ShaderStages, TextureFormat, TextureUsages,
 };
 
 use crate::{
@@ -21,8 +21,6 @@ use crate::{
     types::{BindGroupBuilder, BindGroupLayoutBuilder, Shader, TypedBuffer},
     Gpu,
 };
-
-use self::mesh_renderer::MeshRenderer;
 
 pub struct MsaaResolve {
     final_color: TextureHandle,
@@ -84,9 +82,43 @@ impl Node for MsaaResolve {
     }
 }
 
-// TODO: rendergraph with surface publish node
+pub struct RenderContext<'a> {
+    pub world: &'a mut World,
+    pub assets: &'a AssetCache,
+    pub gpu: &'a Gpu,
+    pub store: &'a mut RendererStore,
+    pub globals: &'a Globals,
+    pub format: TextureFormat,
+}
+
+pub trait CameraRenderer {
+    fn update(&mut self, ctx: &mut RenderContext) -> anyhow::Result<()>;
+
+    fn draw<'s>(
+        &'s mut self,
+        ctx: &'s RenderContext<'s>,
+        render_pass: &mut RenderPass<'s>,
+    ) -> anyhow::Result<()>;
+}
+
+impl<A: CameraRenderer, B: CameraRenderer> CameraRenderer for (A, B) {
+    fn update(&mut self, ctx: &mut RenderContext) -> anyhow::Result<()> {
+        self.0.update(ctx)?;
+        self.1.update(ctx)
+    }
+
+    fn draw<'s>(
+        &'s mut self,
+        ctx: &'s RenderContext<'s>,
+        render_pass: &mut RenderPass<'s>,
+    ) -> anyhow::Result<()> {
+        self.0.draw(ctx, render_pass)?;
+        self.1.draw(ctx, render_pass)
+    }
+}
+
 pub struct CameraNode {
-    mesh_renderer: MeshRenderer,
+    renderer: Box<dyn CameraRenderer>,
     globals: Globals,
     depth_texture: TextureHandle,
     store: RendererStore,
@@ -94,9 +126,14 @@ pub struct CameraNode {
 }
 
 impl CameraNode {
-    pub fn new(gpu: &Gpu, depth_texture: TextureHandle, output: TextureHandle) -> Self {
+    pub fn new(
+        gpu: &Gpu,
+        depth_texture: TextureHandle,
+        output: TextureHandle,
+        renderer: impl 'static + CameraRenderer,
+    ) -> Self {
         Self {
-            mesh_renderer: MeshRenderer::new(gpu),
+            renderer: Box::new(renderer),
             globals: Globals::new(gpu),
             depth_texture,
             store: Default::default(),
@@ -104,7 +141,11 @@ impl CameraNode {
         }
     }
 
-    pub fn update(&mut self, ctx: &mut NodeExecutionContext, format: TextureFormat) {
+    pub fn update(
+        &mut self,
+        ctx: &mut NodeExecutionContext,
+        format: TextureFormat,
+    ) -> anyhow::Result<()> {
         tracing::debug!("updating renderer");
         if let Some((world_transform, &projection)) =
             Query::new((world_transform(), projection_matrix()))
@@ -114,44 +155,44 @@ impl CameraNode {
         {
             let view = world_transform.inverse();
 
-            self.globals.buffer.write(
-                &ctx.gpu.queue,
-                0,
-                &[GlobalData {
-                    view,
-                    projection,
-                    camera_pos: world_transform.transform_point3(Vec3::ZERO),
-                    padding: 0.0,
-                }],
-            );
-        }
-
-        {
-            let light_data = Query::new((world_transform(), light()))
-                .borrow(ctx.world)
-                .iter()
-                .map(|(pos, light)| LightData {
-                    position: pos.transform_point3(Vec3::ZERO).extend(0.0),
-                    color: (vec3(light.color.red, light.color.green, light.color.blue)
-                        * light.intensity)
-                        .extend(1.0),
-                })
-                .take(self.globals.light_buffer.len())
-                .collect_vec();
+            self.globals.data = GlobalData {
+                view,
+                projection,
+                camera_pos: world_transform.transform_point3(Vec3::ZERO),
+                padding: 0.0,
+            };
 
             self.globals
-                .light_buffer
-                .write(&ctx.gpu.queue, 0, &light_data);
+                .buffer
+                .write(&ctx.gpu.queue, 0, &[self.globals.data]);
         }
 
-        self.mesh_renderer.update(
-            ctx.world,
-            ctx.assets,
-            ctx.gpu,
-            &mut self.store,
-            &self.globals,
+        let light_data = Query::new((world_transform(), light()))
+            .borrow(ctx.world)
+            .iter()
+            .map(|(pos, light)| LightData {
+                position: pos.transform_point3(Vec3::ZERO).extend(0.0),
+                color: (vec3(light.color.red, light.color.green, light.color.blue)
+                    * light.intensity)
+                    .extend(1.0),
+            })
+            .take(self.globals.light_buffer.len())
+            .collect_vec();
+
+        self.globals
+            .light_buffer
+            .write(&ctx.gpu.queue, 0, &light_data);
+
+        self.renderer.update(&mut RenderContext {
+            world: ctx.world,
+            assets: ctx.assets,
+            gpu: ctx.gpu,
+            store: &mut self.store,
+            globals: &self.globals,
             format,
-        );
+        })?;
+
+        Ok(())
     }
 }
 
@@ -166,9 +207,19 @@ impl Node for CameraNode {
             .get_texture(self.depth_texture)
             .create_view(&Default::default());
 
-        self.update(&mut ctx, output.format());
+        self.update(&mut ctx, output.format())?;
 
         let output_view = output.create_view(&Default::default());
+
+        let render_context = RenderContext {
+            world: ctx.world,
+            assets: ctx.assets,
+            gpu: ctx.gpu,
+            store: &mut self.store,
+            globals: &self.globals,
+            format: output.format(),
+        };
+
         let mut render_pass = ctx.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: "main_renderpass".into(),
             color_attachments: &[Some(RenderPassColorAttachment {
@@ -196,13 +247,7 @@ impl Node for CameraNode {
             occlusion_query_set: None,
         });
 
-        self.mesh_renderer.draw(
-            ctx.assets,
-            ctx.gpu,
-            &self.globals,
-            &self.store,
-            &mut render_pass,
-        );
+        self.renderer.draw(&render_context, &mut render_pass)?;
 
         Ok(())
     }
@@ -228,9 +273,9 @@ pub struct ObjectData {
 #[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
 #[repr(C)]
 pub struct GlobalData {
-    view: Mat4,
-    projection: Mat4,
-    camera_pos: Vec3,
+    pub view: Mat4,
+    pub projection: Mat4,
+    pub camera_pos: Vec3,
     padding: f32,
 }
 
@@ -243,6 +288,7 @@ pub struct LightData {
 
 pub struct Globals {
     bind_group: BindGroup,
+    pub data: GlobalData,
     buffer: TypedBuffer<GlobalData>,
     light_buffer: TypedBuffer<LightData>,
     layout: wgpu::BindGroupLayout,
@@ -279,6 +325,7 @@ impl Globals {
             buffer,
             layout,
             light_buffer,
+            data: Default::default(),
         }
     }
 }

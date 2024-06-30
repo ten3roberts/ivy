@@ -9,6 +9,7 @@ use ivy_assets::fs::AsyncAssetFromPath;
 use ivy_profiling::profile_scope;
 use std::sync::Arc;
 use std::{collections::HashMap, path::Path};
+use tracing::Instrument;
 
 use gltf::{Gltf, Mesh};
 use ivy_assets::{Asset, AssetCache};
@@ -89,6 +90,7 @@ impl Document {
             .document
             .buffers()
             .map(|v| {
+                tracing::info!("loading buffer data");
                 // TODO: load using assets
                 gltf::buffer::Data::from_source_and_blob(v.source(), None, &mut gltf.blob)
             })
@@ -96,14 +98,15 @@ impl Document {
 
         let buffer_data = Arc::new(buffer_data);
 
-        let images: Vec<_> = futures::stream::iter(gltf.images())
-            .map(|v| {
+        let images: Vec<_> = futures::stream::iter(gltf.images().enumerate())
+            .map(|(i, v)| {
                 let image = gltf::image::Data::from_source(v.source(), None, &buffer_data);
                 async {
                     let image = image?;
                     let image = async_std::task::spawn_blocking(|| load_image(image)).await?;
                     anyhow::Ok(assets.insert(image))
                 }
+                .instrument(tracing::info_span!("load_image", i))
             })
             .boxed()
             .buffered(4)

@@ -28,7 +28,7 @@ use crate::{
     Gpu,
 };
 
-use super::{Globals, ObjectData};
+use super::{CameraRenderer, Globals, ObjectData};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct BatchKey {
@@ -247,6 +247,7 @@ impl MeshRenderer {
                             vertex_layouts: &[Vertex::layout()],
                             layouts: &[&globals.layout, &self.bind_group_layout, material.layout()],
                             depth_format: Some(TextureFormat::Depth24Plus),
+                            sample_count: 4,
                         },
                     ))
                 });
@@ -319,32 +320,34 @@ impl MeshRenderer {
 
         self.object_buffer.write(&gpu.queue, 0, &self.object_data);
     }
+}
 
-    pub fn update(
-        &mut self,
-        world: &mut World,
-        assets: &AssetCache,
-        gpu: &Gpu,
-        store: &mut RendererStore,
-        globals: &Globals,
-        format: TextureFormat,
-    ) {
+impl CameraRenderer for MeshRenderer {
+    fn update(&mut self, ctx: &mut super::RenderContext) -> anyhow::Result<()> {
         let mut cmd = CommandBuffer::new();
-        self.collect_unbatched(world, assets, gpu, globals, store, &mut cmd, format);
-        self.update_object_data(world, gpu);
+        self.collect_unbatched(
+            ctx.world,
+            ctx.assets,
+            ctx.gpu,
+            ctx.globals,
+            ctx.store,
+            &mut cmd,
+            ctx.format,
+        );
+        self.update_object_data(ctx.world, ctx.gpu);
+
+        Ok(())
     }
 
-    pub fn draw<'a>(
-        &'a mut self,
-        assets: &AssetCache,
-        gpu: &Gpu,
-        globals: &'a Globals,
-        store: &'a RendererStore,
-        render_pass: &mut RenderPass<'a>,
-    ) {
-        render_pass.set_bind_group(0, &globals.bind_group, &[]);
+    fn draw<'s>(
+        &'s mut self,
+        ctx: &'s super::RenderContext<'s>,
+        render_pass: &mut RenderPass<'s>,
+    ) -> anyhow::Result<()> {
+        render_pass.set_bind_group(0, &ctx.globals.bind_group, &[]);
 
-        self.object_buffer.write(&gpu.queue, 0, &self.object_data);
+        self.object_buffer
+            .write(&ctx.gpu.queue, 0, &self.object_data);
 
         tracing::trace!("drawing {} batches", self.batch_map.len());
 
@@ -354,8 +357,10 @@ impl MeshRenderer {
         for batch_id in self.batch_map.values() {
             let batch = &self.batches[*batch_id];
             tracing::trace!(instance_count = batch.instance_count, "drawing batch");
-            batch.draw(gpu, assets, globals, store, render_pass)
+            batch.draw(ctx.gpu, ctx.assets, ctx.globals, ctx.store, render_pass)
         }
+
+        Ok(())
     }
 }
 

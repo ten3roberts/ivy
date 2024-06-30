@@ -6,12 +6,6 @@ use ivy_wgpu_types::{
 };
 use wgpu::{Texture, TextureFormat};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum TextureKind {
-    Srgba,
-    Uniform,
-}
-
 /// Describes a texture
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TextureDesc {
@@ -36,39 +30,40 @@ impl TextureDesc {
     pub fn load(
         &self,
         assets: &AssetCache,
-        kind: TextureKind,
+        format: TextureFormat,
     ) -> Result<Asset<Texture>, image::ImageError> {
-        let format = match kind {
-            TextureKind::Srgba => TextureFormat::Rgba8UnormSrgb,
-            TextureKind::Uniform => TextureFormat::Rgba8Unorm,
-        };
-
         let gpu = assets.service();
 
         match self {
             TextureDesc::Path(v) => {
                 let image = image::open(v)?;
-                Ok(assets.insert(texture_from_image(
+                Ok(assets.insert(
+                    texture_from_image(
+                        &gpu,
+                        assets,
+                        &image,
+                        TextureFromImageDesc {
+                            label: v.clone().into(),
+                            format,
+                            ..Default::default()
+                        },
+                    )
+                    .unwrap(),
+                ))
+            }
+            TextureDesc::Content(image) => Ok(assets.insert(
+                texture_from_image(
                     &gpu,
                     assets,
-                    &image,
+                    image,
                     TextureFromImageDesc {
-                        label: v.clone().into(),
+                        label: "content".into(),
                         format,
                         ..Default::default()
                     },
-                )))
-            }
-            TextureDesc::Content(image) => Ok(assets.insert(texture_from_image(
-                &gpu,
-                assets,
-                image,
-                TextureFromImageDesc {
-                    label: "content".into(),
-                    format,
-                    ..Default::default()
-                },
-            ))),
+                )
+                .unwrap(),
+            )),
             TextureDesc::Color(v) => Ok(assets.load(&TextureFromColor { color: v.0, format })),
         }
     }
@@ -77,12 +72,12 @@ impl TextureDesc {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct TextureAndKindDesc {
     texture: TextureDesc,
-    kind: TextureKind,
+    format: TextureFormat,
 }
 
 impl TextureAndKindDesc {
-    pub(crate) fn new(texture: TextureDesc, kind: TextureKind) -> Self {
-        Self { texture, kind }
+    pub(crate) fn new(texture: TextureDesc, format: TextureFormat) -> Self {
+        Self { texture, format }
     }
 }
 
@@ -90,6 +85,6 @@ impl AssetDesc<Texture> for TextureAndKindDesc {
     type Error = image::ImageError;
 
     fn load(&self, assets: &AssetCache) -> Result<Asset<Texture>, Self::Error> {
-        self.texture.load(assets, self.kind)
+        self.texture.load(assets, self.format)
     }
 }
