@@ -1,7 +1,7 @@
 use std::ops::Index;
 
 use glam::{Mat4, Vec3};
-use ivy_base::{Color, DrawGizmos, Line, Sphere};
+use ivy_core::{Color, DrawGizmos, Line, Sphere};
 
 use crate::{epa, gjk, util::minkowski_diff, CollisionPrimitive, EntityPayload};
 
@@ -40,7 +40,7 @@ impl ContactPoints {
 }
 
 impl DrawGizmos for ContactPoints {
-    fn draw_gizmos(&self, gizmos: &mut ivy_base::Gizmos, color: ivy_base::Color) {
+    fn draw_gizmos(&self, gizmos: &mut ivy_core::Gizmos, color: ivy_core::Color) {
         for &p in self.iter() {
             gizmos.draw(
                 Sphere {
@@ -101,7 +101,7 @@ pub struct Contact {
 }
 
 impl DrawGizmos for Contact {
-    fn draw_gizmos(&self, gizmos: &mut ivy_base::Gizmos, color: ivy_base::Color) {
+    fn draw_gizmos(&self, gizmos: &mut ivy_core::Gizmos, color: ivy_core::Color) {
         gizmos.draw(self.points, color);
         gizmos.draw(
             Line {

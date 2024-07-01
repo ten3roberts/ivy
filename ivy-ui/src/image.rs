@@ -1,7 +1,7 @@
 use std::{borrow::Cow, slice};
 
 use crate::{Error, Result};
-use ivy_assets::{Asset, AssetCache, AssetKey};
+use ivy_assets::{Asset, AssetCache, AssetDesc};
 use ivy_vulkan::{
     context::VulkanContextService,
     descriptors::{DescriptorBuilder, DescriptorSet, IntoSet},
@@ -72,7 +72,7 @@ pub struct ImageInfo {
     pub sampler: SamplerKey,
 }
 
-impl AssetKey<Image> for ImageInfo {
+impl AssetDesc<Image> for ImageInfo {
     type Error = Error;
 
     fn load(&self, assets: &AssetCache) -> Result<Asset<Image>> {

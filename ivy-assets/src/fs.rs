@@ -1,32 +1,78 @@
-use std::{hash::Hash, path::Path};
+use std::{fmt::Debug, path::Path};
 
-use crate::{Asset, AssetCache, AssetKey};
+use futures::Future;
 
-impl<V, P> AssetKey<V> for P
+use crate::{
+    service::{FileSystemMapService, FsAssetError},
+    Asset, AssetCache, AssetDesc, AsyncAssetDesc, StoredKey,
+};
+
+/// Helper trait for assets that can load directly from a path
+pub trait AssetFromPath {
+    type Error: 'static + From<FsAssetError> + Debug;
+
+    fn load_from_path(path: &Path, assets: &AssetCache) -> Result<Asset<Self>, Self::Error>;
+}
+
+/// Supports loading an asset directly from a path
+pub trait AsyncAssetFromPath {
+    type Error: 'static + Send + Sync + From<FsAssetError> + Debug;
+
+    fn load_from_path(
+        path: &Path,
+        assets: &AssetCache,
+    ) -> impl Future<Output = Result<Asset<Self>, Self::Error>> + Send;
+}
+
+impl<P, V> AssetDesc<V> for P
 where
-    Path: AssetKey<V>,
-    P: 'static + Send + Sync + Eq + Hash + AsRef<Path> + Clone,
-    V: 'static + Send + Sync,
+    V: AssetFromPath,
+    P: ?Sized + AsRef<Path> + StoredKey + Debug,
 {
-    type Error = <Path as AssetKey<V>>::Error;
+    type Error = V::Error;
 
     fn load(&self, assets: &AssetCache) -> Result<Asset<V>, Self::Error> {
-        assets.try_load(self.as_ref())
+        V::load_from_path(self.as_ref(), assets)
     }
 }
 
-// i
-// impl<K> Loadable<K> for Bytes
-// where
-//     K: AssetKey,
-//     K: AsRef<Path>,
-// {
-//     type Error = std::io::Error;
+impl<P, V> AsyncAssetDesc<V> for P
+where
+    V: AsyncAssetFromPath,
+    P: ?Sized + AsRef<Path> + StoredKey + Debug,
+{
+    type Error = V::Error;
 
-//     fn load(key: K, assets: &AssetCache) -> Result<Self, Self::Error>
-//     where
-//         Self: Sized,
-//     {
-//         Ok(std::fs::read(key.as_ref())?.into())
-//     }
-// }
+    fn create(
+        &self,
+        assets: &AssetCache,
+    ) -> impl Future<Output = Result<Asset<V>, Self::Error>> + Send {
+        V::load_from_path(self.as_ref(), assets)
+    }
+}
+
+impl AssetFromPath for Vec<u8> {
+    type Error = FsAssetError;
+
+    fn load_from_path(path: &Path, assets: &AssetCache) -> Result<Asset<Self>, Self::Error> {
+        Ok(assets.insert(assets.service::<FileSystemMapService>().load_bytes(path)?))
+    }
+}
+
+impl AsyncAssetFromPath for Vec<u8> {
+    type Error = FsAssetError;
+
+    fn load_from_path(
+        path: &Path,
+        assets: &AssetCache,
+    ) -> impl Future<Output = Result<Asset<Self>, Self::Error>> + Send {
+        async move {
+            Ok(assets.insert(
+                assets
+                    .service::<FileSystemMapService>()
+                    .load_bytes_async(path)
+                    .await?,
+            ))
+        }
+    }
+}

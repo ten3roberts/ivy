@@ -4,7 +4,7 @@ use flax::{entity_ids, BoxedSystem, Component, Mutable, Query, QueryBorrow, Syst
 use glam::{vec3, Mat4, Vec2, Vec3, Vec4, Vec4Swizzles};
 use itertools::Itertools;
 use ivy_assets::{Asset, AssetCache};
-use ivy_base::{Color, DrawGizmos, Extent, Line, Sphere};
+use ivy_core::{Color, DrawGizmos, Extent, Line, Sphere};
 use ivy_vulkan::{
     context::SharedVulkanContext,
     descriptors::{DescriptorBuilder, IntoSet},
@@ -407,7 +407,7 @@ impl Frustum {
 }
 
 impl DrawGizmos for Frustum {
-    fn draw_gizmos(&self, gizmos: &mut ivy_base::Gizmos, color: ivy_base::Color) {
+    fn draw_gizmos(&self, gizmos: &mut ivy_core::Gizmos, color: ivy_core::Color) {
         for plane in self.planes() {
             plane.draw_gizmos(gizmos, color)
         }
@@ -415,7 +415,7 @@ impl DrawGizmos for Frustum {
 }
 
 impl DrawGizmos for Plane {
-    fn draw_gizmos(&self, gizmos: &mut ivy_base::Gizmos, color: ivy_base::Color) {
+    fn draw_gizmos(&self, gizmos: &mut ivy_core::Gizmos, color: ivy_core::Color) {
         Sphere {
             origin: self.norm * self.p,
             radius: 0.1,

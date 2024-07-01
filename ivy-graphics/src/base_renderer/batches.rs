@@ -1,16 +1,14 @@
 use std::{
     collections::{hash_map::Entry, HashMap},
-    marker::PhantomData,
     ops::{Index, IndexMut},
 };
 
-use flax::Component;
 use ivy_assets::Asset;
 use ivy_vulkan::{
     context::SharedVulkanContext, PassInfo, Pipeline, PipelineInfo, Shader, VertexDesc,
 };
 
-use crate::{BatchData, BatchMarker, RendererKey, Result};
+use crate::{BatchData, RendererKey, Result};
 
 use super::BatchId;
 

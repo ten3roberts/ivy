@@ -8,7 +8,7 @@ use gpu_allocator::{
     vulkan::{self, *},
     MemoryLocation,
 };
-use ivy_base::Extent;
+use ivy_core::Extent;
 use std::{
     ffi::c_void,
     mem::{self, size_of},

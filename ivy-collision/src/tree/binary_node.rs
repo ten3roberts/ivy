@@ -4,7 +4,7 @@
 // };
 
 // use hecs::Entity;
-// use ivy_base::{Color, DrawGizmos, Gizmo};
+// use ivy_core::{Color, DrawGizmos, Gizmo};
 // use glam::Vec3;
 
 // use super::*;

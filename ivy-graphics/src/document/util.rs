@@ -3,7 +3,7 @@ use std::path::Path;
 use gltf::{buffer, image};
 use ivy_assets::{Asset, AssetCache};
 use ivy_vulkan::{
-    context::{SharedVulkanContext, VulkanContextService},
+    context::{VulkanContextService},
     Texture, TextureFromMemory,
 };
 

@@ -1,10 +1,13 @@
 use std::{
     any::{Any, TypeId},
     borrow::Borrow,
+    collections::HashMap,
+    fmt::Debug,
     hash::Hash,
     ops::Deref,
     path::Path,
     sync::Arc,
+    time::Instant,
 };
 
 use dashmap::DashMap;
@@ -14,9 +17,19 @@ pub mod fs;
 mod handle;
 pub mod map;
 pub mod service;
+pub mod stored;
+use fs::AssetFromPath;
+use futures::{
+    future::{BoxFuture, Shared, WeakShared},
+    Future, FutureExt,
+};
 pub use handle::Asset;
 use image::{DynamicImage, ImageError, ImageResult};
+use parking_lot::{Mutex, MutexGuard, RwLock, RwLockReadGuard};
 use service::Service;
+use stored::Handle;
+use thiserror::Error;
+use tracing::Instrument;
 
 use self::{cell::AssetCell, handle::WeakHandle};
 
@@ -34,19 +47,35 @@ pub struct AssetCache {
     inner: Arc<AssetCacheInner>,
 }
 
-impl std::fmt::Debug for AssetCache {
+impl Debug for AssetCache {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AssetCache").finish()
     }
 }
 
-pub type KeyMap<K, V> = DashMap<K, WeakHandle<V>>;
+#[derive(Debug, Error)]
+#[error(transparent)]
+pub struct SharedError<E>(Arc<E>);
+
+impl<E> Clone for SharedError<E> {
+    #[cold]
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+type KeyMap<K, V> = DashMap<K, WeakHandle<V>>;
+type PendingKeyMap<K, V> = DashMap<
+    <K as StoredKey>::Stored,
+    WeakShared<BoxFuture<'static, Result<Asset<V>, SharedError<<K as AsyncAssetDesc<V>>::Error>>>>,
+>;
 
 /// Stores assets which are accessible through handles
 struct AssetCacheInner {
+    pending_keys: DashMap<TypeId, Box<dyn Any + Send + Sync>>,
     keys: DashMap<TypeId, Box<dyn Any + Send + Sync>>,
     cells: DashMap<TypeId, Box<dyn Any + Send + Sync>>,
-    services: DashMap<TypeId, Box<dyn Service>>,
+    services: RwLock<HashMap<TypeId, Box<dyn Service + Send>>>,
 }
 
 impl AssetCache {
@@ -55,56 +84,157 @@ impl AssetCache {
             inner: Arc::new(AssetCacheInner {
                 keys: DashMap::new(),
                 cells: DashMap::new(),
-                services: DashMap::new(),
+                services: Default::default(),
+                pending_keys: DashMap::new(),
             }),
         }
     }
 
-    pub fn try_load<K, V>(&self, key: &K) -> Result<Asset<V>, K::Error>
+    pub fn try_load<K, V>(&self, desc: &K) -> Result<Asset<V>, K::Error>
     where
-        K: ?Sized + AssetKey<V>,
+        K: ?Sized + AssetDesc<V>,
         V: 'static + Send + Sync,
     {
+        ivy_profiling::profile_function!(format!("{desc:?}"));
+
         let _span = tracing::debug_span!("AssetCache::try_load", key = std::any::type_name::<K>())
             .entered();
-        if let Some(handle) = self.get(key) {
+        if let Some(handle) = self.get(desc) {
             return Ok(handle);
         }
 
         // Load the asset and insert it to get a handle
-        let value = key.load(self)?;
+        let value = desc.load(self)?;
 
         self.inner
             .keys
-            .entry(TypeId::of::<K::Stored>())
+            .entry(TypeId::of::<(K::Stored, V)>())
             .or_insert_with(|| Box::<KeyMap<K::Stored, V>>::default())
             .downcast_mut::<KeyMap<K::Stored, V>>()
             .unwrap()
-            .insert(key.to_stored(), value.downgrade());
+            .insert(desc.to_stored(), value.downgrade());
 
         Ok(value)
     }
 
-    pub fn load<K, V>(&self, key: &K) -> Asset<V>
+    #[track_caller]
+    pub fn load<V>(&self, key: &(impl AssetDesc<V> + ?Sized)) -> Asset<V>
     where
-        K: ?Sized + AssetKey<V>,
         V: 'static + Send + Sync,
     {
         match self.try_load(key) {
             Ok(v) => v,
-            Err(_) => {
-                unreachable!()
+            Err(err) => {
+                panic!("{err:?}");
             }
         }
     }
 
+    pub async fn try_load_async<K, V>(&self, desc: &K) -> Result<Asset<V>, SharedError<K::Error>>
+    where
+        K: ?Sized + AsyncAssetDesc<V>,
+        V: 'static + Send + Sync,
+    {
+        // ivy_profiling::profile_function!(format!("{desc:?}"));
+
+        if let Some(handle) = self.get_async(desc) {
+            return Ok(handle);
+        }
+
+        {
+            let pending = self.inner.pending_keys.get(&TypeId::of::<K::Stored>());
+            if let Some(pending) = pending {
+                let pending = pending.downcast_ref::<PendingKeyMap<K, V>>().unwrap();
+
+                if let Some(fut) = pending.get(desc).and_then(|v| WeakShared::upgrade(&v)) {
+                    let value = fut.await;
+                    return value;
+                }
+            }
+        }
+
+        // Load the asset and insert it to get a handle
+        let assets = self.clone();
+        let stored = desc.to_stored();
+        let desc_debug = format!("{desc:?}");
+        let desc = desc.to_stored();
+
+        let fut = async move {
+            let start = Instant::now();
+            let assets = assets;
+            let value = desc
+                .borrow()
+                .create(&assets)
+                .instrument(tracing::info_span!("load_asset", desc =%desc_debug))
+                .await
+                .map_err(|v| SharedError(Arc::new(v)))?;
+
+            tracing::info!(duration=?start.elapsed(), desc=%desc_debug, "loaded asset");
+
+            assets
+                .inner
+                .keys
+                .entry(TypeId::of::<(K::Stored, V)>())
+                .or_insert_with(|| Box::<KeyMap<K::Stored, V>>::default())
+                .downcast_mut::<KeyMap<K::Stored, V>>()
+                .unwrap()
+                .insert(desc, value.downgrade());
+
+            Ok(value)
+        }
+        .boxed()
+        .shared();
+
+        {
+            let mut pending = self
+                .inner
+                .pending_keys
+                .entry(TypeId::of::<K::Stored>())
+                .or_insert_with(|| Box::new(PendingKeyMap::<K, V>::new()));
+
+            let pending = pending.downcast_mut::<PendingKeyMap<K, V>>().unwrap();
+            pending.insert(stored, fut.downgrade().unwrap());
+        }
+
+        fut.await
+    }
+
+    pub async fn load_async<V>(&self, key: &(impl AsyncAssetDesc<V> + ?Sized)) -> Asset<V>
+    where
+        V: 'static + Send + Sync,
+    {
+        match self.try_load_async(key).await {
+            Ok(v) => v,
+            Err(err) => {
+                let err = err.0;
+                panic!("{err:?}");
+            }
+        }
+    }
     pub fn get<K, V>(&self, key: &K) -> Option<Asset<V>>
     where
-        K: ?Sized + AssetKey<V>,
+        K: ?Sized + AssetDesc<V>,
         V: 'static + Send + Sync,
     {
         // Keys of K
-        let keys = self.inner.keys.get(&TypeId::of::<K::Stored>())?;
+        let keys = self.inner.keys.get(&TypeId::of::<(K::Stored, V)>())?;
+
+        let handle = keys
+            .downcast_ref::<KeyMap<K::Stored, V>>()
+            .unwrap()
+            .get(key)?
+            .upgrade()?;
+
+        Some(handle)
+    }
+
+    pub fn get_async<K, V>(&self, key: &K) -> Option<Asset<V>>
+    where
+        K: ?Sized + AsyncAssetDesc<V>,
+        V: 'static + Send + Sync,
+    {
+        // Keys of K
+        let keys = self.inner.keys.get(&TypeId::of::<(K::Stored, V)>())?;
 
         let handle = keys
             .downcast_ref::<KeyMap<K::Stored, V>>()
@@ -131,20 +261,18 @@ impl AssetCache {
     pub fn register_service<S: Service>(&self, service: S) {
         self.inner
             .services
+            .write()
             .insert(TypeId::of::<S>(), Box::new(service));
     }
 
-    pub fn service<S: Service>(&self) -> impl Deref<Target = S> + '_ {
-        self.inner
-            .services
-            .get(&TypeId::of::<S>())
-            .expect("Service not found")
-            .map(|service| {
-                service
-                    .as_any()
-                    .downcast_ref::<S>()
-                    .expect("Service type mismatch")
-            })
+    pub fn service<S: Service>(&self) -> impl Deref<Target = S> + '_ + Send {
+        RwLockReadGuard::map(self.inner.services.read(), |v| {
+            v.get(&TypeId::of::<S>())
+                .expect("Service not found")
+                .as_any()
+                .downcast_ref::<S>()
+                .expect("Service type mismatch")
+        })
     }
 }
 
@@ -175,17 +303,26 @@ where
 ///
 /// This trait is implemented for `Path`, `str` and `String` by default to load assets from the
 /// filesystem using the provided [`FsProvider`].
-pub trait AssetKey<V>: StoredKey {
-    type Error: 'static;
+pub trait AssetDesc<V>: StoredKey + Debug {
+    type Error: 'static + Debug;
 
     fn load(&self, assets: &AssetCache) -> Result<Asset<V>, Self::Error>;
 }
 
-impl AssetKey<DynamicImage> for Path {
-    type Error = ImageError;
+pub trait AsyncAssetDesc<V>: StoredKey + Debug + Send + Sync {
+    type Error: Send + Sync + 'static + Debug;
 
-    fn load(&self, assets: &AssetCache) -> ImageResult<Asset<DynamicImage>> {
-        Ok(assets.insert(image::open(self)?))
+    fn create(
+        &self,
+        assets: &AssetCache,
+    ) -> impl Future<Output = Result<Asset<V>, Self::Error>> + Send;
+}
+
+impl AssetFromPath for DynamicImage {
+    type Error = anyhow::Error;
+
+    fn load_from_path(path: &Path, assets: &AssetCache) -> anyhow::Result<Asset<Self>> {
+        Ok(assets.insert(image::open(path)?))
     }
 }
 
@@ -193,18 +330,20 @@ impl AssetKey<DynamicImage> for Path {
 mod tests {
     use std::{convert::Infallible, path::Path};
 
+    use crate::service::FsAssetError;
+
     use super::*;
 
     #[test]
     fn asset_cache() {
-        #[derive(Hash, Eq, PartialEq, Clone, Debug)]
-        struct Key(String);
+        impl AssetFromPath for () {
+            type Error = FsAssetError;
 
-        impl AssetKey<()> for Path {
-            type Error = Infallible;
-
-            fn load(&self, assets: &AssetCache) -> Result<Asset<()>, Infallible> {
-                eprintln!("Loading {:?}", self);
+            fn load_from_path(
+                path: &Path,
+                assets: &AssetCache,
+            ) -> Result<Asset<Self>, Self::Error> {
+                eprintln!("Loading {:?}", path);
                 Ok(assets.insert(()))
             }
         }
@@ -227,5 +366,64 @@ mod tests {
         drop(bar);
 
         assert!(assets.get::<_, ()>(&"Bar".to_string()).is_none());
+    }
+
+    #[test]
+    fn async_load() {
+        eprintln!("Starting async_load");
+        struct YieldOnce {
+            yielded: bool,
+        }
+
+        impl Future for YieldOnce {
+            type Output = ();
+
+            fn poll(
+                mut self: std::pin::Pin<&mut Self>,
+                cx: &mut std::task::Context<'_>,
+            ) -> std::task::Poll<()> {
+                if self.yielded {
+                    std::task::Poll::Ready(())
+                } else {
+                    self.yielded = true;
+                    cx.waker().wake_by_ref();
+                    std::task::Poll::Pending
+                }
+            }
+        }
+
+        impl AsyncAssetDesc<()> for str {
+            type Error = Infallible;
+
+            async fn create(&self, assets: &AssetCache) -> Result<Asset<()>, Infallible> {
+                eprintln!("Loading {:?}", self);
+                YieldOnce { yielded: false }.await;
+
+                eprintln!("Finished {:?}", self);
+                Ok(assets.insert(()))
+            }
+        }
+
+        let assets = AssetCache::new();
+
+        eprintln!("Starting first request");
+        let mut pending1 = Box::pin(assets.try_load_async::<_, ()>("Foo"));
+
+        eprintln!("Starting second request");
+
+        let pending2 = assets.try_load_async::<_, ()>("Foo");
+
+        use futures::future::FutureExt;
+        assert!((&mut pending1).now_or_never().is_none());
+        let content2 = pending2.now_or_never().unwrap().unwrap();
+        let content = pending1.now_or_never().unwrap().unwrap();
+        assert!(Arc::ptr_eq(content.as_arc(), content2.as_arc()));
+
+        let pending3 = assets
+            .try_load_async::<_, ()>("Foo")
+            .now_or_never()
+            .unwrap()
+            .unwrap();
+        assert!(Arc::ptr_eq(content.as_arc(), pending3.as_arc()));
     }
 }

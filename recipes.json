@@ -16,5 +16,6 @@
   "run-wgpu": {
     "cmd": "cargo run --example wgpu",
     "interactive": true
-  }
+  },
+  "check": "cargo check --workspace --examples"
 }

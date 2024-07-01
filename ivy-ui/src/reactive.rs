@@ -1,12 +1,10 @@
 use std::marker::PhantomData;
 
-use anyhow::Context;
 use flax::World;
-use flume::Receiver;
 use ivy_assets::AssetCache;
-use ivy_base::{Events, Layer};
+use ivy_core::Events;
 
-use crate::{events::WidgetEvent, systems, WidgetEventKind};
+use crate::{events::WidgetEvent, WidgetEventKind};
 
 #[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
@@ -66,32 +64,41 @@ impl<T: Copy> Reactive<T> {
 
 /// Layer abstraction for updating reactive components.
 pub struct ReactiveLayer<T> {
-    rx: Receiver<WidgetEvent>,
     marker: PhantomData<T>,
 }
 
 impl<T> ReactiveLayer<T> {
-    pub fn new(_world: &mut World, _resources: &mut AssetCache, events: &mut Events) -> Self {
-        let (tx, rx) = flume::unbounded();
-        events.subscribe_custom(tx);
+    pub fn new(_world: &mut World, _resources: &mut AssetCache, _: &mut Events) -> Self {
         Self {
-            rx,
             marker: PhantomData,
         }
     }
 }
 
-impl<T: 'static + Copy + Send + Sync> Layer for ReactiveLayer<T> {
-    fn on_update(
-        &mut self,
-        world: &mut World,
-        _: &mut AssetCache,
-        _: &mut ivy_base::Events,
-        _: std::time::Duration,
-    ) -> anyhow::Result<()> {
-        systems::reactive_system::<T, _>(world, self.rx.try_iter()).context(format!(
-            "Failed to execute reactive layer for {:?}",
-            std::any::type_name::<T>()
-        ))
-    }
-}
+// pub struct ReactiveLayerDefinition;
+
+// impl LayerDesc for ReactiveLayerDefinition {
+//     type Layer = ReactiveLayer<()>;
+
+//     fn register(self, _: &mut World, _: &AssetCache) -> anyhow::Result<Self::Layer> {
+//         todo!()
+//     }
+// }
+
+// impl<T> Layer for ReactiveLayer<T>
+// where
+//     T: 'static + Copy + Send + Sync,
+// {
+//     fn on_update(
+//         &mut self,
+//         world: &mut World,
+//         _: &mut AssetCache,
+//         _: &mut ivy_core::Events,
+//         _: std::time::Duration,
+//     ) -> anyhow::Result<()> {
+//         systems::reactive_system::<T, _>(world, self.rx.try_iter()).context(format!(
+//             "Failed to execute reactive layer for {:?}",
+//             std::any::type_name::<T>()
+//         ))
+//     }
+// }

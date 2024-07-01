@@ -4,12 +4,12 @@ use crate::{
 };
 use flax::{components::child_of, EntityBuilder};
 use gltf::Gltf;
-use ivy_assets::{Asset, AssetCache, AssetKey};
+use ivy_assets::{Asset, AssetCache, AssetDesc};
 use smallvec::SmallVec;
 use std::{ops::Deref, path::Path, path::PathBuf};
 
 use glam::*;
-use ivy_base::{position, position_offset, rotation, rotation_offset, scale, visible, Visible};
+use ivy_core::{position, position_offset, rotation, rotation_offset, scale, visible, Visible};
 use ivy_vulkan::{
     context::{SharedVulkanContext, VulkanContextService},
     Texture,
@@ -112,7 +112,7 @@ impl Document {
     {
         let path = path.as_ref();
         let Gltf { document, blob } =
-            Gltf::open(path).map_err(|e| Error::GltfImport(e, Some(path.to_owned().into())))?;
+            Gltf::open(path).map_err(|e| Error::GltfImport(e, Some(path.to_owned())))?;
 
         let buffers = import_buffer_data(&document, blob, path)?;
 
@@ -201,9 +201,9 @@ impl Document {
                     skinned_mesh: node
                         .mesh()
                         .and_then(|mesh| skinned_meshes[mesh.index()].clone()),
-                    pos: Vec3::from(position).into(),
-                    rot: Quat::from_array(rotation).into(),
-                    scale: Vec3::from(scale).into(),
+                    pos: Vec3::from(position),
+                    rot: Quat::from_array(rotation),
+                    scale: Vec3::from(scale),
                     children: node.children().map(|val| val.index()).collect(),
                 }
             })
@@ -267,17 +267,10 @@ impl Document {
     }
 }
 
-pub struct NodeBundle {
-    pos: Vec3,
-    rot: Quat,
-    scale: Vec3,
-    mesh: Asset<Mesh>,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DocumentFromPath(pub PathBuf);
 
-impl AssetKey<Document> for DocumentFromPath {
+impl AssetDesc<Document> for DocumentFromPath {
     type Error = Error;
 
     fn load(&self, assets: &AssetCache) -> Result<Asset<Document>> {

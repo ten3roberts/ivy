@@ -1,3 +1,3 @@
-pub mod node;
-pub mod pbr;
-pub mod components;
+pub mod fullscreen;
+pub mod hdri;
+pub mod skybox;

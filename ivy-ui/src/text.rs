@@ -190,7 +190,7 @@ impl<'a, I: Iterator<Item = &'a GlyphPosition>> Iterator for TextLayout<'a, I> {
 
         let location = match self.font.get_normalized(key.glyph_index) {
             Ok(val) => val,
-            Err(_) => (NormalizedRect::default()),
+            Err(_) => NormalizedRect::default(),
         };
 
         let width = (glyph.width as i32) as f32;

@@ -40,13 +40,13 @@ impl Default for AnimationInfo {
 
 /// Used for interpolating between keyframes
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct JointTarget {
+pub struct JointTarget {
     pub(crate) position: Vec3,
     pub(crate) rotation: Quat,
     pub(crate) scale: Vec3,
 }
 impl JointTarget {
-    fn to_matrix(&self) -> Mat4 {
+    fn as_matrix(&self) -> Mat4 {
         Mat4::from_scale_rotation_translation(self.scale, self.rotation, self.position)
     }
 }
@@ -174,7 +174,7 @@ impl Animator {
         });
 
         let skin_joint = skin.joint(current).expect("Missing joint in skin");
-        let current_transform = parent * transform.to_matrix();
+        let current_transform = parent * transform.as_matrix();
         // dbg!(current_transform);
         data[skin.joint_to_index(current)] = current_transform * skin_joint.inverse_bind_matrix;
 

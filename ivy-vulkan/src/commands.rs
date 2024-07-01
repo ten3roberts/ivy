@@ -1,6 +1,6 @@
 use crate::traits::FromExtent;
 use crate::{buffer::Buffer, device, framebuffer::Framebuffer, renderpass::RenderPass, Result};
-use ivy_base::Extent;
+use ivy_core::Extent;
 use smallvec::SmallVec;
 use std::mem::size_of;
 use std::sync::Arc;

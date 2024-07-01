@@ -2,7 +2,7 @@ use std::{borrow::Cow, slice};
 
 use crate::{Error, Result};
 use ash::vk::{DescriptorSet, ShaderStageFlags};
-use ivy_assets::{Asset, AssetCache, AssetKey};
+use ivy_assets::{Asset, AssetCache, AssetDesc};
 use ivy_vulkan::{
     context::VulkanContextService,
     descriptors::{DescriptorBuilder, IntoSet},
@@ -179,11 +179,10 @@ struct MaterialData {
     normal: i32,
 }
 
-impl AssetKey<Material> for MaterialInfo {
+impl AssetDesc<Material> for MaterialInfo {
     type Error = Error;
 
     fn load(&self, assets: &AssetCache) -> Result<Asset<Material>> {
-        let context = assets.service::<VulkanContextService>().context();
         let sampler = assets.load(&self.sampler);
         let albedo = assets.load(&TextureFromPath(self.albedo.as_ref().into()));
 

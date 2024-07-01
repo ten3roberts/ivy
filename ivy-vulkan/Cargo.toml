@@ -18,7 +18,7 @@ glfw.workspace = true
 gpu-allocator = "0.17.0"
 ivy-image = { path = "../ivy-image", version = "0.10.0" }
 ivy-assets = { path = "../ivy-assets", version = "0.10.0" }
-ivy-base = { path = "../ivy-base", version = "0.10.0" }
+ivy-core = { path = "../ivy-core", version = "0.10.0" }
 log = "0.4.17"
 parking_lot.workspace = true
 smallvec = "1.8.0"

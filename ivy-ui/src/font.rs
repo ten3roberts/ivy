@@ -1,6 +1,6 @@
 use crate::{Error, Result};
-use ivy_assets::{Asset, AssetCache, AssetKey};
-use ivy_base::Extent;
+use ivy_assets::{Asset, AssetCache, AssetDesc};
+use ivy_core::Extent;
 use ivy_graphics::{NormalizedRect, Rect, TextureAtlas};
 use ivy_vulkan::{
     context::{SharedVulkanContext, VulkanContextService},
@@ -183,7 +183,7 @@ fn nearest_power_2(val: u32) -> u32 {
     result
 }
 
-impl AssetKey<Font> for FontInfo {
+impl AssetDesc<Font> for FontInfo {
     type Error = Error;
 
     fn load(&self, assets: &AssetCache) -> Result<Asset<Font>> {

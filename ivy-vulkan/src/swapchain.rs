@@ -8,7 +8,7 @@ use ash::vk::Extent2D;
 use ash::vk::{self, Image, SurfaceKHR};
 use ash::Device;
 use ash::Instance;
-use ivy_base::Extent;
+use ivy_core::Extent;
 use std::cmp;
 
 /// The maximum number of images in the swapchain. Actual image count may be less but never more.

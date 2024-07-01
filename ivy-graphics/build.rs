@@ -2,23 +2,11 @@ use anyhow::{Context, Result};
 use shaderc::ShaderKind;
 use std::{
     env,
-    error::Error,
     ffi::OsString,
     fs,
     path::{Path, PathBuf},
     slice,
 };
-
-#[derive(Debug)]
-struct CompilationFailure(PathBuf);
-
-impl Error for CompilationFailure {}
-
-impl std::fmt::Display for CompilationFailure {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Failed to compile resource: {}", self.0.display())
-    }
-}
 
 fn rerun_if_changed<P: AsRef<Path>>(path: P) {
     let path = path.as_ref();
@@ -96,7 +84,7 @@ where
 }
 
 fn glslc(src: &Path, dst: &Path) -> Result<()> {
-    let mut compiler = shaderc::Compiler::new().unwrap();
+    let compiler = shaderc::Compiler::new().unwrap();
     let mut options = shaderc::CompileOptions::new().unwrap();
     options.set_optimization_level(shaderc::OptimizationLevel::Performance);
     let source = fs::read_to_string(src)?;

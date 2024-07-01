@@ -2,13 +2,13 @@ use crate::{NodeKind, Result};
 use anyhow::Context;
 use flax::World;
 use ivy_assets::{Asset, AssetCache};
-use ivy_base::engine;
+use ivy_core::engine;
 use ivy_graphics::components::swapchain;
 use ivy_vulkan::{
     context::SharedVulkanContext,
     traits::FromExtent,
     vk::{self, ImageBlit, ImageSubresourceLayers, Offset3D, PipelineStageFlags},
-    ImageLayout, ImageUsage, PassInfo, SampleCountFlags, Swapchain, Texture, TextureInfo,
+    ImageLayout, ImageUsage, PassInfo, SampleCountFlags, Texture, TextureInfo,
 };
 use std::{ops::Deref, slice};
 
@@ -129,7 +129,7 @@ impl Node for SwapchainPresentNode {
     fn execute(
         &mut self,
         world: &mut World,
-        assets: &AssetCache,
+        _: &AssetCache,
         cmd: &ivy_vulkan::commands::CommandBuffer,
         _: &PassInfo,
         _current_frame: usize,

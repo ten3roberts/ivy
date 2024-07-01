@@ -5,7 +5,7 @@ use ivy_window::Window;
 
 use crate::{
     Animator, BoundingSphere, Camera, DepthAttachment, GpuCamera, LightRenderer, Material, Mesh,
-    PointLight, Renderer, Skin, SkinnedVertex,
+    PointLight, Skin, SkinnedVertex,
 };
 
 flax::component! {

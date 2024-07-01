@@ -1,16 +1,10 @@
-use std::convert::TryInto;
-
-use crate::{events::WidgetEvent, InteractiveState, Result};
-use anyhow::Context;
+use crate::{events::WidgetEvent, Result};
 use flax::{
-    components::child_of, entity_ids, fetch::entity_refs, BoxedSystem, Entity, EntityRef, FetchExt,
-    Query, System, World,
+    components::child_of, fetch::entity_refs, BoxedSystem, EntityRef, Query, System, World,
 };
 use glam::{Mat4, Vec2, Vec3Swizzles};
-use glfw::Action;
-use ivy_base::{position, size, visible, Events, Visible};
+use ivy_core::{position, size, visible, Visible};
 use ivy_graphics::components::camera;
-use ivy_input::InputEvent;
 
 use crate::{constraints::ConstraintQuery, *};
 
@@ -46,7 +40,7 @@ pub(crate) fn update_from(world: &World, entity: &EntityRef, depth: u32) -> Resu
         //     world.try_query_one::<(&Position2D, &Size2D, &mut WidgetDepth, &mut Visible)>(parent)?;
 
         // let (position, size, curr_depth, visible) = query.get()?;
-        *cur_depth = depth.into();
+        *cur_depth = depth;
         (*position, *size, *visible)
     };
 
@@ -68,7 +62,7 @@ pub(crate) fn update_from(world: &World, entity: &EntityRef, depth: u32) -> Resu
 
 /// Applies the constraints associated to entity and uses the given parent.
 pub(crate) fn apply_constraints(
-    world: &World,
+    _: &World,
     entity: &EntityRef,
     parent_pos: Vec2,
     parent_size: Vec2,
@@ -113,7 +107,7 @@ pub(crate) fn apply_constraints(
 }
 
 /// Updates the canvas view and projection
-pub fn update_canvas(world: &World, canvas: &EntityRef) -> Result<()> {
+pub fn update_canvas(_: &World, canvas: &EntityRef) -> Result<()> {
     let query = &(camera().as_mut(), size().as_mut(), position().as_mut());
 
     let mut query = canvas.query(query);
@@ -126,134 +120,8 @@ pub fn update_canvas(world: &World, canvas: &EntityRef) -> Result<()> {
 }
 
 pub fn reactive_system<T: 'static + Copy + Send + Sync, I: Iterator<Item = WidgetEvent>>(
-    world: &World,
-    events: I,
+    _: &World,
+    _: I,
 ) -> Result<()> {
     Ok(())
-}
-
-pub fn handle_events(
-    world: &mut World,
-    mut events: &mut Events,
-    state: &mut InteractiveState,
-    cursor_pos: Vec2,
-    intercepted_events: impl Iterator<Item = InputEvent>,
-    control_events: impl Iterator<Item = UIControl>,
-) {
-    control_events.for_each(|event| match event {
-        UIControl::Focus(widget) => state.set_focus(widget, true, &mut events),
-    });
-
-    let hovered = intersect_widget(&*world, cursor_pos);
-
-    let sticky = hovered
-        .map(|val| world.has(val, sticky()))
-        .unwrap_or_default();
-
-    for event in intercepted_events {
-        let event = InputEvent::from(event);
-
-        state.set_hovered(hovered, &mut events);
-
-        let event = match event {
-            // Mouse was clicked on a ui element
-            InputEvent::MouseButton {
-                button,
-                action: Action::Press,
-                mods,
-            } => {
-                state.set_focus(hovered, sticky, &mut events);
-
-                // Swallow or forward event
-                if let Some(widget) = hovered {
-                    let entity = world.entity(widget).unwrap();
-
-                    if let Ok(click) = entity.get(on_click()) {
-                        click.0(entity, &mut events);
-                    }
-
-                    events.send(WidgetEvent::new(
-                        widget,
-                        WidgetEventKind::MouseButton {
-                            button,
-                            action: Action::Press,
-                            mods,
-                        },
-                    ));
-
-                    None
-                } else {
-                    Some(InputEvent::MouseButton {
-                        button,
-                        action: Action::Press,
-                        mods,
-                    })
-                }
-            }
-            InputEvent::MouseButton {
-                button,
-                action: Action::Release,
-                mods,
-            } if state.focused().is_some() => {
-                // Mouse was released on the same widget
-                if let Some(hovered) = hovered {
-                    if Some(hovered) == state.focused() {
-                        events.send(WidgetEvent::new(
-                            hovered,
-                            WidgetEventKind::MouseButton {
-                                button,
-                                action: Action::Release,
-                                mods,
-                            },
-                        ));
-                    }
-                }
-
-                // Send unfocus event if widget is not sticky
-                if !state.sticky() {
-                    state.set_focus(None, false, &mut events);
-                }
-
-                None
-            }
-            // If a widget is focused and all else was handled, forward all events
-            event if state.focused().is_some() => match event.try_into() {
-                Ok(val) => {
-                    events.send(WidgetEvent::new(state.focused().unwrap(), val));
-                    None
-                }
-                Err(val) => Some(val),
-            },
-
-            event => Some(event),
-        };
-
-        if let Some(event) = event {
-            events.intercepted_send(event);
-        }
-    }
-}
-
-/// Returns the first widget that intersects the postiion
-fn intersect_widget(world: &World, point: Vec2) -> Option<Entity> {
-    Query::new((entity_ids(), position(), size(), widget_depth(), visible()))
-        .with(interactive())
-        .borrow(world)
-        .iter()
-        .filter_map(|(id, pos, size, depth, visible)| {
-            if visible.is_visible() && box_intersection(pos.xy(), *size, point) {
-                Some((id, depth))
-            } else {
-                None
-            }
-        })
-        .max_by_key(|v| v.1)
-        .map(|v| v.0)
-}
-
-fn box_intersection(pos: Vec2, size: Vec2, point: Vec2) -> bool {
-    point.x > pos.x - size.x
-        && point.x < pos.x + size.x
-        && point.y > pos.y - size.y
-        && point.y < pos.y + size.y
 }

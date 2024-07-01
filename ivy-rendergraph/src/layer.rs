@@ -1,20 +1,10 @@
-use std::time::Duration;
-
-use anyhow::Context;
 use flax::{Schedule, World};
 use ivy_assets::AssetCache;
-use ivy_base::{engine, Events, Layer};
-use ivy_graphics::{
-    components::{self, swapchain, window},
-    systems, GpuCamera, GraphicsEvent,
-};
-use ivy_vulkan::{
-    context::{SharedVulkanContext, VulkanContextService},
-    device,
-    traits::Backend,
-};
+use ivy_core::engine;
+use ivy_graphics::components::{self, swapchain};
+use ivy_vulkan::{context::SharedVulkanContext, device};
 
-use crate::{components::render_graph, RenderGraph, Result};
+use crate::{components::render_graph, Result};
 
 pub struct GraphicsDesc {
     pub frames_in_flight: usize,
@@ -34,27 +24,6 @@ pub struct GraphicsLayer {
 }
 
 impl GraphicsLayer {
-    pub fn new(
-        _: &mut World,
-        assets: &AssetCache,
-        _: &mut Events,
-        desc: GraphicsDesc,
-    ) -> anyhow::Result<Self> {
-        let context = assets.service::<VulkanContextService>().context();
-
-        let schedule = Schedule::builder()
-            .with_system(systems::update_view_matrices())
-            .with_system(systems::add_bounds_system())
-            .with_system(GpuCamera::update_system())
-            .build();
-
-        Ok(Self {
-            context,
-            schedule,
-            frames_in_flight: desc.frames_in_flight,
-        })
-    }
-
     pub fn execute_rendergraph(
         &mut self,
         world: &mut World,
@@ -89,46 +58,75 @@ impl GraphicsLayer {
 
         Ok(())
     }
-}
-impl Layer for GraphicsLayer {
-    fn on_update(
-        &mut self,
-        world: &mut World,
-        assets: &mut AssetCache,
-        events: &mut Events,
-        _frame_time: Duration,
-    ) -> anyhow::Result<()> {
-        // Ensure gpu side data for cameras
-        GpuCamera::create_gpu_cameras(&self.context, world, self.frames_in_flight)?;
 
-        let extent = world.get(engine(), window())?.extent();
-
-        // Window is minimized, no need to render
-        if extent.width == 0 || extent.height == 0 {
-            return Ok(());
-        }
-
-        match self.execute_rendergraph(world, assets) {
-            Ok(()) => Ok(()),
-            Err(crate::Error::Vulkan(ivy_vulkan::Error::Vulkan(
-                ivy_vulkan::vk::Result::SUBOPTIMAL_KHR
-                | ivy_vulkan::vk::Result::ERROR_OUT_OF_DATE_KHR,
-            ))) => {
-                let window = world.get(engine(), window())?;
-                eprintln!("Recreating swapchain");
-                let swapchain = &mut *world.get_mut(engine(), swapchain())?;
-                swapchain
-                    .recreate(window.framebuffer_size())
-                    .context("Failed to recreate swapchain")?;
-
-                events.send(GraphicsEvent::SwapchainRecreation);
-
-                Ok(())
-            }
-            Err(e) => Err(e).context("Failed to execute rendergraph"),
-        }
+    pub fn frames_in_flight(&self) -> usize {
+        self.frames_in_flight
     }
 }
+
+pub struct GraphicsLayerDesc {
+    pub frames_in_flight: usize,
+}
+
+// impl LayerDesc for GraphicsLayerDesc {
+//     type Layer = GraphicsLayer;
+
+//     fn register(self, _: &mut World, assets: &AssetCache) -> anyhow::Result<Self::Layer> {
+//         let context = assets.service::<VulkanContextService>().context();
+
+//         let schedule = Schedule::builder()
+//             .with_system(systems::update_view_matrices())
+//             .with_system(systems::add_bounds_system())
+//             .with_system(GpuCamera::update_system())
+//             .build();
+
+//         Ok(GraphicsLayer {
+//             context,
+//             schedule,
+//             frames_in_flight: self.frames_in_flight,
+//         })
+//     }
+// }
+
+// impl Layer for GraphicsLayer {
+//     fn on_update(
+//         &mut self,
+//         world: &mut World,
+//         assets: &mut AssetCache,
+//         events: &mut Events,
+//         _frame_time: Duration,
+//     ) -> anyhow::Result<()> {
+//         // Ensure gpu side data for cameras
+//         GpuCamera::create_gpu_cameras(&self.context, world, self.frames_in_flight)?;
+
+//         let extent = world.get(engine(), window())?.extent();
+
+//         // Window is minimized, no need to render
+//         if extent.width == 0 || extent.height == 0 {
+//             return Ok(());
+//         }
+
+//         match self.execute_rendergraph(world, assets) {
+//             Ok(()) => Ok(()),
+//             Err(crate::Error::Vulkan(ivy_vulkan::Error::Vulkan(
+//                 ivy_vulkan::vk::Result::SUBOPTIMAL_KHR
+//                 | ivy_vulkan::vk::Result::ERROR_OUT_OF_DATE_KHR,
+//             ))) => {
+//                 let window = world.get(engine(), window())?;
+//                 eprintln!("Recreating swapchain");
+//                 let swapchain = &mut *world.get_mut(engine(), swapchain())?;
+//                 swapchain
+//                     .recreate(window.framebuffer_size())
+//                     .context("Failed to recreate swapchain")?;
+
+//                 events.send(GraphicsEvent::SwapchainRecreation);
+
+//                 Ok(())
+//             }
+//             Err(e) => Err(e).context("Failed to execute rendergraph"),
+//         }
+//     }
+// }
 
 impl Drop for GraphicsLayer {
     fn drop(&mut self) {

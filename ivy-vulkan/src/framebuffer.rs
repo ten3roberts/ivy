@@ -1,5 +1,5 @@
 use crate::{RenderPass, Result};
-use ivy_base::Extent;
+use ivy_core::Extent;
 use std::sync::Arc;
 
 use ash::vk;

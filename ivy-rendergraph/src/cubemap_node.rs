@@ -4,7 +4,7 @@ use crate::{AttachmentInfo, CameraNode, CameraNodeInfo, Node};
 use flax::{Component, Entity, World};
 use glam::{Quat, Vec3};
 use ivy_assets::{Asset, AssetCache};
-use ivy_base::{connection, position, rotation, scale};
+use ivy_core::{connection, position, rotation, scale};
 use ivy_graphics::{Camera, Renderer};
 use ivy_vulkan::{
     context::SharedVulkanContext, descriptors::MultiDescriptorBindable, CubeMap, Shader,

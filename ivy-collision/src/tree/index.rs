@@ -1,6 +1,6 @@
-use ivy_base::Color;
-use ivy_base::DrawGizmos;
-use ivy_base::Gizmos;
+use ivy_core::Color;
+use ivy_core::DrawGizmos;
+use ivy_core::Gizmos;
 use slotmap::new_key_type;
 use slotmap::Key;
 use std::fmt::Debug;

@@ -3,21 +3,19 @@ use std::collections::BTreeMap;
 use crate::{
     bundles::*,
     collision::{resolve_collision, ResolveObject},
-    components::{self, collision_state, effector, gravity_state, physics_state, PhysicsState},
-    Effector, Result,
+    components::{collision_state, effector, gravity_state, physics_state, PhysicsState},
+    Result,
 };
 use flax::{
     BoxedSystem, Component, Entity, EntityRef, FetchExt, Mutable, Query, QueryBorrow, System, World,
 };
 use flume::Receiver;
 use glam::Quat;
-use ivy_base::{
+use ivy_core::{
     angular_velocity, connection, engine, friction, gravity_influence, position, restitution,
     rotation, sleeping, velocity,
 };
-use ivy_collision::{util::TOLERANCE, Collision, Contact};
-
-const BATCH_SIZE: u32 = 64;
+use ivy_collision::{Collision, Contact};
 
 pub fn integrate_velocity() -> BoxedSystem {
     System::builder()
@@ -123,7 +121,6 @@ pub fn get_rigid_root<'a>(entity: &EntityRef<'a>) -> EntityRef<'a> {
 pub struct CollisionState {
     sleeping: BTreeMap<(Entity, Entity), Collision>,
     active: BTreeMap<(Entity, Entity), Collision>,
-    pending: Vec<Collision>,
 }
 
 impl CollisionState {
@@ -131,7 +128,6 @@ impl CollisionState {
         Self {
             active: BTreeMap::new(),
             sleeping: BTreeMap::new(),
-            pending: Vec::new(),
         }
     }
 
@@ -158,14 +154,10 @@ impl CollisionState {
     }
 
     pub fn has_collision(&self, e: Entity) -> bool {
-        self.active
-            .iter()
-            .skip_while(move |((a, _), _)| *a != e)
-            .next()
-            .is_some()
+        self.active.keys().any(|v| v.0 == e)
     }
 
-    pub fn get<'a>(&'a self, e: Entity) -> impl Iterator<Item = &'a Collision> {
+    pub fn get(&self, e: Entity) -> impl Iterator<Item = &'_ Collision> {
         self.active
             .iter()
             .skip_while(move |((a, _), _)| *a != e)
@@ -187,12 +179,12 @@ impl CollisionState {
     }
 }
 
-fn clear_sleeping() -> BoxedSystem {
-    System::builder()
-        .with_query(Query::new(collision_state().as_mut()))
-        .for_each(|v| v.next_frame())
-        .boxed()
-}
+// fn clear_sleeping() -> BoxedSystem {
+//     System::builder()
+//         .with_query(Query::new(collision_state().as_mut()))
+//         .for_each(|v| v.next_frame())
+//         .boxed()
+// }
 
 impl Default for CollisionState {
     fn default() -> Self {
@@ -236,7 +228,7 @@ pub fn resolve_collisions(
         }
         // Check for static collision
         else if collision.a.state.is_static() {
-            resolve_static(&a, &b, collision.contact, dt);
+            resolve_static(&a, &b, collision.contact, dt)?;
             continue;
         } else if collision.b.state.is_static() {
             resolve_static(

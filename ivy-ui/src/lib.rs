@@ -49,7 +49,6 @@ mod button;
 pub mod constraints;
 pub mod systems;
 
-pub use canvas::*;
 pub use components::*;
 pub use error::*;
 pub use events::*;
@@ -62,6 +61,5 @@ pub use layout::*;
 pub use reactive::*;
 pub use systems::*;
 pub use text::*;
-pub use text_renderer::*;
 pub use text_renderer::*;
 pub use vertex::*;

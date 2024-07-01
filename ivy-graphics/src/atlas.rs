@@ -1,7 +1,7 @@
 use crate::{Error, Result};
 use ash::vk;
 use ivy_assets::{Asset, AssetCache};
-use ivy_base::Extent;
+use ivy_core::Extent;
 use ivy_image::Image;
 use ivy_vulkan::{context::SharedVulkanContext, Texture, TextureInfo};
 use rectangle_pack::{
