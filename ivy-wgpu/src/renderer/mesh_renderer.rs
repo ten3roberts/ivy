@@ -28,7 +28,7 @@ use crate::{
     Gpu,
 };
 
-use super::{CameraRenderer, Globals, ObjectData};
+use super::{CameraRenderer, CameraShaderData, ObjectData};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct BatchKey {
@@ -69,7 +69,7 @@ impl Batch {
         &'a self,
         _: &Gpu,
         _: &AssetCache,
-        _: &'a Globals,
+        _: &'a CameraShaderData,
         store: &'a RendererStore,
         render_pass: &mut RenderPass<'a>,
     ) {
@@ -175,7 +175,7 @@ impl MeshRenderer {
         world: &mut World,
         assets: &AssetCache,
         gpu: &Gpu,
-        globals: &Globals,
+        globals: &CameraShaderData,
         store: &mut RendererStore,
         cmd: &mut CommandBuffer,
         format: TextureFormat,
@@ -331,7 +331,7 @@ impl CameraRenderer for MeshRenderer {
             ctx.world,
             ctx.assets,
             ctx.gpu,
-            ctx.globals,
+            ctx.camera_data,
             ctx.store,
             &mut cmd,
             ctx.format,
@@ -346,7 +346,7 @@ impl CameraRenderer for MeshRenderer {
         ctx: &'s super::RenderContext<'s>,
         render_pass: &mut RenderPass<'s>,
     ) -> anyhow::Result<()> {
-        render_pass.set_bind_group(0, &ctx.globals.bind_group, &[]);
+        render_pass.set_bind_group(0, &ctx.camera_data.bind_group, &[]);
 
         self.object_buffer
             .write(&ctx.gpu.queue, 0, &self.object_data);
@@ -359,7 +359,7 @@ impl CameraRenderer for MeshRenderer {
         for batch_id in self.batch_map.values() {
             let batch = &self.batches[*batch_id];
             tracing::trace!(instance_count = batch.instance_count, "drawing batch");
-            batch.draw(ctx.gpu, ctx.assets, ctx.globals, ctx.store, render_pass)
+            batch.draw(ctx.gpu, ctx.assets, ctx.camera_data, ctx.store, render_pass)
         }
 
         Ok(())

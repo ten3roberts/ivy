@@ -11,18 +11,16 @@ use wgpu::{
 
 pub struct SkyboxRenderer {
     shader: Option<Shader>,
-    skybox: Texture,
     bind_group: wgpu::BindGroup,
     bind_group_layout: wgpu::BindGroupLayout,
     buffer: TypedBuffer<UniformData>,
 }
 
 impl SkyboxRenderer {
-    pub fn new(gpu: &Gpu, skybox: Texture) -> Self {
+    pub fn new(gpu: &Gpu) -> Self {
         let bind_group_layout = BindGroupLayoutBuilder::new("skybox")
             .bind_uniform_buffer(ShaderStages::FRAGMENT)
             .bind_sampler(ShaderStages::FRAGMENT)
-            .bind_texture_cube(ShaderStages::FRAGMENT)
             .build(gpu);
 
         let buffer = TypedBuffer::new(
@@ -46,19 +44,12 @@ impl SkyboxRenderer {
         let bind_group = BindGroupBuilder::new("skybox")
             .bind_buffer(buffer.buffer())
             .bind_sampler(&sampler)
-            .bind_texture(&skybox.create_view(&wgpu::TextureViewDescriptor {
-                label: "skybox".into(),
-                dimension: Some(wgpu::TextureViewDimension::Cube),
-                array_layer_count: Some(6),
-                ..Default::default()
-            }))
             .build(gpu, &bind_group_layout);
 
         Self {
             buffer,
             bind_group,
             bind_group_layout,
-            skybox,
             shader: None,
         }
     }
@@ -70,8 +61,8 @@ impl CameraRenderer for SkyboxRenderer {
             &ctx.gpu.queue,
             0,
             &[UniformData {
-                inv_proj: ctx.globals.data.projection.inverse(),
-                inv_view: ctx.globals.data.view.inverse(),
+                inv_proj: ctx.camera_data.data.projection.inverse(),
+                inv_view: ctx.camera_data.data.view.inverse(),
             }],
         );
 
@@ -91,7 +82,7 @@ impl CameraRenderer for SkyboxRenderer {
                     source: include_str!("../shaders/skybox.wgsl"),
                     format: ctx.format,
                     vertex_layouts: &[],
-                    layouts: &[&self.bind_group_layout],
+                    layouts: &[&ctx.camera_data.layout, &self.bind_group_layout],
                     depth_format: Some(wgpu::TextureFormat::Depth24Plus),
                     sample_count: 4,
                 },
@@ -99,7 +90,8 @@ impl CameraRenderer for SkyboxRenderer {
         });
 
         render_pass.set_pipeline(shader.pipeline());
-        render_pass.set_bind_group(0, &self.bind_group, &[]);
+        render_pass.set_bind_group(0, &ctx.camera_data.bind_group, &[]);
+        render_pass.set_bind_group(1, &self.bind_group, &[]);
 
         render_pass.draw(0..3, 0..1);
 

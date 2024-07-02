@@ -1,6 +1,6 @@
 pub mod mesh_renderer;
 
-use std::any::type_name;
+use std::{any::type_name, sync::Arc};
 
 use flax::{Query, World};
 use glam::{vec3, Mat4, Vec3, Vec4};
@@ -9,7 +9,8 @@ use ivy_assets::{stored::Store, Asset, AssetCache};
 use ivy_core::{main_camera, world_transform, Bundle};
 use wgpu::{
     BindGroup, BufferUsages, Operations, RenderPass, RenderPassColorAttachment,
-    RenderPassDescriptor, ShaderStages, TextureFormat, TextureUsages,
+    RenderPassDescriptor, ShaderStages, Texture, TextureFormat, TextureUsages,
+    TextureViewDescriptor, TextureViewDimension,
 };
 
 use crate::{
@@ -87,8 +88,9 @@ pub struct RenderContext<'a> {
     pub assets: &'a AssetCache,
     pub gpu: &'a Gpu,
     pub store: &'a mut RendererStore,
-    pub globals: &'a Globals,
+    pub camera_data: &'a CameraShaderData,
     pub format: TextureFormat,
+    pub enviroment: &'a EnvironmentData,
 }
 
 pub trait CameraRenderer {
@@ -117,12 +119,35 @@ impl<A: CameraRenderer, B: CameraRenderer> CameraRenderer for (A, B) {
     }
 }
 
+pub struct EnvironmentData {
+    environment_map: Arc<Texture>,
+    irradiance_map: Arc<Texture>,
+}
+
+impl EnvironmentData {
+    pub fn new(environment_map: Arc<Texture>, irradiance_map: Arc<Texture>) -> Self {
+        Self {
+            environment_map,
+            irradiance_map,
+        }
+    }
+
+    pub fn environment_map(&self) -> &Texture {
+        &self.environment_map
+    }
+
+    pub fn irradiance_map(&self) -> &Texture {
+        &self.irradiance_map
+    }
+}
+
 pub struct CameraNode {
     renderer: Box<dyn CameraRenderer>,
-    globals: Globals,
+    shader_data: CameraShaderData,
     depth_texture: TextureHandle,
     store: RendererStore,
     output: TextureHandle,
+    environment: EnvironmentData,
 }
 
 impl CameraNode {
@@ -131,13 +156,15 @@ impl CameraNode {
         depth_texture: TextureHandle,
         output: TextureHandle,
         renderer: impl 'static + CameraRenderer,
+        environment: EnvironmentData,
     ) -> Self {
         Self {
             renderer: Box::new(renderer),
-            globals: Globals::new(gpu),
+            shader_data: CameraShaderData::new(gpu, &environment),
             depth_texture,
             store: Default::default(),
             output,
+            environment,
         }
     }
 
@@ -155,16 +182,16 @@ impl CameraNode {
         {
             let view = world_transform.inverse();
 
-            self.globals.data = GlobalData {
+            self.shader_data.data = CameraData {
                 view,
                 projection,
                 camera_pos: world_transform.transform_point3(Vec3::ZERO),
                 padding: 0.0,
             };
 
-            self.globals
+            self.shader_data
                 .buffer
-                .write(&ctx.gpu.queue, 0, &[self.globals.data]);
+                .write(&ctx.gpu.queue, 0, &[self.shader_data.data]);
         }
 
         let light_data = Query::new((world_transform(), light()))
@@ -176,10 +203,10 @@ impl CameraNode {
                     * light.intensity)
                     .extend(1.0),
             })
-            .take(self.globals.light_buffer.len())
+            .take(self.shader_data.light_buffer.len())
             .collect_vec();
 
-        self.globals
+        self.shader_data
             .light_buffer
             .write(&ctx.gpu.queue, 0, &light_data);
 
@@ -188,8 +215,9 @@ impl CameraNode {
             assets: ctx.assets,
             gpu: ctx.gpu,
             store: &mut self.store,
-            globals: &self.globals,
+            camera_data: &self.shader_data,
             format,
+            enviroment: &self.environment,
         })?;
 
         Ok(())
@@ -216,8 +244,9 @@ impl Node for CameraNode {
             assets: ctx.assets,
             gpu: ctx.gpu,
             store: &mut self.store,
-            globals: &self.globals,
+            camera_data: &self.shader_data,
             format: output.format(),
+            enviroment: &self.environment,
         };
 
         let mut render_pass = ctx.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -272,7 +301,7 @@ pub struct ObjectData {
 
 #[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
 #[repr(C)]
-pub struct GlobalData {
+pub struct CameraData {
     pub view: Mat4,
     pub projection: Mat4,
     pub camera_pos: Vec3,
@@ -286,19 +315,26 @@ pub struct LightData {
     pub color: Vec4,
 }
 
-pub struct Globals {
-    bind_group: BindGroup,
-    pub data: GlobalData,
-    buffer: TypedBuffer<GlobalData>,
+pub struct CameraShaderData {
+    /// 0: camera data
+    /// 1: light buffer
+    /// 2: environment_map
+    /// 3: irradiance_map
+    pub bind_group: BindGroup,
+    pub data: CameraData,
+    buffer: TypedBuffer<CameraData>,
+    // TODO: lights should be managed by shared class in mesh renderer
     light_buffer: TypedBuffer<LightData>,
-    layout: wgpu::BindGroupLayout,
+    pub layout: wgpu::BindGroupLayout,
 }
 
-impl Globals {
-    fn new(gpu: &Gpu) -> Globals {
+impl CameraShaderData {
+    fn new(gpu: &Gpu, environment: &EnvironmentData) -> CameraShaderData {
         let layout = BindGroupLayoutBuilder::new("Globals")
             .bind_uniform_buffer(ShaderStages::VERTEX | ShaderStages::FRAGMENT)
             .bind_uniform_buffer(ShaderStages::FRAGMENT)
+            .bind_texture_cube(ShaderStages::FRAGMENT)
+            .bind_texture_cube(ShaderStages::FRAGMENT)
             .build(gpu);
 
         let buffer = TypedBuffer::new(
@@ -315,9 +351,17 @@ impl Globals {
             &[Default::default(); 8],
         );
 
+        let cubemap_view = TextureViewDescriptor {
+            dimension: Some(TextureViewDimension::Cube),
+            array_layer_count: Some(6),
+            ..Default::default()
+        };
+
         let bind_group = BindGroupBuilder::new("Globals")
             .bind_buffer(&buffer)
             .bind_buffer(&light_buffer)
+            .bind_texture(&environment.environment_map.create_view(&cubemap_view))
+            .bind_texture(&environment.irradiance_map.create_view(&cubemap_view))
             .build(gpu, &layout);
 
         Self {

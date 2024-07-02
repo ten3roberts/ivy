@@ -15,7 +15,7 @@ impl Default for UvSphereDesc {
     fn default() -> Self {
         Self {
             latitudes: 32,
-            longitudes: 16,
+            longitudes: 24,
         }
     }
 }

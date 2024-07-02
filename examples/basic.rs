@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::{sync::Arc, time::Instant};
 
 use flax::{
     component, BoxedSystem, Component, Entity, EntityBuilder, Mutable, Query, QueryBorrow,
@@ -22,7 +22,7 @@ use ivy_input::{
     components::input_state, layer::InputLayer, types::Key, Action, Axis3, BindingExt,
     CursorMovement, InputState, KeyBinding, MouseButtonBinding,
 };
-use ivy_postprocessing::{hdri::process_hdri, skybox::SkyboxRenderer};
+use ivy_postprocessing::{hdri::HdriProcessor, skybox::SkyboxRenderer};
 use ivy_scene::GltfNodeExt;
 use ivy_wgpu::{
     components::{light, main_window, projection_matrix, window},
@@ -33,7 +33,9 @@ use ivy_wgpu::{
     material_desc::{MaterialData, MaterialDesc},
     mesh_desc::MeshDesc,
     primitives::UvSphereDesc,
-    renderer::{mesh_renderer::MeshRenderer, CameraNode, MsaaResolve, RenderObjectBundle},
+    renderer::{
+        mesh_renderer::MeshRenderer, CameraNode, EnvironmentData, MsaaResolve, RenderObjectBundle,
+    },
     rendergraph::{self, ExternalResources, ManagedTextureDesc, RenderGraph},
     shaders::PbrShaderKey,
     Gpu,
@@ -159,7 +161,7 @@ impl LogicLayer {
 
         Entity::builder()
             .mount(TransformBundle::default().with_position(vec3(0.0, 50.0, 0.0)))
-            .set(light(), PointLight::new(Srgb::new(1.0, 1.0, 1.0), 10000.0))
+            .set(light(), PointLight::new(Srgb::new(1.0, 1.0, 1.0), 1000.0))
             .spawn(world);
 
         Ok(())
@@ -393,6 +395,7 @@ impl RenderGraphRenderer {
 
         let image: Asset<DynamicImage> =
             assets.load("ivy-postprocessing/hdrs/lauter_waterfall_4k.hdr");
+        // assets.load("ivy-postprocessing/hdrs/industrial_sunset_puresky_2k.hdr");
 
         let mut encoder = gpu
             .device
@@ -400,13 +403,10 @@ impl RenderGraphRenderer {
                 label: Some("hdri_encoder"),
             });
 
-        let skybox = process_hdri(
-            gpu,
-            &mut encoder,
-            assets,
-            &image,
-            TextureFormat::Rgba16Float,
-        );
+        let hdri_processor = HdriProcessor::new(gpu, TextureFormat::Rgba16Float);
+
+        let skybox = hdri_processor.process_hdri(gpu, &mut encoder, assets, &image);
+        let skybox_ir = hdri_processor.process_diffuse_irradiance(gpu, &mut encoder, &skybox);
 
         gpu.queue.submit(std::iter::once(encoder.finish()));
 
@@ -440,13 +440,14 @@ impl RenderGraphRenderer {
             .resources
             .insert_texture(rendergraph::TextureDesc::External);
 
-        let camera_renderer = (SkyboxRenderer::new(gpu, skybox), MeshRenderer::new(gpu));
+        let camera_renderer = (SkyboxRenderer::new(gpu), MeshRenderer::new(gpu));
 
         render_graph.add_node(CameraNode::new(
             gpu,
             depth_texture,
             final_color,
             camera_renderer,
+            EnvironmentData::new(Arc::new(skybox), Arc::new(skybox_ir)),
         ));
         render_graph.add_node(MsaaResolve::new(final_color, surface_texture));
 
