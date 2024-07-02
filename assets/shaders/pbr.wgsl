@@ -46,6 +46,12 @@ var<uniform> globals: Globals;
 @group(0) @binding(1)
 var<uniform> lights: array<Light, LIGHT_COUNT>;
 
+@group(0) @binding(2)
+var environment_map: texture_cube<f32>;
+
+@group(0) @binding(3)
+var irradiance_map: texture_cube<f32>;
+
 @group(1) @binding(0)
 var<storage> objects: array<Object>;
 
@@ -91,6 +97,10 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
 fn fresnel_schlick(cos_theta: f32, f0: vec3<f32>) -> vec3<f32> {
     return f0 + (1.0 - f0) * pow(clamp(1.0 - cos_theta, 0f, 1f), 5f);
+}
+
+fn fresnel_schlick_roughness(cos_theta: f32, f0: vec3<f32>, roughness: f32) -> vec3<f32> {
+    return f0 + (max(vec3(1f - roughness), f0) - f0) * pow(clamp(1.0 - cos_theta, 0f, 1f), 5f);
 }
 
 fn distribution_ggx(n: vec3<f32>, h: vec3<f32>, roughness: f32) -> f32 {
@@ -164,15 +174,16 @@ fn pbr_luminance(position: vec3<f32>, camera_dir: vec3<f32>, albedo: vec3<f32>, 
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let albedo = textureSample(albedo_texture, default_sampler, in.tex_coord);
+    let albedo = textureSample(albedo_texture, default_sampler, in.tex_coord).rgb;
 
     let tangent_normal = textureSample(normal_texture, default_sampler, in.tex_coord).rgb * 2f - 1f;
 
-
     let tbn = transpose(mat3x3(normalize(in.tangent), normalize(in.bitangent), normalize(in.normal)));
 
-    let tangent_camera = tbn * globals.camera_pos;
-    let tangent_camera_dir = normalize(tangent_camera - in.tangent_pos);
+    let world_normal = normalize(transpose(tbn) * tangent_normal);
+
+    let tangent_camera_pos = tbn * globals.camera_pos;
+    let tangent_camera_dir = normalize(tangent_camera_pos - in.tangent_pos);
 
     let camera_dir = normalize(globals.camera_pos - in.world_pos.xyz);
 
@@ -182,14 +193,23 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let metallic = material_data.metallic_factor * metallic_roughness.b;
     let roughness = material_data.roughness_factor * metallic_roughness.g;
 
-    let normal = normalize(in.normal);
+    var f0 = vec3(0.04);
+
+    f0 = mix(f0, albedo, metallic);
+    let ambient_ks = fresnel_schlick_roughness(max(dot(world_normal, camera_dir), 0f), f0, roughness);
+    let ambient_kd = 1f - ambient_ks;
+    let irradiance = textureSample(irradiance_map, default_sampler, world_normal).rgb;
+    let diffuse = irradiance * albedo;
+    let ambient_light = (ambient_kd * diffuse);
+
+    luminance += ambient_light;
 
     for (var i = 0u; i < LIGHT_COUNT; i++) {
         let light = lights[i];
 
         let light_pos = tbn * light.position;
 
-        luminance += pbr_luminance(in.tangent_pos, tangent_camera_dir, albedo.rgb, tangent_normal, metallic, roughness, light_pos, light.color);
+        luminance += pbr_luminance(in.tangent_pos, tangent_camera_dir, albedo, tangent_normal, metallic, roughness, light_pos, light.color);
     }
 
     return vec4(luminance, 1);
