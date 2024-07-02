@@ -30,8 +30,12 @@ use ivy_wgpu::{
     events::ResizedEvent,
     layer::GraphicsLayer,
     light::PointLight,
-    renderer::{mesh_renderer::MeshRenderer, CameraNode, MsaaResolve},
-    rendergraph::{ExternalResources, ManagedTextureDesc, RenderGraph, TextureDesc},
+    material_desc::{MaterialData, MaterialDesc},
+    mesh_desc::MeshDesc,
+    primitives::UvSphereDesc,
+    renderer::{mesh_renderer::MeshRenderer, CameraNode, MsaaResolve, RenderObjectBundle},
+    rendergraph::{self, ExternalResources, ManagedTextureDesc, RenderGraph},
+    shaders::PbrShaderKey,
     Gpu,
 };
 use ivy_wgpu_types::{PhysicalSize, Surface};
@@ -101,6 +105,28 @@ impl LogicLayer {
 
         async_std::task::spawn(
             async move {
+                let sphere_mesh = MeshDesc::content(assets.load(&UvSphereDesc::default()));
+
+                let plastic_material = MaterialDesc::content(
+                    assets.insert(MaterialData::new().with_metallic(0.0).with_roughness(0.1)),
+                );
+
+                let shader = assets.load(&PbrShaderKey);
+
+                cmd.lock().spawn(
+                    Entity::builder()
+                        .mount(TransformBundle::new(
+                            vec3(0.0, 0.0, 5.0),
+                            Quat::IDENTITY,
+                            Vec3::ONE,
+                        ))
+                        .mount(RenderObjectBundle {
+                            mesh: sphere_mesh,
+                            material: plastic_material,
+                            shader,
+                        }),
+                );
+
                 let document: Asset<Document> = assets.load_async("models/Sphere.glb").await;
                 tracing::info!("finished loading document");
 
@@ -109,7 +135,7 @@ impl LogicLayer {
                     .unwrap()
                     .mount(&assets, &mut Entity::builder())
                     .mount(TransformBundle::new(
-                        vec3(0.0, 0.0, 5.0),
+                        vec3(3.0, 0.0, 5.0),
                         Quat::IDENTITY,
                         Vec3::ONE,
                     ))
@@ -356,9 +382,9 @@ fn movement_system(dt: f32) -> BoxedSystem {
 struct RenderGraphRenderer {
     render_graph: RenderGraph,
     surface: Surface,
-    depth_texture: ivy_wgpu::rendergraph::TextureHandle,
-    final_color: ivy_wgpu::rendergraph::TextureHandle,
-    surface_texture: ivy_wgpu::rendergraph::TextureHandle,
+    depth_texture: rendergraph::TextureHandle,
+    final_color: rendergraph::TextureHandle,
+    surface_texture: rendergraph::TextureHandle,
 }
 
 impl RenderGraphRenderer {
@@ -410,7 +436,9 @@ impl RenderGraphRenderer {
             sample_count: 4,
         });
 
-        let surface_texture = render_graph.resources.insert_texture(TextureDesc::External);
+        let surface_texture = render_graph
+            .resources
+            .insert_texture(rendergraph::TextureDesc::External);
 
         let camera_renderer = (SkyboxRenderer::new(gpu, skybox), MeshRenderer::new(gpu));
 
