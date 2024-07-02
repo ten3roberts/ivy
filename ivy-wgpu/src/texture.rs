@@ -23,6 +23,10 @@ impl TextureDesc {
         Self::Content(content)
     }
 
+    pub fn white() -> Self {
+        Self::Color(image::Rgba([255, 255, 255, 255]))
+    }
+
     pub fn default_normal() -> Self {
         Self::Color(image::Rgba([127, 127, 255, 255]))
     }

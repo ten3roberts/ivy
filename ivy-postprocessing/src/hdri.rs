@@ -6,16 +6,16 @@ use itertools::Itertools;
 use ivy_assets::AssetCache;
 use ivy_core::{DEG_45, DEG_90};
 use ivy_wgpu::{
-    types::{BindGroupBuilder, BindGroupLayoutBuilder, TypedBuffer},
+    types::{shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, Shader, TypedBuffer},
     Gpu,
 };
 use wgpu::{
-    vertex_attr_array, BufferUsages, Color, ColorTargetState, CommandEncoder, Extent3d,
-    FragmentState, IndexFormat, LoadOp, Operations, PipelineLayoutDescriptor, PrimitiveState,
-    RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor, SamplerDescriptor,
-    ShaderModuleDescriptor, ShaderSource, ShaderStages, StoreOp, TextureDescriptor, TextureFormat,
-    TextureUsages, TextureViewDescriptor, TextureViewDimension, VertexBufferLayout, VertexState,
-    VertexStepMode,
+    util::RenderEncoder, vertex_attr_array, BufferUsages, Color, ColorTargetState, CommandEncoder,
+    Extent3d, FragmentState, IndexFormat, LoadOp, Operations, PipelineLayoutDescriptor,
+    PrimitiveState, RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor,
+    SamplerDescriptor, ShaderModuleDescriptor, ShaderSource, ShaderStages, StoreOp, Texture,
+    TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, TextureViewDescriptor,
+    TextureViewDimension, VertexBufferLayout, VertexState, VertexStepMode,
 };
 
 pub struct EnvironmentMapMode {}
@@ -26,7 +26,7 @@ pub fn process_hdri(
     assets: &AssetCache,
     source: &DynamicImage,
     format: TextureFormat,
-) -> wgpu::Texture {
+) -> Texture {
     let source_hdri = ivy_wgpu::types::texture::texture_from_image(
         gpu,
         assets,
@@ -151,7 +151,7 @@ pub fn process_hdri(
         size: CUBE_MAP_SIZE,
         mip_level_count: 1,
         sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
+        dimension: TextureDimension::D2,
         format,
         usage: TextureUsages::RENDER_ATTACHMENT
             | TextureUsages::TEXTURE_BINDING
@@ -196,6 +196,90 @@ pub fn process_hdri(
     }
 
     output
+}
+pub fn process_diffuse_irradiance(
+    gpu: &Gpu,
+    encoder: &mut CommandEncoder,
+    assets: &AssetCache,
+    hdri: &Texture,
+    format: TextureFormat,
+) -> Texture {
+    let bind_group_layout = BindGroupLayoutBuilder::new("diffuse_irradiance")
+        .bind_uniform_buffer(ShaderStages::FRAGMENT)
+        .bind_texture_cube(ShaderStages::FRAGMENT)
+        .build(&gpu);
+
+    let proj = Mat4::perspective_lh(DEG_90, 1.0, 0.1, 10.0);
+    let camera_data = [
+        proj * Mat4::look_at_lh(Vec3::ZERO, Vec3::X, Vec3::Y),
+        proj * Mat4::look_at_lh(Vec3::ZERO, -Vec3::X, Vec3::Y),
+        proj * Mat4::look_at_lh(Vec3::ZERO, Vec3::Y, -Vec3::Z),
+        proj * Mat4::look_at_lh(Vec3::ZERO, -Vec3::Y, Vec3::Z),
+        proj * Mat4::look_at_lh(Vec3::ZERO, Vec3::Z, Vec3::Y),
+        proj * Mat4::look_at_lh(Vec3::ZERO, -Vec3::Z, Vec3::Y),
+    ];
+
+    let bind_groups = camera_data.map(|viewproj| {
+        let buffer = TypedBuffer::new(
+            gpu,
+            "diffuse_irradiance",
+            BufferUsages::UNIFORM,
+            &[viewproj],
+        );
+
+        BindGroupBuilder::new("diffuse_irradiance")
+            .bind_buffer(buffer.buffer())
+            .bind_texture(&hdri.create_view(&TextureViewDescriptor {
+                dimension: Some(TextureViewDimension::Cube),
+                ..Default::default()
+            }))
+            .build(gpu, &bind_group_layout)
+    });
+
+    let shader = Shader::new(
+        gpu,
+        &ShaderDesc {
+            label: "diffuse_irradiance",
+            source: include_str!("../shaders/diffuse_irradiance.wgsl"),
+            format,
+            vertex_layouts: &[],
+            layouts: &[&bind_group_layout],
+            depth_format: None,
+            sample_count: 1,
+        },
+    );
+
+    let output = gpu.device.create_texture(&TextureDescriptor {
+        label: "output".into(),
+        size: Extent3d {
+            width: 512,
+            height: 512,
+            depth_or_array_layers: 6,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: TextureDimension::D2,
+        format,
+        usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
+        view_formats: &[],
+    });
+
+    for (side, bind_group) in bind_groups.iter().enumerate() {
+        let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+            label: "diffuse_irradiance".into(),
+            color_attachments: todo!(),
+            depth_stencil_attachment: todo!(),
+            timestamp_writes: todo!(),
+            occlusion_query_set: todo!(),
+        });
+
+        render_pass.set_pipeline(shader.pipeline());
+        render_pass.set_bind_group(0, bind_group, &[]);
+
+        render_pass.draw_indexed(0..3, 0, 0..1);
+    }
+
+    todo!()
 }
 
 fn cube_vertices(gpu: &Gpu) -> TypedBuffer<Vec3> {

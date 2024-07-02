@@ -203,15 +203,17 @@ impl MeshRenderer {
                 let mut load_mesh = |v: &MeshDesc| {
                     let data = v.load_data(assets).unwrap();
                     assert!(
+                        !data
+                            .vertices()
+                            .iter()
+                            .all(|v| v.tangent.xyz().length() == 0.0),
+                        "Tangents should be non-zero {:?}",
                         data.vertices()
                             .iter()
-                            .all(|v| v.tangent.xyz().length() > 0.0),
-                        "{:?}",
-                        data.vertices()
-                            .iter()
-                            .map(|v| v.tangent.length())
+                            .map(|v| v.tangent.to_string())
                             .collect_vec()
                     );
+
                     Arc::new(
                         self.mesh_buffer
                             .insert(gpu, data.vertices(), data.indices()),

@@ -1,4 +1,3 @@
-use image::Rgba;
 use ivy_assets::{Asset, AssetDesc};
 use ivy_gltf::{GltfMaterial, GltfMaterialRef};
 use wgpu::TextureFormat;
@@ -43,20 +42,56 @@ impl MaterialDesc {
 pub struct MaterialData {
     albedo: TextureDesc,
     normal: TextureDesc,
-    metallic_roughness: Option<TextureDesc>,
+    metallic_roughness: TextureDesc,
     roughness: f32,
     metallic: f32,
 }
 
 impl MaterialData {
-    pub fn new(albedo: TextureDesc, normal: TextureDesc, roughness: f32, metallic: f32) -> Self {
+    pub fn new() -> Self {
         Self {
-            albedo,
-            normal,
-            roughness,
-            metallic,
-            metallic_roughness: None,
+            albedo: TextureDesc::white(),
+            normal: TextureDesc::default_normal(),
+            metallic_roughness: TextureDesc::white(),
+            roughness: 1.0,
+            metallic: 1.0,
         }
+    }
+
+    /// Set the albedo
+    pub fn with_albedo(mut self, albedo: impl Into<TextureDesc>) -> Self {
+        self.albedo = albedo.into();
+        self
+    }
+
+    /// Set the normal
+    pub fn with_normal(mut self, normal: impl Into<TextureDesc>) -> Self {
+        self.normal = normal.into();
+        self
+    }
+
+    /// Set the metallic roughness
+    pub fn with_metallic_roughness(mut self, metallic_roughness: impl Into<TextureDesc>) -> Self {
+        self.metallic_roughness = metallic_roughness.into();
+        self
+    }
+
+    /// Set the roughness factor
+    pub fn with_roughness(mut self, roughness: f32) -> Self {
+        self.roughness = roughness;
+        self
+    }
+
+    /// Set the metallic factor
+    pub fn with_metallic(mut self, metallic: f32) -> Self {
+        self.metallic = metallic;
+        self
+    }
+}
+
+impl Default for MaterialData {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -80,8 +115,6 @@ impl AssetDesc<Material> for MaterialDesc {
                 let normal = v.normal.load(assets, TextureFormat::Rgba8Unorm)?;
                 let metallic_roughness = v
                     .metallic_roughness
-                    .as_ref()
-                    .unwrap_or_else(|| &TextureDesc::Color(Rgba([255, 255, 255, 255])))
                     .load(assets, TextureFormat::Rgba8Unorm)?;
 
                 Ok(assets.insert(Material::new(

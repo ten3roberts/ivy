@@ -1,8 +1,12 @@
 use std::sync::Arc;
 
 use ivy_assets::service::Service;
-use wgpu::{Backends, SurfaceConfiguration, SurfaceError, SurfaceTexture, TextureFormat};
+use wgpu::{Backends, Features, SurfaceConfiguration, SurfaceError, SurfaceTexture, TextureFormat};
 use winit::{dpi::PhysicalSize, window::Window};
+
+fn device_features() -> wgpu::Features {
+    Features::TEXTURE_FORMAT_16BIT_NORM | Features::POLYGON_MODE_POINT | Features::POLYGON_MODE_LINE
+}
 
 /// Represents the basic graphics state, such as the device and queue.
 #[derive(Debug, Clone)]
@@ -14,7 +18,7 @@ pub struct Gpu {
 impl Service for Gpu {}
 
 impl Gpu {
-    /// Creates a new GPu instaence from an aready existing device and queue.
+    /// Creates a new Gpu instaence from an aready existing device and queue.
     ///
     /// This is used to embed Violet within an already existing wgpu application.
     pub fn from_device(device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>) -> Self {
@@ -49,7 +53,7 @@ impl Gpu {
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
-                    required_features: wgpu::Features::TEXTURE_FORMAT_16BIT_NORM,
+                    required_features: device_features(),
                     // WebGL doesn't support all of wgpu's features, so if
                     // we're building for the web we'll have to disable some.
                     required_limits: if cfg!(target_arch = "wasm32") {
@@ -100,7 +104,7 @@ impl Gpu {
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
-                    required_features: wgpu::Features::empty(),
+                    required_features: device_features(),
                     // WebGL doesn't support all of wgpu's features, so if
                     // we're building for the web we'll have to disable some.
                     required_limits: if cfg!(target_arch = "wasm32") {
