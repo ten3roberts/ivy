@@ -38,6 +38,9 @@ impl<'a> NodeExecutionContext<'a> {
 
 pub trait Node: 'static {
     fn label(&self) -> &str;
+    fn begin(&mut self) -> anyhow::Result<()> {
+        Ok(())
+    }
     fn draw(&mut self, ctx: NodeExecutionContext) -> anyhow::Result<()>;
     fn read_dependencies(&self) -> Vec<Dependency>;
     fn write_dependencies(&self) -> Vec<Dependency>;

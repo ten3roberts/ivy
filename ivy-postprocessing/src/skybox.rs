@@ -4,10 +4,7 @@ use ivy_wgpu::{
     types::{shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, Shader, TypedBuffer},
     Gpu,
 };
-use wgpu::{
-    hal::BufferUses, naga::ShaderStage, util::RenderEncoder, AddressMode, BufferUsages, FilterMode,
-    ShaderStages, Texture,
-};
+use wgpu::{AddressMode, BufferUsages, FilterMode, ShaderStages, Texture};
 
 pub struct SkyboxRenderer {
     shader: Option<Shader>,
