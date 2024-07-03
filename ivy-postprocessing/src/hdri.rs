@@ -1,21 +1,25 @@
 //! Image based lighting for environment lighting
 
+use std::{any::type_name, sync::Arc};
+
 use glam::{Mat4, Vec3};
 use image::DynamicImage;
 use itertools::Itertools;
-use ivy_assets::AssetCache;
+use ivy_assets::{Asset, AssetCache};
 use ivy_core::DEG_90;
 use ivy_wgpu::{
-    types::{shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, Shader, TypedBuffer},
+    rendergraph::Node,
+    types::{
+        shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, PhysicalSize, Shader,
+        TypedBuffer,
+    },
     Gpu,
 };
 use wgpu::{
-    vertex_attr_array, BufferUsages, Color, ColorTargetState, CommandEncoder, Extent3d,
-    FragmentState, IndexFormat, LoadOp, Operations, PipelineLayoutDescriptor, PrimitiveState,
-    RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor, Sampler,
-    SamplerDescriptor, ShaderModuleDescriptor, ShaderSource, ShaderStages, StoreOp, Texture,
-    TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, TextureViewDescriptor,
-    TextureViewDimension, VertexBufferLayout, VertexState, VertexStepMode,
+    vertex_attr_array, BufferUsages, Color, CommandEncoder, Extent3d, IndexFormat, LoadOp,
+    Operations, RenderPassColorAttachment, RenderPassDescriptor, Sampler, SamplerDescriptor,
+    ShaderStages, StoreOp, Texture, TextureDescriptor, TextureDimension, TextureFormat,
+    TextureUsages, TextureViewDescriptor, TextureViewDimension, VertexBufferLayout, VertexStepMode,
 };
 
 pub struct EnvironmentMapMode {}
@@ -35,6 +39,28 @@ pub struct HdriProcessor {
 }
 
 impl HdriProcessor {
+    pub fn allocate_cubemap(
+        &self,
+        gpu: &Gpu,
+        extent: PhysicalSize<u32>,
+        usage: TextureUsages,
+    ) -> Texture {
+        gpu.device.create_texture(&TextureDescriptor {
+            label: "hdr_cubemap".into(),
+            size: Extent3d {
+                width: extent.width,
+                height: extent.height,
+                depth_or_array_layers: 6,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: self.format,
+            usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING | usage,
+            view_formats: &[],
+        })
+    }
+
     pub fn new(gpu: &Gpu, format: TextureFormat) -> Self {
         let proj = Mat4::perspective_lh(DEG_90, 1.0, 0.1, 10.0);
         let view_matrices = [
@@ -87,7 +113,8 @@ impl HdriProcessor {
         encoder: &mut CommandEncoder,
         assets: &AssetCache,
         source: &DynamicImage,
-    ) -> Texture {
+        dest: &Texture,
+    ) {
         let source_hdri = ivy_wgpu::types::texture::texture_from_image(
             gpu,
             assets,
@@ -153,28 +180,9 @@ impl HdriProcessor {
         let vb = cube_vertices(gpu);
         let ib = cube_indices(gpu);
 
-        const CUBE_MAP_SIZE: Extent3d = Extent3d {
-            width: 1024,
-            height: 1024,
-            depth_or_array_layers: 6,
-        };
-
-        let output = gpu.device.create_texture(&TextureDescriptor {
-            label: "hdr_cubemap".into(),
-            size: CUBE_MAP_SIZE,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: TextureDimension::D2,
-            format: self.format,
-            usage: TextureUsages::RENDER_ATTACHMENT
-                | TextureUsages::TEXTURE_BINDING
-                | TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
-
         let sides = (0..6)
             .map(|side| {
-                output.create_view(&TextureViewDescriptor {
+                dest.create_view(&TextureViewDescriptor {
                     base_array_layer: side,
                     array_layer_count: Some(1),
                     dimension: Some(TextureViewDimension::D2),
@@ -207,15 +215,15 @@ impl HdriProcessor {
 
             render_pass.draw_indexed(0..36, 0, 0..1);
         }
-
-        output
     }
+
     pub fn process_diffuse_irradiance(
         &self,
         gpu: &Gpu,
         encoder: &mut CommandEncoder,
         hdri: &Texture,
-    ) -> Texture {
+        dest: &Texture,
+    ) {
         let bind_group_layout = BindGroupLayoutBuilder::new("diffuse_irradiance")
             .bind_uniform_buffer(ShaderStages::FRAGMENT)
             .bind_sampler(ShaderStages::FRAGMENT)
@@ -250,23 +258,8 @@ impl HdriProcessor {
             },
         );
 
-        let output = gpu.device.create_texture(&TextureDescriptor {
-            label: "output".into(),
-            size: Extent3d {
-                width: 128,
-                height: 128,
-                depth_or_array_layers: 6,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: TextureDimension::D2,
-            format: self.format,
-            usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        });
-
         for (side, bind_group) in bind_groups.iter().enumerate() {
-            let view = output.create_view(&TextureViewDescriptor {
+            let view = dest.create_view(&TextureViewDescriptor {
                 base_array_layer: side as _,
                 dimension: Some(TextureViewDimension::D2),
                 ..Default::default()
@@ -291,8 +284,64 @@ impl HdriProcessor {
 
             render_pass.draw(0..3, 0..1);
         }
+    }
+}
 
-        output
+pub struct HdriProcessorNode {
+    processor: HdriProcessor,
+    source: Option<Asset<DynamicImage>>,
+    environment_map: Arc<Texture>,
+    irradiance_map: Arc<Texture>,
+}
+
+impl HdriProcessorNode {
+    pub fn new(
+        processor: HdriProcessor,
+        source: Asset<DynamicImage>,
+        environment_map: Arc<Texture>,
+        irradiance_map: Arc<Texture>,
+    ) -> Self {
+        Self {
+            processor,
+            source: Some(source),
+            environment_map,
+            irradiance_map,
+        }
+    }
+}
+
+impl Node for HdriProcessorNode {
+    fn label(&self) -> &str {
+        type_name::<Self>()
+    }
+
+    fn draw(&mut self, ctx: ivy_wgpu::rendergraph::NodeExecutionContext) -> anyhow::Result<()> {
+        if let Some(source) = self.source.take() {
+            self.processor.process_hdri(
+                ctx.gpu,
+                ctx.encoder,
+                ctx.assets,
+                &source,
+                &self.environment_map,
+            );
+
+            self.processor.process_diffuse_irradiance(
+                ctx.gpu,
+                ctx.encoder,
+                &self.environment_map,
+                &self.irradiance_map,
+            );
+        }
+
+        Ok(())
+    }
+
+    fn read_dependencies(&self) -> Vec<ivy_wgpu::rendergraph::Dependency> {
+        vec![]
+    }
+
+    fn write_dependencies(&self) -> Vec<ivy_wgpu::rendergraph::Dependency> {
+        vec![]
     }
 }
 

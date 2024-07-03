@@ -22,7 +22,10 @@ use ivy_input::{
     components::input_state, layer::InputLayer, types::Key, Action, Axis3, BindingExt,
     CursorMovement, InputState, KeyBinding, MouseButtonBinding,
 };
-use ivy_postprocessing::{hdri::HdriProcessor, skybox::SkyboxRenderer};
+use ivy_postprocessing::{
+    hdri::{HdriProcessor, HdriProcessorNode},
+    skybox::SkyboxRenderer,
+};
 use ivy_scene::GltfNodeExt;
 use ivy_wgpu::{
     components::{light, main_window, projection_matrix, window},
@@ -44,7 +47,7 @@ use ivy_wgpu_types::{PhysicalSize, Surface};
 use tracing::Instrument;
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
-use wgpu::{Extent3d, TextureFormat};
+use wgpu::{Extent3d, TextureFormat, TextureUsages};
 
 pub fn main() -> anyhow::Result<()> {
     registry()
@@ -397,18 +400,19 @@ impl RenderGraphRenderer {
             assets.load("ivy-postprocessing/hdrs/lauter_waterfall_4k.hdr");
         // assets.load("ivy-postprocessing/hdrs/industrial_sunset_puresky_2k.hdr");
 
-        let mut encoder = gpu
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("hdri_encoder"),
-            });
-
         let hdri_processor = HdriProcessor::new(gpu, TextureFormat::Rgba16Float);
 
-        let skybox = hdri_processor.process_hdri(gpu, &mut encoder, assets, &image);
-        let skybox_ir = hdri_processor.process_diffuse_irradiance(gpu, &mut encoder, &skybox);
+        let skybox = Arc::new(hdri_processor.allocate_cubemap(
+            gpu,
+            PhysicalSize::new(1024, 1024),
+            TextureUsages::TEXTURE_BINDING,
+        ));
 
-        gpu.queue.submit(std::iter::once(encoder.finish()));
+        let skybox_ir = Arc::new(hdri_processor.allocate_cubemap(
+            gpu,
+            PhysicalSize::new(1024, 1024),
+            TextureUsages::TEXTURE_BINDING,
+        ));
 
         let mut render_graph = RenderGraph::new();
 
@@ -442,12 +446,19 @@ impl RenderGraphRenderer {
 
         let camera_renderer = (SkyboxRenderer::new(gpu), MeshRenderer::new(gpu));
 
+        render_graph.add_node(HdriProcessorNode::new(
+            hdri_processor,
+            image,
+            skybox.clone(),
+            skybox_ir.clone(),
+        ));
+
         render_graph.add_node(CameraNode::new(
             gpu,
             depth_texture,
             final_color,
             camera_renderer,
-            EnvironmentData::new(Arc::new(skybox), Arc::new(skybox_ir)),
+            EnvironmentData::new(skybox, skybox_ir),
         ));
         render_graph.add_node(MsaaResolve::new(final_color, surface_texture));
 
@@ -469,6 +480,7 @@ impl ivy_wgpu::layer::Renderer for RenderGraphRenderer {
         gpu: &Gpu,
         queue: &wgpu::Queue,
     ) -> anyhow::Result<()> {
+        tracing::info!("get next surface texture");
         let surface_texture = self.surface.get_current_texture()?;
 
         let mut external_resources = ExternalResources::new();
@@ -477,6 +489,7 @@ impl ivy_wgpu::layer::Renderer for RenderGraphRenderer {
         self.render_graph
             .draw(gpu, queue, world, assets, &external_resources)?;
 
+        tracing::info!("present");
         surface_texture.present();
 
         Ok(())

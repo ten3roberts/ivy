@@ -44,8 +44,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     let up = normalize(cross(ray_direction, right));
 
-    let samples_i = 256;
-    let samples_j = 128;
+    let samples_i = 128;
+    let samples_j = 64;
 
     var irradiance = vec3(0f);
 

@@ -84,7 +84,7 @@ impl Shader {
                     mask: !0,                         // 3.
                     alpha_to_coverage_enabled: false, // 4.
                 },
-                multiview: None, // 5.
+                multiview: None,
             });
 
         Self { pipeline }
