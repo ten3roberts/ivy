@@ -52,6 +52,9 @@ var environment_map: texture_cube<f32>;
 @group(0) @binding(3)
 var irradiance_map: texture_cube<f32>;
 
+@group(0) @binding(4)
+var specular_map: texture_cube<f32>;
+
 @group(1) @binding(0)
 var<storage> objects: array<Object>;
 

@@ -122,13 +122,19 @@ impl<A: CameraRenderer, B: CameraRenderer> CameraRenderer for (A, B) {
 pub struct EnvironmentData {
     environment_map: Arc<Texture>,
     irradiance_map: Arc<Texture>,
+    specular_map: Arc<Texture>,
 }
 
 impl EnvironmentData {
-    pub fn new(environment_map: Arc<Texture>, irradiance_map: Arc<Texture>) -> Self {
+    pub fn new(
+        environment_map: Arc<Texture>,
+        irradiance_map: Arc<Texture>,
+        specular_map: Arc<Texture>,
+    ) -> Self {
         Self {
             environment_map,
             irradiance_map,
+            specular_map,
         }
     }
 
@@ -138,6 +144,10 @@ impl EnvironmentData {
 
     pub fn irradiance_map(&self) -> &Texture {
         &self.irradiance_map
+    }
+
+    pub fn specular_map(&self) -> &Texture {
+        &self.specular_map
     }
 }
 
@@ -320,6 +330,7 @@ pub struct CameraShaderData {
     /// 1: light buffer
     /// 2: environment_map
     /// 3: irradiance_map
+    /// 4: specular map
     pub bind_group: BindGroup,
     pub data: CameraData,
     buffer: TypedBuffer<CameraData>,
@@ -333,6 +344,7 @@ impl CameraShaderData {
         let layout = BindGroupLayoutBuilder::new("Globals")
             .bind_uniform_buffer(ShaderStages::VERTEX | ShaderStages::FRAGMENT)
             .bind_uniform_buffer(ShaderStages::FRAGMENT)
+            .bind_texture_cube(ShaderStages::FRAGMENT)
             .bind_texture_cube(ShaderStages::FRAGMENT)
             .bind_texture_cube(ShaderStages::FRAGMENT)
             .build(gpu);
@@ -362,6 +374,7 @@ impl CameraShaderData {
             .bind_buffer(&light_buffer)
             .bind_texture(&environment.environment_map.create_view(&cubemap_view))
             .bind_texture(&environment.irradiance_map.create_view(&cubemap_view))
+            .bind_texture(&environment.specular_map.create_view(&cubemap_view))
             .build(gpu, &layout);
 
         Self {
