@@ -400,18 +400,27 @@ impl RenderGraphRenderer {
             assets.load("ivy-postprocessing/hdrs/lauter_waterfall_4k.hdr");
         // assets.load("ivy-postprocessing/hdrs/industrial_sunset_puresky_2k.hdr");
 
-        let hdri_processor = HdriProcessor::new(gpu, TextureFormat::Rgba16Float);
+        let hdri_processor = HdriProcessor::new(gpu, TextureFormat::Rgba16Float, 6);
 
         let skybox = Arc::new(hdri_processor.allocate_cubemap(
             gpu,
             PhysicalSize::new(1024, 1024),
             TextureUsages::TEXTURE_BINDING,
+            1,
         ));
 
         let skybox_ir = Arc::new(hdri_processor.allocate_cubemap(
             gpu,
             PhysicalSize::new(1024, 1024),
             TextureUsages::TEXTURE_BINDING,
+            1,
+        ));
+
+        let skybox_specular = Arc::new(hdri_processor.allocate_cubemap(
+            gpu,
+            PhysicalSize::new(1024, 1024),
+            TextureUsages::TEXTURE_BINDING,
+            6,
         ));
 
         let mut render_graph = RenderGraph::new();
@@ -451,6 +460,7 @@ impl RenderGraphRenderer {
             image,
             skybox.clone(),
             skybox_ir.clone(),
+            skybox_specular.clone(),
         ));
 
         render_graph.add_node(CameraNode::new(
@@ -458,8 +468,9 @@ impl RenderGraphRenderer {
             depth_texture,
             final_color,
             camera_renderer,
-            EnvironmentData::new(skybox, skybox_ir),
+            EnvironmentData::new(skybox, skybox_ir, skybox_specular.clone()),
         ));
+
         render_graph.add_node(MsaaResolve::new(final_color, surface_texture));
 
         Self {
@@ -480,7 +491,6 @@ impl ivy_wgpu::layer::Renderer for RenderGraphRenderer {
         gpu: &Gpu,
         queue: &wgpu::Queue,
     ) -> anyhow::Result<()> {
-        tracing::info!("get next surface texture");
         let surface_texture = self.surface.get_current_texture()?;
 
         let mut external_resources = ExternalResources::new();
@@ -489,7 +499,6 @@ impl ivy_wgpu::layer::Renderer for RenderGraphRenderer {
         self.render_graph
             .draw(gpu, queue, world, assets, &external_resources)?;
 
-        tracing::info!("present");
         surface_texture.present();
 
         Ok(())

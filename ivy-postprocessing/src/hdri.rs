@@ -31,37 +31,26 @@ struct InverseCameraData {
     inv_view: Mat4,
 }
 
+#[repr(C)]
+#[derive(Default, bytemuck::Pod, bytemuck::Zeroable, Clone, Copy, Debug)]
+struct ProcessSpecularData {
+    inv_proj: Mat4,
+    inv_view: Mat4,
+    roughness: f32,
+    _padding: [f32; 3],
+}
+
 pub struct HdriProcessor {
     viewproj_buffers: [TypedBuffer<Mat4>; 6],
     inv_viewproj: [TypedBuffer<InverseCameraData>; 6],
     sampler: Sampler,
     format: TextureFormat,
+    specular_buffers: Vec<TypedBuffer<ProcessSpecularData>>,
+    roughness_levels: u32,
 }
 
 impl HdriProcessor {
-    pub fn allocate_cubemap(
-        &self,
-        gpu: &Gpu,
-        extent: PhysicalSize<u32>,
-        usage: TextureUsages,
-    ) -> Texture {
-        gpu.device.create_texture(&TextureDescriptor {
-            label: "hdr_cubemap".into(),
-            size: Extent3d {
-                width: extent.width,
-                height: extent.height,
-                depth_or_array_layers: 6,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: TextureDimension::D2,
-            format: self.format,
-            usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING | usage,
-            view_formats: &[],
-        })
-    }
-
-    pub fn new(gpu: &Gpu, format: TextureFormat) -> Self {
+    pub fn new(gpu: &Gpu, format: TextureFormat, roughness_levels: u32) -> Self {
         let proj = Mat4::perspective_lh(DEG_90, 1.0, 0.1, 10.0);
         let view_matrices = [
             Mat4::look_at_lh(Vec3::ZERO, Vec3::X, Vec3::Y),
@@ -88,6 +77,25 @@ impl HdriProcessor {
             )
         });
 
+        let specular_buffers = (0..roughness_levels)
+            .flat_map(|level| {
+                view_matrices.map(|v| {
+                    let roughness = level as f32 / (roughness_levels - 1).max(1) as f32;
+                    TypedBuffer::new(
+                        gpu,
+                        "diffuse_irradiance",
+                        BufferUsages::UNIFORM,
+                        &[ProcessSpecularData {
+                            inv_proj: proj.inverse(),
+                            inv_view: v.inverse(),
+                            roughness,
+                            _padding: [0.0; 3],
+                        }],
+                    )
+                })
+            })
+            .collect_vec();
+
         let sampler = gpu.device.create_sampler(&SamplerDescriptor {
             label: "material_sampler".into(),
             min_filter: wgpu::FilterMode::Linear,
@@ -104,7 +112,31 @@ impl HdriProcessor {
             inv_viewproj,
             sampler,
             format,
+            specular_buffers,
+            roughness_levels,
         }
+    }
+    pub fn allocate_cubemap(
+        &self,
+        gpu: &Gpu,
+        extent: PhysicalSize<u32>,
+        usage: TextureUsages,
+        mip_level_count: u32,
+    ) -> Texture {
+        gpu.device.create_texture(&TextureDescriptor {
+            label: "hdr_cubemap".into(),
+            size: Extent3d {
+                width: extent.width,
+                height: extent.height,
+                depth_or_array_layers: 6,
+            },
+            mip_level_count,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: self.format,
+            usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING | usage,
+            view_formats: &[],
+        })
     }
 
     pub fn process_hdri(
@@ -285,6 +317,81 @@ impl HdriProcessor {
             render_pass.draw(0..3, 0..1);
         }
     }
+
+    pub fn process_specular_ibl(
+        &self,
+        gpu: &Gpu,
+        encoder: &mut CommandEncoder,
+        hdri: &Texture,
+        output: &Texture,
+    ) {
+        let bind_group_layout = BindGroupLayoutBuilder::new("specular_ibl")
+            .bind_uniform_buffer(ShaderStages::FRAGMENT)
+            .bind_sampler(ShaderStages::FRAGMENT)
+            .bind_texture_cube(ShaderStages::FRAGMENT)
+            .build(gpu);
+
+        let bind_groups = self
+            .specular_buffers
+            .iter()
+            .map(|v| {
+                BindGroupBuilder::new("specular_ibl")
+                    .bind_buffer(v.buffer())
+                    .bind_sampler(&self.sampler)
+                    .bind_texture(&hdri.create_view(&TextureViewDescriptor {
+                        dimension: Some(TextureViewDimension::Cube),
+                        ..Default::default()
+                    }))
+                    .build(gpu, &bind_group_layout)
+            })
+            .collect_vec();
+
+        let shader = Shader::new(
+            gpu,
+            &ShaderDesc {
+                label: "specular_ibl",
+                source: include_str!("../shaders/specular_ibl.wgsl"),
+                format: self.format,
+                vertex_layouts: &[],
+                layouts: &[&bind_group_layout],
+                depth_format: None,
+                sample_count: 1,
+            },
+        );
+
+        for mip_level in 0..self.roughness_levels {
+            for side in 0..6 {
+                let bind_group = &bind_groups[(side + (mip_level * 6)) as usize];
+
+                let view = output.create_view(&TextureViewDescriptor {
+                    base_array_layer: side as _,
+                    dimension: Some(TextureViewDimension::D2),
+                    base_mip_level: mip_level,
+                    mip_level_count: Some(1),
+                    ..Default::default()
+                });
+
+                let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                    label: "specular_ibl".into(),
+                    color_attachments: &[Some(RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: Operations {
+                            load: LoadOp::Clear(Color::BLACK),
+                            store: StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    ..Default::default()
+                });
+
+                render_pass.set_pipeline(shader.pipeline());
+                render_pass.set_bind_group(0, bind_group, &[]);
+
+                render_pass.draw(0..3, 0..1);
+            }
+        }
+    }
 }
 
 pub struct HdriProcessorNode {
@@ -292,6 +399,7 @@ pub struct HdriProcessorNode {
     source: Option<Asset<DynamicImage>>,
     environment_map: Arc<Texture>,
     irradiance_map: Arc<Texture>,
+    specular_map: Arc<Texture>,
 }
 
 impl HdriProcessorNode {
@@ -300,12 +408,14 @@ impl HdriProcessorNode {
         source: Asset<DynamicImage>,
         environment_map: Arc<Texture>,
         irradiance_map: Arc<Texture>,
+        specular_map: Arc<Texture>,
     ) -> Self {
         Self {
             processor,
             source: Some(source),
             environment_map,
             irradiance_map,
+            specular_map,
         }
     }
 }
@@ -330,6 +440,13 @@ impl Node for HdriProcessorNode {
                 ctx.encoder,
                 &self.environment_map,
                 &self.irradiance_map,
+            );
+
+            self.processor.process_specular_ibl(
+                ctx.gpu,
+                ctx.encoder,
+                &self.environment_map,
+                &self.specular_map,
             );
         }
 
