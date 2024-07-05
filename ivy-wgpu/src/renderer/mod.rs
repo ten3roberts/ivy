@@ -123,6 +123,7 @@ pub struct EnvironmentData {
     environment_map: Arc<Texture>,
     irradiance_map: Arc<Texture>,
     specular_map: Arc<Texture>,
+    integrated_brdf: Arc<Texture>,
 }
 
 impl EnvironmentData {
@@ -130,11 +131,13 @@ impl EnvironmentData {
         environment_map: Arc<Texture>,
         irradiance_map: Arc<Texture>,
         specular_map: Arc<Texture>,
+        integrated_brdf: Arc<Texture>,
     ) -> Self {
         Self {
             environment_map,
             irradiance_map,
             specular_map,
+            integrated_brdf,
         }
     }
 
@@ -148,6 +151,10 @@ impl EnvironmentData {
 
     pub fn specular_map(&self) -> &Texture {
         &self.specular_map
+    }
+
+    pub fn integrated_brdf(&self) -> &Texture {
+        &self.integrated_brdf
     }
 }
 
@@ -331,6 +338,7 @@ pub struct CameraShaderData {
     /// 2: environment_map
     /// 3: irradiance_map
     /// 4: specular map
+    /// 5: integrated brdf
     pub bind_group: BindGroup,
     pub data: CameraData,
     buffer: TypedBuffer<CameraData>,
@@ -347,6 +355,7 @@ impl CameraShaderData {
             .bind_texture_cube(ShaderStages::FRAGMENT)
             .bind_texture_cube(ShaderStages::FRAGMENT)
             .bind_texture_cube(ShaderStages::FRAGMENT)
+            .bind_texture(ShaderStages::FRAGMENT)
             .build(gpu);
 
         let buffer = TypedBuffer::new(
@@ -375,6 +384,7 @@ impl CameraShaderData {
             .bind_texture(&environment.environment_map.create_view(&cubemap_view))
             .bind_texture(&environment.irradiance_map.create_view(&cubemap_view))
             .bind_texture(&environment.specular_map.create_view(&cubemap_view))
+            .bind_texture(&environment.integrated_brdf.create_view(&Default::default()))
             .build(gpu, &layout);
 
         Self {

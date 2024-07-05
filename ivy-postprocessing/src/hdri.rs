@@ -10,8 +10,8 @@ use ivy_core::DEG_90;
 use ivy_wgpu::{
     rendergraph::Node,
     types::{
-        shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, PhysicalSize, Shader,
-        TypedBuffer,
+        shader::ShaderDesc, texture::read_texture, BindGroupBuilder, BindGroupLayoutBuilder,
+        PhysicalSize, Shader, TypedBuffer,
     },
     Gpu,
 };
@@ -392,6 +392,43 @@ impl HdriProcessor {
             }
         }
     }
+
+    pub fn process_brdf_lookup(&self, gpu: &Gpu, encoder: &mut CommandEncoder, dest: &Texture) {
+        let shader = Shader::new(
+            gpu,
+            &ShaderDesc {
+                label: "brdf_lookup",
+                source: include_str!("../shaders/brdf_lookup.wgsl"),
+                format: self.format,
+                vertex_layouts: &[],
+                layouts: &[],
+                depth_format: None,
+                sample_count: 1,
+            },
+        );
+
+        let view = dest.create_view(&TextureViewDescriptor {
+            ..Default::default()
+        });
+
+        let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+            label: "brdf_lookup".into(),
+            color_attachments: &[Some(RenderPassColorAttachment {
+                view: &view,
+                resolve_target: None,
+                ops: Operations {
+                    load: LoadOp::Clear(Color::BLACK),
+                    store: StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            ..Default::default()
+        });
+
+        render_pass.set_pipeline(shader.pipeline());
+
+        render_pass.draw(0..3, 0..1);
+    }
 }
 
 pub struct HdriProcessorNode {
@@ -400,6 +437,7 @@ pub struct HdriProcessorNode {
     environment_map: Arc<Texture>,
     irradiance_map: Arc<Texture>,
     specular_map: Arc<Texture>,
+    integrated_brdf: Arc<Texture>,
 }
 
 impl HdriProcessorNode {
@@ -409,6 +447,7 @@ impl HdriProcessorNode {
         environment_map: Arc<Texture>,
         irradiance_map: Arc<Texture>,
         specular_map: Arc<Texture>,
+        integrated_brdf: Arc<Texture>,
     ) -> Self {
         Self {
             processor,
@@ -416,6 +455,7 @@ impl HdriProcessorNode {
             environment_map,
             irradiance_map,
             specular_map,
+            integrated_brdf,
         }
     }
 }
@@ -448,6 +488,9 @@ impl Node for HdriProcessorNode {
                 &self.environment_map,
                 &self.specular_map,
             );
+
+            self.processor
+                .process_brdf_lookup(ctx.gpu, ctx.encoder, &self.integrated_brdf);
         }
 
         Ok(())
