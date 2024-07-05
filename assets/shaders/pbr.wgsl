@@ -55,6 +55,9 @@ var irradiance_map: texture_cube<f32>;
 @group(0) @binding(4)
 var specular_map: texture_cube<f32>;
 
+@group(0) @binding(5)
+var integrated_brdf: texture_2d<f32>;
+
 @group(1) @binding(0)
 var<storage> objects: array<Object>;
 
@@ -175,6 +178,8 @@ fn pbr_luminance(position: vec3<f32>, camera_dir: vec3<f32>, albedo: vec3<f32>, 
     return (kd * albedo / PI + specular) * radiance * ndotl;
 }
 
+const MAX_REFLECTION_LOD: f32 = 4f;
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let albedo = textureSample(albedo_texture, default_sampler, in.tex_coord).rgb;
@@ -198,12 +203,21 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     var f0 = vec3(0.04);
 
+
     f0 = mix(f0, albedo, metallic);
+    // ambient lighting
     let ambient_ks = fresnel_schlick_roughness(max(dot(world_normal, camera_dir), 0f), f0, roughness);
     let ambient_kd = 1f - ambient_ks;
+
+    let r = reflect(-camera_dir, world_normal);
+
+    let specular_color = textureSampleLevel(specular_map, default_sampler, r, roughness * MAX_REFLECTION_LOD).rgb;
+    let env_brdf = textureSample(integrated_brdf, default_sampler, vec2(max(dot(world_normal, camera_dir), 0f), roughness)).rg;
+    let specular = specular_color * (env_brdf.x + env_brdf.y);
+
     let irradiance = textureSample(irradiance_map, default_sampler, world_normal).rgb;
     let diffuse = irradiance * albedo;
-    let ambient_light = (ambient_kd * diffuse);
+    let ambient_light = (ambient_kd * diffuse + ambient_ks * specular);
 
     luminance += ambient_light;
 

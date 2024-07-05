@@ -5,7 +5,7 @@ use flax::{
     Schedule, System, World,
 };
 use glam::{vec3, EulerRot, Mat4, Quat, Vec2, Vec3};
-use image::DynamicImage;
+use image::{DynamicImage, Rgba};
 use ivy_assets::{Asset, AssetCache};
 use ivy_core::{
     app::{InitEvent, TickEvent},
@@ -19,14 +19,17 @@ use ivy_core::{
 };
 use ivy_gltf::Document;
 use ivy_input::{
-    components::input_state, layer::InputLayer, types::Key, Action, Axis3, BindingExt,
-    CursorMovement, InputState, KeyBinding, MouseButtonBinding,
+    components::input_state,
+    layer::InputLayer,
+    types::{Key, NamedKey},
+    Action, Axis3, BindingExt, CursorMovement, InputState, KeyBinding, MouseButtonBinding,
 };
 use ivy_postprocessing::{
     hdri::{HdriProcessor, HdriProcessorNode},
     skybox::SkyboxRenderer,
 };
 use ivy_scene::GltfNodeExt;
+use ivy_vulkan::vk::Extent3D;
 use ivy_wgpu::{
     components::{light, main_window, projection_matrix, window},
     driver::{WindowHandle, WinitDriver},
@@ -41,13 +44,14 @@ use ivy_wgpu::{
     },
     rendergraph::{self, ExternalResources, ManagedTextureDesc, RenderGraph},
     shaders::PbrShaderKey,
+    texture::TextureDesc,
     Gpu,
 };
-use ivy_wgpu_types::{PhysicalSize, Surface};
+use ivy_wgpu_types::{texture::read_texture, PhysicalSize, Surface};
 use tracing::Instrument;
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
-use wgpu::{Extent3d, TextureFormat, TextureUsages};
+use wgpu::{Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages};
 
 pub fn main() -> anyhow::Result<()> {
     registry()
@@ -112,25 +116,35 @@ impl LogicLayer {
             async move {
                 let sphere_mesh = MeshDesc::content(assets.load(&UvSphereDesc::default()));
 
-                let plastic_material = MaterialDesc::content(
-                    assets.insert(MaterialData::new().with_metallic(0.0).with_roughness(0.1)),
-                );
-
                 let shader = assets.load(&PbrShaderKey);
+                for i in 0..16 {
+                    let roughness = i as f32 / (15) as f32;
+                    for j in 0..2 {
+                        let metallic = j as f32;
 
-                cmd.lock().spawn(
-                    Entity::builder()
-                        .mount(TransformBundle::new(
-                            vec3(0.0, 0.0, 5.0),
-                            Quat::IDENTITY,
-                            Vec3::ONE,
-                        ))
-                        .mount(RenderObjectBundle {
-                            mesh: sphere_mesh,
-                            material: plastic_material,
-                            shader,
-                        }),
-                );
+                        let plastic_material = MaterialDesc::content(
+                            assets.insert(
+                                MaterialData::new()
+                                    .with_metallic(metallic)
+                                    .with_roughness(roughness),
+                            ),
+                        );
+
+                        cmd.lock().spawn(
+                            Entity::builder()
+                                .mount(TransformBundle::new(
+                                    vec3(0.0 + i as f32 * 2.0, j as f32 * 2.0, 5.0),
+                                    Quat::IDENTITY,
+                                    Vec3::ONE,
+                                ))
+                                .mount(RenderObjectBundle {
+                                    mesh: sphere_mesh.clone(),
+                                    material: plastic_material,
+                                    shader: shader.clone(),
+                                }),
+                        );
+                    }
+                }
 
                 let document: Asset<Document> = assets.load_async("models/Sphere.glb").await;
                 tracing::info!("finished loading document");
@@ -140,7 +154,7 @@ impl LogicLayer {
                     .unwrap()
                     .mount(&assets, &mut Entity::builder())
                     .mount(TransformBundle::new(
-                        vec3(3.0, 0.0, 5.0),
+                        vec3(3.0, 0.0, -2.0),
                         Quat::IDENTITY,
                         Vec3::ONE,
                     ))
@@ -162,10 +176,10 @@ impl LogicLayer {
         //     .set(light(), PointLight::new(Srgb::new(1.0, 1.0, 1.0), 100000.0))
         //     .spawn(world);
 
-        Entity::builder()
-            .mount(TransformBundle::default().with_position(vec3(0.0, 50.0, 0.0)))
-            .set(light(), PointLight::new(Srgb::new(1.0, 1.0, 1.0), 1000.0))
-            .spawn(world);
+        // Entity::builder()
+        //     .mount(TransformBundle::default().with_position(vec3(0.0, 50.0, 0.0)))
+        //     .set(light(), PointLight::new(Srgb::new(1.0, 1.0, 1.0), 1000.0))
+        //     .spawn(world);
 
         Ok(())
     }
@@ -199,7 +213,11 @@ impl Layer for LogicLayer {
         move_action.add(KeyBinding::new(Key::Character("w".into())).compose(Vec3::Z));
         move_action.add(KeyBinding::new(Key::Character("a".into())).compose(-Vec3::X));
         move_action.add(KeyBinding::new(Key::Character("s".into())).compose(-Vec3::Z));
-        move_action.add(KeyBinding::new(Key::Character("d".into())).compose(Axis3::X));
+        move_action.add(KeyBinding::new(Key::Character("d".into())).compose(Vec3::X));
+
+        move_action.add(KeyBinding::new(Key::Character("c".into())).compose(-Vec3::Y));
+        move_action.add(KeyBinding::new(Key::Named(NamedKey::Control)).compose(-Vec3::Y));
+        move_action.add(KeyBinding::new(Key::Named(NamedKey::Space)).compose(Vec3::Y));
 
         let mut rotate_action = Action::new(rotation_input());
         rotate_action.add(CursorMovement::new().amplitude(Vec2::ONE * 0.001));
@@ -390,6 +408,7 @@ struct RenderGraphRenderer {
     depth_texture: rendergraph::TextureHandle,
     final_color: rendergraph::TextureHandle,
     surface_texture: rendergraph::TextureHandle,
+    integrated_brdf: Arc<wgpu::Texture>,
 }
 
 impl RenderGraphRenderer {
@@ -400,7 +419,9 @@ impl RenderGraphRenderer {
             assets.load("ivy-postprocessing/hdrs/lauter_waterfall_4k.hdr");
         // assets.load("ivy-postprocessing/hdrs/industrial_sunset_puresky_2k.hdr");
 
-        let hdri_processor = HdriProcessor::new(gpu, TextureFormat::Rgba16Float, 6);
+        const MAX_REFLECTION_LOD: u32 = 4;
+        let hdri_processor =
+            HdriProcessor::new(gpu, TextureFormat::Rgba16Float, MAX_REFLECTION_LOD);
 
         let skybox = Arc::new(hdri_processor.allocate_cubemap(
             gpu,
@@ -420,8 +441,25 @@ impl RenderGraphRenderer {
             gpu,
             PhysicalSize::new(1024, 1024),
             TextureUsages::TEXTURE_BINDING,
-            6,
+            MAX_REFLECTION_LOD,
         ));
+
+        let integrated_brdf = Arc::new(gpu.device.create_texture(&TextureDescriptor {
+            label: "integrated_brdf".into(),
+            size: Extent3d {
+                width: 1024,
+                height: 1024,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Rgba16Float,
+            usage: TextureUsages::RENDER_ATTACHMENT
+                | TextureUsages::TEXTURE_BINDING
+                | TextureUsages::COPY_SRC,
+            view_formats: &[],
+        }));
 
         let mut render_graph = RenderGraph::new();
 
@@ -461,6 +499,7 @@ impl RenderGraphRenderer {
             skybox.clone(),
             skybox_ir.clone(),
             skybox_specular.clone(),
+            integrated_brdf.clone(),
         ));
 
         render_graph.add_node(CameraNode::new(
@@ -468,7 +507,12 @@ impl RenderGraphRenderer {
             depth_texture,
             final_color,
             camera_renderer,
-            EnvironmentData::new(skybox, skybox_ir, skybox_specular.clone()),
+            EnvironmentData::new(
+                skybox,
+                skybox_ir,
+                skybox_specular.clone(),
+                integrated_brdf.clone(),
+            ),
         ));
 
         render_graph.add_node(MsaaResolve::new(final_color, surface_texture));
@@ -479,6 +523,7 @@ impl RenderGraphRenderer {
             final_color,
             surface_texture,
             depth_texture,
+            integrated_brdf,
         }
     }
 }
@@ -500,6 +545,14 @@ impl ivy_wgpu::layer::Renderer for RenderGraphRenderer {
             .draw(gpu, queue, world, assets, &external_resources)?;
 
         surface_texture.present();
+
+        // async_std::task::block_on(async {
+        //     let image = read_texture(gpu, &self.integrated_brdf, 0, 0, image::ColorType::Rgba8)
+        //         .await
+        //         .unwrap();
+
+        //     image.save("./integrated_brdf.png").unwrap();
+        // });
 
         Ok(())
     }
