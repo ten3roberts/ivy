@@ -1,6 +1,6 @@
 use std::convert::Infallible;
 use std::fs::File;
-use std::io::{self, Read};
+use std::io::{self, BufReader, Read};
 use std::path::{Path, PathBuf};
 
 use futures::AsyncReadExt;
@@ -56,6 +56,20 @@ impl Default for FileSystemMapService {
 impl FileSystemMapService {
     pub fn new(root: impl Into<PathBuf>) -> Self {
         Self { root: root.into() }
+    }
+
+    pub fn load_reader(&self, path: impl AsRef<Path>) -> Result<BufReader<File>, FsAssetError> {
+        let path = path.as_ref();
+
+        let inner = || {
+            let file = File::open(self.root.join(path))?;
+            Ok(BufReader::new(file))
+        };
+
+        inner().map_err(|err| FsAssetError {
+            path: path.into(),
+            error: err,
+        })
     }
 
     pub fn load_bytes(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsAssetError> {

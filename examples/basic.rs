@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Instant};
+use std::{f32::consts::TAU, sync::Arc, time::Instant};
 
 use flax::{
     component, BoxedSystem, Component, Entity, EntityBuilder, Mutable, Query, QueryBorrow,
@@ -47,7 +47,7 @@ use ivy_wgpu::{
     texture::TextureDesc,
     Gpu,
 };
-use ivy_wgpu_types::{texture::read_texture, PhysicalSize, Surface};
+use ivy_wgpu_types::{texture::{max_mip_levels, read_texture}, PhysicalSize, Surface};
 use tracing::Instrument;
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
@@ -112,13 +112,75 @@ impl LogicLayer {
         let cmd = world.get(engine(), async_commandbuffer()).unwrap().clone();
         let assets = assets.clone();
 
+        async_std::task::spawn({
+            let cmd = cmd.clone();
+            let assets = assets.clone();
+            async move {
+
+            let shader = assets.load(&PbrShaderKey);
+            let sphere_mesh = MeshDesc::content(assets.load(&UvSphereDesc::default()));
+            let materials:Asset<Document> = assets.load_async("textures/materials.glb").await;
+
+            {
+                let mut cmd = cmd.lock();
+
+                for (i, material) in materials.materials().enumerate() {
+
+                    cmd.spawn(
+                        Entity::builder()
+                        .mount(TransformBundle::new(
+                                vec3(0.0 + i as f32 * 2.0, 5.0, 5.0),
+                                Quat::IDENTITY,
+                                Vec3::ONE,
+                        ))
+                        .mount(RenderObjectBundle {
+                            mesh: sphere_mesh.clone(),
+                            material: material.into(),
+                            shader: shader.clone(),
+                        }),
+                    );
+                }
+            }
+        }});
+
         async_std::task::spawn(
             async move {
+
                 let sphere_mesh = MeshDesc::content(assets.load(&UvSphereDesc::default()));
 
-                let shader = assets.load(&PbrShaderKey);
-                for i in 0..16 {
-                    let roughness = i as f32 / (15) as f32;
+                let material = MaterialDesc::content(
+                    assets.insert(
+                        MaterialData::new()
+                            .with_albedo(
+                                "./assets/textures/MetalPlates012_1K-PNG/MetalPlates012_1K-PNG_Color.png",
+                            )
+                            .with_normal(
+                                "./assets/textures/MetalPlates012_1K-PNG/MetalPlates012_1K-PNG_NormalGL.png",
+                            )
+                            .with_metallic_roughness(
+                                "./assets/textures/MetalPlates012_1K-PNG/MetalPlates012_1K-PNG_Metalness.png",
+                            ).with_roughness(0.1),
+                    ),
+                );
+
+            let shader = assets.load(&PbrShaderKey);
+                 
+                cmd.lock().spawn(
+                    Entity::builder()
+                        .mount(TransformBundle::new(
+                            vec3(-3.0, 0.0, 5.0),
+                            Quat::IDENTITY,
+                            Vec3::ONE,
+                        ))
+                        .mount(RenderObjectBundle {
+                            mesh: sphere_mesh.clone(),
+                            material,
+                            shader: shader.clone(),
+                        }),
+                );
+
+                for i in 0..8 {
+                    let roughness = i as f32 / (7) as f32;
                     for j in 0..2 {
                         let metallic = j as f32;
 
@@ -130,6 +192,7 @@ impl LogicLayer {
                             ),
                         );
 
+
                         cmd.lock().spawn(
                             Entity::builder()
                                 .mount(TransformBundle::new(
@@ -139,7 +202,7 @@ impl LogicLayer {
                                 ))
                                 .mount(RenderObjectBundle {
                                     mesh: sphere_mesh.clone(),
-                                    material: plastic_material,
+                                    material: plastic_material.clone(),
                                     shader: shader.clone(),
                                 }),
                         );
@@ -147,7 +210,6 @@ impl LogicLayer {
                 }
 
                 let document: Asset<Document> = assets.load_async("models/Sphere.glb").await;
-                tracing::info!("finished loading document");
 
                 let root: EntityBuilder = document
                     .node(0)
@@ -171,15 +233,10 @@ impl LogicLayer {
     fn setup_objects(&mut self, world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
         self.setup_assets(world, assets)?;
 
-        // Entity::builder()
-        //     .mount(TransformBundle::default().with_position(vec3(0.0, 100.0, 0.0)))
-        //     .set(light(), PointLight::new(Srgb::new(1.0, 1.0, 1.0), 100000.0))
-        //     .spawn(world);
-
-        // Entity::builder()
-        //     .mount(TransformBundle::default().with_position(vec3(0.0, 50.0, 0.0)))
-        //     .set(light(), PointLight::new(Srgb::new(1.0, 1.0, 1.0), 1000.0))
-        //     .spawn(world);
+        Entity::builder()
+            .mount(TransformBundle::default().with_position(vec3(0.0, 100.0, 0.0)))
+            .set(light(), PointLight::new(Srgb::new(1.0, 1.0, 1.0), 15000.0))
+            .spawn(world);
 
         Ok(())
     }
@@ -408,7 +465,6 @@ struct RenderGraphRenderer {
     depth_texture: rendergraph::TextureHandle,
     final_color: rendergraph::TextureHandle,
     surface_texture: rendergraph::TextureHandle,
-    integrated_brdf: Arc<wgpu::Texture>,
 }
 
 impl RenderGraphRenderer {
@@ -417,17 +473,19 @@ impl RenderGraphRenderer {
 
         let image: Asset<DynamicImage> =
             assets.load("ivy-postprocessing/hdrs/lauter_waterfall_4k.hdr");
+            // assets.load("ivy-postprocessing/hdrs/kloofendal_puresky_2k.hdr");
         // assets.load("ivy-postprocessing/hdrs/industrial_sunset_puresky_2k.hdr");
 
-        const MAX_REFLECTION_LOD: u32 = 4;
+        const MAX_REFLECTION_LOD: u32 = 5;
         let hdri_processor =
             HdriProcessor::new(gpu, TextureFormat::Rgba16Float, MAX_REFLECTION_LOD);
+
 
         let skybox = Arc::new(hdri_processor.allocate_cubemap(
             gpu,
             PhysicalSize::new(1024, 1024),
             TextureUsages::TEXTURE_BINDING,
-            1,
+            10,
         ));
 
         let skybox_ir = Arc::new(hdri_processor.allocate_cubemap(
@@ -439,7 +497,7 @@ impl RenderGraphRenderer {
 
         let skybox_specular = Arc::new(hdri_processor.allocate_cubemap(
             gpu,
-            PhysicalSize::new(1024, 1024),
+            PhysicalSize::new(128, 128),
             TextureUsages::TEXTURE_BINDING,
             MAX_REFLECTION_LOD,
         ));
@@ -463,6 +521,62 @@ impl RenderGraphRenderer {
 
         let mut render_graph = RenderGraph::new();
 
+        let skybox = render_graph.resources.insert_texture(ManagedTextureDesc{
+            label: "hdr_cubemap".into(),
+            extent: Extent3d {
+                width: 1024,
+                height: 1024,
+                depth_or_array_layers: 6,
+            },
+            mip_level_count: max_mip_levels(1024, 1024),
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: hdri_processor.format(),
+            persistent: true,
+        });
+
+        let skybox_ir = render_graph.resources.insert_texture(ManagedTextureDesc{
+            label: "skybox_ir".into(),
+            extent: Extent3d {
+                width: 128,
+                height: 128,
+                depth_or_array_layers: 6,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: hdri_processor.format(),
+            persistent: true,
+        });
+
+        let skybox_specular = render_graph.resources.insert_texture(ManagedTextureDesc{
+            label: "hdr_cubemap".into(),
+            extent: Extent3d {
+                width: 128,
+                height: 128,
+                depth_or_array_layers: 6,
+            },
+            mip_level_count: MAX_REFLECTION_LOD,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: hdri_processor.format(),
+            persistent: true,
+        });
+
+        let integrated_brdf = render_graph.resources.insert_texture(ManagedTextureDesc {
+            label: "integrated_brdf".into(),
+            extent: Extent3d {
+                width: 1024,
+                height: 1024,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Rgba16Float,
+            persistent:true
+        });
+
         let extent = wgpu::Extent3d {
             width: size.width,
             height: size.height,
@@ -476,6 +590,7 @@ impl RenderGraphRenderer {
             format: surface.surface_config().format,
             mip_level_count: 1,
             sample_count: 4,
+            persistent: false,
         });
 
         let depth_texture = render_graph.resources.insert_texture(ManagedTextureDesc {
@@ -485,6 +600,7 @@ impl RenderGraphRenderer {
             format: wgpu::TextureFormat::Depth24Plus,
             mip_level_count: 1,
             sample_count: 4,
+            persistent: false,
         });
 
         let surface_texture = render_graph
@@ -523,7 +639,6 @@ impl RenderGraphRenderer {
             final_color,
             surface_texture,
             depth_texture,
-            integrated_brdf,
         }
     }
 }

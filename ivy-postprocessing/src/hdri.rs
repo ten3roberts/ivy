@@ -8,10 +8,10 @@ use itertools::Itertools;
 use ivy_assets::{Asset, AssetCache};
 use ivy_core::DEG_90;
 use ivy_wgpu::{
-    rendergraph::Node,
+    rendergraph::{Dependency, Node, TextureHandle},
     types::{
-        shader::ShaderDesc, texture::read_texture, BindGroupBuilder, BindGroupLayoutBuilder,
-        PhysicalSize, Shader, TypedBuffer,
+        shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, PhysicalSize, Shader,
+        TypedBuffer,
     },
     Gpu,
 };
@@ -37,7 +37,8 @@ struct ProcessSpecularData {
     inv_proj: Mat4,
     inv_view: Mat4,
     roughness: f32,
-    _padding: [f32; 3],
+    resolution: u32,
+    _padding: [f32; 2],
 }
 
 pub struct HdriProcessor {
@@ -45,8 +46,10 @@ pub struct HdriProcessor {
     inv_viewproj: [TypedBuffer<InverseCameraData>; 6],
     sampler: Sampler,
     format: TextureFormat,
-    specular_buffers: Vec<TypedBuffer<ProcessSpecularData>>,
+    // specular_buffers: Vec<TypedBuffer<ProcessSpecularData>>,
     roughness_levels: u32,
+    view_matrices: [Mat4; 6],
+    proj: Mat4,
 }
 
 impl HdriProcessor {
@@ -77,25 +80,6 @@ impl HdriProcessor {
             )
         });
 
-        let specular_buffers = (0..roughness_levels)
-            .flat_map(|level| {
-                view_matrices.map(|v| {
-                    let roughness = level as f32 / (roughness_levels - 1).max(1) as f32;
-                    TypedBuffer::new(
-                        gpu,
-                        "diffuse_irradiance",
-                        BufferUsages::UNIFORM,
-                        &[ProcessSpecularData {
-                            inv_proj: proj.inverse(),
-                            inv_view: v.inverse(),
-                            roughness,
-                            _padding: [0.0; 3],
-                        }],
-                    )
-                })
-            })
-            .collect_vec();
-
         let sampler = gpu.device.create_sampler(&SamplerDescriptor {
             label: "material_sampler".into(),
             min_filter: wgpu::FilterMode::Linear,
@@ -108,11 +92,13 @@ impl HdriProcessor {
         });
 
         Self {
+            proj,
             viewproj_buffers,
             inv_viewproj,
             sampler,
             format,
-            specular_buffers,
+            view_matrices,
+            // specular_buffers,
             roughness_levels,
         }
     }
@@ -218,34 +204,45 @@ impl HdriProcessor {
                     base_array_layer: side,
                     array_layer_count: Some(1),
                     dimension: Some(TextureViewDimension::D2),
+                    mip_level_count: Some(1),
                     ..Default::default()
                 })
             })
             .collect_vec();
 
-        for (side, bind_group) in sides.iter().zip(bind_groups) {
-            let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: None,
-                color_attachments: &[Some(RenderPassColorAttachment {
-                    view: side,
-                    resolve_target: None,
-                    ops: Operations {
-                        load: LoadOp::Clear(Color::BLACK),
-                        store: StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                ..Default::default()
-            });
+        for (i, (side, bind_group)) in sides.iter().zip(bind_groups).enumerate() {
+            {
+                let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                    label: None,
+                    color_attachments: &[Some(RenderPassColorAttachment {
+                        view: side,
+                        resolve_target: None,
+                        ops: Operations {
+                            load: LoadOp::Clear(Color::BLACK),
+                            store: StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    ..Default::default()
+                });
 
-            tracing::info!("drawing side");
+                tracing::info!("drawing side");
 
-            render_pass.set_pipeline(shader.pipeline());
-            render_pass.set_vertex_buffer(0, vb.slice(..));
-            render_pass.set_index_buffer(ib.slice(..), IndexFormat::Uint16);
-            render_pass.set_bind_group(0, &bind_group, &[]);
+                render_pass.set_pipeline(shader.pipeline());
+                render_pass.set_vertex_buffer(0, vb.slice(..));
+                render_pass.set_index_buffer(ib.slice(..), IndexFormat::Uint16);
+                render_pass.set_bind_group(0, &bind_group, &[]);
 
-            render_pass.draw_indexed(0..36, 0, 0..1);
+                render_pass.draw_indexed(0..36, 0, 0..1);
+            }
+
+            ivy_wgpu::types::mipmap::generate_mipmaps(
+                gpu,
+                encoder,
+                dest,
+                dest.mip_level_count(),
+                i as u32,
+            );
         }
     }
 
@@ -331,8 +328,28 @@ impl HdriProcessor {
             .bind_texture_cube(ShaderStages::FRAGMENT)
             .build(gpu);
 
-        let bind_groups = self
-            .specular_buffers
+        let specular_buffers = (0..self.roughness_levels)
+            .flat_map(|level| {
+                let roughness = level as f32 / (self.roughness_levels - 1).max(1) as f32;
+                tracing::info!(roughness);
+                self.view_matrices.map(|v| {
+                    TypedBuffer::new(
+                        gpu,
+                        "diffuse_irradiance",
+                        BufferUsages::UNIFORM,
+                        &[ProcessSpecularData {
+                            inv_proj: self.proj.inverse(),
+                            inv_view: v.inverse(),
+                            roughness,
+                            resolution: hdri.size().width,
+                            _padding: [0.0; 2],
+                        }],
+                    )
+                })
+            })
+            .collect_vec();
+
+        let bind_groups = specular_buffers
             .iter()
             .map(|v| {
                 BindGroupBuilder::new("specular_ibl")
@@ -429,25 +446,29 @@ impl HdriProcessor {
 
         render_pass.draw(0..3, 0..1);
     }
+
+    pub fn format(&self) -> TextureFormat {
+        self.format
+    }
 }
 
 pub struct HdriProcessorNode {
     processor: HdriProcessor,
     source: Option<Asset<DynamicImage>>,
-    environment_map: Arc<Texture>,
-    irradiance_map: Arc<Texture>,
-    specular_map: Arc<Texture>,
-    integrated_brdf: Arc<Texture>,
+    environment_map: TextureHandle,
+    irradiance_map: TextureHandle,
+    specular_map: TextureHandle,
+    integrated_brdf: TextureHandle,
 }
 
 impl HdriProcessorNode {
     pub fn new(
         processor: HdriProcessor,
         source: Asset<DynamicImage>,
-        environment_map: Arc<Texture>,
-        irradiance_map: Arc<Texture>,
-        specular_map: Arc<Texture>,
-        integrated_brdf: Arc<Texture>,
+        environment_map: TextureHandle,
+        irradiance_map: TextureHandle,
+        specular_map: TextureHandle,
+        integrated_brdf: TextureHandle,
     ) -> Self {
         Self {
             processor,
@@ -467,30 +488,29 @@ impl Node for HdriProcessorNode {
 
     fn draw(&mut self, ctx: ivy_wgpu::rendergraph::NodeExecutionContext) -> anyhow::Result<()> {
         if let Some(source) = self.source.take() {
-            self.processor.process_hdri(
-                ctx.gpu,
-                ctx.encoder,
-                ctx.assets,
-                &source,
-                &self.environment_map,
-            );
+            let environment_map = ctx.get_texture(self.environment_map);
+            self.processor
+                .process_hdri(ctx.gpu, ctx.encoder, ctx.assets, &source, environment_map);
 
             self.processor.process_diffuse_irradiance(
                 ctx.gpu,
                 ctx.encoder,
-                &self.environment_map,
-                &self.irradiance_map,
+                environment_map,
+                ctx.get_texture(self.irradiance_map),
             );
 
             self.processor.process_specular_ibl(
                 ctx.gpu,
                 ctx.encoder,
-                &self.environment_map,
-                &self.specular_map,
+                environment_map,
+                ctx.get_texture(self.specular_map),
             );
 
-            self.processor
-                .process_brdf_lookup(ctx.gpu, ctx.encoder, &self.integrated_brdf);
+            self.processor.process_brdf_lookup(
+                ctx.gpu,
+                ctx.encoder,
+                ctx.get_texture(self.integrated_brdf),
+            );
         }
 
         Ok(())
@@ -501,7 +521,15 @@ impl Node for HdriProcessorNode {
     }
 
     fn write_dependencies(&self) -> Vec<ivy_wgpu::rendergraph::Dependency> {
-        vec![]
+        vec![
+            Dependency::texture(
+                self.environment_map,
+                TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT,
+            ),
+            Dependency::texture(self.irradiance_map, TextureUsages::RENDER_ATTACHMENT),
+            Dependency::texture(self.specular_map, TextureUsages::RENDER_ATTACHMENT),
+            Dependency::texture(self.integrated_brdf, TextureUsages::RENDER_ATTACHMENT),
+        ]
     }
 }
 

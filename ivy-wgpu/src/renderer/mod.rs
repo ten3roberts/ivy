@@ -91,10 +91,21 @@ pub struct RenderContext<'a> {
     pub camera_data: &'a CameraShaderData,
     pub format: TextureFormat,
     pub enviroment: &'a EnvironmentData,
+    pub bind_group: &'a BindGroup,
+}
+
+pub struct UpdateContext<'a> {
+    pub world: &'a mut World,
+    pub assets: &'a AssetCache,
+    pub gpu: &'a Gpu,
+    pub store: &'a mut RendererStore,
+    pub camera_data: &'a CameraShaderData,
+    pub format: TextureFormat,
+    pub enviroment: &'a EnvironmentData,
 }
 
 pub trait CameraRenderer {
-    fn update(&mut self, ctx: &mut RenderContext) -> anyhow::Result<()>;
+    fn update(&mut self, ctx: &mut UpdateContext) -> anyhow::Result<()>;
 
     fn draw<'s>(
         &'s mut self,
@@ -104,7 +115,7 @@ pub trait CameraRenderer {
 }
 
 impl<A: CameraRenderer, B: CameraRenderer> CameraRenderer for (A, B) {
-    fn update(&mut self, ctx: &mut RenderContext) -> anyhow::Result<()> {
+    fn update(&mut self, ctx: &mut UpdateContext) -> anyhow::Result<()> {
         self.0.update(ctx)?;
         self.1.update(ctx)
     }
@@ -120,18 +131,18 @@ impl<A: CameraRenderer, B: CameraRenderer> CameraRenderer for (A, B) {
 }
 
 pub struct EnvironmentData {
-    environment_map: Arc<Texture>,
-    irradiance_map: Arc<Texture>,
-    specular_map: Arc<Texture>,
-    integrated_brdf: Arc<Texture>,
+    environment_map: TextureHandle,
+    irradiance_map: TextureHandle,
+    specular_map: TextureHandle,
+    integrated_brdf: TextureHandle,
 }
 
 impl EnvironmentData {
     pub fn new(
-        environment_map: Arc<Texture>,
-        irradiance_map: Arc<Texture>,
-        specular_map: Arc<Texture>,
-        integrated_brdf: Arc<Texture>,
+        environment_map: TextureHandle,
+        irradiance_map: TextureHandle,
+        specular_map: TextureHandle,
+        integrated_brdf: TextureHandle,
     ) -> Self {
         Self {
             environment_map,
@@ -139,22 +150,6 @@ impl EnvironmentData {
             specular_map,
             integrated_brdf,
         }
-    }
-
-    pub fn environment_map(&self) -> &Texture {
-        &self.environment_map
-    }
-
-    pub fn irradiance_map(&self) -> &Texture {
-        &self.irradiance_map
-    }
-
-    pub fn specular_map(&self) -> &Texture {
-        &self.specular_map
-    }
-
-    pub fn integrated_brdf(&self) -> &Texture {
-        &self.integrated_brdf
     }
 }
 
@@ -165,6 +160,13 @@ pub struct CameraNode {
     store: RendererStore,
     output: TextureHandle,
     environment: EnvironmentData,
+    /// 0: camera data
+    /// 1: light buffer
+    /// 2: environment_map
+    /// 3: irradiance_map
+    /// 4: specular map
+    /// 5: integrated brdf
+    pub bind_group: Option<BindGroup>,
 }
 
 impl CameraNode {
@@ -177,11 +179,12 @@ impl CameraNode {
     ) -> Self {
         Self {
             renderer: Box::new(renderer),
-            shader_data: CameraShaderData::new(gpu, &environment),
+            shader_data: CameraShaderData::new(gpu),
             depth_texture,
             store: Default::default(),
             output,
             environment,
+            bind_group: None,
         }
     }
 
@@ -227,7 +230,7 @@ impl CameraNode {
             .light_buffer
             .write(&ctx.gpu.queue, 0, &light_data);
 
-        self.renderer.update(&mut RenderContext {
+        self.renderer.update(&mut UpdateContext {
             world: ctx.world,
             assets: ctx.assets,
             gpu: ctx.gpu,
@@ -254,6 +257,34 @@ impl Node for CameraNode {
 
         self.update(&mut ctx, output.format())?;
 
+        let bind_group = self.bind_group.get_or_insert_with(|| {
+            let cubemap_view = TextureViewDescriptor {
+                dimension: Some(TextureViewDimension::Cube),
+                array_layer_count: Some(6),
+                ..Default::default()
+            };
+
+            BindGroupBuilder::new("Globals")
+                .bind_buffer(&self.shader_data.buffer)
+                .bind_buffer(&self.shader_data.light_buffer)
+                .bind_texture(
+                    &ctx.get_texture(self.environment.environment_map)
+                        .create_view(&cubemap_view),
+                )
+                .bind_texture(
+                    &ctx.get_texture(self.environment.irradiance_map)
+                        .create_view(&cubemap_view),
+                )
+                .bind_texture(
+                    &ctx.get_texture(self.environment.specular_map)
+                        .create_view(&cubemap_view),
+                )
+                .bind_texture(
+                    &ctx.get_texture(self.environment.integrated_brdf)
+                        .create_view(&Default::default()),
+                )
+                .build(ctx.gpu, &self.shader_data.layout)
+        });
         let output_view = output.create_view(&Default::default());
 
         let render_context = RenderContext {
@@ -264,6 +295,7 @@ impl Node for CameraNode {
             camera_data: &self.shader_data,
             format: output.format(),
             enviroment: &self.environment,
+            bind_group,
         };
 
         let mut render_pass = ctx.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -299,7 +331,24 @@ impl Node for CameraNode {
     }
 
     fn read_dependencies(&self) -> Vec<Dependency> {
-        vec![]
+        vec![
+            Dependency::texture(
+                self.environment.environment_map,
+                TextureUsages::TEXTURE_BINDING,
+            ),
+            Dependency::texture(
+                self.environment.irradiance_map,
+                TextureUsages::TEXTURE_BINDING,
+            ),
+            Dependency::texture(
+                self.environment.specular_map,
+                TextureUsages::TEXTURE_BINDING,
+            ),
+            Dependency::texture(
+                self.environment.integrated_brdf,
+                TextureUsages::TEXTURE_BINDING,
+            ),
+        ]
     }
 
     fn write_dependencies(&self) -> Vec<Dependency> {
@@ -333,13 +382,6 @@ pub struct LightData {
 }
 
 pub struct CameraShaderData {
-    /// 0: camera data
-    /// 1: light buffer
-    /// 2: environment_map
-    /// 3: irradiance_map
-    /// 4: specular map
-    /// 5: integrated brdf
-    pub bind_group: BindGroup,
     pub data: CameraData,
     buffer: TypedBuffer<CameraData>,
     // TODO: lights should be managed by shared class in mesh renderer
@@ -348,7 +390,7 @@ pub struct CameraShaderData {
 }
 
 impl CameraShaderData {
-    fn new(gpu: &Gpu, environment: &EnvironmentData) -> CameraShaderData {
+    fn new(gpu: &Gpu) -> CameraShaderData {
         let layout = BindGroupLayoutBuilder::new("Globals")
             .bind_uniform_buffer(ShaderStages::VERTEX | ShaderStages::FRAGMENT)
             .bind_uniform_buffer(ShaderStages::FRAGMENT)
@@ -372,23 +414,7 @@ impl CameraShaderData {
             &[Default::default(); 8],
         );
 
-        let cubemap_view = TextureViewDescriptor {
-            dimension: Some(TextureViewDimension::Cube),
-            array_layer_count: Some(6),
-            ..Default::default()
-        };
-
-        let bind_group = BindGroupBuilder::new("Globals")
-            .bind_buffer(&buffer)
-            .bind_buffer(&light_buffer)
-            .bind_texture(&environment.environment_map.create_view(&cubemap_view))
-            .bind_texture(&environment.irradiance_map.create_view(&cubemap_view))
-            .bind_texture(&environment.specular_map.create_view(&cubemap_view))
-            .bind_texture(&environment.integrated_brdf.create_view(&Default::default()))
-            .build(gpu, &layout);
-
         Self {
-            bind_group,
             buffer,
             layout,
             light_buffer,

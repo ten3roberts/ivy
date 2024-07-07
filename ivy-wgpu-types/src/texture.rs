@@ -100,7 +100,9 @@ pub fn texture_from_image(
     );
 
     if desc.generate_mipmaps {
-        generate_mipmaps(gpu, &texture, mip_level_count);
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
+        generate_mipmaps(gpu, &mut encoder, &texture, mip_level_count, 0);
+        gpu.queue.submit([encoder.finish()]);
     }
 
     Ok(texture)

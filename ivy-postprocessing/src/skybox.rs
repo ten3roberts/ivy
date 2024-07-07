@@ -1,6 +1,6 @@
 use glam::Mat4;
 use ivy_wgpu::{
-    renderer::CameraRenderer,
+    renderer::{CameraRenderer, UpdateContext},
     types::{shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, Shader, TypedBuffer},
     Gpu,
 };
@@ -53,7 +53,7 @@ impl SkyboxRenderer {
 }
 
 impl CameraRenderer for SkyboxRenderer {
-    fn update(&mut self, ctx: &mut ivy_wgpu::renderer::RenderContext) -> anyhow::Result<()> {
+    fn update(&mut self, ctx: &mut UpdateContext<'_>) -> anyhow::Result<()> {
         self.buffer.write(
             &ctx.gpu.queue,
             0,
@@ -87,7 +87,7 @@ impl CameraRenderer for SkyboxRenderer {
         });
 
         render_pass.set_pipeline(shader.pipeline());
-        render_pass.set_bind_group(0, &ctx.camera_data.bind_group, &[]);
+        render_pass.set_bind_group(0, ctx.bind_group, &[]);
         render_pass.set_bind_group(1, &self.bind_group, &[]);
 
         render_pass.draw(0..3, 0..1);

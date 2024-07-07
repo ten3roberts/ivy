@@ -25,7 +25,7 @@
 use std::{borrow::Cow, f32::consts};
 
 use ivy_assets::AssetCache;
-use wgpu::{Texture, TextureFormat, TextureUsages};
+use wgpu::{CommandEncoder, Texture, TextureFormat, TextureUsages};
 
 use crate::{
     texture::{texture_from_image, TextureFromImageDesc},
@@ -79,6 +79,7 @@ impl MipMapGenerator {
         device: &wgpu::Device,
         texture: &wgpu::Texture,
         mip_count: u32,
+        base_array_layer: u32,
     ) {
         let format = texture.format();
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -128,11 +129,12 @@ impl MipMapGenerator {
                 texture.create_view(&wgpu::TextureViewDescriptor {
                     label: Some("mip"),
                     format: None,
-                    dimension: None,
+                    dimension: Some(wgpu::TextureViewDimension::D2),
                     aspect: wgpu::TextureAspect::All,
+
                     base_mip_level: mip,
                     mip_level_count: Some(1),
-                    base_array_layer: 0,
+                    base_array_layer,
                     array_layer_count: None,
                 })
             })
@@ -178,13 +180,16 @@ impl MipMapGenerator {
     }
 }
 
-pub fn generate_mipmaps(gpu: &Gpu, texture: &Texture, mip_count: u32) {
+pub fn generate_mipmaps(
+    gpu: &Gpu,
+    encoder: &mut CommandEncoder,
+    texture: &Texture,
+    mip_count: u32,
+    base_array_layer: u32,
+) {
     puffin::profile_function!();
-    let mut encoder = gpu.device.create_command_encoder(&Default::default());
 
-    MipMapGenerator::generate_mipmaps(&mut encoder, &gpu.device, texture, mip_count);
-
-    gpu.queue.submit([encoder.finish()]);
+    MipMapGenerator::generate_mipmaps(encoder, &gpu.device, texture, mip_count, base_array_layer);
 }
 
 #[test]
@@ -216,7 +221,9 @@ fn load_mips() {
         )
         .unwrap();
 
-        generate_mipmaps(&gpu, &texture, texture.mip_level_count());
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
+        generate_mipmaps(&gpu, &mut encoder, &texture, texture.mip_level_count(), 0);
+        gpu.queue.submit([encoder.finish()]);
 
         tracing::info!("reading back texture");
         let mip = read_texture(&gpu, &texture, 3, 0, image::ColorType::Rgba8)
