@@ -510,6 +510,7 @@ mod test {
             format: TextureFormat::R8Uint,
             mip_level_count: 1,
             sample_count: 1,
+            persistent: false,
         });
 
         let texture2 = render_graph.resources.insert_texture(ManagedTextureDesc {
@@ -519,6 +520,7 @@ mod test {
             format: TextureFormat::R8Uint,
             mip_level_count: 1,
             sample_count: 1,
+            persistent: false,
         });
 
         let buffer = render_graph.resources.insert_buffer(BufferDesc {

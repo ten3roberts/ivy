@@ -312,9 +312,7 @@ impl MeshRenderer {
     }
 
     fn update_object_data(&mut self, world: &World, gpu: &Gpu) {
-        let mut total = 0;
         for (&object_index, item) in &mut self.object_query.borrow(world) {
-            total += 1;
             self.object_data[object_index] = ObjectData {
                 transform: item.transform,
             };
@@ -325,7 +323,7 @@ impl MeshRenderer {
 }
 
 impl CameraRenderer for MeshRenderer {
-    fn update(&mut self, ctx: &mut super::RenderContext) -> anyhow::Result<()> {
+    fn update(&mut self, ctx: &mut super::UpdateContext) -> anyhow::Result<()> {
         let mut cmd = CommandBuffer::new();
         self.collect_unbatched(
             ctx.world,
@@ -346,7 +344,7 @@ impl CameraRenderer for MeshRenderer {
         ctx: &'s super::RenderContext<'s>,
         render_pass: &mut RenderPass<'s>,
     ) -> anyhow::Result<()> {
-        render_pass.set_bind_group(0, &ctx.camera_data.bind_group, &[]);
+        render_pass.set_bind_group(0, ctx.bind_group, &[]);
 
         self.object_buffer
             .write(&ctx.gpu.queue, 0, &self.object_data);

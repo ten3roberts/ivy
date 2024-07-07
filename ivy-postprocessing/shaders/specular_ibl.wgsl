@@ -21,6 +21,7 @@ struct UniformData {
     inv_proj: mat4x4<f32>,
     inv_view: mat4x4<f32>,
     roughness: f32,
+    resolution: u32,
 }
 
 @group(0) @binding(0)
@@ -71,6 +72,18 @@ fn importance_sample_ggx(Xi: vec2<f32>, n: vec3<f32>, roughness: f32) -> vec3<f3
     return normalize(sample_vec);
 }
 
+fn distribution_ggx(n: vec3<f32>, h: vec3<f32>, roughness: f32) -> f32 {
+    let a = roughness * roughness;
+    let a2 = a * a;
+    let ndoth = max(dot(n, h), 0f);
+    let ndoth2 = ndoth * ndoth;
+
+    let num = a2;
+    var denom = (ndoth2 * (a2 - 1f) + 1f);
+
+    return num / denom;
+}
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let view_pos_homogeneous = data.inv_proj * in.clip_position;
@@ -90,9 +103,23 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
         let l = normalize(2f * dot(v, h) * h - v);
 
+        let ndoth = dot(normal, h);
+        let hdotv = dot(v, h);
+        let d = distribution_ggx(normal, h, data.roughness);
+
+        let pdf = (d * ndoth / (4f * hdotv)) + 0.0001;
+
+        let sa_texel = 4f * PI / (6f * f32(data.resolution) * f32(data.resolution));
+        let sa_sample = 1f / (f32(sample_count) * pdf + 0.0001);
+
+        var mip_level = 0f;
+        if data.roughness > 0f {
+            mip_level = 0.5 * log2(sa_sample / sa_texel);
+        }
+
         let ndotl = dot(normal, l);
         if ndotl > 0f {
-            total_incoming += textureSample(skybox_texture, skybox_sampler, l).rgb * ndotl;
+            total_incoming += textureSampleLevel(skybox_texture, skybox_sampler, l, mip_level).rgb * ndotl;
             total_weight += ndotl;
         }
     }

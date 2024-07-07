@@ -74,6 +74,7 @@ pub struct ManagedTextureDesc {
     pub format: TextureFormat,
     pub mip_level_count: u32,
     pub sample_count: u32,
+    pub persistent: bool,
 }
 
 pub struct BufferDesc {
@@ -102,19 +103,36 @@ trait SubResource {
     fn create(gpu: &Gpu, desc: Self::Desc<'_>) -> Self;
 }
 
+#[derive(Debug, Clone)]
+struct AllocatedTextureDescriptor {
+    desc: ManagedTextureDesc,
+    usage: TextureUsages,
+}
+
 impl SubResource for Texture {
-    type Desc<'a> = TextureDescriptor<'a>;
+    type Desc<'a> = AllocatedTextureDescriptor;
 
     fn is_compatible(desc: &Self::Desc<'_>, other: &Self::Desc<'_>) -> bool {
-        desc.size == other.size
-            && desc.dimension == other.dimension
-            && desc.format == other.format
-            && desc.mip_level_count == other.mip_level_count
-            && desc.sample_count == other.sample_count
+        !desc.desc.persistent
+            && !other.desc.persistent
+            && desc.desc.extent == other.desc.extent
+            && desc.desc.dimension == other.desc.dimension
+            && desc.desc.format == other.desc.format
+            && desc.desc.mip_level_count == other.desc.mip_level_count
+            && desc.desc.sample_count == other.desc.sample_count
     }
 
     fn create(gpu: &Gpu, desc: Self::Desc<'_>) -> Self {
-        gpu.device.create_texture(&desc)
+        gpu.device.create_texture(&TextureDescriptor {
+            label: Some(&desc.desc.label),
+            size: desc.desc.extent,
+            mip_level_count: desc.desc.mip_level_count,
+            sample_count: desc.desc.sample_count,
+            dimension: desc.desc.dimension,
+            format: desc.desc.format,
+            usage: desc.usage,
+            view_formats: &[],
+        })
     }
 }
 
@@ -272,15 +290,9 @@ impl Resources {
 
             Some((
                 handle,
-                TextureDescriptor {
-                    label: None,
-                    size: desc.extent,
-                    mip_level_count: desc.mip_level_count,
-                    sample_count: desc.sample_count,
-                    dimension: desc.dimension,
-                    format: desc.format,
+                AllocatedTextureDescriptor {
+                    desc: desc.clone(),
                     usage,
-                    view_formats: &[],
                 },
                 lf,
             ))
