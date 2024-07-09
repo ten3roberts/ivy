@@ -26,8 +26,9 @@ use ivy_input::{
 };
 use ivy_postprocessing::{
     hdri::{HdriProcessor, HdriProcessorNode},
-    skybox::SkyboxRenderer,
+    skybox::SkyboxRenderer, tonemap::TonemapNode,
 };
+use ivy_rendergraph::components::render_graph;
 use ivy_scene::GltfNodeExt;
 use ivy_vulkan::vk::Extent3D;
 use ivy_wgpu::{
@@ -235,7 +236,7 @@ impl LogicLayer {
 
         Entity::builder()
             .mount(TransformBundle::default().with_position(vec3(0.0, 100.0, 0.0)))
-            .set(light(), PointLight::new(Srgb::new(1.0, 1.0, 1.0), 15000.0))
+            .set(light(), PointLight::new(Srgb::new(1.0, 1.0, 1.0), 55000.0))
             .spawn(world);
 
         Ok(())
@@ -463,8 +464,9 @@ struct RenderGraphRenderer {
     render_graph: RenderGraph,
     surface: Surface,
     depth_texture: rendergraph::TextureHandle,
-    final_color: rendergraph::TextureHandle,
+    multisampled_hdr: rendergraph::TextureHandle,
     surface_texture: rendergraph::TextureHandle,
+    final_color: rendergraph::TextureHandle,
 }
 
 impl RenderGraphRenderer {
@@ -476,7 +478,7 @@ impl RenderGraphRenderer {
             // assets.load("ivy-postprocessing/hdrs/kloofendal_puresky_2k.hdr");
         // assets.load("ivy-postprocessing/hdrs/industrial_sunset_puresky_2k.hdr");
 
-        const MAX_REFLECTION_LOD: u32 = 5;
+        const MAX_REFLECTION_LOD: u32 = 8;
         let hdri_processor =
             HdriProcessor::new(gpu, TextureFormat::Rgba16Float, MAX_REFLECTION_LOD);
 
@@ -583,13 +585,24 @@ impl RenderGraphRenderer {
             depth_or_array_layers: 1,
         };
 
+        let multisampled_hdr = render_graph.resources.insert_texture(ManagedTextureDesc {
+            label: "final_color".into(),
+            extent,
+            dimension: wgpu::TextureDimension::D2,
+            format: TextureFormat::Rgba16Float,
+            mip_level_count: 1,
+            sample_count: 4,
+            persistent: false,
+        });
+
+
         let final_color = render_graph.resources.insert_texture(ManagedTextureDesc {
             label: "final_color".into(),
             extent,
             dimension: wgpu::TextureDimension::D2,
-            format: surface.surface_config().format,
+            format: TextureFormat::Rgba16Float,
             mip_level_count: 1,
-            sample_count: 4,
+            sample_count: 1,
             persistent: false,
         });
 
@@ -612,30 +625,32 @@ impl RenderGraphRenderer {
         render_graph.add_node(HdriProcessorNode::new(
             hdri_processor,
             image,
-            skybox.clone(),
-            skybox_ir.clone(),
-            skybox_specular.clone(),
-            integrated_brdf.clone(),
+            skybox,
+            skybox_ir,
+            skybox_specular,
+            integrated_brdf,
         ));
 
         render_graph.add_node(CameraNode::new(
             gpu,
             depth_texture,
-            final_color,
+            multisampled_hdr,
             camera_renderer,
             EnvironmentData::new(
                 skybox,
                 skybox_ir,
-                skybox_specular.clone(),
-                integrated_brdf.clone(),
+                skybox_specular,
+                integrated_brdf,
             ),
         ));
 
-        render_graph.add_node(MsaaResolve::new(final_color, surface_texture));
+        render_graph.add_node(MsaaResolve::new(multisampled_hdr, final_color));
+        render_graph.add_node(TonemapNode::new(gpu, final_color, surface_texture));
 
         Self {
             render_graph,
             surface,
+            multisampled_hdr,
             final_color,
             surface_texture,
             depth_texture,
@@ -661,14 +676,6 @@ impl ivy_wgpu::layer::Renderer for RenderGraphRenderer {
 
         surface_texture.present();
 
-        // async_std::task::block_on(async {
-        //     let image = read_texture(gpu, &self.integrated_brdf, 0, 0, image::ColorType::Rgba8)
-        //         .await
-        //         .unwrap();
-
-        //     image.save("./integrated_brdf.png").unwrap();
-        // });
-
         Ok(())
     }
 
@@ -683,11 +690,18 @@ impl ivy_wgpu::layer::Renderer for RenderGraphRenderer {
 
         self.render_graph
             .resources
-            .get_texture_mut(self.final_color)
+            .get_texture_mut(self.multisampled_hdr)
             .as_managed_mut()
             .unwrap()
             .extent = new_extent;
 
+        self.render_graph
+            .resources
+            .get_texture_mut(self.final_color)
+            .as_managed_mut()
+            .unwrap()
+            .extent = new_extent;
+        
         self.render_graph
             .resources
             .get_texture_mut(self.depth_texture)

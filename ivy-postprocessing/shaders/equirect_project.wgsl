@@ -7,7 +7,6 @@ struct VertexOutput {
     @location(0) vertex_pos: vec3<f32>,
 }
 
-
 @group(0) @binding(0)
 var<uniform> projview: mat4x4<f32>;
 

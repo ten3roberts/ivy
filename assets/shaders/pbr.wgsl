@@ -178,7 +178,7 @@ fn pbr_luminance(position: vec3<f32>, camera_dir: vec3<f32>, albedo: vec3<f32>, 
     return (kd * albedo / PI + specular) * radiance * ndotl;
 }
 
-const MAX_REFLECTION_LOD: f32 = 4f;
+const MAX_REFLECTION_LOD: f32 = 7f;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
