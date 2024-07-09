@@ -283,7 +283,8 @@ impl Resources {
             let desc = desc.as_managed()?;
 
             let Some(&lf) = lifetimes.get(&handle.into()) else {
-                panic!("No entry for {:?}", self.textures[handle]);
+                tracing::warn!("Unused texture {:?}", self.textures[handle]);
+                return None;
             };
 
             let usage = *usages.get(handle)?;

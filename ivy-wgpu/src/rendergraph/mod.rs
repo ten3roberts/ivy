@@ -37,7 +37,10 @@ impl<'a> NodeExecutionContext<'a> {
 }
 
 pub trait Node: 'static {
-    fn label(&self) -> &str;
+    fn label(&self) -> &str {
+        std::any::type_name::<Self>()
+    }
+
     fn begin(&mut self) -> anyhow::Result<()> {
         Ok(())
     }
