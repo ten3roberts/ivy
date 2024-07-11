@@ -25,8 +25,7 @@ use ivy_input::{
     Action, Axis3, BindingExt, CursorMovement, InputState, KeyBinding, MouseButtonBinding,
 };
 use ivy_postprocessing::{
-    hdri::{HdriProcessor, HdriProcessorNode},
-    skybox::SkyboxRenderer, tonemap::TonemapNode,
+    bloom::BloomNode, hdri::{HdriProcessor, HdriProcessorNode}, skybox::SkyboxRenderer, tonemap::TonemapNode
 };
 use ivy_rendergraph::components::render_graph;
 use ivy_scene::GltfNodeExt;
@@ -52,7 +51,7 @@ use ivy_wgpu_types::{texture::{max_mip_levels, read_texture}, PhysicalSize, Surf
 use tracing::Instrument;
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
-use wgpu::{Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages};
+use wgpu::{core::binding_model::BindGroupLayoutEntryError, Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages};
 
 pub fn main() -> anyhow::Result<()> {
     registry()
@@ -235,8 +234,8 @@ impl LogicLayer {
         self.setup_assets(world, assets)?;
 
         Entity::builder()
-            .mount(TransformBundle::default().with_position(vec3(0.0, 100.0, 0.0)))
-            .set(light(), PointLight::new(Srgb::new(1.0, 1.0, 1.0), 55000.0))
+            .mount(TransformBundle::default().with_position(vec3(0.0, 2.0, 0.0)))
+            .set(light(), PointLight::new(Srgb::new(1.0, 1.0, 1.0), 50.0))
             .spawn(world);
 
         Ok(())
@@ -482,45 +481,6 @@ impl RenderGraphRenderer {
         let hdri_processor =
             HdriProcessor::new(gpu, TextureFormat::Rgba16Float, MAX_REFLECTION_LOD);
 
-
-        let skybox = Arc::new(hdri_processor.allocate_cubemap(
-            gpu,
-            PhysicalSize::new(1024, 1024),
-            TextureUsages::TEXTURE_BINDING,
-            10,
-        ));
-
-        let skybox_ir = Arc::new(hdri_processor.allocate_cubemap(
-            gpu,
-            PhysicalSize::new(1024, 1024),
-            TextureUsages::TEXTURE_BINDING,
-            1,
-        ));
-
-        let skybox_specular = Arc::new(hdri_processor.allocate_cubemap(
-            gpu,
-            PhysicalSize::new(128, 128),
-            TextureUsages::TEXTURE_BINDING,
-            MAX_REFLECTION_LOD,
-        ));
-
-        let integrated_brdf = Arc::new(gpu.device.create_texture(&TextureDescriptor {
-            label: "integrated_brdf".into(),
-            size: Extent3d {
-                width: 1024,
-                height: 1024,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: TextureDimension::D2,
-            format: TextureFormat::Rgba16Float,
-            usage: TextureUsages::RENDER_ATTACHMENT
-                | TextureUsages::TEXTURE_BINDING
-                | TextureUsages::COPY_SRC,
-            view_formats: &[],
-        }));
-
         let mut render_graph = RenderGraph::new();
 
         let skybox = render_graph.resources.insert_texture(ManagedTextureDesc{
@@ -606,6 +566,16 @@ impl RenderGraphRenderer {
             persistent: false,
         });
 
+        let bloom_result = render_graph.resources.insert_texture(ManagedTextureDesc {
+            label: "final_color".into(),
+            extent,
+            dimension: wgpu::TextureDimension::D2,
+            format: TextureFormat::Rgba16Float,
+            mip_level_count: 1,
+            sample_count: 1,
+            persistent: true,
+        });
+
         let depth_texture = render_graph.resources.insert_texture(ManagedTextureDesc {
             label: "depth_texture".into(),
             extent,
@@ -645,7 +615,8 @@ impl RenderGraphRenderer {
         ));
 
         render_graph.add_node(MsaaResolve::new(multisampled_hdr, final_color));
-        render_graph.add_node(TonemapNode::new(gpu, final_color, surface_texture));
+        render_graph.add_node(BloomNode::new(gpu, final_color, bloom_result , 5, 0.005));
+        render_graph.add_node(TonemapNode::new(gpu, bloom_result, surface_texture));
 
         Self {
             render_graph,
