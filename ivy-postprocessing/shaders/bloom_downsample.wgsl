@@ -1,35 +1,42 @@
-
 struct VertexOutput {
-    @builtin(position) frag_position: vec4<f32>,
-    @location(0) uv: vec2<f32>,
+    @builtin(position) position: vec4<f32>,
+    @location(0) clip_position: vec4<f32>,
+    @location(1) uv: vec2<f32>,
 };
 
 @vertex
-fn vs_main(@builtin(vertex_index) id: u32) -> VertexOutput {
-    let uv = vec2<f32>(vec2<u32>(
-        id & 1u,
-        (id >> 1u) & 1u,
-    ));
-    var out: VertexOutput;
-    // out.clip_position = vec4(uv * vec2(4.0, -4.0) + vec2(-1.0, 1.0), 0.0, 1.0);
-    out.uv = uv;
-    out.frag_position = vec4(uv * 4.0 - 1.0, 1.0, 1.0);
-    return out;
+fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
+    var result: VertexOutput;
+    let x = i32(vertex_index) / 2;
+    let y = i32(vertex_index) & 1;
+    let uv = vec2<f32>(
+        f32(x) * 2.0,
+        f32(y) * 2.0
+    );
+    result.position = vec4<f32>(
+        uv.x * 2.0 - 1.0,
+        1.0 - uv.y * 2.0,
+        1.0, 1.0
+    );
+    result.clip_position = result.position;
+    result.uv = uv;
+    return result;
 }
 
 @group(0) @binding(0)
 var source_texture: texture_2d<f32>;
 
 @group(0) @binding(1)
-var<uniform> source_resolution: f32;
+var default_sampler: sampler;
+
+@group(0) @binding(2)
+var<uniform> source_texel_size: vec3<f32>;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let srcResolution = 1024f;
-    let srcTexelSize = 1.0 / source_resolution;
-
-    float x = srcTexelSize.x;
-    float y = srcTexelSize.y;
+    let x = source_texel_size.x;
+    let y = source_texel_size.y;
+    let uv = in.uv;
 
     // Take 13 samples around current texel:
     // a - b - c
@@ -38,22 +45,22 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // - l - m -
     // g - h - i
     // === ('e' is the current texel) ===
-    let a = texture(source_texture, vec2(in.uv.x - 2 * x, in.uv.y + 2 * y)).rgb;
-    let b = texture(source_texture, vec2(in.uv.x, in.uv.y + 2 * y)).rgb;
-    let c = texture(source_texture, vec2(in.uv.x + 2 * x, in.uv.y + 2 * y)).rgb;
+    let a = textureSample(source_texture, default_sampler, vec2(uv.x - 2 * x, uv.y + 2 * y)).rgb;
+    let b = textureSample(source_texture, default_sampler, vec2(uv.x, uv.y + 2 * y)).rgb;
+    let c = textureSample(source_texture, default_sampler, vec2(uv.x + 2 * x, uv.y + 2 * y)).rgb;
 
-    let d = texture(source_texture, vec2(in.uv.x - 2 * x, in.uv.y)).rgb;
-    let e = texture(source_texture, vec2(in.uv.x, in.uv.y)).rgb;
-    let f = texture(source_texture, vec2(in.uv.x + 2 * x, in.uv.y)).rgb;
+    let d = textureSample(source_texture, default_sampler, vec2(uv.x - 2 * x, uv.y)).rgb;
+    let e = textureSample(source_texture, default_sampler, vec2(uv.x, uv.y)).rgb;
+    let f = textureSample(source_texture, default_sampler, vec2(uv.x + 2 * x, uv.y)).rgb;
 
-    let g = texture(source_texture, vec2(in.uv.x - 2 * x, in.uv.y - 2 * y)).rgb;
-    let h = texture(source_texture, vec2(in.uv.x, in.uv.y - 2 * y)).rgb;
-    let i = texture(source_texture, vec2(in.uv.x + 2 * x, in.uv.y - 2 * y)).rgb;
+    let g = textureSample(source_texture, default_sampler, vec2(uv.x - 2 * x, uv.y - 2 * y)).rgb;
+    let h = textureSample(source_texture, default_sampler, vec2(uv.x, uv.y - 2 * y)).rgb;
+    let i = textureSample(source_texture, default_sampler, vec2(uv.x + 2 * x, uv.y - 2 * y)).rgb;
 
-    let j = texture(source_texture, vec2(in.uv.x - x, in.uv.y + y)).rgb;
-    let k = texture(source_texture, vec2(in.uv.x + x, in.uv.y + y)).rgb;
-    let l = texture(source_texture, vec2(in.uv.x - x, in.uv.y - y)).rgb;
-    let m = texture(source_texture, vec2(in.uv.x + x, in.uv.y - y)).rgb;
+    let j = textureSample(source_texture, default_sampler, vec2(uv.x - x, uv.y + y)).rgb;
+    let k = textureSample(source_texture, default_sampler, vec2(uv.x + x, uv.y + y)).rgb;
+    let l = textureSample(source_texture, default_sampler, vec2(uv.x - x, uv.y - y)).rgb;
+    let m = textureSample(source_texture, default_sampler, vec2(uv.x + x, uv.y - y)).rgb;
 
     // Apply weighted distribution:
     // 0.5 + 0.125 + 0.125 + 0.125 + 0.125 = 1
@@ -73,6 +80,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // downsample += (a + c + g + i) * 0.03125;
     // downsample += (b + d + f + h) * 0.0625;
     // downsample += (j + k + l + m) * 0.125;
-    return vec4(downsample, 1f);
+    return vec4(max(downsample, vec3(0.000001f)), 1f);
+    // return vec4(1f, 0f, 0f, 1f);
 }
  
