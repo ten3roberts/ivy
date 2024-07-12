@@ -2,7 +2,7 @@ use flax::{components::child_of, Entity, EntityBuilder};
 use ivy_assets::AssetCache;
 use ivy_core::{EntityBuilderExt, TransformBundle};
 use ivy_gltf::{GltfNode, GltfNodeRef};
-use ivy_wgpu::{components::mesh_primitive, renderer::RenderObjectBundle, shaders::PbrShaderKey};
+use ivy_wgpu::{components::mesh_primitive, renderer::RenderObjectBundle, shaders::PbrShaderDesc};
 
 pub trait GltfNodeExt {
     fn mount<'a>(
@@ -26,7 +26,7 @@ impl GltfNodeExt for GltfNodeRef<'_> {
                     Entity::builder().mount(RenderObjectBundle::new(
                         primitive.into(),
                         material,
-                        assets.load(&PbrShaderKey),
+                        assets.load(&PbrShaderDesc),
                     )),
                 );
             }

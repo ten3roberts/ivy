@@ -165,9 +165,13 @@ impl RenderGraph {
             .enumerate()
             .flat_map(|(node_idx, node)| {
                 let writes = &writes;
-                node.read_dependencies().into_iter().map(move |v| {
-                    let write_idx = *writes.get(&v.as_handle()).unwrap();
-                    (node_idx, write_idx)
+                node.read_dependencies().into_iter().filter_map(move |v| {
+                    let Some(&write_idx) = writes.get(&v.as_handle()) else {
+                        tracing::warn!("No corresponding write found for dependency: {v:?}");
+                        return None;
+                    };
+
+                    Some((node_idx, write_idx))
                 })
             })
             .into_group_map();
@@ -178,7 +182,7 @@ impl RenderGraph {
         } = topo_sort(&self.nodes, &dependencies);
 
         self.expected_lifetimes.clear();
-        tracing::info!(?writes, "writes");
+
         for (resource, node) in writes {
             let reads = reads.get(&resource).map(Vec::as_slice).unwrap_or_default();
 

@@ -1,9 +1,6 @@
-use image::{DynamicImage, GenericImageView};
-use ivy_assets::{Asset, AssetCache, AssetDesc, StoredKey};
-use ivy_wgpu_types::{
-    texture::{max_mip_levels, texture_from_image, TextureFromColor, TextureFromImageDesc},
-    Gpu,
-};
+use image::DynamicImage;
+use ivy_assets::{Asset, AssetCache, AssetDesc};
+use ivy_wgpu_types::texture::{texture_from_image, TextureFromColor, TextureFromImageDesc};
 use wgpu::{Texture, TextureFormat};
 
 /// Describes a texture

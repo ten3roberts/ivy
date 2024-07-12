@@ -6,9 +6,9 @@ use crate::shader::ShaderDesc;
 
 /// Loads the default PBR shader
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct PbrShaderKey;
+pub struct PbrShaderDesc;
 
-impl AssetDesc<ShaderDesc> for PbrShaderKey {
+impl AssetDesc<ShaderDesc> for PbrShaderDesc {
     type Error = Infallible;
 
     fn load(&self, assets: &ivy_assets::AssetCache) -> Result<Asset<ShaderDesc>, Self::Error> {
