@@ -81,6 +81,10 @@ impl Node for MsaaResolve {
             TextureUsages::RENDER_ATTACHMENT,
         )]
     }
+
+    fn update(&mut self, _ctx: crate::rendergraph::NodeUpdateContext) -> anyhow::Result<()> {
+        Ok(())
+    }
 }
 
 pub struct RenderContext<'a> {
@@ -187,12 +191,16 @@ impl CameraNode {
             bind_group: None,
         }
     }
+}
 
-    pub fn update(
-        &mut self,
-        ctx: &mut NodeExecutionContext,
-        format: TextureFormat,
-    ) -> anyhow::Result<()> {
+impl Node for CameraNode {
+    fn label(&self) -> &str {
+        type_name::<Self>()
+    }
+
+    fn update(&mut self, ctx: crate::rendergraph::NodeUpdateContext) -> anyhow::Result<()> {
+        let output = ctx.get_texture(self.output);
+
         tracing::debug!("updating renderer");
         if let Some((world_transform, &projection)) =
             Query::new((world_transform(), projection_matrix()))
@@ -236,26 +244,17 @@ impl CameraNode {
             gpu: ctx.gpu,
             store: &mut self.store,
             camera_data: &self.shader_data,
-            format,
+            format: output.format(),
             enviroment: &self.environment,
         })?;
 
         Ok(())
     }
-}
-
-impl Node for CameraNode {
-    fn label(&self) -> &str {
-        type_name::<Self>()
-    }
 
     fn draw(&mut self, mut ctx: crate::rendergraph::NodeExecutionContext) -> anyhow::Result<()> {
-        let output = ctx.get_texture(self.output);
         let depth_view = ctx
             .get_texture(self.depth_texture)
             .create_view(&Default::default());
-
-        self.update(&mut ctx, output.format())?;
 
         let bind_group = self.bind_group.get_or_insert_with(|| {
             let cubemap_view = TextureViewDescriptor {
@@ -285,6 +284,8 @@ impl Node for CameraNode {
                 )
                 .build(ctx.gpu, &self.shader_data.layout)
         });
+
+        let output = ctx.get_texture(self.output);
         let output_view = output.create_view(&Default::default());
 
         let render_context = RenderContext {

@@ -280,6 +280,10 @@ impl Node for BloomNode {
         Ok(())
     }
 
+    fn on_resource_changed(&mut self, _resource: ivy_wgpu::rendergraph::ResourceHandle) {
+        self.data = None;
+    }
+
     fn read_dependencies(&self) -> Vec<Dependency> {
         vec![Dependency::texture(
             self.input,

@@ -1,4 +1,7 @@
-use std::{borrow::Cow, collections::HashMap};
+use std::{
+    borrow::Cow,
+    collections::{BTreeSet, HashMap},
+};
 
 use itertools::Itertools;
 use ivy_wgpu_types::Gpu;
@@ -211,6 +214,8 @@ pub struct Resources {
 
     buffers: SlotMap<BufferHandle, BufferDesc>,
     buffer_data: ResourceAllocator<BufferHandle, Buffer>,
+
+    pub(crate) modified_resources: BTreeSet<ResourceHandle>,
 }
 
 impl Resources {
@@ -221,6 +226,7 @@ impl Resources {
             buffers: Default::default(),
             managed_texture_data: ResourceAllocator::new(),
             buffer_data: ResourceAllocator::new(),
+            modified_resources: Default::default(),
         }
     }
 
@@ -231,6 +237,7 @@ impl Resources {
 
     pub fn get_texture_mut(&mut self, handle: TextureHandle) -> &mut TextureDesc {
         self.dirty = true;
+        self.modified_resources.insert(handle.into());
         &mut self.textures[handle]
     }
 

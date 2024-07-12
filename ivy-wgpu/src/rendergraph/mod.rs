@@ -4,18 +4,14 @@ use ivy_assets::AssetCache;
 pub use resources::*;
 use slotmap::SecondaryMap;
 
-use std::{collections::HashMap, mem};
+use std::{
+    collections::{BTreeSet, HashMap},
+    mem,
+};
 
 use itertools::Itertools;
 use ivy_wgpu_types::Gpu;
 use wgpu::{BufferUsages, CommandEncoder, Queue, Texture, TextureUsages};
-
-pub struct RenderGraph {
-    nodes: Vec<Box<dyn Node>>,
-    order: Option<Vec<usize>>,
-    pub resources: Resources,
-    expected_lifetimes: HashMap<ResourceHandle, Lifetime>,
-}
 
 pub struct NodeExecutionContext<'a> {
     pub gpu: &'a Gpu,
@@ -36,15 +32,35 @@ impl<'a> NodeExecutionContext<'a> {
     }
 }
 
+pub struct NodeUpdateContext<'a> {
+    pub gpu: &'a Gpu,
+    pub resources: &'a Resources,
+    pub assets: &'a AssetCache,
+    pub world: &'a mut World,
+    external_resources: &'a ExternalResources<'a>,
+}
+
+impl<'a> NodeUpdateContext<'a> {
+    pub fn get_texture(&self, handle: TextureHandle) -> &'a Texture {
+        match self.external_resources.external_textures.get(handle) {
+            Some(v) => v,
+            None => self.resources.get_texture_data(handle),
+        }
+    }
+}
 pub trait Node: 'static {
     fn label(&self) -> &str {
         std::any::type_name::<Self>()
     }
 
-    fn begin(&mut self) -> anyhow::Result<()> {
+    fn update(&mut self, _ctx: NodeUpdateContext) -> anyhow::Result<()> {
         Ok(())
     }
+
     fn draw(&mut self, ctx: NodeExecutionContext) -> anyhow::Result<()>;
+
+    fn on_resource_changed(&mut self, _resource: ResourceHandle) {}
+
     fn read_dependencies(&self) -> Vec<Dependency>;
     fn write_dependencies(&self) -> Vec<Dependency>;
 }
@@ -61,7 +77,7 @@ pub enum Dependency {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ResourceHandle {
     Texture(TextureHandle),
     Buffer(BufferHandle),
@@ -114,6 +130,15 @@ impl Dependency {
     }
 }
 
+pub struct RenderGraph {
+    nodes: Vec<Box<dyn Node>>,
+    order: Option<Vec<usize>>,
+    pub resources: Resources,
+    expected_lifetimes: HashMap<ResourceHandle, Lifetime>,
+
+    resource_map: HashMap<ResourceHandle, BTreeSet<usize>>,
+}
+
 impl RenderGraph {
     pub fn new() -> Self {
         Self {
@@ -121,6 +146,7 @@ impl RenderGraph {
             order: None,
             resources: Default::default(),
             expected_lifetimes: Default::default(),
+            resource_map: Default::default(),
         }
     }
 
@@ -136,28 +162,38 @@ impl RenderGraph {
             .allocate_buffers(&self.nodes, gpu, &self.expected_lifetimes);
     }
 
-    fn build(&mut self) {
-        let writes: HashMap<_, _> = self
-            .nodes
-            .iter()
-            .enumerate()
-            .flat_map(|(idx, v)| {
-                v.write_dependencies()
-                    .into_iter()
-                    .map(move |d| (d.as_handle(), idx))
-            })
-            .collect();
+    fn build(&mut self) -> anyhow::Result<()> {
+        self.resource_map.clear();
+        let mut writes = HashMap::new();
+        let mut reads = HashMap::new();
 
-        let reads = self
-            .nodes
-            .iter()
-            .enumerate()
-            .flat_map(|(idx, v)| {
-                v.read_dependencies()
-                    .into_iter()
-                    .map(move |v| (v.as_handle(), idx))
-            })
-            .into_group_map();
+        for (idx, node) in self.nodes.iter().enumerate() {
+            for write in node.write_dependencies() {
+                self.resource_map
+                    .entry(write.as_handle())
+                    .or_default()
+                    .insert(idx);
+
+                if writes.insert(write.as_handle(), idx).is_some() {
+                    anyhow::bail!(
+                        "Multiple write dependencies for resource {:?}",
+                        write.as_handle()
+                    )
+                }
+            }
+
+            for read in node.read_dependencies() {
+                self.resource_map
+                    .entry(read.as_handle())
+                    .or_default()
+                    .insert(idx);
+
+                reads
+                    .entry(read.as_handle())
+                    .or_insert_with(Vec::new)
+                    .push(idx)
+            }
+        }
 
         let dependencies = self
             .nodes
@@ -199,10 +235,12 @@ impl RenderGraph {
 
             tracing::info!(?resource, lifetime = ?open..close, "lifetime");
             self.expected_lifetimes
-                .insert(resource, Lifetime::new(open, close));
+                .insert(resource, Lifetime::new(open, close + 1));
         }
 
         self.order = Some(order);
+
+        Ok(())
     }
 
     pub fn draw(
@@ -216,14 +254,25 @@ impl RenderGraph {
         let _span = tracing::info_span!("RenderGraph::draw").entered();
 
         if self.order.is_none() {
-            self.build();
+            self.build()?;
         }
 
         if mem::take(&mut self.resources.dirty) {
+            self.invoke_on_resource_modified();
             self.allocate_resources(gpu);
         }
 
         let order = self.order.as_ref().unwrap();
+
+        for &idx in order {
+            self.nodes[idx].update(NodeUpdateContext {
+                gpu,
+                resources: &self.resources,
+                assets,
+                world,
+                external_resources,
+            })?;
+        }
 
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
 
@@ -243,6 +292,18 @@ impl RenderGraph {
         queue.submit([encoder.finish()]);
 
         Ok(())
+    }
+
+    fn invoke_on_resource_modified(&mut self) {
+        for modified in mem::take(&mut self.resources.modified_resources) {
+            self.resource_map
+                .get(&modified)
+                .iter()
+                .flat_map(|v| *v)
+                .for_each(|&idx| {
+                    self.nodes[idx].on_resource_changed(modified);
+                })
+        }
     }
 }
 
@@ -402,6 +463,10 @@ mod test {
             fn write_dependencies(&self) -> Vec<Dependency> {
                 vec![Dependency::texture(self.write, TextureUsages::COPY_DST)]
             }
+
+            fn update(&mut self, _ctx: super::NodeUpdateContext) -> anyhow::Result<()> {
+                Ok(())
+            }
         }
 
         struct ReadFromTexture {
@@ -465,6 +530,10 @@ mod test {
                     BufferUsages::COPY_DST,
                 )]
             }
+
+            fn update(&mut self, _ctx: super::NodeUpdateContext) -> anyhow::Result<()> {
+                Ok(())
+            }
         }
 
         struct WriteIntoTexture {
@@ -499,6 +568,10 @@ mod test {
                     self.texture,
                     TextureUsages::COPY_DST | TextureUsages::COPY_SRC,
                 )]
+            }
+
+            fn update(&mut self, _ctx: super::NodeUpdateContext) -> anyhow::Result<()> {
+                Ok(())
             }
         }
 
