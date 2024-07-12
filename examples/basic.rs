@@ -521,7 +521,7 @@ impl RenderGraphRenderer {
         };
 
         let multisampled_hdr = render_graph.resources.insert_texture(ManagedTextureDesc {
-            label: "final_color".into(),
+            label: "multisampled_hdr".into(),
             extent,
             dimension: wgpu::TextureDimension::D2,
             format: TextureFormat::Rgba16Float,
@@ -529,7 +529,6 @@ impl RenderGraphRenderer {
             sample_count: 4,
             persistent: false,
         });
-
 
         let final_color = render_graph.resources.insert_texture(ManagedTextureDesc {
             label: "final_color".into(),
@@ -542,13 +541,13 @@ impl RenderGraphRenderer {
         });
 
         let bloom_result = render_graph.resources.insert_texture(ManagedTextureDesc {
-            label: "final_color".into(),
+            label: "bloom_result".into(),
             extent,
             dimension: wgpu::TextureDimension::D2,
             format: TextureFormat::Rgba16Float,
             mip_level_count: 1,
             sample_count: 1,
-            persistent: true,
+            persistent: false,
         });
 
         let depth_texture = render_graph.resources.insert_texture(ManagedTextureDesc {
@@ -567,14 +566,14 @@ impl RenderGraphRenderer {
 
         let camera_renderer = (SkyboxRenderer::new(gpu), MeshRenderer::new(gpu));
 
-        // render_graph.add_node(HdriProcessorNode::new(
-        //     hdri_processor,
-        //     image,
-        //     skybox,
-        //     skybox_ir,
-        //     skybox_specular,
-        //     integrated_brdf,
-        // ));
+        render_graph.add_node(HdriProcessorNode::new(
+            hdri_processor,
+            image,
+            skybox,
+            skybox_ir,
+            skybox_specular,
+            integrated_brdf,
+        ));
 
         render_graph.add_node(CameraNode::new(
             gpu,
@@ -585,7 +584,7 @@ impl RenderGraphRenderer {
         ));
 
         render_graph.add_node(MsaaResolve::new(multisampled_hdr, final_color));
-        // render_graph.add_node(BloomNode::new(gpu, final_color, bloom_result, 5, 0.005));
+        render_graph.add_node(BloomNode::new(gpu, final_color, bloom_result, 5, 0.005));
         render_graph.add_node(TonemapNode::new(gpu, final_color, surface_texture));
 
         Self {
@@ -642,7 +641,7 @@ impl ivy_wgpu::layer::Renderer for RenderGraphRenderer {
             .as_managed_mut()
             .unwrap()
             .extent = new_extent;
-        
+
         self.render_graph
             .resources
             .get_texture_mut(self.depth_texture)

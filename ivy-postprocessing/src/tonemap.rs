@@ -108,4 +108,8 @@ impl Node for TonemapNode {
             TextureUsages::RENDER_ATTACHMENT,
         )]
     }
+
+    fn on_resource_changed(&mut self, _resource: ivy_wgpu::rendergraph::ResourceHandle) {
+        self.bind_group = None;
+    }
 }
