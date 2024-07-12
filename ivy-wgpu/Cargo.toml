@@ -30,6 +30,7 @@ slab.workspace = true
 slotmap.workspace = true
 mikktspace.workspace = true
 rayon.workspace = true
+ordered-float.workspace = true
 
 [dev-dependencies]
 tracing-subscriber.workspace = true

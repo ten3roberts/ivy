@@ -25,7 +25,10 @@ use ivy_input::{
     Action, Axis3, BindingExt, CursorMovement, InputState, KeyBinding, MouseButtonBinding,
 };
 use ivy_postprocessing::{
-    bloom::BloomNode, hdri::{HdriProcessor, HdriProcessorNode}, skybox::SkyboxRenderer, tonemap::TonemapNode
+    bloom::BloomNode,
+    hdri::{HdriProcessor, HdriProcessorNode},
+    skybox::SkyboxRenderer,
+    tonemap::TonemapNode,
 };
 use ivy_rendergraph::components::render_graph;
 use ivy_scene::GltfNodeExt;
@@ -43,15 +46,21 @@ use ivy_wgpu::{
         mesh_renderer::MeshRenderer, CameraNode, EnvironmentData, MsaaResolve, RenderObjectBundle,
     },
     rendergraph::{self, ExternalResources, ManagedTextureDesc, RenderGraph},
-    shaders::PbrShaderKey,
+    shaders::PbrShaderDesc,
     texture::TextureDesc,
     Gpu,
 };
-use ivy_wgpu_types::{texture::{max_mip_levels, read_texture}, PhysicalSize, Surface};
+use ivy_wgpu_types::{
+    texture::{max_mip_levels, read_texture},
+    PhysicalSize, Surface,
+};
 use tracing::Instrument;
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
-use wgpu::{core::binding_model::BindGroupLayoutEntryError, Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages};
+use wgpu::{
+    core::binding_model::BindGroupLayoutEntryError, Extent3d, TextureDescriptor, TextureDimension,
+    TextureFormat, TextureUsages,
+};
 
 pub fn main() -> anyhow::Result<()> {
     registry()
@@ -116,68 +125,37 @@ impl LogicLayer {
             let cmd = cmd.clone();
             let assets = assets.clone();
             async move {
+                let shader = assets.load(&PbrShaderDesc);
+                let sphere_mesh = MeshDesc::content(assets.load(&UvSphereDesc::default()));
+                // let materials:Asset<Document> = assets.load_async("textures/materials.glb").await;
 
-            let shader = assets.load(&PbrShaderKey);
-            let sphere_mesh = MeshDesc::content(assets.load(&UvSphereDesc::default()));
-            let materials:Asset<Document> = assets.load_async("textures/materials.glb").await;
+                // {
+                //     let mut cmd = cmd.lock();
 
-            {
-                let mut cmd = cmd.lock();
+                //     for (i, material) in materials.materials().enumerate() {
 
-                for (i, material) in materials.materials().enumerate() {
-
-                    cmd.spawn(
-                        Entity::builder()
-                        .mount(TransformBundle::new(
-                                vec3(0.0 + i as f32 * 2.0, 5.0, 5.0),
-                                Quat::IDENTITY,
-                                Vec3::ONE,
-                        ))
-                        .mount(RenderObjectBundle {
-                            mesh: sphere_mesh.clone(),
-                            material: material.into(),
-                            shader: shader.clone(),
-                        }),
-                    );
-                }
+                //         cmd.spawn(
+                //             Entity::builder()
+                //             .mount(TransformBundle::new(
+                //                     vec3(0.0 + i as f32 * 2.0, 5.0, 5.0),
+                //                     Quat::IDENTITY,
+                //                     Vec3::ONE,
+                //             ))
+                //             .mount(RenderObjectBundle {
+                //                 mesh: sphere_mesh.clone(),
+                //                 material: material.into(),
+                //                 shader: shader.clone(),
+                //             }),
+                //         );
+                //     }
+                // }
             }
-        }});
+        });
 
         async_std::task::spawn(
             async move {
-
                 let sphere_mesh = MeshDesc::content(assets.load(&UvSphereDesc::default()));
-
-                let material = MaterialDesc::content(
-                    assets.insert(
-                        MaterialData::new()
-                            .with_albedo(
-                                "./assets/textures/MetalPlates012_1K-PNG/MetalPlates012_1K-PNG_Color.png",
-                            )
-                            .with_normal(
-                                "./assets/textures/MetalPlates012_1K-PNG/MetalPlates012_1K-PNG_NormalGL.png",
-                            )
-                            .with_metallic_roughness(
-                                "./assets/textures/MetalPlates012_1K-PNG/MetalPlates012_1K-PNG_Metalness.png",
-                            ).with_roughness(0.1),
-                    ),
-                );
-
-            let shader = assets.load(&PbrShaderKey);
-                 
-                cmd.lock().spawn(
-                    Entity::builder()
-                        .mount(TransformBundle::new(
-                            vec3(-3.0, 0.0, 5.0),
-                            Quat::IDENTITY,
-                            Vec3::ONE,
-                        ))
-                        .mount(RenderObjectBundle {
-                            mesh: sphere_mesh.clone(),
-                            material,
-                            shader: shader.clone(),
-                        }),
-                );
+                let shader = assets.load(&PbrShaderDesc);
 
                 for i in 0..8 {
                     let roughness = i as f32 / (7) as f32;
@@ -185,13 +163,10 @@ impl LogicLayer {
                         let metallic = j as f32;
 
                         let plastic_material = MaterialDesc::content(
-                            assets.insert(
-                                MaterialData::new()
-                                    .with_metallic(metallic)
-                                    .with_roughness(roughness),
-                            ),
+                            MaterialData::new()
+                                .with_metallic(metallic)
+                                .with_roughness(roughness),
                         );
-
 
                         cmd.lock().spawn(
                             Entity::builder()
@@ -209,20 +184,20 @@ impl LogicLayer {
                     }
                 }
 
-                let document: Asset<Document> = assets.load_async("models/Sphere.glb").await;
+                // let document: Asset<Document> = assets.load_async("models/Sphere.glb").await;
 
-                let root: EntityBuilder = document
-                    .node(0)
-                    .unwrap()
-                    .mount(&assets, &mut Entity::builder())
-                    .mount(TransformBundle::new(
-                        vec3(3.0, 0.0, -2.0),
-                        Quat::IDENTITY,
-                        Vec3::ONE,
-                    ))
-                    .into();
+                // let root: EntityBuilder = document
+                //     .node(0)
+                //     .unwrap()
+                //     .mount(&assets, &mut Entity::builder())
+                //     .mount(TransformBundle::new(
+                //         vec3(3.0, 0.0, -2.0),
+                //         Quat::IDENTITY,
+                //         Vec3::ONE,
+                //     ))
+                //     .into();
 
-                cmd.lock().spawn(root);
+                // cmd.lock().spawn(root);
             }
             .instrument(tracing::info_span!("load_assets")),
         );
@@ -474,7 +449,7 @@ impl RenderGraphRenderer {
 
         let image: Asset<DynamicImage> =
             assets.load("ivy-postprocessing/hdrs/lauter_waterfall_4k.hdr");
-            // assets.load("ivy-postprocessing/hdrs/kloofendal_puresky_2k.hdr");
+        // assets.load("ivy-postprocessing/hdrs/kloofendal_puresky_2k.hdr");
         // assets.load("ivy-postprocessing/hdrs/industrial_sunset_puresky_2k.hdr");
 
         const MAX_REFLECTION_LOD: u32 = 8;
@@ -483,7 +458,7 @@ impl RenderGraphRenderer {
 
         let mut render_graph = RenderGraph::new();
 
-        let skybox = render_graph.resources.insert_texture(ManagedTextureDesc{
+        let skybox = render_graph.resources.insert_texture(ManagedTextureDesc {
             label: "hdr_cubemap".into(),
             extent: Extent3d {
                 width: 1024,
@@ -497,7 +472,7 @@ impl RenderGraphRenderer {
             persistent: true,
         });
 
-        let skybox_ir = render_graph.resources.insert_texture(ManagedTextureDesc{
+        let skybox_ir = render_graph.resources.insert_texture(ManagedTextureDesc {
             label: "skybox_ir".into(),
             extent: Extent3d {
                 width: 128,
@@ -511,7 +486,7 @@ impl RenderGraphRenderer {
             persistent: true,
         });
 
-        let skybox_specular = render_graph.resources.insert_texture(ManagedTextureDesc{
+        let skybox_specular = render_graph.resources.insert_texture(ManagedTextureDesc {
             label: "hdr_cubemap".into(),
             extent: Extent3d {
                 width: 128,
@@ -536,7 +511,7 @@ impl RenderGraphRenderer {
             sample_count: 1,
             dimension: TextureDimension::D2,
             format: TextureFormat::Rgba16Float,
-            persistent:true
+            persistent: true,
         });
 
         let extent = wgpu::Extent3d {
@@ -592,31 +567,26 @@ impl RenderGraphRenderer {
 
         let camera_renderer = (SkyboxRenderer::new(gpu), MeshRenderer::new(gpu));
 
-        render_graph.add_node(HdriProcessorNode::new(
-            hdri_processor,
-            image,
-            skybox,
-            skybox_ir,
-            skybox_specular,
-            integrated_brdf,
-        ));
+        // render_graph.add_node(HdriProcessorNode::new(
+        //     hdri_processor,
+        //     image,
+        //     skybox,
+        //     skybox_ir,
+        //     skybox_specular,
+        //     integrated_brdf,
+        // ));
 
         render_graph.add_node(CameraNode::new(
             gpu,
             depth_texture,
             multisampled_hdr,
             camera_renderer,
-            EnvironmentData::new(
-                skybox,
-                skybox_ir,
-                skybox_specular,
-                integrated_brdf,
-            ),
+            EnvironmentData::new(skybox, skybox_ir, skybox_specular, integrated_brdf),
         ));
 
         render_graph.add_node(MsaaResolve::new(multisampled_hdr, final_color));
-        render_graph.add_node(BloomNode::new(gpu, final_color, bloom_result , 5, 0.005));
-        render_graph.add_node(TonemapNode::new(gpu, bloom_result, surface_texture));
+        // render_graph.add_node(BloomNode::new(gpu, final_color, bloom_result, 5, 0.005));
+        render_graph.add_node(TonemapNode::new(gpu, final_color, surface_texture));
 
         Self {
             render_graph,

@@ -62,10 +62,11 @@ smallvec = "1.0"
 thiserror = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "parking_lot"] }
-tracing-tree = "0.3"
+tracing-tree = "0.4"
 wgpu = "0.20.1"
 winit = "0.30"
 rayon = "1.0"
+ordered-float = "4.2"
 
 [dependencies]
 ivy-collision = { path = "./ivy-collision", version = "0.10" }

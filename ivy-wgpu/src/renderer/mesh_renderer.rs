@@ -19,7 +19,7 @@ use wgpu::{BindGroup, BindGroupLayout, BufferUsages, RenderPass, ShaderStages, T
 use crate::{
     components::{material, mesh, mesh_primitive, shader},
     material::Material,
-    material_desc::MaterialDesc,
+    material_desc::{MaterialData, MaterialDesc},
     mesh::{Vertex, VertexDesc},
     mesh_buffer::{MeshBuffer, MeshHandle},
     mesh_desc::MeshDesc,
@@ -30,7 +30,7 @@ use crate::{
 
 use super::{CameraRenderer, CameraShaderData, ObjectData};
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BatchKey {
     pub shader: Asset<crate::shader::ShaderDesc>,
     pub material: MaterialDesc,
@@ -115,7 +115,7 @@ pub struct MeshRenderer {
     pub materials: HashMap<MaterialDesc, Asset<Material>>,
 
     batches: Slab<Batch>,
-    batch_map: BTreeMap<BatchKey, BatchId>,
+    batch_map: HashMap<BatchKey, BatchId>,
 
     object_query: Query<(
         Component<usize>,
@@ -135,7 +135,7 @@ impl MeshRenderer {
             gpu,
             "Object buffer",
             BufferUsages::STORAGE | BufferUsages::COPY_DST,
-            &[ObjectData::zeroed(); 8],
+            &[ObjectData::zeroed(); 64],
         );
 
         let bind_group = BindGroupBuilder::new("ObjectBuffer")
@@ -237,7 +237,10 @@ impl MeshRenderer {
                     }
                 };
 
-                let material: Asset<Material> = assets.load(&k.material);
+                let material: Asset<Material> = assets.try_load(&k.material).unwrap_or_else(|e| {
+                    tracing::error!(?k.material, "{:?}", e.context("Failed to load material"));
+                    assets.load(&MaterialDesc::content(MaterialData::new()))
+                });
 
                 let shader = self.shaders.entry(&k.shader).or_insert_with(|| {
                     store.shaders.insert(Shader::new(
