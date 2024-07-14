@@ -192,6 +192,8 @@ impl HdriProcessor {
                 layouts: &[&bind_group_layout],
                 depth_format: None,
                 sample_count: 1,
+                fragment_entry_point: "fs_main",
+                vertex_entry_point: "vs_main",
             },
         );
 
@@ -284,6 +286,8 @@ impl HdriProcessor {
                 layouts: &[&bind_group_layout],
                 depth_format: None,
                 sample_count: 1,
+                fragment_entry_point: "fs_main",
+                vertex_entry_point: "vs_main",
             },
         );
 
@@ -373,6 +377,8 @@ impl HdriProcessor {
                 layouts: &[&bind_group_layout],
                 depth_format: None,
                 sample_count: 1,
+                fragment_entry_point: "fs_main",
+                vertex_entry_point: "vs_main",
             },
         );
 
@@ -421,6 +427,8 @@ impl HdriProcessor {
                 layouts: &[],
                 depth_format: None,
                 sample_count: 1,
+                fragment_entry_point: "fs_main",
+                vertex_entry_point: "vs_main",
             },
         );
 

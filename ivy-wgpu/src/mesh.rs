@@ -1,4 +1,4 @@
-use glam::{Vec2, Vec3, Vec4};
+use glam::{U16Vec4, UVec4, Vec2, Vec3, Vec4};
 use ivy_assets::Asset;
 use wgpu::{
     util::DeviceExt, vertex_attr_array, Buffer, RenderPass, VertexAttribute, VertexBufferLayout,
@@ -31,6 +31,7 @@ impl Vertex {
         }
     }
 }
+
 impl VertexDesc for Vertex {
     fn layout() -> VertexBufferLayout<'static> {
         static ATTRIBUTES: &[VertexAttribute] =
@@ -38,6 +39,29 @@ impl VertexDesc for Vertex {
 
         wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: ATTRIBUTES,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Debug, Clone)]
+pub struct SkinnedVertex {
+    pub pos: Vec3,
+    pub tex_coord: Vec2,
+    pub normal: Vec3,
+    pub tangent: Vec4,
+    pub joints: UVec4,
+    pub weights: Vec4,
+}
+
+impl VertexDesc for SkinnedVertex {
+    fn layout() -> VertexBufferLayout<'static> {
+        static ATTRIBUTES: &[VertexAttribute] = &vertex_attr_array![0 => Float32x3, 1 => Float32x2, 2 => Float32x3, 3 => Float32x4, 4 => Uint32x4, 5 => Float32x4];
+
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Self>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: ATTRIBUTES,
         }

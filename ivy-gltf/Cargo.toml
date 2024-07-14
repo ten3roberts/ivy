@@ -5,6 +5,7 @@ edition = "2021"
 description = "Gltf asset management for Ivy"
 
 [dependencies]
+ivy-core = { path = "../ivy-core" }
 ivy-assets = { path = "../ivy-assets" }
 ivy-profiling = { path = "../ivy-profiling" }
 
@@ -17,3 +18,4 @@ flax.workspace = true
 image.workspace = true
 async-std.workspace = true
 futures.workspace = true
+ordered-float.workspace = true

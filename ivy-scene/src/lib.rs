@@ -1,8 +1,12 @@
 use flax::{components::child_of, Entity, EntityBuilder};
 use ivy_assets::AssetCache;
-use ivy_core::{EntityBuilderExt, TransformBundle};
-use ivy_gltf::{GltfNode, GltfNodeRef};
-use ivy_wgpu::{components::mesh_primitive, renderer::RenderObjectBundle, shaders::PbrShaderDesc};
+use ivy_core::EntityBuilderExt;
+use ivy_gltf::GltfNode;
+use ivy_wgpu::{
+    components::mesh_primitive,
+    renderer::RenderObjectBundle,
+    shaders::{PbrShaderDesc, SkinnedPbrShaderDesc},
+};
 
 pub trait GltfNodeExt {
     fn mount<'a>(
@@ -12,12 +16,14 @@ pub trait GltfNodeExt {
     ) -> &'a mut EntityBuilder;
 }
 
-impl GltfNodeExt for GltfNodeRef<'_> {
+impl GltfNodeExt for GltfNode {
     fn mount<'a>(
         &self,
         assets: &AssetCache,
         entity: &'a mut EntityBuilder,
     ) -> &'a mut EntityBuilder {
+        let skin = self.skin();
+
         if let Some(mesh) = self.mesh() {
             for primitive in mesh.primitives() {
                 let material = primitive.material().into();
@@ -26,29 +32,27 @@ impl GltfNodeExt for GltfNodeRef<'_> {
                     Entity::builder().mount(RenderObjectBundle::new(
                         primitive.into(),
                         material,
-                        assets.load(&PbrShaderDesc),
+                        if skin.is_some() {
+                            assets.load(&SkinnedPbrShaderDesc)
+                        } else {
+                            assets.load(&PbrShaderDesc)
+                        },
                     )),
                 );
             }
         }
 
-        let (position, rotation, scale) = self.transform();
-        entity.mount(TransformBundle::new(position, rotation, scale));
+        if let Some(skin) = skin {
+            tracing::info!("adding skin to node");
+            entity.set(ivy_gltf::components::skin(), skin);
+        }
+
+        entity.mount(self.transform());
 
         for child in self.children() {
             entity.attach(child_of, child.mount(assets, &mut Entity::builder()));
         }
 
         entity
-    }
-}
-
-impl GltfNodeExt for GltfNode {
-    fn mount<'a>(
-        &self,
-        assets: &AssetCache,
-        entity: &'a mut EntityBuilder,
-    ) -> &'a mut EntityBuilder {
-        self.get_ref().mount(assets, entity)
     }
 }

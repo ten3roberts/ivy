@@ -1,5 +1,5 @@
 use ivy_assets::{Asset, AssetDesc};
-use ivy_gltf::{GltfMaterial, GltfMaterialRef};
+use ivy_gltf::GltfMaterial;
 use ordered_float::NotNan;
 use wgpu::TextureFormat;
 
@@ -10,12 +10,6 @@ pub enum MaterialDesc {
     Gltf(GltfMaterial),
 
     Content(MaterialData),
-}
-
-impl From<GltfMaterialRef<'_>> for MaterialDesc {
-    fn from(v: GltfMaterialRef) -> Self {
-        Self::Gltf(v.into())
-    }
 }
 
 impl From<GltfMaterial> for MaterialDesc {

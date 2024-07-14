@@ -6,14 +6,17 @@ use std::{
 use bytemuck::Zeroable;
 use flax::{
     entity_ids,
-    fetch::{entity_refs, Copied, Modified, Source, TransformFetch, Traverse},
+    fetch::{Copied, Modified, Source, TransformFetch, Traverse},
     CommandBuffer, Component, Fetch, FetchExt, Query, World,
 };
 use glam::{Mat4, Vec4Swizzles};
 use itertools::Itertools;
 use ivy_assets::{map::AssetMap, stored::Handle, Asset, AssetCache};
 use ivy_core::world_transform;
-use ivy_gltf::components::skin;
+use ivy_gltf::{
+    animation::{player::Animator, skin::Skin},
+    components::{animator, skin},
+};
 use slab::Slab;
 use wgpu::{BindGroup, BindGroupLayout, BufferUsages, RenderPass, ShaderStages, TextureFormat};
 
@@ -21,7 +24,7 @@ use crate::{
     components::{material, mesh, mesh_primitive, shader},
     material::Material,
     material_desc::{MaterialData, MaterialDesc},
-    mesh::{Vertex, VertexDesc},
+    mesh::{SkinnedVertex, VertexDesc},
     mesh_buffer::{MeshBuffer, MeshHandle},
     mesh_desc::MeshDesc,
     renderer::RendererStore,
@@ -33,6 +36,7 @@ use super::{CameraRenderer, CameraShaderData, ObjectData};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BatchKey {
+    pub skin: Asset<Skin>,
     pub shader: Asset<crate::shader::ShaderDesc>,
     pub material: MaterialDesc,
     pub mesh: MeshDesc,
@@ -44,13 +48,25 @@ struct Batch {
     first_instance: u32,
     instance_capacity: u32,
 
-    mesh: Arc<MeshHandle>,
+    skin: Asset<Skin>,
+    mesh: Arc<MeshHandle<SkinnedVertex>>,
     material: Asset<Material>,
     shader: Handle<Shader>,
+    skinning_buffer: TypedBuffer<Mat4>,
+    skinning_data: Vec<Mat4>,
+
+    bind_group: BindGroup,
 }
 
 impl Batch {
-    pub fn new(mesh: Arc<MeshHandle>, material: Asset<Material>, shader: Handle<Shader>) -> Self {
+    pub fn new(
+        mesh: Arc<MeshHandle<SkinnedVertex>>,
+        material: Asset<Material>,
+        shader: Handle<Shader>,
+        skin: Asset<Skin>,
+        skinning_buffer: TypedBuffer<Mat4>,
+        bind_group: BindGroup,
+    ) -> Self {
         Self {
             instance_count: 0,
             first_instance: 0,
@@ -58,6 +74,10 @@ impl Batch {
             material,
             shader,
             instance_capacity: 0,
+            skin,
+            skinning_buffer,
+            skinning_data: Vec::new(),
+            bind_group,
         }
     }
 
@@ -75,7 +95,9 @@ impl Batch {
         render_pass: &mut RenderPass<'a>,
     ) {
         render_pass.set_pipeline(store.shaders[&self.shader].pipeline());
+        render_pass.set_bind_group(1, &self.bind_group, &[]);
         render_pass.set_bind_group(2, self.material.bind_group(), &[]);
+
         let index_offset = self.mesh.ib().offset() as u32;
 
         render_pass.draw_indexed(
@@ -89,18 +111,22 @@ impl Batch {
 #[derive(Fetch)]
 #[fetch(transforms = [ Modified ])]
 struct ObjectDataQuery {
-    transform: Source<Copied<Component<Mat4>>, Traverse>,
+    transform: Copied<Component<Mat4>>,
+    animator: Component<Animator>,
+    skin: Component<Asset<Skin>>,
 }
 
 impl ObjectDataQuery {
     pub fn new() -> Self {
         Self {
-            transform: world_transform().copied().traverse(mesh_primitive),
+            transform: world_transform().copied(),
+            animator: animator(),
+            skin: skin(),
         }
     }
 }
 
-pub struct MeshRenderer {
+pub struct SkinnedMeshRenderer {
     /// All the objects registered
     /// |****-|**---|**|
     ///
@@ -109,9 +135,8 @@ pub struct MeshRenderer {
     object_buffer: TypedBuffer<ObjectData>,
 
     bind_group_layout: BindGroupLayout,
-    bind_group: BindGroup,
 
-    pub meshes: HashMap<MeshDesc, Weak<MeshHandle>>,
+    pub meshes: HashMap<MeshDesc, Weak<MeshHandle<SkinnedVertex>>>,
     pub shaders: AssetMap<crate::shader::ShaderDesc, Handle<Shader>>,
     pub materials: HashMap<MaterialDesc, Asset<Material>>,
 
@@ -120,15 +145,17 @@ pub struct MeshRenderer {
 
     object_query: Query<(
         Component<usize>,
-        <ObjectDataQuery as TransformFetch<Modified>>::Output,
+        Component<usize>,
+        Source<ObjectDataQuery, Traverse>,
     )>,
 
-    mesh_buffer: MeshBuffer,
+    mesh_buffer: MeshBuffer<SkinnedVertex>,
 }
 
-impl MeshRenderer {
+impl SkinnedMeshRenderer {
     pub fn new(gpu: &Gpu) -> Self {
         let bind_group_layout = BindGroupLayoutBuilder::new("ObjectBuffer")
+            .bind_storage_buffer(ShaderStages::VERTEX)
             .bind_storage_buffer(ShaderStages::VERTEX)
             .build(gpu);
 
@@ -139,21 +166,20 @@ impl MeshRenderer {
             &[ObjectData::zeroed(); 64],
         );
 
-        let bind_group = BindGroupBuilder::new("ObjectBuffer")
-            .bind_buffer(&object_buffer)
-            .build(gpu, &bind_group_layout);
-
         Self {
             object_data: Vec::new(),
             object_buffer,
             bind_group_layout,
-            bind_group,
             meshes: Default::default(),
             shaders: Default::default(),
             materials: Default::default(),
             batches: Default::default(),
             batch_map: Default::default(),
-            object_query: Query::new((object_index(), ObjectDataQuery::new().modified())),
+            object_query: Query::new((
+                object_index(),
+                batch_id(),
+                ObjectDataQuery::new().traverse(mesh_primitive),
+            )),
             mesh_buffer: MeshBuffer::new(gpu, "mesh_buffer", 4),
         }
     }
@@ -165,10 +191,6 @@ impl MeshRenderer {
 
         self.object_buffer
             .resize(gpu, capacity.next_power_of_two(), false);
-
-        self.bind_group = BindGroupBuilder::new("ObjectBuffer")
-            .bind_buffer(&self.object_buffer)
-            .build(gpu, &self.bind_group_layout);
     }
 
     pub fn collect_unbatched(
@@ -182,50 +204,39 @@ impl MeshRenderer {
         format: TextureFormat,
     ) {
         let mut query = Query::new((
-            entity_refs(),
+            entity_ids(),
             mesh().cloned(),
             material().cloned(),
             shader().cloned(),
+            skin().cloned().traverse(mesh_primitive),
         ))
         .without(object_index());
 
         let mut needs_reallocation = false;
-        for (entity, mesh, material, shader) in &mut query.borrow(world) {
-            if entity
-                .query(&skin().traverse(mesh_primitive))
-                .get()
-                .is_some()
-            {
-                continue;
-            }
-            let id = entity.id();
+        for (id, mesh, material, shader, skin) in &mut query.borrow(world) {
+            let skinning_buffer = TypedBuffer::new_uninit(
+                gpu,
+                "skinning_buffer",
+                BufferUsages::STORAGE | BufferUsages::COPY_DST,
+                skin.joints().len() * 64,
+            );
+
             let key = BatchKey {
                 mesh,
                 material,
                 shader,
+                skin,
             };
 
             let batch_id = *self.batch_map.entry(key).or_insert_with_key(|k| {
-                // TODO: local storage
-
                 let mut load_mesh = |v: &MeshDesc| {
                     let data = v.load_data(assets).unwrap();
-                    assert!(
-                        !data
-                            .vertices()
-                            .iter()
-                            .all(|v| v.tangent.xyz().length() == 0.0),
-                        "Tangents should be non-zero {:?}",
-                        data.vertices()
-                            .iter()
-                            .map(|v| v.tangent.to_string())
-                            .collect_vec()
-                    );
 
-                    Arc::new(
-                        self.mesh_buffer
-                            .insert(gpu, data.vertices(), data.indices()),
-                    )
+                    Arc::new(self.mesh_buffer.insert(
+                        gpu,
+                        &data.skinned_vertices().collect_vec(),
+                        data.indices(),
+                    ))
                 };
 
                 let mesh = match self.meshes.entry(k.mesh.clone()) {
@@ -257,7 +268,7 @@ impl MeshRenderer {
                             label: k.shader.label(),
                             source: k.shader.source(),
                             format,
-                            vertex_layouts: &[Vertex::layout()],
+                            vertex_layouts: &[SkinnedVertex::layout()],
                             layouts: &[&globals.layout, &self.bind_group_layout, material.layout()],
                             depth_format: Some(TextureFormat::Depth24Plus),
                             sample_count: 4,
@@ -267,8 +278,19 @@ impl MeshRenderer {
                     ))
                 });
 
-                self.batches
-                    .insert(Batch::new(mesh, material, shader.clone()))
+                let bind_group = BindGroupBuilder::new("ObjectBuffer")
+                    .bind_buffer(&self.object_buffer)
+                    .bind_buffer(&skinning_buffer)
+                    .build(gpu, &self.bind_group_layout);
+
+                self.batches.insert(Batch::new(
+                    mesh,
+                    material,
+                    shader.clone(),
+                    k.skin.clone(),
+                    skinning_buffer,
+                    bind_group,
+                ))
             });
 
             cmd.set(id, object_index(), usize::MAX)
@@ -299,10 +321,21 @@ impl MeshRenderer {
 
             batch.first_instance = cursor;
             batch.instance_capacity = cap;
+            batch.skinning_data = vec![Mat4::IDENTITY; batch.skin.joints().len() * cap as usize];
+
+            batch.bind_group = BindGroupBuilder::new("SkinnedObjectBuffer")
+                .bind_buffer(&self.object_buffer)
+                .bind_buffer(&batch.skinning_buffer)
+                .build(gpu, &self.bind_group_layout);
+
             cursor += cap;
         }
 
-        let mut query = Query::new((batch_id(), object_index().as_mut(), ObjectDataQuery::new()));
+        let mut query = Query::new((
+            batch_id(),
+            object_index().as_mut(),
+            ObjectDataQuery::new().traverse(mesh_primitive),
+        ));
 
         let mut total_found = 0;
 
@@ -313,7 +346,9 @@ impl MeshRenderer {
             *object_index = index as usize;
             batch.instance_count += 1;
             total_found += 1;
+
             assert!(total_found <= total_registered);
+
             self.object_data[index as usize] = ObjectData {
                 transform: item.transform,
             };
@@ -325,17 +360,30 @@ impl MeshRenderer {
     }
 
     fn update_object_data(&mut self, world: &World, gpu: &Gpu) {
-        for (&object_index, item) in &mut self.object_query.borrow(world) {
+        for (&object_index, &batch_index, item) in &mut self.object_query.borrow(world) {
+            let batch = &mut self.batches[batch_index];
+
+            let local_offset = object_index - batch.first_instance as usize;
+
             self.object_data[object_index] = ObjectData {
                 transform: item.transform,
             };
+
+            item.animator
+                .fill_buffer(item.skin, &mut batch.skinning_data[local_offset..]);
         }
 
         self.object_buffer.write(&gpu.queue, 0, &self.object_data);
+
+        for (_, batch) in &self.batches {
+            batch
+                .skinning_buffer
+                .write(&gpu.queue, 0, &batch.skinning_data);
+        }
     }
 }
 
-impl CameraRenderer for MeshRenderer {
+impl CameraRenderer for SkinnedMeshRenderer {
     fn update(&mut self, ctx: &mut super::UpdateContext) -> anyhow::Result<()> {
         let mut cmd = CommandBuffer::new();
         self.collect_unbatched(
@@ -366,7 +414,6 @@ impl CameraRenderer for MeshRenderer {
 
         self.mesh_buffer.bind(render_pass);
 
-        render_pass.set_bind_group(1, &self.bind_group, &[]);
         for batch_id in self.batch_map.values() {
             let batch = &self.batches[*batch_id];
             tracing::trace!(instance_count = batch.instance_count, "drawing batch");

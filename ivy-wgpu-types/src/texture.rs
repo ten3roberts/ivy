@@ -46,7 +46,7 @@ pub fn texture_from_image(
     image: &image::DynamicImage,
     desc: TextureFromImageDesc,
 ) -> anyhow::Result<Texture> {
-    let _span = tracing::info_span!("texture_from_image", label = %desc.label).entered();
+    let _span = tracing::debug_span!("texture_from_image", label = %desc.label).entered();
 
     let image = normalize_image_format(image, desc.format)?;
     let dimensions = image.dimensions();
@@ -77,7 +77,7 @@ pub fn texture_from_image(
         view_formats: &[],
     });
 
-    tracing::info!( color_format = ?image.color(), "loading image of format");
+    tracing::trace!( color_format = ?image.color(), "loading image of format");
 
     // Write to the texture
     gpu.queue.write_texture(
@@ -140,7 +140,6 @@ pub async fn read_texture(
         depth_or_array_layers: 1,
     };
 
-    tracing::info!(?extent, "reading back texture");
     let block_size = texture.format().block_copy_size(None).unwrap();
 
     let byte_size = extent.width as u64 * extent.height as u64 * block_size as u64;

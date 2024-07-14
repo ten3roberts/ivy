@@ -1,28 +1,38 @@
+pub mod animation;
 pub mod components;
 
+use animation::skin::Skin;
+use animation::Animation;
 use futures::StreamExt;
 use futures::TryStreamExt;
-use glam::{Quat, Vec3};
+use glam::Quat;
 use image::{DynamicImage, ImageBuffer, RgbImage, RgbaImage};
 use itertools::Itertools;
 use ivy_assets::fs::AsyncAssetFromPath;
+use ivy_assets::AssetId;
+use ivy_core::TransformBundle;
 use ivy_profiling::profile_scope;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::{collections::HashMap, path::Path};
 use tracing::Instrument;
 
-use gltf::{Gltf, Mesh};
+use gltf::Gltf;
 use ivy_assets::{Asset, AssetCache};
 
 /// An in memory representation of a gltf document and binary buffer data
 pub struct DocumentData {
     gltf: Gltf,
+
     named_meshes: HashMap<String, usize>,
     named_materials: HashMap<String, usize>,
     named_nodes: HashMap<String, usize>,
+    named_animations: HashMap<String, usize>,
 
     buffer_data: Arc<Vec<gltf::buffer::Data>>,
     images: Vec<Asset<DynamicImage>>,
+
+    skins: Vec<Asset<Skin>>,
     // buffer_data: Vec<gltf::buffer::Data>,
 }
 
@@ -134,58 +144,91 @@ impl Document {
             .filter_map(|(i, v)| Some((v.name().map(ToString::to_string)?, i)))
             .collect();
 
-        Ok(Self {
-            data: assets.insert(DocumentData {
-                gltf,
-                named_meshes,
-                named_materials,
-                named_nodes,
-                buffer_data,
-                images,
-            }),
-        })
+        let named_animations = gltf
+            .document
+            .animations()
+            .enumerate()
+            .filter_map(|(i, v)| Some((v.name().map(ToString::to_string)?, i)))
+            .collect();
+
+        let skins = Skin::load_from_document(assets, &gltf.document, &buffer_data)?;
+
+        let data = assets.insert(DocumentData {
+            gltf,
+            named_meshes,
+            named_materials,
+            named_nodes,
+            buffer_data,
+            images,
+            named_animations,
+            skins,
+        });
+
+        // let skins: Vec<_> = data
+        //     .gltf
+        //     .document
+        //     .skins()
+        //     .map(|v| anyhow::Ok(assets.insert(Skin::from_gltf(data.clone(), v)?)))
+        //     .try_collect()?;
+
+        // let animations = data
+        //     .gltf
+        //     .document
+        //     .animations()
+        //     .flat_map(|v| Animation::from_gltf(v, &skins, &data.buffer_data))
+        //     .map(|(k, v)| (k, assets.insert(v)))
+        //     .fold(BTreeMap::new(), |mut acc, (skin, v)| {
+        //         acc.entry(skin).or_insert_with(Vec::new).push(v);
+        //         acc
+        //     });
+
+        Ok(Self { data })
     }
 
-    pub fn meshes(&self) -> impl Iterator<Item = GltfMeshRef> {
-        self.data.meshes().map(|v| GltfMeshRef::new(&self.data, v))
+    pub fn meshes(&self) -> impl Iterator<Item = GltfMesh> + '_ {
+        self.data
+            .meshes()
+            .map(|v| GltfMesh::new(self.data.clone(), v))
     }
 
-    pub fn materials(&self) -> impl Iterator<Item = GltfMaterialRef> {
+    pub fn materials(&self) -> impl Iterator<Item = GltfMaterial> + '_ {
         self.data
             .materials()
-            .map(|v| GltfMaterialRef::new(&self.data, v))
+            .map(|v| GltfMaterial::new(self.data.clone(), v))
     }
 
-    pub fn nodes(&self) -> impl Iterator<Item = GltfNodeRef> {
-        self.data.nodes().map(|v| GltfNodeRef::new(&self.data, v))
+    pub fn nodes(&self) -> impl Iterator<Item = GltfNode> + '_ {
+        self.data
+            .nodes()
+            .map(|v| GltfNode::new(self.data.clone(), v))
     }
 
     pub fn data(&self) -> &DocumentData {
         &self.data
     }
 
-    pub fn mesh(&self, index: usize) -> Option<GltfMeshRef> {
+    pub fn mesh(&self, index: usize) -> Option<GltfMesh> {
         self.data
             .meshes()
             .nth(index)
-            .map(|v| GltfMeshRef::new(&self.data, v))
+            .map(|v| GltfMesh::new(self.data.clone(), v))
     }
 
-    pub fn material(&self, index: usize) -> Option<GltfMaterialRef> {
+    pub fn material(&self, index: usize) -> Option<GltfMaterial> {
         self.data
             .materials()
             .nth(index)
-            .map(|v| GltfMaterialRef::new(&self.data, v))
+            .map(|v| GltfMaterial::new(self.data.clone(), v))
     }
 
-    pub fn node(&self, index: usize) -> Option<GltfNodeRef> {
+    pub fn node(&self, index: usize) -> Option<GltfNode> {
         self.data
             .nodes()
             .nth(index)
-            .map(|v| GltfNodeRef::new(&self.data, v))
+            .map(|v| GltfNode::new(self.data.clone(), v))
     }
 
-    pub fn find_mesh(&self, name: impl AsRef<str>) -> Option<GltfMeshRef> {
+    pub fn find_mesh(&self, name: impl AsRef<str>) -> Option<GltfMesh> {
         tracing::info!(?self.data.named_meshes);
         self.data
             .named_meshes
@@ -193,14 +236,14 @@ impl Document {
             .map(|&index| self.mesh(index).unwrap())
     }
 
-    pub fn find_material(&self, name: impl AsRef<str>) -> Option<GltfMaterialRef> {
+    pub fn find_material(&self, name: impl AsRef<str>) -> Option<GltfMaterial> {
         self.data
             .named_materials
             .get(name.as_ref())
             .map(|&index| self.material(index).unwrap())
     }
 
-    pub fn find_node(&self, name: impl AsRef<str>) -> Option<GltfNodeRef> {
+    pub fn find_node(&self, name: impl AsRef<str>) -> Option<GltfNode> {
         self.data
             .named_nodes
             .get(name.as_ref())
@@ -257,134 +300,31 @@ impl AsyncAssetFromPath for Document {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct GltfPrimitiveRef<'a> {
-    data: &'a Asset<DocumentData>,
-    // TODO: store gltf tie instead
-    value: gltf::Primitive<'a>,
-    mesh: GltfMeshRef<'a>,
-}
-
-impl<'a> GltfPrimitiveRef<'a> {
-    fn new(
-        data: &'a Asset<DocumentData>,
-        value: gltf::Primitive<'a>,
-        mesh: GltfMeshRef<'a>,
-    ) -> Self {
-        Self { data, value, mesh }
-    }
-
-    #[inline]
-    pub fn mesh_index(&self) -> usize {
-        self.mesh.index()
-    }
-
-    /// **Note**: Refers to the index inside the mesh, not globally
-    pub fn index(&self) -> usize {
-        self.value.index()
-    }
-
-    pub fn material(&self) -> GltfMaterialRef<'a> {
-        GltfMaterialRef::new(self.data, self.value.material())
-    }
-}
-
-/// References a mesh in a gltf document
-#[derive(Debug, Clone)]
-pub struct GltfMeshRef<'a> {
-    data: &'a Asset<DocumentData>,
-    value: Mesh<'a>,
-}
-
-impl<'a> GltfMeshRef<'a> {
-    fn new(data: &'a Asset<DocumentData>, mesh: gltf::Mesh<'a>) -> Self {
-        Self { data, value: mesh }
-    }
-
-    pub fn index(&self) -> usize {
-        self.value.index()
-    }
-
-    pub fn name(&self) -> Option<&str> {
-        self.value.name()
-    }
-
-    pub fn primitives(&self) -> impl Iterator<Item = GltfPrimitiveRef<'a>> + '_ {
-        self.value
-            .primitives()
-            .map(|v| GltfPrimitiveRef::new(self.data, v, self.clone()))
-    }
-}
-
-/// References a material in a gltf document
-#[derive(Debug, Clone)]
-pub struct GltfMaterialRef<'a> {
-    data: &'a Asset<DocumentData>,
-    value: gltf::Material<'a>,
-}
-
-impl<'a> GltfMaterialRef<'a> {
-    fn new(data: &'a Asset<DocumentData>, value: gltf::Material<'a>) -> Self {
-        Self { data, value }
-    }
-
-    pub fn index(&self) -> usize {
-        self.value.index().unwrap()
-    }
-
-    pub fn name(&self) -> Option<&str> {
-        self.value.name()
-    }
-}
-
-/// References a node in a gltf document
-#[derive(Debug, Clone)]
-pub struct GltfNodeRef<'a> {
-    data: &'a Asset<DocumentData>,
-    value: gltf::Node<'a>,
-}
-
-impl<'a> GltfNodeRef<'a> {
-    fn new(data: &'a Asset<DocumentData>, value: gltf::Node<'a>) -> Self {
-        Self { data, value }
-    }
-
-    pub fn index(&self) -> usize {
-        self.value.index()
-    }
-
-    pub fn name(&self) -> Option<&str> {
-        self.value.name()
-    }
-
-    pub fn mesh(&'a self) -> Option<GltfMeshRef<'a>> {
-        Some(GltfMeshRef::new(self.data, self.value.mesh()?))
-    }
-
-    pub fn children(&'a self) -> impl Iterator<Item = GltfNodeRef<'a>> {
-        self.data
-            .node(self.index())
-            .unwrap()
-            .children()
-            .map(move |v| GltfNodeRef::new(self.data, v))
-    }
-
-    pub fn transform(&self) -> (Vec3, Quat, Vec3) {
-        let (pos, rot, scale) = self.value.transform().decomposed();
-        (pos.into(), Quat::from_array(rot), scale.into())
-    }
-}
-
 /// References a mesh primitive in a gltf document
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct GltfPrimitive {
     data: Asset<DocumentData>,
-    index: (usize, usize),
+    mesh_index: usize,
+    index: usize,
 }
 
 impl GltfPrimitive {
-    pub fn material(&self) -> GltfMaterialRef<'_> {
-        self.get_ref().material()
+    pub fn new(data: Asset<DocumentData>, mesh: &GltfMesh, value: gltf::Primitive) -> Self {
+        Self {
+            data,
+            mesh_index: mesh.index(),
+            index: value.index(),
+        }
+    }
+
+    pub fn material(&self) -> GltfMaterial {
+        GltfMaterial::new(
+            self.data.clone(),
+            self.data
+                .primitive((self.mesh_index, self.index))
+                .unwrap()
+                .material(),
+        )
     }
 }
 
@@ -396,8 +336,23 @@ pub struct GltfMesh {
 }
 
 impl GltfMesh {
+    pub fn new(data: Asset<DocumentData>, value: gltf::Mesh) -> Self {
+        Self {
+            data,
+            index: value.index(),
+        }
+    }
+
     pub fn name(&self) -> Option<&str> {
         self.data.mesh(self.index).and_then(|v| v.name())
+    }
+
+    pub fn primitives(&self) -> impl Iterator<Item = GltfPrimitive> + '_ {
+        self.data
+            .mesh(self.index)
+            .unwrap()
+            .primitives()
+            .map(|v| GltfPrimitive::new(self.data.clone(), self, v))
     }
 }
 
@@ -409,6 +364,13 @@ pub struct GltfMaterial {
 }
 
 impl GltfMaterial {
+    pub fn new(data: Asset<DocumentData>, value: gltf::Material) -> Self {
+        Self {
+            data,
+            index: value.index().unwrap(),
+        }
+    }
+
     pub fn name(&self) -> Option<&str> {
         self.data.material(self.index).and_then(|v| v.name())
     }
@@ -422,26 +384,44 @@ pub struct GltfNode {
 }
 
 impl GltfNode {
+    pub fn new(data: Asset<DocumentData>, value: gltf::Node) -> Self {
+        Self {
+            data,
+            index: value.index(),
+        }
+    }
+
     pub fn name(&self) -> Option<&str> {
         self.data.node(self.index).and_then(|v| v.name())
     }
 
-    pub fn mesh(&self) -> Option<GltfMeshRef<'_>> {
+    pub fn mesh(&self) -> Option<GltfMesh> {
         let node = self.data.node(self.index).unwrap();
-        Some(GltfMeshRef::new(&self.data, node.mesh()?))
+        Some(GltfMesh::new(self.data.clone(), node.mesh()?))
     }
 
-    pub fn children(&self) -> impl Iterator<Item = GltfNodeRef> {
+    pub fn transform(&self) -> TransformBundle {
+        let (pos, rot, scale) = self.data.node(self.index).unwrap().transform().decomposed();
+        TransformBundle::new(pos.into(), Quat::from_array(rot), scale.into())
+    }
+
+    pub fn children(&self) -> impl Iterator<Item = GltfNode> + '_ {
         self.data
             .node(self.index)
             .unwrap()
             .children()
-            .map(move |v| GltfNodeRef::new(&self.data, v))
+            .map(move |v| GltfNode::new(self.data.clone(), v))
+    }
+
+    pub fn skin(&self) -> Option<Asset<Skin>> {
+        let skin = self.data.node(self.index).unwrap().skin()?;
+
+        Some(self.data.skins[skin.index()].clone())
     }
 }
 
 macro_rules! gltf_node_impl {
-    ($ty: ty, $ref_ty: ident, $name: ident) => {
+    ($ty: ty, $name: ident) => {
         impl $ty {
             #[inline]
             pub fn index(&self) -> usize {
@@ -451,70 +431,26 @@ macro_rules! gltf_node_impl {
             pub fn data(&self) -> &Asset<DocumentData> {
                 &self.data
             }
-
-            pub fn get_ref(&self) -> $ref_ty {
-                $ref_ty {
-                    data: &self.data,
-                    value: self.data.$name(self.index()).unwrap(),
-                }
-            }
-        }
-
-        impl<'a> $ref_ty<'a> {
-            pub fn data(&self) -> &Asset<DocumentData> {
-                self.data
-            }
-        }
-
-        impl From<$ref_ty<'_>> for $ty {
-            fn from(v: $ref_ty) -> Self {
-                Self {
-                    data: v.data.clone(),
-                    index: v.index(),
-                }
-            }
         }
     };
 }
 
-gltf_node_impl! { GltfMesh, GltfMeshRef, mesh }
-gltf_node_impl! { GltfNode, GltfNodeRef, node }
-gltf_node_impl! { GltfMaterial, GltfMaterialRef, material }
+gltf_node_impl! { GltfMesh, mesh }
+gltf_node_impl! { GltfNode, node }
+gltf_node_impl! { GltfMaterial, material }
 
 impl GltfPrimitive {
     #[inline]
     pub fn mesh_index(&self) -> usize {
-        self.index.0
+        self.mesh_index
     }
 
     /// **Note**: Refers to the index inside the mesh, not globally
     pub fn index(&self) -> usize {
-        self.index.1
+        self.index
     }
 
     pub fn data(&self) -> &Asset<DocumentData> {
         &self.data
-    }
-    pub fn get_ref(&self) -> GltfPrimitiveRef {
-        GltfPrimitiveRef {
-            data: &self.data,
-            value: self.data.primitive(self.index).unwrap(),
-            mesh: GltfMeshRef::new(&self.data, self.data.mesh(self.mesh_index()).unwrap()),
-        }
-    }
-}
-
-impl<'a> GltfPrimitiveRef<'a> {
-    pub fn data(&self) -> &Asset<DocumentData> {
-        self.data
-    }
-}
-
-impl From<GltfPrimitiveRef<'_>> for GltfPrimitive {
-    fn from(v: GltfPrimitiveRef) -> Self {
-        Self {
-            data: v.data.clone(),
-            index: (v.mesh_index(), v.index()),
-        }
     }
 }

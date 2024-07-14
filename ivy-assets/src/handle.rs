@@ -103,6 +103,7 @@ impl<T: ?Sized> Asset<T> {
     pub fn id(&self) -> AssetId {
         self.id
     }
+
 }
 
 impl<T: ?Sized> Hash for Asset<T> {

@@ -20,3 +20,20 @@ impl AssetDesc<ShaderDesc> for PbrShaderDesc {
         }))
     }
 }
+
+/// Loads the default skinned PBR shader
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SkinnedPbrShaderDesc;
+
+impl AssetDesc<ShaderDesc> for SkinnedPbrShaderDesc {
+    type Error = Infallible;
+
+    fn load(&self, assets: &ivy_assets::AssetCache) -> Result<Asset<ShaderDesc>, Self::Error> {
+        let source = include_str!("../../assets/shaders/skinned_pbr.wgsl").into();
+
+        Ok(assets.insert(ShaderDesc {
+            label: "pbr_shader".into(),
+            source,
+        }))
+    }
+}

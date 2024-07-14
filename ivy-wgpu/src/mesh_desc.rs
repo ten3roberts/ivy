@@ -1,21 +1,16 @@
-use glam::{vec2, vec3, Vec2, Vec3};
+use glam::{vec2, vec3, I16Vec4, U16Vec4, Vec2, Vec3, Vec4};
+use gltf::mesh::util::weights;
 use itertools::{izip, Itertools};
 use ivy_assets::{Asset, AssetCache};
-use ivy_gltf::{GltfPrimitive, GltfPrimitiveRef};
+use ivy_gltf::GltfPrimitive;
 
-use crate::mesh::Vertex;
+use crate::mesh::{SkinnedVertex, Vertex};
 
 /// Cpu side mesh descriptor
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MeshDesc {
     Gltf(GltfPrimitive),
     Content(Asset<MeshData>),
-}
-
-impl From<GltfPrimitiveRef<'_>> for MeshDesc {
-    fn from(v: GltfPrimitiveRef) -> Self {
-        Self::Gltf(v.into())
-    }
 }
 
 impl From<GltfPrimitive> for MeshDesc {
@@ -49,12 +44,33 @@ impl MeshDesc {
 /// CPU created mesh data
 pub struct MeshData {
     vertices: Box<[Vertex]>,
+    joints: Vec<U16Vec4>,
+    weights: Vec<Vec4>,
     indices: Box<[u32]>,
 }
 
 impl MeshData {
     pub fn new(vertices: Box<[Vertex]>, indices: Box<[u32]>) -> Self {
-        Self { vertices, indices }
+        Self {
+            vertices,
+            indices,
+            joints: Vec::new(),
+            weights: Vec::new(),
+        }
+    }
+
+    pub fn skinned(
+        vertices: Box<[Vertex]>,
+        indices: Box<[u32]>,
+        joints: Vec<U16Vec4>,
+        weights: Vec<Vec4>,
+    ) -> Self {
+        Self {
+            vertices,
+            indices,
+            joints,
+            weights,
+        }
     }
 
     pub fn generate_tangents(&mut self) -> anyhow::Result<()> {
@@ -73,6 +89,21 @@ impl MeshData {
         &self.indices
     }
 
+    pub fn skinned_vertices(&self) -> impl Iterator<Item = SkinnedVertex> + '_ {
+        assert_eq!(self.vertices.len(), self.weights.len());
+        assert_eq!(self.vertices.len(), self.joints.len());
+        izip!(&*self.vertices, &self.weights, &self.joints).map(|(v, &weights, &joints)| -> _ {
+            SkinnedVertex {
+                pos: v.pos,
+                tex_coord: v.tex_coord,
+                normal: v.normal,
+                tangent: v.tangent,
+                weights,
+                joints: joints.into(),
+            }
+        })
+    }
+
     pub fn quad() -> Self {
         let vertices = [
             Vertex::new(vec3(-0.5, -0.5, 0.0), vec2(0.0, 1.0), Vec3::ONE),
@@ -86,6 +117,8 @@ impl MeshData {
         let mut this = Self {
             vertices: vertices.to_vec().into_boxed_slice(),
             indices: indices.to_vec().into_boxed_slice(),
+            joints: Vec::new(),
+            weights: Vec::new(),
         };
 
         this.generate_tangents().unwrap();
@@ -113,6 +146,8 @@ impl MeshData {
         let mut this = Self {
             vertices: vertices.to_vec().into_boxed_slice(),
             indices: indices.to_vec().into_boxed_slice(),
+            joints: Vec::new(),
+            weights: Vec::new(),
         };
 
         this.generate_tangents().unwrap();
@@ -140,6 +175,20 @@ impl MeshData {
 
         let normals = reader.read_normals().into_iter().flatten().map(Vec3::from);
 
+        let joints = reader
+            .read_joints(0)
+            .into_iter()
+            .flat_map(|v| v.into_u16())
+            .map(U16Vec4::from)
+            .collect_vec();
+
+        let weights = reader
+            .read_weights(0)
+            .into_iter()
+            .flat_map(|v| v.into_f32())
+            .map(Vec4::from)
+            .collect_vec();
+
         let texcoord = reader
             .read_tex_coords(0)
             .into_iter()
@@ -150,7 +199,13 @@ impl MeshData {
             .map(|(pos, normal, textcoord)| Vertex::new(pos, textcoord, normal))
             .collect_vec();
 
-        let mut this = Self::new(vertices.into_boxed_slice(), indices.into_boxed_slice());
+        let mut this = Self::skinned(
+            vertices.into_boxed_slice(),
+            indices.into_boxed_slice(),
+            joints,
+            weights,
+        );
+
         this.generate_tangents()?;
         Ok(this)
     }

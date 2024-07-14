@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex};
 
+use bytemuck::Pod;
 use itertools::Itertools;
 use wgpu::{BufferUsages, RenderPass};
 
@@ -12,26 +13,26 @@ use super::{
 
 pub struct MeshBufferInner {}
 
-type DroppedList = Vec<(SubBuffer<Vertex>, SubBuffer<u32>)>;
+type DroppedList<V> = Vec<(SubBuffer<V>, SubBuffer<u32>)>;
 
-pub struct MeshBuffer {
+pub struct MeshBuffer<V = Vertex> {
     next_id: u64,
-    pub vertex_buffers: MultiBuffer<Vertex>,
+    pub vertex_buffers: MultiBuffer<V>,
     pub index_buffers: MultiBuffer<u32>,
-    dropped: Arc<Mutex<DroppedList>>,
+    dropped: Arc<Mutex<DroppedList<V>>>,
 }
 
 /// Handle to an allocation within a mesh
 #[derive(Clone)]
-pub struct MeshHandle {
+pub struct MeshHandle<V = Vertex> {
     id: u64,
-    vb: SubBuffer<Vertex>,
+    vb: SubBuffer<V>,
     ib: SubBuffer<u32>,
     index_count: usize,
-    on_drop: Arc<Mutex<DroppedList>>,
+    on_drop: Arc<Mutex<DroppedList<V>>>,
 }
 
-impl std::fmt::Debug for MeshHandle {
+impl<V> std::fmt::Debug for MeshHandle<V> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MeshHandle")
             .field("id", &self.id)
@@ -41,22 +42,22 @@ impl std::fmt::Debug for MeshHandle {
     }
 }
 
-impl std::hash::Hash for MeshHandle {
+impl<V> std::hash::Hash for MeshHandle<V> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.id.hash(state);
     }
 }
 
-impl Eq for MeshHandle {}
+impl<V> Eq for MeshHandle<V> {}
 
-impl PartialEq for MeshHandle {
+impl<V> PartialEq for MeshHandle<V> {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
     }
 }
 
-impl MeshHandle {
-    pub fn vb(&self) -> SubBuffer<Vertex> {
+impl<V> MeshHandle<V> {
+    pub fn vb(&self) -> SubBuffer<V> {
         self.vb
     }
 
@@ -69,13 +70,13 @@ impl MeshHandle {
     }
 }
 
-impl Drop for MeshHandle {
+impl<V> Drop for MeshHandle<V> {
     fn drop(&mut self) {
         self.on_drop.lock().unwrap().push((self.vb, self.ib));
     }
 }
 
-impl MeshBuffer {
+impl<V: Pod> MeshBuffer<V> {
     pub fn new(gpu: &Gpu, label: impl Into<String>, capacity: usize) -> Self {
         let label = label.into();
 
@@ -109,7 +110,12 @@ impl MeshBuffer {
     }
 
     /// Allocate a mesh in the buffer
-    pub fn allocate(&mut self, gpu: &Gpu, vertex_count: usize, index_count: usize) -> MeshHandle {
+    pub fn allocate(
+        &mut self,
+        gpu: &Gpu,
+        vertex_count: usize,
+        index_count: usize,
+    ) -> MeshHandle<V> {
         self.allocate_exact(gpu, vertex_count, index_count)
     }
 
@@ -118,7 +124,7 @@ impl MeshBuffer {
         gpu: &Gpu,
         vertex_count: usize,
         index_count: usize,
-    ) -> MeshHandle {
+    ) -> MeshHandle<V> {
         self.reclaim();
         tracing::debug!("Allocating {vertex_count} {index_count}");
         let vb = match self.vertex_buffers.allocate(vertex_count) {
@@ -149,7 +155,7 @@ impl MeshBuffer {
         }
     }
 
-    pub fn insert(&mut self, gpu: &Gpu, vertices: &[Vertex], indices: &[u32]) -> MeshHandle {
+    pub fn insert(&mut self, gpu: &Gpu, vertices: &[V], indices: &[u32]) -> MeshHandle<V> {
         let mesh = self.allocate(gpu, vertices.len(), indices.len());
         self.write(gpu, &mesh, vertices, indices);
         mesh
@@ -160,7 +166,7 @@ impl MeshBuffer {
         render_pass.set_index_buffer(self.index_buffers.slice(..), wgpu::IndexFormat::Uint32);
     }
 
-    pub fn write(&mut self, gpu: &Gpu, handle: &MeshHandle, vertices: &[Vertex], indices: &[u32]) {
+    pub fn write(&mut self, gpu: &Gpu, handle: &MeshHandle<V>, vertices: &[V], indices: &[u32]) {
         self.vertex_buffers.write(&gpu.queue, &handle.vb, vertices);
         self.index_buffers.write(
             &gpu.queue,
