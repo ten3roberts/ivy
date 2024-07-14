@@ -80,6 +80,7 @@ impl Default for TransformQuery {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct TransformBundle {
     pub pos: Vec3,
     pub rotation: Quat,
@@ -111,6 +112,10 @@ impl TransformBundle {
     pub fn with_scale(mut self, scale: Vec3) -> Self {
         self.scale = scale;
         self
+    }
+
+    pub fn to_mat4(&self) -> Mat4 {
+        Mat4::from_scale_rotation_translation(self.scale, self.rotation, self.pos)
     }
 }
 

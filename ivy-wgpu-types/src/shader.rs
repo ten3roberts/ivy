@@ -12,6 +12,8 @@ pub struct ShaderDesc<'a> {
     pub layouts: &'a [&'a BindGroupLayout],
     pub depth_format: Option<TextureFormat>,
     pub sample_count: u32,
+    pub vertex_entry_point: &'a str,
+    pub fragment_entry_point: &'a str,
 }
 
 /// Represents a graphics shader
@@ -44,14 +46,14 @@ impl Shader {
                 layout: Some(&layout),
                 vertex: wgpu::VertexState {
                     module: &shader,
-                    entry_point: "vs_main", // 1.
+                    entry_point: desc.vertex_entry_point,
                     buffers: desc.vertex_layouts,
                     compilation_options: Default::default(),
                 },
                 fragment: Some(wgpu::FragmentState {
                     // 3.
                     module: &shader,
-                    entry_point: "fs_main",
+                    entry_point: desc.fragment_entry_point,
                     targets: &[Some(wgpu::ColorTargetState {
                         // 4.
                         format: desc.format,

@@ -1,4 +1,5 @@
 pub mod mesh_renderer;
+pub mod skinned_mesh_renderer;
 
 use std::{any::type_name, sync::Arc};
 
@@ -6,7 +7,7 @@ use flax::{Query, World};
 use glam::{vec3, Mat4, Vec3, Vec4};
 use itertools::Itertools;
 use ivy_assets::{stored::Store, Asset, AssetCache};
-use ivy_core::{main_camera, world_transform, Bundle};
+use ivy_core::{impl_for_tuples, main_camera, world_transform, Bundle};
 use wgpu::{
     BindGroup, BufferUsages, Operations, RenderPass, RenderPassColorAttachment,
     RenderPassDescriptor, ShaderStages, Texture, TextureFormat, TextureUsages,
@@ -118,10 +119,35 @@ pub trait CameraRenderer {
     ) -> anyhow::Result<()>;
 }
 
-impl<A: CameraRenderer, B: CameraRenderer> CameraRenderer for (A, B) {
+macro_rules! impl_for_tuples {
+    ($($idx: tt => $ty: ident),*) => {
+        impl<$($ty: CameraRenderer,)*> CameraRenderer for ($($ty,)*) {
+            fn update(&mut self, ctx: &mut UpdateContext) -> anyhow::Result<()> {
+                $(self.$idx.update(ctx)?;)*
+                Ok(())
+            }
+
+            fn draw<'s>(
+                &'s mut self,
+                ctx: &'s RenderContext<'s>,
+                render_pass: &mut RenderPass<'s>,
+            ) -> anyhow::Result<()> {
+                $(self.$idx.draw(ctx, render_pass)?;)*
+
+                Ok(())
+            }
+        }
+    };
+}
+
+impl_for_tuples! { 0 => A }
+impl_for_tuples! { 0 => A, 1 => B }
+impl_for_tuples! { 0 => A, 1 => B, 2 => C }
+impl_for_tuples! { 0 => A, 1 => B, 2 => C, 3 => D }
+
+impl CameraRenderer for Box<dyn CameraRenderer> {
     fn update(&mut self, ctx: &mut UpdateContext) -> anyhow::Result<()> {
-        self.0.update(ctx)?;
-        self.1.update(ctx)
+        (**self).update(ctx)
     }
 
     fn draw<'s>(
@@ -129,8 +155,7 @@ impl<A: CameraRenderer, B: CameraRenderer> CameraRenderer for (A, B) {
         ctx: &'s RenderContext<'s>,
         render_pass: &mut RenderPass<'s>,
     ) -> anyhow::Result<()> {
-        self.0.draw(ctx, render_pass)?;
-        self.1.draw(ctx, render_pass)
+        (**self).draw(ctx, render_pass)
     }
 }
 

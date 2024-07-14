@@ -45,6 +45,7 @@ pub struct JointTarget {
     pub(crate) rotation: Quat,
     pub(crate) scale: Vec3,
 }
+
 impl JointTarget {
     fn as_matrix(&self) -> Mat4 {
         Mat4::from_scale_rotation_translation(self.scale, self.rotation, self.position)

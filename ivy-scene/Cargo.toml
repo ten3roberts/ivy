@@ -10,4 +10,5 @@ ivy-wgpu = { path = "../ivy-wgpu" }
 ivy-gltf = { path = "../ivy-gltf" }
 ivy-assets = { path = "../ivy-assets" }
 
+tracing.workspace = true
 flax.workspace = true

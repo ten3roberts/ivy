@@ -68,6 +68,8 @@ impl Node for TonemapNode {
                     layouts: &[&self.layout],
                     depth_format: None,
                     sample_count: 1,
+                fragment_entry_point:"fs_main",
+                vertex_entry_point:"vs_main",
                 },
             )
         });

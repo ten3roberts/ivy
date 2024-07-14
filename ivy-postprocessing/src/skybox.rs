@@ -82,6 +82,8 @@ impl CameraRenderer for SkyboxRenderer {
                     layouts: &[&ctx.camera_data.layout, &self.bind_group_layout],
                     depth_format: Some(wgpu::TextureFormat::Depth24Plus),
                     sample_count: 4,
+                    fragment_entry_point: "fs_main",
+                    vertex_entry_point: "vs_main",
                 },
             )
         });

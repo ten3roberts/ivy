@@ -1,5 +1,6 @@
 use std::{f32::consts::TAU, sync::Arc, time::Instant};
 
+use anyhow::Context;
 use flax::{
     component, BoxedSystem, Component, Entity, EntityBuilder, Mutable, Query, QueryBorrow,
     Schedule, System, World,
@@ -17,7 +18,7 @@ use ivy_core::{
     profiling::ProfilingLayer,
     rotation, App, EngineLayer, EntityBuilderExt, Layer, TransformBundle,
 };
-use ivy_gltf::Document;
+use ivy_gltf::{animation::player::Animator, components::animator, Document};
 use ivy_input::{
     components::input_state,
     layer::InputLayer,
@@ -32,7 +33,7 @@ use ivy_postprocessing::{
 };
 use ivy_rendergraph::components::render_graph;
 use ivy_scene::GltfNodeExt;
-use ivy_vulkan::vk::Extent3D;
+use ivy_vulkan::vk::{BufferCollectionCreateInfoFUCHSIABuilder, Extent3D};
 use ivy_wgpu::{
     components::{light, main_window, projection_matrix, window},
     driver::{WindowHandle, WinitDriver},
@@ -43,24 +44,18 @@ use ivy_wgpu::{
     mesh_desc::MeshDesc,
     primitives::UvSphereDesc,
     renderer::{
-        mesh_renderer::MeshRenderer, CameraNode, EnvironmentData, MsaaResolve, RenderObjectBundle,
+        mesh_renderer::MeshRenderer, skinned_mesh_renderer::SkinnedMeshRenderer, CameraNode,
+        EnvironmentData, MsaaResolve, RenderObjectBundle,
     },
     rendergraph::{self, ExternalResources, ManagedTextureDesc, RenderGraph},
-    shaders::PbrShaderDesc,
-    texture::TextureDesc,
+    shaders::{PbrShaderDesc, SkinnedPbrShaderDesc},
     Gpu,
 };
-use ivy_wgpu_types::{
-    texture::{max_mip_levels, read_texture},
-    PhysicalSize, Surface,
-};
+use ivy_wgpu_types::{texture::max_mip_levels, PhysicalSize, Surface};
 use tracing::Instrument;
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
-use wgpu::{
-    core::binding_model::BindGroupLayoutEntryError, Extent3d, TextureDescriptor, TextureDimension,
-    TextureFormat, TextureUsages,
-};
+use wgpu::{Extent3d, TextureDimension, TextureFormat};
 
 pub fn main() -> anyhow::Result<()> {
     registry()
@@ -93,7 +88,10 @@ pub fn main() -> anyhow::Result<()> {
         ))
         .with_layer(FixedUpdate::new(
             dt,
-            Schedule::builder().with_system(movement_system(dt)).build(),
+            Schedule::builder()
+                .with_system(movement_system(dt))
+                .with_system(animate_system(dt))
+                .build(),
         ))
         .run()
     {
@@ -126,6 +124,7 @@ impl LogicLayer {
             let assets = assets.clone();
             async move {
                 let shader = assets.load(&PbrShaderDesc);
+                let skinned_shader = assets.load(&SkinnedPbrShaderDesc);
                 let sphere_mesh = MeshDesc::content(assets.load(&UvSphereDesc::default()));
                 // let materials:Asset<Document> = assets.load_async("textures/materials.glb").await;
 
@@ -184,20 +183,27 @@ impl LogicLayer {
                     }
                 }
 
-                // let document: Asset<Document> = assets.load_async("models/Sphere.glb").await;
+                tracing::info!("loading spine");
+                let document: Asset<Document> = assets.load_async("models/spine.glb").await;
+                let node = document
+                    .find_node("Cube")
+                    .context("Missing document node")
+                    .unwrap();
 
-                // let root: EntityBuilder = document
-                //     .node(0)
-                //     .unwrap()
-                //     .mount(&assets, &mut Entity::builder())
-                //     .mount(TransformBundle::new(
-                //         vec3(3.0, 0.0, -2.0),
-                //         Quat::IDENTITY,
-                //         Vec3::ONE,
-                //     ))
-                //     .into();
+                let skin = node.skin().unwrap();
+                let animation = skin.animations()[0].clone();
 
-                // cmd.lock().spawn(root);
+                let root: EntityBuilder = node
+                    .mount(&assets, &mut Entity::builder())
+                    .mount(TransformBundle::new(
+                        vec3(0.0, 0.0, 2.0),
+                        Quat::IDENTITY,
+                        Vec3::ONE,
+                    ))
+                    .set(animator(), Animator::new(animation))
+                    .into();
+
+                cmd.lock().spawn(root);
             }
             .instrument(tracing::info_span!("load_assets")),
         );
@@ -434,13 +440,21 @@ fn movement_system(dt: f32) -> BoxedSystem {
         .boxed()
 }
 
+fn animate_system(dt: f32) -> BoxedSystem {
+    System::builder()
+        .with_query(Query::new(animator().as_mut()))
+        .par_for_each(move |animator| {
+            animator.step(dt);
+        })
+        .boxed()
+}
+
 struct RenderGraphRenderer {
     render_graph: RenderGraph,
     surface: Surface,
     depth_texture: rendergraph::TextureHandle,
-    multisampled_hdr: rendergraph::TextureHandle,
     surface_texture: rendergraph::TextureHandle,
-    final_color: rendergraph::TextureHandle,
+    screensized: Vec<rendergraph::TextureHandle>,
 }
 
 impl RenderGraphRenderer {
@@ -448,8 +462,8 @@ impl RenderGraphRenderer {
         let size = surface.size();
 
         let image: Asset<DynamicImage> =
-            assets.load("ivy-postprocessing/hdrs/lauter_waterfall_4k.hdr");
-        // assets.load("ivy-postprocessing/hdrs/kloofendal_puresky_2k.hdr");
+            // assets.load("ivy-postprocessing/hdrs/lauter_waterfall_4k.hdr");
+        assets.load("ivy-postprocessing/hdrs/kloofendal_puresky_2k.hdr");
         // assets.load("ivy-postprocessing/hdrs/industrial_sunset_puresky_2k.hdr");
 
         const MAX_REFLECTION_LOD: u32 = 8;
@@ -564,7 +578,11 @@ impl RenderGraphRenderer {
             .resources
             .insert_texture(rendergraph::TextureDesc::External);
 
-        let camera_renderer = (SkyboxRenderer::new(gpu), MeshRenderer::new(gpu));
+        let camera_renderer = (
+            SkyboxRenderer::new(gpu),
+            MeshRenderer::new(gpu),
+            SkinnedMeshRenderer::new(gpu),
+        );
 
         render_graph.add_node(HdriProcessorNode::new(
             hdri_processor,
@@ -583,15 +601,15 @@ impl RenderGraphRenderer {
             EnvironmentData::new(skybox, skybox_ir, skybox_specular, integrated_brdf),
         ));
 
+        // TODO: make chaining easier
         render_graph.add_node(MsaaResolve::new(multisampled_hdr, final_color));
         render_graph.add_node(BloomNode::new(gpu, final_color, bloom_result, 5, 0.005));
-        render_graph.add_node(TonemapNode::new(gpu, final_color, surface_texture));
+        render_graph.add_node(TonemapNode::new(gpu, bloom_result, surface_texture));
 
         Self {
             render_graph,
             surface,
-            multisampled_hdr,
-            final_color,
+            screensized: vec![multisampled_hdr, final_color, bloom_result],
             surface_texture,
             depth_texture,
         }
@@ -628,19 +646,14 @@ impl ivy_wgpu::layer::Renderer for RenderGraphRenderer {
 
         self.surface.resize(gpu, size);
 
-        self.render_graph
-            .resources
-            .get_texture_mut(self.multisampled_hdr)
-            .as_managed_mut()
-            .unwrap()
-            .extent = new_extent;
-
-        self.render_graph
-            .resources
-            .get_texture_mut(self.final_color)
-            .as_managed_mut()
-            .unwrap()
-            .extent = new_extent;
+        for &handle in &self.screensized {
+            self.render_graph
+                .resources
+                .get_texture_mut(handle)
+                .as_managed_mut()
+                .unwrap()
+                .extent = new_extent;
+        }
 
         self.render_graph
             .resources
