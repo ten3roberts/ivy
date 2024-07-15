@@ -35,20 +35,21 @@ use ivy_rendergraph::components::render_graph;
 use ivy_scene::GltfNodeExt;
 use ivy_vulkan::vk::{BufferCollectionCreateInfoFUCHSIABuilder, Extent3D};
 use ivy_wgpu::{
-    components::{light, main_window, projection_matrix, window},
+    components::{light_data, light_kind, main_window, projection_matrix, window},
     driver::{WindowHandle, WinitDriver},
     events::ResizedEvent,
     layer::GraphicsLayer,
-    light::PointLight,
+    light::{LightData, LightKind},
     material_desc::{MaterialData, MaterialDesc},
     mesh_desc::MeshDesc,
-    primitives::UvSphereDesc,
+    primitives::{generate_plane, PlaneDesc, UvSphereDesc},
     renderer::{
         mesh_renderer::MeshRenderer, skinned_mesh_renderer::SkinnedMeshRenderer, CameraNode,
         EnvironmentData, MsaaResolve, RenderObjectBundle,
     },
     rendergraph::{self, ExternalResources, ManagedTextureDesc, RenderGraph},
     shaders::{PbrShaderDesc, SkinnedPbrShaderDesc},
+    texture::TextureDesc,
     Gpu,
 };
 use ivy_wgpu_types::{texture::max_mip_levels, PhysicalSize, Surface};
@@ -153,8 +154,35 @@ impl LogicLayer {
 
         async_std::task::spawn(
             async move {
-                let sphere_mesh = MeshDesc::content(assets.load(&UvSphereDesc::default()));
                 let shader = assets.load(&PbrShaderDesc);
+
+                let plane_mesh = MeshDesc::content(assets.insert(generate_plane(25.0, Vec3::Y)));
+
+                let plane_material = MaterialDesc::content(
+                    MaterialData::new()
+                        .with_metallic(0.0)
+                        .with_albedo(TextureDesc::path(
+                            "assets/textures/BaseCollection/Sand/Ground054_1K-PNG_Color.png",
+                        ))
+                        .with_normal(TextureDesc::path(
+                            "assets/textures/BaseCollection/Sand/Ground054_1K-PNG_NormalGL.png",
+                        ))
+                        .with_metallic_roughness(TextureDesc::path(
+                            "assets/textures/BaseCollection/Sand/Ground054_1K-PNG_Roughness.png",
+                        )),
+                );
+
+                cmd.lock().spawn(
+                    Entity::builder()
+                        .mount(TransformBundle::new(Vec3::ZERO, Quat::IDENTITY, Vec3::ONE))
+                        .mount(RenderObjectBundle {
+                            mesh: plane_mesh.clone(),
+                            material: plane_material.clone(),
+                            shader: shader.clone(),
+                        }),
+                );
+
+                let sphere_mesh = MeshDesc::content(assets.load(&UvSphereDesc::default()));
 
                 for i in 0..8 {
                     let roughness = i as f32 / (7) as f32;
@@ -170,7 +198,7 @@ impl LogicLayer {
                         cmd.lock().spawn(
                             Entity::builder()
                                 .mount(TransformBundle::new(
-                                    vec3(0.0 + i as f32 * 2.0, j as f32 * 2.0, 5.0),
+                                    vec3(0.0 + i as f32 * 2.0, j as f32 * 2.0 + 1.0, 5.0),
                                     Quat::IDENTITY,
                                     Vec3::ONE,
                                 ))
@@ -215,10 +243,21 @@ impl LogicLayer {
         self.setup_assets(world, assets)?;
 
         Entity::builder()
-            .mount(TransformBundle::default().with_position(vec3(0.0, 2.0, 0.0)))
-            .set(light(), PointLight::new(Srgb::new(1.0, 1.0, 1.0), 50.0))
+            .mount(TransformBundle::default().with_rotation(Quat::from_euler(
+                EulerRot::YXZ,
+                0.0,
+                1.0,
+                0.0,
+            )))
+            .set(light_data(), LightData::new(Srgb::new(1.0, 1.0, 1.0), 2.0))
+            .set(light_kind(), LightKind::Directional)
             .spawn(world);
 
+        Entity::builder()
+            .mount(TransformBundle::default().with_position(vec3(0.0, 2.0, 0.0)))
+            .set(light_data(), LightData::new(Srgb::new(1.0, 0.0, 0.0), 50.0))
+            .set(light_kind(), LightKind::Point)
+            .spawn(world);
         Ok(())
     }
 }
@@ -268,7 +307,7 @@ impl Layer for LogicLayer {
             ));
 
         Entity::builder()
-            .mount(TransformBundle::new(Vec3::ZERO, Quat::IDENTITY, Vec3::ONE))
+            .mount(TransformBundle::new(Vec3::Y, Quat::IDENTITY, Vec3::ONE))
             .set(main_camera(), ())
             .set_default(projection_matrix())
             .set(
@@ -462,8 +501,8 @@ impl RenderGraphRenderer {
         let size = surface.size();
 
         let image: Asset<DynamicImage> =
-            // assets.load("ivy-postprocessing/hdrs/lauter_waterfall_4k.hdr");
-        assets.load("ivy-postprocessing/hdrs/kloofendal_puresky_2k.hdr");
+            assets.load("ivy-postprocessing/hdrs/lauter_waterfall_4k.hdr");
+        // assets.load("ivy-postprocessing/hdrs/kloofendal_puresky_2k.hdr");
         // assets.load("ivy-postprocessing/hdrs/industrial_sunset_puresky_2k.hdr");
 
         const MAX_REFLECTION_LOD: u32 = 8;

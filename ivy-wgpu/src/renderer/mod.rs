@@ -1,13 +1,13 @@
 pub mod mesh_renderer;
 pub mod skinned_mesh_renderer;
 
-use std::{any::type_name, sync::Arc};
+use std::any::type_name;
 
-use flax::{Query, World};
+use flax::{filter::Or, Query, World};
 use glam::{vec3, Mat4, Vec3, Vec4};
 use itertools::Itertools;
 use ivy_assets::{stored::Store, Asset, AssetCache};
-use ivy_core::{impl_for_tuples, main_camera, world_transform, Bundle};
+use ivy_core::{impl_for_tuples, main_camera, position, world_transform, Bundle};
 use wgpu::{
     BindGroup, BufferUsages, Operations, RenderPass, RenderPassColorAttachment,
     RenderPassDescriptor, ShaderStages, Texture, TextureFormat, TextureUsages,
@@ -15,7 +15,7 @@ use wgpu::{
 };
 
 use crate::{
-    components::{light, material, mesh, projection_matrix, shader},
+    components::{light_data, light_kind, material, mesh, projection_matrix, shader},
     material::Material,
     material_desc::MaterialDesc,
     mesh_desc::MeshDesc,
@@ -247,14 +247,23 @@ impl Node for CameraNode {
                 .write(&ctx.gpu.queue, 0, &[self.shader_data.data]);
         }
 
-        let light_data = Query::new((world_transform(), light()))
+        let light_data = Query::new((world_transform(), light_data(), light_kind()))
             .borrow(ctx.world)
             .iter()
-            .map(|(pos, light)| LightData {
-                position: pos.transform_point3(Vec3::ZERO).extend(0.0),
-                color: (vec3(light.color.red, light.color.green, light.color.blue)
-                    * light.intensity)
-                    .extend(1.0),
+            .map(|(transform, data, kind)| {
+                let color = (vec3(data.color.red, data.color.green, data.color.blue)
+                    * data.intensity)
+                    .extend(1.0);
+                let position = transform.transform_point3(Vec3::ZERO);
+                let direction = transform.transform_vector3(Vec3::Z);
+
+                LightData {
+                    position: position.extend(0.0),
+                    color,
+                    kind: *kind as u32,
+                    direction: direction.normalize().extend(0.0),
+                    padding: Default::default(),
+                }
             })
             .take(self.shader_data.light_buffer.len())
             .collect_vec();
@@ -276,7 +285,7 @@ impl Node for CameraNode {
         Ok(())
     }
 
-    fn draw(&mut self, mut ctx: crate::rendergraph::NodeExecutionContext) -> anyhow::Result<()> {
+    fn draw(&mut self, ctx: crate::rendergraph::NodeExecutionContext) -> anyhow::Result<()> {
         let depth_view = ctx
             .get_texture(self.depth_texture)
             .create_view(&Default::default());
@@ -403,6 +412,9 @@ pub struct CameraData {
 #[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
 #[repr(C)]
 pub struct LightData {
+    pub kind: u32,
+    pub padding: Vec3,
+    pub direction: Vec4,
     pub position: Vec4,
     pub color: Vec4,
 }

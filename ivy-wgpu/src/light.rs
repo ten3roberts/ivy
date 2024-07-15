@@ -1,15 +1,19 @@
-use futures::stream::PollNext;
-use ivy_core::palette::{Srgb, Srgba};
+use ivy_core::palette::Srgb;
 
-use crate::renderer::LightData;
-
-pub struct PointLight {
+pub struct LightData {
     pub color: Srgb,
     pub intensity: f32,
 }
 
-impl PointLight {
+impl LightData {
     pub fn new(color: Srgb, intensity: f32) -> Self {
         Self { color, intensity }
     }
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy)]
+pub enum LightKind {
+    Point,
+    Directional,
 }

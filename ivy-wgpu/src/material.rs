@@ -46,6 +46,8 @@ impl Material {
         // TODO: asset
         let sampler = gpu.device.create_sampler(&SamplerDescriptor {
             label: "material_sampler".into(),
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::Repeat,
             min_filter: wgpu::FilterMode::Linear,
             mag_filter: wgpu::FilterMode::Linear,
             mipmap_filter: wgpu::FilterMode::Linear,
