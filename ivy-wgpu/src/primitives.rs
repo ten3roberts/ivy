@@ -1,6 +1,6 @@
 use std::{convert::Infallible, f32::consts::PI};
 
-use glam::{vec2, vec3, Vec4};
+use glam::{vec2, vec3, IVec3, Vec2, Vec3, Vec4};
 use ivy_assets::AssetDesc;
 
 use crate::{mesh::Vertex, mesh_desc::MeshData};
@@ -79,6 +79,67 @@ fn generate_uv_sphere(radius: f32, latitudes: u32, longitudes: u32) -> MeshData 
     }
 
     let mut mesh = MeshData::new(vertices.into_boxed_slice(), indices.into_boxed_slice());
+    mesh.generate_tangents().unwrap();
+    mesh
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct PlaneDesc {
+    normal: IVec3,
+}
+
+impl Default for PlaneDesc {
+    fn default() -> Self {
+        Self { normal: IVec3::Y }
+    }
+}
+
+impl AssetDesc<MeshData> for PlaneDesc {
+    type Error = Infallible;
+
+    fn load(
+        &self,
+        assets: &ivy_assets::AssetCache,
+    ) -> Result<ivy_assets::Asset<MeshData>, Self::Error> {
+        Ok(assets.insert(generate_plane(1.0, self.normal.as_vec3())))
+    }
+}
+
+pub fn generate_plane(halfextent: f32, normal: Vec3) -> MeshData {
+    let tan = if normal.distance(Vec3::Y) < 0.001 {
+        Vec3::Z
+    } else {
+        normal.cross(Vec3::Y)
+    };
+
+    let bitan = normal.cross(tan);
+
+    let vertices = [
+        Vertex::new(
+            (-tan - bitan) * halfextent,
+            vec2(0.0, 1.0) * halfextent,
+            normal,
+        ),
+        Vertex::new(
+            (tan - bitan) * halfextent,
+            vec2(1.0, 1.0) * halfextent,
+            normal,
+        ),
+        Vertex::new(
+            (tan + bitan) * halfextent,
+            vec2(1.0, 0.0) * halfextent,
+            normal,
+        ),
+        Vertex::new(
+            (-tan + bitan) * halfextent,
+            vec2(0.0, 0.0) * halfextent,
+            normal,
+        ),
+    ];
+
+    let indices = [0, 1, 2, 2, 3, 0];
+
+    let mut mesh = MeshData::new(vertices.to_vec().into(), indices.to_vec().into());
     mesh.generate_tangents().unwrap();
     mesh
 }

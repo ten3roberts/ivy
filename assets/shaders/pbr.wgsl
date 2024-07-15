@@ -29,6 +29,8 @@ struct Globals {
 }
 
 struct Light {
+    kind: u32,
+    direction: vec3<f32>,
     position: vec3<f32>,
     color: vec3<f32>,
 }
@@ -143,23 +145,33 @@ fn geometry_smith(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, roughness: f32) -> f
 
 const PI: f32 = 3.14159265359;
 
-fn pbr_luminance(position: vec3<f32>, camera_dir: vec3<f32>, albedo: vec3<f32>, normal: vec3<f32>, metallic: f32, roughness: f32, light_position: vec3<f32>, light_color: vec3<f32>) -> vec3<f32> {
-    let to_light = light_position - position.xyz;
-    let dist_sqr: f32 = dot(to_light, to_light);
+const LIGHT_POINT: u32 = 0;
+const LIGHT_DIRECTIONAL: u32 = 1;
 
-    let l = normalize(to_light);
+fn pbr_luminance(position: vec3<f32>, camera_dir: vec3<f32>, albedo: vec3<f32>, normal: vec3<f32>, metallic: f32, roughness: f32, tbn: mat3x3<f32>, light: Light) -> vec3<f32> {
+    var l: vec3<f32>;
+    var attenuation: f32;
+
+    if light.kind == LIGHT_POINT {
+        let light_position = tbn * light.position;
+        let to_light = light_position - position.xyz;
+        let dist_sqr: f32 = dot(to_light, to_light);
+
+        l = normalize(to_light);
+        attenuation = 1f / dist_sqr;
+    } else if light.kind == LIGHT_DIRECTIONAL {
+        l = tbn * -light.direction;
+        attenuation = 1f;
+    }
+
     let h = normalize(camera_dir + l);
 
-    let distance = length(to_light);
-    let attenuation = 1f / dist_sqr;
-
-    let radiance = light_color * attenuation;
+    let radiance = light.color * attenuation;
 
     var f0 = vec3(0.04);
 
     f0 = mix(f0, albedo, metallic);
     let f = fresnel_schlick(max(dot(h, camera_dir), 0f), f0);
-
 
     let ndf = distribution_ggx(normal, h, roughness);
     let g = geometry_smith(normal, camera_dir, l, roughness);
@@ -226,7 +238,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
         let light_pos = tbn * light.position;
 
-        luminance += pbr_luminance(in.tangent_pos, tangent_camera_dir, albedo, tangent_normal, metallic, roughness, light_pos, light.color);
+        luminance += pbr_luminance(in.tangent_pos, tangent_camera_dir, albedo, tangent_normal, metallic, roughness, tbn, light);
     }
 
     return vec4(luminance, 1);
