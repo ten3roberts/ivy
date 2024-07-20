@@ -1,6 +1,6 @@
 //! Image based lighting for environment lighting
 
-use std::{any::type_name, sync::Arc};
+use std::any::type_name;
 
 use glam::{Mat4, Vec3};
 use image::DynamicImage;
@@ -10,8 +10,8 @@ use ivy_core::DEG_90;
 use ivy_wgpu::{
     rendergraph::{Dependency, Node, TextureHandle},
     types::{
-        shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, PhysicalSize, Shader,
-        TypedBuffer,
+        shader::{ShaderDesc, TargetDesc},
+        BindGroupBuilder, BindGroupLayoutBuilder, PhysicalSize, Shader, TypedBuffer,
     },
     Gpu,
 };
@@ -183,15 +183,17 @@ impl HdriProcessor {
             &ShaderDesc {
                 label: "hdri_project",
                 source: include_str!("../shaders/equirect_project.wgsl"),
-                format: self.format,
+                target: &TargetDesc {
+                    formats: &[self.format],
+                    depth_format: None,
+                    sample_count: 1,
+                },
                 vertex_layouts: &[VertexBufferLayout {
                     array_stride: 12,
                     step_mode: VertexStepMode::Vertex,
                     attributes: &vertex_attr_array![0 => Float32x3],
                 }],
                 layouts: &[&bind_group_layout],
-                depth_format: None,
-                sample_count: 1,
                 fragment_entry_point: "fs_main",
                 vertex_entry_point: "vs_main",
             },
@@ -281,11 +283,13 @@ impl HdriProcessor {
             &ShaderDesc {
                 label: "diffuse_irradiance",
                 source: include_str!("../shaders/diffuse_irradiance.wgsl"),
-                format: self.format,
+                target: &TargetDesc {
+                    formats: &[self.format],
+                    depth_format: None,
+                    sample_count: 1,
+                },
                 vertex_layouts: &[],
                 layouts: &[&bind_group_layout],
-                depth_format: None,
-                sample_count: 1,
                 fragment_entry_point: "fs_main",
                 vertex_entry_point: "vs_main",
             },
@@ -372,11 +376,13 @@ impl HdriProcessor {
             &ShaderDesc {
                 label: "specular_ibl",
                 source: include_str!("../shaders/specular_ibl.wgsl"),
-                format: self.format,
+                target: &TargetDesc {
+                    formats: &[self.format],
+                    depth_format: None,
+                    sample_count: 1,
+                },
                 vertex_layouts: &[],
                 layouts: &[&bind_group_layout],
-                depth_format: None,
-                sample_count: 1,
                 fragment_entry_point: "fs_main",
                 vertex_entry_point: "vs_main",
             },
@@ -422,11 +428,13 @@ impl HdriProcessor {
             &ShaderDesc {
                 label: "brdf_lookup",
                 source: include_str!("../shaders/brdf_lookup.wgsl"),
-                format: self.format,
                 vertex_layouts: &[],
                 layouts: &[],
-                depth_format: None,
-                sample_count: 1,
+                target: &TargetDesc {
+                    formats: &[self.format],
+                    depth_format: None,
+                    sample_count: 1,
+                },
                 fragment_entry_point: "fs_main",
                 vertex_entry_point: "vs_main",
             },

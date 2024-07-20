@@ -72,6 +72,29 @@ where
         }
     }
 
+    pub fn new_uninit_aligned(
+        gpu: &Gpu,
+        label: impl Into<String>,
+        usage: BufferUsages,
+        len: usize,
+        align: usize,
+    ) -> Self {
+        let label = label.into();
+        let buffer = gpu.device.create_buffer(&BufferDescriptor {
+            label: Some(&label),
+            usage,
+            size: ((size_of::<T>() as u64).max(align as u64) * len as u64),
+            mapped_at_creation: false,
+        });
+
+        Self {
+            buffer,
+            len,
+            label,
+            _marker: PhantomData,
+        }
+    }
+
     #[inline]
     pub fn len(&self) -> usize {
         self.len

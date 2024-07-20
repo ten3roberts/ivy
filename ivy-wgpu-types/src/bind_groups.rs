@@ -47,6 +47,17 @@ impl BindGroupLayoutBuilder {
         )
     }
 
+    pub fn bind_texture_unfiltered(&mut self, visibility: ShaderStages) -> &mut Self {
+        self.bind(
+            visibility,
+            BindingType::Texture {
+                sample_type: TextureSampleType::Float { filterable: false },
+                view_dimension: TextureViewDimension::D2,
+                multisampled: false,
+            },
+        )
+    }
+
     pub fn bind_texture_cube(&mut self, visibility: ShaderStages) -> &mut Self {
         self.bind(
             visibility,
@@ -78,6 +89,20 @@ impl BindGroupLayoutBuilder {
         self.bind(
             visibility,
             BindingType::Sampler(SamplerBindingType::Filtering),
+        )
+    }
+
+    pub fn bind_sampler_nonfiltering(&mut self, visibility: ShaderStages) -> &mut Self {
+        self.bind(
+            visibility,
+            BindingType::Sampler(SamplerBindingType::NonFiltering),
+        )
+    }
+
+    pub fn bind_sampler_comparison(&mut self, visibility: ShaderStages) -> &mut Self {
+        self.bind(
+            visibility,
+            BindingType::Sampler(SamplerBindingType::Comparison),
         )
     }
 
@@ -143,6 +168,14 @@ impl<'a> BindGroupBuilder<'a> {
 
     pub fn bind_buffer(&mut self, buffer: &'a Buffer) -> &mut Self {
         self.bind(buffer.as_entire_binding())
+    }
+
+    pub fn bind_buffer_slice(&mut self, buffer: &'a Buffer, offset: u64, size: u64) -> &mut Self {
+        self.bind(BindingResource::Buffer(wgpu::BufferBinding {
+            buffer,
+            offset,
+            size: Some(size.try_into().unwrap()),
+        }))
     }
 
     pub fn build(&self, gpu: &Gpu, layout: &BindGroupLayout) -> BindGroup {

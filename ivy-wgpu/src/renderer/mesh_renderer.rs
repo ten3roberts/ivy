@@ -7,33 +7,37 @@ use bytemuck::Zeroable;
 use flax::{
     entity_ids,
     fetch::{entity_refs, Copied, Modified, Source, TransformFetch, Traverse},
-    CommandBuffer, Component, Fetch, FetchExt, Query, World,
+    CommandBuffer, Component, Entity, Fetch, FetchExt, Query, World,
 };
 use glam::{Mat4, Vec4Swizzles};
 use itertools::Itertools;
 use ivy_assets::{map::AssetMap, stored::Handle, Asset, AssetCache};
-use ivy_core::world_transform;
+use ivy_core::{
+    profiling::{profile_function, profile_scope},
+    world_transform,
+};
 use ivy_gltf::components::skin;
 use slab::Slab;
 use wgpu::{BindGroup, BindGroupLayout, BufferUsages, RenderPass, ShaderStages, TextureFormat};
 
 use crate::{
-    components::{material, mesh, mesh_primitive, shader},
+    components::{material, mesh, mesh_primitive},
     material::Material,
     material_desc::{MaterialData, MaterialDesc},
     mesh::{Vertex, VertexDesc},
     mesh_buffer::{MeshBuffer, MeshHandle},
     mesh_desc::MeshDesc,
     renderer::RendererStore,
+    shader::ShaderPassDesc,
     types::{shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, Shader, TypedBuffer},
     Gpu,
 };
 
-use super::{CameraRenderer, CameraShaderData, ObjectData};
+use super::{CameraRenderer, CameraShaderData, ObjectData, TargetDesc};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BatchKey {
-    pub shader: Asset<crate::shader::ShaderDesc>,
+    pub shader: Asset<ShaderPassDesc>,
     pub material: MaterialDesc,
     pub mesh: MeshDesc,
 }
@@ -70,7 +74,6 @@ impl Batch {
         &'a self,
         _: &Gpu,
         _: &AssetCache,
-        _: &'a CameraShaderData,
         store: &'a RendererStore,
         render_pass: &mut RenderPass<'a>,
     ) {
@@ -101,6 +104,7 @@ impl ObjectDataQuery {
 }
 
 pub struct MeshRenderer {
+    id: Entity,
     /// All the objects registered
     /// |****-|**---|**|
     ///
@@ -112,7 +116,7 @@ pub struct MeshRenderer {
     bind_group: BindGroup,
 
     pub meshes: HashMap<MeshDesc, Weak<MeshHandle>>,
-    pub shaders: AssetMap<crate::shader::ShaderDesc, Handle<Shader>>,
+    pub shaders: AssetMap<ShaderPassDesc, Handle<Shader>>,
     pub materials: HashMap<MaterialDesc, Asset<Material>>,
 
     batches: Slab<Batch>,
@@ -124,10 +128,17 @@ pub struct MeshRenderer {
     )>,
 
     mesh_buffer: MeshBuffer,
+    shader_pass: Component<Asset<ShaderPassDesc>>,
 }
 
 impl MeshRenderer {
-    pub fn new(gpu: &Gpu) -> Self {
+    pub fn new(
+        world: &mut World,
+        gpu: &Gpu,
+        shader_pass: Component<Asset<ShaderPassDesc>>,
+    ) -> Self {
+        let id = world.spawn();
+
         let bind_group_layout = BindGroupLayoutBuilder::new("ObjectBuffer")
             .bind_storage_buffer(ShaderStages::VERTEX)
             .build(gpu);
@@ -144,6 +155,7 @@ impl MeshRenderer {
             .build(gpu, &bind_group_layout);
 
         Self {
+            id,
             object_data: Vec::new(),
             object_buffer,
             bind_group_layout,
@@ -153,8 +165,9 @@ impl MeshRenderer {
             materials: Default::default(),
             batches: Default::default(),
             batch_map: Default::default(),
-            object_query: Query::new((object_index(), ObjectDataQuery::new().modified())),
+            object_query: Query::new((object_index(id), ObjectDataQuery::new().modified())),
             mesh_buffer: MeshBuffer::new(gpu, "mesh_buffer", 4),
+            shader_pass,
         }
     }
 
@@ -176,18 +189,18 @@ impl MeshRenderer {
         world: &mut World,
         assets: &AssetCache,
         gpu: &Gpu,
-        globals: &CameraShaderData,
+        layout: &BindGroupLayout,
         store: &mut RendererStore,
         cmd: &mut CommandBuffer,
-        format: TextureFormat,
+        target: &TargetDesc,
     ) {
         let mut query = Query::new((
             entity_refs(),
             mesh().cloned(),
             material().cloned(),
-            shader().cloned(),
+            self.shader_pass.cloned(),
         ))
-        .without(object_index());
+        .without(object_index(self.id));
 
         let mut needs_reallocation = false;
         for (entity, mesh, material, shader) in &mut query.borrow(world) {
@@ -256,11 +269,9 @@ impl MeshRenderer {
                         &ShaderDesc {
                             label: k.shader.label(),
                             source: k.shader.source(),
-                            format,
+                            target,
                             vertex_layouts: &[Vertex::layout()],
-                            layouts: &[&globals.layout, &self.bind_group_layout, material.layout()],
-                            depth_format: Some(TextureFormat::Depth24Plus),
-                            sample_count: 4,
+                            layouts: &[layout, &self.bind_group_layout, material.layout()],
                             vertex_entry_point: "vs_main",
                             fragment_entry_point: "fs_main",
                         },
@@ -271,8 +282,11 @@ impl MeshRenderer {
                     .insert(Batch::new(mesh, material, shader.clone()))
             });
 
-            cmd.set(id, object_index(), usize::MAX)
-                .set(id, self::batch_id(), batch_id);
+            cmd.set(id, object_index(self.id), usize::MAX).set(
+                id,
+                self::batch_id(self.id),
+                batch_id,
+            );
 
             let batch = &mut self.batches[batch_id];
 
@@ -288,6 +302,8 @@ impl MeshRenderer {
     }
 
     fn reallocate_object_buffer(&mut self, world: &World, gpu: &Gpu) {
+        profile_function!();
+
         let mut cursor = 0;
         let mut total_registered = 0;
 
@@ -302,7 +318,11 @@ impl MeshRenderer {
             cursor += cap;
         }
 
-        let mut query = Query::new((batch_id(), object_index().as_mut(), ObjectDataQuery::new()));
+        let mut query = Query::new((
+            batch_id(self.id),
+            object_index(self.id).as_mut(),
+            ObjectDataQuery::new(),
+        ));
 
         let mut total_found = 0;
 
@@ -342,10 +362,10 @@ impl CameraRenderer for MeshRenderer {
             ctx.world,
             ctx.assets,
             ctx.gpu,
-            ctx.camera_data,
+            ctx.layout,
             ctx.store,
             &mut cmd,
-            ctx.format,
+            &ctx.target_desc,
         );
         self.update_object_data(ctx.world, ctx.gpu);
 
@@ -370,7 +390,7 @@ impl CameraRenderer for MeshRenderer {
         for batch_id in self.batch_map.values() {
             let batch = &self.batches[*batch_id];
             tracing::trace!(instance_count = batch.instance_count, "drawing batch");
-            batch.draw(ctx.gpu, ctx.assets, ctx.camera_data, ctx.store, render_pass)
+            batch.draw(ctx.gpu, ctx.assets, ctx.store, render_pass)
         }
 
         Ok(())
@@ -380,6 +400,6 @@ impl CameraRenderer for MeshRenderer {
 type BatchId = usize;
 
 flax::component! {
-    batch_id: BatchId,
-    object_index: usize,
+    batch_id(id): BatchId,
+    object_index(id): usize,
 }

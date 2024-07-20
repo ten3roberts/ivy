@@ -166,9 +166,7 @@ impl<'a> WinitEventHandler<'a> {
             WindowEvent::DroppedFile(_) => todo!(),
             WindowEvent::HoveredFile(_) => todo!(),
             WindowEvent::HoveredFileCancelled => todo!(),
-            WindowEvent::Focused(focus) => {
-                tracing::info!(?focus, "focus");
-            }
+            WindowEvent::Focused(_focus) => {}
             WindowEvent::KeyboardInput { event, .. } => {
                 self.app.emit(KeyboardInput {
                     modifiers: self.modifiers,

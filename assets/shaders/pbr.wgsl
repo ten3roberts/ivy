@@ -30,6 +30,9 @@ struct Globals {
 
 struct Light {
     kind: u32,
+    shadow_index: u32,
+    _padding: vec2<f32>,
+    shadow_viewproj: mat4x4<f32>,
     direction: vec3<f32>,
     position: vec3<f32>,
     color: vec3<f32>,
@@ -49,15 +52,21 @@ var<uniform> globals: Globals;
 var<uniform> lights: array<Light, LIGHT_COUNT>;
 
 @group(0) @binding(2)
-var environment_map: texture_cube<f32>;
+var shadow_maps: texture_depth_2d_array;
 
 @group(0) @binding(3)
-var irradiance_map: texture_cube<f32>;
+var shadow_sampler: sampler_comparison;
 
 @group(0) @binding(4)
-var specular_map: texture_cube<f32>;
+var environment_map: texture_cube<f32>;
 
 @group(0) @binding(5)
+var irradiance_map: texture_cube<f32>;
+
+@group(0) @binding(6)
+var specular_map: texture_cube<f32>;
+
+@group(0) @binding(7)
 var integrated_brdf: texture_2d<f32>;
 
 @group(1) @binding(0)
@@ -144,11 +153,12 @@ fn geometry_smith(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, roughness: f32) -> f
 }
 
 const PI: f32 = 3.14159265359;
+const U32_MAX = 0xFFFFFFFFu;
 
 const LIGHT_POINT: u32 = 0;
 const LIGHT_DIRECTIONAL: u32 = 1;
 
-fn pbr_luminance(position: vec3<f32>, camera_dir: vec3<f32>, albedo: vec3<f32>, normal: vec3<f32>, metallic: f32, roughness: f32, tbn: mat3x3<f32>, light: Light) -> vec3<f32> {
+fn pbr_luminance(world_pos: vec3<f32>, position: vec3<f32>, camera_dir: vec3<f32>, albedo: vec3<f32>, normal: vec3<f32>, metallic: f32, roughness: f32, tbn: mat3x3<f32>, light: Light) -> vec3<f32> {
     var l: vec3<f32>;
     var attenuation: f32;
 
@@ -162,6 +172,21 @@ fn pbr_luminance(position: vec3<f32>, camera_dir: vec3<f32>, albedo: vec3<f32>, 
     } else if light.kind == LIGHT_DIRECTIONAL {
         l = tbn * -light.direction;
         attenuation = 1f;
+    }
+
+    var in_light = 0f;
+    if light.shadow_index != U32_MAX {
+        let bias = max(0.05 * (1.0 - dot(normal, l)), 0.005);
+
+        let light_space_clip = light.shadow_viewproj * vec4(world_pos, 1.0);
+        let light_space_pos = light_space_clip.xyz / light_space_clip.w;
+
+        var light_space_uv = vec2(light_space_pos.x, -light_space_pos.y) * 0.5 + 0.5;
+        let current_depth = light_space_pos.z;
+
+        in_light = textureSampleCompare(shadow_maps, shadow_sampler, light_space_uv, light.shadow_index, current_depth - bias);
+        // return vec3(current_depth - textureSample(shadow_maps, shadow_sampler, light_space_uv, light.shadow_index));
+        // // return vec3(light_space_uv.x, light_space_uv.y, 0.0);
     }
 
     let h = normalize(camera_dir + l);
@@ -187,7 +212,7 @@ fn pbr_luminance(position: vec3<f32>, camera_dir: vec3<f32>, albedo: vec3<f32>, 
     var kd = vec3(1f) - ks;
     kd *= 1f - metallic;
 
-    return (kd * albedo / PI + specular) * radiance * ndotl;
+    return in_light * (kd * albedo / PI + specular) * radiance * ndotl;
 }
 
 const MAX_REFLECTION_LOD: f32 = 7f;
@@ -235,10 +260,11 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     for (var i = 0u; i < LIGHT_COUNT; i++) {
         let light = lights[i];
+        if light.kind == U32_MAX {
+            break;
+        }
 
-        let light_pos = tbn * light.position;
-
-        luminance += pbr_luminance(in.tangent_pos, tangent_camera_dir, albedo, tangent_normal, metallic, roughness, tbn, light);
+        luminance += pbr_luminance(in.world_pos, in.tangent_pos, tangent_camera_dir, albedo, tangent_normal, metallic, roughness, tbn, light);
     }
 
     return vec4(luminance, 1);

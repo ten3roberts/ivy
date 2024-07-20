@@ -1,4 +1,4 @@
-use std::{f32::consts::TAU, sync::Arc, time::Instant};
+use std::{f32::consts::TAU, mem::size_of, sync::Arc, time::Instant};
 
 use anyhow::Context;
 use flax::{
@@ -16,7 +16,7 @@ use ivy_core::{
     palette::Srgb,
     position,
     profiling::ProfilingLayer,
-    rotation, App, EngineLayer, EntityBuilderExt, Layer, TransformBundle,
+    rotation, App, EngineLayer, EntityBuilderExt, Layer, TransformBundle, DEG_90,
 };
 use ivy_gltf::{animation::player::Animator, components::animator, Document};
 use ivy_input::{
@@ -32,10 +32,13 @@ use ivy_postprocessing::{
     tonemap::TonemapNode,
 };
 use ivy_rendergraph::components::render_graph;
-use ivy_scene::GltfNodeExt;
+use ivy_scene::{GltfNodeExt, NodeMountOptions};
 use ivy_vulkan::vk::{BufferCollectionCreateInfoFUCHSIABuilder, Extent3D};
 use ivy_wgpu::{
-    components::{light_data, light_kind, main_window, projection_matrix, window},
+    components::{
+        cast_shadow, forward_pass, light_data, light_kind, main_window, projection_matrix,
+        shadow_pass, window,
+    },
     driver::{WindowHandle, WinitDriver},
     events::ResizedEvent,
     layer::GraphicsLayer,
@@ -44,11 +47,12 @@ use ivy_wgpu::{
     mesh_desc::MeshDesc,
     primitives::{generate_plane, PlaneDesc, UvSphereDesc},
     renderer::{
-        mesh_renderer::MeshRenderer, skinned_mesh_renderer::SkinnedMeshRenderer, CameraNode,
-        EnvironmentData, MsaaResolve, RenderObjectBundle,
+        mesh_renderer::MeshRenderer, shadowmapping::ShadowMapNode,
+        skinned_mesh_renderer::SkinnedMeshRenderer, CameraNode, EnvironmentData, LightManager,
+        MsaaResolve, RenderObjectBundle,
     },
-    rendergraph::{self, ExternalResources, ManagedTextureDesc, RenderGraph},
-    shaders::{PbrShaderDesc, SkinnedPbrShaderDesc},
+    rendergraph::{self, BufferDesc, ExternalResources, ManagedTextureDesc, RenderGraph},
+    shaders::{PbrShaderDesc, ShadowShaderDesc, SkinnedPbrShaderDesc},
     texture::TextureDesc,
     Gpu,
 };
@@ -56,7 +60,7 @@ use ivy_wgpu_types::{texture::max_mip_levels, PhysicalSize, Surface};
 use tracing::Instrument;
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
-use wgpu::{Extent3d, TextureDimension, TextureFormat};
+use wgpu::{BufferUsages, Extent3d, TextureDimension, TextureFormat};
 
 pub fn main() -> anyhow::Result<()> {
     registry()
@@ -179,7 +183,8 @@ impl LogicLayer {
                             mesh: plane_mesh.clone(),
                             material: plane_material.clone(),
                             shader: shader.clone(),
-                        }),
+                        })
+                        .set(shadow_pass(), assets.load(&ShadowShaderDesc)),
                 );
 
                 let sphere_mesh = MeshDesc::content(assets.load(&UvSphereDesc::default()));
@@ -200,13 +205,14 @@ impl LogicLayer {
                                 .mount(TransformBundle::new(
                                     vec3(0.0 + i as f32 * 2.0, j as f32 * 2.0 + 1.0, 5.0),
                                     Quat::IDENTITY,
-                                    Vec3::ONE,
+                                    Vec3::ONE * if j == 0 { 1.0 } else { 0.5 },
                                 ))
                                 .mount(RenderObjectBundle {
                                     mesh: sphere_mesh.clone(),
                                     material: plastic_material.clone(),
                                     shader: shader.clone(),
-                                }),
+                                })
+                                .set(shadow_pass(), assets.load(&ShadowShaderDesc)),
                         );
                     }
                 }
@@ -222,13 +228,38 @@ impl LogicLayer {
                 let animation = skin.animations()[0].clone();
 
                 let root: EntityBuilder = node
-                    .mount(&assets, &mut Entity::builder())
+                    .mount(
+                        &assets,
+                        &mut Entity::builder(),
+                        NodeMountOptions { cast_shadow: true },
+                    )
                     .mount(TransformBundle::new(
                         vec3(0.0, 0.0, 2.0),
                         Quat::IDENTITY,
                         Vec3::ONE,
                     ))
                     .set(animator(), Animator::new(animation))
+                    .into();
+
+                // cmd.lock().spawn(root);
+
+                let document: Asset<Document> = assets.load_async("models/crate.glb").await;
+                let node = document
+                    .find_node("Cube")
+                    .context("Missing document node")
+                    .unwrap();
+
+                let root: EntityBuilder = node
+                    .mount(
+                        &assets,
+                        &mut Entity::builder(),
+                        NodeMountOptions { cast_shadow: true },
+                    )
+                    .mount(TransformBundle::new(
+                        vec3(0.0, 1.0, -2.0),
+                        Quat::IDENTITY,
+                        Vec3::ONE,
+                    ))
                     .into();
 
                 cmd.lock().spawn(root);
@@ -245,19 +276,33 @@ impl LogicLayer {
         Entity::builder()
             .mount(TransformBundle::default().with_rotation(Quat::from_euler(
                 EulerRot::YXZ,
-                0.0,
+                0.5,
                 1.0,
                 0.0,
             )))
             .set(light_data(), LightData::new(Srgb::new(1.0, 1.0, 1.0), 2.0))
             .set(light_kind(), LightKind::Directional)
+            .set_default(cast_shadow())
             .spawn(world);
 
-        Entity::builder()
-            .mount(TransformBundle::default().with_position(vec3(0.0, 2.0, 0.0)))
-            .set(light_data(), LightData::new(Srgb::new(1.0, 0.0, 0.0), 50.0))
-            .set(light_kind(), LightKind::Point)
-            .spawn(world);
+        // Entity::builder()
+        //     .mount(TransformBundle::default().with_rotation(Quat::from_euler(
+        //         EulerRot::YXZ,
+        //         2.0,
+        //         0.5,
+        //         0.0,
+        //     )))
+        //     .set(light_data(), LightData::new(Srgb::new(0.0, 0.0, 1.0), 1.0))
+        //     .set(light_kind(), LightKind::Directional)
+        //     .set_default(cast_shadow())
+        //     .spawn(world);
+
+        // Entity::builder()
+        //     .mount(TransformBundle::default().with_position(vec3(0.0, 2.0, 0.0)))
+        //     .set(light_data(), LightData::new(Srgb::new(1.0, 0.0, 0.0), 50.0))
+        //     .set(light_kind(), LightKind::Point)
+        //     .spawn(world);
+
         Ok(())
     }
 }
@@ -497,7 +542,7 @@ struct RenderGraphRenderer {
 }
 
 impl RenderGraphRenderer {
-    pub fn new(_world: &mut World, assets: &AssetCache, gpu: &Gpu, surface: Surface) -> Self {
+    pub fn new(world: &mut World, assets: &AssetCache, gpu: &Gpu, surface: Surface) -> Self {
         let size = surface.size();
 
         let image: Asset<DynamicImage> =
@@ -506,8 +551,8 @@ impl RenderGraphRenderer {
         // assets.load("ivy-postprocessing/hdrs/industrial_sunset_puresky_2k.hdr");
 
         const MAX_REFLECTION_LOD: u32 = 8;
-        let hdri_processor =
-            HdriProcessor::new(gpu, TextureFormat::Rgba16Float, MAX_REFLECTION_LOD);
+        let hdr_format = TextureFormat::Rgba16Float;
+        let hdri_processor = HdriProcessor::new(gpu, hdr_format, MAX_REFLECTION_LOD);
 
         let mut render_graph = RenderGraph::new();
 
@@ -563,7 +608,7 @@ impl RenderGraphRenderer {
             mip_level_count: 1,
             sample_count: 1,
             dimension: TextureDimension::D2,
-            format: TextureFormat::Rgba16Float,
+            format: hdr_format,
             persistent: true,
         });
 
@@ -577,7 +622,7 @@ impl RenderGraphRenderer {
             label: "multisampled_hdr".into(),
             extent,
             dimension: wgpu::TextureDimension::D2,
-            format: TextureFormat::Rgba16Float,
+            format: hdr_format,
             mip_level_count: 1,
             sample_count: 4,
             persistent: false,
@@ -587,21 +632,21 @@ impl RenderGraphRenderer {
             label: "final_color".into(),
             extent,
             dimension: wgpu::TextureDimension::D2,
-            format: TextureFormat::Rgba16Float,
+            format: hdr_format,
             mip_level_count: 1,
             sample_count: 1,
             persistent: false,
         });
 
-        let bloom_result = render_graph.resources.insert_texture(ManagedTextureDesc {
-            label: "bloom_result".into(),
-            extent,
-            dimension: wgpu::TextureDimension::D2,
-            format: TextureFormat::Rgba16Float,
-            mip_level_count: 1,
-            sample_count: 1,
-            persistent: false,
-        });
+        // let bloom_result = render_graph.resources.insert_texture(ManagedTextureDesc {
+        //     label: "bloom_result".into(),
+        //     extent,
+        //     dimension: wgpu::TextureDimension::D2,
+        //     format: TextureFormat::Rgba16Float,
+        //     mip_level_count: 1,
+        //     sample_count: 1,
+        //     persistent: false,
+        // });
 
         let depth_texture = render_graph.resources.insert_texture(ManagedTextureDesc {
             label: "depth_texture".into(),
@@ -619,9 +664,31 @@ impl RenderGraphRenderer {
 
         let camera_renderer = (
             SkyboxRenderer::new(gpu),
-            MeshRenderer::new(gpu),
-            SkinnedMeshRenderer::new(gpu),
+            MeshRenderer::new(world, gpu, forward_pass()),
+            SkinnedMeshRenderer::new(world, gpu, forward_pass()),
         );
+        let max_shadows = 4;
+
+        let shadow_maps = render_graph.resources.insert_texture(ManagedTextureDesc {
+            label: "depth_texture".into(),
+            extent: wgpu::Extent3d {
+                width: 4096,
+                height: 4096,
+                depth_or_array_layers: max_shadows,
+            },
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Depth24Plus,
+            mip_level_count: 1,
+            sample_count: 1,
+            persistent: false,
+        });
+
+        render_graph.add_node(ShadowMapNode::new(
+            world,
+            gpu,
+            shadow_maps,
+            max_shadows as usize,
+        ));
 
         render_graph.add_node(HdriProcessorNode::new(
             hdri_processor,
@@ -632,23 +699,26 @@ impl RenderGraphRenderer {
             integrated_brdf,
         ));
 
+        let light_manager = LightManager::new(gpu, shadow_maps, 4);
+
         render_graph.add_node(CameraNode::new(
             gpu,
             depth_texture,
             multisampled_hdr,
             camera_renderer,
+            light_manager,
             EnvironmentData::new(skybox, skybox_ir, skybox_specular, integrated_brdf),
         ));
 
         // TODO: make chaining easier
         render_graph.add_node(MsaaResolve::new(multisampled_hdr, final_color));
-        render_graph.add_node(BloomNode::new(gpu, final_color, bloom_result, 5, 0.005));
-        render_graph.add_node(TonemapNode::new(gpu, bloom_result, surface_texture));
+        // render_graph.add_node(BloomNode::new(gpu, final_color, bloom_result, 5, 0.005));
+        render_graph.add_node(TonemapNode::new(gpu, final_color, surface_texture));
 
         Self {
             render_graph,
             surface,
-            screensized: vec![multisampled_hdr, final_color, bloom_result],
+            screensized: vec![multisampled_hdr, final_color],
             surface_texture,
             depth_texture,
         }

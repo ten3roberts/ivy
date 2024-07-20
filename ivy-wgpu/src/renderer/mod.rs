@@ -1,4 +1,6 @@
+mod light_manager;
 pub mod mesh_renderer;
+pub mod shadowmapping;
 pub mod skinned_mesh_renderer;
 
 use std::any::type_name;
@@ -8,14 +10,16 @@ use glam::{vec3, Mat4, Vec3, Vec4};
 use itertools::Itertools;
 use ivy_assets::{stored::Store, Asset, AssetCache};
 use ivy_core::{impl_for_tuples, main_camera, position, world_transform, Bundle};
+use ivy_wgpu_types::shader::TargetDesc;
 use wgpu::{
-    BindGroup, BufferUsages, Operations, RenderPass, RenderPassColorAttachment,
-    RenderPassDescriptor, ShaderStages, Texture, TextureFormat, TextureUsages,
-    TextureViewDescriptor, TextureViewDimension,
+    core::resource::TextureDimensionError, BindGroup, BindGroupLayout, BindingType, BufferUsages,
+    Operations, RenderPass, RenderPassColorAttachment, RenderPassDescriptor, SamplerDescriptor,
+    ShaderStages, Texture, TextureFormat, TextureSampleType, TextureUsages, TextureViewDescriptor,
+    TextureViewDimension,
 };
 
 use crate::{
-    components::{light_data, light_kind, material, mesh, projection_matrix, shader},
+    components::{forward_pass, light_data, light_kind, material, mesh, projection_matrix},
     material::Material,
     material_desc::MaterialDesc,
     mesh_desc::MeshDesc,
@@ -23,6 +27,8 @@ use crate::{
     types::{BindGroupBuilder, BindGroupLayoutBuilder, Shader, TypedBuffer},
     Gpu,
 };
+
+pub use light_manager::LightManager;
 
 pub struct MsaaResolve {
     final_color: TextureHandle,
@@ -93,10 +99,11 @@ pub struct RenderContext<'a> {
     pub assets: &'a AssetCache,
     pub gpu: &'a Gpu,
     pub store: &'a mut RendererStore,
-    pub camera_data: &'a CameraShaderData,
-    pub format: TextureFormat,
-    pub enviroment: &'a EnvironmentData,
+    // pub camera_data: &'a CameraShaderData,
+    pub environment: Option<&'a EnvironmentData>,
+    pub layout: &'a BindGroupLayout,
     pub bind_group: &'a BindGroup,
+    pub target_desc: TargetDesc<'a>,
 }
 
 pub struct UpdateContext<'a> {
@@ -104,9 +111,10 @@ pub struct UpdateContext<'a> {
     pub assets: &'a AssetCache,
     pub gpu: &'a Gpu,
     pub store: &'a mut RendererStore,
-    pub camera_data: &'a CameraShaderData,
-    pub format: TextureFormat,
-    pub enviroment: &'a EnvironmentData,
+    pub layout: &'a BindGroupLayout,
+    // pub camera_data: &'a CameraShaderData,
+    pub camera: CameraData,
+    pub target_desc: TargetDesc<'a>,
 }
 
 pub trait CameraRenderer {
@@ -191,11 +199,14 @@ pub struct CameraNode {
     environment: EnvironmentData,
     /// 0: camera data
     /// 1: light buffer
-    /// 2: environment_map
-    /// 3: irradiance_map
-    /// 4: specular map
-    /// 5: integrated brdf
+    /// 2: shadow textures
+    /// 3: shadow sampler
+    /// 4: environment map
+    /// 5: irradiance map
+    /// 6: specular map
+    /// 7: integrated brdf
     pub bind_group: Option<BindGroup>,
+    light_manager: LightManager,
 }
 
 impl CameraNode {
@@ -204,9 +215,11 @@ impl CameraNode {
         depth_texture: TextureHandle,
         output: TextureHandle,
         renderer: impl 'static + CameraRenderer,
+        light_manager: LightManager,
         environment: EnvironmentData,
     ) -> Self {
         Self {
+            light_manager,
             renderer: Box::new(renderer),
             shader_data: CameraShaderData::new(gpu),
             depth_texture,
@@ -225,6 +238,8 @@ impl Node for CameraNode {
 
     fn update(&mut self, ctx: crate::rendergraph::NodeUpdateContext) -> anyhow::Result<()> {
         let output = ctx.get_texture(self.output);
+
+        let depth = ctx.get_texture(self.depth_texture);
 
         tracing::debug!("updating renderer");
         if let Some((world_transform, &projection)) =
@@ -247,48 +262,29 @@ impl Node for CameraNode {
                 .write(&ctx.gpu.queue, 0, &[self.shader_data.data]);
         }
 
-        let light_data = Query::new((world_transform(), light_data(), light_kind()))
-            .borrow(ctx.world)
-            .iter()
-            .map(|(transform, data, kind)| {
-                let color = (vec3(data.color.red, data.color.green, data.color.blue)
-                    * data.intensity)
-                    .extend(1.0);
-                let position = transform.transform_point3(Vec3::ZERO);
-                let direction = transform.transform_vector3(Vec3::Z);
-
-                LightData {
-                    position: position.extend(0.0),
-                    color,
-                    kind: *kind as u32,
-                    direction: direction.normalize().extend(0.0),
-                    padding: Default::default(),
-                }
-            })
-            .take(self.shader_data.light_buffer.len())
-            .collect_vec();
-
-        self.shader_data
-            .light_buffer
-            .write(&ctx.gpu.queue, 0, &light_data);
+        self.light_manager.update(&ctx)?;
 
         self.renderer.update(&mut UpdateContext {
             world: ctx.world,
             assets: ctx.assets,
             gpu: ctx.gpu,
             store: &mut self.store,
-            camera_data: &self.shader_data,
-            format: output.format(),
-            enviroment: &self.environment,
+            target_desc: TargetDesc {
+                formats: &[output.format()],
+                depth_format: depth.format().into(),
+                sample_count: output.sample_count(),
+            },
+            layout: &self.shader_data.layout,
+            camera: self.shader_data.data,
         })?;
 
         Ok(())
     }
 
     fn draw(&mut self, ctx: crate::rendergraph::NodeExecutionContext) -> anyhow::Result<()> {
-        let depth_view = ctx
-            .get_texture(self.depth_texture)
-            .create_view(&Default::default());
+        let depth = ctx.get_texture(self.depth_texture);
+
+        let depth_view = depth.create_view(&Default::default());
 
         let bind_group = self.bind_group.get_or_insert_with(|| {
             let cubemap_view = TextureViewDescriptor {
@@ -297,9 +293,31 @@ impl Node for CameraNode {
                 ..Default::default()
             };
 
+            let shadow_sampler = ctx.gpu.device.create_sampler(&SamplerDescriptor {
+                label: "shadow sampler".into(),
+                address_mode_u: wgpu::AddressMode::ClampToEdge,
+                address_mode_v: wgpu::AddressMode::ClampToEdge,
+                address_mode_w: wgpu::AddressMode::ClampToEdge,
+                mag_filter: wgpu::FilterMode::Nearest,
+                min_filter: wgpu::FilterMode::Nearest,
+                mipmap_filter: wgpu::FilterMode::Nearest,
+                compare: Some(wgpu::CompareFunction::Less),
+                anisotropy_clamp: 1,
+                border_color: None,
+                ..Default::default()
+            });
+
             BindGroupBuilder::new("Globals")
                 .bind_buffer(&self.shader_data.buffer)
-                .bind_buffer(&self.shader_data.light_buffer)
+                .bind_buffer(self.light_manager.light_buffer())
+                .bind_texture(
+                    &ctx.get_texture(self.light_manager.shadow_maps())
+                        .create_view(&TextureViewDescriptor {
+                            dimension: Some(TextureViewDimension::D2Array),
+                            ..Default::default()
+                        }),
+                )
+                .bind_sampler(&shadow_sampler)
                 .bind_texture(
                     &ctx.get_texture(self.environment.environment_map)
                         .create_view(&cubemap_view),
@@ -327,10 +345,15 @@ impl Node for CameraNode {
             assets: ctx.assets,
             gpu: ctx.gpu,
             store: &mut self.store,
-            camera_data: &self.shader_data,
-            format: output.format(),
-            enviroment: &self.environment,
+            // camera_data: &self.shader_data,
+            target_desc: TargetDesc {
+                formats: &[output.format()],
+                depth_format: depth.format().into(),
+                sample_count: output.sample_count(),
+            },
+            environment: Some(&self.environment),
             bind_group,
+            layout: &self.shader_data.layout,
         };
 
         let mut render_pass = ctx.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -367,6 +390,10 @@ impl Node for CameraNode {
 
     fn read_dependencies(&self) -> Vec<Dependency> {
         vec![
+            Dependency::texture(
+                self.light_manager.shadow_maps(),
+                TextureUsages::TEXTURE_BINDING,
+            ),
             Dependency::texture(
                 self.environment.environment_map,
                 TextureUsages::TEXTURE_BINDING,
@@ -409,22 +436,11 @@ pub struct CameraData {
     padding: f32,
 }
 
-#[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
-#[repr(C)]
-pub struct LightData {
-    pub kind: u32,
-    pub padding: Vec3,
-    pub direction: Vec4,
-    pub position: Vec4,
-    pub color: Vec4,
-}
-
 pub struct CameraShaderData {
     pub data: CameraData,
     buffer: TypedBuffer<CameraData>,
     // TODO: lights should be managed by shared class in mesh renderer
-    light_buffer: TypedBuffer<LightData>,
-    pub layout: wgpu::BindGroupLayout,
+    pub layout: BindGroupLayout,
 }
 
 impl CameraShaderData {
@@ -432,6 +448,15 @@ impl CameraShaderData {
         let layout = BindGroupLayoutBuilder::new("Globals")
             .bind_uniform_buffer(ShaderStages::VERTEX | ShaderStages::FRAGMENT)
             .bind_uniform_buffer(ShaderStages::FRAGMENT)
+            .bind(
+                ShaderStages::FRAGMENT,
+                BindingType::Texture {
+                    sample_type: TextureSampleType::Depth,
+                    view_dimension: TextureViewDimension::D2Array,
+                    multisampled: false,
+                },
+            )
+            .bind_sampler_comparison(ShaderStages::FRAGMENT)
             .bind_texture_cube(ShaderStages::FRAGMENT)
             .bind_texture_cube(ShaderStages::FRAGMENT)
             .bind_texture_cube(ShaderStages::FRAGMENT)
@@ -445,17 +470,9 @@ impl CameraShaderData {
             &[Default::default()],
         );
 
-        let light_buffer = TypedBuffer::new(
-            gpu,
-            "light_buffer",
-            BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-            &[Default::default(); 8],
-        );
-
         Self {
             buffer,
             layout,
-            light_buffer,
             data: Default::default(),
         }
     }
@@ -464,14 +481,14 @@ impl CameraShaderData {
 pub struct RenderObjectBundle {
     pub mesh: MeshDesc,
     pub material: MaterialDesc,
-    pub shader: Asset<crate::shader::ShaderDesc>,
+    pub shader: Asset<crate::shader::ShaderPassDesc>,
 }
 
 impl RenderObjectBundle {
     pub fn new(
         mesh: MeshDesc,
         material: MaterialDesc,
-        shader: Asset<crate::shader::ShaderDesc>,
+        shader: Asset<crate::shader::ShaderPassDesc>,
     ) -> Self {
         Self {
             mesh,
@@ -486,7 +503,7 @@ impl Bundle for RenderObjectBundle {
         entity
             .set(mesh(), self.mesh)
             .set(material(), self.material)
-            .set(shader(), self.shader);
+            .set(forward_pass(), self.shader);
     }
 }
 

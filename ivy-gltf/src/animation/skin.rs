@@ -137,7 +137,6 @@ impl Skin {
                     .map(|v| v.scene_index)
                     .collect::<BTreeSet<_>>();
 
-                tracing::info!(?joints, "joints");
                 for joint in &joints {
                     let node = document.nodes().nth(joint.scene_index).unwrap();
                     tracing::info!(
