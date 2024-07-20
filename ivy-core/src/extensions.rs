@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use flax::{
-    component::ComponentValue, entity_ids, CommandBuffer, Component, EntityBuilder, EntityRef,
-    Query, World,
+    component::ComponentValue, entity_ids, CommandBuffer, Component, Entity, EntityBuilder,
+    EntityRef, Query, World,
 };
 use parking_lot::{Mutex, MutexGuard};
 
@@ -11,6 +11,12 @@ pub trait WorldExt {
     fn by_name(&self, name: &str) -> Option<EntityRef>;
     /// Finds an entity by tag
     fn by_tag<T: ComponentValue>(&self, component: Component<T>) -> Option<EntityRef>;
+
+    fn append_all<I: IntoIterator<Item = (Entity, T)>, T: ComponentValue>(
+        &mut self,
+        component: Component<T>,
+        iter: I,
+    ) -> flax::error::Result<()>;
 }
 
 impl WorldExt for World {
@@ -28,6 +34,15 @@ impl WorldExt for World {
             .iter()
             .next()
             .map(|(v, _)| self.entity(v).unwrap())
+    }
+
+    fn append_all<I: IntoIterator<Item = (Entity, T)>, T: ComponentValue>(
+        &mut self,
+        component: Component<T>,
+        iter: I,
+    ) -> flax::error::Result<()> {
+        iter.into_iter()
+            .try_for_each(|(id, value)| self.set(id, component, value).map(|_| {}))
     }
 }
 

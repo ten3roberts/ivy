@@ -5,7 +5,10 @@ use itertools::Itertools;
 use ivy_core::palette::num::Recip;
 use ivy_wgpu::{
     rendergraph::{Dependency, Node, TextureDesc, TextureHandle},
-    types::{shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, Shader, TypedBuffer},
+    types::{
+        shader::{ShaderDesc, TargetDesc},
+        BindGroupBuilder, BindGroupLayoutBuilder, Shader, TypedBuffer,
+    },
     Gpu,
 };
 use wgpu::{
@@ -57,11 +60,13 @@ impl BloomNode {
             &ShaderDesc {
                 label: "bloom_downsample",
                 source: include_str!("../shaders/bloom_downsample.wgsl"),
-                format: TextureFormat::Rgba16Float,
+                target: &TargetDesc {
+                    formats: &[TextureFormat::Rgba16Float],
+                    depth_format: None,
+                    sample_count: 1,
+                },
                 vertex_layouts: &[],
                 layouts: &[&layout],
-                depth_format: None,
-                sample_count: 1,
                 fragment_entry_point: "fs_main",
                 vertex_entry_point: "vs_main",
             },
@@ -72,11 +77,13 @@ impl BloomNode {
             &ShaderDesc {
                 label: "bloom_upsample",
                 source: include_str!("../shaders/bloom_upsample.wgsl"),
-                format: TextureFormat::Rgba16Float,
+                target: &TargetDesc {
+                    formats: &[TextureFormat::Rgba16Float],
+                    depth_format: None,
+                    sample_count: 1,
+                },
                 vertex_layouts: &[],
                 layouts: &[&layout],
-                depth_format: None,
-                sample_count: 1,
                 fragment_entry_point: "fs_main",
                 vertex_entry_point: "vs_main",
             },
@@ -93,11 +100,13 @@ impl BloomNode {
             &ShaderDesc {
                 label: "bloom_mix",
                 source: include_str!("../shaders/bloom_mix.wgsl"),
-                format: TextureFormat::Rgba16Float,
+                target: &TargetDesc {
+                    formats: &[TextureFormat::Rgba16Float],
+                    depth_format: None,
+                    sample_count: 1,
+                },
                 vertex_layouts: &[],
                 layouts: &[&mix_layout],
-                depth_format: None,
-                sample_count: 1,
                 fragment_entry_point: "fs_main",
                 vertex_entry_point: "vs_main",
             },

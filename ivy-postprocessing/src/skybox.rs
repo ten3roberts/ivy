@@ -58,8 +58,8 @@ impl CameraRenderer for SkyboxRenderer {
             &ctx.gpu.queue,
             0,
             &[UniformData {
-                inv_proj: ctx.camera_data.data.projection.inverse(),
-                inv_view: ctx.camera_data.data.view.inverse(),
+                inv_proj: ctx.camera.projection.inverse(),
+                inv_view: ctx.camera.view.inverse(),
             }],
         );
 
@@ -77,11 +77,9 @@ impl CameraRenderer for SkyboxRenderer {
                 &ShaderDesc {
                     label: "skybox_shader",
                     source: include_str!("../shaders/skybox.wgsl"),
-                    format: ctx.format,
+                    target: &ctx.target_desc,
                     vertex_layouts: &[],
-                    layouts: &[&ctx.camera_data.layout, &self.bind_group_layout],
-                    depth_format: Some(wgpu::TextureFormat::Depth24Plus),
-                    sample_count: 4,
+                    layouts: &[&ctx.layout, &self.bind_group_layout],
                     fragment_entry_point: "fs_main",
                     vertex_entry_point: "vs_main",
                 },

@@ -7,7 +7,8 @@ use crate::{
     light::{LightData, LightKind},
     material_desc::MaterialDesc,
     mesh_desc::MeshDesc,
-    shader::ShaderDesc,
+    renderer::shadowmapping::LightShadowData,
+    shader::ShaderPassDesc,
 };
 
 component! {
@@ -15,7 +16,8 @@ component! {
 
     pub mesh: MeshDesc,
     pub material: MaterialDesc,
-    pub shader: Asset<ShaderDesc>,
+    pub forward_pass: Asset<ShaderPassDesc>,
+    pub shadow_pass: Asset<ShaderPassDesc>,
 
     pub mesh_primitive(entity): (),
 
@@ -25,4 +27,8 @@ component! {
 
     pub light_data: LightData,
     pub light_kind:LightKind,
+    pub cast_shadow: (),
+
+    /// Shadow-specific data added from shadow mapping node
+    pub light_shadow_data: LightShadowData,
 }

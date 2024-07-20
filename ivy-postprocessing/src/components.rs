@@ -1,0 +1,3 @@
+use flax::component;
+
+component! {}

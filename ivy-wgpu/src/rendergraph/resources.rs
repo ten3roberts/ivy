@@ -248,7 +248,7 @@ impl Resources {
     pub(super) fn get_texture_data(&self, key: TextureHandle) -> &Texture {
         match self.textures.get(key).unwrap() {
             TextureDesc::External => panic!("Must use external resources"),
-            TextureDesc::Managed(_) => self.managed_texture_data.get(key).unwrap(),
+            TextureDesc::Managed(_) => self.managed_texture_data.get(key).expect("No such texture"),
         }
     }
 

@@ -86,7 +86,6 @@ fn reinhard_2(x: f32) -> f32 {
     return (x * (1.0 + x / (L_white * L_white))) / (1.0 + x);
 }
 
-
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var color = textureSample(source_texture, default_sampler, in.uv).rgb;

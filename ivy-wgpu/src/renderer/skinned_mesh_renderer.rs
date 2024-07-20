@@ -7,7 +7,7 @@ use bytemuck::Zeroable;
 use flax::{
     entity_ids,
     fetch::{Copied, Modified, Source, TransformFetch, Traverse},
-    CommandBuffer, Component, Fetch, FetchExt, Query, World,
+    CommandBuffer, Component, Entity, Fetch, FetchExt, Query, World,
 };
 use glam::{Mat4, Vec4Swizzles};
 use itertools::Itertools;
@@ -17,17 +17,19 @@ use ivy_gltf::{
     animation::{player::Animator, skin::Skin},
     components::{animator, skin},
 };
+use ivy_wgpu_types::shader::TargetDesc;
 use slab::Slab;
 use wgpu::{BindGroup, BindGroupLayout, BufferUsages, RenderPass, ShaderStages, TextureFormat};
 
 use crate::{
-    components::{material, mesh, mesh_primitive, shader},
+    components::{forward_pass, material, mesh, mesh_primitive},
     material::Material,
     material_desc::{MaterialData, MaterialDesc},
     mesh::{SkinnedVertex, VertexDesc},
     mesh_buffer::{MeshBuffer, MeshHandle},
     mesh_desc::MeshDesc,
     renderer::RendererStore,
+    shader::ShaderPassDesc,
     types::{shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, Shader, TypedBuffer},
     Gpu,
 };
@@ -37,7 +39,7 @@ use super::{CameraRenderer, CameraShaderData, ObjectData};
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BatchKey {
     pub skin: Asset<Skin>,
-    pub shader: Asset<crate::shader::ShaderDesc>,
+    pub shader: Asset<crate::shader::ShaderPassDesc>,
     pub material: MaterialDesc,
     pub mesh: MeshDesc,
 }
@@ -90,7 +92,6 @@ impl Batch {
         &'a self,
         _: &Gpu,
         _: &AssetCache,
-        _: &'a CameraShaderData,
         store: &'a RendererStore,
         render_pass: &mut RenderPass<'a>,
     ) {
@@ -127,6 +128,7 @@ impl ObjectDataQuery {
 }
 
 pub struct SkinnedMeshRenderer {
+    id: Entity,
     /// All the objects registered
     /// |****-|**---|**|
     ///
@@ -137,7 +139,7 @@ pub struct SkinnedMeshRenderer {
     bind_group_layout: BindGroupLayout,
 
     pub meshes: HashMap<MeshDesc, Weak<MeshHandle<SkinnedVertex>>>,
-    pub shaders: AssetMap<crate::shader::ShaderDesc, Handle<Shader>>,
+    pub shaders: AssetMap<crate::shader::ShaderPassDesc, Handle<Shader>>,
     pub materials: HashMap<MaterialDesc, Asset<Material>>,
 
     batches: Slab<Batch>,
@@ -150,10 +152,18 @@ pub struct SkinnedMeshRenderer {
     )>,
 
     mesh_buffer: MeshBuffer<SkinnedVertex>,
+
+    shader_pass: Component<Asset<ShaderPassDesc>>,
 }
 
 impl SkinnedMeshRenderer {
-    pub fn new(gpu: &Gpu) -> Self {
+    pub fn new(
+        world: &mut World,
+        gpu: &Gpu,
+        shader_pass: Component<Asset<ShaderPassDesc>>,
+    ) -> Self {
+        let id = world.spawn();
+
         let bind_group_layout = BindGroupLayoutBuilder::new("ObjectBuffer")
             .bind_storage_buffer(ShaderStages::VERTEX)
             .bind_storage_buffer(ShaderStages::VERTEX)
@@ -167,6 +177,7 @@ impl SkinnedMeshRenderer {
         );
 
         Self {
+            id,
             object_data: Vec::new(),
             object_buffer,
             bind_group_layout,
@@ -176,11 +187,12 @@ impl SkinnedMeshRenderer {
             batches: Default::default(),
             batch_map: Default::default(),
             object_query: Query::new((
-                object_index(),
-                batch_id(),
+                object_index(id),
+                batch_id(id),
                 ObjectDataQuery::new().traverse(mesh_primitive),
             )),
             mesh_buffer: MeshBuffer::new(gpu, "mesh_buffer", 4),
+            shader_pass,
         }
     }
 
@@ -198,19 +210,19 @@ impl SkinnedMeshRenderer {
         world: &mut World,
         assets: &AssetCache,
         gpu: &Gpu,
-        globals: &CameraShaderData,
+        layout: &BindGroupLayout,
         store: &mut RendererStore,
         cmd: &mut CommandBuffer,
-        format: TextureFormat,
+        target: &TargetDesc,
     ) {
         let mut query = Query::new((
             entity_ids(),
             mesh().cloned(),
             material().cloned(),
-            shader().cloned(),
+            self.shader_pass.cloned(),
             skin().cloned().traverse(mesh_primitive),
         ))
-        .without(object_index());
+        .without(object_index(self.id));
 
         let mut needs_reallocation = false;
         for (id, mesh, material, shader, skin) in &mut query.borrow(world) {
@@ -267,13 +279,11 @@ impl SkinnedMeshRenderer {
                         &ShaderDesc {
                             label: k.shader.label(),
                             source: k.shader.source(),
-                            format,
                             vertex_layouts: &[SkinnedVertex::layout()],
-                            layouts: &[&globals.layout, &self.bind_group_layout, material.layout()],
-                            depth_format: Some(TextureFormat::Depth24Plus),
-                            sample_count: 4,
+                            layouts: &[layout, &self.bind_group_layout, material.layout()],
                             vertex_entry_point: "vs_main",
                             fragment_entry_point: "fs_main",
+                            target,
                         },
                     ))
                 });
@@ -293,8 +303,11 @@ impl SkinnedMeshRenderer {
                 ))
             });
 
-            cmd.set(id, object_index(), usize::MAX)
-                .set(id, self::batch_id(), batch_id);
+            cmd.set(id, object_index(self.id), usize::MAX).set(
+                id,
+                self::batch_id(self.id),
+                batch_id,
+            );
 
             let batch = &mut self.batches[batch_id];
 
@@ -332,8 +345,8 @@ impl SkinnedMeshRenderer {
         }
 
         let mut query = Query::new((
-            batch_id(),
-            object_index().as_mut(),
+            batch_id(self.id),
+            object_index(self.id).as_mut(),
             ObjectDataQuery::new().traverse(mesh_primitive),
         ));
 
@@ -390,10 +403,10 @@ impl CameraRenderer for SkinnedMeshRenderer {
             ctx.world,
             ctx.assets,
             ctx.gpu,
-            ctx.camera_data,
+            ctx.layout,
             ctx.store,
             &mut cmd,
-            ctx.format,
+            &ctx.target_desc,
         );
         self.update_object_data(ctx.world, ctx.gpu);
 
@@ -417,7 +430,7 @@ impl CameraRenderer for SkinnedMeshRenderer {
         for batch_id in self.batch_map.values() {
             let batch = &self.batches[*batch_id];
             tracing::trace!(instance_count = batch.instance_count, "drawing batch");
-            batch.draw(ctx.gpu, ctx.assets, ctx.camera_data, ctx.store, render_pass)
+            batch.draw(ctx.gpu, ctx.assets, ctx.store, render_pass)
         }
 
         Ok(())
@@ -427,6 +440,6 @@ impl CameraRenderer for SkinnedMeshRenderer {
 type BatchId = usize;
 
 flax::component! {
-    batch_id: BatchId,
-    object_index: usize,
+    batch_id(id): BatchId,
+    object_index(id): usize,
 }

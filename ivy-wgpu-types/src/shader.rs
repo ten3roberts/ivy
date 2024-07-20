@@ -1,17 +1,23 @@
 use crate::Gpu;
+use itertools::Itertools;
 use wgpu::{
     BindGroupLayout, PipelineLayoutDescriptor, RenderPipeline, TextureFormat, VertexBufferLayout,
 };
 
 #[derive(Debug, Clone)]
+pub struct TargetDesc<'a> {
+    pub formats: &'a [TextureFormat],
+    pub depth_format: Option<TextureFormat>,
+    pub sample_count: u32,
+}
+
+#[derive(Debug, Clone)]
 pub struct ShaderDesc<'a> {
     pub label: &'a str,
     pub source: &'a str,
-    pub format: TextureFormat,
+    pub target: &'a TargetDesc<'a>,
     pub vertex_layouts: &'a [VertexBufferLayout<'static>],
     pub layouts: &'a [&'a BindGroupLayout],
-    pub depth_format: Option<TextureFormat>,
-    pub sample_count: u32,
     pub vertex_entry_point: &'a str,
     pub fragment_entry_point: &'a str,
 }
@@ -54,12 +60,19 @@ impl Shader {
                     // 3.
                     module: &shader,
                     entry_point: desc.fragment_entry_point,
-                    targets: &[Some(wgpu::ColorTargetState {
-                        // 4.
-                        format: desc.format,
-                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })],
+                    targets: &desc
+                        .target
+                        .formats
+                        .iter()
+                        .map(|&format| {
+                            Some(wgpu::ColorTargetState {
+                                // 4.
+                                format,
+                                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                                write_mask: wgpu::ColorWrites::ALL,
+                            })
+                        })
+                        .collect_vec(),
                     compilation_options: Default::default(),
                 }),
                 primitive: wgpu::PrimitiveState {
@@ -74,15 +87,18 @@ impl Shader {
                     // Requires Features::CONSERVATIVE_RASTERIZATION
                     conservative: false,
                 },
-                depth_stencil: desc.depth_format.map(|format| wgpu::DepthStencilState {
-                    format,
-                    depth_write_enabled: true,
-                    depth_compare: wgpu::CompareFunction::LessEqual,
-                    stencil: Default::default(),
-                    bias: Default::default(),
-                }),
+                depth_stencil: desc
+                    .target
+                    .depth_format
+                    .map(|format| wgpu::DepthStencilState {
+                        format,
+                        depth_write_enabled: true,
+                        depth_compare: wgpu::CompareFunction::LessEqual,
+                        stencil: Default::default(),
+                        bias: Default::default(),
+                    }),
                 multisample: wgpu::MultisampleState {
-                    count: desc.sample_count,         // 2.
+                    count: desc.target.sample_count,  // 2.
                     mask: !0,                         // 3.
                     alpha_to_coverage_enabled: false, // 4.
                 },

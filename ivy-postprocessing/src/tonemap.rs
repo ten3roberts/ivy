@@ -1,6 +1,9 @@
 use ivy_wgpu::{
     rendergraph::{Dependency, Node, TextureHandle},
-    types::{shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, Shader},
+    types::{
+        shader::{ShaderDesc, TargetDesc},
+        BindGroupBuilder, BindGroupLayoutBuilder, Shader,
+    },
     Gpu,
 };
 use wgpu::{
@@ -63,20 +66,22 @@ impl Node for TonemapNode {
                 &ShaderDesc {
                     label: "tonemap",
                     source: include_str!("../shaders/tonemap.wgsl"),
-                    format: output.format(),
+                    target: &TargetDesc {
+                        formats: &[output.format()],
+                        depth_format: None,
+                        sample_count: 1,
+                    },
                     vertex_layouts: &[],
                     layouts: &[&self.layout],
-                    depth_format: None,
-                    sample_count: 1,
-                fragment_entry_point:"fs_main",
-                vertex_entry_point:"vs_main",
+                    fragment_entry_point: "fs_main",
+                    vertex_entry_point: "vs_main",
                 },
             )
         });
 
         let output_view = output.create_view(&Default::default());
         let mut render_pass = ctx.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: "Bloom".into(),
+            label: "Tonemap".into(),
             color_attachments: &[Some(RenderPassColorAttachment {
                 view: &output_view,
                 resolve_target: None,

@@ -17,3 +17,21 @@ pub enum LightKind {
     Point,
     Directional,
 }
+
+impl LightKind {
+    /// Returns `true` if the light kind is [`Directional`].
+    ///
+    /// [`Directional`]: LightKind::Directional
+    #[must_use]
+    pub fn is_directional(&self) -> bool {
+        matches!(self, Self::Directional)
+    }
+
+    /// Returns `true` if the light kind is [`Point`].
+    ///
+    /// [`Point`]: LightKind::Point
+    #[must_use]
+    pub fn is_point(&self) -> bool {
+        matches!(self, Self::Point)
+    }
+}
