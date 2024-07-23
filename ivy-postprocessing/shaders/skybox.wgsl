@@ -28,7 +28,7 @@ struct UniformData {
     inv_view: mat4x4<f32>,
 }
 
-@group(0) @binding(4)
+@group(0) @binding(1)
 var environment_map: texture_cube<f32>;
 
 @group(1) @binding(0)

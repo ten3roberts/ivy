@@ -32,7 +32,6 @@ struct Light {
     kind: u32,
     shadow_index: u32,
     _padding: vec2<f32>,
-    shadow_viewproj: mat4x4<f32>,
     direction: vec3<f32>,
     position: vec3<f32>,
     color: vec3<f32>,
@@ -49,43 +48,46 @@ const LIGHT_COUNT: u32 = 4;
 var<uniform> globals: Globals;
 
 @group(0) @binding(1)
-var<uniform> lights: array<Light, LIGHT_COUNT>;
-
-@group(0) @binding(2)
-var shadow_maps: texture_depth_2d_array;
-
-@group(0) @binding(3)
-var shadow_sampler: sampler_comparison;
-
-@group(0) @binding(4)
 var environment_map: texture_cube<f32>;
 
-@group(0) @binding(5)
+@group(0) @binding(2)
 var irradiance_map: texture_cube<f32>;
 
-@group(0) @binding(6)
+@group(0) @binding(3)
 var specular_map: texture_cube<f32>;
 
-@group(0) @binding(7)
+@group(0) @binding(4)
 var integrated_brdf: texture_2d<f32>;
 
 @group(1) @binding(0)
+var<storage> lights: array<Light>;
+
+@group(1) @binding(1)
+var<storage> shadow_cameras: array<mat4x4<f32>>;
+
+@group(1) @binding(2)
+var shadow_maps: texture_depth_2d_array;
+
+@group(1) @binding(3)
+var shadow_sampler: sampler_comparison;
+
+@group(2) @binding(0)
 var<storage> objects: array<Object>;
 
 // material
-@group(2) @binding(0)
+@group(3) @binding(0)
 var default_sampler: sampler;
 
-@group(2) @binding(1)
+@group(3) @binding(1)
 var albedo_texture: texture_2d<f32>;
 
-@group(2) @binding(2)
+@group(3) @binding(2)
 var normal_texture: texture_2d<f32>;
 
-@group(2) @binding(3)
+@group(3) @binding(3)
 var mr_texture: texture_2d<f32>;
 
-@group(2) @binding(4)
+@group(3) @binding(4)
 var<uniform> material_data: MaterialData;
 
 @vertex
@@ -178,13 +180,13 @@ fn pbr_luminance(world_pos: vec3<f32>, position: vec3<f32>, camera_dir: vec3<f32
     if light.shadow_index != U32_MAX {
         let bias = max(0.05 * (1.0 - dot(normal, l)), 0.005);
 
-        let light_space_clip = light.shadow_viewproj * vec4(world_pos, 1.0);
+        let light_space_clip = shadow_cameras[light.shadow_index + 1] * vec4(world_pos, 1.0);
         let light_space_pos = light_space_clip.xyz / light_space_clip.w;
 
         var light_space_uv = vec2(light_space_pos.x, -light_space_pos.y) * 0.5 + 0.5;
         let current_depth = light_space_pos.z;
 
-        in_light = textureSampleCompare(shadow_maps, shadow_sampler, light_space_uv, light.shadow_index, current_depth - bias);
+        in_light = textureSampleCompare(shadow_maps, shadow_sampler, light_space_uv, light.shadow_index + 1, current_depth - bias);
         // return vec3(current_depth - textureSample(shadow_maps, shadow_sampler, light_space_uv, light.shadow_index));
         // // return vec3(light_space_uv.x, light_space_uv.y, 0.0);
     }

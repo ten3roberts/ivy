@@ -1,7 +1,9 @@
 use std::mem::size_of;
 
 use crate::{
-    components::{cast_shadow, forward_pass, light_data, light_kind, shadow_pass},
+    components::{
+        cast_shadow, forward_pass, light_data, light_kind, projection_matrix, shadow_pass,
+    },
     renderer::{
         mesh_renderer::MeshRenderer, CameraRenderer, CameraShaderData, RenderContext,
         RendererStore, UpdateContext,
@@ -12,22 +14,22 @@ use crate::{
     types::{shader::TargetDesc, BindGroupBuilder, BindGroupLayoutBuilder, TypedBuffer},
     Gpu,
 };
-use flax::{entity_ids, Query, World};
-use glam::{Mat4, Vec3};
+use anyhow::Context;
+use flax::{entity_ids, FetchExt, Query, World};
+use glam::{vec3, Mat4, Vec3, Vec3Swizzles, Vec4Swizzles};
 use itertools::Itertools;
-use ivy_core::{world_transform, WorldExt, DEG_45};
+use ivy_core::{main_camera, world_transform, WorldExt, DEG_45};
+use ivy_input::Stimulus;
 use wgpu::{
-    BindGroup, BindGroupLayout, Buffer, BufferDescriptor, BufferUsages, Color, Operations,
-    RenderPassColorAttachment, RenderPassDescriptor, ShaderStages, TextureUsages,
-    TextureViewDescriptor, TextureViewDimension,
+    naga::back::FunctionCtx, BindGroup, BindGroupLayout, Buffer, BufferDescriptor, BufferUsages,
+    Color, Operations, RenderPassColorAttachment, RenderPassDescriptor, ShaderStages,
+    TextureUsages, TextureViewDescriptor, TextureViewDimension,
 };
 
 use crate::components::light_shadow_data;
 
 pub struct LightShadowData {
     pub index: u32,
-    pub view: Mat4,
-    pub proj: Mat4,
 }
 
 #[repr(C)]
@@ -42,9 +44,11 @@ pub struct ShadowMapNode {
     layout: BindGroupLayout,
     bind_groups: Option<Vec<BindGroup>>,
     lights: Vec<LightShadowCamera>,
-    light_camera_buffer: Buffer,
+    dynamic_light_camera_buffer: Buffer,
+    shadow_camera_buffer: BufferHandle,
     renderer: MeshRenderer,
     store: RendererStore,
+    max_cascades: usize,
 }
 
 impl ShadowMapNode {
@@ -52,7 +56,9 @@ impl ShadowMapNode {
         world: &mut World,
         gpu: &Gpu,
         shadow_maps: TextureHandle,
+        light_camera_buffer: BufferHandle,
         max_shadows: usize,
+        max_cascades: usize,
     ) -> Self {
         let layout = BindGroupLayoutBuilder::new("LightCameraBuffer")
             .bind_uniform_buffer(ShaderStages::VERTEX)
@@ -62,8 +68,8 @@ impl ShadowMapNode {
 
         let align = gpu.device.limits().min_uniform_buffer_offset_alignment as u64;
 
-        let light_camera_buffer = gpu.device.create_buffer(&BufferDescriptor {
-            label: Some("light_camera_buffer"),
+        let dynamic_light_camera_buffer = gpu.device.create_buffer(&BufferDescriptor {
+            label: Some("dynamic_light_camera_buffer"),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
             size: (align.max(size_of::<LightShadowCamera>() as u64) * max_shadows as u64),
             mapped_at_creation: false,
@@ -71,10 +77,12 @@ impl ShadowMapNode {
 
         Self {
             shadow_maps,
+            max_cascades,
             layout,
             bind_groups: None,
             lights: vec![],
-            light_camera_buffer,
+            dynamic_light_camera_buffer,
+            shadow_camera_buffer: light_camera_buffer,
             renderer,
             store: RendererStore::new(),
         }
@@ -85,53 +93,89 @@ impl Node for ShadowMapNode {
     fn update(&mut self, ctx: NodeUpdateContext) -> anyhow::Result<()> {
         let shadow_maps = ctx.get_texture(self.shadow_maps);
 
-        let focus_point = Vec3::ZERO;
-
         let mut to_add = Vec::new();
 
         self.lights.clear();
 
-        for (id, &transform, light_data, &kind) in
+        let Some(main_camera) =
+            Query::new((world_transform().copied(), projection_matrix().copied()))
+                .with(main_camera())
+                .borrow(ctx.world)
+                .first()
+        else {
+            tracing::warn!("no main camera");
+            return Ok(());
+        };
+
+        let camera_inv_viewproj = main_camera.0 * main_camera.1.inverse();
+
+        let frustrums = (0..self.max_cascades)
+            .map(|i| {
+                Frustrum::from_inv_viewproj(
+                    camera_inv_viewproj,
+                    i as f32 / self.max_cascades as f32,
+                    (i + 1) as f32 / self.max_cascades as f32,
+                )
+            })
+            .collect_vec();
+
+        for (i, (id, &transform, light_data, &kind)) in
             Query::new((entity_ids(), world_transform(), light_data(), light_kind()))
                 .with(cast_shadow())
                 .borrow(ctx.world)
                 .iter()
+                .enumerate()
         {
             let (_, rot, pos) = transform.to_scale_rotation_translation();
-            let view;
-            let proj;
-
-            if kind.is_directional() {
-                let direction = rot * -Vec3::Z;
-                let distance = 20.0;
-                let origin = focus_point + direction.normalize() * distance;
-                view = Mat4::from_scale_rotation_translation(Vec3::ONE, rot, origin).inverse();
-
-                let camera_size = 40.0;
-                proj = Mat4::orthographic_lh(
-                    -camera_size,
-                    camera_size,
-                    -camera_size,
-                    camera_size,
-                    0.1,
-                    distance * 2.0,
-                );
-            } else {
-                todo!()
-            };
 
             to_add.push((
                 id,
                 LightShadowData {
-                    index: self.lights.len() as u32,
-                    view,
-                    proj,
+                    index: self.lights.len() as _,
                 },
             ));
 
-            self.lights.push(LightShadowCamera {
-                viewproj: proj * view,
-            });
+            if kind.is_directional() {
+                let direction = rot * -Vec3::Z;
+
+                for frustrum in &frustrums {
+                    let view = Mat4::look_at_lh(
+                        frustrum.center + direction.normalize(),
+                        frustrum.center,
+                        Vec3::Y,
+                    );
+
+                    let (mut min, mut max) = frustrum
+                        .corners
+                        .iter()
+                        .map(|&v| view.transform_point3(v))
+                        .fold((Vec3::MAX, Vec3::MIN), |mut acc, x| {
+                            acc.0 = acc.0.min(x);
+                            acc.1 = acc.1.max(x);
+                            acc
+                        });
+
+                    let z_mul = 2.0;
+
+                    if min.z < 0.0 {
+                        min.z *= z_mul;
+                    } else {
+                        min.z /= z_mul;
+                    }
+                    if max.z < 0.0 {
+                        max.z /= z_mul;
+                    } else {
+                        max.z *= z_mul;
+                    }
+
+                    let proj = Mat4::orthographic_lh(min.x, max.x, min.y, max.y, min.z, max.z);
+                    self.lights.push(LightShadowCamera {
+                        viewproj: proj * view,
+                    });
+                }
+            } else {
+                todo!()
+            };
         }
 
         ctx.world.append_all(light_shadow_data(), to_add)?;
@@ -141,7 +185,7 @@ impl Node for ShadowMapNode {
             assets: ctx.assets,
             gpu: ctx.gpu,
             store: &mut self.store,
-            layout: &self.layout,
+            layouts: &[&self.layout],
             camera: Default::default(),
             target_desc: TargetDesc {
                 formats: &[],
@@ -161,25 +205,26 @@ impl Node for ShadowMapNode {
             as u64)
             .max(size_of::<LightShadowCamera>() as u64);
 
+        ctx.queue.write_buffer(
+            ctx.get_buffer(self.shadow_camera_buffer),
+            0,
+            bytemuck::cast_slice(&self.lights),
+        );
+
         for (i, &light) in self.lights.iter().enumerate() {
             ctx.queue.write_buffer(
-                &self.light_camera_buffer,
+                &self.dynamic_light_camera_buffer,
                 i as u64 * light_shadow_stride,
                 bytemuck::cast_slice(&[light]),
             );
         }
-        ctx.queue.write_buffer(
-            &self.light_camera_buffer,
-            0,
-            bytemuck::cast_slice(&self.lights),
-        );
 
         let bind_groups = self.bind_groups.get_or_insert_with(|| {
             (0..self.lights.len())
                 .map(|i| {
                     let bind_group = BindGroupBuilder::new("LightCamera")
                         .bind_buffer_slice(
-                            &self.light_camera_buffer,
+                            &self.dynamic_light_camera_buffer,
                             i as u64 * light_shadow_stride,
                             size_of::<LightShadowCamera>() as u64,
                         )
@@ -205,8 +250,8 @@ impl Node for ShadowMapNode {
                 gpu: ctx.gpu,
                 store: &mut self.store,
                 environment: None,
-                bind_group,
-                layout: &self.layout,
+                bind_groups: &[bind_group],
+                layouts: &[&self.layout],
                 target_desc: TargetDesc {
                     formats: &[],
                     depth_format: Some(shadow_maps.format()),
@@ -239,9 +284,36 @@ impl Node for ShadowMapNode {
     }
 
     fn write_dependencies(&self) -> Vec<Dependency> {
-        vec![Dependency::texture(
-            self.shadow_maps,
-            TextureUsages::RENDER_ATTACHMENT,
-        )]
+        vec![
+            Dependency::texture(self.shadow_maps, TextureUsages::RENDER_ATTACHMENT),
+            Dependency::buffer(self.shadow_camera_buffer, BufferUsages::COPY_DST),
+        ]
+    }
+}
+
+struct Frustrum {
+    corners: [Vec3; 8],
+    center: Vec3,
+}
+
+impl Frustrum {
+    fn from_inv_viewproj(inv: Mat4, near: f32, far: f32) -> Self {
+        let mut corners = [Vec3::ZERO; 8];
+        for (i, corner) in corners.iter_mut().enumerate() {
+            let point = vec3(
+                (i >> 2 & 1) as f32 * 2.0 - 1.0,
+                (i >> 1 & 1) as f32 * 2.0 - 1.0,
+                ((i & 1) as f32 * 2.0 * (far - near) - 1.0 + near * 2.0),
+            );
+
+            let point = inv * point.extend(1.0);
+            let point = point.xyz() / point.w;
+            // tracing::info!(index = i, ?point, near, far);
+            *corner = point;
+        }
+
+        let center = corners.iter().sum::<Vec3>() / corners.len() as f32;
+
+        Self { corners, center }
     }
 }

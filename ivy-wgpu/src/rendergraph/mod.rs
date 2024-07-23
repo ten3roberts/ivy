@@ -11,7 +11,7 @@ use std::{
 
 use itertools::Itertools;
 use ivy_wgpu_types::Gpu;
-use wgpu::{BufferUsages, CommandEncoder, Queue, Texture, TextureUsages};
+use wgpu::{Buffer, BufferUsages, CommandEncoder, Queue, Texture, TextureUsages};
 
 pub struct NodeExecutionContext<'a> {
     pub gpu: &'a Gpu,
@@ -30,6 +30,10 @@ impl<'a> NodeExecutionContext<'a> {
             None => self.resources.get_texture_data(handle),
         }
     }
+
+    pub fn get_buffer(&self, handle: BufferHandle) -> &'a Buffer {
+        self.resources.get_buffer_data(handle)
+    }
 }
 
 pub struct NodeUpdateContext<'a> {
@@ -46,6 +50,10 @@ impl<'a> NodeUpdateContext<'a> {
             Some(v) => v,
             None => self.resources.get_texture_data(handle),
         }
+    }
+
+    pub fn get_buffer(&self, handle: BufferHandle) -> &'a Buffer {
+        self.resources.get_buffer_data(handle)
     }
 }
 pub trait Node: 'static {
@@ -265,7 +273,9 @@ impl RenderGraph {
         let order = self.order.as_ref().unwrap();
 
         for &idx in order {
-            self.nodes[idx].update(NodeUpdateContext {
+            let node = &mut self.nodes[idx];
+            let _span = tracing::info_span!("update", node=?node.label()).entered();
+            node.update(NodeUpdateContext {
                 gpu,
                 resources: &self.resources,
                 assets,
@@ -278,6 +288,7 @@ impl RenderGraph {
 
         for &idx in order {
             let node = &mut self.nodes[idx];
+            let _span = tracing::info_span!("draw", node=?node.label()).entered();
             node.draw(NodeExecutionContext {
                 gpu,
                 resources: &self.resources,

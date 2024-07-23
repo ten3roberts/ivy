@@ -32,7 +32,7 @@ impl AssetDesc<ShaderPassDesc> for SkinnedPbrShaderDesc {
         let source = include_str!("../../assets/shaders/skinned_pbr.wgsl").into();
 
         Ok(assets.insert(ShaderPassDesc {
-            label: "pbr_shader".into(),
+            label: "skinned_pbr_shader".into(),
             source,
         }))
     }
@@ -47,7 +47,7 @@ impl AssetDesc<ShaderPassDesc> for ShadowShaderDesc {
         let source = include_str!("../../assets/shaders/shadow.wgsl").into();
 
         Ok(assets.insert(ShaderPassDesc {
-            label: "pbr_shader".into(),
+            label: "shadow_shader".into(),
             source,
         }))
     }
