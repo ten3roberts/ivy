@@ -76,9 +76,10 @@ impl Batch {
         _: &AssetCache,
         store: &'a RendererStore,
         render_pass: &mut RenderPass<'a>,
+        first_bindgroup: u32,
     ) {
         render_pass.set_pipeline(store.shaders[&self.shader].pipeline());
-        render_pass.set_bind_group(2, self.material.bind_group(), &[]);
+        render_pass.set_bind_group(first_bindgroup, self.material.bind_group(), &[]);
         let index_offset = self.mesh.ib().offset() as u32;
 
         render_pass.draw_indexed(
@@ -189,7 +190,7 @@ impl MeshRenderer {
         world: &mut World,
         assets: &AssetCache,
         gpu: &Gpu,
-        layout: &BindGroupLayout,
+        layouts: &[&BindGroupLayout],
         store: &mut RendererStore,
         cmd: &mut CommandBuffer,
         target: &TargetDesc,
@@ -264,6 +265,7 @@ impl MeshRenderer {
                 });
 
                 let shader = self.shaders.entry(&k.shader).or_insert_with(|| {
+                    tracing::info!(layouts = layouts.len(), "creating shader");
                     store.shaders.insert(Shader::new(
                         gpu,
                         &ShaderDesc {
@@ -271,7 +273,11 @@ impl MeshRenderer {
                             source: k.shader.source(),
                             target,
                             vertex_layouts: &[Vertex::layout()],
-                            layouts: &[layout, &self.bind_group_layout, material.layout()],
+                            layouts: &layouts
+                                .iter()
+                                .copied()
+                                .chain([&self.bind_group_layout, material.layout()])
+                                .collect_vec(),
                             vertex_entry_point: "vs_main",
                             fragment_entry_point: "fs_main",
                         },
@@ -362,7 +368,7 @@ impl CameraRenderer for MeshRenderer {
             ctx.world,
             ctx.assets,
             ctx.gpu,
-            ctx.layout,
+            ctx.layouts,
             ctx.store,
             &mut cmd,
             &ctx.target_desc,
@@ -377,7 +383,9 @@ impl CameraRenderer for MeshRenderer {
         ctx: &'s super::RenderContext<'s>,
         render_pass: &mut RenderPass<'s>,
     ) -> anyhow::Result<()> {
-        render_pass.set_bind_group(0, ctx.bind_group, &[]);
+        for (i, bind_group) in ctx.bind_groups.iter().enumerate() {
+            render_pass.set_bind_group(i as _, bind_group, &[]);
+        }
 
         self.object_buffer
             .write(&ctx.gpu.queue, 0, &self.object_data);
@@ -386,11 +394,17 @@ impl CameraRenderer for MeshRenderer {
 
         self.mesh_buffer.bind(render_pass);
 
-        render_pass.set_bind_group(1, &self.bind_group, &[]);
+        render_pass.set_bind_group(ctx.bind_groups.len() as _, &self.bind_group, &[]);
         for batch_id in self.batch_map.values() {
             let batch = &self.batches[*batch_id];
             tracing::trace!(instance_count = batch.instance_count, "drawing batch");
-            batch.draw(ctx.gpu, ctx.assets, ctx.store, render_pass)
+            batch.draw(
+                ctx.gpu,
+                ctx.assets,
+                ctx.store,
+                render_pass,
+                ctx.bind_groups.len() as u32 + 1,
+            )
         }
 
         Ok(())

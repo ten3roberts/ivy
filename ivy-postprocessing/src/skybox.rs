@@ -79,7 +79,7 @@ impl CameraRenderer for SkyboxRenderer {
                     source: include_str!("../shaders/skybox.wgsl"),
                     target: &ctx.target_desc,
                     vertex_layouts: &[],
-                    layouts: &[&ctx.layout, &self.bind_group_layout],
+                    layouts: &[ctx.layouts[0], &self.bind_group_layout],
                     fragment_entry_point: "fs_main",
                     vertex_entry_point: "vs_main",
                 },
@@ -87,7 +87,7 @@ impl CameraRenderer for SkyboxRenderer {
         });
 
         render_pass.set_pipeline(shader.pipeline());
-        render_pass.set_bind_group(0, ctx.bind_group, &[]);
+        render_pass.set_bind_group(0, ctx.bind_groups[0], &[]);
         render_pass.set_bind_group(1, &self.bind_group, &[]);
 
         render_pass.draw(0..3, 0..1);

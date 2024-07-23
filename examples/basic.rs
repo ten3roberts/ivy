@@ -325,7 +325,7 @@ impl Layer for LogicLayer {
                 let aspect =
                     resized.physical_size.width as f32 / resized.physical_size.height as f32;
                 tracing::info!(%aspect);
-                *main_camera = Mat4::perspective_lh(1.0, aspect, 0.1, 1000.0);
+                *main_camera = Mat4::perspective_lh(1.0, aspect, 0.1, 20.0);
             }
 
             Ok(())
@@ -667,7 +667,9 @@ impl RenderGraphRenderer {
             MeshRenderer::new(world, gpu, forward_pass()),
             SkinnedMeshRenderer::new(world, gpu, forward_pass()),
         );
+
         let max_shadows = 4;
+        let max_cascades = 2;
 
         let shadow_maps = render_graph.resources.insert_texture(ManagedTextureDesc {
             label: "depth_texture".into(),
@@ -683,11 +685,19 @@ impl RenderGraphRenderer {
             persistent: false,
         });
 
+        let shadow_camera_buffer = render_graph.resources.insert_buffer(BufferDesc {
+            label: "shadow_camera_buffer".into(),
+            size: size_of::<Mat4>() as u64 * max_shadows as u64 * max_cascades,
+            usage: BufferUsages::STORAGE,
+        });
+
         render_graph.add_node(ShadowMapNode::new(
             world,
             gpu,
             shadow_maps,
-            max_shadows as usize,
+            shadow_camera_buffer,
+            max_shadows as _,
+            max_cascades as _,
         ));
 
         render_graph.add_node(HdriProcessorNode::new(
@@ -699,7 +709,7 @@ impl RenderGraphRenderer {
             integrated_brdf,
         ));
 
-        let light_manager = LightManager::new(gpu, shadow_maps, 4);
+        let light_manager = LightManager::new(gpu, shadow_maps, shadow_camera_buffer, 4);
 
         render_graph.add_node(CameraNode::new(
             gpu,
