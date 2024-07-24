@@ -669,7 +669,7 @@ impl RenderGraphRenderer {
         );
 
         let max_shadows = 4;
-        let max_cascades = 2;
+        let max_cascades = 4;
 
         let shadow_maps = render_graph.resources.insert_texture(ManagedTextureDesc {
             label: "depth_texture".into(),

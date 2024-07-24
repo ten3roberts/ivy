@@ -30,12 +30,15 @@ use crate::components::light_shadow_data;
 
 pub struct LightShadowData {
     pub index: u32,
+    pub cascade_count: u32,
 }
 
 #[repr(C)]
 #[derive(bytemuck::Pod, bytemuck::Zeroable, Clone, Copy, Debug)]
 struct LightShadowCamera {
     viewproj: Mat4,
+    depth: f32,
+    _padding: Vec3,
 }
 
 pub struct ShadowMapNode {
@@ -109,13 +112,47 @@ impl Node for ShadowMapNode {
 
         let camera_inv_viewproj = main_camera.0 * main_camera.1.inverse();
 
+        fn transform_perspective(inv_viewproj: Mat4, clip: Vec3) -> Vec3 {
+            let p = inv_viewproj * clip.extend(1.0);
+            p.xyz() / p.w
+        }
+
+        let near = transform_perspective(main_camera.1.inverse(), -Vec3::Z).z;
+        let far = transform_perspective(main_camera.1.inverse(), Vec3::Z).z;
+
+        let clip_range = far - near;
+
+        let min_z = near;
+        let max_z = near * clip_range;
+
+        let range = max_z - min_z;
+        let ratio = max_z / min_z;
+        let cascade_split_lambda = 0.95;
+
+        tracing::info!(near, far, ratio, range);
+        let clip_distances = (0..self.max_cascades)
+            .map(|i| {
+                let p = (i + 1) as f32 / self.max_cascades as f32;
+
+                let log = min_z * ratio.powf(p);
+                let uniform = min_z + range * p;
+                let d = cascade_split_lambda * (log - uniform) + uniform;
+                (d - near) / clip_range
+            })
+            .collect_vec();
+
+        let mut last_split_distance = 0.0;
         let frustrums = (0..self.max_cascades)
             .map(|i| {
-                Frustrum::from_inv_viewproj(
+                let frustrum = Frustrum::from_inv_viewproj(
                     camera_inv_viewproj,
-                    i as f32 / self.max_cascades as f32,
-                    (i + 1) as f32 / self.max_cascades as f32,
-                )
+                    clip_distances[i],
+                    last_split_distance,
+                );
+
+                last_split_distance = clip_distances[i];
+
+                frustrum
             })
             .collect_vec();
 
@@ -132,6 +169,7 @@ impl Node for ShadowMapNode {
                 id,
                 LightShadowData {
                     index: self.lights.len() as _,
+                    cascade_count: 4,
                 },
             ));
 
@@ -171,6 +209,8 @@ impl Node for ShadowMapNode {
                     let proj = Mat4::orthographic_lh(min.x, max.x, min.y, max.y, min.z, max.z);
                     self.lights.push(LightShadowCamera {
                         viewproj: proj * view,
+                        depth: far,
+                        _padding: Default::default(),
                     });
                 }
             } else {
@@ -297,21 +337,29 @@ struct Frustrum {
 }
 
 impl Frustrum {
-    fn from_inv_viewproj(inv: Mat4, near: f32, far: f32) -> Self {
+    fn from_inv_viewproj(inv: Mat4, split_distance: f32, last_split_distance: f32) -> Self {
         let mut corners = [Vec3::ZERO; 8];
         for (i, corner) in corners.iter_mut().enumerate() {
             let point = vec3(
-                (i >> 2 & 1) as f32 * 2.0 - 1.0,
+                (i & 1) as f32 * 2.0 - 1.0,
                 (i >> 1 & 1) as f32 * 2.0 - 1.0,
-                ((i & 1) as f32 * 2.0 * (far - near) - 1.0 + near * 2.0),
+                // (i >> 2 & 1) as f32 * 2.0 - 1.0,
+                (i >> 2 & 1) as f32 * 2.0 - 1.0,
             );
 
+            tracing::info!(index = i, ?point);
             let point = inv * point.extend(1.0);
             let point = point.xyz() / point.w;
-            // tracing::info!(index = i, ?point, near, far);
             *corner = point;
         }
 
+        for i in 0..4 {
+            let dist = corners[i + 4] - corners[i];
+            corners[i + 4] = corners[i] + (dist * split_distance);
+            corners[i] = corners[i] + (dist * last_split_distance);
+        }
+
+        tracing::info!(?corners);
         let center = corners.iter().sum::<Vec3>() / corners.len() as f32;
 
         Self { corners, center }

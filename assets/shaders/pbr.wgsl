@@ -31,7 +31,8 @@ struct Globals {
 struct Light {
     kind: u32,
     shadow_index: u32,
-    _padding: vec2<f32>,
+    shadow_cascades: u32,
+    _padding: f32,
     direction: vec3<f32>,
     position: vec3<f32>,
     color: vec3<f32>,
@@ -40,6 +41,11 @@ struct Light {
 struct MaterialData {
     roughness_factor: f32,
     metallic_factor: f32,
+}
+
+struct ShadowCamera {
+    viewproj: mat4x4<f32>,
+    depth: f32,
 }
 
 const LIGHT_COUNT: u32 = 4;
@@ -63,7 +69,7 @@ var integrated_brdf: texture_2d<f32>;
 var<storage> lights: array<Light>;
 
 @group(1) @binding(1)
-var<storage> shadow_cameras: array<mat4x4<f32>>;
+var<storage> shadow_cameras: array<ShadowCamera>;
 
 @group(1) @binding(2)
 var shadow_maps: texture_depth_2d_array;
@@ -178,17 +184,29 @@ fn pbr_luminance(world_pos: vec3<f32>, position: vec3<f32>, camera_dir: vec3<f32
 
     var in_light = 0f;
     if light.shadow_index != U32_MAX {
-        let bias = max(0.05 * (1.0 - dot(normal, l)), 0.005);
+        // let bias = max(0.05 * (1.0 - dot(normal, l)), 0.005);
 
-        let light_space_clip = shadow_cameras[light.shadow_index + 1] * vec4(world_pos, 1.0);
+        let bias = 0.0;
+        let frag_pos_view_space = globals.view * vec4(world_pos, 1.0);
+        let depth = abs(frag_pos_view_space.z);
+
+        var cascade_index = 0u;
+        // var cascade_index = light.shadow_cascades;
+        // for (var i = 0u; i < light.shadow_cascades; i++) {
+        //     if depth < shadow_cameras[light.shadow_index + i].depth {
+        //         cascade_index = i;
+        //         break;
+        //     }
+        // }
+
+        // return vec3(f32(cascade_index) / 4f, 0f, 0f);
+        let light_space_clip = shadow_cameras[light.shadow_index + cascade_index].viewproj * vec4(world_pos, 1.0);
         let light_space_pos = light_space_clip.xyz / light_space_clip.w;
 
         var light_space_uv = vec2(light_space_pos.x, -light_space_pos.y) * 0.5 + 0.5;
         let current_depth = light_space_pos.z;
 
         in_light = textureSampleCompare(shadow_maps, shadow_sampler, light_space_uv, light.shadow_index + 1, current_depth - bias);
-        // return vec3(current_depth - textureSample(shadow_maps, shadow_sampler, light_space_uv, light.shadow_index));
-        // // return vec3(light_space_uv.x, light_space_uv.y, 0.0);
     }
 
     let h = normalize(camera_dir + l);
