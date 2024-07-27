@@ -112,7 +112,7 @@ pub fn generate_plane(halfextent: f32, normal: Vec3) -> MeshData {
         normal.cross(Vec3::Y)
     };
 
-    let bitan = normal.cross(tan);
+    let bitan = -normal.cross(tan);
 
     let vertices = [
         Vertex::new(

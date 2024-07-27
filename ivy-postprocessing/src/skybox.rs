@@ -82,6 +82,7 @@ impl CameraRenderer for SkyboxRenderer {
                     layouts: &[ctx.layouts[0], &self.bind_group_layout],
                     fragment_entry_point: "fs_main",
                     vertex_entry_point: "vs_main",
+                    culling: Default::default(),
                 },
             )
         });

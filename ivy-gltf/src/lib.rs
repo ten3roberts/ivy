@@ -5,6 +5,7 @@ use animation::skin::Skin;
 use animation::Animation;
 use futures::StreamExt;
 use futures::TryStreamExt;
+use glam::Mat4;
 use glam::Quat;
 use image::{DynamicImage, ImageBuffer, RgbImage, RgbaImage};
 use itertools::Itertools;
@@ -403,6 +404,12 @@ impl GltfNode {
     pub fn transform(&self) -> TransformBundle {
         let (pos, rot, scale) = self.data.node(self.index).unwrap().transform().decomposed();
         TransformBundle::new(pos.into(), Quat::from_array(rot), scale.into())
+    }
+
+    pub fn transform_matrix(&self) -> Mat4 {
+        let matrix = self.data.node(self.index).unwrap().transform().matrix();
+
+        Mat4::from_cols_array_2d(&matrix)
     }
 
     pub fn children(&self) -> impl Iterator<Item = GltfNode> + '_ {

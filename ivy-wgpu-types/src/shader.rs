@@ -1,8 +1,24 @@
 use crate::Gpu;
 use itertools::Itertools;
 use wgpu::{
-    BindGroupLayout, PipelineLayoutDescriptor, RenderPipeline, TextureFormat, VertexBufferLayout,
+    BindGroupLayout, Face, FrontFace, PipelineLayoutDescriptor, RenderPipeline, TextureFormat,
+    VertexBufferLayout,
 };
+
+#[derive(Debug, Clone)]
+pub struct Culling {
+    pub cull_mode: Option<Face>,
+    pub front_face: FrontFace,
+}
+
+impl Default for Culling {
+    fn default() -> Self {
+        Self {
+            cull_mode: None,
+            front_face: FrontFace::Ccw,
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct TargetDesc<'a> {
@@ -20,6 +36,7 @@ pub struct ShaderDesc<'a> {
     pub layouts: &'a [&'a BindGroupLayout],
     pub vertex_entry_point: &'a str,
     pub fragment_entry_point: &'a str,
+    pub culling: Culling,
 }
 
 /// Represents a graphics shader
@@ -78,8 +95,8 @@ impl Shader {
                 primitive: wgpu::PrimitiveState {
                     topology: wgpu::PrimitiveTopology::TriangleList, // 1.
                     strip_index_format: None,
-                    front_face: wgpu::FrontFace::Cw, // 2.
-                    cull_mode: None,                 //Some(wgpu::Face::Back),
+                    front_face: desc.culling.front_face,
+                    cull_mode: desc.culling.cull_mode,
                     // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
                     polygon_mode: wgpu::PolygonMode::Fill,
                     // Requires Features::DEPTH_CLIP_CONTROL

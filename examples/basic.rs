@@ -62,6 +62,7 @@ use tracing::Instrument;
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
 use wgpu::{BufferUsages, Extent3d, TextureDimension, TextureFormat};
+use winit::{dpi::LogicalSize, platform::x11::WindowAttributesExtX11, window::WindowAttributes};
 
 pub fn main() -> anyhow::Result<()> {
     registry()
@@ -77,7 +78,9 @@ pub fn main() -> anyhow::Result<()> {
     let dt = 0.02;
 
     if let Err(err) = App::builder()
-        .with_driver(WinitDriver::new())
+        .with_driver(WinitDriver::new(
+            WindowAttributes::default().with_base_size(LogicalSize::new(1920, 1080)),
+        ))
         .with_layer(EngineLayer::new())
         .with_layer(ProfilingLayer::new())
         .with_layer(GraphicsLayer::new(|world, assets, gpu, surface| {
@@ -189,6 +192,26 @@ impl LogicLayer {
                 );
 
                 let sphere_mesh = MeshDesc::content(assets.load(&UvSphereDesc::default()));
+                let plastic_material = MaterialDesc::content(
+                    MaterialData::new().with_metallic(0.0).with_roughness(0.2),
+                );
+
+                for i in 0..5 {
+                    cmd.lock().spawn(
+                        Entity::builder()
+                            .mount(TransformBundle::new(
+                                vec3(i as f32 * 5.0, 1.0, 25.0),
+                                Quat::IDENTITY,
+                                Vec3::ONE,
+                            ))
+                            .mount(RenderObjectBundle {
+                                mesh: sphere_mesh.clone(),
+                                material: plastic_material.clone(),
+                                shader: shader.clone(),
+                            })
+                            .set(shadow_pass(), assets.load(&ShadowShaderDesc)),
+                    );
+                }
 
                 for i in 0..8 {
                     let roughness = i as f32 / (7) as f32;
@@ -256,11 +279,11 @@ impl LogicLayer {
                         &mut Entity::builder(),
                         NodeMountOptions { cast_shadow: true },
                     )
-                    .mount(TransformBundle::new(
-                        vec3(0.0, 1.0, -2.0),
-                        Quat::IDENTITY,
-                        Vec3::ONE,
-                    ))
+                    // .mount(TransformBundle::new(
+                    //     vec3(0.0, 1.0, -2.0),
+                    //     Quat::IDENTITY,
+                    //     Vec3::ONE,
+                    // ))
                     .into();
 
                 cmd.lock().spawn(root);
@@ -277,7 +300,7 @@ impl LogicLayer {
         Entity::builder()
             .mount(TransformBundle::default().with_rotation(Quat::from_euler(
                 EulerRot::YXZ,
-                0.5,
+                0.0,
                 1.0,
                 0.0,
             )))
@@ -326,7 +349,7 @@ impl Layer for LogicLayer {
                 let aspect =
                     resized.physical_size.width as f32 / resized.physical_size.height as f32;
                 tracing::info!(%aspect);
-                *main_camera = Mat4::perspective_lh(1.0, aspect, 0.1, 100.0);
+                *main_camera = Mat4::perspective_lh(1.0, aspect, 0.1, 1000.0);
             }
 
             Ok(())
@@ -670,13 +693,13 @@ impl RenderGraphRenderer {
         );
 
         let max_shadows = 4;
-        let max_cascades = 2;
+        let max_cascades = 6;
 
         let shadow_maps = render_graph.resources.insert_texture(ManagedTextureDesc {
             label: "depth_texture".into(),
             extent: wgpu::Extent3d {
-                width: 4096,
-                height: 4096,
+                width: 2048,
+                height: 2048,
                 depth_or_array_layers: max_shadows * max_cascades,
             },
             dimension: wgpu::TextureDimension::D2,
@@ -726,7 +749,7 @@ impl RenderGraphRenderer {
         // render_graph.add_node(BloomNode::new(gpu, final_color, bloom_result, 5, 0.005));
         render_graph.add_node(TonemapNode::new(gpu, final_color, surface_texture));
 
-        render_graph.add_node(OverlayNode::new(gpu, shadow_maps, surface_texture));
+        // render_graph.add_node(OverlayNode::new(gpu, shadow_maps, surface_texture));
 
         Self {
             render_graph,
