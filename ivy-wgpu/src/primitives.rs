@@ -69,11 +69,13 @@ fn generate_uv_sphere(radius: f32, latitudes: u32, longitudes: u32) -> MeshData 
             let k1 = k1 + j;
             let k2 = k2 + j;
             if i != 0 {
-                indices.extend([k1, k2, k1 + 1]);
+                // indices.extend([k1, k2, k1 + 1]);
+                indices.extend([k1 + 1, k2, k1]);
             }
 
             if i != latitudes - 1 {
-                indices.extend([k1 + 1, k2, k2 + 1])
+                // indices.extend([k1 + 1, k2, k2 + 1])
+                indices.extend([k2 + 1, k2, k1 + 1])
             }
         }
     }
@@ -112,7 +114,7 @@ pub fn generate_plane(halfextent: f32, normal: Vec3) -> MeshData {
         normal.cross(Vec3::Y)
     };
 
-    let bitan = -normal.cross(tan);
+    let bitan = normal.cross(tan);
 
     let vertices = [
         Vertex::new(

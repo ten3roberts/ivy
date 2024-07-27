@@ -12,8 +12,10 @@ ivy-assets = { path = "../ivy-assets" }
 ivy-input = { path = "../ivy-input" }
 ivy-gltf = { path = "../ivy-gltf" }
 
+parking_lot.workspace = true
+naga_oil.workspace = true
 winit.workspace = true
-wgpu.workspace = true
+wgpu = { workspace = true, features = [ "naga-ir" ]}
 bytemuck.workspace = true
 glam.workspace = true
 flax.workspace = true

@@ -4,7 +4,10 @@ use ivy_wgpu::{
     types::{shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, Shader, TypedBuffer},
     Gpu,
 };
-use wgpu::{AddressMode, BufferUsages, FilterMode, ShaderStages, Texture};
+use wgpu::{
+    AddressMode, BufferUsages, FilterMode, ShaderModuleDescriptor, ShaderSource, ShaderStages,
+    Texture,
+};
 
 pub struct SkyboxRenderer {
     shader: Option<Shader>,
@@ -76,7 +79,10 @@ impl CameraRenderer for SkyboxRenderer {
                 ctx.gpu,
                 &ShaderDesc {
                     label: "skybox_shader",
-                    source: include_str!("../shaders/skybox.wgsl"),
+                    module: &ctx.gpu.device.create_shader_module(ShaderModuleDescriptor {
+                        label: Some("skybox"),
+                        source: ShaderSource::Wgsl(include_str!("../shaders/skybox.wgsl").into()),
+                    }),
                     target: &ctx.target_desc,
                     vertex_layouts: &[],
                     layouts: &[ctx.layouts[0], &self.bind_group_layout],

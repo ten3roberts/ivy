@@ -121,51 +121,15 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     return out;
 }
 
-fn fresnel_schlick(cos_theta: f32, f0: vec3<f32>) -> vec3<f32> {
-    return f0 + (1.0 - f0) * pow(clamp(1.0 - cos_theta, 0f, 1f), 5f);
-}
-
-fn fresnel_schlick_roughness(cos_theta: f32, f0: vec3<f32>, roughness: f32) -> vec3<f32> {
-    return f0 + (max(vec3(1f - roughness), f0) - f0) * pow(clamp(1.0 - cos_theta, 0f, 1f), 5f);
-}
-
-fn distribution_ggx(n: vec3<f32>, h: vec3<f32>, roughness: f32) -> f32 {
-    let a = roughness * roughness;
-    let a2 = a * a;
-    let ndoth = max(dot(n, h), 0f);
-    let ndoth2 = ndoth * ndoth;
-
-    let num = a2;
-    var denom = (ndoth2 * (a2 - 1f) + 1f);
-
-    return num / denom;
-}
-
-fn geometry_schlick_ggx(ndotv: f32, roughness: f32) -> f32 {
-    let r = (roughness + 1f);
-    let k = (r * r) / 8f;
-
-    let num = ndotv;
-    let denom = ndotv * (1.0 - k) + k;
-
-    return num / denom;
-}
-
-fn geometry_smith(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, roughness: f32) -> f32 {
-    let ndotv = max(dot(n, v), 0f);
-    let ndotl = max(dot(n, l), 0f);
-
-    let ggx2 = geometry_schlick_ggx(ndotv, roughness);
-    let ggx1 = geometry_schlick_ggx(ndotl, roughness);
-
-    return ggx1 * ggx2;
-}
-
 const PI: f32 = 3.14159265359;
 const U32_MAX = 0xFFFFFFFFu;
 
 const LIGHT_POINT: u32 = 0;
 const LIGHT_DIRECTIONAL: u32 = 1;
+
+#import pbr_base::{fresnel_schlick, distribution_ggx, geometry_smith, fresnel_schlick_roughness};
+
+const MAX_REFLECTION_LOD: f32 = 7f;
 
 fn shadow_pcf(uv: vec2<f32>, index: u32, current_depth: f32, texel_size: vec2<f32>) -> f32 {
     var total = 0.0;
@@ -200,36 +164,15 @@ fn pbr_luminance(in: VertexOutput, tangent_camera_dir: vec3<f32>, albedo: vec3<f
     if light.shadow_index != U32_MAX {
         let in_view = globals.view * vec4(in.world_pos, 1.0);
 
-        // let bias = max(0.05 * (1.0 - dot(tbn * in.normal, l)), 0.005);
-
         let bias = 0.001;
+
         var cascade_index = 0u;
-        // return vec3(in_view.z / 20f);
-        // if in_view.z < shadow_cameras[light.shadow_index + 0].depth { cascade_index = 0u; }
-        // if in_view.z < shadow_cameras[light.shadow_index + 1].depth { cascade_index = 1u; }
-        // if in_view.z < shadow_cameras[light.shadow_index + 2].depth { cascade_index = 2u; }
-        // if in_view.z < shadow_cameras[light.shadow_index + 3].depth { cascade_index = 3u; }
         for (var i = 0u; i < light.shadow_cascades - 1; i++) {
-            if in_view.z > shadow_cameras[light.shadow_index + i].depth {
+            if in_view.z < shadow_cameras[light.shadow_index + i].depth {
                 cascade_index = i + 1;
             }
         }
 
-        if cascade_index == 0 {
-            c = vec3(1f, 0f, 0f);
-        }
-        if cascade_index == 1 {
-            c = vec3(0f, 1f, 0f);
-        }
-        if cascade_index == 2 {
-            c = vec3(0f, 0f, 1f);
-        }
-        if cascade_index == 3 {
-            c = vec3(1f, 0f, 1f);
-        }
-
-        // return c;
-        // return vec3(f32(cascade_index) / 4f, 0f, 0f);
         let shadow_camera = shadow_cameras[light.shadow_index + cascade_index];
         let light_space_clip = shadow_camera.viewproj * vec4(in.world_pos, 1.0);
         let light_space_pos = light_space_clip.xyz / light_space_clip.w;
@@ -238,7 +181,6 @@ fn pbr_luminance(in: VertexOutput, tangent_camera_dir: vec3<f32>, albedo: vec3<f
         let current_depth = light_space_pos.z;
 
         in_light = shadow_pcf(light_space_uv, light.shadow_index + cascade_index, current_depth + bias, shadow_camera.texel_size);
-        // return  mix(c, vec3(max(current_depth - shadow_depth, 0f), max(shadow_depth - current_depth, 0f), 0f), 1.0);
     }
 
     let h = normalize(tangent_camera_dir + l);
@@ -266,8 +208,6 @@ fn pbr_luminance(in: VertexOutput, tangent_camera_dir: vec3<f32>, albedo: vec3<f
 
     return in_light * (kd * albedo / PI + specular) * radiance * ndotl;
 }
-
-const MAX_REFLECTION_LOD: f32 = 7f;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {

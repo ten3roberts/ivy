@@ -53,6 +53,7 @@ use ivy_wgpu::{
         MsaaResolve, RenderObjectBundle,
     },
     rendergraph::{self, BufferDesc, ExternalResources, ManagedTextureDesc, RenderGraph},
+    shader_library::{self, ModuleDesc, ShaderLibrary},
     shaders::{PbrShaderDesc, ShadowShaderDesc, SkinnedPbrShaderDesc},
     texture::TextureDesc,
     Gpu,
@@ -62,7 +63,7 @@ use tracing::Instrument;
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
 use wgpu::{BufferUsages, Extent3d, TextureDimension, TextureFormat};
-use winit::{dpi::LogicalSize, platform::x11::WindowAttributesExtX11, window::WindowAttributes};
+use winit::{dpi::LogicalSize, window::WindowAttributes};
 
 pub fn main() -> anyhow::Result<()> {
     registry()
@@ -79,7 +80,9 @@ pub fn main() -> anyhow::Result<()> {
 
     if let Err(err) = App::builder()
         .with_driver(WinitDriver::new(
-            WindowAttributes::default().with_base_size(LogicalSize::new(1920, 1080)),
+            WindowAttributes::default()
+                .with_inner_size(LogicalSize::new(1920, 1080))
+                .with_title("Ivy"),
         ))
         .with_layer(EngineLayer::new())
         .with_layer(ProfilingLayer::new())
@@ -279,11 +282,11 @@ impl LogicLayer {
                         &mut Entity::builder(),
                         NodeMountOptions { cast_shadow: true },
                     )
-                    // .mount(TransformBundle::new(
-                    //     vec3(0.0, 1.0, -2.0),
-                    //     Quat::IDENTITY,
-                    //     Vec3::ONE,
-                    // ))
+                    .mount(TransformBundle::new(
+                        vec3(0.0, 1.0, -2.0),
+                        Quat::IDENTITY,
+                        Vec3::ONE,
+                    ))
                     .into();
 
                 cmd.lock().spawn(root);
@@ -300,7 +303,7 @@ impl LogicLayer {
         Entity::builder()
             .mount(TransformBundle::default().with_rotation(Quat::from_euler(
                 EulerRot::YXZ,
-                0.0,
+                0.5,
                 1.0,
                 0.0,
             )))
@@ -309,18 +312,29 @@ impl LogicLayer {
             .set_default(cast_shadow())
             .spawn(world);
 
-        // Entity::builder()
-        //     .mount(TransformBundle::default().with_rotation(Quat::from_euler(
-        //         EulerRot::YXZ,
-        //         2.0,
-        //         0.5,
-        //         0.0,
-        //     )))
-        //     .set(light_data(), LightData::new(Srgb::new(0.0, 0.0, 1.0), 1.0))
-        //     .set(light_kind(), LightKind::Directional)
-        //     .set_default(cast_shadow())
-        //     .spawn(world);
+        Entity::builder()
+            .mount(TransformBundle::default().with_rotation(Quat::from_euler(
+                EulerRot::YXZ,
+                2.0,
+                0.5,
+                0.0,
+            )))
+            .set(light_data(), LightData::new(Srgb::new(1.0, 1.0, 1.0), 2.0))
+            .set(light_kind(), LightKind::Directional)
+            .set_default(cast_shadow())
+            .spawn(world);
 
+        Entity::builder()
+            .mount(TransformBundle::default().with_rotation(Quat::from_euler(
+                EulerRot::YXZ,
+                3.0,
+                0.5,
+                0.0,
+            )))
+            .set(light_data(), LightData::new(Srgb::new(1.0, 1.0, 1.0), 2.0))
+            .set(light_kind(), LightKind::Directional)
+            .set_default(cast_shadow())
+            .spawn(world);
         // Entity::builder()
         //     .mount(TransformBundle::default().with_position(vec3(0.0, 2.0, 0.0)))
         //     .set(light_data(), LightData::new(Srgb::new(1.0, 0.0, 0.0), 50.0))
@@ -349,7 +363,7 @@ impl Layer for LogicLayer {
                 let aspect =
                     resized.physical_size.width as f32 / resized.physical_size.height as f32;
                 tracing::info!(%aspect);
-                *main_camera = Mat4::perspective_lh(1.0, aspect, 0.1, 1000.0);
+                *main_camera = Mat4::perspective_rh(1.0, aspect, 0.1, 1000.0);
             }
 
             Ok(())
@@ -529,7 +543,7 @@ fn update_camera_rotation_system() -> BoxedSystem {
     System::builder()
         .with_query(Query::new((rotation().as_mut(), euler_rotation())))
         .for_each(|(rotation, euler_rotation)| {
-            *rotation = Quat::from_euler(EulerRot::YXZ, euler_rotation.y, euler_rotation.x, 0.0);
+            *rotation = Quat::from_euler(EulerRot::YXZ, -euler_rotation.y, -euler_rotation.x, 0.0);
         })
         .boxed()
 }
@@ -543,7 +557,7 @@ fn movement_system(dt: f32) -> BoxedSystem {
             position().as_mut(),
         )))
         .for_each(move |(&movement, rotation, &camera_speed, position)| {
-            *position += *rotation * movement * camera_speed * dt;
+            *position += *rotation * (movement * vec3(1.0, 1.0, -1.0) * camera_speed * dt);
         })
         .boxed()
 }
@@ -662,15 +676,15 @@ impl RenderGraphRenderer {
             persistent: false,
         });
 
-        // let bloom_result = render_graph.resources.insert_texture(ManagedTextureDesc {
-        //     label: "bloom_result".into(),
-        //     extent,
-        //     dimension: wgpu::TextureDimension::D2,
-        //     format: TextureFormat::Rgba16Float,
-        //     mip_level_count: 1,
-        //     sample_count: 1,
-        //     persistent: false,
-        // });
+        let bloom_result = render_graph.resources.insert_texture(ManagedTextureDesc {
+            label: "bloom_result".into(),
+            extent,
+            dimension: wgpu::TextureDimension::D2,
+            format: TextureFormat::Rgba16Float,
+            mip_level_count: 1,
+            sample_count: 1,
+            persistent: false,
+        });
 
         let depth_texture = render_graph.resources.insert_texture(ManagedTextureDesc {
             label: "depth_texture".into(),
@@ -686,9 +700,16 @@ impl RenderGraphRenderer {
             .resources
             .insert_texture(rendergraph::TextureDesc::External);
 
+        let shader_library = ShaderLibrary::new().with_module(ModuleDesc {
+            path: "./assets/shaders/pbr_base.wgsl",
+            source: &assets.load::<String>(&"shaders/pbr_base.wgsl".to_string()),
+        });
+
+        let shader_library = Arc::new(shader_library);
+
         let camera_renderer = (
             SkyboxRenderer::new(gpu),
-            MeshRenderer::new(world, gpu, forward_pass()),
+            MeshRenderer::new(world, gpu, forward_pass(), shader_library.clone()),
             SkinnedMeshRenderer::new(world, gpu, forward_pass()),
         );
 
@@ -722,6 +743,7 @@ impl RenderGraphRenderer {
             shadow_camera_buffer,
             max_shadows as _,
             max_cascades as _,
+            shader_library,
         ));
 
         render_graph.add_node(HdriProcessorNode::new(
@@ -746,15 +768,15 @@ impl RenderGraphRenderer {
 
         // TODO: make chaining easier
         render_graph.add_node(MsaaResolve::new(multisampled_hdr, final_color));
-        // render_graph.add_node(BloomNode::new(gpu, final_color, bloom_result, 5, 0.005));
-        render_graph.add_node(TonemapNode::new(gpu, final_color, surface_texture));
+        render_graph.add_node(BloomNode::new(gpu, final_color, bloom_result, 5, 0.005));
+        render_graph.add_node(TonemapNode::new(gpu, bloom_result, surface_texture));
 
         // render_graph.add_node(OverlayNode::new(gpu, shadow_maps, surface_texture));
 
         Self {
             render_graph,
             surface,
-            screensized: vec![multisampled_hdr, final_color],
+            screensized: vec![multisampled_hdr, final_color, bloom_result],
             surface_texture,
             depth_texture,
         }

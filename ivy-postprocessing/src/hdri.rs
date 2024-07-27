@@ -18,8 +18,9 @@ use ivy_wgpu::{
 use wgpu::{
     vertex_attr_array, BufferUsages, Color, CommandEncoder, Extent3d, IndexFormat, LoadOp,
     Operations, RenderPassColorAttachment, RenderPassDescriptor, Sampler, SamplerDescriptor,
-    ShaderStages, StoreOp, Texture, TextureDescriptor, TextureDimension, TextureFormat,
-    TextureUsages, TextureViewDescriptor, TextureViewDimension, VertexBufferLayout, VertexStepMode,
+    ShaderModuleDescriptor, ShaderSource, ShaderStages, StoreOp, Texture, TextureDescriptor,
+    TextureDimension, TextureFormat, TextureUsages, TextureViewDescriptor, TextureViewDimension,
+    VertexBufferLayout, VertexStepMode,
 };
 
 pub struct EnvironmentMapMode {}
@@ -182,7 +183,12 @@ impl HdriProcessor {
             gpu,
             &ShaderDesc {
                 label: "hdri_project",
-                source: include_str!("../shaders/equirect_project.wgsl"),
+                module: &gpu.device.create_shader_module(ShaderModuleDescriptor {
+                    label: Some("equirect_project"),
+                    source: ShaderSource::Wgsl(
+                        include_str!("../shaders/equirect_project.wgsl").into(),
+                    ),
+                }),
                 target: &TargetDesc {
                     formats: &[self.format],
                     depth_format: None,
@@ -283,7 +289,12 @@ impl HdriProcessor {
             gpu,
             &ShaderDesc {
                 label: "diffuse_irradiance",
-                source: include_str!("../shaders/diffuse_irradiance.wgsl"),
+                module: &gpu.device.create_shader_module(ShaderModuleDescriptor {
+                    label: Some("diffuse_irradiance"),
+                    source: ShaderSource::Wgsl(
+                        include_str!("../shaders/diffuse_irradiance.wgsl").into(),
+                    ),
+                }),
                 target: &TargetDesc {
                     formats: &[self.format],
                     depth_format: None,
@@ -377,7 +388,10 @@ impl HdriProcessor {
             gpu,
             &ShaderDesc {
                 label: "specular_ibl",
-                source: include_str!("../shaders/specular_ibl.wgsl"),
+                module: &gpu.device.create_shader_module(ShaderModuleDescriptor {
+                    label: Some("specular_ibl"),
+                    source: ShaderSource::Wgsl(include_str!("../shaders/specular_ibl.wgsl").into()),
+                }),
                 target: &TargetDesc {
                     formats: &[self.format],
                     depth_format: None,
@@ -430,7 +444,10 @@ impl HdriProcessor {
             gpu,
             &ShaderDesc {
                 label: "brdf_lookup",
-                source: include_str!("../shaders/brdf_lookup.wgsl"),
+                module: &gpu.device.create_shader_module(ShaderModuleDescriptor {
+                    label: Some("brdf_lookup"),
+                    source: ShaderSource::Wgsl(include_str!("../shaders/brdf_lookup.wgsl").into()),
+                }),
                 vertex_layouts: &[],
                 layouts: &[],
                 target: &TargetDesc {

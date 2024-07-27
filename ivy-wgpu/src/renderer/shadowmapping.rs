@@ -1,4 +1,4 @@
-use std::{cmp::max_by, mem::size_of};
+use std::{cmp::max_by, mem::size_of, sync::Arc};
 
 use crate::{
     components::{
@@ -11,6 +11,7 @@ use crate::{
     rendergraph::{
         BufferHandle, Dependency, Node, NodeExecutionContext, NodeUpdateContext, TextureHandle,
     },
+    shader_library::ShaderLibrary,
     types::{shader::TargetDesc, BindGroupBuilder, BindGroupLayoutBuilder, TypedBuffer},
     Gpu,
 };
@@ -65,12 +66,13 @@ impl ShadowMapNode {
         light_camera_buffer: BufferHandle,
         max_shadows: usize,
         max_cascades: usize,
+        shader_library: Arc<ShaderLibrary>,
     ) -> Self {
         let layout = BindGroupLayoutBuilder::new("LightCameraBuffer")
             .bind_uniform_buffer(ShaderStages::VERTEX)
             .build(gpu);
 
-        let renderer = MeshRenderer::new(world, gpu, shadow_pass());
+        let renderer = MeshRenderer::new(world, gpu, shadow_pass(), shader_library);
 
         let align = gpu.device.limits().min_uniform_buffer_offset_alignment as u64;
 
@@ -99,6 +101,8 @@ impl ShadowMapNode {
 
 impl Node for ShadowMapNode {
     fn update(&mut self, ctx: NodeUpdateContext) -> anyhow::Result<()> {
+        ivy_core::profiling::profile_function!();
+
         let shadow_maps = ctx.get_texture(self.shadow_maps);
         let texel_size = vec2(shadow_maps.width() as f32, shadow_maps.height() as f32).recip();
 
@@ -123,8 +127,8 @@ impl Node for ShadowMapNode {
             p.xyz() / p.w
         }
 
-        let near = transform_perspective(main_camera.1.inverse(), Vec3::ZERO).z;
-        let far = transform_perspective(main_camera.1.inverse(), Vec3::Z).z;
+        let near = -transform_perspective(main_camera.1.inverse(), Vec3::ZERO).z;
+        let far = -transform_perspective(main_camera.1.inverse(), Vec3::Z).z;
 
         let clip_range = far - near;
 
@@ -135,7 +139,6 @@ impl Node for ShadowMapNode {
         let ratio = max_z / min_z;
         let cascade_split_lambda = 0.95;
 
-        // tracing::info!(near, far, ratio, range);
         let clip_distances = (0..self.max_cascades)
             .map(|i| {
                 let p = (i + 1) as f32 / self.max_cascades as f32;
@@ -164,12 +167,10 @@ impl Node for ShadowMapNode {
             })
             .collect_vec();
 
-        for (i, (id, &transform, light_data, &kind)) in
-            Query::new((entity_ids(), world_transform(), light_data(), light_kind()))
-                .with(cast_shadow())
-                .borrow(ctx.world)
-                .iter()
-                .enumerate()
+        for (id, &transform, &kind) in Query::new((entity_ids(), world_transform(), light_kind()))
+            .with(cast_shadow())
+            .borrow(ctx.world)
+            .iter()
         {
             let (_, rot, pos) = transform.to_scale_rotation_translation();
 
@@ -199,10 +200,10 @@ impl Node for ShadowMapNode {
                     let radius = (radius / snapping).ceil() * snapping;
 
                     let view =
-                        Mat4::look_at_lh(center + direction.normalize() * radius, center, Vec3::Y);
+                        Mat4::look_at_rh(center + direction.normalize() * radius, center, Vec3::Y);
 
                     let proj =
-                        Mat4::orthographic_lh(-radius, radius, -radius, radius, 0.1, radius * 2.0);
+                        Mat4::orthographic_rh(-radius, radius, -radius, radius, 0.1, radius * 2.0);
                     self.lights.push(LightShadowCamera {
                         viewproj: proj * view,
                         texel_size,
@@ -355,16 +356,6 @@ impl Frustrum {
         ];
 
         for (dir, corner) in corner_directions.iter_mut().zip(&mut corners) {
-            // let point = vec3(
-            //     (i & 1) as f32,
-            //     (i >> 1 & 1) as f32,
-            //     (i >> 2 & 1) as f32,
-            //     // (i & 1) as f32 * 2.0 - 1.0,
-            //     // (i >> 1 & 1) as f32 * 2.0 - 1.0,
-            //     // // (i >> 2 & 1) as f32 * 2.0 - 1.0,
-            //     // (i >> 2 & 1) as f32 * 2.0 - 1.0,
-            // );
-
             let point = inv * dir.extend(1.0);
             let point = point.xyz() / point.w;
             *corner = point;
@@ -373,12 +364,12 @@ impl Frustrum {
         for i in 0..4 {
             let dist = corners[i + 4] - corners[i];
             corners[i + 4] = corners[i] + (dist * split_distance);
-            corners[i] = corners[i] + (dist * last_split_distance);
+            corners[i] += (dist * last_split_distance);
         }
 
         let center = corners.iter().sum::<Vec3>() / corners.len() as f32;
 
-        let depth = (near + split_distance * clip_range);
+        let depth = -(near + split_distance * clip_range);
         // tracing::info!(depth, ?corners);
         Self {
             corners,

@@ -4,14 +4,20 @@ use wgpu::Face;
 
 /// Describes a shader
 pub struct ShaderPassDesc {
+    pub path: String,
     pub label: String,
     pub source: Cow<'static, str>,
     pub cull_mode: Option<Face>,
 }
 
 impl ShaderPassDesc {
-    pub fn new(label: impl Into<String>, source: impl Into<Cow<'static, str>>) -> Self {
+    pub fn new(
+        path: impl Into<String>,
+        label: impl Into<String>,
+        source: impl Into<Cow<'static, str>>,
+    ) -> Self {
         Self {
+            path: path.into(),
             label: label.into(),
             source: source.into(),
             cull_mode: None,

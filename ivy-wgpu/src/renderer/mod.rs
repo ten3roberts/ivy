@@ -397,6 +397,10 @@ impl Node for CameraNode {
             Dependency::texture(self.depth_texture, TextureUsages::RENDER_ATTACHMENT),
         ]
     }
+
+    fn on_resource_changed(&mut self, _resource: crate::rendergraph::ResourceHandle) {
+        self.light_manager.clear();
+    }
 }
 
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]

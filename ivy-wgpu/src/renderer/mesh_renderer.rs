@@ -30,6 +30,7 @@ use crate::{
     mesh_desc::MeshDesc,
     renderer::RendererStore,
     shader::ShaderPassDesc,
+    shader_library::{self, ShaderLibrary},
     types::{shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, Shader, TypedBuffer},
     Gpu,
 };
@@ -131,6 +132,7 @@ pub struct MeshRenderer {
 
     mesh_buffer: MeshBuffer,
     shader_pass: Component<Asset<ShaderPassDesc>>,
+    shader_library: Arc<ShaderLibrary>,
 }
 
 impl MeshRenderer {
@@ -138,6 +140,7 @@ impl MeshRenderer {
         world: &mut World,
         gpu: &Gpu,
         shader_pass: Component<Asset<ShaderPassDesc>>,
+        shader_library: Arc<ShaderLibrary>,
     ) -> Self {
         let id = world.spawn();
 
@@ -158,6 +161,7 @@ impl MeshRenderer {
 
         Self {
             id,
+            shader_library,
             object_data: Vec::new(),
             object_buffer,
             bind_group_layout,
@@ -267,11 +271,16 @@ impl MeshRenderer {
 
                 let shader = self.shaders.entry(&k.shader).or_insert_with(|| {
                     tracing::info!(layouts = layouts.len(), "creating shader");
+                    let module = self
+                        .shader_library
+                        .process(&gpu, (&*k.shader).into())
+                        .unwrap();
+
                     store.shaders.insert(Shader::new(
                         gpu,
                         &ShaderDesc {
                             label: k.shader.label(),
-                            source: k.shader.source(),
+                            module: &module,
                             target,
                             vertex_layouts: &[Vertex::layout()],
                             layouts: &layouts
