@@ -8,8 +8,8 @@ use ivy_wgpu::{
 };
 use wgpu::{
     BindGroup, BindGroupLayout, BindingType, Color, Operations, RenderPassColorAttachment,
-    SamplerDescriptor, ShaderStages, StoreOp, TextureFormat, TextureSampleType, TextureUsages,
-    TextureViewDimension,
+    SamplerDescriptor, ShaderModuleDescriptor, ShaderSource, ShaderStages, StoreOp, TextureFormat,
+    TextureSampleType, TextureUsages, TextureViewDimension,
 };
 
 pub struct OverlayNode {
@@ -76,7 +76,10 @@ impl Node for OverlayNode {
                 ctx.gpu,
                 &ShaderDesc {
                     label: "overlay",
-                    source: include_str!("../shaders/overlay.wgsl"),
+                    module: &ctx.gpu.device.create_shader_module(ShaderModuleDescriptor {
+                        label: Some("overlay"),
+                        source: ShaderSource::Wgsl(include_str!("../shaders/overlay.wgsl").into()),
+                    }),
                     target: &TargetDesc {
                         formats: &[output.format()],
                         depth_format: None,

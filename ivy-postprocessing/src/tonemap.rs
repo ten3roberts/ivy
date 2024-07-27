@@ -8,7 +8,7 @@ use ivy_wgpu::{
 };
 use wgpu::{
     BindGroup, BindGroupLayout, Color, Operations, RenderPassColorAttachment, SamplerDescriptor,
-    ShaderStages, StoreOp, TextureFormat, TextureUsages,
+    ShaderModuleDescriptor, ShaderSource, ShaderStages, StoreOp, TextureFormat, TextureUsages,
 };
 
 pub struct TonemapNode {
@@ -65,7 +65,10 @@ impl Node for TonemapNode {
                 ctx.gpu,
                 &ShaderDesc {
                     label: "tonemap",
-                    source: include_str!("../shaders/tonemap.wgsl"),
+                    module: &ctx.gpu.device.create_shader_module(ShaderModuleDescriptor {
+                        label: Some("tonemap"),
+                        source: ShaderSource::Wgsl(include_str!("../shaders/tonemap.wgsl").into()),
+                    }),
                     target: &TargetDesc {
                         formats: &[output.format()],
                         depth_format: None,

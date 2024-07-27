@@ -124,6 +124,10 @@ impl LightManager {
         Ok(())
     }
 
+    pub fn clear(&mut self) {
+        self.bind_group = None;
+    }
+
     pub fn light_buffer(&self) -> &TypedBuffer<LightData> {
         &self.light_buffer
     }

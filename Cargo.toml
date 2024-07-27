@@ -34,6 +34,7 @@ members = [
 ]
 
 [workspace.dependencies]
+naga_oil = "0.14"
 anyhow = { version = "1.0", features = ["backtrace"] }
 async-std = { version = "1.0"}
 atomic_refcell = "0.1"

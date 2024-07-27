@@ -13,9 +13,9 @@ use ivy_wgpu::{
 };
 use wgpu::{
     hal::BufferUses, util::RenderEncoder, BindGroup, BindGroupLayout, BufferUsages, Color,
-    Operations, RenderPassColorAttachment, Sampler, SamplerDescriptor, ShaderStages, StoreOp,
-    Texture, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, TextureView,
-    TextureViewDescriptor,
+    Operations, RenderPassColorAttachment, Sampler, SamplerDescriptor, ShaderModuleDescriptor,
+    ShaderSource, ShaderStages, StoreOp, Texture, TextureDescriptor, TextureDimension,
+    TextureFormat, TextureUsages, TextureView, TextureViewDescriptor,
 };
 
 struct Data {
@@ -59,7 +59,12 @@ impl BloomNode {
             gpu,
             &ShaderDesc {
                 label: "bloom_downsample",
-                source: include_str!("../shaders/bloom_downsample.wgsl"),
+                module: &gpu.device.create_shader_module(ShaderModuleDescriptor {
+                    label: Some("blolm_downsample"),
+                    source: ShaderSource::Wgsl(
+                        include_str!("../shaders/bloom_downsample.wgsl").into(),
+                    ),
+                }),
                 target: &TargetDesc {
                     formats: &[TextureFormat::Rgba16Float],
                     depth_format: None,
@@ -77,7 +82,12 @@ impl BloomNode {
             gpu,
             &ShaderDesc {
                 label: "bloom_upsample",
-                source: include_str!("../shaders/bloom_upsample.wgsl"),
+                module: &gpu.device.create_shader_module(ShaderModuleDescriptor {
+                    label: Some("bloom_upsample"),
+                    source: ShaderSource::Wgsl(
+                        include_str!("../shaders/bloom_upsample.wgsl").into(),
+                    ),
+                }),
                 target: &TargetDesc {
                     formats: &[TextureFormat::Rgba16Float],
                     depth_format: None,
@@ -101,7 +111,10 @@ impl BloomNode {
             gpu,
             &ShaderDesc {
                 label: "bloom_mix",
-                source: include_str!("../shaders/bloom_mix.wgsl"),
+                module: &gpu.device.create_shader_module(ShaderModuleDescriptor {
+                    label: Some("bloom_mix"),
+                    source: ShaderSource::Wgsl(include_str!("../shaders/bloom_mix.wgsl").into()),
+                }),
                 target: &TargetDesc {
                     formats: &[TextureFormat::Rgba16Float],
                     depth_format: None,

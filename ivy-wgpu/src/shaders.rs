@@ -13,11 +13,10 @@ impl AssetDesc<ShaderPassDesc> for PbrShaderDesc {
     type Error = Infallible;
 
     fn load(&self, assets: &ivy_assets::AssetCache) -> Result<Asset<ShaderPassDesc>, Self::Error> {
-        let source = include_str!("../../assets/shaders/pbr.wgsl").into();
-
         Ok(assets.insert(ShaderPassDesc {
             label: "pbr_shader".into(),
-            source,
+            path: "../../assets/shader/pbr.wgsl".into(),
+            source: include_str!("../../assets/shaders/pbr.wgsl").into(),
             cull_mode: Some(Face::Back),
         }))
     }
@@ -31,11 +30,10 @@ impl AssetDesc<ShaderPassDesc> for SkinnedPbrShaderDesc {
     type Error = Infallible;
 
     fn load(&self, assets: &ivy_assets::AssetCache) -> Result<Asset<ShaderPassDesc>, Self::Error> {
-        let source = include_str!("../../assets/shaders/skinned_pbr.wgsl").into();
-
         Ok(assets.insert(ShaderPassDesc {
             label: "skinned_pbr_shader".into(),
-            source,
+            path: "../../assets/shaders/skinned_pbr.wgsl".into(),
+            source: include_str!("../../assets/shaders/skinned_pbr.wgsl").into(),
             cull_mode: Some(Face::Back),
         }))
     }
@@ -47,11 +45,10 @@ impl AssetDesc<ShaderPassDesc> for ShadowShaderDesc {
     type Error = Infallible;
 
     fn load(&self, assets: &ivy_assets::AssetCache) -> Result<Asset<ShaderPassDesc>, Self::Error> {
-        let source = include_str!("../../assets/shaders/shadow.wgsl").into();
-
         Ok(assets.insert(ShaderPassDesc {
             label: "shadow_shader".into(),
-            source,
+            path: "../../assets/shaders/shadow.wgsl".into(),
+            source: include_str!("../../assets/shaders/shadow.wgsl").into(),
             cull_mode: Some(Face::Front),
         }))
     }

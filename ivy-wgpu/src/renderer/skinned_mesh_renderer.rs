@@ -279,7 +279,7 @@ impl SkinnedMeshRenderer {
                         gpu,
                         &ShaderDesc {
                             label: k.shader.label(),
-                            source: k.shader.source(),
+                            module: todo!(),
                             vertex_layouts: &[SkinnedVertex::layout()],
                             layouts: &layouts
                                 .iter()

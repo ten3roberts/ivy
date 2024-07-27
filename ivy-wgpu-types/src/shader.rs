@@ -27,10 +27,10 @@ pub struct TargetDesc<'a> {
     pub sample_count: u32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct ShaderDesc<'a> {
     pub label: &'a str,
-    pub source: &'a str,
+    pub module: &'a wgpu::ShaderModule,
     pub target: &'a TargetDesc<'a>,
     pub vertex_layouts: &'a [VertexBufferLayout<'static>],
     pub layouts: &'a [&'a BindGroupLayout],
@@ -47,12 +47,12 @@ pub struct Shader {
 
 impl Shader {
     pub fn new(gpu: &Gpu, desc: &ShaderDesc) -> Self {
-        let shader = gpu
-            .device
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some(desc.label),
-                source: wgpu::ShaderSource::Wgsl(desc.source.into()),
-            });
+        // let shader = gpu
+        //     .device
+        //     .create_shader_module(wgpu::ShaderModuleDescriptor {
+        //         label: Some(desc.label),
+        //         source: wgpu::ShaderSource::Wgsl(desc.source.into()),
+        //     });
 
         let layout = gpu
             .device
@@ -68,14 +68,14 @@ impl Shader {
                 label: Some(desc.label),
                 layout: Some(&layout),
                 vertex: wgpu::VertexState {
-                    module: &shader,
+                    module: &desc.module,
                     entry_point: desc.vertex_entry_point,
                     buffers: desc.vertex_layouts,
                     compilation_options: Default::default(),
                 },
                 fragment: Some(wgpu::FragmentState {
                     // 3.
-                    module: &shader,
+                    module: &desc.module,
                     entry_point: desc.fragment_entry_point,
                     targets: &desc
                         .target
