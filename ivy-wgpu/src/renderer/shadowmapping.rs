@@ -16,7 +16,7 @@ use crate::{
 };
 use anyhow::Context;
 use flax::{entity_ids, FetchExt, Query, World};
-use glam::{vec3, Mat4, Vec3, Vec3Swizzles, Vec4Swizzles};
+use glam::{vec2, vec3, Mat4, Vec2, Vec3, Vec3Swizzles, Vec4Swizzles};
 use itertools::Itertools;
 use ivy_core::{main_camera, palette::num::Sqrt, world_transform, WorldExt, DEG_45};
 use ivy_input::Stimulus;
@@ -39,8 +39,9 @@ pub struct LightShadowData {
 #[derive(bytemuck::Pod, bytemuck::Zeroable, Clone, Copy, Debug)]
 struct LightShadowCamera {
     viewproj: Mat4,
+    texel_size: Vec2,
     depth: f32,
-    _padding: Vec3,
+    _padding: f32,
 }
 
 pub struct ShadowMapNode {
@@ -76,7 +77,9 @@ impl ShadowMapNode {
         let dynamic_light_camera_buffer = gpu.device.create_buffer(&BufferDescriptor {
             label: Some("dynamic_light_camera_buffer"),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-            size: (align.max(size_of::<LightShadowCamera>() as u64) * max_shadows as u64),
+            size: (align.max(size_of::<LightShadowCamera>() as u64)
+                * max_shadows as u64
+                * max_cascades as u64),
             mapped_at_creation: false,
         });
 
@@ -97,6 +100,7 @@ impl ShadowMapNode {
 impl Node for ShadowMapNode {
     fn update(&mut self, ctx: NodeUpdateContext) -> anyhow::Result<()> {
         let shadow_maps = ctx.get_texture(self.shadow_maps);
+        let texel_size = vec2(shadow_maps.width() as f32, shadow_maps.height() as f32).recip();
 
         let mut to_add = Vec::new();
 
@@ -131,7 +135,7 @@ impl Node for ShadowMapNode {
         let ratio = max_z / min_z;
         let cascade_split_lambda = 0.95;
 
-        tracing::info!(near, far, ratio, range);
+        // tracing::info!(near, far, ratio, range);
         let clip_distances = (0..self.max_cascades)
             .map(|i| {
                 let p = (i + 1) as f32 / self.max_cascades as f32;
@@ -181,47 +185,27 @@ impl Node for ShadowMapNode {
                 let direction = rot * -Vec3::Z;
 
                 for frustrum in &frustrums {
+                    let snapping = 2.0;
+                    let center = (frustrum.center / snapping).ceil() * snapping;
+
                     let radius = frustrum
                         .corners
                         .iter()
-                        .map(|v| v.distance_squared(frustrum.center))
+                        .map(|v| v.distance_squared(center))
                         .max_by_key(|&v| OrderedFloat(v))
                         .unwrap_or_default()
                         .sqrt();
 
-                    // let (mut min, mut max) = frustrum
-                    //     .corners
-                    //     .iter()
-                    //     .map(|&v| view.transform_point3(v))
-                    //     .fold((Vec3::MAX, Vec3::MIN), |mut acc, x| {
-                    //         acc.0 = acc.0.min(x);
-                    //         acc.1 = acc.1.max(x);
-                    //         acc
-                    //     });
+                    let radius = (radius / snapping).ceil() * snapping;
 
-                    // let z_mul = 2.0;
-
-                    // if min.z < 0.0 {
-                    //     min.z *= z_mul;
-                    // } else {
-                    //     min.z /= z_mul;
-                    // }
-                    // if max.z < 0.0 {
-                    //     max.z /= z_mul;
-                    // } else {
-                    //     max.z *= z_mul;
-                    // }
-
-                    let view = Mat4::look_at_lh(
-                        frustrum.center + direction.normalize() * radius,
-                        frustrum.center,
-                        Vec3::Y,
-                    );
+                    let view =
+                        Mat4::look_at_lh(center + direction.normalize() * radius, center, Vec3::Y);
 
                     let proj =
                         Mat4::orthographic_lh(-radius, radius, -radius, radius, 0.1, radius * 2.0);
                     self.lights.push(LightShadowCamera {
                         viewproj: proj * view,
+                        texel_size,
                         depth: frustrum.split_distance,
                         _padding: Default::default(),
                     });
@@ -394,7 +378,7 @@ impl Frustrum {
 
         let center = corners.iter().sum::<Vec3>() / corners.len() as f32;
 
-        let depth = -(near + split_distance * clip_range);
+        let depth = (near + split_distance * clip_range);
         // tracing::info!(depth, ?corners);
         Self {
             corners,

@@ -15,7 +15,7 @@ use winit::{
     dpi::PhysicalPosition,
     event::WindowEvent,
     event_loop::{ActiveEventLoop, EventLoop},
-    window::{CursorGrabMode, Window, WindowId},
+    window::{CursorGrabMode, Window, WindowAttributes, WindowId},
 };
 
 use crate::{
@@ -23,17 +23,19 @@ use crate::{
     events::{ApplicationReady, RedrawEvent, ResizedEvent},
 };
 
-pub struct WinitDriver {}
+pub struct WinitDriver {
+    window_attributes: WindowAttributes,
+}
 
 impl WinitDriver {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(window_attributes: WindowAttributes) -> Self {
+        Self { window_attributes }
     }
 }
 
 impl Default for WinitDriver {
     fn default() -> Self {
-        Self::new()
+        Self::new(Default::default())
     }
 }
 
@@ -50,6 +52,7 @@ impl Driver for WinitDriver {
             last_cursor_pos: None,
             stats: AppStats::new(16),
             main_window: Default::default(),
+            window_attributes: self.window_attributes.clone(),
         })?;
 
         Ok(())
@@ -65,6 +68,7 @@ pub struct WinitEventHandler<'a> {
     last_cursor_pos: Option<Vec2>,
     stats: AppStats,
     main_window: Option<Entity>,
+    window_attributes: WindowAttributes,
 }
 
 impl<'a> ApplicationHandler for WinitEventHandler<'a> {
@@ -73,7 +77,7 @@ impl<'a> ApplicationHandler for WinitEventHandler<'a> {
 
         let window = Arc::new(
             event_loop
-                .create_window(Window::default_attributes().with_title("Ivy"))
+                .create_window(self.window_attributes.clone())
                 .unwrap(),
         );
 

@@ -196,6 +196,7 @@ impl HdriProcessor {
                 layouts: &[&bind_group_layout],
                 fragment_entry_point: "fs_main",
                 vertex_entry_point: "vs_main",
+                culling: Default::default(),
             },
         );
 
@@ -292,6 +293,7 @@ impl HdriProcessor {
                 layouts: &[&bind_group_layout],
                 fragment_entry_point: "fs_main",
                 vertex_entry_point: "vs_main",
+                culling: Default::default(),
             },
         );
 
@@ -385,6 +387,7 @@ impl HdriProcessor {
                 layouts: &[&bind_group_layout],
                 fragment_entry_point: "fs_main",
                 vertex_entry_point: "vs_main",
+                culling: Default::default(),
             },
         );
 
@@ -437,6 +440,7 @@ impl HdriProcessor {
                 },
                 fragment_entry_point: "fs_main",
                 vertex_entry_point: "vs_main",
+                culling: Default::default(),
             },
         );
 

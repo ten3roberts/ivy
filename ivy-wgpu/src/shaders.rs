@@ -1,6 +1,7 @@
 use std::convert::Infallible;
 
 use ivy_assets::{Asset, AssetDesc};
+use wgpu::Face;
 
 use crate::shader::ShaderPassDesc;
 
@@ -17,6 +18,7 @@ impl AssetDesc<ShaderPassDesc> for PbrShaderDesc {
         Ok(assets.insert(ShaderPassDesc {
             label: "pbr_shader".into(),
             source,
+            cull_mode: Some(Face::Back),
         }))
     }
 }
@@ -34,6 +36,7 @@ impl AssetDesc<ShaderPassDesc> for SkinnedPbrShaderDesc {
         Ok(assets.insert(ShaderPassDesc {
             label: "skinned_pbr_shader".into(),
             source,
+            cull_mode: Some(Face::Back),
         }))
     }
 }
@@ -49,6 +52,7 @@ impl AssetDesc<ShaderPassDesc> for ShadowShaderDesc {
         Ok(assets.insert(ShaderPassDesc {
             label: "shadow_shader".into(),
             source,
+            cull_mode: Some(Face::Front),
         }))
     }
 }

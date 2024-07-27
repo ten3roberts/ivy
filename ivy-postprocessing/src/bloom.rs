@@ -69,6 +69,7 @@ impl BloomNode {
                 layouts: &[&layout],
                 fragment_entry_point: "fs_main",
                 vertex_entry_point: "vs_main",
+                culling: Default::default(),
             },
         );
 
@@ -86,6 +87,7 @@ impl BloomNode {
                 layouts: &[&layout],
                 fragment_entry_point: "fs_main",
                 vertex_entry_point: "vs_main",
+                culling: Default::default(),
             },
         );
 
@@ -109,6 +111,7 @@ impl BloomNode {
                 layouts: &[&mix_layout],
                 fragment_entry_point: "fs_main",
                 vertex_entry_point: "vs_main",
+                culling: Default::default(),
             },
         );
         let sampler = gpu.device.create_sampler(&SamplerDescriptor {

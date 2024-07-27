@@ -45,6 +45,7 @@ struct MaterialData {
 
 struct ShadowCamera {
     viewproj: mat4x4<f32>,
+    texel_size: vec2<f32>,
     depth: f32,
 }
 
@@ -166,6 +167,18 @@ const U32_MAX = 0xFFFFFFFFu;
 const LIGHT_POINT: u32 = 0;
 const LIGHT_DIRECTIONAL: u32 = 1;
 
+fn shadow_pcf(uv: vec2<f32>, index: u32, current_depth: f32, texel_size: vec2<f32>) -> f32 {
+    var total = 0.0;
+    for (var x = -1; x <= 1; x++) {
+        for (var y = -1; y <= 1; y++) {
+            total += textureSampleCompare(shadow_maps, shadow_sampler, uv + vec2(f32(x), f32(y)) * texel_size, index, current_depth);
+        }
+    }
+
+    total = total / 9.0;
+    return total;
+}
+
 fn pbr_luminance(in: VertexOutput, tangent_camera_dir: vec3<f32>, albedo: vec3<f32>, normal: vec3<f32>, metallic: f32, roughness: f32, tbn: mat3x3<f32>, light: Light) -> vec3<f32> {
     var l: vec3<f32>;
     var attenuation: f32;
@@ -189,20 +202,18 @@ fn pbr_luminance(in: VertexOutput, tangent_camera_dir: vec3<f32>, albedo: vec3<f
 
         // let bias = max(0.05 * (1.0 - dot(tbn * in.normal, l)), 0.005);
 
-        let bias = 0.005;
-
+        let bias = 0.001;
         var cascade_index = 0u;
         // return vec3(in_view.z / 20f);
         // if in_view.z < shadow_cameras[light.shadow_index + 0].depth { cascade_index = 0u; }
         // if in_view.z < shadow_cameras[light.shadow_index + 1].depth { cascade_index = 1u; }
         // if in_view.z < shadow_cameras[light.shadow_index + 2].depth { cascade_index = 2u; }
         // if in_view.z < shadow_cameras[light.shadow_index + 3].depth { cascade_index = 3u; }
-        // for (var i = 0u; i < light.shadow_cascades - 1u; i++) {
-        //     if in_view.z > -shadow_cameras[light.shadow_index + i].depth {
-        //         cascade_index = i + 1;
-        //         // break;
-        //     }
-        // }
+        for (var i = 0u; i < light.shadow_cascades - 1; i++) {
+            if in_view.z > shadow_cameras[light.shadow_index + i].depth {
+                cascade_index = i + 1;
+            }
+        }
 
         if cascade_index == 0 {
             c = vec3(1f, 0f, 0f);
@@ -219,14 +230,15 @@ fn pbr_luminance(in: VertexOutput, tangent_camera_dir: vec3<f32>, albedo: vec3<f
 
         // return c;
         // return vec3(f32(cascade_index) / 4f, 0f, 0f);
-        let light_space_clip = shadow_cameras[cascade_index].viewproj * vec4(in.world_pos, 1.0);
+        let shadow_camera = shadow_cameras[light.shadow_index + cascade_index];
+        let light_space_clip = shadow_camera.viewproj * vec4(in.world_pos, 1.0);
         let light_space_pos = light_space_clip.xyz / light_space_clip.w;
 
         var light_space_uv = vec2(light_space_pos.x, -light_space_pos.y) * 0.5 + 0.5;
         let current_depth = light_space_pos.z;
 
-        in_light = textureSampleCompare(shadow_maps, shadow_sampler, light_space_uv, cascade_index, current_depth - bias);
-        // return  mix(c, vec3(in_light), 0.9);
+        in_light = shadow_pcf(light_space_uv, light.shadow_index + cascade_index, current_depth + bias, shadow_camera.texel_size);
+        // return  mix(c, vec3(max(current_depth - shadow_depth, 0f), max(shadow_depth - current_depth, 0f), 0f), 1.0);
     }
 
     let h = normalize(tangent_camera_dir + l);

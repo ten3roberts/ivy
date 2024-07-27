@@ -7,11 +7,12 @@ use ivy_wgpu::{
     Gpu,
 };
 use wgpu::{
-    BindGroup, BindGroupLayout, Color, Operations, RenderPassColorAttachment, SamplerDescriptor,
-    ShaderStages, StoreOp, TextureFormat, TextureUsages,
+    BindGroup, BindGroupLayout, BindingType, Color, Operations, RenderPassColorAttachment,
+    SamplerDescriptor, ShaderStages, StoreOp, TextureFormat, TextureSampleType, TextureUsages,
+    TextureViewDimension,
 };
 
-pub struct TonemapNode {
+pub struct OverlayNode {
     input: TextureHandle,
     output: TextureHandle,
     shader: Option<Shader>,
@@ -20,10 +21,17 @@ pub struct TonemapNode {
     default_sampler: wgpu::Sampler,
 }
 
-impl TonemapNode {
+impl OverlayNode {
     pub fn new(gpu: &Gpu, input: TextureHandle, output: TextureHandle) -> Self {
-        let layout = BindGroupLayoutBuilder::new("Tonemap")
-            .bind_texture(ShaderStages::FRAGMENT)
+        let layout = BindGroupLayoutBuilder::new("Overlay")
+            .bind(
+                ShaderStages::FRAGMENT,
+                BindingType::Texture {
+                    sample_type: TextureSampleType::Depth,
+                    view_dimension: TextureViewDimension::D2,
+                    multisampled: false,
+                },
+            )
             .bind_sampler(ShaderStages::FRAGMENT)
             .build(gpu);
 
@@ -48,24 +56,27 @@ impl TonemapNode {
     }
 }
 
-impl Node for TonemapNode {
+impl Node for OverlayNode {
     fn draw(&mut self, ctx: ivy_wgpu::rendergraph::NodeExecutionContext) -> anyhow::Result<()> {
         let input = ctx.get_texture(self.input);
         let output = ctx.get_texture(self.output);
 
-        let bind_group = self.bind_group.get_or_insert_with(|| {
-            BindGroupBuilder::new("Tonemap")
-                .bind_texture(&input.create_view(&Default::default()))
-                .bind_sampler(&self.default_sampler)
-                .build(ctx.gpu, &self.layout)
-        });
+        let bind_group = BindGroupBuilder::new("Overlay")
+            .bind_texture(&input.create_view(&wgpu::TextureViewDescriptor {
+                dimension: Some(TextureViewDimension::D2),
+                base_array_layer: 0,
+                array_layer_count: Some(1),
+                ..Default::default()
+            }))
+            .bind_sampler(&self.default_sampler)
+            .build(ctx.gpu, &self.layout);
 
         let shader = self.shader.get_or_insert_with(|| {
             Shader::new(
                 ctx.gpu,
                 &ShaderDesc {
-                    label: "tonemap",
-                    source: include_str!("../shaders/tonemap.wgsl"),
+                    label: "overlay",
+                    source: include_str!("../shaders/overlay.wgsl"),
                     target: &TargetDesc {
                         formats: &[output.format()],
                         depth_format: None,
@@ -82,12 +93,12 @@ impl Node for TonemapNode {
 
         let output_view = output.create_view(&Default::default());
         let mut render_pass = ctx.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: "Tonemap".into(),
+            label: "Overlay".into(),
             color_attachments: &[Some(RenderPassColorAttachment {
                 view: &output_view,
                 resolve_target: None,
                 ops: Operations {
-                    load: wgpu::LoadOp::Clear(Color::BLACK),
+                    load: wgpu::LoadOp::Load,
                     store: StoreOp::Store,
                 },
             })],
@@ -96,7 +107,7 @@ impl Node for TonemapNode {
         });
 
         render_pass.set_pipeline(shader.pipeline());
-        render_pass.set_bind_group(0, bind_group, &[]);
+        render_pass.set_bind_group(0, &bind_group, &[]);
 
         render_pass.draw(0..3, 0..1);
 
@@ -104,17 +115,14 @@ impl Node for TonemapNode {
     }
 
     fn read_dependencies(&self) -> Vec<ivy_wgpu::rendergraph::Dependency> {
-        vec![Dependency::texture(
-            self.input,
-            TextureUsages::TEXTURE_BINDING,
-        )]
+        vec![
+            Dependency::texture(self.input, TextureUsages::TEXTURE_BINDING),
+            Dependency::texture(self.output, TextureUsages::RENDER_ATTACHMENT),
+        ]
     }
 
     fn write_dependencies(&self) -> Vec<ivy_wgpu::rendergraph::Dependency> {
-        vec![Dependency::texture(
-            self.output,
-            TextureUsages::RENDER_ATTACHMENT,
-        )]
+        vec![]
     }
 
     fn on_resource_changed(&mut self, _resource: ivy_wgpu::rendergraph::ResourceHandle) {

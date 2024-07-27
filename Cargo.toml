@@ -110,6 +110,7 @@ tracing-subscriber.workspace = true
 tracing-tree = "0.3.0"
 tracing.workspace = true
 wgpu.workspace = true
+winit.workspace = true
 async-std.workspace = true
 
 [features]

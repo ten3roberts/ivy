@@ -17,6 +17,7 @@ use ivy_core::{
     world_transform,
 };
 use ivy_gltf::components::skin;
+use ivy_wgpu_types::shader::Culling;
 use slab::Slab;
 use wgpu::{BindGroup, BindGroupLayout, BufferUsages, RenderPass, ShaderStages, TextureFormat};
 
@@ -280,6 +281,10 @@ impl MeshRenderer {
                                 .collect_vec(),
                             vertex_entry_point: "vs_main",
                             fragment_entry_point: "fs_main",
+                            culling: Culling {
+                                cull_mode: k.shader.cull_mode,
+                                front_face: wgpu::FrontFace::Ccw,
+                            },
                         },
                     ))
                 });

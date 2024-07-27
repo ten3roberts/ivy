@@ -17,7 +17,7 @@ use ivy_gltf::{
     animation::{player::Animator, skin::Skin},
     components::{animator, skin},
 };
-use ivy_wgpu_types::shader::TargetDesc;
+use ivy_wgpu_types::shader::{Culling, TargetDesc};
 use slab::Slab;
 use wgpu::{BindGroup, BindGroupLayout, BufferUsages, RenderPass, ShaderStages, TextureFormat};
 
@@ -289,6 +289,10 @@ impl SkinnedMeshRenderer {
                             vertex_entry_point: "vs_main",
                             fragment_entry_point: "fs_main",
                             target,
+                            culling: Culling {
+                                cull_mode: k.shader.cull_mode,
+                                front_face: wgpu::FrontFace::Ccw,
+                            },
                         },
                     ))
                 });
