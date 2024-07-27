@@ -1,4 +1,4 @@
-use std::mem::size_of;
+use std::{cmp::max_by, mem::size_of};
 
 use crate::{
     components::{
@@ -18,8 +18,9 @@ use anyhow::Context;
 use flax::{entity_ids, FetchExt, Query, World};
 use glam::{vec3, Mat4, Vec3, Vec3Swizzles, Vec4Swizzles};
 use itertools::Itertools;
-use ivy_core::{main_camera, world_transform, WorldExt, DEG_45};
+use ivy_core::{main_camera, palette::num::Sqrt, world_transform, WorldExt, DEG_45};
 use ivy_input::Stimulus;
+use ordered_float::OrderedFloat;
 use wgpu::{
     naga::back::FunctionCtx, BindGroup, BindGroupLayout, Buffer, BufferDescriptor, BufferUsages,
     Color, Operations, RenderPassColorAttachment, RenderPassDescriptor, ShaderStages,
@@ -28,6 +29,7 @@ use wgpu::{
 
 use crate::components::light_shadow_data;
 
+#[derive(Debug, Clone, Copy)]
 pub struct LightShadowData {
     pub index: u32,
     pub cascade_count: u32,
@@ -117,13 +119,13 @@ impl Node for ShadowMapNode {
             p.xyz() / p.w
         }
 
-        let near = transform_perspective(main_camera.1.inverse(), -Vec3::Z).z;
+        let near = transform_perspective(main_camera.1.inverse(), Vec3::ZERO).z;
         let far = transform_perspective(main_camera.1.inverse(), Vec3::Z).z;
 
         let clip_range = far - near;
 
         let min_z = near;
-        let max_z = near * clip_range;
+        let max_z = near + clip_range;
 
         let range = max_z - min_z;
         let ratio = max_z / min_z;
@@ -146,6 +148,8 @@ impl Node for ShadowMapNode {
             .map(|i| {
                 let frustrum = Frustrum::from_inv_viewproj(
                     camera_inv_viewproj,
+                    near,
+                    clip_range,
                     clip_distances[i],
                     last_split_distance,
                 );
@@ -169,7 +173,7 @@ impl Node for ShadowMapNode {
                 id,
                 LightShadowData {
                     index: self.lights.len() as _,
-                    cascade_count: 4,
+                    cascade_count: self.max_cascades as _,
                 },
             ));
 
@@ -177,39 +181,48 @@ impl Node for ShadowMapNode {
                 let direction = rot * -Vec3::Z;
 
                 for frustrum in &frustrums {
+                    let radius = frustrum
+                        .corners
+                        .iter()
+                        .map(|v| v.distance_squared(frustrum.center))
+                        .max_by_key(|&v| OrderedFloat(v))
+                        .unwrap_or_default()
+                        .sqrt();
+
+                    // let (mut min, mut max) = frustrum
+                    //     .corners
+                    //     .iter()
+                    //     .map(|&v| view.transform_point3(v))
+                    //     .fold((Vec3::MAX, Vec3::MIN), |mut acc, x| {
+                    //         acc.0 = acc.0.min(x);
+                    //         acc.1 = acc.1.max(x);
+                    //         acc
+                    //     });
+
+                    // let z_mul = 2.0;
+
+                    // if min.z < 0.0 {
+                    //     min.z *= z_mul;
+                    // } else {
+                    //     min.z /= z_mul;
+                    // }
+                    // if max.z < 0.0 {
+                    //     max.z /= z_mul;
+                    // } else {
+                    //     max.z *= z_mul;
+                    // }
+
                     let view = Mat4::look_at_lh(
-                        frustrum.center + direction.normalize(),
+                        frustrum.center + direction.normalize() * radius,
                         frustrum.center,
                         Vec3::Y,
                     );
 
-                    let (mut min, mut max) = frustrum
-                        .corners
-                        .iter()
-                        .map(|&v| view.transform_point3(v))
-                        .fold((Vec3::MAX, Vec3::MIN), |mut acc, x| {
-                            acc.0 = acc.0.min(x);
-                            acc.1 = acc.1.max(x);
-                            acc
-                        });
-
-                    let z_mul = 2.0;
-
-                    if min.z < 0.0 {
-                        min.z *= z_mul;
-                    } else {
-                        min.z /= z_mul;
-                    }
-                    if max.z < 0.0 {
-                        max.z /= z_mul;
-                    } else {
-                        max.z *= z_mul;
-                    }
-
-                    let proj = Mat4::orthographic_lh(min.x, max.x, min.y, max.y, min.z, max.z);
+                    let proj =
+                        Mat4::orthographic_lh(-radius, radius, -radius, radius, 0.1, radius * 2.0);
                     self.lights.push(LightShadowCamera {
                         viewproj: proj * view,
-                        depth: far,
+                        depth: frustrum.split_distance,
                         _padding: Default::default(),
                     });
                 }
@@ -334,21 +347,41 @@ impl Node for ShadowMapNode {
 struct Frustrum {
     corners: [Vec3; 8],
     center: Vec3,
+    split_distance: f32,
 }
 
 impl Frustrum {
-    fn from_inv_viewproj(inv: Mat4, split_distance: f32, last_split_distance: f32) -> Self {
+    fn from_inv_viewproj(
+        inv: Mat4,
+        near: f32,
+        clip_range: f32,
+        split_distance: f32,
+        last_split_distance: f32,
+    ) -> Self {
         let mut corners = [Vec3::ZERO; 8];
-        for (i, corner) in corners.iter_mut().enumerate() {
-            let point = vec3(
-                (i & 1) as f32 * 2.0 - 1.0,
-                (i >> 1 & 1) as f32 * 2.0 - 1.0,
-                // (i >> 2 & 1) as f32 * 2.0 - 1.0,
-                (i >> 2 & 1) as f32 * 2.0 - 1.0,
-            );
+        let mut corner_directions = [
+            vec3(-1.0, 1., 0.),
+            vec3(1.0, 1., 0.),
+            vec3(1.0, -1., 0.),
+            vec3(-1.0, -1., 0.),
+            vec3(-1.0, 1., 1.),
+            vec3(1.0, 1., 1.),
+            vec3(1.0, -1., 1.),
+            vec3(-1.0, -1., 1.),
+        ];
 
-            tracing::info!(index = i, ?point);
-            let point = inv * point.extend(1.0);
+        for (dir, corner) in corner_directions.iter_mut().zip(&mut corners) {
+            // let point = vec3(
+            //     (i & 1) as f32,
+            //     (i >> 1 & 1) as f32,
+            //     (i >> 2 & 1) as f32,
+            //     // (i & 1) as f32 * 2.0 - 1.0,
+            //     // (i >> 1 & 1) as f32 * 2.0 - 1.0,
+            //     // // (i >> 2 & 1) as f32 * 2.0 - 1.0,
+            //     // (i >> 2 & 1) as f32 * 2.0 - 1.0,
+            // );
+
+            let point = inv * dir.extend(1.0);
             let point = point.xyz() / point.w;
             *corner = point;
         }
@@ -359,9 +392,14 @@ impl Frustrum {
             corners[i] = corners[i] + (dist * last_split_distance);
         }
 
-        tracing::info!(?corners);
         let center = corners.iter().sum::<Vec3>() / corners.len() as f32;
 
-        Self { corners, center }
+        let depth = -(near + split_distance * clip_range);
+        // tracing::info!(depth, ?corners);
+        Self {
+            corners,
+            center,
+            split_distance: depth,
+        }
     }
 }

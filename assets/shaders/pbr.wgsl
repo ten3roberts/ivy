@@ -166,13 +166,13 @@ const U32_MAX = 0xFFFFFFFFu;
 const LIGHT_POINT: u32 = 0;
 const LIGHT_DIRECTIONAL: u32 = 1;
 
-fn pbr_luminance(world_pos: vec3<f32>, position: vec3<f32>, camera_dir: vec3<f32>, albedo: vec3<f32>, normal: vec3<f32>, metallic: f32, roughness: f32, tbn: mat3x3<f32>, light: Light) -> vec3<f32> {
+fn pbr_luminance(in: VertexOutput, tangent_camera_dir: vec3<f32>, albedo: vec3<f32>, normal: vec3<f32>, metallic: f32, roughness: f32, tbn: mat3x3<f32>, light: Light) -> vec3<f32> {
     var l: vec3<f32>;
     var attenuation: f32;
 
     if light.kind == LIGHT_POINT {
         let light_position = tbn * light.position;
-        let to_light = light_position - position.xyz;
+        let to_light = light_position - in.tangent_pos.xyz;
         let dist_sqr: f32 = dot(to_light, to_light);
 
         l = normalize(to_light);
@@ -183,48 +183,68 @@ fn pbr_luminance(world_pos: vec3<f32>, position: vec3<f32>, camera_dir: vec3<f32
     }
 
     var in_light = 0f;
+    var c = vec3(0f);
     if light.shadow_index != U32_MAX {
-        // let bias = max(0.05 * (1.0 - dot(normal, l)), 0.005);
+        let in_view = globals.view * vec4(in.world_pos, 1.0);
 
-        let bias = 0.0;
-        let frag_pos_view_space = globals.view * vec4(world_pos, 1.0);
-        let depth = abs(frag_pos_view_space.z);
+        // let bias = max(0.05 * (1.0 - dot(tbn * in.normal, l)), 0.005);
+
+        let bias = 0.005;
 
         var cascade_index = 0u;
-        // var cascade_index = light.shadow_cascades;
-        // for (var i = 0u; i < light.shadow_cascades; i++) {
-        //     if depth < shadow_cameras[light.shadow_index + i].depth {
-        //         cascade_index = i;
-        //         break;
+        // return vec3(in_view.z / 20f);
+        // if in_view.z < shadow_cameras[light.shadow_index + 0].depth { cascade_index = 0u; }
+        // if in_view.z < shadow_cameras[light.shadow_index + 1].depth { cascade_index = 1u; }
+        // if in_view.z < shadow_cameras[light.shadow_index + 2].depth { cascade_index = 2u; }
+        // if in_view.z < shadow_cameras[light.shadow_index + 3].depth { cascade_index = 3u; }
+        // for (var i = 0u; i < light.shadow_cascades - 1u; i++) {
+        //     if in_view.z > -shadow_cameras[light.shadow_index + i].depth {
+        //         cascade_index = i + 1;
+        //         // break;
         //     }
         // }
 
+        if cascade_index == 0 {
+            c = vec3(1f, 0f, 0f);
+        }
+        if cascade_index == 1 {
+            c = vec3(0f, 1f, 0f);
+        }
+        if cascade_index == 2 {
+            c = vec3(0f, 0f, 1f);
+        }
+        if cascade_index == 3 {
+            c = vec3(1f, 0f, 1f);
+        }
+
+        // return c;
         // return vec3(f32(cascade_index) / 4f, 0f, 0f);
-        let light_space_clip = shadow_cameras[light.shadow_index + cascade_index].viewproj * vec4(world_pos, 1.0);
+        let light_space_clip = shadow_cameras[cascade_index].viewproj * vec4(in.world_pos, 1.0);
         let light_space_pos = light_space_clip.xyz / light_space_clip.w;
 
         var light_space_uv = vec2(light_space_pos.x, -light_space_pos.y) * 0.5 + 0.5;
         let current_depth = light_space_pos.z;
 
-        in_light = textureSampleCompare(shadow_maps, shadow_sampler, light_space_uv, light.shadow_index + 1, current_depth - bias);
+        in_light = textureSampleCompare(shadow_maps, shadow_sampler, light_space_uv, cascade_index, current_depth - bias);
+        // return  mix(c, vec3(in_light), 0.9);
     }
 
-    let h = normalize(camera_dir + l);
+    let h = normalize(tangent_camera_dir + l);
 
     let radiance = light.color * attenuation;
 
     var f0 = vec3(0.04);
 
     f0 = mix(f0, albedo, metallic);
-    let f = fresnel_schlick(max(dot(h, camera_dir), 0f), f0);
+    let f = fresnel_schlick(max(dot(h, tangent_camera_dir), 0f), f0);
 
     let ndf = distribution_ggx(normal, h, roughness);
-    let g = geometry_smith(normal, camera_dir, l, roughness);
+    let g = geometry_smith(normal, tangent_camera_dir, l, roughness);
 
     let ndotl = max(dot(normal, l), 0f);
 
     let num = ndf * g * f;
-    let denom = 4f * max(dot(normal, camera_dir), 0f) * ndotl + 0.0001;
+    let denom = 4f * max(dot(normal, tangent_camera_dir), 0f) * ndotl + 0.0001;
 
     let specular = num / denom;
 
@@ -284,7 +304,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
             break;
         }
 
-        luminance += pbr_luminance(in.world_pos, in.tangent_pos, tangent_camera_dir, albedo, tangent_normal, metallic, roughness, tbn, light);
+        luminance += pbr_luminance(in, tangent_camera_dir, albedo, tangent_normal, metallic, roughness, tbn, light);
     }
 
     return vec4(luminance, 1);

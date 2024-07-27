@@ -4,3 +4,4 @@ pub mod fullscreen;
 pub mod hdri;
 pub mod skybox;
 pub mod tonemap;
+pub mod overlay;
