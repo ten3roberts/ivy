@@ -3,11 +3,11 @@
     "cmd": "cargo run --example vulkan",
     "interactive": true
   },
-  "debug-vulkan": {
-    "cmd": "cargo build --example vulkan",
+  "debug basic": {
+    "cmd": "cargo build --example basic",
     "components": {
       "dap": {
-        "program": "./target/debug/examples/vulkan",
+        "program": "./target/debug/examples/basic",
         "adapter": "rust"
       }
     }

@@ -28,6 +28,7 @@ use ivy_input::{
 use ivy_postprocessing::{
     bloom::BloomNode,
     hdri::{HdriProcessor, HdriProcessorNode},
+    overlay::OverlayNode,
     skybox::SkyboxRenderer,
     tonemap::TonemapNode,
 };
@@ -325,7 +326,7 @@ impl Layer for LogicLayer {
                 let aspect =
                     resized.physical_size.width as f32 / resized.physical_size.height as f32;
                 tracing::info!(%aspect);
-                *main_camera = Mat4::perspective_lh(1.0, aspect, 0.1, 20.0);
+                *main_camera = Mat4::perspective_lh(1.0, aspect, 0.1, 100.0);
             }
 
             Ok(())
@@ -669,14 +670,14 @@ impl RenderGraphRenderer {
         );
 
         let max_shadows = 4;
-        let max_cascades = 4;
+        let max_cascades = 2;
 
         let shadow_maps = render_graph.resources.insert_texture(ManagedTextureDesc {
             label: "depth_texture".into(),
             extent: wgpu::Extent3d {
                 width: 4096,
                 height: 4096,
-                depth_or_array_layers: max_shadows,
+                depth_or_array_layers: max_shadows * max_cascades,
             },
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Depth24Plus,
@@ -687,7 +688,7 @@ impl RenderGraphRenderer {
 
         let shadow_camera_buffer = render_graph.resources.insert_buffer(BufferDesc {
             label: "shadow_camera_buffer".into(),
-            size: size_of::<Mat4>() as u64 * max_shadows as u64 * max_cascades,
+            size: size_of::<Mat4>() as u64 * max_shadows as u64 * max_cascades as u64,
             usage: BufferUsages::STORAGE,
         });
 
@@ -724,6 +725,8 @@ impl RenderGraphRenderer {
         render_graph.add_node(MsaaResolve::new(multisampled_hdr, final_color));
         // render_graph.add_node(BloomNode::new(gpu, final_color, bloom_result, 5, 0.005));
         render_graph.add_node(TonemapNode::new(gpu, final_color, surface_texture));
+
+        render_graph.add_node(OverlayNode::new(gpu, shadow_maps, surface_texture));
 
         Self {
             render_graph,

@@ -16,6 +16,8 @@ use crate::{
     rendergraph::{BufferHandle, NodeUpdateContext, TextureHandle},
 };
 
+use super::shadowmapping::LightShadowData;
+
 pub struct LightManager {
     layout: BindGroupLayout,
     bind_group: Option<BindGroup>,
@@ -98,7 +100,10 @@ impl LightManager {
             let position = transform.transform_point3(Vec3::ZERO);
             let direction = transform.transform_vector3(Vec3::Z).normalize();
 
-            let shadow_index = shadow_data.map(|v| v.index).unwrap_or(u32::MAX);
+            let shadow_data = shadow_data.copied().unwrap_or(LightShadowData {
+                index: u32::MAX,
+                cascade_count: 0,
+            });
 
             LightData {
                 position: position.extend(0.0),
@@ -106,7 +111,8 @@ impl LightManager {
                 kind: *kind as u32,
                 direction: direction.normalize().extend(0.0),
                 padding: Default::default(),
-                shadow_index,
+                shadow_index: shadow_data.index,
+                shadow_cascades: shadow_data.cascade_count,
             }
         })
         .chain(repeat(LightData::NONE))
@@ -144,7 +150,8 @@ impl LightManager {
 pub struct LightData {
     pub kind: u32,
     pub shadow_index: u32,
-    pub padding: Vec2,
+    pub shadow_cascades: u32,
+    pub padding: f32,
     pub direction: Vec4,
     pub position: Vec4,
     pub color: Vec4,
@@ -154,7 +161,8 @@ impl LightData {
     const NONE: Self = Self {
         kind: u32::MAX,
         shadow_index: u32::MAX,
-        padding: Vec2::ZERO,
+        shadow_cascades: u32::MAX,
+        padding: 0.0,
         direction: Vec4::ZERO,
         position: Vec4::ZERO,
         color: Vec4::ZERO,
