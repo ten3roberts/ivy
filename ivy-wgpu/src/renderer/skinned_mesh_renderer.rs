@@ -23,7 +23,7 @@ use wgpu::{BindGroup, BindGroupLayout, BufferUsages, RenderPass, ShaderStages};
 
 use crate::{
     components::{material, mesh, mesh_primitive},
-    material::Material,
+    material::PbrMaterial,
     material_desc::{MaterialData, MaterialDesc},
     mesh::{SkinnedVertex, Vertex, VertexDesc},
     mesh_buffer::{MeshBuffer, MeshHandle},
@@ -53,7 +53,7 @@ struct Batch {
 
     skin: Asset<Skin>,
     mesh: Arc<MeshHandle<SkinnedVertex>>,
-    material: Asset<Material>,
+    material: Asset<PbrMaterial>,
     shader: Handle<Shader>,
     skinning_buffer: TypedBuffer<Mat4>,
     skinning_data: Vec<Mat4>,
@@ -64,7 +64,7 @@ struct Batch {
 impl Batch {
     pub fn new(
         mesh: Arc<MeshHandle<SkinnedVertex>>,
-        material: Asset<Material>,
+        material: Asset<PbrMaterial>,
         shader: Handle<Shader>,
         skin: Asset<Skin>,
         skinning_buffer: TypedBuffer<Mat4>,
@@ -142,7 +142,7 @@ pub struct SkinnedMeshRenderer {
 
     pub meshes: HashMap<MeshDesc, Weak<MeshHandle<SkinnedVertex>>>,
     pub shaders: AssetMap<crate::shader::ShaderPassDesc, Handle<Shader>>,
-    pub materials: HashMap<MaterialDesc, Asset<Material>>,
+    pub materials: HashMap<MaterialDesc, Asset<PbrMaterial>>,
 
     batches: Slab<Batch>,
     batch_map: HashMap<BatchKey, BatchId>,
@@ -284,7 +284,7 @@ impl SkinnedMeshRenderer {
                     }
                 };
 
-                let material: Asset<Material> = assets.try_load(&key.material).unwrap_or_else(|e| {
+                let material: Asset<PbrMaterial> = assets.try_load(&key.material).unwrap_or_else(|e| {
                     tracing::error!(?key.material, "{:?}", e.context("Failed to load material"));
                     assets.load(&MaterialDesc::content(MaterialData::new()))
                 });

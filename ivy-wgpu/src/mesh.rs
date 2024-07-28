@@ -4,7 +4,7 @@ use wgpu::{
     util::DeviceExt, vertex_attr_array, Buffer, RenderPass, VertexAttribute, VertexBufferLayout,
 };
 
-use crate::material::Material;
+use crate::material::PbrMaterial;
 
 use super::Gpu;
 
@@ -96,7 +96,7 @@ impl VertexDesc for Vertex2d {
 pub struct Primitive {
     pub first_index: u32,
     pub index_count: u32,
-    pub material: Asset<Material>,
+    pub material: Asset<PbrMaterial>,
 }
 
 /// Flat mesh of vertices and indices

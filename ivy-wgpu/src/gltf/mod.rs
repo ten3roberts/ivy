@@ -5,12 +5,12 @@ use ivy_assets::{Asset, AssetCache, AssetDesc};
 use ivy_core::profiling::{profile_function, profile_scope};
 use ivy_gltf::{DocumentData, GltfPrimitive};
 
-use crate::{material::Material, mesh_desc::MeshData, Gpu};
+use crate::{material::PbrMaterial, mesh_desc::MeshData, Gpu};
 
 /// Contains the gltf data
 pub struct Document {
     pub(crate) mesh_primitives: Vec<Vec<Asset<MeshData>>>,
-    pub(crate) materials: Vec<Asset<Material>>,
+    pub(crate) materials: Vec<Asset<PbrMaterial>>,
 }
 
 impl Document {
@@ -22,7 +22,7 @@ impl Document {
             .materials()
             .map(|v| {
                 profile_scope!("load_material");
-                anyhow::Ok(assets.insert(Material::from_gltf(gpu, assets, v, data.images())?))
+                anyhow::Ok(assets.insert(PbrMaterial::from_gltf(gpu, assets, v, data.images())?))
             })
             .try_collect()?;
 
@@ -49,7 +49,7 @@ impl Document {
         })
     }
 
-    pub fn materials(&self) -> &[Asset<Material>] {
+    pub fn materials(&self) -> &[Asset<PbrMaterial>] {
         &self.materials
     }
 

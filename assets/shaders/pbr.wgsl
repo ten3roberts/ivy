@@ -44,7 +44,7 @@ var<storage> objects: array<Object>;
 
 // material
 @group(3) @binding(0)
-var default_sampler: sampler;
+var material_sampler: sampler;
 
 @group(3) @binding(1)
 var albedo_texture: texture_2d<f32>;
@@ -56,6 +56,12 @@ var normal_texture: texture_2d<f32>;
 var mr_texture: texture_2d<f32>;
 
 @group(3) @binding(4)
+var ao_texture: texture_2d<f32>;
+
+@group(3) @binding(5)
+var displacement_texture: texture_2d<f32>;
+
+@group(3) @binding(6)
 var<uniform> material_data: MaterialData;
 
 @vertex
@@ -83,13 +89,18 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     return out;
 }
 
+
 #import pbr_base::{PbrLuminance, brdf_forward};
+const DISPLACEMENT_STRENGTH: f32 = 0.2f;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let albedo = textureSample(albedo_texture, default_sampler, in.tex_coord).rgb;
+    let albedo = textureSample(albedo_texture, material_sampler, in.tex_coord).rgb;
 
-    let tangent_normal = textureSample(normal_texture, default_sampler, in.tex_coord).rgb * 2f - 1f;
+    let ao = textureSample(ao_texture, material_sampler, in.tex_coord).r;
+    let displacement = textureSample(displacement_texture, material_sampler, in.tex_coord).r;
+
+    let tangent_normal = textureSample(normal_texture, material_sampler, in.tex_coord).rgb * 2f - 1f;
 
     let tbn = transpose(mat3x3(normalize(in.tangent), normalize(in.bitangent), normalize(in.normal)));
 
@@ -100,22 +111,25 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     let camera_dir = normalize(globals.camera_pos - in.world_pos.xyz);
 
-    let metallic_roughness = textureSample(mr_texture, default_sampler, in.tex_coord);
+    let metallic_roughness = textureSample(mr_texture, material_sampler, in.tex_coord);
     let metallic = material_data.metallic_factor * metallic_roughness.b;
     let roughness = material_data.roughness_factor * metallic_roughness.g;
 
     var in_lum: PbrLuminance;
 
+    let world_pos = in.world_pos - DISPLACEMENT_STRENGTH * in.normal * (1f - displacement);
+
     in_lum.camera_dir = camera_dir;
     in_lum.tangent_camera_dir = tangent_camera_dir;
-    in_lum.world_pos = in.world_pos;
-    in_lum.tangent_pos = in.tangent_pos;
+    in_lum.world_pos = world_pos;
+    in_lum.tangent_pos = tbn * world_pos;
     in_lum.world_normal = world_normal;
     in_lum.tangent_normal = tangent_normal;
 
     in_lum.albedo = albedo;
     in_lum.metallic = metallic;
     in_lum.roughness = roughness;
+    in_lum.ao = ao;
 
     in_lum.tbn = tbn;
     in_lum.view_pos = in.view_pos;

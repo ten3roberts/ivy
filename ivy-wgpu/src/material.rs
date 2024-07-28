@@ -8,6 +8,16 @@ use crate::{
     types::{texture::DefaultNormalTexture, Gpu, TypedBuffer},
 };
 
+pub struct PbrMaterialParams {
+    pub albedo: Asset<Texture>,
+    pub normal: Asset<Texture>,
+    pub metallic_roughness: Asset<Texture>,
+    pub ambient_occlusion: Asset<Texture>,
+    pub displacement: Asset<Texture>,
+    pub roughness_factor: f32,
+    pub metallic_factor: f32,
+}
+
 #[repr(C)]
 #[derive(bytemuck::Pod, bytemuck::Zeroable, Clone, Copy, Debug)]
 pub struct MaterialUniformData {
@@ -15,29 +25,18 @@ pub struct MaterialUniformData {
     metallic_factor: f32,
 }
 
-pub struct Material {
-    pub albedo: Asset<Texture>,
-    pub normal: Asset<Texture>,
-    pub roughness_factor: f32,
-    pub metallic_factor: f32,
+pub struct PbrMaterial {
     bind_group: wgpu::BindGroup,
-    // buffer: TypedBuffer<MaterialUniformData>,
     sampler: Sampler,
     layout: wgpu::BindGroupLayout,
 }
 
-impl Material {
-    pub fn new(
-        label: String,
-        gpu: &Gpu,
-        albedo: Asset<Texture>,
-        normal: Asset<Texture>,
-        metallic_roughness: Asset<Texture>,
-        roughness_factor: f32,
-        metallic_factor: f32,
-    ) -> Self {
+impl PbrMaterial {
+    pub fn new(label: String, gpu: &Gpu, params: PbrMaterialParams) -> Self {
         let layout = BindGroupLayoutBuilder::new(label.clone())
             .bind_sampler(ShaderStages::FRAGMENT)
+            .bind_texture(ShaderStages::FRAGMENT)
+            .bind_texture(ShaderStages::FRAGMENT)
             .bind_texture(ShaderStages::FRAGMENT)
             .bind_texture(ShaderStages::FRAGMENT)
             .bind_texture(ShaderStages::FRAGMENT)
@@ -61,27 +60,25 @@ impl Material {
             "material_uniforms",
             BufferUsages::UNIFORM,
             &[MaterialUniformData {
-                roughness_factor,
-                metallic_factor,
+                roughness_factor: params.roughness_factor,
+                metallic_factor: params.metallic_factor,
             }],
         );
 
         let bind_group = BindGroupBuilder::new(&label)
             .bind_sampler(&sampler)
-            .bind_texture(&albedo.create_view(&Default::default()))
-            .bind_texture(&normal.create_view(&Default::default()))
-            .bind_texture(&metallic_roughness.create_view(&Default::default()))
+            .bind_texture(&params.albedo.create_view(&Default::default()))
+            .bind_texture(&params.normal.create_view(&Default::default()))
+            .bind_texture(&params.metallic_roughness.create_view(&Default::default()))
+            .bind_texture(&params.ambient_occlusion.create_view(&Default::default()))
+            .bind_texture(&params.displacement.create_view(&Default::default()))
             .bind_buffer(&buffer)
             .build(gpu, &layout);
 
         Self {
-            albedo,
-            normal,
             bind_group,
             sampler,
             layout,
-            roughness_factor,
-            metallic_factor,
             // buffer,
         }
     }
@@ -160,14 +157,23 @@ impl Material {
             "gltf material"
         );
 
+        let plain_white = assets.load(&TextureFromColor {
+            color: [255, 255, 255, 255],
+            format: TextureFormat::Rgba8Unorm,
+        });
+
         Ok(Self::new(
             "gltf_material".into(),
             gpu,
-            albedo,
-            normal,
-            metallic_roughness,
-            pbr.roughness_factor(),
-            pbr.metallic_factor(),
+            PbrMaterialParams {
+                albedo,
+                normal,
+                metallic_roughness,
+                ambient_occlusion: plain_white.clone(),
+                displacement: plain_white,
+                roughness_factor: pbr.roughness_factor(),
+                metallic_factor: pbr.metallic_factor(),
+            },
         ))
     }
 }

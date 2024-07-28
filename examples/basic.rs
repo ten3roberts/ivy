@@ -136,30 +136,28 @@ impl LogicLayer {
             let assets = assets.clone();
             async move {
                 let shader = assets.load(&PbrShaderDesc);
-                let skinned_shader = assets.load(&SkinnedPbrShaderDesc);
                 let sphere_mesh = MeshDesc::content(assets.load(&UvSphereDesc::default()));
-                // let materials:Asset<Document> = assets.load_async("textures/materials.glb").await;
+                let materials: Asset<Document> = assets.load_async("textures/materials.glb").await;
 
-                // {
-                //     let mut cmd = cmd.lock();
+                {
+                    let mut cmd = cmd.lock();
 
-                //     for (i, material) in materials.materials().enumerate() {
-
-                //         cmd.spawn(
-                //             Entity::builder()
-                //             .mount(TransformBundle::new(
-                //                     vec3(0.0 + i as f32 * 2.0, 5.0, 5.0),
-                //                     Quat::IDENTITY,
-                //                     Vec3::ONE,
-                //             ))
-                //             .mount(RenderObjectBundle {
-                //                 mesh: sphere_mesh.clone(),
-                //                 material: material.into(),
-                //                 shader: shader.clone(),
-                //             }),
-                //         );
-                //     }
-                // }
+                    for (i, material) in materials.materials().enumerate() {
+                        cmd.spawn(
+                            Entity::builder()
+                                .mount(TransformBundle::new(
+                                    vec3(0.0 + i as f32 * 2.0, 5.0, 5.0),
+                                    Quat::IDENTITY,
+                                    Vec3::ONE,
+                                ))
+                                .mount(RenderObjectBundle {
+                                    mesh: sphere_mesh.clone(),
+                                    material: material.into(),
+                                    shader: shader.clone(),
+                                }),
+                        );
+                    }
+                }
             }
         });
 
@@ -171,7 +169,7 @@ impl LogicLayer {
 
                 let plane_material = MaterialDesc::content(
                     MaterialData::new()
-                        .with_metallic(0.0)
+                        .with_metallic_factor(0.0)
                         .with_albedo(TextureDesc::path(
                             "assets/textures/BaseCollection/ConcreteTiles/Concrete007_2K-PNG_Color.png",
                         ))
@@ -180,6 +178,12 @@ impl LogicLayer {
                         ))
                         .with_metallic_roughness(TextureDesc::path(
                             "assets/textures/BaseCollection/ConcreteTiles/Concrete007_2K-PNG_Roughness.png",
+                        ))
+                        .with_ambient_occlusion(TextureDesc::path(
+                            "assets/textures/BaseCollection/ConcreteTiles/Concrete007_2K-PNG_AmbientOcclusion.png",
+                        ))
+                        .with_displacement(TextureDesc::path(
+                            "assets/textures/BaseCollection/ConcreteTiles/Concrete007_2K-PNG_Displacement.png",
                         )),
                 );
 
@@ -196,7 +200,7 @@ impl LogicLayer {
 
                 let sphere_mesh = MeshDesc::content(assets.load(&UvSphereDesc::default()));
                 let plastic_material = MaterialDesc::content(
-                    MaterialData::new().with_metallic(0.0).with_roughness(0.2),
+                    MaterialData::new().with_metallic_factor(0.0).with_roughness_factor(0.2),
                 );
 
                 for i in 0..5 {
@@ -223,8 +227,8 @@ impl LogicLayer {
 
                         let plastic_material = MaterialDesc::content(
                             MaterialData::new()
-                                .with_metallic(metallic)
-                                .with_roughness(roughness),
+                                .with_metallic_factor(metallic)
+                                .with_roughness_factor(roughness),
                         );
 
                         cmd.lock().spawn(

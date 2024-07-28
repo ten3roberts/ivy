@@ -19,7 +19,7 @@ use wgpu::{BindGroup, BindGroupLayout, BufferUsages, RenderPass, ShaderStages};
 
 use crate::{
     components::{material, mesh, mesh_primitive},
-    material::Material,
+    material::PbrMaterial,
     material_desc::{MaterialData, MaterialDesc},
     mesh::{Vertex, VertexDesc},
     mesh_buffer::{MeshBuffer, MeshHandle},
@@ -47,12 +47,12 @@ struct Batch {
     instance_capacity: u32,
 
     mesh: Arc<MeshHandle>,
-    material: Asset<Material>,
+    material: Asset<PbrMaterial>,
     shader: Handle<Shader>,
 }
 
 impl Batch {
-    pub fn new(mesh: Arc<MeshHandle>, material: Asset<Material>, shader: Handle<Shader>) -> Self {
+    pub fn new(mesh: Arc<MeshHandle>, material: Asset<PbrMaterial>, shader: Handle<Shader>) -> Self {
         Self {
             instance_count: 0,
             first_instance: 0,
@@ -116,7 +116,7 @@ pub struct MeshRenderer {
 
     pub meshes: HashMap<MeshDesc, Weak<MeshHandle>>,
     pub shaders: AssetMap<ShaderPassDesc, Handle<Shader>>,
-    pub materials: HashMap<MaterialDesc, Asset<Material>>,
+    pub materials: HashMap<MaterialDesc, Asset<PbrMaterial>>,
 
     batches: Slab<Batch>,
     batch_map: HashMap<BatchKey, BatchId>,
@@ -258,7 +258,7 @@ impl MeshRenderer {
                     }
                 };
 
-                let material: Asset<Material> = assets.try_load(&key.material).unwrap_or_else(|e| {
+                let material: Asset<PbrMaterial> = assets.try_load(&key.material).unwrap_or_else(|e| {
                     tracing::error!(?key.material, "{:?}", e.context("Failed to load material"));
                     assets.load(&MaterialDesc::content(MaterialData::new()))
                 });

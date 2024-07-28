@@ -18,7 +18,7 @@ use wgpu::{
 
 use crate::{
     components::{forward_pass, material, mesh, projection_matrix},
-    material::Material,
+    material::PbrMaterial,
     material_desc::MaterialDesc,
     mesh_desc::MeshDesc,
     rendergraph::{Dependency, Node, TextureHandle},
@@ -494,7 +494,7 @@ impl Bundle for RenderObjectBundle {
 }
 
 pub struct RendererStore {
-    pub materials: Store<Material>,
+    pub materials: Store<PbrMaterial>,
     pub shaders: Store<Shader>,
     pub bind_groups: Store<BindGroup>,
 }
