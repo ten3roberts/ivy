@@ -237,8 +237,6 @@ impl HdriProcessor {
                     ..Default::default()
                 });
 
-                tracing::info!("drawing side");
-
                 render_pass.set_pipeline(shader.pipeline());
                 render_pass.set_vertex_buffer(0, vb.slice(..));
                 render_pass.set_index_buffer(ib.slice(..), IndexFormat::Uint16);
@@ -352,7 +350,6 @@ impl HdriProcessor {
         let specular_buffers = (0..self.roughness_levels)
             .flat_map(|level| {
                 let roughness = level as f32 / (self.roughness_levels - 1).max(1) as f32;
-                tracing::info!(roughness);
                 self.view_matrices.map(|v| {
                     TypedBuffer::new(
                         gpu,

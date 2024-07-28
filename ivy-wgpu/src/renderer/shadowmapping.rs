@@ -30,6 +30,8 @@ use wgpu::{
 
 use crate::components::light_shadow_data;
 
+use super::skinned_mesh_renderer::SkinnedMeshRenderer;
+
 #[derive(Debug, Clone, Copy)]
 pub struct LightShadowData {
     pub index: u32,
@@ -53,7 +55,7 @@ pub struct ShadowMapNode {
     lights: Vec<LightShadowCamera>,
     dynamic_light_camera_buffer: Buffer,
     shadow_camera_buffer: BufferHandle,
-    renderer: MeshRenderer,
+    renderer: (MeshRenderer, SkinnedMeshRenderer),
     store: RendererStore,
     max_cascades: usize,
 }
@@ -72,7 +74,10 @@ impl ShadowMapNode {
             .bind_uniform_buffer(ShaderStages::VERTEX)
             .build(gpu);
 
-        let renderer = MeshRenderer::new(world, gpu, shadow_pass(), shader_library);
+        let renderer = (
+            MeshRenderer::new(world, gpu, shadow_pass(), shader_library.clone()),
+            SkinnedMeshRenderer::new(world, gpu, shadow_pass(), shader_library),
+        );
 
         let align = gpu.device.limits().min_uniform_buffer_offset_alignment as u64;
 
@@ -364,7 +369,7 @@ impl Frustrum {
         for i in 0..4 {
             let dist = corners[i + 4] - corners[i];
             corners[i + 4] = corners[i] + (dist * split_distance);
-            corners[i] += (dist * last_split_distance);
+            corners[i] += dist * last_split_distance;
         }
 
         let center = corners.iter().sum::<Vec3>() / corners.len() as f32;

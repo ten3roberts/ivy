@@ -167,25 +167,25 @@ impl LogicLayer {
             async move {
                 let shader = assets.load(&PbrShaderDesc);
 
-                let plane_mesh = MeshDesc::content(assets.insert(generate_plane(25.0, Vec3::Y)));
+                let plane_mesh = MeshDesc::content(assets.insert(generate_plane(8.0, Vec3::Y)));
 
                 let plane_material = MaterialDesc::content(
                     MaterialData::new()
                         .with_metallic(0.0)
                         .with_albedo(TextureDesc::path(
-                            "assets/textures/BaseCollection/Sand/Ground054_1K-PNG_Color.png",
+                            "assets/textures/BaseCollection/ConcreteTiles/Concrete007_2K-PNG_Color.png",
                         ))
                         .with_normal(TextureDesc::path(
-                            "assets/textures/BaseCollection/Sand/Ground054_1K-PNG_NormalGL.png",
+                            "assets/textures/BaseCollection/ConcreteTiles/Concrete007_2K-PNG_NormalGL.png",
                         ))
                         .with_metallic_roughness(TextureDesc::path(
-                            "assets/textures/BaseCollection/Sand/Ground054_1K-PNG_Roughness.png",
+                            "assets/textures/BaseCollection/ConcreteTiles/Concrete007_2K-PNG_Roughness.png",
                         )),
                 );
 
                 cmd.lock().spawn(
                     Entity::builder()
-                        .mount(TransformBundle::new(Vec3::ZERO, Quat::IDENTITY, Vec3::ONE))
+                        .mount(TransformBundle::new(Vec3::ZERO, Quat::IDENTITY, Vec3::ONE * 2.0))
                         .mount(RenderObjectBundle {
                             mesh: plane_mesh.clone(),
                             material: plane_material.clone(),
@@ -268,7 +268,7 @@ impl LogicLayer {
                     .set(animator(), Animator::new(animation))
                     .into();
 
-                // cmd.lock().spawn(root);
+                cmd.lock().spawn(root);
 
                 let document: Asset<Document> = assets.load_async("models/crate.glb").await;
                 let node = document
@@ -710,7 +710,7 @@ impl RenderGraphRenderer {
         let camera_renderer = (
             SkyboxRenderer::new(gpu),
             MeshRenderer::new(world, gpu, forward_pass(), shader_library.clone()),
-            SkinnedMeshRenderer::new(world, gpu, forward_pass()),
+            SkinnedMeshRenderer::new(world, gpu, forward_pass(), shader_library.clone()),
         );
 
         let max_shadows = 4;

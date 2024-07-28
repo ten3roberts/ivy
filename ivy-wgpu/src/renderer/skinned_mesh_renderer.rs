@@ -1,12 +1,12 @@
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{hash_map::Entry, HashMap},
     sync::{Arc, Weak},
 };
 
 use bytemuck::Zeroable;
 use flax::{
     entity_ids,
-    fetch::{Copied, Modified, Source, TransformFetch, Traverse},
+    fetch::{Copied, Source, Traverse},
     CommandBuffer, Component, Entity, Fetch, FetchExt, Query, World,
 };
 use glam::{Mat4, Vec4Swizzles};
@@ -19,22 +19,23 @@ use ivy_gltf::{
 };
 use ivy_wgpu_types::shader::{Culling, TargetDesc};
 use slab::Slab;
-use wgpu::{BindGroup, BindGroupLayout, BufferUsages, RenderPass, ShaderStages, TextureFormat};
+use wgpu::{BindGroup, BindGroupLayout, BufferUsages, RenderPass, ShaderStages};
 
 use crate::{
-    components::{forward_pass, material, mesh, mesh_primitive},
+    components::{material, mesh, mesh_primitive},
     material::Material,
     material_desc::{MaterialData, MaterialDesc},
-    mesh::{SkinnedVertex, VertexDesc},
+    mesh::{SkinnedVertex, Vertex, VertexDesc},
     mesh_buffer::{MeshBuffer, MeshHandle},
     mesh_desc::MeshDesc,
     renderer::RendererStore,
     shader::ShaderPassDesc,
+    shader_library::ShaderLibrary,
     types::{shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, Shader, TypedBuffer},
     Gpu,
 };
 
-use super::{CameraRenderer, CameraShaderData, ObjectData};
+use super::{CameraRenderer, ObjectData};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BatchKey {
@@ -97,8 +98,8 @@ impl Batch {
         first_bindgroup: u32,
     ) {
         render_pass.set_pipeline(store.shaders[&self.shader].pipeline());
-        render_pass.set_bind_group(first_bindgroup + 1, &self.bind_group, &[]);
-        render_pass.set_bind_group(first_bindgroup + 2, self.material.bind_group(), &[]);
+        render_pass.set_bind_group(first_bindgroup, &self.bind_group, &[]);
+        render_pass.set_bind_group(first_bindgroup + 1, self.material.bind_group(), &[]);
 
         let index_offset = self.mesh.ib().offset() as u32;
 
@@ -155,6 +156,7 @@ pub struct SkinnedMeshRenderer {
     mesh_buffer: MeshBuffer<SkinnedVertex>,
 
     shader_pass: Component<Asset<ShaderPassDesc>>,
+    shader_library: Arc<ShaderLibrary>,
 }
 
 impl SkinnedMeshRenderer {
@@ -162,6 +164,7 @@ impl SkinnedMeshRenderer {
         world: &mut World,
         gpu: &Gpu,
         shader_pass: Component<Asset<ShaderPassDesc>>,
+        shader_library: Arc<ShaderLibrary>,
     ) -> Self {
         let id = world.spawn();
 
@@ -179,6 +182,7 @@ impl SkinnedMeshRenderer {
 
         Self {
             id,
+            shader_library,
             object_data: Vec::new(),
             object_buffer,
             bind_group_layout,
@@ -215,7 +219,7 @@ impl SkinnedMeshRenderer {
         store: &mut RendererStore,
         cmd: &mut CommandBuffer,
         target: &TargetDesc,
-    ) {
+    ) -> anyhow::Result<()> {
         let mut query = Query::new((
             entity_ids(),
             mesh().cloned(),
@@ -241,9 +245,20 @@ impl SkinnedMeshRenderer {
                 skin,
             };
 
-            let batch_id = *self.batch_map.entry(key).or_insert_with_key(|k| {
+            let create_batch = |key: &BatchKey| {
                 let mut load_mesh = |v: &MeshDesc| {
                     let data = v.load_data(assets).unwrap();
+                    assert!(
+                        !data
+                            .vertices()
+                            .iter()
+                            .all(|v| v.tangent.xyz().length() == 0.0),
+                        "Tangents should be non-zero {:?}",
+                        data.vertices()
+                            .iter()
+                            .map(|v| v.tangent.to_string())
+                            .collect_vec()
+                    );
 
                     Arc::new(self.mesh_buffer.insert(
                         gpu,
@@ -252,8 +267,8 @@ impl SkinnedMeshRenderer {
                     ))
                 };
 
-                let mesh = match self.meshes.entry(k.mesh.clone()) {
-                    std::collections::hash_map::Entry::Occupied(mut v) => {
+                let mesh = match self.meshes.entry(key.mesh.clone()) {
+                    Entry::Occupied(mut v) => {
                         if let Some(mesh) = v.get().upgrade() {
                             mesh
                         } else {
@@ -262,55 +277,72 @@ impl SkinnedMeshRenderer {
                             handle
                         }
                     }
-                    std::collections::hash_map::Entry::Vacant(v) => {
+                    Entry::Vacant(v) => {
                         let handle = load_mesh(v.key());
                         v.insert(Arc::downgrade(&handle));
                         handle
                     }
                 };
 
-                let material: Asset<Material> = assets.try_load(&k.material).unwrap_or_else(|e| {
-                    tracing::error!(?k.material, "{:?}", e.context("Failed to load material"));
+                let material: Asset<Material> = assets.try_load(&key.material).unwrap_or_else(|e| {
+                    tracing::error!(?key.material, "{:?}", e.context("Failed to load material"));
                     assets.load(&MaterialDesc::content(MaterialData::new()))
                 });
 
-                let shader = self.shaders.entry(&k.shader).or_insert_with(|| {
-                    store.shaders.insert(Shader::new(
-                        gpu,
-                        &ShaderDesc {
-                            label: k.shader.label(),
-                            module: todo!(),
-                            vertex_layouts: &[SkinnedVertex::layout()],
-                            layouts: &layouts
-                                .iter()
-                                .copied()
-                                .chain([&self.bind_group_layout, material.layout()])
-                                .collect_vec(),
-                            vertex_entry_point: "vs_main",
-                            fragment_entry_point: "fs_main",
-                            target,
-                            culling: Culling {
-                                cull_mode: k.shader.cull_mode,
-                                front_face: wgpu::FrontFace::Ccw,
-                            },
-                        },
-                    ))
-                });
+                let shader = match self.shaders.entry(&key.shader) {
+                    slotmap::secondary::Entry::Occupied(slot) => slot.get().clone(),
+                    slotmap::secondary::Entry::Vacant(slot) => {
+                        tracing::info!(layouts = layouts.len(), "creating shader");
+                        let module = self.shader_library.process(gpu, (&*key.shader).into())?;
+
+                        slot.insert(
+                            store.shaders.insert(Shader::new(
+                                gpu,
+                                &ShaderDesc {
+                                    label: key.shader.label(),
+                                    module: &module,
+                                    target,
+                                    vertex_layouts: &[SkinnedVertex::layout()],
+                                    layouts: &layouts
+                                        .iter()
+                                        .copied()
+                                        .chain([&self.bind_group_layout, material.layout()])
+                                        .collect_vec(),
+                                    vertex_entry_point: "vs_main",
+                                    fragment_entry_point: "fs_main",
+                                    culling: Culling {
+                                        cull_mode: key.shader.cull_mode,
+                                        front_face: wgpu::FrontFace::Ccw,
+                                    },
+                                },
+                            )),
+                        )
+                        .clone()
+                    }
+                };
 
                 let bind_group = BindGroupBuilder::new("ObjectBuffer")
                     .bind_buffer(&self.object_buffer)
                     .bind_buffer(&skinning_buffer)
                     .build(gpu, &self.bind_group_layout);
 
-                self.batches.insert(Batch::new(
+                anyhow::Ok(Batch::new(
                     mesh,
                     material,
-                    shader.clone(),
-                    k.skin.clone(),
+                    shader,
+                    key.skin.clone(),
                     skinning_buffer,
                     bind_group,
                 ))
-            });
+            };
+
+            let batch_id = match self.batch_map.entry(key) {
+                Entry::Occupied(slot) => *slot.get(),
+                Entry::Vacant(slot) => {
+                    let batch = create_batch(slot.key());
+                    *slot.insert(self.batches.insert(batch?))
+                }
+            };
 
             cmd.set(id, object_index(self.id), usize::MAX).set(
                 id,
@@ -329,6 +361,8 @@ impl SkinnedMeshRenderer {
             // TODO: only update positions for new objects
             self.reallocate_object_buffer(world, gpu);
         }
+
+        Ok(())
     }
 
     fn reallocate_object_buffer(&mut self, world: &World, gpu: &Gpu) {
@@ -416,7 +450,8 @@ impl CameraRenderer for SkinnedMeshRenderer {
             ctx.store,
             &mut cmd,
             &ctx.target_desc,
-        );
+        )?;
+
         self.update_object_data(ctx.world, ctx.gpu);
 
         Ok(())

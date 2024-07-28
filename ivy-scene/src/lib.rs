@@ -5,7 +5,7 @@ use ivy_gltf::GltfNode;
 use ivy_wgpu::{
     components::{mesh_primitive, shadow_pass},
     renderer::RenderObjectBundle,
-    shaders::{PbrShaderDesc, ShadowShaderDesc, SkinnedPbrShaderDesc},
+    shaders::{PbrShaderDesc, ShadowShaderDesc, SkinnedPbrShaderDesc, SkinnedShadowShaderDesc},
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -31,6 +31,20 @@ impl GltfNodeExt for GltfNode {
     ) -> &'a mut EntityBuilder {
         let skin = self.skin();
 
+        let shader;
+        let shadow_shader;
+
+        match skin {
+            Some(_) => {
+                shader = assets.load(&SkinnedPbrShaderDesc);
+                shadow_shader = assets.load(&SkinnedShadowShaderDesc);
+            }
+            None => {
+                shader = assets.load(&PbrShaderDesc);
+                shadow_shader = assets.load(&ShadowShaderDesc);
+            }
+        }
+
         if let Some(mesh) = self.mesh() {
             for primitive in mesh.primitives() {
                 let material = primitive.material().into();
@@ -40,15 +54,11 @@ impl GltfNodeExt for GltfNode {
                 child.mount(RenderObjectBundle::new(
                     primitive.into(),
                     material,
-                    if skin.is_some() {
-                        assets.load(&SkinnedPbrShaderDesc)
-                    } else {
-                        assets.load(&PbrShaderDesc)
-                    },
+                    shader.clone(),
                 ));
 
                 if opts.cast_shadow {
-                    child.set(shadow_pass(), assets.load(&ShadowShaderDesc));
+                    child.set(shadow_pass(), shadow_shader.clone());
                 }
 
                 entity.attach(mesh_primitive, child);

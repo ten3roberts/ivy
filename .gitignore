@@ -2,3 +2,6 @@
 *.spv
 flamegraph.svg
 perf.data
+
+/assets/models
+/assets/textures
