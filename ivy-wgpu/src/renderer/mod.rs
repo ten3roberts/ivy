@@ -5,25 +5,23 @@ pub mod skinned_mesh_renderer;
 
 use std::any::type_name;
 
-use flax::{filter::Or, Query, World};
-use glam::{vec3, Mat4, Vec3, Vec4};
-use itertools::Itertools;
+use flax::{Query, World};
+use glam::{Mat4, Vec3};
 use ivy_assets::{stored::Store, Asset, AssetCache};
-use ivy_core::{impl_for_tuples, main_camera, position, world_transform, Bundle};
+use ivy_core::{impl_for_tuples, main_camera, world_transform, Bundle};
 use ivy_wgpu_types::shader::TargetDesc;
 use wgpu::{
-    core::resource::TextureDimensionError, BindGroup, BindGroupLayout, BindingType, BufferUsages,
-    Operations, RenderPass, RenderPassColorAttachment, RenderPassDescriptor, SamplerDescriptor,
-    ShaderStages, Texture, TextureFormat, TextureSampleType, TextureUsages, TextureViewDescriptor,
-    TextureViewDimension,
+    AddressMode, BindGroup, BindGroupLayout, BufferUsages, FilterMode, Operations, RenderPass,
+    RenderPassColorAttachment, RenderPassDescriptor, ShaderStages, TextureUsages,
+    TextureViewDescriptor, TextureViewDimension,
 };
 
 use crate::{
-    components::{forward_pass, light_data, light_kind, material, mesh, projection_matrix},
+    components::{forward_pass, material, mesh, projection_matrix},
     material::Material,
     material_desc::MaterialDesc,
     mesh_desc::MeshDesc,
-    rendergraph::{Dependency, Node, NodeExecutionContext, TextureHandle},
+    rendergraph::{Dependency, Node, TextureHandle},
     types::{BindGroupBuilder, BindGroupLayoutBuilder, Shader, TypedBuffer},
     Gpu,
 };
@@ -248,6 +246,7 @@ impl Node for CameraNode {
             let view = world_transform.inverse();
 
             self.shader_data.data = CameraData {
+                viewproj: projection * view,
                 view,
                 projection,
                 camera_pos: world_transform.transform_point3(Vec3::ZERO),
@@ -290,6 +289,18 @@ impl Node for CameraNode {
                 ..Default::default()
             };
 
+            let environment_sampler = ctx.gpu.device.create_sampler(&wgpu::SamplerDescriptor {
+                label: Some("environment_sampler"),
+                address_mode_u: AddressMode::ClampToEdge,
+                address_mode_v: AddressMode::ClampToEdge,
+                address_mode_w: AddressMode::ClampToEdge,
+                mag_filter: FilterMode::Linear,
+                min_filter: FilterMode::Linear,
+                mipmap_filter: FilterMode::Linear,
+                anisotropy_clamp: 16,
+                ..Default::default()
+            });
+
             BindGroupBuilder::new("Globals")
                 .bind_buffer(&self.shader_data.buffer)
                 .bind_texture(
@@ -308,6 +319,7 @@ impl Node for CameraNode {
                     &ctx.get_texture(self.environment.integrated_brdf)
                         .create_view(&Default::default()),
                 )
+                .bind_sampler(&environment_sampler)
                 .build(ctx.gpu, &self.shader_data.layout)
         });
 
@@ -412,6 +424,7 @@ pub struct ObjectData {
 #[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
 #[repr(C)]
 pub struct CameraData {
+    pub viewproj: Mat4,
     pub view: Mat4,
     pub projection: Mat4,
     pub camera_pos: Vec3,
@@ -433,6 +446,7 @@ impl CameraShaderData {
             .bind_texture_cube(ShaderStages::FRAGMENT)
             .bind_texture_cube(ShaderStages::FRAGMENT)
             .bind_texture(ShaderStages::FRAGMENT)
+            .bind_sampler(ShaderStages::FRAGMENT)
             .build(gpu);
 
         let buffer = TypedBuffer::new(

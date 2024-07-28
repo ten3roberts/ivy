@@ -1,25 +1,21 @@
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{hash_map::Entry, HashMap},
     sync::{Arc, Weak},
 };
 
 use bytemuck::Zeroable;
 use flax::{
-    entity_ids,
     fetch::{entity_refs, Copied, Modified, Source, TransformFetch, Traverse},
     CommandBuffer, Component, Entity, Fetch, FetchExt, Query, World,
 };
 use glam::{Mat4, Vec4Swizzles};
 use itertools::Itertools;
 use ivy_assets::{map::AssetMap, stored::Handle, Asset, AssetCache};
-use ivy_core::{
-    profiling::{profile_function, profile_scope},
-    world_transform,
-};
+use ivy_core::{profiling::profile_function, world_transform};
 use ivy_gltf::components::skin;
 use ivy_wgpu_types::shader::Culling;
 use slab::Slab;
-use wgpu::{BindGroup, BindGroupLayout, BufferUsages, RenderPass, ShaderStages, TextureFormat};
+use wgpu::{BindGroup, BindGroupLayout, BufferUsages, RenderPass, ShaderStages};
 
 use crate::{
     components::{material, mesh, mesh_primitive},
@@ -30,12 +26,12 @@ use crate::{
     mesh_desc::MeshDesc,
     renderer::RendererStore,
     shader::ShaderPassDesc,
-    shader_library::{self, ShaderLibrary},
+    shader_library::ShaderLibrary,
     types::{shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, Shader, TypedBuffer},
     Gpu,
 };
 
-use super::{CameraRenderer, CameraShaderData, ObjectData, TargetDesc};
+use super::{CameraRenderer, ObjectData, TargetDesc};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BatchKey {
@@ -199,7 +195,7 @@ impl MeshRenderer {
         store: &mut RendererStore,
         cmd: &mut CommandBuffer,
         target: &TargetDesc,
-    ) {
+    ) -> anyhow::Result<()> {
         let mut query = Query::new((
             entity_refs(),
             mesh().cloned(),
@@ -224,9 +220,7 @@ impl MeshRenderer {
                 shader,
             };
 
-            let batch_id = *self.batch_map.entry(key).or_insert_with_key(|k| {
-                // TODO: local storage
-
+            let mut create_batch = |key: &BatchKey| {
                 let mut load_mesh = |v: &MeshDesc| {
                     let data = v.load_data(assets).unwrap();
                     assert!(
@@ -247,8 +241,8 @@ impl MeshRenderer {
                     )
                 };
 
-                let mesh = match self.meshes.entry(k.mesh.clone()) {
-                    std::collections::hash_map::Entry::Occupied(mut v) => {
+                let mesh = match self.meshes.entry(key.mesh.clone()) {
+                    Entry::Occupied(mut v) => {
                         if let Some(mesh) = v.get().upgrade() {
                             mesh
                         } else {
@@ -257,50 +251,60 @@ impl MeshRenderer {
                             handle
                         }
                     }
-                    std::collections::hash_map::Entry::Vacant(v) => {
+                    Entry::Vacant(v) => {
                         let handle = load_mesh(v.key());
                         v.insert(Arc::downgrade(&handle));
                         handle
                     }
                 };
 
-                let material: Asset<Material> = assets.try_load(&k.material).unwrap_or_else(|e| {
-                    tracing::error!(?k.material, "{:?}", e.context("Failed to load material"));
+                let material: Asset<Material> = assets.try_load(&key.material).unwrap_or_else(|e| {
+                    tracing::error!(?key.material, "{:?}", e.context("Failed to load material"));
                     assets.load(&MaterialDesc::content(MaterialData::new()))
                 });
 
-                let shader = self.shaders.entry(&k.shader).or_insert_with(|| {
-                    tracing::info!(layouts = layouts.len(), "creating shader");
-                    let module = self
-                        .shader_library
-                        .process(&gpu, (&*k.shader).into())
-                        .unwrap();
+                let shader = match self.shaders.entry(&key.shader) {
+                    slotmap::secondary::Entry::Occupied(slot) => slot.get().clone(),
+                    slotmap::secondary::Entry::Vacant(slot) => {
+                        tracing::info!(layouts = layouts.len(), "creating shader");
+                        let module = self.shader_library.process(&gpu, (&*key.shader).into())?;
 
-                    store.shaders.insert(Shader::new(
-                        gpu,
-                        &ShaderDesc {
-                            label: k.shader.label(),
-                            module: &module,
-                            target,
-                            vertex_layouts: &[Vertex::layout()],
-                            layouts: &layouts
-                                .iter()
-                                .copied()
-                                .chain([&self.bind_group_layout, material.layout()])
-                                .collect_vec(),
-                            vertex_entry_point: "vs_main",
-                            fragment_entry_point: "fs_main",
-                            culling: Culling {
-                                cull_mode: k.shader.cull_mode,
-                                front_face: wgpu::FrontFace::Ccw,
-                            },
-                        },
-                    ))
-                });
+                        slot.insert(
+                            store.shaders.insert(Shader::new(
+                                gpu,
+                                &ShaderDesc {
+                                    label: key.shader.label(),
+                                    module: &module,
+                                    target,
+                                    vertex_layouts: &[Vertex::layout()],
+                                    layouts: &layouts
+                                        .iter()
+                                        .copied()
+                                        .chain([&self.bind_group_layout, material.layout()])
+                                        .collect_vec(),
+                                    vertex_entry_point: "vs_main",
+                                    fragment_entry_point: "fs_main",
+                                    culling: Culling {
+                                        cull_mode: key.shader.cull_mode,
+                                        front_face: wgpu::FrontFace::Ccw,
+                                    },
+                                },
+                            )),
+                        )
+                        .clone()
+                    }
+                };
 
-                self.batches
-                    .insert(Batch::new(mesh, material, shader.clone()))
-            });
+                anyhow::Ok(Batch::new(mesh, material, shader))
+            };
+
+            let batch_id = match self.batch_map.entry(key) {
+                Entry::Occupied(slot) => *slot.get(),
+                Entry::Vacant(slot) => {
+                    let batch = create_batch(slot.key());
+                    *slot.insert(self.batches.insert(batch?))
+                }
+            };
 
             cmd.set(id, object_index(self.id), usize::MAX).set(
                 id,
@@ -319,6 +323,8 @@ impl MeshRenderer {
             // TODO: only update positions for new objects
             self.reallocate_object_buffer(world, gpu);
         }
+
+        Ok(())
     }
 
     fn reallocate_object_buffer(&mut self, world: &World, gpu: &Gpu) {
@@ -386,7 +392,8 @@ impl CameraRenderer for MeshRenderer {
             ctx.store,
             &mut cmd,
             &ctx.target_desc,
-        );
+        )?;
+
         self.update_object_data(ctx.world, ctx.gpu);
 
         Ok(())
