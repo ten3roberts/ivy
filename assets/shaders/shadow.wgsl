@@ -41,6 +41,4 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 }
 
 @fragment
-fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return vec4(vec3(in.pos.z / in.pos.w), 1f);
-}
+fn fs_main(in: VertexOutput) {}
