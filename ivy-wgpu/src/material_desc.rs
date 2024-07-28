@@ -36,6 +36,7 @@ impl MaterialDesc {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MaterialData {
+    label: String,
     albedo: TextureDesc,
     normal: TextureDesc,
     metallic_roughness: TextureDesc,
@@ -51,7 +52,14 @@ impl MaterialData {
             metallic_roughness: TextureDesc::white(),
             roughness: 1.0.try_into().unwrap(),
             metallic: 1.0.try_into().unwrap(),
+            label: "unknown_material".into(),
         }
+    }
+
+    /// Set the label
+    pub fn with_label(mut self, label: impl Into<String>) -> Self {
+        self.label = label.into();
+        self
     }
 
     /// Set the albedo
@@ -114,6 +122,7 @@ impl AssetDesc<Material> for MaterialDesc {
                     .load(assets, TextureFormat::Rgba8Unorm)?;
 
                 Ok(assets.insert(Material::new(
+                    v.label.clone(),
                     &assets.service(),
                     albedo,
                     normal,

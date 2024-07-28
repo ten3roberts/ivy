@@ -28,6 +28,7 @@ pub struct Material {
 
 impl Material {
     pub fn new(
+        label: String,
         gpu: &Gpu,
         albedo: Asset<Texture>,
         normal: Asset<Texture>,
@@ -35,7 +36,7 @@ impl Material {
         roughness_factor: f32,
         metallic_factor: f32,
     ) -> Self {
-        let layout = BindGroupLayoutBuilder::new("Material")
+        let layout = BindGroupLayoutBuilder::new(label.clone())
             .bind_sampler(ShaderStages::FRAGMENT)
             .bind_texture(ShaderStages::FRAGMENT)
             .bind_texture(ShaderStages::FRAGMENT)
@@ -65,7 +66,7 @@ impl Material {
             }],
         );
 
-        let bind_group = BindGroupBuilder::new("Material")
+        let bind_group = BindGroupBuilder::new(&label)
             .bind_sampler(&sampler)
             .bind_texture(&albedo.create_view(&Default::default()))
             .bind_texture(&normal.create_view(&Default::default()))
@@ -160,6 +161,7 @@ impl Material {
         );
 
         Ok(Self::new(
+            "gltf_material".into(),
             gpu,
             albedo,
             normal,

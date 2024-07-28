@@ -267,7 +267,7 @@ impl MeshRenderer {
                     slotmap::secondary::Entry::Occupied(slot) => slot.get().clone(),
                     slotmap::secondary::Entry::Vacant(slot) => {
                         tracing::info!(layouts = layouts.len(), "creating shader");
-                        let module = self.shader_library.process(&gpu, (&*key.shader).into())?;
+                        let module = self.shader_library.process(gpu, (&*key.shader).into())?;
 
                         slot.insert(
                             store.shaders.insert(Shader::new(

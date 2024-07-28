@@ -151,8 +151,10 @@ fn pbr_luminance(in: PbrLuminance, light: Light) -> vec3<f32> {
             }
         }
 
+        let parallax = in.world_normal * max(1.0 * (1.0 - dot(vec3(0f, 0f, 1f), in.tangent_normal)), 0.05);
+
         let shadow_camera = shadow_cameras[light.shadow_index + cascade_index];
-        let light_space_clip = shadow_camera.viewproj * vec4(in.world_pos, 1.0);
+        let light_space_clip = shadow_camera.viewproj * vec4(in.world_pos + parallax, 1.0);
         let light_space_pos = light_space_clip.xyz / light_space_clip.w;
 
         var light_space_uv = vec2(light_space_pos.x, -light_space_pos.y) * 0.5 + 0.5;
