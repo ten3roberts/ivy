@@ -94,6 +94,7 @@ struct PbrLuminance {
     albedo: vec3<f32>,
     metallic: f32,
     roughness: f32,
+    ao: f32,
 
     tbn: mat3x3<f32>,
     view_pos: vec3<f32>,
@@ -151,10 +152,8 @@ fn pbr_luminance(in: PbrLuminance, light: Light) -> vec3<f32> {
             }
         }
 
-        let parallax = in.world_normal * max(1.0 * (1.0 - dot(vec3(0f, 0f, 1f), in.tangent_normal)), 0.05);
-
         let shadow_camera = shadow_cameras[light.shadow_index + cascade_index];
-        let light_space_clip = shadow_camera.viewproj * vec4(in.world_pos + parallax, 1.0);
+        let light_space_clip = shadow_camera.viewproj * vec4(in.world_pos, 1.0);
         let light_space_pos = light_space_clip.xyz / light_space_clip.w;
 
         var light_space_uv = vec2(light_space_pos.x, -light_space_pos.y) * 0.5 + 0.5;
@@ -211,7 +210,7 @@ fn brdf_forward(in: PbrLuminance) -> vec3<f32> {
     let diffuse = irradiance * in.albedo;
     let ambient_light = (ambient_kd * diffuse + ambient_ks * specular);
 
-    luminance += ambient_light;
+    luminance += ambient_light * in.ao;
 
     for (var i = 0u; i < LIGHT_COUNT; i++) {
         let light = lights[i];

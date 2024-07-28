@@ -3,7 +3,10 @@ use ivy_gltf::GltfMaterial;
 use ordered_float::NotNan;
 use wgpu::TextureFormat;
 
-use crate::{material::Material, texture::TextureDesc};
+use crate::{
+    material::{PbrMaterial, PbrMaterialParams},
+    texture::TextureDesc,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum MaterialDesc {
@@ -40,8 +43,10 @@ pub struct MaterialData {
     albedo: TextureDesc,
     normal: TextureDesc,
     metallic_roughness: TextureDesc,
-    roughness: NotNan<f32>,
-    metallic: NotNan<f32>,
+    ambient_occlusion: TextureDesc,
+    displacement: TextureDesc,
+    roughness_factor: NotNan<f32>,
+    metallic_factor: NotNan<f32>,
 }
 
 impl MaterialData {
@@ -50,8 +55,10 @@ impl MaterialData {
             albedo: TextureDesc::white(),
             normal: TextureDesc::default_normal(),
             metallic_roughness: TextureDesc::white(),
-            roughness: 1.0.try_into().unwrap(),
-            metallic: 1.0.try_into().unwrap(),
+            ambient_occlusion: TextureDesc::white(),
+            displacement: TextureDesc::white(),
+            roughness_factor: 1.0.try_into().unwrap(),
+            metallic_factor: 1.0.try_into().unwrap(),
             label: "unknown_material".into(),
         }
     }
@@ -80,15 +87,27 @@ impl MaterialData {
         self
     }
 
+    /// Set the ambient occlusion
+    pub fn with_ambient_occlusion(mut self, ambient_occlusion: impl Into<TextureDesc>) -> Self {
+        self.ambient_occlusion = ambient_occlusion.into();
+        self
+    }
+
+    /// Set the displacement
+    pub fn with_displacement(mut self, displacement: impl Into<TextureDesc>) -> Self {
+        self.displacement = displacement.into();
+        self
+    }
+
     /// Set the roughness factor
-    pub fn with_roughness(mut self, roughness: f32) -> Self {
-        self.roughness = roughness.try_into().unwrap();
+    pub fn with_roughness_factor(mut self, roughness: f32) -> Self {
+        self.roughness_factor = roughness.try_into().unwrap();
         self
     }
 
     /// Set the metallic factor
-    pub fn with_metallic(mut self, metallic: f32) -> Self {
-        self.metallic = metallic.try_into().unwrap();
+    pub fn with_metallic_factor(mut self, metallic: f32) -> Self {
+        self.metallic_factor = metallic.try_into().unwrap();
         self
     }
 }
@@ -99,10 +118,10 @@ impl Default for MaterialData {
     }
 }
 
-impl AssetDesc<Material> for MaterialDesc {
+impl AssetDesc<PbrMaterial> for MaterialDesc {
     type Error = anyhow::Error;
 
-    fn load(&self, assets: &ivy_assets::AssetCache) -> Result<Asset<Material>, Self::Error> {
+    fn load(&self, assets: &ivy_assets::AssetCache) -> Result<Asset<PbrMaterial>, Self::Error> {
         match self {
             MaterialDesc::Gltf(v) => {
                 let document = assets.try_load(v.data())?;
@@ -121,14 +140,23 @@ impl AssetDesc<Material> for MaterialDesc {
                     .metallic_roughness
                     .load(assets, TextureFormat::Rgba8Unorm)?;
 
-                Ok(assets.insert(Material::new(
+                let ambient_occlusion = v
+                    .ambient_occlusion
+                    .load(assets, TextureFormat::Rgba8Unorm)?;
+                let displacement = v.displacement.load(assets, TextureFormat::Rgba8Unorm)?;
+
+                Ok(assets.insert(PbrMaterial::new(
                     v.label.clone(),
                     &assets.service(),
-                    albedo,
-                    normal,
-                    metallic_roughness,
-                    *v.roughness,
-                    *v.metallic,
+                    PbrMaterialParams {
+                        albedo,
+                        normal,
+                        metallic_roughness,
+                        ambient_occlusion,
+                        displacement,
+                        roughness_factor: *v.roughness_factor,
+                        metallic_factor: *v.metallic_factor,
+                    },
                 )))
             }
         }
