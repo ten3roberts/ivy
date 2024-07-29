@@ -10,6 +10,7 @@ pub use event::*;
 use flax::World;
 
 use crate::{
+    engine, gizmos,
     layer::events::{Event, EventRegistry},
     Events, Layer, LayerDyn,
 };
@@ -38,12 +39,15 @@ impl App {
         let asset_cache = AssetCache::new();
         asset_cache.register_service(FileSystemMapService::new("./assets"));
 
+        let mut world = World::new();
+        world.set(engine(), gizmos(), Default::default()).unwrap();
+
         #[allow(deprecated)]
         Self {
             name: "Ivy".into(),
             layers: Default::default(),
             event_registry: Default::default(),
-            world: World::new(),
+            world,
             assets: asset_cache,
             events: Events::new(),
             running: false,

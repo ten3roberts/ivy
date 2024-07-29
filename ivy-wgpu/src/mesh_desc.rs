@@ -106,10 +106,10 @@ impl MeshData {
 
     pub fn quad() -> Self {
         let vertices = [
-            Vertex::new(vec3(-0.5, -0.5, 0.0), vec2(0.0, 1.0), Vec3::ONE),
-            Vertex::new(vec3(0.5, -0.5, 0.0), vec2(1.0, 1.0), Vec3::ONE),
-            Vertex::new(vec3(0.5, 0.5, 0.0), vec2(1.0, 0.0), Vec3::ONE),
-            Vertex::new(vec3(-0.5, 0.5, 0.0), vec2(0.0, 0.0), Vec3::ONE),
+            Vertex::new(vec3(-1.0, -1.0, 0.0), vec2(0.0, 1.0), Vec3::ONE),
+            Vertex::new(vec3(1.0, -1.0, 0.0), vec2(1.0, 1.0), Vec3::ONE),
+            Vertex::new(vec3(1.0, 1.0, 0.0), vec2(1.0, 0.0), Vec3::ONE),
+            Vertex::new(vec3(-1.0, 1.0, 0.0), vec2(0.0, 0.0), Vec3::ONE),
         ];
 
         let indices = [0, 1, 2, 2, 3, 0];
