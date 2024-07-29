@@ -10,13 +10,14 @@ use image::{DynamicImage, Rgba};
 use ivy_assets::{Asset, AssetCache};
 use ivy_core::{
     app::{InitEvent, TickEvent},
-    async_commandbuffer, engine,
+    async_commandbuffer, engine, gizmos,
     layer::events::EventRegisterContext,
     main_camera,
     palette::Srgb,
     position,
     profiling::ProfilingLayer,
-    rotation, App, EngineLayer, EntityBuilderExt, Layer, TransformBundle, DEG_90,
+    rotation, App, Color, ColorExt, EngineLayer, EntityBuilderExt, Gizmos, Layer, TransformBundle,
+    DEG_90,
 };
 use ivy_gltf::{animation::player::Animator, components::animator, Document};
 use ivy_input::{
@@ -48,9 +49,9 @@ use ivy_wgpu::{
     mesh_desc::MeshDesc,
     primitives::{generate_plane, PlaneDesc, UvSphereDesc},
     renderer::{
-        mesh_renderer::MeshRenderer, shadowmapping::ShadowMapNode,
-        skinned_mesh_renderer::SkinnedMeshRenderer, CameraNode, EnvironmentData, LightManager,
-        MsaaResolve, RenderObjectBundle,
+        gizmos_renderer::GizmosRendererNode, mesh_renderer::MeshRenderer,
+        shadowmapping::ShadowMapNode, skinned_mesh_renderer::SkinnedMeshRenderer, CameraNode,
+        EnvironmentData, LightManager, MsaaResolve, RenderObjectBundle,
     },
     rendergraph::{self, BufferDesc, ExternalResources, ManagedTextureDesc, RenderGraph},
     shader_library::{self, ModuleDesc, ShaderLibrary},
@@ -103,6 +104,7 @@ pub fn main() -> anyhow::Result<()> {
             Schedule::builder()
                 .with_system(movement_system(dt))
                 .with_system(animate_system(dt))
+                .with_system(gizmos_system())
                 .build(),
         ))
         .run()
@@ -575,6 +577,43 @@ fn animate_system(dt: f32) -> BoxedSystem {
         .boxed()
 }
 
+fn gizmos_system() -> BoxedSystem {
+    System::builder()
+        .with_query(Query::new(gizmos().as_mut()))
+        .for_each(|gizmos| {
+            gizmos.begin_section("section");
+
+            gizmos.draw(
+                gizmos::Sphere {
+                    origin: Vec3::ZERO,
+                    radius: 0.2,
+                },
+                Color::red(),
+            );
+
+            gizmos.draw(
+                gizmos::Cube {
+                    origin: vec3(5.0, 2.0, -5.0),
+                    half_extents: Vec3::ONE,
+                    line_radius: 0.05,
+                    corner_radius: 1.0,
+                },
+                Color::green(),
+            );
+
+            gizmos.draw(
+                gizmos::Cube {
+                    origin: vec3(2.0, 3.0, -5.0),
+                    half_extents: Vec3::ONE * 2.0,
+                    line_radius: 0.05,
+                    corner_radius: 1.0,
+                },
+                Color::cyan(),
+            );
+        })
+        .boxed()
+}
+
 struct RenderGraphRenderer {
     render_graph: RenderGraph,
     surface: Surface,
@@ -700,6 +739,17 @@ impl RenderGraphRenderer {
             persistent: false,
         });
 
+        let single_sample_depth_texture =
+            render_graph.resources.insert_texture(ManagedTextureDesc {
+                label: "depth_texture".into(),
+                extent,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Depth24Plus,
+                mip_level_count: 1,
+                sample_count: 1,
+                persistent: false,
+            });
+
         let surface_texture = render_graph
             .resources
             .insert_texture(rendergraph::TextureDesc::External);
@@ -775,7 +825,7 @@ impl RenderGraphRenderer {
         render_graph.add_node(BloomNode::new(gpu, final_color, bloom_result, 5, 0.005));
         render_graph.add_node(TonemapNode::new(gpu, bloom_result, surface_texture));
 
-        // render_graph.add_node(OverlayNode::new(gpu, shadow_maps, surface_texture));
+        render_graph.add_node(GizmosRendererNode::new(gpu, surface_texture, depth_texture));
 
         Self {
             render_graph,

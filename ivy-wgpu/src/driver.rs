@@ -108,7 +108,7 @@ impl<'a> ApplicationHandler for WinitEventHandler<'a> {
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, wid: WindowId, event: WindowEvent) {
         if let Err(err) = self.process_event(event_loop, event, self.windows[&wid]) {
-            tracing::error!("Error processing event: {:?}", err);
+            tracing::error!("Error processing event\n{err:?}");
             event_loop.exit();
         }
     }

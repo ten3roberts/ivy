@@ -1,3 +1,4 @@
+pub mod gizmos_renderer;
 mod light_manager;
 pub mod mesh_renderer;
 pub mod shadowmapping;
@@ -11,8 +12,8 @@ use ivy_assets::{stored::Store, Asset, AssetCache};
 use ivy_core::{impl_for_tuples, main_camera, world_transform, Bundle};
 use ivy_wgpu_types::shader::TargetDesc;
 use wgpu::{
-    AddressMode, BindGroup, BindGroupLayout, BufferUsages, FilterMode, Operations, RenderPass,
-    RenderPassColorAttachment, RenderPassDescriptor, ShaderStages, TextureUsages,
+    AddressMode, BindGroup, BindGroupLayout, BufferUsages, FilterMode, Operations, Queue,
+    RenderPass, RenderPassColorAttachment, RenderPassDescriptor, ShaderStages, TextureUsages,
     TextureViewDescriptor, TextureViewDimension,
 };
 
@@ -96,6 +97,7 @@ pub struct RenderContext<'a> {
     pub world: &'a mut World,
     pub assets: &'a AssetCache,
     pub gpu: &'a Gpu,
+    pub queue: &'a Queue,
     pub store: &'a mut RendererStore,
     // pub camera_data: &'a CameraShaderData,
     pub environment: Option<&'a EnvironmentData>,
@@ -188,6 +190,23 @@ impl EnvironmentData {
     }
 }
 
+pub fn get_camera_data(world: &World) -> Option<CameraData> {
+    let (&world_transform, &projection) = Query::new((world_transform(), projection_matrix()))
+        .with(main_camera())
+        .borrow(world)
+        .first()?;
+
+    let view = world_transform.inverse();
+
+    Some(CameraData {
+        viewproj: projection * view,
+        view,
+        projection,
+        camera_pos: world_transform.transform_point3(Vec3::ZERO),
+        padding: 0.0,
+    })
+}
+
 pub struct CameraNode {
     renderer: Box<dyn CameraRenderer>,
     shader_data: CameraShaderData,
@@ -236,22 +255,8 @@ impl Node for CameraNode {
 
         let depth = ctx.get_texture(self.depth_texture);
 
-        tracing::debug!("updating renderer");
-        if let Some((world_transform, &projection)) =
-            Query::new((world_transform(), projection_matrix()))
-                .with(main_camera())
-                .borrow(ctx.world)
-                .first()
-        {
-            let view = world_transform.inverse();
-
-            self.shader_data.data = CameraData {
-                viewproj: projection * view,
-                view,
-                projection,
-                camera_pos: world_transform.transform_point3(Vec3::ZERO),
-                padding: 0.0,
-            };
+        if let Some(camera_data) = get_camera_data(ctx.world) {
+            self.shader_data.data = camera_data;
 
             self.shader_data
                 .buffer
@@ -330,6 +335,7 @@ impl Node for CameraNode {
             world: ctx.world,
             assets: ctx.assets,
             gpu: ctx.gpu,
+            queue: ctx.queue,
             store: &mut self.store,
             // camera_data: &self.shader_data,
             target_desc: TargetDesc {

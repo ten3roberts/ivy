@@ -291,6 +291,7 @@ impl Node for ShadowMapNode {
                 world: ctx.world,
                 assets: ctx.assets,
                 gpu: ctx.gpu,
+                queue: ctx.queue,
                 store: &mut self.store,
                 environment: None,
                 bind_groups: &[bind_group],
