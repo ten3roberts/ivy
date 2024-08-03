@@ -28,6 +28,7 @@ use ivy_input::{
 };
 use ivy_postprocessing::{
     bloom::BloomNode,
+    depth_resolve::MsaaDepthResolve,
     hdri::{HdriProcessor, HdriProcessorNode},
     overlay::OverlayNode,
     skybox::SkyboxRenderer,
@@ -133,35 +134,35 @@ impl LogicLayer {
         let cmd = world.get(engine(), async_commandbuffer()).unwrap().clone();
         let assets = assets.clone();
 
-        async_std::task::spawn({
-            let cmd = cmd.clone();
-            let assets = assets.clone();
-            async move {
-                let shader = assets.load(&PbrShaderDesc);
-                let sphere_mesh = MeshDesc::content(assets.load(&UvSphereDesc::default()));
-                let materials: Asset<Document> = assets.load_async("textures/materials.glb").await;
+        // async_std::task::spawn({
+        //     let cmd = cmd.clone();
+        //     let assets = assets.clone();
+        //     async move {
+        //         let shader = assets.load(&PbrShaderDesc);
+        //         let sphere_mesh = MeshDesc::content(assets.load(&UvSphereDesc::default()));
+        //         let materials: Asset<Document> = assets.load_async("textures/materials.glb").await;
 
-                {
-                    let mut cmd = cmd.lock();
+        //         {
+        //             let mut cmd = cmd.lock();
 
-                    for (i, material) in materials.materials().enumerate() {
-                        cmd.spawn(
-                            Entity::builder()
-                                .mount(TransformBundle::new(
-                                    vec3(0.0 + i as f32 * 2.0, 5.0, 5.0),
-                                    Quat::IDENTITY,
-                                    Vec3::ONE,
-                                ))
-                                .mount(RenderObjectBundle {
-                                    mesh: sphere_mesh.clone(),
-                                    material: material.into(),
-                                    shader: shader.clone(),
-                                }),
-                        );
-                    }
-                }
-            }
-        });
+        //             for (i, material) in materials.materials().enumerate() {
+        //                 cmd.spawn(
+        //                     Entity::builder()
+        //                         .mount(TransformBundle::new(
+        //                             vec3(0.0 + i as f32 * 2.0, 5.0, 5.0),
+        //                             Quat::IDENTITY,
+        //                             Vec3::ONE,
+        //                         ))
+        //                         .mount(RenderObjectBundle {
+        //                             mesh: sphere_mesh.clone(),
+        //                             material: material.into(),
+        //                             shader: shader.clone(),
+        //                         }),
+        //                 );
+        //             }
+        //         }
+        //     }
+        // });
 
         async_std::task::spawn(
             async move {
@@ -318,29 +319,29 @@ impl LogicLayer {
             .set_default(cast_shadow())
             .spawn(world);
 
-        Entity::builder()
-            .mount(TransformBundle::default().with_rotation(Quat::from_euler(
-                EulerRot::YXZ,
-                2.0,
-                0.5,
-                0.0,
-            )))
-            .set(light_data(), LightData::new(Srgb::new(1.0, 1.0, 1.0), 2.0))
-            .set(light_kind(), LightKind::Directional)
-            .set_default(cast_shadow())
-            .spawn(world);
+        // Entity::builder()
+        //     .mount(TransformBundle::default().with_rotation(Quat::from_euler(
+        //         EulerRot::YXZ,
+        //         2.0,
+        //         0.5,
+        //         0.0,
+        //     )))
+        //     .set(light_data(), LightData::new(Srgb::new(1.0, 1.0, 1.0), 2.0))
+        //     .set(light_kind(), LightKind::Directional)
+        //     .set_default(cast_shadow())
+        //     .spawn(world);
 
-        Entity::builder()
-            .mount(TransformBundle::default().with_rotation(Quat::from_euler(
-                EulerRot::YXZ,
-                3.0,
-                0.5,
-                0.0,
-            )))
-            .set(light_data(), LightData::new(Srgb::new(1.0, 1.0, 1.0), 2.0))
-            .set(light_kind(), LightKind::Directional)
-            .set_default(cast_shadow())
-            .spawn(world);
+        // Entity::builder()
+        //     .mount(TransformBundle::default().with_rotation(Quat::from_euler(
+        //         EulerRot::YXZ,
+        //         3.0,
+        //         0.5,
+        //         0.0,
+        //     )))
+        //     .set(light_data(), LightData::new(Srgb::new(1.0, 1.0, 1.0), 2.0))
+        //     .set(light_kind(), LightKind::Directional)
+        //     .set_default(cast_shadow())
+        //     .spawn(world);
         // Entity::builder()
         //     .mount(TransformBundle::default().with_position(vec3(0.0, 2.0, 0.0)))
         //     .set(light_data(), LightData::new(Srgb::new(1.0, 0.0, 0.0), 50.0))
@@ -581,35 +582,29 @@ fn gizmos_system() -> BoxedSystem {
     System::builder()
         .with_query(Query::new(gizmos().as_mut()))
         .for_each(|gizmos| {
-            gizmos.begin_section("section");
+            let mut section = gizmos.begin_section("basic example");
 
-            gizmos.draw(
-                gizmos::Sphere {
-                    origin: Vec3::ZERO,
-                    radius: 0.2,
-                },
-                Color::red(),
-            );
+            section.draw(gizmos::Sphere {
+                origin: Vec3::ZERO,
+                radius: 0.2,
+                color: Color::red(),
+            });
 
-            gizmos.draw(
-                gizmos::Cube {
-                    origin: vec3(5.0, 2.0, -5.0),
-                    half_extents: Vec3::ONE,
-                    line_radius: 0.05,
-                    corner_radius: 1.0,
-                },
-                Color::green(),
-            );
+            section.draw(gizmos::Cube {
+                origin: vec3(5.0, 2.0, -5.0),
+                half_extents: Vec3::ONE,
+                line_radius: 0.05,
+                corner_radius: 1.0,
+                color: Color::green(),
+            });
 
-            gizmos.draw(
-                gizmos::Cube {
-                    origin: vec3(2.0, 3.0, -5.0),
-                    half_extents: Vec3::ONE * 2.0,
-                    line_radius: 0.05,
-                    corner_radius: 1.0,
-                },
-                Color::cyan(),
-            );
+            section.draw(gizmos::Cube {
+                origin: vec3(2.0, 3.0, -5.0),
+                half_extents: Vec3::ONE * 2.0,
+                line_radius: 0.05,
+                corner_radius: 1.0,
+                color: Color::cyan(),
+            });
         })
         .boxed()
 }
@@ -739,16 +734,15 @@ impl RenderGraphRenderer {
             persistent: false,
         });
 
-        let single_sample_depth_texture =
-            render_graph.resources.insert_texture(ManagedTextureDesc {
-                label: "depth_texture".into(),
-                extent,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Depth24Plus,
-                mip_level_count: 1,
-                sample_count: 1,
-                persistent: false,
-            });
+        let resolved_depth_texture = render_graph.resources.insert_texture(ManagedTextureDesc {
+            label: "depth_texture".into(),
+            extent,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::R32Float,
+            mip_level_count: 1,
+            sample_count: 1,
+            persistent: false,
+        });
 
         let surface_texture = render_graph
             .resources
@@ -773,8 +767,8 @@ impl RenderGraphRenderer {
         let shadow_maps = render_graph.resources.insert_texture(ManagedTextureDesc {
             label: "depth_texture".into(),
             extent: wgpu::Extent3d {
-                width: 2048,
-                height: 2048,
+                width: 512,
+                height: 512,
                 depth_or_array_layers: max_shadows * max_cascades,
             },
             dimension: wgpu::TextureDimension::D2,
@@ -822,15 +816,30 @@ impl RenderGraphRenderer {
 
         // TODO: make chaining easier
         render_graph.add_node(MsaaResolve::new(multisampled_hdr, final_color));
+        render_graph.add_node(MsaaDepthResolve::new(
+            gpu,
+            depth_texture,
+            resolved_depth_texture,
+        ));
         render_graph.add_node(BloomNode::new(gpu, final_color, bloom_result, 5, 0.005));
         render_graph.add_node(TonemapNode::new(gpu, bloom_result, surface_texture));
 
-        render_graph.add_node(GizmosRendererNode::new(gpu, surface_texture, depth_texture));
+        render_graph.add_node(GizmosRendererNode::new(
+            gpu,
+            surface_texture,
+            resolved_depth_texture,
+        ));
 
         Self {
             render_graph,
             surface,
-            screensized: vec![multisampled_hdr, final_color, bloom_result],
+            screensized: vec![
+                multisampled_hdr,
+                final_color,
+                bloom_result,
+                depth_texture,
+                resolved_depth_texture,
+            ],
             surface_texture,
             depth_texture,
         }

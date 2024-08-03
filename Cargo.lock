@@ -1518,6 +1518,7 @@ name = "ivy-core"
 version = "0.10.3"
 dependencies = [
  "anyhow",
+ "dashmap",
  "downcast-rs",
  "ezy",
  "flax",

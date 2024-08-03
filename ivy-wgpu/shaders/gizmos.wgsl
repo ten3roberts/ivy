@@ -8,10 +8,11 @@ struct VertexInput {
 
 struct VertexOutput {
     @builtin(position) pos: vec4<f32>,
-    @location(0) frag_pos: vec3<f32>,
-    @location(1) frag_scale: vec3<f32>,
-    @location(2) color: vec4<f32>,
-    @location(3) corner_radius: f32,
+    @location(0) clip_pos: vec3<f32>,
+    @location(1) frag_pos: vec3<f32>,
+    @location(2) frag_scale: vec3<f32>,
+    @location(3) color: vec4<f32>,
+    @location(4) corner_radius: f32,
 }
 
 struct Object {
@@ -41,7 +42,7 @@ var<uniform> globals: Globals;
 var<storage> objects: array<Object>;
 
 @group(0) @binding(2)
-var depth_texture: texture_depth_multisampled_2d;
+var depth_texture: texture_2d<f32>;
 
 @group(0) @binding(3)
 var depth_sampler: sampler;
@@ -51,9 +52,6 @@ fn axis_billboard(up: vec3<f32>, view: vec3<f32>) -> mat3x3<f32> {
     let forward = cross(right, up);
 
     var result = mat3x3(right, up, forward);
-    // result[0].xyz = right;
-    // result[1].xyz = up;
-    // result[2].xyz = forward;
 
     return result;
 }
@@ -97,16 +95,21 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     out.color = object.color;
     out.corner_radius = object.corner_radius;
 
+    out.clip_pos = out.pos.xyz / out.pos.w;
     return out;
 }
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    let uv = vec2(in.clip_pos.x + 1.0, -in.clip_pos.y + 1.0) * 0.5;
 
+    let depth_at = textureSample(depth_texture, depth_sampler, uv).r;
 
-    let uv = vec2(in.pos.x + 1.0, in.pos.y + 1.0) * 0.5;
-
-    let depth_at = textureSample(depth_texture, depth_sampler, uv);
+    var mask = vec4(1f);
+    if depth_at < in.clip_pos.z {
+        mask = vec4(0.2);
+    } else {
+    }
 
     let width = in.frag_scale.x;
     let height = in.frag_scale.y;
@@ -122,5 +125,5 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         discard;
     }
 
-    return in.color;
+    return vec4(in.color.xyz, 1f) * mask;
 }

@@ -1,7 +1,7 @@
 use std::ops::Index;
 
 use glam::{Mat4, Vec3};
-use ivy_core::{Color, DrawGizmos, Line, Sphere};
+use ivy_core::{Color, ColorExt, DrawGizmos, Line, Sphere};
 
 use crate::{epa, gjk, util::minkowski_diff, CollisionPrimitive, EntityPayload};
 
@@ -40,15 +40,13 @@ impl ContactPoints {
 }
 
 impl DrawGizmos for ContactPoints {
-    fn draw_gizmos(&self, gizmos: &mut ivy_core::Gizmos, color: ivy_core::Color) {
+    fn draw_primitives(&self, gizmos: &mut ivy_core::GizmosSection) {
         for &p in self.iter() {
-            gizmos.draw(
-                Sphere {
-                    origin: p,
-                    radius: 0.1,
-                },
-                color,
-            )
+            gizmos.draw(Sphere {
+                origin: p,
+                radius: 0.1,
+                ..Default::default()
+            })
         }
     }
 }
@@ -101,17 +99,14 @@ pub struct Contact {
 }
 
 impl DrawGizmos for Contact {
-    fn draw_gizmos(&self, gizmos: &mut ivy_core::Gizmos, color: ivy_core::Color) {
-        gizmos.draw(self.points, color);
-        gizmos.draw(
-            Line {
-                origin: self.points[0],
-                dir: self.normal * 0.2,
-
-                ..Default::default()
-            },
-            Color::new(0.0, 0.0, 1.0, 1.0),
-        );
+    fn draw_primitives(&self, gizmos: &mut ivy_core::GizmosSection) {
+        gizmos.draw(self.points);
+        gizmos.draw(Line {
+            origin: self.points[0],
+            dir: self.normal * 0.2,
+            color: Color::blue(),
+            ..Default::default()
+        });
     }
 }
 

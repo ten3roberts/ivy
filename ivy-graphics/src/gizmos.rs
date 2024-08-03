@@ -61,52 +61,7 @@ impl Renderer for GizmoRenderer {
             cmd.bind_descriptor_sets(layout, 0, sets, offsets);
         }
 
-        for gizmo in gizmos.sections().iter().flat_map(|val| val.1) {
-            match gizmo {
-                ivy_core::GizmoPrimitive::Sphere {
-                    origin,
-                    color,
-                    radius,
-                } => {
-                    cmd.push_constants(
-                        layout,
-                        ShaderStageFlags::VERTEX,
-                        0,
-                        &PushConstantData {
-                            model: Mat4::from_translation(*origin)
-                                * Mat4::from_scale(Vec3::splat(*radius)),
-                            color: color.to_vec4(),
-                            billboard_axis: Vec3::ZERO,
-                            corner_radius: 1.0,
-                        },
-                    );
-
-                    cmd.draw_indexed(6, 1, 0, 0, 0);
-                }
-                ivy_core::GizmoPrimitive::Line {
-                    origin,
-                    color,
-                    dir,
-                    radius,
-                    corner_radius,
-                } => {
-                    cmd.push_constants(
-                        layout,
-                        ShaderStageFlags::VERTEX,
-                        0,
-                        &PushConstantData {
-                            model: Mat4::from_translation(*origin + *dir * 0.5)
-                                * Mat4::from_scale(Vec3::new(*radius, dir.length() * 0.5, *radius)),
-                            color: color.to_vec4(),
-                            billboard_axis: dir.normalize(),
-                            corner_radius: *corner_radius,
-                        },
-                    );
-
-                    cmd.draw_indexed(6, 1, 0, 0, 0);
-                }
-            }
-        }
+        unimplemented!();
 
         Ok(())
     }

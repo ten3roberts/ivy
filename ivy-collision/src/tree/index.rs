@@ -1,6 +1,7 @@
 use ivy_core::Color;
 use ivy_core::DrawGizmos;
 use ivy_core::Gizmos;
+use ivy_core::GizmosSection;
 use slotmap::new_key_type;
 use slotmap::Key;
 use std::fmt::Debug;
@@ -38,13 +39,12 @@ impl NodeIndex {
     pub fn draw_gizmos_recursive<N: CollisionTreeNode + DrawGizmos>(
         self,
         nodes: &Nodes<N>,
-        mut gizmos: &mut Gizmos,
-        color: Color,
+        mut gizmos: &mut GizmosSection,
     ) {
-        nodes[self].draw_gizmos(gizmos.deref_mut(), color);
+        nodes[self].draw_primitives(gizmos.deref_mut());
 
         for val in nodes[self].children() {
-            val.draw_gizmos_recursive(nodes, gizmos, color)
+            val.draw_gizmos_recursive(nodes, gizmos)
         }
     }
 }

@@ -27,12 +27,12 @@ impl OverlayNode {
             .bind(
                 ShaderStages::FRAGMENT,
                 BindingType::Texture {
-                    sample_type: TextureSampleType::Depth,
+                    sample_type: TextureSampleType::Float { filterable: false },
                     view_dimension: TextureViewDimension::D2,
                     multisampled: false,
                 },
             )
-            .bind_sampler(ShaderStages::FRAGMENT)
+            .bind_sampler_nonfiltering(ShaderStages::FRAGMENT)
             .build(gpu);
 
         let default_sampler = gpu.device.create_sampler(&SamplerDescriptor {

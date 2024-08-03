@@ -58,6 +58,28 @@ impl BindGroupLayoutBuilder {
         )
     }
 
+    pub fn bind_texture_depth(&mut self, visibility: ShaderStages) -> &mut Self {
+        self.bind(
+            visibility,
+            BindingType::Texture {
+                sample_type: TextureSampleType::Depth,
+                view_dimension: TextureViewDimension::D2,
+                multisampled: false,
+            },
+        )
+    }
+
+    pub fn bind_texture_depth_multisampled(&mut self, visibility: ShaderStages) -> &mut Self {
+        self.bind(
+            visibility,
+            BindingType::Texture {
+                sample_type: TextureSampleType::Depth,
+                view_dimension: TextureViewDimension::D2,
+                multisampled: true,
+            },
+        )
+    }
+
     pub fn bind_texture_depth_array(&mut self, visibility: ShaderStages) -> &mut Self {
         self.bind(
             visibility,
@@ -68,6 +90,7 @@ impl BindGroupLayoutBuilder {
             },
         )
     }
+
     pub fn bind_texture_cube(&mut self, visibility: ShaderStages) -> &mut Self {
         self.bind(
             visibility,

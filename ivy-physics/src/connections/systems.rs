@@ -157,15 +157,15 @@ pub fn draw_connections(world: &World, gizmos: &mut Gizmos) -> Result<()> {
                     } => Color::red(),
                 };
 
-                gizmos.draw(
-                    ivy_core::Line {
+                gizmos
+                    .begin_section("draw_connections")
+                    .draw(ivy_core::Line {
                         origin: parent_pos,
                         dir: (pos - parent_pos),
                         radius: 0.02,
                         corner_radius: 1.0,
-                    },
-                    color,
-                );
+                        color,
+                    });
             }
 
             pos

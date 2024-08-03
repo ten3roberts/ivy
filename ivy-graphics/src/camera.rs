@@ -4,7 +4,7 @@ use flax::{entity_ids, BoxedSystem, Component, Mutable, Query, QueryBorrow, Syst
 use glam::{vec3, Mat4, Vec2, Vec3, Vec4, Vec4Swizzles};
 use itertools::Itertools;
 use ivy_assets::{Asset, AssetCache};
-use ivy_core::{Color, DrawGizmos, Extent, Line, Sphere};
+use ivy_core::{Color, ColorExt, DrawGizmos, Extent, Line, Sphere};
 use ivy_vulkan::{
     context::SharedVulkanContext,
     descriptors::{DescriptorBuilder, IntoSet},
@@ -407,20 +407,22 @@ impl Frustum {
 }
 
 impl DrawGizmos for Frustum {
-    fn draw_gizmos(&self, gizmos: &mut ivy_core::Gizmos, color: ivy_core::Color) {
+    fn draw_primitives(&self, gizmos: &mut ivy_core::GizmosSection) {
         for plane in self.planes() {
-            plane.draw_gizmos(gizmos, color)
+            plane.draw_primitives(gizmos)
         }
     }
 }
 
 impl DrawGizmos for Plane {
-    fn draw_gizmos(&self, gizmos: &mut ivy_core::Gizmos, color: ivy_core::Color) {
+    fn draw_primitives(&self, gizmos: &mut ivy_core::GizmosSection) {
         Sphere {
             origin: self.norm * self.p,
             radius: 0.1,
+            color: Color::new(0.0, 0.0, 1.0, 1.0),
+            ..Default::default()
         }
-        .draw_gizmos(gizmos, Color::new(0.0, 0.0, 1.0, 1.0));
-        Line::new(self.norm * self.p, self.norm, 0.01, 1.0).draw_gizmos(gizmos, color);
+        .draw_primitives(gizmos);
+        Line::new(self.norm * self.p, self.norm, 0.01, 1.0, Color::green()).draw_primitives(gizmos);
     }
 }
