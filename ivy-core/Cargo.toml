@@ -34,6 +34,7 @@ rand.workspace = true
 rand_distr.workspace = true
 puffin = { workspace = true, optional = true }
 puffin_http = { workspace = true, optional = true }
+dashmap.workspace = true
 
 [features]
 profile = [ "ivy-profiling/profile_with_puffin", "puffin", "puffin_http" ]

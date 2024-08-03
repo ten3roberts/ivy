@@ -1,8 +1,7 @@
-use std::collections::BTreeMap;
-
+use dashmap::DashMap;
 use glam::Vec3;
 
-use crate::Color;
+use crate::{Color, ColorExt};
 
 mod traits;
 pub use traits::*;
@@ -15,6 +14,15 @@ pub const DEFAULT_RADIUS: f32 = 0.01;
 pub struct Sphere {
     origin: Vec3,
     radius: f32,
+    color: Color,
+}
+
+impl Sphere {
+    /// Set the color
+    pub fn with_color(mut self, color: Color) -> Self {
+        self.color = color;
+        self
+    }
 }
 
 impl Default for Sphere {
@@ -22,15 +30,16 @@ impl Default for Sphere {
         Self {
             origin: Default::default(),
             radius: DEFAULT_RADIUS,
+            color: Color::red(),
         }
     }
 }
 
 impl DrawGizmos for Sphere {
-    fn draw_gizmos(&self, gizmos: &mut Gizmos, color: Color) {
+    fn draw_primitives(&self, gizmos: &mut GizmosSection) {
         gizmos.push(GizmoPrimitive::Sphere {
             origin: self.origin,
-            color,
+            color: self.color,
             radius: self.radius,
         })
     }
@@ -43,6 +52,7 @@ pub struct Line {
     dir: Vec3,
     radius: f32,
     corner_radius: f32,
+    color: Color,
 }
 
 impl Line {
@@ -52,15 +62,22 @@ impl Line {
             dir: (b - a),
             radius,
             corner_radius,
+            color: Color::blue(),
         }
+    }
+
+    /// Set the color
+    pub fn with_color(mut self, color: Color) -> Self {
+        self.color = color;
+        self
     }
 }
 
 impl DrawGizmos for Line {
-    fn draw_gizmos(&self, gizmos: &mut Gizmos, color: Color) {
+    fn draw_primitives(&self, gizmos: &mut GizmosSection) {
         gizmos.push(GizmoPrimitive::Line {
             origin: self.origin,
-            color,
+            color: self.color,
             dir: self.dir,
             radius: self.radius,
             corner_radius: self.corner_radius,
@@ -75,6 +92,7 @@ impl Default for Line {
             radius: DEFAULT_RADIUS,
             dir: Vec3::Z,
             corner_radius: 1.0,
+            color: Color::blue(),
         }
     }
 }
@@ -86,6 +104,15 @@ pub struct Cube {
     half_extents: Vec3,
     line_radius: f32,
     corner_radius: f32,
+    color: Color,
+}
+
+impl Cube {
+    /// Set the color
+    pub fn with_color(mut self, color: Color) -> Self {
+        self.color = color;
+        self
+    }
 }
 
 impl Default for Cube {
@@ -95,12 +122,13 @@ impl Default for Cube {
             line_radius: DEFAULT_RADIUS,
             half_extents: Vec3::ONE,
             corner_radius: 1.0,
+            color: Color::green(),
         }
     }
 }
 
 impl DrawGizmos for Cube {
-    fn draw_gizmos(&self, gizmos: &mut Gizmos, color: Color) {
+    fn draw_primitives(&self, gizmos: &mut GizmosSection) {
         let sides = [
             (Vec3::X, Vec3::Y),
             (Vec3::X, -Vec3::Y),
@@ -128,7 +156,7 @@ impl DrawGizmos for Cube {
                 origin: pos,
                 dir,
                 corner_radius: self.corner_radius,
-                color,
+                color: self.color,
                 radius: self.line_radius,
             }
         });
@@ -156,7 +184,7 @@ impl Default for Triangle {
         }
     }
 }
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 /// Represents a 3D world overlay for debugging purposes.
 pub enum GizmoPrimitive {
     Sphere {
@@ -188,14 +216,14 @@ pub type Section = &'static str;
 #[derive(Default)]
 pub struct Gizmos {
     current: Option<Section>,
-    sections: BTreeMap<Section, Vec<GizmoPrimitive>>,
+    sections: DashMap<&'static str, GizmosSection>,
 }
 
 impl Gizmos {
     pub fn new() -> Self {
         Self {
             current: None,
-            sections: BTreeMap::new(),
+            sections: Default::default(),
         }
     }
 
@@ -203,41 +231,55 @@ impl Gizmos {
     /// If a section already exists with the same name, the existing gizmos will be
     /// cleared. If drawing singleton like types, consider using the typename as a
     /// section name.
-    pub fn begin_section(&mut self, section: Section) {
-        self.current = Some(section);
-        self.sections.get_mut(section).map(Vec::clear);
-    }
-
-    pub fn clear_section(&mut self, section: Section) {
-        self.sections.get_mut(section).map(Vec::clear);
-    }
-
-    /// Adds a new gizmos to the current section
-    pub fn draw(&mut self, gizmo: impl DrawGizmos, color: Color) {
-        gizmo.draw_gizmos(self, color)
-    }
-
-    pub fn push(&mut self, primitive: GizmoPrimitive) {
-        self.get_section().push(primitive)
-    }
-
-    pub fn extend<I: Iterator<Item = GizmoPrimitive>>(&mut self, iter: I) {
-        let section = self.get_section();
-
-        section.extend(iter);
-    }
-
-    fn get_section(&mut self) -> &mut Vec<GizmoPrimitive> {
+    pub fn begin_section<'a>(
+        &'a self,
+        key: &'static str,
+    ) -> dashmap::mapref::one::RefMut<'a, &'static str, GizmosSection> {
+        // if let Some(mut section) = self.sections.get_mut(key) {
+        //     section.primitives.clear();
+        //     section
+        // } else {
         self.sections
-            .entry(
-                self.current
-                    .expect("Can not draw gizmos before initiating a section."),
-            )
-            .or_insert_with(Vec::new)
+            .entry(key)
+            .and_modify(|v| v.primitives.clear())
+            .or_default()
+        // }
     }
 
     /// Get a reference to the gizmos's sections.
-    pub fn sections(&self) -> &BTreeMap<Section, Vec<GizmoPrimitive>> {
-        &self.sections
+    pub fn sections<'a>(
+        &'a self,
+    ) -> dashmap::iter::Iter<
+        'a,
+        &'static str,
+        GizmosSection,
+        std::hash::RandomState,
+        DashMap<&'static str, GizmosSection>,
+    > {
+        self.sections.iter()
+    }
+}
+
+#[derive(Default, Debug, Clone)]
+pub struct GizmosSection {
+    primitives: Vec<GizmoPrimitive>,
+}
+
+impl GizmosSection {
+    /// Adds a new gizmos to the current section
+    pub fn draw(&mut self, gizmo: impl DrawGizmos) {
+        gizmo.draw_primitives(self)
+    }
+
+    pub fn push(&mut self, primitive: GizmoPrimitive) {
+        self.primitives.push(primitive)
+    }
+
+    pub fn extend<I: Iterator<Item = GizmoPrimitive>>(&mut self, iter: I) {
+        self.primitives.extend(iter);
+    }
+
+    pub fn primitives(&self) -> &[GizmoPrimitive] {
+        &self.primitives
     }
 }

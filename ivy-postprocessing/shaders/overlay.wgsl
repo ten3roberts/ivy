@@ -24,15 +24,15 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
 }
 
 @group(0) @binding(0)
-var source_texture: texture_depth_2d;
+var source_texture: texture_2d<f32>;
 
 @group(0) @binding(1)
 var default_sampler: sampler;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    var color = textureSample(source_texture, default_sampler, in.uv);
+    var color = textureSample(source_texture, default_sampler, in.uv).xyz;
 
-    return vec4(vec3(color), 0.5f);
+    return vec4(color, 0.5f);
 }
  

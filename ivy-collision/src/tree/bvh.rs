@@ -1,6 +1,6 @@
-use flax::{component::ComponentValue};
+use flax::component::ComponentValue;
 use glam::Vec3;
-use ivy_core::{Color, Cube, DrawGizmos, Events, Gizmos};
+use ivy_core::{Cube, DrawGizmos, Events, GizmosSection};
 use ordered_float::OrderedFloat;
 use palette::{
     named::{BLUE, GREEN, YELLOW},
@@ -418,7 +418,7 @@ impl<O> DrawGizmos for BvhNode<O>
 where
     O: Array<Item = Object> + ComponentValue,
 {
-    fn draw_gizmos(&self, gizmos: &mut Gizmos, _: Color) {
+    fn draw_primitives(&self, gizmos: &mut GizmosSection) {
         if !self.is_leaf() {
             return;
         }
@@ -429,14 +429,12 @@ where
             NodeState::Sleeping => YELLOW,
         };
 
-        gizmos.draw(
-            Cube {
-                origin: self.bounds.origin,
-                half_extents: self.bounds.extents,
-                ..Default::default()
-            },
-            Srgb::from_format(color).with_alpha(1.0),
-        )
+        gizmos.draw(Cube {
+            origin: self.bounds.origin,
+            half_extents: self.bounds.extents,
+            color: Srgb::from_format(color).with_alpha(1.0),
+            ..Default::default()
+        })
     }
 }
 

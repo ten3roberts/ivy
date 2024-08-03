@@ -41,14 +41,7 @@ impl GizmosRendererNode {
         let layout = BindGroupLayoutBuilder::new("gizmos")
             .bind_uniform_buffer(ShaderStages::VERTEX)
             .bind_storage_buffer(ShaderStages::VERTEX)
-            .bind(
-                ShaderStages::FRAGMENT,
-                BindingType::Texture {
-                    sample_type: TextureSampleType::Depth,
-                    view_dimension: TextureViewDimension::D2,
-                    multisampled: true,
-                },
-            )
+            .bind_texture_unfiltered(ShaderStages::FRAGMENT)
             .bind(
                 ShaderStages::FRAGMENT,
                 BindingType::Sampler(SamplerBindingType::NonFiltering),
@@ -107,35 +100,37 @@ impl Node for GizmosRendererNode {
 
         self.data.clear();
 
-        for gizmo in gizmos.sections().iter().flat_map(|val| val.1) {
-            match gizmo {
-                ivy_core::GizmoPrimitive::Sphere {
-                    origin,
-                    color,
-                    radius,
-                } => {
-                    self.data.push(Data {
-                        world: Mat4::from_translation(*origin)
-                            * Mat4::from_scale(Vec3::splat(*radius)),
-                        color: color.to_vec4(),
-                        billboard_axis: Vec3::ZERO,
-                        corner_radius: 1.0,
-                    });
-                }
-                ivy_core::GizmoPrimitive::Line {
-                    origin,
-                    color,
-                    dir,
-                    radius,
-                    corner_radius,
-                } => {
-                    self.data.push(Data {
-                        world: Mat4::from_translation(*origin + *dir * 0.5)
-                            * Mat4::from_scale(Vec3::new(*radius, dir.length() * 0.5, *radius)),
-                        color: color.to_vec4(),
-                        billboard_axis: dir.normalize(),
-                        corner_radius: *corner_radius,
-                    });
+        for section in gizmos.sections() {
+            for primitive in section.primitives() {
+                match primitive {
+                    ivy_core::GizmoPrimitive::Sphere {
+                        origin,
+                        color,
+                        radius,
+                    } => {
+                        self.data.push(Data {
+                            world: Mat4::from_translation(*origin)
+                                * Mat4::from_scale(Vec3::splat(*radius)),
+                            color: color.to_vec4(),
+                            billboard_axis: Vec3::ZERO,
+                            corner_radius: 1.0,
+                        });
+                    }
+                    ivy_core::GizmoPrimitive::Line {
+                        origin,
+                        color,
+                        dir,
+                        radius,
+                        corner_radius,
+                    } => {
+                        self.data.push(Data {
+                            world: Mat4::from_translation(*origin + *dir * 0.5)
+                                * Mat4::from_scale(Vec3::new(*radius, dir.length() * 0.5, *radius)),
+                            color: color.to_vec4(),
+                            billboard_axis: dir.normalize(),
+                            corner_radius: *corner_radius,
+                        });
+                    }
                 }
             }
         }

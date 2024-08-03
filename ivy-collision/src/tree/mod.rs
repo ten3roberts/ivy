@@ -7,7 +7,9 @@ use flax::{
 };
 use flume::{Receiver, Sender};
 use glam::{Mat4, Vec3};
-use ivy_core::{is_trigger, mass, velocity, world_transform, DrawGizmos, Events, Gizmos};
+use ivy_core::{
+    is_trigger, mass, velocity, world_transform, DrawGizmos, Events, Gizmos, GizmosSection,
+};
 use slotmap::{new_key_type, SlotMap};
 use smallvec::Array;
 
@@ -442,9 +444,8 @@ impl std::ops::Deref for EntityPayload {
 }
 
 impl<N: CollisionTreeNode + DrawGizmos> DrawGizmos for CollisionTree<N> {
-    fn draw_gizmos(&self, gizmos: &mut Gizmos, color: ivy_core::Color) {
-        gizmos.begin_section(any::type_name::<Self>());
-        self.root.draw_gizmos_recursive(&self.nodes, gizmos, color)
+    fn draw_primitives(&self, gizmos: &mut GizmosSection) {
+        self.root.draw_gizmos_recursive(&self.nodes, gizmos)
     }
 }
 
