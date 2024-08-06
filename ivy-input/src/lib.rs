@@ -1,6 +1,5 @@
 pub mod components;
 pub mod error;
-mod events;
 pub mod layer;
 pub mod types;
 mod vector;
