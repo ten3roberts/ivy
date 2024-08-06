@@ -18,7 +18,7 @@ use crate::{
     rendergraph::{Dependency, Node, NodeExecutionContext, NodeUpdateContext, TextureHandle},
 };
 
-use super::{get_camera_data, CameraData};
+use super::{get_main_camera_data, CameraData};
 
 pub struct GizmosRendererNode {
     mesh: Mesh,
@@ -94,7 +94,7 @@ impl Node for GizmosRendererNode {
             .get(engine(), gizmos())
             .context("Missing gizmos")?;
 
-        if let Some(camera_data) = get_camera_data(ctx.world) {
+        if let Some(camera_data) = get_main_camera_data(ctx.world) {
             self.camera_buffer.write(&ctx.gpu.queue, 0, &[camera_data]);
         }
 

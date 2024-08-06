@@ -8,6 +8,7 @@ use itertools::Itertools;
 use ivy_assets::{Asset, AssetCache};
 use ivy_core::DEG_90;
 use ivy_wgpu::{
+    renderer::SkyboxTextures,
     rendergraph::{Dependency, Node, TextureHandle},
     types::{
         shader::{ShaderDesc, TargetDesc},
@@ -489,28 +490,19 @@ impl HdriProcessor {
 pub struct HdriProcessorNode {
     processor: HdriProcessor,
     source: Option<Asset<DynamicImage>>,
-    environment_map: TextureHandle,
-    irradiance_map: TextureHandle,
-    specular_map: TextureHandle,
-    integrated_brdf: TextureHandle,
+    skybox: SkyboxTextures,
 }
 
 impl HdriProcessorNode {
     pub fn new(
         processor: HdriProcessor,
         source: Asset<DynamicImage>,
-        environment_map: TextureHandle,
-        irradiance_map: TextureHandle,
-        specular_map: TextureHandle,
-        integrated_brdf: TextureHandle,
+        skybox: SkyboxTextures,
     ) -> Self {
         Self {
             processor,
             source: Some(source),
-            environment_map,
-            irradiance_map,
-            specular_map,
-            integrated_brdf,
+            skybox,
         }
     }
 }
@@ -522,7 +514,7 @@ impl Node for HdriProcessorNode {
 
     fn draw(&mut self, ctx: ivy_wgpu::rendergraph::NodeExecutionContext) -> anyhow::Result<()> {
         if let Some(source) = self.source.take() {
-            let environment_map = ctx.get_texture(self.environment_map);
+            let environment_map = ctx.get_texture(self.skybox.environment_map);
             self.processor
                 .process_hdri(ctx.gpu, ctx.encoder, ctx.assets, &source, environment_map);
 
@@ -530,20 +522,20 @@ impl Node for HdriProcessorNode {
                 ctx.gpu,
                 ctx.encoder,
                 environment_map,
-                ctx.get_texture(self.irradiance_map),
+                ctx.get_texture(self.skybox.irradiance_map),
             );
 
             self.processor.process_specular_ibl(
                 ctx.gpu,
                 ctx.encoder,
                 environment_map,
-                ctx.get_texture(self.specular_map),
+                ctx.get_texture(self.skybox.specular_map),
             );
 
             self.processor.process_brdf_lookup(
                 ctx.gpu,
                 ctx.encoder,
-                ctx.get_texture(self.integrated_brdf),
+                ctx.get_texture(self.skybox.integrated_brdf),
             );
         }
 
@@ -557,12 +549,15 @@ impl Node for HdriProcessorNode {
     fn write_dependencies(&self) -> Vec<ivy_wgpu::rendergraph::Dependency> {
         vec![
             Dependency::texture(
-                self.environment_map,
+                self.skybox.environment_map,
                 TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT,
             ),
-            Dependency::texture(self.irradiance_map, TextureUsages::RENDER_ATTACHMENT),
-            Dependency::texture(self.specular_map, TextureUsages::RENDER_ATTACHMENT),
-            Dependency::texture(self.integrated_brdf, TextureUsages::RENDER_ATTACHMENT),
+            Dependency::texture(self.skybox.irradiance_map, TextureUsages::RENDER_ATTACHMENT),
+            Dependency::texture(self.skybox.specular_map, TextureUsages::RENDER_ATTACHMENT),
+            Dependency::texture(
+                self.skybox.integrated_brdf,
+                TextureUsages::RENDER_ATTACHMENT,
+            ),
         ]
     }
 }
