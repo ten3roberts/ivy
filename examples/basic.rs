@@ -2,8 +2,8 @@ use std::{mem::size_of, sync::Arc, time::Instant};
 
 use anyhow::Context;
 use flax::{
-    component, BoxedSystem, Component, Entity, EntityBuilder, Mutable, Query, QueryBorrow,
-    Schedule, System, World,
+    component, BoxedSystem, Component, Entity, EntityBuilder, FetchExt, Mutable, Query,
+    QueryBorrow, Schedule, System, World,
 };
 use glam::{vec3, EulerRot, Mat4, Quat, Vec2, Vec3};
 use image::DynamicImage;
@@ -13,10 +13,11 @@ use ivy_core::{
     async_commandbuffer, engine, gizmos,
     layer::events::EventRegisterContext,
     main_camera,
-    palette::Srgb,
+    palette::{Srgb, WithAlpha},
     position,
     profiling::ProfilingLayer,
-    rotation, App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer, TransformBundle,
+    rotation, world_transform, App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer,
+    TransformBundle,
 };
 use ivy_gltf::{animation::player::Animator, components::animator, Document};
 use ivy_input::{
@@ -44,15 +45,15 @@ use ivy_wgpu::{
     light::{LightData, LightKind},
     material_desc::{MaterialData, MaterialDesc},
     mesh_desc::MeshDesc,
-    primitives::{generate_plane, PlaneDesc, UvSphereDesc},
+    primitives::{generate_plane, CubeDesc, UvSphereDesc},
     renderer::{
         gizmos_renderer::GizmosRendererNode, mesh_renderer::MeshRenderer,
         shadowmapping::ShadowMapNode, skinned_mesh_renderer::SkinnedMeshRenderer, CameraNode,
         EnvironmentData, LightManager, MsaaResolve, RenderObjectBundle, SkyboxTextures,
     },
     rendergraph::{self, BufferDesc, ExternalResources, ManagedTextureDesc, RenderGraph},
-    shader_library::{self, ModuleDesc, ShaderLibrary},
-    shaders::{PbrShaderDesc, ShadowShaderDesc, SkinnedPbrShaderDesc},
+    shader_library::{ModuleDesc, ShaderLibrary},
+    shaders::{PbrShaderDesc, ShadowShaderDesc},
     texture::TextureDesc,
     Gpu,
 };
@@ -63,7 +64,7 @@ use tracing_tree::HierarchicalLayer;
 use wgpu::{BufferUsages, Extent3d, TextureDimension, TextureFormat};
 use winit::{dpi::LogicalSize, window::WindowAttributes};
 
-const ENABLE_SKYBOX: bool = false;
+const ENABLE_SKYBOX: bool = true;
 
 pub fn main() -> anyhow::Result<()> {
     registry()
@@ -103,6 +104,7 @@ pub fn main() -> anyhow::Result<()> {
             Schedule::builder()
                 .with_system(movement_system(dt))
                 .with_system(animate_system(dt))
+                .with_system(point_light_gizmo_system())
                 .with_system(gizmos_system())
                 .build(),
         ))
@@ -132,35 +134,35 @@ impl LogicLayer {
         let cmd = world.get(engine(), async_commandbuffer()).unwrap().clone();
         let assets = assets.clone();
 
-        // async_std::task::spawn({
-        //     let cmd = cmd.clone();
-        //     let assets = assets.clone();
-        //     async move {
-        //         let shader = assets.load(&PbrShaderDesc);
-        //         let sphere_mesh = MeshDesc::content(assets.load(&UvSphereDesc::default()));
-        //         let materials: Asset<Document> = assets.load_async("textures/materials.glb").await;
+        async_std::task::spawn({
+            let cmd = cmd.clone();
+            let assets = assets.clone();
+            async move {
+                let shader = assets.load(&PbrShaderDesc);
+                let sphere_mesh = MeshDesc::content(assets.load(&UvSphereDesc::default()));
+                let materials: Asset<Document> = assets.load_async("textures/materials.glb").await;
 
-        //         {
-        //             let mut cmd = cmd.lock();
+                {
+                    let mut cmd = cmd.lock();
 
-        //             for (i, material) in materials.materials().enumerate() {
-        //                 cmd.spawn(
-        //                     Entity::builder()
-        //                         .mount(TransformBundle::new(
-        //                             vec3(0.0 + i as f32 * 2.0, 5.0, 5.0),
-        //                             Quat::IDENTITY,
-        //                             Vec3::ONE,
-        //                         ))
-        //                         .mount(RenderObjectBundle {
-        //                             mesh: sphere_mesh.clone(),
-        //                             material: material.into(),
-        //                             shader: shader.clone(),
-        //                         }),
-        //                 );
-        //             }
-        //         }
-        //     }
-        // });
+                    for (i, material) in materials.materials().enumerate() {
+                        cmd.spawn(
+                            Entity::builder()
+                                .mount(TransformBundle::new(
+                                    vec3(0.0 + i as f32 * 2.0, 1.0, 12.0),
+                                    Quat::IDENTITY,
+                                    Vec3::ONE * 0.5,
+                                ))
+                                .mount(RenderObjectBundle {
+                                    mesh: sphere_mesh.clone(),
+                                    material: material.into(),
+                                    shader: shader.clone(),
+                                }),
+                        );
+                    }
+                }
+            }
+        });
 
         async_std::task::spawn(
             async move {
@@ -172,20 +174,20 @@ impl LogicLayer {
                     MaterialData::new()
                         .with_metallic_factor(0.0)
                         .with_albedo(TextureDesc::path(
-                        "assets/textures/BaseCollection/ConcreteTiles/Concrete007_2K-PNG_Color.png",
+                        "assets/textures/BaseCollection/Sand/Ground054_1K-PNG_Color.png",
+                    ))
+                    .with_normal(TextureDesc::path(
+                        "assets/textures/BaseCollection/Sand/Ground054_1K-PNG_NormalGL.png",
+                    ))
+                    .with_metallic_roughness(TextureDesc::path(
+                        "assets/textures/BaseCollection/Sand/Ground054_1K-PNG_Roughness.png",
+                    ))
+                    .with_ambient_occlusion(TextureDesc::path(
+                        "assets/textures/BaseCollection/Sand/Ground054_1K-PNG_AmbientOcclusion.png",
+                    ))
+                    .with_displacement(TextureDesc::path(
+                        "assets/textures/BaseCollection/Sand/Ground054_1K-PNG_Displacement.png",
                     )),
-                    // .with_normal(TextureDesc::path(
-                    //     "assets/textures/BaseCollection/ConcreteTiles/Concrete007_2K-PNG_NormalGL.png",
-                    // ))
-                    // .with_metallic_roughness(TextureDesc::path(
-                    //     "assets/textures/BaseCollection/ConcreteTiles/Concrete007_2K-PNG_Roughness.png",
-                    // ))
-                    // .with_ambient_occlusion(TextureDesc::path(
-                    //     "assets/textures/BaseCollection/ConcreteTiles/Concrete007_2K-PNG_AmbientOcclusion.png",
-                    // ))
-                    // .with_displacement(TextureDesc::path(
-                    //     "assets/textures/BaseCollection/ConcreteTiles/Concrete007_2K-PNG_Displacement.png",
-                    // )),
                 );
 
                 cmd.lock().spawn(
@@ -204,27 +206,40 @@ impl LogicLayer {
                 );
 
                 let sphere_mesh = MeshDesc::content(assets.load(&UvSphereDesc::default()));
+                let cube_mesh = MeshDesc::content(assets.load(&CubeDesc::default()));
+
                 let plastic_material = MaterialDesc::content(
                     MaterialData::new()
                         .with_metallic_factor(0.0)
                         .with_roughness_factor(0.2),
                 );
 
-                for i in 0..5 {
-                    cmd.lock().spawn(
-                        Entity::builder()
-                            .mount(TransformBundle::new(
-                                vec3(i as f32 * 5.0, 1.0, 25.0),
-                                Quat::IDENTITY,
-                                Vec3::ONE,
-                            ))
-                            .mount(RenderObjectBundle {
-                                mesh: sphere_mesh.clone(),
-                                material: plastic_material.clone(),
-                                shader: shader.clone(),
-                            })
-                            .set(shadow_pass(), assets.load(&ShadowShaderDesc)),
-                    );
+                for i in 0..8 {
+                    let roughness = i as f32 / (7) as f32;
+                    for j in 0..2 {
+                        let metallic = j as f32;
+
+                        let plastic_material = MaterialDesc::content(
+                            MaterialData::new()
+                                .with_metallic_factor(metallic)
+                                .with_roughness_factor(roughness),
+                        );
+
+                        cmd.lock().spawn(
+                            Entity::builder()
+                                .mount(TransformBundle::new(
+                                    vec3(0.0 + i as f32 * 2.0, 1.0, 5.0 + 4.0 * j as f32),
+                                    Quat::IDENTITY,
+                                    Vec3::ONE * 0.5,
+                                ))
+                                .mount(RenderObjectBundle {
+                                    mesh: sphere_mesh.clone(),
+                                    material: plastic_material.clone(),
+                                    shader: shader.clone(),
+                                })
+                                .set(shadow_pass(), assets.load(&ShadowShaderDesc)),
+                        );
+                    }
                 }
 
                 for i in 0..8 {
@@ -241,12 +256,12 @@ impl LogicLayer {
                         cmd.lock().spawn(
                             Entity::builder()
                                 .mount(TransformBundle::new(
-                                    vec3(0.0 + i as f32 * 2.0, j as f32 * 2.0 + 1.0, 5.0),
+                                    vec3(0.0 + i as f32 * 2.0, 5.0, 5.0 + 4.0 * j as f32),
                                     Quat::IDENTITY,
-                                    Vec3::ONE * if j == 0 { 1.0 } else { 0.5 },
+                                    Vec3::ONE * 0.5,
                                 ))
                                 .mount(RenderObjectBundle {
-                                    mesh: sphere_mesh.clone(),
+                                    mesh: cube_mesh.clone(),
                                     material: plastic_material.clone(),
                                     shader: shader.clone(),
                                 })
@@ -312,28 +327,26 @@ impl LogicLayer {
         self.setup_assets(world, assets)?;
 
         Entity::builder()
-            .mount(TransformBundle::default().with_rotation(Quat::from_euler(
-                EulerRot::YXZ,
-                0.5,
-                1.0,
-                0.0,
-            )))
-            .set(light_data(), LightData::new(Srgb::new(1.0, 1.0, 1.0), 2.0))
+            .mount(
+                TransformBundle::default()
+                    .with_position(Vec3::Y * 5.0)
+                    .with_rotation(Quat::from_euler(EulerRot::YXZ, 0.5, 1.0, 0.0)),
+            )
+            .set(light_data(), LightData::new(Srgb::new(1.0, 1.0, 1.0), 1.0))
             .set(light_kind(), LightKind::Directional)
             .set_default(cast_shadow())
             .spawn(world);
 
-        // Entity::builder()
-        //     .mount(TransformBundle::default().with_rotation(Quat::from_euler(
-        //         EulerRot::YXZ,
-        //         2.0,
-        //         0.5,
-        //         0.0,
-        //     )))
-        //     .set(light_data(), LightData::new(Srgb::new(1.0, 1.0, 1.0), 2.0))
-        //     .set(light_kind(), LightKind::Directional)
-        //     .set_default(cast_shadow())
-        //     .spawn(world);
+        Entity::builder()
+            .mount(
+                TransformBundle::default()
+                    .with_position(Vec3::Y * 5.0)
+                    .with_rotation(Quat::from_euler(EulerRot::YXZ, 2.0, 0.5, 0.0)),
+            )
+            .set(light_data(), LightData::new(Srgb::new(1.0, 1.0, 1.0), 1.0))
+            .set(light_kind(), LightKind::Directional)
+            .set_default(cast_shadow())
+            .spawn(world);
 
         // Entity::builder()
         //     .mount(TransformBundle::default().with_rotation(Quat::from_euler(
@@ -346,12 +359,18 @@ impl LogicLayer {
         //     .set(light_kind(), LightKind::Directional)
         //     .set_default(cast_shadow())
         //     .spawn(world);
-        // Entity::builder()
-        //     .mount(TransformBundle::default().with_position(vec3(0.0, 2.0, 0.0)))
-        //     .set(light_data(), LightData::new(Srgb::new(1.0, 0.0, 0.0), 50.0))
-        //     .set(light_kind(), LightKind::Point)
-        //     .spawn(world);
 
+        Entity::builder()
+            .mount(TransformBundle::default().with_position(vec3(0.0, 2.0, 0.0)))
+            .set(light_data(), LightData::new(Srgb::new(1.0, 0.0, 0.0), 25.0))
+            .set(light_kind(), LightKind::Point)
+            .spawn(world);
+
+        Entity::builder()
+            .mount(TransformBundle::default().with_position(vec3(2.0, 2.0, 5.0)))
+            .set(light_data(), LightData::new(Srgb::new(0.0, 0.0, 1.0), 25.0))
+            .set(light_kind(), LightKind::Point)
+            .spawn(world);
         Ok(())
     }
 }
@@ -406,7 +425,11 @@ impl Layer for LogicLayer {
             .set_default(projection_matrix())
             .set(
                 environment_data(),
-                EnvironmentData::new(Srgb::new(0.2, 0.2, 0.3), 0.01),
+                EnvironmentData::new(
+                    Srgb::new(0.2, 0.2, 0.3),
+                    0.001,
+                    if ENABLE_SKYBOX { 0.0 } else { 1.0 },
+                ),
             )
             .set(
                 input_state(),
@@ -586,17 +609,55 @@ fn animate_system(dt: f32) -> BoxedSystem {
         .boxed()
 }
 
+fn point_light_gizmo_system() -> BoxedSystem {
+    System::builder()
+        .with_query(Query::new(gizmos().source(engine())))
+        .with_query(Query::new((world_transform(), light_data(), light_kind())))
+        .build(
+            |mut gizmos: QueryBorrow<flax::fetch::Source<Component<gizmos::Gizmos>, Entity>>,
+             mut query: QueryBorrow<(
+                Component<Mat4>,
+                Component<LightData>,
+                Component<LightKind>,
+            )>| {
+                let mut gizmos = gizmos
+                    .first()
+                    .unwrap()
+                    .begin_section("point_light_gizmo_system");
+
+                query
+                    .iter()
+                    .for_each(|(transform, light, kind)| match kind {
+                        LightKind::Point => gizmos.draw(gizmos::Sphere::new(
+                            transform.transform_point3(Vec3::ZERO),
+                            0.1,
+                            light.color.with_alpha(1.0),
+                        )),
+                        LightKind::Directional => {
+                            let pos = transform.transform_point3(Vec3::ZERO);
+                            let dir = transform.transform_vector3(Vec3::Z);
+
+                            gizmos.draw(gizmos::Sphere::new(pos, 0.1, light.color.with_alpha(1.0)));
+
+                            gizmos.draw(gizmos::Line::new(
+                                pos,
+                                dir,
+                                0.02,
+                                1.0,
+                                light.color.with_alpha(1.0),
+                            ))
+                        }
+                    });
+            },
+        )
+        .boxed()
+}
+
 fn gizmos_system() -> BoxedSystem {
     System::builder()
         .with_query(Query::new(gizmos().as_mut()))
         .for_each(|gizmos| {
             let mut section = gizmos.begin_section("basic example");
-
-            section.draw(gizmos::Sphere {
-                origin: Vec3::ZERO,
-                radius: 0.2,
-                color: Color::red(),
-            });
 
             section.draw(gizmos::Cube {
                 origin: vec3(5.0, 2.0, -5.0),
@@ -674,8 +735,8 @@ impl RenderGraphRenderer {
             let specular_map = render_graph.resources.insert_texture(ManagedTextureDesc {
                 label: "hdr_cubemap".into(),
                 extent: Extent3d {
-                    width: 128,
-                    height: 128,
+                    width: 512,
+                    height: 512,
                     depth_or_array_layers: 6,
                 },
                 mip_level_count: MAX_REFLECTION_LOD,
@@ -791,8 +852,8 @@ impl RenderGraphRenderer {
         let shadow_maps = render_graph.resources.insert_texture(ManagedTextureDesc {
             label: "depth_texture".into(),
             extent: wgpu::Extent3d {
-                width: 512,
-                height: 512,
+                width: 1024,
+                height: 1024,
                 depth_or_array_layers: max_shadows * max_cascades,
             },
             dimension: wgpu::TextureDimension::D2,

@@ -11,8 +11,7 @@ use glam::{Mat4, Vec3};
 use itertools::Itertools;
 use ivy_assets::{stored::Store, Asset, AssetCache};
 use ivy_core::{
-    impl_for_tuples, main_camera, palette::Srgb, to_linear_vec3, world_transform, Bundle, Color,
-    ColorExt,
+    impl_for_tuples, main_camera, palette::Srgb, to_linear_vec3, world_transform, Bundle,
 };
 use ivy_wgpu_types::shader::TargetDesc;
 use wgpu::{
@@ -198,13 +197,15 @@ impl SkyboxTextures {
 pub struct EnvironmentData {
     pub fog_color: Srgb,
     pub fog_density: f32,
+    pub fog_blend: f32,
 }
 
 impl EnvironmentData {
-    pub fn new(fog_color: Srgb, fog_density: f32) -> Self {
+    pub fn new(fog_color: Srgb, fog_density: f32, fog_blend: f32) -> Self {
         Self {
             fog_color,
             fog_density,
+            fog_blend,
         }
     }
 }
@@ -229,9 +230,9 @@ pub fn get_camera_data(camera: &EntityRef) -> CameraData {
         view,
         projection,
         camera_pos: world_transform.transform_point3(Vec3::ZERO),
-        padding: 0.0,
         fog_color: to_linear_vec3(env_data.fog_color),
         fog_density: env_data.fog_density,
+        fog_blend: env_data.fog_blend,
     }
 }
 
@@ -503,7 +504,7 @@ pub struct CameraData {
     pub view: Mat4,
     pub projection: Mat4,
     pub camera_pos: Vec3,
-    pub padding: f32,
+    pub fog_blend: f32,
     pub fog_color: Vec3,
     pub fog_density: f32,
 }
