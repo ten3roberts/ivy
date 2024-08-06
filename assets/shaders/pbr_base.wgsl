@@ -137,7 +137,7 @@ fn pbr_luminance(in: PbrLuminance, light: Light) -> vec3<f32> {
         attenuation = 1f;
     }
 
-    var in_light = 0f;
+    var in_light = 1f;
     var c = vec3(0f);
     if light.shadow_index != U32_MAX {
         // let in_view = globals.view * vec4(in.world_pos, 1.0);

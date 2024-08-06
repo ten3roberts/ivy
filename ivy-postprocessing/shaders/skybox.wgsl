@@ -26,6 +26,8 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
 struct UniformData {
     inv_proj: mat4x4<f32>,
     inv_view: mat4x4<f32>,
+    fog_color: vec3<f32>,
+    fog_blend: f32,
 }
 
 @group(0) @binding(1)
@@ -44,6 +46,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var ray_direction = normalize((data.inv_view * vec4(view_ray_direction, 0.0)).xyz);
 
     let color = textureSample(environment_map, skybox_sampler, ray_direction).rgb;
-    return vec4(color, 1.0);
+    return vec4(mix(color, data.fog_color, data.fog_blend), 1.0);
     // return vec4(dir, 1.0);
 }

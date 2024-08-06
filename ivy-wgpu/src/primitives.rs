@@ -2,6 +2,7 @@ use std::{convert::Infallible, f32::consts::PI};
 
 use glam::{vec2, vec3, IVec3, Vec2, Vec3, Vec4};
 use ivy_assets::AssetDesc;
+use ordered_float::Float;
 
 use crate::{mesh::Vertex, mesh_desc::MeshData};
 
@@ -144,4 +145,71 @@ pub fn generate_plane(halfextent: f32, normal: Vec3) -> MeshData {
     let mut mesh = MeshData::new(vertices.to_vec().into(), indices.to_vec().into());
     mesh.generate_tangents().unwrap();
     mesh
+}
+
+pub fn generate_cube(halfextent: f32) -> MeshData {
+    let sides = [
+        (Vec3::X),
+        (Vec3::Y),
+        (Vec3::Z),
+        (-Vec3::Z),
+        (-Vec3::X),
+        (-Vec3::Y),
+    ];
+
+    let mut vertices = Vec::new();
+    let mut indices = Vec::new();
+
+    for normal in sides {
+        let tan = if normal.abs().distance(Vec3::Y) < 0.001 {
+            Vec3::Z
+        } else {
+            normal.cross(Vec3::Y)
+        };
+
+        let bitan = normal.cross(tan);
+
+        indices.extend([0, 1, 2, 2, 3, 0].map(|i| i + vertices.len() as u32));
+
+        vertices.extend([
+            Vertex::new(
+                (-tan - bitan) * halfextent + normal,
+                vec2(0.0, 1.0) * halfextent,
+                normal,
+            ),
+            Vertex::new(
+                (tan - bitan) * halfextent + normal,
+                vec2(1.0, 1.0) * halfextent,
+                normal,
+            ),
+            Vertex::new(
+                (tan + bitan) * halfextent + normal,
+                vec2(1.0, 0.0) * halfextent,
+                normal,
+            ),
+            Vertex::new(
+                (-tan + bitan) * halfextent + normal,
+                vec2(0.0, 0.0) * halfextent,
+                normal,
+            ),
+        ]);
+    }
+
+    let mut mesh = MeshData::new(vertices.into(), indices.into());
+    mesh.generate_tangents().unwrap();
+    mesh
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+pub struct CubeDesc;
+
+impl AssetDesc<MeshData> for CubeDesc {
+    type Error = Infallible;
+
+    fn load(
+        &self,
+        assets: &ivy_assets::AssetCache,
+    ) -> Result<ivy_assets::Asset<MeshData>, Self::Error> {
+        Ok(assets.insert(generate_cube(1.0)))
+    }
 }

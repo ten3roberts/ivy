@@ -98,7 +98,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let r = normal;
     let v = r;
 
-    let sample_count = 512u;
+    let sample_count = 1024u;
 
     var total_weight = 0.0;
     var total_incoming = vec3(0f);

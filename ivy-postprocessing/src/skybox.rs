@@ -1,4 +1,4 @@
-use glam::Mat4;
+use glam::{Mat4, Vec3};
 use ivy_wgpu::{
     renderer::{CameraRenderer, UpdateContext},
     types::{shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, Shader, TypedBuffer},
@@ -63,6 +63,8 @@ impl CameraRenderer for SkyboxRenderer {
             &[UniformData {
                 inv_proj: ctx.camera.projection.inverse(),
                 inv_view: ctx.camera.view.inverse(),
+                fog_color: ctx.camera.fog_color,
+                fog_blend: ctx.camera.fog_blend,
             }],
         );
 
@@ -108,4 +110,6 @@ impl CameraRenderer for SkyboxRenderer {
 pub struct UniformData {
     inv_proj: Mat4,
     inv_view: Mat4,
+    fog_color: Vec3,
+    fog_blend: f32,
 }
