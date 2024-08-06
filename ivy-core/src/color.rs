@@ -1,6 +1,6 @@
-use glam::{Vec3, Vec4};
+use glam::{vec3, Vec3, Vec4};
 pub use palette;
-use palette::{FromColor, Hsla, Hsva, IntoColor, Srgba};
+use palette::{FromColor, Hsla, Hsva, IntoColor, Srgb, Srgba};
 
 #[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
@@ -98,10 +98,8 @@ impl ColorExt for Color {
         Color::new(1.0, 0.0, 1.0, 1.0)
     }
 }
-// impl<'a> Lerp<'a> for Color {
-//     type Write = &'a mut Color;
 
-//     fn lerp(write: Self::Write, start: &Self, end: &Self, t: f32) {
-//         *write = Color::from(Vec4::from(start).lerp(Vec4::from(end), t));
-//     }
-// }
+pub fn to_linear_vec3(color: Srgb) -> Vec3 {
+    let color = palette::rgb::LinSrgb::from_color(color);
+    vec3(color.red, color.green, color.blue)
+}

@@ -20,6 +20,7 @@ struct VertexOutput {
     @location(5) normal: vec3<f32>,
     @location(6) tangent: vec3<f32>,
     @location(7) bitangent: vec3<f32>,
+    @location(8) fog: vec4<f32>,
 }
 
 struct Object {
@@ -31,6 +32,8 @@ struct Globals {
     view: mat4x4<f32>,
     proj: mat4x4<f32>,
     camera_pos: vec3<f32>,
+    fog_color: vec3<f32>,
+    fog_density: f32,
 }
 
 struct Light {
@@ -110,6 +113,11 @@ fn vs_main(in: SkinnedVertexInput) -> VertexOutput {
     out.bitangent = bitangent;
     out.tangent_pos = tbn * world_position.xyz;
 
+    let distance = length(world_position.xyz - globals.camera_pos);
+
+    let fog_opacity = 1f - exp(-globals.fog_density * distance);
+    out.fog = vec4(globals.fog_color, fog_opacity);
+
     return out;
 }
 
@@ -160,5 +168,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     let luminance = brdf_forward(in_lum);
 
-    return vec4(luminance, 1);
+    let color = mix(luminance, in.fog.rgb, in.fog.a);
+    return vec4(color, 1f);
 }

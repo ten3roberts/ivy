@@ -6,19 +6,23 @@ pub mod skinned_mesh_renderer;
 
 use std::any::type_name;
 
-use flax::{Query, World};
+use flax::{fetch::entity_refs, EntityRef, Query, World};
 use glam::{Mat4, Vec3};
+use itertools::Itertools;
 use ivy_assets::{stored::Store, Asset, AssetCache};
-use ivy_core::{impl_for_tuples, main_camera, world_transform, Bundle};
+use ivy_core::{
+    impl_for_tuples, main_camera, palette::Srgb, to_linear_vec3, world_transform, Bundle, Color,
+    ColorExt,
+};
 use ivy_wgpu_types::shader::TargetDesc;
 use wgpu::{
-    AddressMode, BindGroup, BindGroupLayout, BufferUsages, FilterMode, Operations, Queue,
-    RenderPass, RenderPassColorAttachment, RenderPassDescriptor, ShaderStages, TextureUsages,
-    TextureViewDescriptor, TextureViewDimension,
+    AddressMode, BindGroup, BindGroupLayout, BufferUsages, Extent3d, FilterMode, Operations, Queue,
+    RenderPass, RenderPassColorAttachment, RenderPassDescriptor, ShaderStages, TextureDescriptor,
+    TextureUsages, TextureViewDescriptor, TextureViewDimension,
 };
 
 use crate::{
-    components::{forward_pass, material, mesh, projection_matrix},
+    components::{environment_data, forward_pass, material, mesh, projection_matrix},
     material::PbrMaterial,
     material_desc::MaterialDesc,
     mesh_desc::MeshDesc,
@@ -100,7 +104,6 @@ pub struct RenderContext<'a> {
     pub queue: &'a Queue,
     pub store: &'a mut RendererStore,
     // pub camera_data: &'a CameraShaderData,
-    pub environment: Option<&'a EnvironmentData>,
     pub layouts: &'a [&'a BindGroupLayout],
     pub bind_groups: &'a [&'a BindGroup],
     pub target_desc: TargetDesc<'a>,
@@ -167,14 +170,15 @@ impl CameraRenderer for Box<dyn CameraRenderer> {
     }
 }
 
-pub struct EnvironmentData {
-    environment_map: TextureHandle,
-    irradiance_map: TextureHandle,
-    specular_map: TextureHandle,
-    integrated_brdf: TextureHandle,
+#[derive(Debug, Clone, Copy)]
+pub struct SkyboxTextures {
+    pub environment_map: TextureHandle,
+    pub irradiance_map: TextureHandle,
+    pub specular_map: TextureHandle,
+    pub integrated_brdf: TextureHandle,
 }
 
-impl EnvironmentData {
+impl SkyboxTextures {
     pub fn new(
         environment_map: TextureHandle,
         irradiance_map: TextureHandle,
@@ -190,21 +194,45 @@ impl EnvironmentData {
     }
 }
 
-pub fn get_camera_data(world: &World) -> Option<CameraData> {
-    let (&world_transform, &projection) = Query::new((world_transform(), projection_matrix()))
+#[derive(Default, Debug, Clone, Copy)]
+pub struct EnvironmentData {
+    pub fog_color: Srgb,
+    pub fog_density: f32,
+}
+
+impl EnvironmentData {
+    pub fn new(fog_color: Srgb, fog_density: f32) -> Self {
+        Self {
+            fog_color,
+            fog_density,
+        }
+    }
+}
+
+pub fn get_main_camera_data(world: &World) -> Option<CameraData> {
+    Query::new(entity_refs())
         .with(main_camera())
         .borrow(world)
-        .first()?;
+        .first()
+        .map(|entity| get_camera_data(&entity))
+}
+
+pub fn get_camera_data(camera: &EntityRef) -> CameraData {
+    let world_transform = camera.get_copy(world_transform()).unwrap_or_default();
+    let projection = camera.get_copy(projection_matrix()).unwrap_or_default();
+    let env_data = camera.get_copy(environment_data()).unwrap_or_default();
 
     let view = world_transform.inverse();
 
-    Some(CameraData {
+    CameraData {
         viewproj: projection * view,
         view,
         projection,
         camera_pos: world_transform.transform_point3(Vec3::ZERO),
         padding: 0.0,
-    })
+        fog_color: to_linear_vec3(env_data.fog_color),
+        fog_density: env_data.fog_density,
+    }
 }
 
 pub struct CameraNode {
@@ -213,7 +241,6 @@ pub struct CameraNode {
     depth_texture: TextureHandle,
     store: RendererStore,
     output: TextureHandle,
-    environment: EnvironmentData,
     /// 0: camera data
     /// 1: environment map
     /// 2: irradiance map
@@ -221,6 +248,7 @@ pub struct CameraNode {
     /// 4: integrated brdf
     pub bind_group: Option<BindGroup>,
     light_manager: LightManager,
+    skybox: Option<SkyboxTextures>,
 }
 
 impl CameraNode {
@@ -230,7 +258,7 @@ impl CameraNode {
         output: TextureHandle,
         renderer: impl 'static + CameraRenderer,
         light_manager: LightManager,
-        environment: EnvironmentData,
+        skybox: Option<SkyboxTextures>,
     ) -> Self {
         Self {
             light_manager,
@@ -239,7 +267,7 @@ impl CameraNode {
             depth_texture,
             store: Default::default(),
             output,
-            environment,
+            skybox,
             bind_group: None,
         }
     }
@@ -255,8 +283,12 @@ impl Node for CameraNode {
 
         let depth = ctx.get_texture(self.depth_texture);
 
-        if let Some(camera_data) = get_camera_data(ctx.world) {
-            self.shader_data.data = camera_data;
+        if let Some(camera) = Query::new(entity_refs())
+            .with(main_camera())
+            .borrow(ctx.world)
+            .first()
+        {
+            self.shader_data.data = get_camera_data(&camera);
 
             self.shader_data
                 .buffer
@@ -306,24 +338,62 @@ impl Node for CameraNode {
                 ..Default::default()
             });
 
+            let (environment_map, irradiance_map, specular_map, integrated_brdf) =
+                match &self.skybox {
+                    Some(v) => (
+                        ctx.get_texture(v.environment_map)
+                            .create_view(&cubemap_view),
+                        ctx.get_texture(v.irradiance_map).create_view(&cubemap_view),
+                        ctx.get_texture(v.specular_map).create_view(&cubemap_view),
+                        ctx.get_texture(v.integrated_brdf)
+                            .create_view(&Default::default()),
+                    ),
+                    None => {
+                        let default_texture = ctx.gpu.device.create_texture(&TextureDescriptor {
+                            label: Some("default_skybox"),
+                            size: Extent3d {
+                                width: 64,
+                                height: 64,
+                                depth_or_array_layers: 6,
+                            },
+                            mip_level_count: 1,
+                            sample_count: 1,
+                            dimension: wgpu::TextureDimension::D2,
+                            format: wgpu::TextureFormat::R16Float,
+                            usage: TextureUsages::TEXTURE_BINDING,
+                            view_formats: &[],
+                        });
+
+                        let default_brdf = ctx.gpu.device.create_texture(&TextureDescriptor {
+                            label: Some("default_integrated_brdf"),
+                            size: Extent3d {
+                                width: 64,
+                                height: 64,
+                                depth_or_array_layers: 1,
+                            },
+                            mip_level_count: 1,
+                            sample_count: 1,
+                            dimension: wgpu::TextureDimension::D2,
+                            format: wgpu::TextureFormat::R16Float,
+                            usage: TextureUsages::TEXTURE_BINDING,
+                            view_formats: &[],
+                        });
+
+                        (
+                            default_texture.create_view(&cubemap_view),
+                            default_texture.create_view(&cubemap_view),
+                            default_texture.create_view(&cubemap_view),
+                            default_brdf.create_view(&Default::default()),
+                        )
+                    }
+                };
+
             BindGroupBuilder::new("Globals")
                 .bind_buffer(&self.shader_data.buffer)
-                .bind_texture(
-                    &ctx.get_texture(self.environment.environment_map)
-                        .create_view(&cubemap_view),
-                )
-                .bind_texture(
-                    &ctx.get_texture(self.environment.irradiance_map)
-                        .create_view(&cubemap_view),
-                )
-                .bind_texture(
-                    &ctx.get_texture(self.environment.specular_map)
-                        .create_view(&cubemap_view),
-                )
-                .bind_texture(
-                    &ctx.get_texture(self.environment.integrated_brdf)
-                        .create_view(&Default::default()),
-                )
+                .bind_texture(&environment_map)
+                .bind_texture(&irradiance_map)
+                .bind_texture(&specular_map)
+                .bind_texture(&integrated_brdf)
                 .bind_sampler(&environment_sampler)
                 .build(ctx.gpu, &self.shader_data.layout)
         });
@@ -343,7 +413,6 @@ impl Node for CameraNode {
                 depth_format: depth.format().into(),
                 sample_count: output.sample_count(),
             },
-            environment: Some(&self.environment),
             bind_groups: &[bind_group, self.light_manager.bind_group().unwrap()],
             layouts: &[&self.shader_data.layout, self.light_manager.layout()],
         };
@@ -381,7 +450,7 @@ impl Node for CameraNode {
     }
 
     fn read_dependencies(&self) -> Vec<Dependency> {
-        vec![
+        [
             Dependency::texture(
                 self.light_manager.shadow_maps(),
                 TextureUsages::TEXTURE_BINDING,
@@ -390,23 +459,23 @@ impl Node for CameraNode {
                 self.light_manager.shadow_camera_buffer(),
                 BufferUsages::STORAGE,
             ),
-            Dependency::texture(
-                self.environment.environment_map,
-                TextureUsages::TEXTURE_BINDING,
-            ),
-            Dependency::texture(
-                self.environment.irradiance_map,
-                TextureUsages::TEXTURE_BINDING,
-            ),
-            Dependency::texture(
-                self.environment.specular_map,
-                TextureUsages::TEXTURE_BINDING,
-            ),
-            Dependency::texture(
-                self.environment.integrated_brdf,
-                TextureUsages::TEXTURE_BINDING,
-            ),
         ]
+        .into_iter()
+        .chain(
+            self.skybox
+                .as_ref()
+                .map(|v| {
+                    [
+                        Dependency::texture(v.environment_map, TextureUsages::TEXTURE_BINDING),
+                        Dependency::texture(v.irradiance_map, TextureUsages::TEXTURE_BINDING),
+                        Dependency::texture(v.specular_map, TextureUsages::TEXTURE_BINDING),
+                        Dependency::texture(v.integrated_brdf, TextureUsages::TEXTURE_BINDING),
+                    ]
+                })
+                .into_iter()
+                .flatten(),
+        )
+        .collect_vec()
     }
 
     fn write_dependencies(&self) -> Vec<Dependency> {
@@ -434,7 +503,9 @@ pub struct CameraData {
     pub view: Mat4,
     pub projection: Mat4,
     pub camera_pos: Vec3,
-    padding: f32,
+    pub padding: f32,
+    pub fog_color: Vec3,
+    pub fog_density: f32,
 }
 
 pub struct CameraShaderData {

@@ -7,7 +7,7 @@ use crate::{
     light::{LightData, LightKind},
     material_desc::MaterialDesc,
     mesh_desc::MeshDesc,
-    renderer::shadowmapping::LightShadowData,
+    renderer::{shadowmapping::LightShadowData, EnvironmentData},
     shader::ShaderPassDesc,
 };
 
@@ -31,4 +31,6 @@ component! {
 
     /// Shadow-specific data added from shadow mapping node
     pub light_shadow_data: LightShadowData,
+
+    pub environment_data: EnvironmentData,
 }

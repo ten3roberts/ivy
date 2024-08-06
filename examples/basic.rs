@@ -1,4 +1,4 @@
-use std::{f32::consts::TAU, mem::size_of, sync::Arc, time::Instant};
+use std::{mem::size_of, sync::Arc, time::Instant};
 
 use anyhow::Context;
 use flax::{
@@ -6,7 +6,7 @@ use flax::{
     Schedule, System, World,
 };
 use glam::{vec3, EulerRot, Mat4, Quat, Vec2, Vec3};
-use image::{DynamicImage, Rgba};
+use image::DynamicImage;
 use ivy_assets::{Asset, AssetCache};
 use ivy_core::{
     app::{InitEvent, TickEvent},
@@ -16,31 +16,27 @@ use ivy_core::{
     palette::Srgb,
     position,
     profiling::ProfilingLayer,
-    rotation, App, Color, ColorExt, EngineLayer, EntityBuilderExt, Gizmos, Layer, TransformBundle,
-    DEG_90,
+    rotation, App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer, TransformBundle,
 };
 use ivy_gltf::{animation::player::Animator, components::animator, Document};
 use ivy_input::{
     components::input_state,
     layer::InputLayer,
     types::{Key, NamedKey},
-    Action, Axis3, BindingExt, CursorMovement, InputState, KeyBinding, MouseButtonBinding,
+    Action, BindingExt, CursorMovement, InputState, KeyBinding, MouseButtonBinding,
 };
 use ivy_postprocessing::{
     bloom::BloomNode,
     depth_resolve::MsaaDepthResolve,
     hdri::{HdriProcessor, HdriProcessorNode},
-    overlay::OverlayNode,
     skybox::SkyboxRenderer,
     tonemap::TonemapNode,
 };
-use ivy_rendergraph::components::render_graph;
 use ivy_scene::{GltfNodeExt, NodeMountOptions};
-use ivy_vulkan::vk::{BufferCollectionCreateInfoFUCHSIABuilder, Extent3D};
 use ivy_wgpu::{
     components::{
-        cast_shadow, forward_pass, light_data, light_kind, main_window, projection_matrix,
-        shadow_pass, window,
+        cast_shadow, environment_data, forward_pass, light_data, light_kind, main_window,
+        projection_matrix, shadow_pass, window,
     },
     driver::{WindowHandle, WinitDriver},
     events::ResizedEvent,
@@ -52,7 +48,7 @@ use ivy_wgpu::{
     renderer::{
         gizmos_renderer::GizmosRendererNode, mesh_renderer::MeshRenderer,
         shadowmapping::ShadowMapNode, skinned_mesh_renderer::SkinnedMeshRenderer, CameraNode,
-        EnvironmentData, LightManager, MsaaResolve, RenderObjectBundle,
+        EnvironmentData, LightManager, MsaaResolve, RenderObjectBundle, SkyboxTextures,
     },
     rendergraph::{self, BufferDesc, ExternalResources, ManagedTextureDesc, RenderGraph},
     shader_library::{self, ModuleDesc, ShaderLibrary},
@@ -66,6 +62,8 @@ use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt
 use tracing_tree::HierarchicalLayer;
 use wgpu::{BufferUsages, Extent3d, TextureDimension, TextureFormat};
 use winit::{dpi::LogicalSize, window::WindowAttributes};
+
+const ENABLE_SKYBOX: bool = false;
 
 pub fn main() -> anyhow::Result<()> {
     registry()
@@ -174,25 +172,29 @@ impl LogicLayer {
                     MaterialData::new()
                         .with_metallic_factor(0.0)
                         .with_albedo(TextureDesc::path(
-                            "assets/textures/BaseCollection/ConcreteTiles/Concrete007_2K-PNG_Color.png",
-                        ))
-                        .with_normal(TextureDesc::path(
-                            "assets/textures/BaseCollection/ConcreteTiles/Concrete007_2K-PNG_NormalGL.png",
-                        ))
-                        .with_metallic_roughness(TextureDesc::path(
-                            "assets/textures/BaseCollection/ConcreteTiles/Concrete007_2K-PNG_Roughness.png",
-                        ))
-                        .with_ambient_occlusion(TextureDesc::path(
-                            "assets/textures/BaseCollection/ConcreteTiles/Concrete007_2K-PNG_AmbientOcclusion.png",
-                        ))
-                        .with_displacement(TextureDesc::path(
-                            "assets/textures/BaseCollection/ConcreteTiles/Concrete007_2K-PNG_Displacement.png",
-                        )),
+                        "assets/textures/BaseCollection/ConcreteTiles/Concrete007_2K-PNG_Color.png",
+                    )),
+                    // .with_normal(TextureDesc::path(
+                    //     "assets/textures/BaseCollection/ConcreteTiles/Concrete007_2K-PNG_NormalGL.png",
+                    // ))
+                    // .with_metallic_roughness(TextureDesc::path(
+                    //     "assets/textures/BaseCollection/ConcreteTiles/Concrete007_2K-PNG_Roughness.png",
+                    // ))
+                    // .with_ambient_occlusion(TextureDesc::path(
+                    //     "assets/textures/BaseCollection/ConcreteTiles/Concrete007_2K-PNG_AmbientOcclusion.png",
+                    // ))
+                    // .with_displacement(TextureDesc::path(
+                    //     "assets/textures/BaseCollection/ConcreteTiles/Concrete007_2K-PNG_Displacement.png",
+                    // )),
                 );
 
                 cmd.lock().spawn(
                     Entity::builder()
-                        .mount(TransformBundle::new(Vec3::ZERO, Quat::IDENTITY, Vec3::ONE * 2.0))
+                        .mount(TransformBundle::new(
+                            Vec3::ZERO,
+                            Quat::IDENTITY,
+                            Vec3::ONE * 2.0,
+                        ))
                         .mount(RenderObjectBundle {
                             mesh: plane_mesh.clone(),
                             material: plane_material.clone(),
@@ -203,7 +205,9 @@ impl LogicLayer {
 
                 let sphere_mesh = MeshDesc::content(assets.load(&UvSphereDesc::default()));
                 let plastic_material = MaterialDesc::content(
-                    MaterialData::new().with_metallic_factor(0.0).with_roughness_factor(0.2),
+                    MaterialData::new()
+                        .with_metallic_factor(0.0)
+                        .with_roughness_factor(0.2),
                 );
 
                 for i in 0..5 {
@@ -400,6 +404,10 @@ impl Layer for LogicLayer {
             .mount(TransformBundle::new(Vec3::Y, Quat::IDENTITY, Vec3::ONE))
             .set(main_camera(), ())
             .set_default(projection_matrix())
+            .set(
+                environment_data(),
+                EnvironmentData::new(Srgb::new(0.2, 0.2, 0.3), 0.01),
+            )
             .set(
                 input_state(),
                 InputState::new()
@@ -621,72 +629,88 @@ impl RenderGraphRenderer {
     pub fn new(world: &mut World, assets: &AssetCache, gpu: &Gpu, surface: Surface) -> Self {
         let size = surface.size();
 
-        let image: Asset<DynamicImage> =
-            assets.load("ivy-postprocessing/hdrs/lauter_waterfall_4k.hdr");
-        // assets.load("ivy-postprocessing/hdrs/kloofendal_puresky_2k.hdr");
-        // assets.load("ivy-postprocessing/hdrs/industrial_sunset_puresky_2k.hdr");
-
-        const MAX_REFLECTION_LOD: u32 = 8;
-        let hdr_format = TextureFormat::Rgba16Float;
-        let hdri_processor = HdriProcessor::new(gpu, hdr_format, MAX_REFLECTION_LOD);
-
         let mut render_graph = RenderGraph::new();
 
-        let skybox = render_graph.resources.insert_texture(ManagedTextureDesc {
-            label: "hdr_cubemap".into(),
-            extent: Extent3d {
-                width: 1024,
-                height: 1024,
-                depth_or_array_layers: 6,
-            },
-            mip_level_count: max_mip_levels(1024, 1024),
-            sample_count: 1,
-            dimension: TextureDimension::D2,
-            format: hdri_processor.format(),
-            persistent: true,
-        });
+        let skybox_textures;
+        let hdr_format = TextureFormat::Rgba16Float;
 
-        let skybox_ir = render_graph.resources.insert_texture(ManagedTextureDesc {
-            label: "skybox_ir".into(),
-            extent: Extent3d {
-                width: 128,
-                height: 128,
-                depth_or_array_layers: 6,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: TextureDimension::D2,
-            format: hdri_processor.format(),
-            persistent: true,
-        });
+        if ENABLE_SKYBOX {
+            let image: Asset<DynamicImage> =
+                assets.load("ivy-postprocessing/hdrs/lauter_waterfall_4k.hdr");
+            // assets.load("ivy-postprocessing/hdrs/kloofendal_puresky_2k.hdr");
+            // assets.load("ivy-postprocessing/hdrs/industrial_sunset_puresky_2k.hdr");
 
-        let skybox_specular = render_graph.resources.insert_texture(ManagedTextureDesc {
-            label: "hdr_cubemap".into(),
-            extent: Extent3d {
-                width: 128,
-                height: 128,
-                depth_or_array_layers: 6,
-            },
-            mip_level_count: MAX_REFLECTION_LOD,
-            sample_count: 1,
-            dimension: TextureDimension::D2,
-            format: hdri_processor.format(),
-            persistent: true,
-        });
+            const MAX_REFLECTION_LOD: u32 = 8;
+            let hdri_processor = HdriProcessor::new(gpu, hdr_format, MAX_REFLECTION_LOD);
 
-        let integrated_brdf = render_graph.resources.insert_texture(ManagedTextureDesc {
-            label: "integrated_brdf".into(),
-            extent: Extent3d {
-                width: 1024,
-                height: 1024,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: TextureDimension::D2,
-            format: hdr_format,
-            persistent: true,
-        });
+            let environment_map = render_graph.resources.insert_texture(ManagedTextureDesc {
+                label: "hdr_cubemap".into(),
+                extent: Extent3d {
+                    width: 1024,
+                    height: 1024,
+                    depth_or_array_layers: 6,
+                },
+                mip_level_count: max_mip_levels(1024, 1024),
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                format: hdri_processor.format(),
+                persistent: true,
+            });
+
+            let irradiance_map = render_graph.resources.insert_texture(ManagedTextureDesc {
+                label: "skybox_ir".into(),
+                extent: Extent3d {
+                    width: 128,
+                    height: 128,
+                    depth_or_array_layers: 6,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                format: hdri_processor.format(),
+                persistent: true,
+            });
+
+            let specular_map = render_graph.resources.insert_texture(ManagedTextureDesc {
+                label: "hdr_cubemap".into(),
+                extent: Extent3d {
+                    width: 128,
+                    height: 128,
+                    depth_or_array_layers: 6,
+                },
+                mip_level_count: MAX_REFLECTION_LOD,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                format: hdri_processor.format(),
+                persistent: true,
+            });
+
+            let integrated_brdf = render_graph.resources.insert_texture(ManagedTextureDesc {
+                label: "integrated_brdf".into(),
+                extent: Extent3d {
+                    width: 1024,
+                    height: 1024,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                format: hdr_format,
+                persistent: true,
+            });
+
+            let skybox = SkyboxTextures::new(
+                environment_map,
+                irradiance_map,
+                specular_map,
+                integrated_brdf,
+            );
+
+            skybox_textures = Some(skybox);
+            render_graph.add_node(HdriProcessorNode::new(hdri_processor, image, skybox));
+        } else {
+            skybox_textures = None;
+        }
 
         let extent = wgpu::Extent3d {
             width: size.width,
@@ -794,15 +818,6 @@ impl RenderGraphRenderer {
             shader_library,
         ));
 
-        render_graph.add_node(HdriProcessorNode::new(
-            hdri_processor,
-            image,
-            skybox,
-            skybox_ir,
-            skybox_specular,
-            integrated_brdf,
-        ));
-
         let light_manager = LightManager::new(gpu, shadow_maps, shadow_camera_buffer, 4);
 
         render_graph.add_node(CameraNode::new(
@@ -811,7 +826,7 @@ impl RenderGraphRenderer {
             multisampled_hdr,
             camera_renderer,
             light_manager,
-            EnvironmentData::new(skybox, skybox_ir, skybox_specular, integrated_brdf),
+            skybox_textures,
         ));
 
         // TODO: make chaining easier

@@ -3,7 +3,7 @@ use std::iter::repeat;
 use flax::{FetchExt, Query};
 use glam::{vec3, Mat4, Vec2, Vec3, Vec4};
 use itertools::Itertools;
-use ivy_core::world_transform;
+use ivy_core::{to_linear_vec3, world_transform};
 use ivy_input::Stimulus;
 use ivy_wgpu_types::{BindGroupBuilder, BindGroupLayoutBuilder, Gpu, TypedBuffer};
 use wgpu::{
@@ -94,8 +94,7 @@ impl LightManager {
         .borrow(ctx.world)
         .iter()
         .map(|(transform, data, kind, shadow_data)| {
-            let color = (vec3(data.color.red, data.color.green, data.color.blue) * data.intensity)
-                .extend(1.0);
+            let color = (to_linear_vec3(data.color) * data.intensity).extend(1.0);
 
             let position = transform.transform_point3(Vec3::ZERO);
             let direction = transform.transform_vector3(Vec3::Z).normalize();
