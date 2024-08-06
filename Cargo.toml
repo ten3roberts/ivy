@@ -93,9 +93,8 @@ glam.workspace = true
 parking_lot.workspace = true
 slotmap.workspace = true
 thiserror.workspace = true
-tokio = { version = "1.18.2", features = ["full"] }
 tracing-subscriber.workspace = true
-tracing-tree = "0.3.0"
+tracing-tree = "0.4.0"
 tracing.workspace = true
 wgpu.workspace = true
 winit.workspace = true
