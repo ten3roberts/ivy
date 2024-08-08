@@ -2,6 +2,7 @@ use anyhow::Context;
 use bytemuck::Zeroable;
 use glam::{Mat4, Vec3, Vec4};
 use ivy_core::{engine, gizmos, ColorExt};
+use ivy_graphics::mesh::MeshData;
 use ivy_wgpu_types::{
     shader::{ShaderDesc, TargetDesc},
     BindGroupBuilder, BindGroupLayoutBuilder, Gpu, Shader, TypedBuffer,
@@ -14,7 +15,6 @@ use wgpu::{
 
 use crate::{
     mesh::{Mesh, Vertex, VertexDesc},
-    mesh_desc::MeshData,
     rendergraph::{Dependency, Node, NodeExecutionContext, NodeUpdateContext, TextureHandle},
 };
 
@@ -36,7 +36,7 @@ impl GizmosRendererNode {
     pub fn new(gpu: &Gpu, output: TextureHandle, depth_buffer: TextureHandle) -> Self {
         let mesh = MeshData::quad();
 
-        let mesh = Mesh::new(gpu, mesh.vertices(), mesh.indices());
+        let mesh = Mesh::new(gpu, &Vertex::compose_from_mesh(&mesh), mesh.indices());
 
         let layout = BindGroupLayoutBuilder::new("gizmos")
             .bind_uniform_buffer(ShaderStages::VERTEX)

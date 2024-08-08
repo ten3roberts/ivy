@@ -3,15 +3,24 @@ pub mod components;
 
 use animation::skin::Skin;
 use animation::Animation;
+use futures::SinkExt;
 use futures::StreamExt;
 use futures::TryStreamExt;
 use glam::Mat4;
 use glam::Quat;
+use glam::U16Vec4;
+use glam::Vec2;
+use glam::Vec3;
+use glam::Vec4;
 use image::{DynamicImage, ImageBuffer, RgbImage, RgbaImage};
+use itertools::izip;
 use itertools::Itertools;
 use ivy_assets::fs::AsyncAssetFromPath;
+use ivy_assets::AssetDesc;
 use ivy_assets::AssetId;
 use ivy_core::TransformBundle;
+use ivy_graphics::mesh::MeshData;
+use ivy_profiling::profile_function;
 use ivy_profiling::profile_scope;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -32,6 +41,7 @@ pub struct DocumentData {
 
     buffer_data: Arc<Vec<gltf::buffer::Data>>,
     images: Vec<Asset<DynamicImage>>,
+    mesh_data: Vec<Vec<Asset<MeshData>>>,
 
     skins: Vec<Asset<Skin>>,
     // buffer_data: Vec<gltf::buffer::Data>,
@@ -76,6 +86,10 @@ impl DocumentData {
 
     pub fn images(&self) -> &[Asset<DynamicImage>] {
         &self.images
+    }
+
+    pub fn mesh_data(&self) -> &[Vec<Asset<MeshData>>] {
+        &self.mesh_data
     }
 }
 
@@ -124,6 +138,30 @@ impl Document {
             .try_collect()
             .await?;
 
+        let meshes: Vec<_> = futures::stream::iter(gltf.meshes().enumerate())
+            .map(|(i, v)| {
+                let buffer_data = buffer_data.clone();
+                async move {
+                    let primitives = v
+                        .primitives()
+                        .map(|primitive| {
+                            anyhow::Ok(assets.insert(mesh_from_gltf(
+                                assets,
+                                &primitive,
+                                &buffer_data,
+                            )?))
+                        })
+                        .try_collect()?;
+
+                    anyhow::Ok(primitives)
+                }
+                .instrument(tracing::info_span!("load_image", i))
+            })
+            .boxed()
+            .buffered(4)
+            .try_collect()
+            .await?;
+
         let named_meshes = gltf
             .document
             .meshes()
@@ -163,6 +201,7 @@ impl Document {
             images,
             named_animations,
             skins,
+            mesh_data: meshes,
         });
 
         // let skins: Vec<_> = data
@@ -258,9 +297,11 @@ fn load_image(image: gltf::image::Data) -> Result<DynamicImage, anyhow::Error> {
     let image: DynamicImage = match image.format {
         gltf::image::Format::R8 => todo!(),
         gltf::image::Format::R8G8 => todo!(),
-        gltf::image::Format::R8G8B8 => RgbImage::from_raw(image.width, image.height, image.pixels)
-            .unwrap()
-            .into(),
+        gltf::image::Format::R8G8B8 => {
+            DynamicImage::from(RgbImage::from_raw(image.width, image.height, image.pixels).unwrap())
+                .to_rgba8()
+                .into()
+        }
         gltf::image::Format::R8G8B8A8 => {
             RgbaImage::from_raw(image.width, image.height, image.pixels)
                 .unwrap()
@@ -281,9 +322,12 @@ fn load_image(image: gltf::image::Data) -> Result<DynamicImage, anyhow::Error> {
                 })
                 .collect::<Vec<_>>();
 
-            ImageBuffer::<image::Rgb<u16>, _>::from_raw(image.width, image.height, pixels)
-                .unwrap()
-                .into()
+            DynamicImage::from(
+                ImageBuffer::<image::Rgb<u16>, _>::from_raw(image.width, image.height, pixels)
+                    .unwrap(),
+            )
+            .to_rgba8()
+            .into()
         }
         gltf::image::Format::R16G16B16A16 => todo!(),
         gltf::image::Format::R32G32B32FLOAT => todo!(),
@@ -460,4 +504,67 @@ impl GltfPrimitive {
     pub fn data(&self) -> &Asset<DocumentData> {
         &self.data
     }
+}
+
+impl AssetDesc<MeshData> for GltfPrimitive {
+    type Error = anyhow::Error;
+
+    fn load(&self, _: &AssetCache) -> Result<Asset<MeshData>, Self::Error> {
+        self.data()
+            .mesh_data()
+            .get(self.mesh_index())
+            .ok_or_else(|| anyhow::anyhow!("mesh out of bounds: {}", self.mesh_index(),))?
+            .get(self.index())
+            .ok_or_else(|| anyhow::anyhow!("mesh primitive out of bounds: {}", self.index(),))
+            .cloned()
+    }
+}
+
+pub(crate) fn mesh_from_gltf(
+    _: &AssetCache,
+    primitive: &gltf::Primitive,
+    buffer_data: &[gltf::buffer::Data],
+) -> anyhow::Result<MeshData> {
+    profile_function!();
+
+    let reader = primitive.reader(|buffer| Some(&buffer_data[buffer.index()]));
+
+    let indices = reader
+        .read_indices()
+        .into_iter()
+        .flat_map(|val| val.into_u32())
+        .collect_vec();
+
+    let pos = reader
+        .read_positions()
+        .into_iter()
+        .flatten()
+        .map(Vec3::from);
+
+    let normals = reader.read_normals().into_iter().flatten().map(Vec3::from);
+
+    let joints = reader
+        .read_joints(0)
+        .into_iter()
+        .flat_map(|v| v.into_u16())
+        .map(U16Vec4::from)
+        .collect_vec();
+
+    let weights = reader
+        .read_weights(0)
+        .into_iter()
+        .flat_map(|v| v.into_f32())
+        .map(Vec4::from)
+        .collect_vec();
+
+    let texcoord = reader
+        .read_tex_coords(0)
+        .into_iter()
+        .flat_map(|val| val.into_f32())
+        .map(Vec2::from);
+
+    let mut this = MeshData::skinned(indices, pos, texcoord, normals, joints, weights);
+
+    this.generate_tangents()?;
+    Ok(this)
 }

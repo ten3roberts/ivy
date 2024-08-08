@@ -697,9 +697,9 @@ impl RenderGraphRenderer {
 
         if ENABLE_SKYBOX {
             let image: Asset<DynamicImage> =
-                assets.load("ivy-postprocessing/hdrs/lauter_waterfall_4k.hdr");
+                // assets.load("ivy-postprocessing/hdrs/lauter_waterfall_4k.hdr");
             // assets.load("ivy-postprocessing/hdrs/kloofendal_puresky_2k.hdr");
-            // assets.load("ivy-postprocessing/hdrs/industrial_sunset_puresky_2k.hdr");
+            assets.load("ivy-postprocessing/hdrs/kloofendal_48d_partly_cloudy_puresky_2k.hdr");
 
             const MAX_REFLECTION_LOD: u32 = 8;
             let hdri_processor = HdriProcessor::new(gpu, hdr_format, MAX_REFLECTION_LOD);

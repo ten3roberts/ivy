@@ -247,23 +247,12 @@ impl SkinnedMeshRenderer {
 
             let create_batch = |key: &BatchKey| {
                 let mut load_mesh = |v: &MeshDesc| {
-                    let data = v.load_data(assets).unwrap();
-                    assert!(
-                        !data
-                            .vertices()
-                            .iter()
-                            .all(|v| v.tangent.xyz().length() == 0.0),
-                        "Tangents should be non-zero {:?}",
-                        data.vertices()
-                            .iter()
-                            .map(|v| v.tangent.to_string())
-                            .collect_vec()
-                    );
+                    let mesh_data = v.load_data(assets).unwrap();
 
                     Arc::new(self.mesh_buffer.insert(
                         gpu,
-                        &data.skinned_vertices().collect_vec(),
-                        data.indices(),
+                        &SkinnedVertex::compose_from_mesh(&mesh_data),
+                        mesh_data.indices(),
                     ))
                 };
 

@@ -11,6 +11,7 @@ ivy-wgpu-types = { path = "../ivy-wgpu-types" }
 ivy-assets = { path = "../ivy-assets" }
 ivy-input = { path = "../ivy-input" }
 ivy-gltf = { path = "../ivy-gltf" }
+ivy-graphics = { path = "../ivy-graphics" }
 
 parking_lot.workspace = true
 naga_oil.workspace = true

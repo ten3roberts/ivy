@@ -5,6 +5,7 @@ use glam::uvec2;
 use image::{ColorType, DynamicImage, GenericImageView, ImageBuffer, Rgba, RgbaImage};
 use itertools::Itertools;
 use ivy_assets::{Asset, AssetCache, AssetDesc};
+use ivy_core::profiling::{profile_function, profile_scope};
 use wgpu::{
     BufferUsages, CommandEncoderDescriptor, ComputePassDescriptor, Extent3d, ImageCopyBuffer,
     ImageCopyTexture, ImageDataLayout, Origin3d, Texture, TextureFormat, TextureUsages,
@@ -46,6 +47,7 @@ pub fn texture_from_image(
     image: &image::DynamicImage,
     desc: TextureFromImageDesc,
 ) -> anyhow::Result<Texture> {
+    profile_function!();
     let _span = tracing::debug_span!("texture_from_image", label = %desc.label).entered();
 
     let image = normalize_image_format(image, desc.format)?;
@@ -79,27 +81,30 @@ pub fn texture_from_image(
 
     tracing::trace!( color_format = ?image.color(), "loading image of format");
 
-    // Write to the texture
-    gpu.queue.write_texture(
-        // Tells wgpu where to copy the pixel data
-        wgpu::ImageCopyTexture {
-            texture: &texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
-        // The actual pixel data
-        image.as_bytes(),
-        // The layout of the texture
-        wgpu::ImageDataLayout {
-            offset: 0,
-            bytes_per_row: Some(size.width * desc.format.block_copy_size(None).unwrap()),
-            rows_per_image: Some(size.height),
-        },
-        size,
-    );
-
+    {
+        profile_scope!("write_texture");
+        // Write to the texture
+        gpu.queue.write_texture(
+            // Tells wgpu where to copy the pixel data
+            wgpu::ImageCopyTexture {
+                texture: &texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            // The actual pixel data
+            image.as_bytes(),
+            // The layout of the texture
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(size.width * desc.format.block_copy_size(None).unwrap()),
+                rows_per_image: Some(size.height),
+            },
+            size,
+        );
+    }
     if desc.generate_mipmaps {
+        puffin::profile_scope!("generate_mipmaps");
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
         generate_mipmaps(gpu, &mut encoder, &texture, mip_level_count, 0);
         gpu.queue.submit([encoder.finish()]);
@@ -111,11 +116,34 @@ pub fn texture_from_image(
 fn normalize_image_format(
     image: &DynamicImage,
     format: TextureFormat,
-) -> anyhow::Result<DynamicImage> {
+) -> anyhow::Result<Cow<'_, DynamicImage>> {
+    profile_function!(format!("{:?} => {:?}", image.color(), format));
     let image = match format {
-        TextureFormat::Rgba8Unorm => image.to_rgba8().into(),
-        TextureFormat::Rgba8UnormSrgb => image.to_rgba8().into(),
-        TextureFormat::Rgba16Unorm => image.to_rgba16().into(),
+        TextureFormat::Rgba8Unorm => {
+            if image.color() != ColorType::Rgba8 {
+                Cow::Owned(image.to_rgba8().into())
+            } else {
+                Cow::Borrowed(image)
+            }
+        }
+        TextureFormat::Rgba8UnormSrgb => {
+            if image.color() != ColorType::Rgba8 {
+                {
+                    Cow::Owned(image.to_rgba8().into())
+                }
+            } else {
+                Cow::Borrowed(image)
+            }
+        }
+        TextureFormat::Rgba16Unorm => {
+            if image.color() != ColorType::Rgba16 {
+                {
+                    Cow::Owned(image.to_rgba16().into())
+                }
+            } else {
+                Cow::Borrowed(image)
+            }
+        }
         _ => anyhow::bail!("image loading from format {format:?} is not supported"),
     };
 

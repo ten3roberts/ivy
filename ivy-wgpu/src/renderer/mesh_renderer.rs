@@ -52,7 +52,11 @@ struct Batch {
 }
 
 impl Batch {
-    pub fn new(mesh: Arc<MeshHandle>, material: Asset<PbrMaterial>, shader: Handle<Shader>) -> Self {
+    pub fn new(
+        mesh: Arc<MeshHandle>,
+        material: Asset<PbrMaterial>,
+        shader: Handle<Shader>,
+    ) -> Self {
         Self {
             instance_count: 0,
             first_instance: 0,
@@ -222,23 +226,13 @@ impl MeshRenderer {
 
             let mut create_batch = |key: &BatchKey| {
                 let mut load_mesh = |v: &MeshDesc| {
-                    let data = v.load_data(assets).unwrap();
-                    assert!(
-                        !data
-                            .vertices()
-                            .iter()
-                            .all(|v| v.tangent.xyz().length() == 0.0),
-                        "Tangents should be non-zero {:?}",
-                        data.vertices()
-                            .iter()
-                            .map(|v| v.tangent.to_string())
-                            .collect_vec()
-                    );
+                    let mesh_data = v.load_data(assets).unwrap();
 
-                    Arc::new(
-                        self.mesh_buffer
-                            .insert(gpu, data.vertices(), data.indices()),
-                    )
+                    Arc::new(self.mesh_buffer.insert(
+                        gpu,
+                        &Vertex::compose_from_mesh(&mesh_data),
+                        mesh_data.indices(),
+                    ))
                 };
 
                 let mesh = match self.meshes.entry(key.mesh.clone()) {
