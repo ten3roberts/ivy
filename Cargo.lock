@@ -1486,6 +1486,7 @@ dependencies = [
  "ivy-collision",
  "ivy-core",
  "ivy-gltf",
+ "ivy-graphics",
  "ivy-input",
  "ivy-physics",
  "ivy-postprocessing",
@@ -1518,7 +1519,27 @@ dependencies = [
  "itertools 0.13.0",
  "ivy-assets",
  "ivy-core",
+ "ivy-graphics",
  "ivy-profiling",
+ "ordered-float 4.2.2",
+ "tracing",
+]
+
+[[package]]
+name = "ivy-graphics"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-std",
+ "flax",
+ "futures",
+ "glam 0.28.0",
+ "image",
+ "itertools 0.13.0",
+ "ivy-assets",
+ "ivy-core",
+ "ivy-profiling",
+ "mikktspace",
  "ordered-float 4.2.2",
  "tracing",
 ]
@@ -1621,6 +1642,7 @@ dependencies = [
  "ivy-assets",
  "ivy-core",
  "ivy-gltf",
+ "ivy-graphics",
  "ivy-input",
  "ivy-wgpu-types",
  "mikktspace",

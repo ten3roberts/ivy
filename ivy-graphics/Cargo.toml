@@ -1,17 +1,15 @@
 [package]
-name = "ivy-gltf"
+name = "ivy-graphics"
 version = "0.1.0"
 edition = "2021"
-description = "Gltf asset management for Ivy"
 
 [dependencies]
 ivy-core = { path = "../ivy-core" }
 ivy-assets = { path = "../ivy-assets" }
 ivy-profiling = { path = "../ivy-profiling" }
-ivy-graphics = { path = "../ivy-graphics" }
+
 
 anyhow.workspace = true
-gltf.workspace = true
 glam.workspace = true
 tracing.workspace = true
 itertools.workspace = true
@@ -20,3 +18,4 @@ image.workspace = true
 async-std.workspace = true
 futures.workspace = true
 ordered-float.workspace = true
+mikktspace.workspace = true

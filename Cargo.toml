@@ -26,6 +26,7 @@ members = [
   "ivy-scene",
   "ivy-wgpu-types",
   "ivy-profiling",
+  "ivy-graphics",
 ]
 
 [workspace.dependencies]
@@ -75,6 +76,7 @@ ivy-wgpu = { path = "./ivy-wgpu", version = "0.10" }
 ivy-gltf = { path = "./ivy-gltf", version = "0.1.0" }
 ivy-scene = { path = "./ivy-scene", version = "0.1.0" }
 ivy-wgpu-types = { path = "./ivy-wgpu-types", version = "0.1.0" }
+ivy-graphics = { path = "./ivy-graphics", version = "0.1.0" }
 
 regex = "1.0"
 flax.workspace = true

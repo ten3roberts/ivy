@@ -1,5 +1,6 @@
 use image::DynamicImage;
 use ivy_assets::{Asset, AssetCache, AssetDesc};
+use ivy_core::profiling::profile_function;
 use ivy_wgpu_types::texture::{texture_from_image, TextureFromColor, TextureFromImageDesc};
 use wgpu::{Texture, TextureFormat};
 
@@ -45,6 +46,7 @@ impl TextureDesc {
         assets: &AssetCache,
         format: TextureFormat,
     ) -> Result<Asset<Texture>, image::ImageError> {
+        profile_function!("TextureDesc::load");
         let gpu = assets.service();
 
         match self {

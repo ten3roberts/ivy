@@ -1,5 +1,10 @@
 use glam::{U16Vec4, UVec4, Vec2, Vec3, Vec4};
+use itertools::{izip, Itertools};
 use ivy_assets::Asset;
+use ivy_graphics::mesh::{
+    MeshData, JOINT_INDEX_ATTRIBUTE, NORMAL_ATTRIBUTE, POSITION_ATTRIBUTE, TANGENT_ATTRIBUTE,
+    TEX_COORD_ATTRIBUTE, WEIGHT_ATTRIBUTE,
+};
 use wgpu::{
     util::DeviceExt, vertex_attr_array, Buffer, RenderPass, VertexAttribute, VertexBufferLayout,
 };
@@ -30,6 +35,41 @@ impl Vertex {
             tangent: Vec4::ZERO,
         }
     }
+
+    pub(crate) fn compose_from_mesh(mesh: &MeshData) -> Vec<Self> {
+        let positions = mesh
+            .get_attribute(POSITION_ATTRIBUTE)
+            .expect("Missing position attribute")
+            .as_vec3()
+            .unwrap();
+
+        let tex_coords = mesh
+            .get_attribute(TEX_COORD_ATTRIBUTE)
+            .expect("missing tex_coord attribute")
+            .as_vec2()
+            .unwrap();
+
+        let normals = mesh
+            .get_attribute(NORMAL_ATTRIBUTE)
+            .expect("missing normal attribute")
+            .as_vec3()
+            .unwrap();
+
+        let tangents = mesh
+            .get_attribute(TANGENT_ATTRIBUTE)
+            .expect("missing tangent attribute")
+            .as_vec4()
+            .unwrap();
+
+        izip!(positions, tex_coords, normals, tangents)
+            .map(|(&pos, &tex_coord, &normal, &tangent)| Self {
+                pos,
+                tex_coord,
+                normal,
+                tangent,
+            })
+            .collect_vec()
+    }
 }
 
 impl VertexDesc for Vertex {
@@ -54,6 +94,59 @@ pub struct SkinnedVertex {
     pub tangent: Vec4,
     pub joints: UVec4,
     pub weights: Vec4,
+}
+
+impl SkinnedVertex {
+    pub(crate) fn compose_from_mesh(mesh: &MeshData) -> Vec<Self> {
+        let positions = mesh
+            .get_attribute(POSITION_ATTRIBUTE)
+            .expect("Missing position attribute")
+            .as_vec3()
+            .unwrap();
+
+        let tex_coords = mesh
+            .get_attribute(TEX_COORD_ATTRIBUTE)
+            .expect("missing tex_coord attribute")
+            .as_vec2()
+            .unwrap();
+
+        let normals = mesh
+            .get_attribute(NORMAL_ATTRIBUTE)
+            .expect("missing normal attribute")
+            .as_vec3()
+            .unwrap();
+
+        let tangents = mesh
+            .get_attribute(TANGENT_ATTRIBUTE)
+            .expect("missing tangent attribute")
+            .as_vec4()
+            .unwrap();
+
+        let joints = mesh
+            .get_attribute(JOINT_INDEX_ATTRIBUTE)
+            .expect("missing joint attribute")
+            .as_u16_vec4()
+            .unwrap();
+
+        let weights = mesh
+            .get_attribute(WEIGHT_ATTRIBUTE)
+            .expect("missing weight attribute")
+            .as_vec4()
+            .unwrap();
+
+        izip!(positions, tex_coords, normals, tangents, joints, weights)
+            .map(
+                |(&pos, &tex_coord, &normal, &tangent, &joints, &weights)| Self {
+                    pos,
+                    tex_coord,
+                    normal,
+                    tangent,
+                    joints: joints.into(),
+                    weights,
+                },
+            )
+            .collect_vec()
+    }
 }
 
 impl VertexDesc for SkinnedVertex {
