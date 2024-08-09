@@ -4,8 +4,8 @@ version = "0.10.3"
 authors = ["Tim Roberts <ten3roberts@gmail.com>"]
 edition = "2021"
 description = "Base crate for the Ivy game engine"
+license-file.workspace = true
 
-license-file = "../LICENSE"
 keywords = ["graphics", "physics", "game-engine", "game", "vulkan"]
 documentation = "https://lib.rs/ivy-core"
 repository = "https://github.com/ten3roberts/ivy"

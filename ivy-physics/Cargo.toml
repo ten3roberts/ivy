@@ -3,8 +3,8 @@ name = "ivy-physics"
 version = "0.10.3"
 edition = "2021"
 description = "Provides physics for the Ivy framework"
+license-file.workspace = true
 
-license-file = "../LICENSE"
 keywords = ["physics", "collisions", "rigidbody", "game"]
 documentation = "https://lib.rs/ivy-physics"
 repository = "https://github.com/ten3roberts/ivy"
