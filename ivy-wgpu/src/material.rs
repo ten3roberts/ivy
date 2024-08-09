@@ -1,10 +1,11 @@
 use image::DynamicImage;
 use ivy_assets::{Asset, AssetCache};
+use ivy_graphics::texture::TextureDesc;
 use ivy_wgpu_types::{texture::TextureFromColor, BindGroupBuilder, BindGroupLayoutBuilder};
 use wgpu::{BufferUsages, Sampler, SamplerDescriptor, ShaderStages, Texture, TextureFormat};
 
 use crate::{
-    texture::{TextureAndKindDesc, TextureDesc},
+    texture::TextureAndKindDesc,
     types::{texture::DefaultNormalTexture, Gpu, TypedBuffer},
 };
 
