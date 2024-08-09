@@ -2,8 +2,6 @@ pub mod animation;
 pub mod components;
 
 use animation::skin::Skin;
-use animation::Animation;
-use futures::SinkExt;
 use futures::StreamExt;
 use futures::TryStreamExt;
 use glam::Mat4;
@@ -13,16 +11,14 @@ use glam::Vec2;
 use glam::Vec3;
 use glam::Vec4;
 use image::{DynamicImage, ImageBuffer, RgbImage, RgbaImage};
-use itertools::izip;
 use itertools::Itertools;
 use ivy_assets::fs::AsyncAssetFromPath;
 use ivy_assets::AssetDesc;
-use ivy_assets::AssetId;
 use ivy_core::TransformBundle;
 use ivy_graphics::mesh::MeshData;
 use ivy_profiling::profile_function;
 use ivy_profiling::profile_scope;
-use std::collections::BTreeMap;
+use std::future::Future;
 use std::sync::Arc;
 use std::{collections::HashMap, path::Path};
 use tracing::Instrument;
@@ -37,7 +33,6 @@ pub struct DocumentData {
     named_meshes: HashMap<String, usize>,
     named_materials: HashMap<String, usize>,
     named_nodes: HashMap<String, usize>,
-    named_animations: HashMap<String, usize>,
 
     buffer_data: Arc<Vec<gltf::buffer::Data>>,
     images: Vec<Asset<DynamicImage>>,
@@ -138,24 +133,24 @@ impl Document {
             .try_collect()
             .await?;
 
-        let meshes: Vec<_> = futures::stream::iter(gltf.meshes().enumerate())
-            .map(|(i, v)| {
+        let meshes: Vec<_> = futures::stream::iter(gltf.meshes())
+            .map(|v| {
                 let buffer_data = buffer_data.clone();
                 async move {
-                    let primitives = v
-                        .primitives()
-                        .map(|primitive| {
-                            anyhow::Ok(assets.insert(mesh_from_gltf(
-                                assets,
-                                &primitive,
-                                &buffer_data,
-                            )?))
+                    let primitives = futures::stream::iter(v.primitives())
+                        .then(|primitive| {
+                            let buffer_data = buffer_data.clone();
+                            async move {
+                                anyhow::Ok(assets.insert(
+                                    mesh_from_gltf(assets, &primitive, &buffer_data).await?,
+                                ))
+                            }
                         })
-                        .try_collect()?;
+                        .try_collect()
+                        .await?;
 
                     anyhow::Ok(primitives)
                 }
-                .instrument(tracing::info_span!("load_image", i))
             })
             .boxed()
             .buffered(4)
@@ -183,13 +178,6 @@ impl Document {
             .filter_map(|(i, v)| Some((v.name().map(ToString::to_string)?, i)))
             .collect();
 
-        let named_animations = gltf
-            .document
-            .animations()
-            .enumerate()
-            .filter_map(|(i, v)| Some((v.name().map(ToString::to_string)?, i)))
-            .collect();
-
         let skins = Skin::load_from_document(assets, &gltf.document, &buffer_data)?;
 
         let data = assets.insert(DocumentData {
@@ -199,28 +187,9 @@ impl Document {
             named_nodes,
             buffer_data,
             images,
-            named_animations,
             skins,
             mesh_data: meshes,
         });
-
-        // let skins: Vec<_> = data
-        //     .gltf
-        //     .document
-        //     .skins()
-        //     .map(|v| anyhow::Ok(assets.insert(Skin::from_gltf(data.clone(), v)?)))
-        //     .try_collect()?;
-
-        // let animations = data
-        //     .gltf
-        //     .document
-        //     .animations()
-        //     .flat_map(|v| Animation::from_gltf(v, &skins, &data.buffer_data))
-        //     .map(|(k, v)| (k, assets.insert(v)))
-        //     .fold(BTreeMap::new(), |mut acc, (skin, v)| {
-        //         acc.entry(skin).or_insert_with(Vec::new).push(v);
-        //         acc
-        //     });
 
         Ok(Self { data })
     }
@@ -524,7 +493,7 @@ pub(crate) fn mesh_from_gltf(
     _: &AssetCache,
     primitive: &gltf::Primitive,
     buffer_data: &[gltf::buffer::Data],
-) -> anyhow::Result<MeshData> {
+) -> impl Future<Output = anyhow::Result<MeshData>> {
     profile_function!();
 
     let reader = primitive.reader(|buffer| Some(&buffer_data[buffer.index()]));
@@ -563,8 +532,10 @@ pub(crate) fn mesh_from_gltf(
         .flat_map(|val| val.into_f32())
         .map(Vec2::from);
 
-    let mut this = MeshData::skinned(indices, pos, texcoord, normals, joints, weights);
+    let this = MeshData::skinned(indices, pos, texcoord, normals, joints, weights);
+    async move {
+        let this = async_std::task::spawn_blocking(move || this.with_generated_tangents()).await?;
 
-    this.generate_tangents()?;
-    Ok(this)
+        Ok(this)
+    }
 }

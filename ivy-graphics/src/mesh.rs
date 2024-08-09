@@ -257,6 +257,12 @@ impl MeshData {
             .with_attribute(WEIGHT_ATTRIBUTE, weights)
     }
 
+    /// Set the generated tangents
+    pub fn with_generated_tangents(mut self) -> anyhow::Result<Self> {
+        self.generate_tangents()?;
+        Ok(self)
+    }
+
     pub fn generate_tangents(&mut self) -> anyhow::Result<()> {
         profile_function!();
         let positions = self
@@ -278,9 +284,9 @@ impl MeshData {
         let mut tangents = vec![Vec4::ZERO; positions.len()];
         if !mikktspace::generate_tangents(&mut MikktWrapper {
             indices: &self.indices,
-            positions: &positions,
-            normals: &normals,
-            tex_coords: &tex_coords,
+            positions,
+            normals,
+            tex_coords,
             tangents: &mut tangents,
         }) {
             anyhow::bail!("Failed to generate tangents for mesh")
@@ -291,28 +297,9 @@ impl MeshData {
         Ok(())
     }
 
-    // pub fn vertices(&self) -> &[Vertex] {
-    //     &self.vertices
-    // }
-
     pub fn indices(&self) -> &[u32] {
         &self.indices
     }
-
-    // pub fn skinned_vertices(&self) -> impl Iterator<Item = SkinnedVertex> + '_ {
-    //     assert_eq!(self.vertices.len(), self.weights.len());
-    //     assert_eq!(self.vertices.len(), self.joints.len());
-    //     izip!(&*self.vertices, &self.weights, &self.joints).map(|(v, &weights, &joints)| -> _ {
-    //         SkinnedVertex {
-    //             pos: v.pos,
-    //             tex_coord: v.tex_coord,
-    //             normal: v.normal,
-    //             tangent: v.tangent,
-    //             weights,
-    //             joints: joints.into(),
-    //         }
-    //     })
-    // }
 
     pub fn quad() -> Self {
         let positions = [
