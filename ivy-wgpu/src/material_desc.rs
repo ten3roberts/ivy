@@ -1,11 +1,12 @@
 use ivy_assets::{Asset, AssetDesc};
 use ivy_gltf::GltfMaterial;
+use ivy_graphics::texture::TextureDesc;
 use ordered_float::NotNan;
 use wgpu::TextureFormat;
 
 use crate::{
     material::{PbrMaterial, PbrMaterialParams},
-    texture::TextureDesc,
+    texture::TextureAndKindDesc,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -134,16 +135,30 @@ impl AssetDesc<PbrMaterial> for MaterialDesc {
                 Ok(material)
             }
             MaterialDesc::Content(v) => {
-                let albedo = v.albedo.load(assets, TextureFormat::Rgba8UnormSrgb)?;
-                let normal = v.normal.load(assets, TextureFormat::Rgba8Unorm)?;
-                let metallic_roughness = v
-                    .metallic_roughness
-                    .load(assets, TextureFormat::Rgba8Unorm)?;
+                let albedo = assets.try_load(&TextureAndKindDesc::new(
+                    v.albedo.clone(),
+                    TextureFormat::Rgba8UnormSrgb,
+                ))?;
 
-                let ambient_occlusion = v
-                    .ambient_occlusion
-                    .load(assets, TextureFormat::Rgba8Unorm)?;
-                let displacement = v.displacement.load(assets, TextureFormat::Rgba8Unorm)?;
+                let normal = assets.try_load(&TextureAndKindDesc::new(
+                    v.normal.clone(),
+                    TextureFormat::Rgba8Unorm,
+                ))?;
+
+                let metallic_roughness = assets.try_load(&TextureAndKindDesc::new(
+                    v.metallic_roughness.clone(),
+                    TextureFormat::Rgba8Unorm,
+                ))?;
+
+                let ambient_occlusion = assets.try_load(&TextureAndKindDesc::new(
+                    v.ambient_occlusion.clone(),
+                    TextureFormat::Rgba8Unorm,
+                ))?;
+
+                let displacement = assets.try_load(&TextureAndKindDesc::new(
+                    v.displacement.clone(),
+                    TextureFormat::Rgba8Unorm,
+                ))?;
 
                 Ok(assets.insert(PbrMaterial::new(
                     v.label.clone(),

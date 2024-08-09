@@ -20,6 +20,7 @@ use ivy_core::{
     TransformBundle,
 };
 use ivy_gltf::{animation::player::Animator, components::animator, Document};
+use ivy_graphics::texture::TextureDesc;
 use ivy_input::{
     components::input_state,
     layer::InputLayer,
@@ -54,7 +55,6 @@ use ivy_wgpu::{
     rendergraph::{self, BufferDesc, ExternalResources, ManagedTextureDesc, RenderGraph},
     shader_library::{ModuleDesc, ShaderLibrary},
     shaders::{PbrShaderDesc, ShadowShaderDesc},
-    texture::TextureDesc,
     Gpu,
 };
 use ivy_wgpu_types::{texture::max_mip_levels, PhysicalSize, Surface};
