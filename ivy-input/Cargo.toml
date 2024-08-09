@@ -3,8 +3,8 @@ name = "ivy-input"
 version = "0.10.3"
 authors = ["Tim Roberts <ten3roberts@gmail.com>"]
 edition = "2021"
+license-file.workspace = true
 
-license-file = "../LICENSE"
 keywords = ["graphics", "input", "keyboard", "game", "vulkan"]
 documentation = "https://lib.rs/ivy-input"
 repository = "https://github.com/ten3roberts/ivy"

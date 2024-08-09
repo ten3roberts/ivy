@@ -3,8 +3,8 @@ name = "ivy-collision"
 version = "0.10.3"
 edition = "2021"
 description = "3D collision crate for Ivy"
+license-file.workspace = true
 
-license-file = "../LICENSE"
 keywords = ["physics", "collisions", "rigidbody", "game"]
 documentation = "https://lib.rs/ivy-collision"
 repository = "https://github.com/ten3roberts/ivy"

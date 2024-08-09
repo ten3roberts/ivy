@@ -3,8 +3,8 @@ name = "ivy-random"
 version = "0.10.3"
 edition = "2021"
 description = "Provides random utility functions to the ivy framework"
+license-file.workspace = true
 
-license-file = "../LICENSE"
 keywords = ["rand", "random", "linear-algebra", "vector"]
 documentation = "https://lib.rs/ivy-random"
 repository = "https://github.com/ten3roberts/ivy"

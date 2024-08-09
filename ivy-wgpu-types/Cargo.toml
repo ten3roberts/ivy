@@ -3,6 +3,7 @@ name = "ivy-wgpu-types"
 version = "0.1.0"
 edition = "2021"
 description = "Lower level abstractions and non-coupled types for Ivy"
+license-file.workspace = true
 
 [dependencies]
 ivy-core = { path = "../ivy-core" }

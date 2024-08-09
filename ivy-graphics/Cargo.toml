@@ -2,6 +2,7 @@
 name = "ivy-graphics"
 version = "0.1.0"
 edition = "2021"
+license-file.workspace = true
 
 [dependencies]
 ivy-core = { path = "../ivy-core" }

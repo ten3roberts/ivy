@@ -3,6 +3,7 @@ name = "ivy-gltf"
 version = "0.1.0"
 edition = "2021"
 description = "Gltf asset management for Ivy"
+license-file.workspace = true
 
 [dependencies]
 ivy-core = { path = "../ivy-core" }

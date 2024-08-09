@@ -3,8 +3,8 @@ name = "ivy-postprocessing"
 version = "0.10.3"
 edition = "2021"
 description = "post processing helpers for ivy"
+license-file.workspace = true
 
-license-file = "../LICENSE"
 keywords = ["pbr", "post-processing", "vulkan", "graphics", "effects"]
 documentation = "https://lib.rs/ivy-postprocessing"
 repository = "https://github.com/ten3roberts/ivy"
