@@ -149,14 +149,6 @@ impl PbrMaterial {
                 })
             });
 
-        tracing::info!(
-            metallic_roughness = pbr.metallic_roughness_texture().is_some(),
-            normal_map = material.normal_texture().is_some(),
-            roughness_factor = pbr.roughness_factor(),
-            metallic_factor = pbr.metallic_factor(),
-            "gltf material"
-        );
-
         let plain_white = assets.load(&TextureFromColor {
             color: [255, 255, 255, 255],
             format: TextureFormat::Rgba8Unorm,
