@@ -414,7 +414,7 @@ mod test {
 
     use crate::rendergraph::{
         BufferDesc, BufferHandle, Dependency, ManagedTextureDesc, Node, NodeExecutionContext,
-        RenderGraph, TextureDesc, TextureHandle,
+        RenderGraph, TextureHandle,
     };
 
     #[test]
@@ -564,8 +564,8 @@ mod test {
             }
 
             fn draw(&mut self, ctx: NodeExecutionContext) -> anyhow::Result<()> {
-                let texture = ctx.resources.get_texture_data(self.texture);
-                let buffer = ctx.resources.get_buffer_data(self.buffer);
+                let _texture = ctx.resources.get_texture_data(self.texture);
+                let _buffer = ctx.resources.get_buffer_data(self.buffer);
 
                 Ok(())
             }

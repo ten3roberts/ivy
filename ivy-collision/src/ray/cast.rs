@@ -20,7 +20,7 @@ pub struct RayIntersection {
 
 impl PartialOrd for RayIntersection {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.contact.depth.partial_cmp(&other.contact.depth)
+        Some(self.cmp(other))
     }
 }
 
@@ -87,7 +87,7 @@ impl<'a, N: CollisionTreeNode, Q: 'a> Visitor<'a, N> for RayCaster<'a, Q> {
             world: self.world,
             data,
             objects,
-            filter: &self.filter,
+            filter: self.filter,
         })
     }
 }
@@ -122,7 +122,7 @@ impl<'a, Q: for<'x> Fetch<'x>> Iterator for RayCastIterator<'a, Q> {
                 //     continue;
                 // }
 
-                if let Some(contact) = self.ray.intersects(&*collider, &data.transform) {
+                if let Some(contact) = self.ray.intersects(collider, &data.transform) {
                     return Some(RayIntersection::new(object.entity, contact));
                 }
             };

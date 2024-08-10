@@ -13,6 +13,7 @@ pub fn update_fixed(_: Vec3, offset_rot: Quat, parent: Mat4, child: &mut Transfo
     *child.rotation = parent_rot * offset_rot;
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn apply_connection_constraints(
     kind: &ConnectionKind,
     offset_pos: Vec3,

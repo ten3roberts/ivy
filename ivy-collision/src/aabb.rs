@@ -25,7 +25,7 @@ impl BoundingBox {
 
         let half_extents = (r - l) * 0.5;
 
-        Self::new(half_extents, origin.into())
+        Self::new(half_extents, origin)
     }
 
     pub fn from_points(points: impl Iterator<Item = Vec3>) -> Self {

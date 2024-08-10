@@ -215,14 +215,12 @@ pub type Section = &'static str;
 /// transient at different durations.
 #[derive(Default)]
 pub struct Gizmos {
-    current: Option<Section>,
     sections: DashMap<&'static str, GizmosSection>,
 }
 
 impl Gizmos {
     pub fn new() -> Self {
         Self {
-            current: None,
             sections: Default::default(),
         }
     }
@@ -247,10 +245,10 @@ impl Gizmos {
     }
 
     /// Get a reference to the gizmos's sections.
-    pub fn sections<'a>(
-        &'a self,
+    pub fn sections(
+        &self,
     ) -> dashmap::iter::Iter<
-        'a,
+        '_,
         &'static str,
         GizmosSection,
         std::hash::RandomState,

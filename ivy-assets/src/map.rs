@@ -1,5 +1,5 @@
 use slotmap::{
-    secondary::{self, Entry},
+    secondary::{self},
     SecondaryMap,
 };
 

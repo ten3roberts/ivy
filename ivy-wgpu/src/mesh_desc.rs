@@ -1,12 +1,6 @@
-use glam::{vec2, vec3, I16Vec4, U16Vec4, Vec2, Vec3, Vec4};
-use gltf::mesh::util::weights;
-use itertools::{izip, Itertools};
 use ivy_assets::{Asset, AssetCache};
-use ivy_core::profiling::profile_function;
 use ivy_gltf::GltfPrimitive;
 use ivy_graphics::mesh::MeshData;
-
-use crate::mesh::{SkinnedVertex, Vertex};
 
 /// Cpu side mesh descriptor
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]

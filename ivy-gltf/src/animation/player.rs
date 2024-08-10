@@ -3,12 +3,9 @@ use std::collections::BTreeMap;
 use glam::{Mat4, Quat, Vec3};
 use itertools::Itertools;
 use ivy_assets::Asset;
-use ivy_core::{palette::chromatic_adaptation::TransformMatrix, TransformBundle};
+use ivy_core::TransformBundle;
 
-use super::{
-    skin::{Joint, Skin},
-    Animation,
-};
+use super::{skin::Skin, Animation};
 
 pub struct Animator {
     joint_targets: BTreeMap<usize, TransformBundle>,

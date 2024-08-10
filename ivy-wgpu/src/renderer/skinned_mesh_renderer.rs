@@ -9,7 +9,7 @@ use flax::{
     fetch::{Copied, Source, Traverse},
     CommandBuffer, Component, Entity, Fetch, FetchExt, Query, World,
 };
-use glam::{Mat4, Vec4Swizzles};
+use glam::Mat4;
 use itertools::Itertools;
 use ivy_assets::{map::AssetMap, stored::Handle, Asset, AssetCache};
 use ivy_core::world_transform;
@@ -25,7 +25,7 @@ use crate::{
     components::{material, mesh, mesh_primitive},
     material::PbrMaterial,
     material_desc::{MaterialData, MaterialDesc},
-    mesh::{SkinnedVertex, Vertex, VertexDesc},
+    mesh::{SkinnedVertex, VertexDesc},
     mesh_buffer::{MeshBuffer, MeshHandle},
     mesh_desc::MeshDesc,
     renderer::RendererStore,
@@ -129,6 +129,12 @@ impl ObjectDataQuery {
     }
 }
 
+type ObjectQueryType = (
+    Component<usize>,
+    Component<usize>,
+    Source<ObjectDataQuery, Traverse>,
+);
+
 pub struct SkinnedMeshRenderer {
     id: Entity,
     /// All the objects registered
@@ -147,11 +153,7 @@ pub struct SkinnedMeshRenderer {
     batches: Slab<Batch>,
     batch_map: HashMap<BatchKey, BatchId>,
 
-    object_query: Query<(
-        Component<usize>,
-        Component<usize>,
-        Source<ObjectDataQuery, Traverse>,
-    )>,
+    object_query: Query<ObjectQueryType>,
 
     mesh_buffer: MeshBuffer<SkinnedVertex>,
 
@@ -210,6 +212,7 @@ impl SkinnedMeshRenderer {
             .resize(gpu, capacity.next_power_of_two(), false);
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn collect_unbatched(
         &mut self,
         world: &mut World,

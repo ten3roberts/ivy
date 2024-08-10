@@ -1,14 +1,11 @@
 pub mod player;
 pub mod skin;
 
-use std::{borrow::Cow, collections::BTreeMap};
+use std::borrow::Cow;
 
 use glam::{Quat, Vec3};
 use gltf::animation::util::{ReadOutputs, Rotations, Scales, Translations};
-use itertools::Itertools;
-use ivy_assets::{Asset, AssetId};
 use ordered_float::OrderedFloat;
-use skin::Skin;
 
 pub struct Animation {
     label: Cow<'static, str>,
@@ -28,6 +25,10 @@ impl Animation {
     /// Get a reference to the animation's channels.
     pub fn channels(&self) -> &[Channel] {
         self.channels.as_ref()
+    }
+
+    pub fn label(&self) -> &str {
+        &self.label
     }
 }
 

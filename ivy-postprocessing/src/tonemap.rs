@@ -8,7 +8,7 @@ use ivy_wgpu::{
 };
 use wgpu::{
     BindGroup, BindGroupLayout, Color, Operations, RenderPassColorAttachment, SamplerDescriptor,
-    ShaderModuleDescriptor, ShaderSource, ShaderStages, StoreOp, TextureFormat, TextureUsages,
+    ShaderModuleDescriptor, ShaderSource, ShaderStages, StoreOp, TextureUsages,
 };
 
 pub struct TonemapNode {

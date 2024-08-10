@@ -1,10 +1,8 @@
 use itertools::Itertools;
-use ivy_assets::AssetCache;
 use std::collections::BTreeMap;
 
 use glam::{vec2, vec3, U16Vec4, UVec4, Vec2, Vec3, Vec4};
 use ivy_profiling::profile_function;
-use tracing::field::ValueSet;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum AttributeType {
@@ -323,6 +321,12 @@ impl MeshData {
         let mut this = Self::unskinned(indices, positions, tex_coords, normals);
         this.generate_tangents().unwrap();
         this
+    }
+}
+
+impl Default for MeshData {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

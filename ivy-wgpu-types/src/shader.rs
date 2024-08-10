@@ -68,14 +68,14 @@ impl Shader {
                 label: Some(desc.label),
                 layout: Some(&layout),
                 vertex: wgpu::VertexState {
-                    module: &desc.module,
+                    module: desc.module,
                     entry_point: desc.vertex_entry_point,
                     buffers: desc.vertex_layouts,
                     compilation_options: Default::default(),
                 },
                 fragment: Some(wgpu::FragmentState {
                     // 3.
-                    module: &desc.module,
+                    module: desc.module,
                     entry_point: desc.fragment_entry_point,
                     targets: &desc
                         .target

@@ -8,9 +8,8 @@ use ivy_wgpu_types::{
     BindGroupBuilder, BindGroupLayoutBuilder, Gpu, Shader, TypedBuffer,
 };
 use wgpu::{
-    core::device, BindGroup, BindingType, BufferUsages, Operations, RenderPassColorAttachment,
-    RenderPassDepthStencilAttachment, RenderPassDescriptor, SamplerBindingType, SamplerDescriptor,
-    ShaderStages, TextureSampleType, TextureUsages, TextureViewDimension,
+    BindingType, BufferUsages, RenderPassColorAttachment, RenderPassDescriptor, SamplerBindingType,
+    SamplerDescriptor, ShaderStages, TextureUsages,
 };
 
 use crate::{

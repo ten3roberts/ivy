@@ -1,6 +1,6 @@
 use glam::Vec3;
 
-use crate::{Color, GizmosSection, Line, Sphere, DEFAULT_RADIUS};
+use crate::{GizmosSection, Line, Sphere, DEFAULT_RADIUS};
 
 pub trait DrawGizmos {
     /// Draw a set of gizmos using the current section

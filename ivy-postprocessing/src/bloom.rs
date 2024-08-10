@@ -1,10 +1,9 @@
-use std::{any::type_name, process::Output, slice};
+use std::slice;
 
-use glam::{ivec2, uvec2, vec2, vec3, Vec2};
+use glam::{uvec2, vec3};
 use itertools::Itertools;
-use ivy_core::palette::num::Recip;
 use ivy_wgpu::{
-    rendergraph::{Dependency, Node, TextureDesc, TextureHandle},
+    rendergraph::{Dependency, Node, TextureHandle},
     types::{
         shader::{ShaderDesc, TargetDesc},
         BindGroupBuilder, BindGroupLayoutBuilder, Shader, TypedBuffer,
@@ -12,10 +11,10 @@ use ivy_wgpu::{
     Gpu,
 };
 use wgpu::{
-    hal::BufferUses, util::RenderEncoder, BindGroup, BindGroupLayout, BufferUsages, Color,
-    Operations, RenderPassColorAttachment, Sampler, SamplerDescriptor, ShaderModuleDescriptor,
-    ShaderSource, ShaderStages, StoreOp, Texture, TextureDescriptor, TextureDimension,
-    TextureFormat, TextureUsages, TextureView, TextureViewDescriptor,
+    BindGroup, BindGroupLayout, BufferUsages, Color, Operations, RenderPassColorAttachment,
+    Sampler, SamplerDescriptor, ShaderModuleDescriptor, ShaderSource, ShaderStages, StoreOp,
+    TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, TextureView,
+    TextureViewDescriptor,
 };
 
 struct Data {

@@ -1,5 +1,3 @@
-use std::any;
-
 use flax::{
     components::is_static, entity_ids, fetch::Satisfied, sink::Sink, BoxedSystem, CommandBuffer,
     Component, Entity, Error, Fetch, FetchExt, Mutable, Opt, OptOr, Query, QueryBorrow, System,
@@ -7,9 +5,7 @@ use flax::{
 };
 use flume::{Receiver, Sender};
 use glam::{Mat4, Vec3};
-use ivy_core::{
-    is_trigger, mass, velocity, world_transform, DrawGizmos, Events, Gizmos, GizmosSection,
-};
+use ivy_core::{is_trigger, mass, velocity, world_transform, DrawGizmos, Events, GizmosSection};
 use slotmap::{new_key_type, SlotMap};
 use smallvec::Array;
 

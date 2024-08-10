@@ -53,9 +53,9 @@ impl Default for Axis {
     }
 }
 
-impl Into<usize> for Axis {
-    fn into(self) -> usize {
-        match self {
+impl From<Axis> for usize {
+    fn from(value: Axis) -> Self {
+        match value {
             Axis::X => 0,
             Axis::Y => 1,
             Axis::Z => 2,
@@ -103,7 +103,7 @@ where
 
         let node = Self {
             bounds,
-            objects: objects.into(),
+            objects,
             axis,
             children: None,
             depth,
@@ -309,7 +309,7 @@ impl<O: Array<Item = Object> + ComponentValue> CollisionTreeNode for BvhNode<O> 
         let obj = &data[object.index];
 
         // Make bound fit object
-        node.bounds = node.calculate_bounds_incremental(&obj);
+        node.bounds = node.calculate_bounds_incremental(obj);
 
         node.state = node.state.merge(obj.state);
 
@@ -317,9 +317,9 @@ impl<O: Array<Item = Object> + ComponentValue> CollisionTreeNode for BvhNode<O> 
         if let Some([left, right]) = node.children {
             assert!(node.objects.is_empty());
             if nodes[left].bounds.contains(obj.bounds) {
-                return Self::insert(left, nodes, object, data);
+                Self::insert(left, nodes, object, data)
             } else if nodes[right].bounds.contains(obj.bounds) {
-                return Self::insert(right, nodes, object, data);
+                Self::insert(right, nodes, object, data)
             }
             // Object did not fit in any child.
             // Gather up both children and all descendants, and re-add all objects by splitting.
@@ -383,7 +383,7 @@ impl<O: Array<Item = Object> + ComponentValue> CollisionTreeNode for BvhNode<O> 
                 let a_obj = &data[a.index];
                 for b in b.objects() {
                     let b_obj = &data[b.index];
-                    if let Some(collision) = check_collision(data, *a, &a_obj, *b, &b_obj) {
+                    if let Some(collision) = check_collision(data, *a, a_obj, *b, b_obj) {
                         events.send(collision)
                     }
                 }
@@ -405,7 +405,7 @@ impl<O: Array<Item = Object> + ComponentValue> CollisionTreeNode for BvhNode<O> 
                 for b in node.objects.iter().skip(i + 1) {
                     assert_ne!(a, b);
                     let b_obj = &data[b.index];
-                    if let Some(collision) = check_collision(data, *a, &a_obj, *b, &b_obj) {
+                    if let Some(collision) = check_collision(data, *a, a_obj, *b, b_obj) {
                         events.send(collision)
                     }
                 }

@@ -1,6 +1,5 @@
 use image::DynamicImage;
-use ivy_assets::{Asset, AssetCache, AssetDesc};
-use ivy_core::profiling::profile_function;
+use ivy_assets::Asset;
 
 /// Describes a texture
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
