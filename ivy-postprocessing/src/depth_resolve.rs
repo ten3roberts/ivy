@@ -118,4 +118,8 @@ impl Node for MsaaDepthResolve {
             TextureUsages::STORAGE_BINDING,
         )]
     }
+
+    fn on_resource_changed(&mut self, _resource: ivy_wgpu::rendergraph::ResourceHandle) {
+        self.bind_group = None;
+    }
 }

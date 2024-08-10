@@ -40,7 +40,7 @@ pub struct LightShadowData {
 
 #[repr(C)]
 #[derive(bytemuck::Pod, bytemuck::Zeroable, Clone, Copy, Debug)]
-struct LightShadowCamera {
+pub struct LightShadowCamera {
     viewproj: Mat4,
     texel_size: Vec2,
     depth: f32,

@@ -168,7 +168,7 @@ impl<Handle: slotmap::Key, Data: SubResource> ResourceAllocator<Handle, Data> {
         Some(&self.bucket_data[*self.bucket_map.get(handle)?])
     }
 
-    fn allocate_resources<'a, I: Iterator<Item = (Handle, Data::Desc<'a>, Lifetime)>>(
+    fn allocate_resources<'a, I: Iterator<Item = (Handle, Data::Desc<'a>, Option<Lifetime>)>>(
         &mut self,
         gpu: &Gpu,
         resources: I,
@@ -181,9 +181,13 @@ impl<Handle: slotmap::Key, Data: SubResource> ResourceAllocator<Handle, Data> {
 
         for (handle, desc, lifetime) in resources {
             // Find suitable bucket
-            let bucket_id = buckets
-                .iter_mut()
-                .find_position(|v| Data::is_compatible(&desc, &v.desc) && !v.overlaps(lifetime));
+            let bucket_id = lifetime.and_then(|lifetime| {
+                buckets
+                    .iter_mut()
+                    .find_position(|v| Data::is_compatible(&desc, &v.desc) && !v.overlaps(lifetime))
+            });
+
+            let lifetime = lifetime.unwrap_or(Lifetime::new(0, u32::MAX));
 
             if let Some((bucket_id, bucket)) = bucket_id {
                 bucket.lifetimes.push(lifetime);
@@ -288,13 +292,11 @@ impl Resources {
 
         let iter = self.textures.iter().filter_map(|(handle, desc)| {
             let desc = desc.as_managed()?;
+            tracing::info!("allocating {}", desc.label);
 
-            let Some(&lf) = lifetimes.get(&handle.into()) else {
-                tracing::warn!("Unused texture {:?}", self.textures[handle]);
-                return None;
-            };
+            let lf = lifetimes.get(&handle.into()).copied();
 
-            let usage = *usages.get(handle)?;
+            let usage = *usages.get(handle).unwrap();
 
             Some((
                 handle,
@@ -336,7 +338,7 @@ impl Resources {
             });
 
         let iter = self.buffers.iter().filter_map(|(handle, desc)| {
-            let lf = lifetimes[&handle.into()];
+            let lf = lifetimes.get(&handle.into()).copied();
             let usage = *usages.get(handle)?;
 
             Some((

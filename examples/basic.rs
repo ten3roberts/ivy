@@ -31,6 +31,7 @@ use ivy_postprocessing::{
     bloom::BloomNode,
     depth_resolve::MsaaDepthResolve,
     hdri::{HdriProcessor, HdriProcessorNode},
+    preconfigured::{PbrRenderGraph, PbrRenderGraphConfig, SkyboxConfig},
     skybox::SkyboxRenderer,
     tonemap::TonemapNode,
 };
@@ -681,142 +682,13 @@ fn gizmos_system() -> BoxedSystem {
 struct RenderGraphRenderer {
     render_graph: RenderGraph,
     surface: Surface,
-    depth_texture: rendergraph::TextureHandle,
     surface_texture: rendergraph::TextureHandle,
-    screensized: Vec<rendergraph::TextureHandle>,
+    pbr: PbrRenderGraph,
 }
 
 impl RenderGraphRenderer {
     pub fn new(world: &mut World, assets: &AssetCache, gpu: &Gpu, surface: Surface) -> Self {
-        let size = surface.size();
-
         let mut render_graph = RenderGraph::new();
-
-        let skybox_textures;
-
-        if ENABLE_SKYBOX {
-            let image: Asset<DynamicImage> =
-                // assets.load("ivy-postprocessing/hdrs/lauter_waterfall_4k.hdr");
-            // assets.load("ivy-postprocessing/hdrs/kloofendal_puresky_2k.hdr");
-            assets.load("ivy-postprocessing/hdrs/kloofendal_48d_partly_cloudy_puresky_2k.hdr");
-
-            const MAX_REFLECTION_LOD: u32 = 8;
-            let hdri_processor = HdriProcessor::new(gpu, hdr_format, MAX_REFLECTION_LOD);
-
-            let environment_map = render_graph.resources.insert_texture(ManagedTextureDesc {
-                label: "hdr_cubemap".into(),
-                extent: Extent3d {
-                    width: 1024,
-                    height: 1024,
-                    depth_or_array_layers: 6,
-                },
-                mip_level_count: max_mip_levels(1024, 1024),
-                sample_count: 1,
-                dimension: TextureDimension::D2,
-                format: hdri_processor.format(),
-                persistent: true,
-            });
-
-            let irradiance_map = render_graph.resources.insert_texture(ManagedTextureDesc {
-                label: "skybox_ir".into(),
-                extent: Extent3d {
-                    width: 128,
-                    height: 128,
-                    depth_or_array_layers: 6,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: TextureDimension::D2,
-                format: hdri_processor.format(),
-                persistent: true,
-            });
-
-            let specular_map = render_graph.resources.insert_texture(ManagedTextureDesc {
-                label: "hdr_cubemap".into(),
-                extent: Extent3d {
-                    width: 512,
-                    height: 512,
-                    depth_or_array_layers: 6,
-                },
-                mip_level_count: MAX_REFLECTION_LOD,
-                sample_count: 1,
-                dimension: TextureDimension::D2,
-                format: hdri_processor.format(),
-                persistent: true,
-            });
-
-            let integrated_brdf = render_graph.resources.insert_texture(ManagedTextureDesc {
-                label: "integrated_brdf".into(),
-                extent: Extent3d {
-                    width: 1024,
-                    height: 1024,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: TextureDimension::D2,
-                format: hdr_format,
-                persistent: true,
-            });
-
-            let skybox = SkyboxTextures::new(
-                environment_map,
-                irradiance_map,
-                specular_map,
-                integrated_brdf,
-            );
-
-            skybox_textures = Some(skybox);
-            render_graph.add_node(HdriProcessorNode::new(hdri_processor, image, skybox));
-        } else {
-            skybox_textures = None;
-        }
-
-        let extent = wgpu::Extent3d {
-            width: size.width,
-            height: size.height,
-            depth_or_array_layers: 1,
-        };
-
-        let multisampled_hdr = render_graph.resources.insert_texture(ManagedTextureDesc {
-            label: "multisampled_hdr".into(),
-            extent,
-            dimension: wgpu::TextureDimension::D2,
-            format: hdr_format,
-            mip_level_count: 1,
-            sample_count: 4,
-            persistent: false,
-        });
-
-        let final_color = render_graph.resources.insert_texture(ManagedTextureDesc {
-            label: "final_color".into(),
-            extent,
-            dimension: wgpu::TextureDimension::D2,
-            format: hdr_format,
-            mip_level_count: 1,
-            sample_count: 1,
-            persistent: false,
-        });
-
-        let depth_texture = render_graph.resources.insert_texture(ManagedTextureDesc {
-            label: "depth_texture".into(),
-            extent,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Depth24Plus,
-            mip_level_count: 1,
-            sample_count: 4,
-            persistent: false,
-        });
-
-        let resolved_depth_texture = render_graph.resources.insert_texture(ManagedTextureDesc {
-            label: "depth_texture".into(),
-            extent,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::R32Float,
-            mip_level_count: 1,
-            sample_count: 1,
-            persistent: false,
-        });
 
         let surface_texture = render_graph
             .resources
@@ -829,47 +701,28 @@ impl RenderGraphRenderer {
 
         let shader_library = Arc::new(shader_library);
 
-        let max_shadows = 4;
-        let max_cascades = 6;
-
-        let light_manager = LightManager::new(gpu, shadow_maps, shadow_camera_buffer, 4);
-
-        render_graph.add_node(CameraNode::new(
+        let pbr = PbrRenderGraphConfig {
+            shadow_map_config: Some(Default::default()),
+            msaa: Some(Default::default()),
+            bloom: Some(Default::default()),
+            skybox: Some(SkyboxConfig {
+                hdri: Box::new("assets/hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr"),
+            }),
+        }
+        .configure(
+            world,
             gpu,
-            depth_texture,
-            multisampled_hdr,
-            camera_renderers,
-            light_manager,
-            skybox_textures,
-        ));
-
-        // TODO: make chaining easier
-        render_graph.add_node(MsaaResolve::new(multisampled_hdr, final_color));
-        render_graph.add_node(MsaaDepthResolve::new(
-            gpu,
-            depth_texture,
-            resolved_depth_texture,
-        ));
-        render_graph.add_node(TonemapNode::new(gpu, bloom_result, surface_texture));
-
-        render_graph.add_node(GizmosRendererNode::new(
-            gpu,
+            assets,
+            &mut render_graph,
+            shader_library.clone(),
             surface_texture,
-            resolved_depth_texture,
-        ));
+        );
 
         Self {
             render_graph,
             surface,
-            screensized: vec![
-                multisampled_hdr,
-                final_color,
-                bloom_result,
-                depth_texture,
-                resolved_depth_texture,
-            ],
             surface_texture,
-            depth_texture,
+            pbr,
         }
     }
 }
@@ -896,28 +749,8 @@ impl ivy_wgpu::layer::Renderer for RenderGraphRenderer {
     }
 
     fn on_resize(&mut self, gpu: &Gpu, size: PhysicalSize<u32>) {
-        let new_extent = Extent3d {
-            width: size.width,
-            height: size.height,
-            depth_or_array_layers: 1,
-        };
-
         self.surface.resize(gpu, size);
 
-        for &handle in &self.screensized {
-            self.render_graph
-                .resources
-                .get_texture_mut(handle)
-                .as_managed_mut()
-                .unwrap()
-                .extent = new_extent;
-        }
-
-        self.render_graph
-            .resources
-            .get_texture_mut(self.depth_texture)
-            .as_managed_mut()
-            .unwrap()
-            .extent = new_extent;
+        self.pbr.set_size(&mut self.render_graph, size);
     }
 }
