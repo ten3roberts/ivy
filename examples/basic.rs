@@ -693,7 +693,6 @@ impl RenderGraphRenderer {
         let mut render_graph = RenderGraph::new();
 
         let skybox_textures;
-        let hdr_format = TextureFormat::Rgba16Float;
 
         if ENABLE_SKYBOX {
             let image: Asset<DynamicImage> =
@@ -799,16 +798,6 @@ impl RenderGraphRenderer {
             persistent: false,
         });
 
-        let bloom_result = render_graph.resources.insert_texture(ManagedTextureDesc {
-            label: "bloom_result".into(),
-            extent,
-            dimension: wgpu::TextureDimension::D2,
-            format: TextureFormat::Rgba16Float,
-            mip_level_count: 1,
-            sample_count: 1,
-            persistent: false,
-        });
-
         let depth_texture = render_graph.resources.insert_texture(ManagedTextureDesc {
             label: "depth_texture".into(),
             extent,
@@ -840,44 +829,8 @@ impl RenderGraphRenderer {
 
         let shader_library = Arc::new(shader_library);
 
-        let camera_renderer = (
-            SkyboxRenderer::new(gpu),
-            MeshRenderer::new(world, gpu, forward_pass(), shader_library.clone()),
-            SkinnedMeshRenderer::new(world, gpu, forward_pass(), shader_library.clone()),
-        );
-
         let max_shadows = 4;
         let max_cascades = 6;
-
-        let shadow_maps = render_graph.resources.insert_texture(ManagedTextureDesc {
-            label: "depth_texture".into(),
-            extent: wgpu::Extent3d {
-                width: 1024,
-                height: 1024,
-                depth_or_array_layers: max_shadows * max_cascades,
-            },
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Depth24Plus,
-            mip_level_count: 1,
-            sample_count: 1,
-            persistent: false,
-        });
-
-        let shadow_camera_buffer = render_graph.resources.insert_buffer(BufferDesc {
-            label: "shadow_camera_buffer".into(),
-            size: size_of::<Mat4>() as u64 * max_shadows as u64 * max_cascades as u64,
-            usage: BufferUsages::STORAGE,
-        });
-
-        render_graph.add_node(ShadowMapNode::new(
-            world,
-            gpu,
-            shadow_maps,
-            shadow_camera_buffer,
-            max_shadows as _,
-            max_cascades as _,
-            shader_library,
-        ));
 
         let light_manager = LightManager::new(gpu, shadow_maps, shadow_camera_buffer, 4);
 
@@ -885,7 +838,7 @@ impl RenderGraphRenderer {
             gpu,
             depth_texture,
             multisampled_hdr,
-            camera_renderer,
+            camera_renderers,
             light_manager,
             skybox_textures,
         ));
@@ -897,7 +850,6 @@ impl RenderGraphRenderer {
             depth_texture,
             resolved_depth_texture,
         ));
-        render_graph.add_node(BloomNode::new(gpu, final_color, bloom_result, 5, 0.005));
         render_graph.add_node(TonemapNode::new(gpu, bloom_result, surface_texture));
 
         render_graph.add_node(GizmosRendererNode::new(

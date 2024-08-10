@@ -122,7 +122,7 @@ impl Default for MaterialData {
 impl AssetDesc<PbrMaterial> for MaterialDesc {
     type Error = anyhow::Error;
 
-    fn load(&self, assets: &ivy_assets::AssetCache) -> Result<Asset<PbrMaterial>, Self::Error> {
+    fn create(&self, assets: &ivy_assets::AssetCache) -> Result<Asset<PbrMaterial>, Self::Error> {
         match self {
             MaterialDesc::Gltf(v) => {
                 let document = assets.try_load(v.data())?;

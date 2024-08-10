@@ -25,7 +25,7 @@ impl Default for UvSphereDesc {
 impl AssetDesc<MeshData> for UvSphereDesc {
     type Error = Infallible;
 
-    fn load(
+    fn create(
         &self,
         assets: &ivy_assets::AssetCache,
     ) -> Result<ivy_assets::Asset<MeshData>, Self::Error> {
@@ -102,7 +102,7 @@ impl Default for PlaneDesc {
 impl AssetDesc<MeshData> for PlaneDesc {
     type Error = Infallible;
 
-    fn load(
+    fn create(
         &self,
         assets: &ivy_assets::AssetCache,
     ) -> Result<ivy_assets::Asset<MeshData>, Self::Error> {
@@ -196,7 +196,7 @@ pub struct CubeDesc;
 impl AssetDesc<MeshData> for CubeDesc {
     type Error = Infallible;
 
-    fn load(
+    fn create(
         &self,
         assets: &ivy_assets::AssetCache,
     ) -> Result<ivy_assets::Asset<MeshData>, Self::Error> {

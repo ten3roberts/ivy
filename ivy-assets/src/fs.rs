@@ -31,7 +31,7 @@ where
 {
     type Error = V::Error;
 
-    fn load(&self, assets: &AssetCache) -> Result<Asset<V>, Self::Error> {
+    fn create(&self, assets: &AssetCache) -> Result<Asset<V>, Self::Error> {
         V::load_from_path(self.as_ref(), assets)
     }
 }

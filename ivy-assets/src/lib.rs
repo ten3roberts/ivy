@@ -104,7 +104,7 @@ impl AssetCache {
         }
 
         // Load the asset and insert it to get a handle
-        let value = desc.load(self)?;
+        let value = desc.create(self)?;
 
         self.inner
             .keys
@@ -299,6 +299,26 @@ where
     }
 }
 
+pub trait DynAssetDesc<V>: 'static + Send + Sync {
+    fn load(&self, assets: &AssetCache) -> Asset<V>;
+    fn try_load(&self, assets: &AssetCache) -> anyhow::Result<Asset<V>>;
+}
+
+impl<T, V> DynAssetDesc<V> for T
+where
+    T: AssetDesc<V>,
+    T::Error: Into<anyhow::Error>,
+    V: 'static + Send + Sync,
+{
+    fn load(&self, assets: &AssetCache) -> Asset<V> {
+        assets.load(self)
+    }
+
+    fn try_load(&self, assets: &AssetCache) -> anyhow::Result<Asset<V>> {
+        assets.try_load(self).map_err(Into::into)
+    }
+}
+
 /// A key or descriptor which can be used to load an asset.
 ///
 /// This trait is implemented for `Path`, `str` and `String` by default to load assets from the
@@ -306,7 +326,7 @@ where
 pub trait AssetDesc<V>: StoredKey + Debug {
     type Error: 'static + Debug;
 
-    fn load(&self, assets: &AssetCache) -> Result<Asset<V>, Self::Error>;
+    fn create(&self, assets: &AssetCache) -> Result<Asset<V>, Self::Error>;
 }
 
 pub trait AsyncAssetDesc<V>: StoredKey + Debug + Send + Sync {

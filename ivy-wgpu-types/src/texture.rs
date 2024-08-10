@@ -257,7 +257,7 @@ impl TextureFromPath {
 impl AssetDesc<Texture> for TextureFromPath {
     type Error = image::ImageError;
 
-    fn load(
+    fn create(
         &self,
         assets: &ivy_assets::AssetCache,
     ) -> Result<ivy_assets::Asset<Texture>, Self::Error> {
@@ -285,7 +285,7 @@ pub struct DefaultNormalTexture;
 impl AssetDesc<Texture> for DefaultNormalTexture {
     type Error = Infallible;
 
-    fn load(&self, assets: &AssetCache) -> Result<Asset<Texture>, Self::Error> {
+    fn create(&self, assets: &AssetCache) -> Result<Asset<Texture>, Self::Error> {
         assets.try_load(&TextureFromColor {
             color: [127, 127, 255, 255],
             format: wgpu::TextureFormat::Rgba8Unorm,
@@ -302,7 +302,7 @@ pub struct TextureFromColor {
 impl AssetDesc<Texture> for TextureFromColor {
     type Error = Infallible;
 
-    fn load(&self, assets: &AssetCache) -> Result<Asset<Texture>, Infallible> {
+    fn create(&self, assets: &AssetCache) -> Result<Asset<Texture>, Infallible> {
         Ok(assets.insert(
             texture_from_image(
                 &assets.service(),
