@@ -37,7 +37,7 @@ impl Document {
 impl AssetDesc<Document> for Asset<ivy_gltf::Document> {
     type Error = anyhow::Error;
 
-    fn load(&self, assets: &AssetCache) -> Result<Asset<Document>, Self::Error> {
+    fn create(&self, assets: &AssetCache) -> Result<Asset<Document>, Self::Error> {
         Ok(assets.insert(Document::new(&assets.service(), assets, self.data())?))
     }
 }
@@ -45,7 +45,7 @@ impl AssetDesc<Document> for Asset<ivy_gltf::Document> {
 impl AssetDesc<Document> for Asset<ivy_gltf::DocumentData> {
     type Error = anyhow::Error;
 
-    fn load(&self, assets: &AssetCache) -> Result<Asset<Document>, Self::Error> {
+    fn create(&self, assets: &AssetCache) -> Result<Asset<Document>, Self::Error> {
         Ok(assets.insert(Document::new(&assets.service(), assets, self)?))
     }
 }

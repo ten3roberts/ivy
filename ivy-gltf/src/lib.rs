@@ -478,7 +478,7 @@ impl GltfPrimitive {
 impl AssetDesc<MeshData> for GltfPrimitive {
     type Error = anyhow::Error;
 
-    fn load(&self, _: &AssetCache) -> Result<Asset<MeshData>, Self::Error> {
+    fn create(&self, _: &AssetCache) -> Result<Asset<MeshData>, Self::Error> {
         self.data()
             .mesh_data()
             .get(self.mesh_index())

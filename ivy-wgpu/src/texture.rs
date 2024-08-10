@@ -19,7 +19,7 @@ impl TextureAndKindDesc {
 impl AssetDesc<Texture> for TextureAndKindDesc {
     type Error = image::ImageError;
 
-    fn load(&self, assets: &AssetCache) -> Result<Asset<Texture>, Self::Error> {
+    fn create(&self, assets: &AssetCache) -> Result<Asset<Texture>, Self::Error> {
         profile_function!("TextureDesc::load");
         let gpu = assets.service();
 
