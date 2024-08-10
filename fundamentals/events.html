@@ -188,30 +188,7 @@ by other means as the event will be cloned for every subscribed sender.</p>
 <h2 id="example"><a class="header" href="#example">Example</a></h2>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn events() {
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    pub struct MyEvent(String);
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    pub struct OtherEvent(String);
-
-    // Normally, events will be supplied by App
-    let mut events = Events::new();
-    let my_events = events.subscribe::&lt;MyEvent&gt;();
-
-    let other_events = events.subscribe::&lt;OtherEvent&gt;();
-
-    // Send some events
-    events.send(MyEvent(String::from("Hello, World!")));
-
-    // Receive events
-    for event in my_events.try_iter() {
-        let other = OtherEvent(event.0.to_uppercase());
-        events.send(other)
-    }
-
-    assert!(other_events
-        .try_iter()
-        .map(|val| val.0)
+</span>{{ #include ../../../tests/events.rs:4:27 }}
 <span class="boring">}</span></code></pre></pre>
 <h2 id="intercepting"><a class="header" href="#intercepting">Intercepting</a></h2>
 <p>Sometimes it is necessary to intercept events, either absorbing them or
@@ -224,29 +201,7 @@ be present and thus requiring a <em>mockup</em> intercepter that simply re-emits
 <p>For these use cases, the use of the <code>intercept</code> API is necessary.</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn intercept_events() {
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    pub struct MyEvent(String);
-
-    // Normally, events will be supplied by App
-    let mut events = Events::new();
-    let (tx, my_events) = flume::unbounded();
-    events.intercept::&lt;MyEvent, _&gt;(tx).unwrap();
-
-    let other_events = events.subscribe::&lt;MyEvent&gt;();
-
-    // Send some events
-    events.send(MyEvent(String::from("Hello, World!")));
-
-    // Receive events
-    for event in my_events.try_iter() {
-        let other = MyEvent(event.0.to_uppercase());
-        events.intercepted_send(other)
-    }
-
-    assert!(other_events
-        .try_iter()
-        .map(|val| val.0)
+</span>{{ #include ../../../tests/events.rs:32:54 }}
 <span class="boring">}</span></code></pre></pre>
 
                     </main>
