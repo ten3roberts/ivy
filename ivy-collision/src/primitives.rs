@@ -57,7 +57,7 @@ impl CollisionPrimitive for Cube {
     }
 
     fn dyn_clone(&self) -> Box<dyn CollisionPrimitive + Send + Sync> {
-        Box::new(self.clone())
+        Box::new(*self)
     }
 }
 
@@ -141,7 +141,7 @@ impl CollisionPrimitive for Sphere {
     }
 
     fn dyn_clone(&self) -> Box<dyn CollisionPrimitive + Send + Sync> {
-        Box::new(self.clone())
+        Box::new(*self)
     }
 }
 
@@ -196,7 +196,7 @@ impl CollisionPrimitive for Capsule {
     }
 
     fn dyn_clone(&self) -> Box<dyn CollisionPrimitive + Send + Sync> {
-        Box::new(self.clone())
+        Box::new(*self)
     }
 }
 

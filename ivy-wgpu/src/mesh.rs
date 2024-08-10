@@ -1,4 +1,4 @@
-use glam::{U16Vec4, UVec4, Vec2, Vec3, Vec4};
+use glam::{UVec4, Vec2, Vec3, Vec4};
 use itertools::{izip, Itertools};
 use ivy_assets::Asset;
 use ivy_graphics::mesh::{

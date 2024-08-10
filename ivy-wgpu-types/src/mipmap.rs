@@ -22,35 +22,15 @@
 //! OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 //! SOFTWARE.
 
-use std::{borrow::Cow, f32::consts};
+use std::borrow::Cow;
 
-use ivy_assets::AssetCache;
-use wgpu::{CommandEncoder, Texture, TextureFormat, TextureUsages};
+use wgpu::{CommandEncoder, Texture};
 
-use crate::{
-    texture::{texture_from_image, TextureFromImageDesc},
-    Gpu,
-};
+use crate::Gpu;
 
-use super::texture::read_texture;
-
-struct MipMapGenerator {
-    bind_group: wgpu::BindGroup,
-    uniform_buf: wgpu::Buffer,
-    draw_pipeline: wgpu::RenderPipeline,
-}
+struct MipMapGenerator {}
 
 impl MipMapGenerator {
-    fn generate_matrix(aspect_ratio: f32) -> glam::Mat4 {
-        let projection = glam::Mat4::perspective_rh(consts::FRAC_PI_4, aspect_ratio, 1.0, 1000.0);
-        let view = glam::Mat4::look_at_rh(
-            glam::Vec3::new(0f32, 0.0, 10.0),
-            glam::Vec3::new(0f32, 50.0, 0.0),
-            glam::Vec3::Z,
-        );
-        projection * view
-    }
-
     fn generate_mipmaps(
         encoder: &mut wgpu::CommandEncoder,
         device: &wgpu::Device,
@@ -133,9 +113,6 @@ impl MipMapGenerator {
                 label: None,
             });
 
-            let pipeline_query_index_base = target_mip as u32 - 1;
-            let timestamp_query_index_base = (target_mip as u32 - 1) * 2;
-
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: None,
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -169,44 +146,55 @@ pub fn generate_mipmaps(
     MipMapGenerator::generate_mipmaps(encoder, &gpu.device, texture, mip_count, base_array_layer);
 }
 
-#[test]
-fn load_mips() {
-    tracing_subscriber::fmt::init();
-    futures::executor::block_on(async {
-        tracing::info!("loading image");
-        let image = image::open("../assets/textures/statue.jpg").unwrap();
+#[cfg(test)]
+mod test {
+    use ivy_assets::AssetCache;
+    use wgpu::{TextureFormat, TextureUsages};
 
-        let gpu = Gpu::headless().await;
+    use crate::{
+        mipmap::generate_mipmaps,
+        texture::{read_texture, texture_from_image, TextureFromImageDesc},
+        Gpu,
+    };
 
-        let assets = AssetCache::new();
-        assets.register_service(gpu.clone());
+    #[test]
+    fn load_mips() {
+        tracing_subscriber::fmt::init();
+        futures::executor::block_on(async {
+            tracing::info!("loading image");
+            let image = image::open("../assets/textures/statue.jpg").unwrap();
 
-        tracing::info!("creating image");
-        let texture = texture_from_image(
-            &gpu,
-            &assets,
-            &image,
-            TextureFromImageDesc {
-                label: "test_image".into(),
-                format: TextureFormat::Rgba8UnormSrgb,
-                mip_level_count: None,
-                usage: TextureUsages::COPY_SRC
-                    | TextureUsages::TEXTURE_BINDING
-                    | TextureUsages::RENDER_ATTACHMENT,
-                generate_mipmaps: true,
-            },
-        )
-        .unwrap();
+            let gpu = Gpu::headless().await;
 
-        let mut encoder = gpu.device.create_command_encoder(&Default::default());
-        generate_mipmaps(&gpu, &mut encoder, &texture, texture.mip_level_count(), 0);
-        gpu.queue.submit([encoder.finish()]);
+            let assets = AssetCache::new();
+            assets.register_service(gpu.clone());
 
-        tracing::info!("reading back texture");
-        let mip = read_texture(&gpu, &texture, 3, 0, image::ColorType::Rgba8)
-            .await
+            tracing::info!("creating image");
+            let texture = texture_from_image(
+                &gpu,
+                &image,
+                TextureFromImageDesc {
+                    label: "test_image".into(),
+                    format: TextureFormat::Rgba8UnormSrgb,
+                    mip_level_count: None,
+                    usage: TextureUsages::COPY_SRC
+                        | TextureUsages::TEXTURE_BINDING
+                        | TextureUsages::RENDER_ATTACHMENT,
+                    generate_mipmaps: true,
+                },
+            )
             .unwrap();
 
-        mip.save("../assets/textures/mip_output.png").unwrap();
-    });
+            let mut encoder = gpu.device.create_command_encoder(&Default::default());
+            generate_mipmaps(&gpu, &mut encoder, &texture, texture.mip_level_count(), 0);
+            gpu.queue.submit([encoder.finish()]);
+
+            tracing::info!("reading back texture");
+            let mip = read_texture(&gpu, &texture, 3, 0, image::ColorType::Rgba8)
+                .await
+                .unwrap();
+
+            mip.save("../assets/textures/mip_output.png").unwrap();
+        });
+    }
 }

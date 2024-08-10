@@ -6,7 +6,6 @@ use ivy_wgpu::{
 };
 use wgpu::{
     AddressMode, BufferUsages, FilterMode, ShaderModuleDescriptor, ShaderSource, ShaderStages,
-    Texture,
 };
 
 pub struct SkyboxRenderer {

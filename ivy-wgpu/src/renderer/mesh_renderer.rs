@@ -8,7 +8,7 @@ use flax::{
     fetch::{entity_refs, Copied, Modified, Source, TransformFetch, Traverse},
     CommandBuffer, Component, Entity, Fetch, FetchExt, Query, World,
 };
-use glam::{Mat4, Vec4Swizzles};
+use glam::Mat4;
 use itertools::Itertools;
 use ivy_assets::{map::AssetMap, stored::Handle, Asset, AssetCache};
 use ivy_core::{profiling::profile_function, world_transform};
@@ -190,6 +190,7 @@ impl MeshRenderer {
             .build(gpu, &self.bind_group_layout);
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn collect_unbatched(
         &mut self,
         world: &mut World,

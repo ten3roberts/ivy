@@ -1,31 +1,25 @@
-use std::{cmp::max_by, mem::size_of, sync::Arc};
+use std::{mem::size_of, sync::Arc};
 
 use crate::{
-    components::{
-        cast_shadow, forward_pass, light_data, light_kind, projection_matrix, shadow_pass,
-    },
+    components::{cast_shadow, light_kind, projection_matrix, shadow_pass},
     renderer::{
-        mesh_renderer::MeshRenderer, CameraRenderer, CameraShaderData, RenderContext,
-        RendererStore, UpdateContext,
+        mesh_renderer::MeshRenderer, CameraRenderer, RenderContext, RendererStore, UpdateContext,
     },
     rendergraph::{
         BufferHandle, Dependency, Node, NodeExecutionContext, NodeUpdateContext, TextureHandle,
     },
     shader_library::ShaderLibrary,
-    types::{shader::TargetDesc, BindGroupBuilder, BindGroupLayoutBuilder, TypedBuffer},
+    types::{shader::TargetDesc, BindGroupBuilder, BindGroupLayoutBuilder},
     Gpu,
 };
-use anyhow::Context;
 use flax::{entity_ids, FetchExt, Query, World};
-use glam::{vec2, vec3, Mat4, Vec2, Vec3, Vec3Swizzles, Vec4Swizzles};
+use glam::{vec2, vec3, Mat4, Vec2, Vec3, Vec4Swizzles};
 use itertools::Itertools;
-use ivy_core::{main_camera, palette::num::Sqrt, world_transform, WorldExt, DEG_45};
-use ivy_input::Stimulus;
+use ivy_core::{main_camera, world_transform, WorldExt};
 use ordered_float::OrderedFloat;
 use wgpu::{
-    naga::back::FunctionCtx, BindGroup, BindGroupLayout, Buffer, BufferDescriptor, BufferUsages,
-    Color, Operations, RenderPassColorAttachment, RenderPassDescriptor, ShaderStages,
-    TextureUsages, TextureViewDescriptor, TextureViewDimension,
+    BindGroup, BindGroupLayout, Buffer, BufferDescriptor, BufferUsages, Operations,
+    RenderPassDescriptor, ShaderStages, TextureUsages, TextureViewDescriptor, TextureViewDimension,
 };
 
 use crate::components::light_shadow_data;
@@ -177,7 +171,7 @@ impl Node for ShadowMapNode {
             .borrow(ctx.world)
             .iter()
         {
-            let (_, rot, pos) = transform.to_scale_rotation_translation();
+            let (_, rot, _) = transform.to_scale_rotation_translation();
 
             to_add.push((
                 id,

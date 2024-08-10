@@ -1,18 +1,16 @@
 use std::{borrow::Cow, convert::Infallible, path::PathBuf};
 
 use anyhow::Context;
-use glam::uvec2;
-use image::{ColorType, DynamicImage, GenericImageView, ImageBuffer, Rgba, RgbaImage};
+use image::{ColorType, DynamicImage, GenericImageView, ImageBuffer, Rgba};
 use itertools::Itertools;
 use ivy_assets::{Asset, AssetCache, AssetDesc};
 use ivy_core::profiling::{profile_function, profile_scope};
 use wgpu::{
-    BufferUsages, CommandEncoderDescriptor, ComputePassDescriptor, Extent3d, ImageCopyBuffer,
-    ImageCopyTexture, ImageDataLayout, Origin3d, Texture, TextureFormat, TextureUsages,
-    TextureViewDescriptor,
+    BufferUsages, Extent3d, ImageCopyBuffer, ImageCopyTexture, ImageDataLayout, Origin3d, Texture,
+    TextureFormat, TextureUsages,
 };
 
-use crate::{mipmap::generate_mipmaps, BindGroupBuilder, TypedBuffer};
+use crate::{mipmap::generate_mipmaps, TypedBuffer};
 
 use super::Gpu;
 
@@ -43,7 +41,6 @@ pub fn max_mip_levels(width: u32, height: u32) -> u32 {
 
 pub fn texture_from_image(
     gpu: &Gpu,
-    assets: &AssetCache,
     image: &image::DynamicImage,
     desc: TextureFromImageDesc,
 ) -> anyhow::Result<Texture> {
@@ -255,18 +252,17 @@ impl TextureFromPath {
 }
 
 impl AssetDesc<Texture> for TextureFromPath {
-    type Error = image::ImageError;
+    type Error = anyhow::Error;
 
     fn create(
         &self,
         assets: &ivy_assets::AssetCache,
     ) -> Result<ivy_assets::Asset<Texture>, Self::Error> {
-        let image = image::open(&self.path)?;
+        let image: Asset<DynamicImage> = assets.try_load(&self.path)?;
 
         Ok(assets.insert(
             texture_from_image(
                 &assets.service(),
-                assets,
                 &image,
                 TextureFromImageDesc {
                     label: self.path.display().to_string().into(),
@@ -287,7 +283,7 @@ impl AssetDesc<Texture> for DefaultNormalTexture {
 
     fn create(&self, assets: &AssetCache) -> Result<Asset<Texture>, Self::Error> {
         assets.try_load(&TextureFromColor {
-            color: [127, 127, 255, 255],
+            color: [128, 128, 255, 255],
             format: wgpu::TextureFormat::Rgba8Unorm,
         })
     }
@@ -306,7 +302,6 @@ impl AssetDesc<Texture> for TextureFromColor {
         Ok(assets.insert(
             texture_from_image(
                 &assets.service(),
-                assets,
                 &DynamicImage::ImageRgba8(ImageBuffer::from_pixel(32, 32, image::Rgba(self.color))),
                 TextureFromImageDesc {
                     format: self.format,

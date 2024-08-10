@@ -2,8 +2,6 @@ use core::f32;
 
 use flax::Debuggable;
 use glam::Vec3;
-#[cfg(feature = "serialize")]
-use serde::{Deserialize, Serialize};
 
 // TODO: move to physics crate
 flax::component! {

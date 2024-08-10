@@ -1,7 +1,6 @@
 use std::{mem::size_of, sync::Arc};
 
 use flax::World;
-use glam::Mat4;
 use image::DynamicImage;
 use ivy_assets::{Asset, AssetCache, DynAssetDesc};
 use ivy_wgpu::{
@@ -9,7 +8,7 @@ use ivy_wgpu::{
     renderer::{
         gizmos_renderer::GizmosRendererNode,
         mesh_renderer::MeshRenderer,
-        shadowmapping::{LightShadowCamera, LightShadowData, ShadowMapNode},
+        shadowmapping::{LightShadowCamera, ShadowMapNode},
         skinned_mesh_renderer::SkinnedMeshRenderer,
         CameraNode, LightManager, MsaaResolve, SkyboxTextures,
     },

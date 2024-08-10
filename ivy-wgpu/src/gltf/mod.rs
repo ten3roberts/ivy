@@ -3,8 +3,7 @@ pub mod node;
 use itertools::Itertools;
 use ivy_assets::{Asset, AssetCache, AssetDesc};
 use ivy_core::profiling::{profile_function, profile_scope};
-use ivy_gltf::{DocumentData, GltfPrimitive};
-use ivy_graphics::mesh::MeshData;
+use ivy_gltf::DocumentData;
 
 use crate::{material::PbrMaterial, Gpu};
 

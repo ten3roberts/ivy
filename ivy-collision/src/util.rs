@@ -43,9 +43,7 @@ pub fn support<T: CollisionPrimitive>(
     coll: &T,
     dir: Vec3,
 ) -> Vec3 {
-    transform
-        .transform_point3(coll.support(transform_inv.transform_vector3(dir).normalize()))
-        .into()
+    transform.transform_point3(coll.support(transform_inv.transform_vector3(dir).normalize()))
 }
 
 /// Compute barycentric coordinates of p in relation to the triangle defined by (a, b, c).

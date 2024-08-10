@@ -2,7 +2,7 @@ use std::{
     any::{Any, TypeId},
     borrow::Borrow,
     collections::HashMap,
-    fmt::Debug,
+    fmt::{Debug, Display},
     hash::Hash,
     ops::Deref,
     path::Path,
@@ -18,17 +18,15 @@ mod handle;
 pub mod map;
 pub mod service;
 pub mod stored;
-use fs::AssetFromPath;
+use fs::{AssetFromPath, AsyncAssetFromPath};
 use futures::{
-    future::{BoxFuture, Shared, WeakShared},
+    future::{BoxFuture, WeakShared},
     Future, FutureExt,
 };
 pub use handle::Asset;
-use image::{DynamicImage, ImageError, ImageResult};
-use parking_lot::{Mutex, MutexGuard, RwLock, RwLockReadGuard};
+use image::DynamicImage;
+use parking_lot::{RwLock, RwLockReadGuard};
 use service::Service;
-use stored::Handle;
-use thiserror::Error;
 use tracing::Instrument;
 
 use self::{cell::AssetCell, handle::WeakHandle};
@@ -53,9 +51,16 @@ impl Debug for AssetCache {
     }
 }
 
-#[derive(Debug, Error)]
-#[error(transparent)]
+#[derive(Debug)]
 pub struct SharedError<E>(Arc<E>);
+
+impl<E: Display> Display for SharedError<E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.0, f)
+    }
+}
+
+impl<E: Debug + Display> std::error::Error for SharedError<E> {}
 
 impl<E> Clone for SharedError<E> {
     #[cold]
@@ -342,10 +347,26 @@ impl AssetFromPath for DynamicImage {
     type Error = anyhow::Error;
 
     fn load_from_path(path: &Path, assets: &AssetCache) -> anyhow::Result<Asset<Self>> {
-        Ok(assets.insert(image::open(path)?))
+        let format = image::ImageFormat::from_path(path)?;
+        let data = assets.try_load::<_, Vec<u8>>(path)?;
+        let image = image::load_from_memory_with_format(&data, format)?;
+        Ok(assets.insert(image))
     }
 }
 
+impl AsyncAssetFromPath for DynamicImage {
+    type Error = anyhow::Error;
+
+    async fn load_from_path(path: &Path, assets: &AssetCache) -> anyhow::Result<Asset<Self>> {
+        let format = image::ImageFormat::from_path(path)?;
+        let data = assets.try_load_async::<_, Vec<u8>>(path).await?;
+        let image = async_std::task::spawn_blocking(move || {
+            image::load_from_memory_with_format(&data, format)
+        })
+        .await?;
+        Ok(assets.insert(image))
+    }
+}
 #[cfg(test)]
 mod tests {
     use std::{convert::Infallible, path::Path};

@@ -1,11 +1,8 @@
 use std::{convert::Infallible, f32::consts::PI};
 
-use glam::{vec2, vec3, IVec3, Vec2, Vec3, Vec4};
+use glam::{vec2, vec3, IVec3, Vec3};
 use ivy_assets::AssetDesc;
 use ivy_graphics::mesh::MeshData;
-use ordered_float::Float;
-
-use crate::mesh::Vertex;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct UvSphereDesc {

@@ -8,9 +8,7 @@ pub fn normalize_dir(nth: usize) -> anyhow::Result<()> {
         .context("Failed to canonicalize current exe")?;
 
     let dir = (0..nth + 1)
-        .fold(Some(current_exe.as_path()), |acc, _| {
-            acc.and_then(|val| val.parent())
-        })
+        .try_fold(current_exe.as_path(), |acc, _| acc.parent())
         .context("Failed to get parent dir of executable")?;
 
     env::set_current_dir(dir).context("Failed to set current directory")?;

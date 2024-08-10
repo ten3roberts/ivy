@@ -62,18 +62,13 @@ impl AssetFromPath for Vec<u8> {
 impl AsyncAssetFromPath for Vec<u8> {
     type Error = FsAssetError;
 
-    fn load_from_path(
-        path: &Path,
-        assets: &AssetCache,
-    ) -> impl Future<Output = Result<Asset<Self>, Self::Error>> + Send {
-        async move {
-            Ok(assets.insert(
-                assets
-                    .service::<FileSystemMapService>()
-                    .load_bytes_async(path)
-                    .await?,
-            ))
-        }
+    async fn load_from_path(path: &Path, assets: &AssetCache) -> Result<Asset<Self>, Self::Error> {
+        Ok(assets.insert(
+            assets
+                .service::<FileSystemMapService>()
+                .load_bytes_async(path)
+                .await?,
+        ))
     }
 }
 

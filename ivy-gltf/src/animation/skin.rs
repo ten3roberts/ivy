@@ -6,8 +6,6 @@ use itertools::Itertools;
 use ivy_assets::{Asset, AssetCache};
 use ivy_core::TransformBundle;
 
-use crate::DocumentData;
-
 use super::{Animation, Channel, KeyFrameValues};
 
 pub type JointIndex = usize;
@@ -98,8 +96,7 @@ impl Skin {
                 let joints = skin
                     .joints()
                     .zip(reader.read_inverse_bind_matrices().unwrap())
-                    .enumerate()
-                    .map(|(i, (joint, ibm))| {
+                    .map(|(joint, ibm)| {
                         let transform = joint.transform().decomposed();
 
                         Joint {
@@ -120,8 +117,6 @@ impl Skin {
                         }
                     })
                     .collect_vec();
-
-                let name = skin.name();
 
                 assert_eq!(skin.index(), i);
                 let animations = skin_animations

@@ -7,8 +7,8 @@ use ivy_wgpu::{
     Gpu,
 };
 use wgpu::{
-    BindGroup, BindGroupLayout, BindingType, Color, Operations, RenderPassColorAttachment,
-    SamplerDescriptor, ShaderModuleDescriptor, ShaderSource, ShaderStages, StoreOp, TextureFormat,
+    BindGroup, BindGroupLayout, BindingType, Operations, RenderPassColorAttachment,
+    SamplerDescriptor, ShaderModuleDescriptor, ShaderSource, ShaderStages, StoreOp,
     TextureSampleType, TextureUsages, TextureViewDimension,
 };
 

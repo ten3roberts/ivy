@@ -1,4 +1,4 @@
-use std::{mem::size_of, sync::Arc, time::Instant};
+use std::{sync::Arc, time::Instant};
 
 use anyhow::Context;
 use flax::{
@@ -6,7 +6,6 @@ use flax::{
     QueryBorrow, Schedule, System, World,
 };
 use glam::{vec3, EulerRot, Mat4, Quat, Vec2, Vec3};
-use image::DynamicImage;
 use ivy_assets::{Asset, AssetCache};
 use ivy_core::{
     app::{InitEvent, TickEvent},
@@ -27,19 +26,12 @@ use ivy_input::{
     types::{Key, NamedKey},
     Action, BindingExt, CursorMovement, InputState, KeyBinding, MouseButtonBinding,
 };
-use ivy_postprocessing::{
-    bloom::BloomNode,
-    depth_resolve::MsaaDepthResolve,
-    hdri::{HdriProcessor, HdriProcessorNode},
-    preconfigured::{PbrRenderGraph, PbrRenderGraphConfig, SkyboxConfig},
-    skybox::SkyboxRenderer,
-    tonemap::TonemapNode,
-};
+use ivy_postprocessing::preconfigured::{PbrRenderGraph, PbrRenderGraphConfig, SkyboxConfig};
 use ivy_scene::{GltfNodeExt, NodeMountOptions};
 use ivy_wgpu::{
     components::{
-        cast_shadow, environment_data, forward_pass, light_data, light_kind, main_window,
-        projection_matrix, shadow_pass, window,
+        cast_shadow, environment_data, light_data, light_kind, main_window, projection_matrix,
+        shadow_pass, window,
     },
     driver::{WindowHandle, WinitDriver},
     events::ResizedEvent,
@@ -48,21 +40,16 @@ use ivy_wgpu::{
     material_desc::{MaterialData, MaterialDesc},
     mesh_desc::MeshDesc,
     primitives::{generate_plane, CubeDesc, UvSphereDesc},
-    renderer::{
-        gizmos_renderer::GizmosRendererNode, mesh_renderer::MeshRenderer,
-        shadowmapping::ShadowMapNode, skinned_mesh_renderer::SkinnedMeshRenderer, CameraNode,
-        EnvironmentData, LightManager, MsaaResolve, RenderObjectBundle, SkyboxTextures,
-    },
-    rendergraph::{self, BufferDesc, ExternalResources, ManagedTextureDesc, RenderGraph},
+    renderer::{EnvironmentData, RenderObjectBundle},
+    rendergraph::{self, ExternalResources, RenderGraph},
     shader_library::{ModuleDesc, ShaderLibrary},
     shaders::{PbrShaderDesc, ShadowShaderDesc},
     Gpu,
 };
-use ivy_wgpu_types::{texture::max_mip_levels, PhysicalSize, Surface};
+use ivy_wgpu_types::{PhysicalSize, Surface};
 use tracing::Instrument;
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
-use wgpu::{BufferUsages, Extent3d, TextureDimension, TextureFormat};
 use winit::{dpi::LogicalSize, window::WindowAttributes};
 
 const ENABLE_SKYBOX: bool = true;
@@ -175,20 +162,20 @@ impl LogicLayer {
                     MaterialData::new()
                         .with_metallic_factor(0.0)
                         .with_albedo(TextureDesc::path(
-                        "assets/textures/BaseCollection/Sand/Ground054_1K-PNG_Color.png",
-                    ))
-                    .with_normal(TextureDesc::path(
-                        "assets/textures/BaseCollection/Sand/Ground054_1K-PNG_NormalGL.png",
-                    ))
-                    .with_metallic_roughness(TextureDesc::path(
-                        "assets/textures/BaseCollection/Sand/Ground054_1K-PNG_Roughness.png",
-                    ))
-                    .with_ambient_occlusion(TextureDesc::path(
-                        "assets/textures/BaseCollection/Sand/Ground054_1K-PNG_AmbientOcclusion.png",
-                    ))
-                    .with_displacement(TextureDesc::path(
-                        "assets/textures/BaseCollection/Sand/Ground054_1K-PNG_Displacement.png",
-                    )),
+                            "textures/BaseCollection/Sand/Ground054_1K-PNG_Color.png",
+                        ))
+                        .with_normal(TextureDesc::path(
+                            "textures/BaseCollection/Sand/Ground054_1K-PNG_NormalGL.png",
+                        ))
+                        .with_metallic_roughness(TextureDesc::path(
+                            "textures/BaseCollection/Sand/Ground054_1K-PNG_Roughness.png",
+                        ))
+                        .with_ambient_occlusion(TextureDesc::path(
+                            "textures/BaseCollection/Sand/Ground054_1K-PNG_AmbientOcclusion.png",
+                        ))
+                        .with_displacement(TextureDesc::path(
+                            "textures/BaseCollection/Sand/Ground054_1K-PNG_Displacement.png",
+                        )),
                 );
 
                 cmd.lock().spawn(
@@ -207,13 +194,7 @@ impl LogicLayer {
                 );
 
                 let sphere_mesh = MeshDesc::content(assets.load(&UvSphereDesc::default()));
-                let cube_mesh = MeshDesc::content(assets.load(&CubeDesc::default()));
-
-                let plastic_material = MaterialDesc::content(
-                    MaterialData::new()
-                        .with_metallic_factor(0.0)
-                        .with_roughness_factor(0.2),
-                );
+                let cube_mesh = MeshDesc::content(assets.load(&CubeDesc));
 
                 for i in 0..8 {
                     let roughness = i as f32 / (7) as f32;
@@ -348,18 +329,6 @@ impl LogicLayer {
             .set(light_kind(), LightKind::Directional)
             .set_default(cast_shadow())
             .spawn(world);
-
-        // Entity::builder()
-        //     .mount(TransformBundle::default().with_rotation(Quat::from_euler(
-        //         EulerRot::YXZ,
-        //         3.0,
-        //         0.5,
-        //         0.0,
-        //     )))
-        //     .set(light_data(), LightData::new(Srgb::new(1.0, 1.0, 1.0), 2.0))
-        //     .set(light_kind(), LightKind::Directional)
-        //     .set_default(cast_shadow())
-        //     .spawn(world);
 
         Entity::builder()
             .mount(TransformBundle::default().with_position(vec3(0.0, 2.0, 0.0)))
@@ -706,7 +675,7 @@ impl RenderGraphRenderer {
             msaa: Some(Default::default()),
             bloom: Some(Default::default()),
             skybox: Some(SkyboxConfig {
-                hdri: Box::new("assets/hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr"),
+                hdri: Box::new("hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr"),
             }),
         }
         .configure(

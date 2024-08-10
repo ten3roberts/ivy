@@ -2,9 +2,6 @@ use glam::{vec3, Vec3, Vec4};
 pub use palette;
 use palette::{FromColor, Hsla, Hsva, IntoColor, Srgb, Srgba};
 
-#[cfg(feature = "serialize")]
-use serde::{Deserialize, Serialize};
-
 pub type Color = Srgba;
 
 pub trait ColorExt {

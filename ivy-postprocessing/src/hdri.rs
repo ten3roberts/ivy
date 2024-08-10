@@ -5,11 +5,11 @@ use std::any::type_name;
 use glam::{Mat4, Vec3};
 use image::DynamicImage;
 use itertools::Itertools;
-use ivy_assets::{Asset, AssetCache};
+use ivy_assets::Asset;
 use ivy_core::DEG_90;
 use ivy_wgpu::{
     renderer::SkyboxTextures,
-    rendergraph::{Dependency, Node, TextureHandle},
+    rendergraph::{Dependency, Node},
     types::{
         shader::{ShaderDesc, TargetDesc},
         BindGroupBuilder, BindGroupLayoutBuilder, PhysicalSize, Shader, TypedBuffer,
@@ -131,13 +131,11 @@ impl HdriProcessor {
         &self,
         gpu: &Gpu,
         encoder: &mut CommandEncoder,
-        assets: &AssetCache,
         source: &DynamicImage,
         dest: &Texture,
     ) {
         let source_hdri = ivy_wgpu::types::texture::texture_from_image(
             gpu,
-            assets,
             source,
             ivy_wgpu::types::texture::TextureFromImageDesc {
                 label: "hdri".into(),
@@ -516,7 +514,7 @@ impl Node for HdriProcessorNode {
         if let Some(source) = self.source.take() {
             let environment_map = ctx.get_texture(self.skybox.environment_map);
             self.processor
-                .process_hdri(ctx.gpu, ctx.encoder, ctx.assets, &source, environment_map);
+                .process_hdri(ctx.gpu, ctx.encoder, &source, environment_map);
 
             self.processor.process_diffuse_irradiance(
                 ctx.gpu,

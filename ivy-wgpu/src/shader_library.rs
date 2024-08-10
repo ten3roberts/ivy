@@ -4,7 +4,7 @@ use anyhow::Context;
 use ivy_wgpu_types::Gpu;
 use naga_oil::compose::{Composer, ShaderDefValue};
 use parking_lot::Mutex;
-use wgpu::{Device, ShaderModule, ShaderModuleDescriptor, ShaderSource};
+use wgpu::{ShaderModule, ShaderModuleDescriptor, ShaderSource};
 
 use crate::shader::ShaderPassDesc;
 
