@@ -103,6 +103,7 @@ impl<T> Bucket<T> {
 trait SubResource {
     type Desc<'a>: Clone;
     fn is_compatible(desc: &Self::Desc<'_>, other: &Self::Desc<'_>) -> bool;
+    fn is_persistent(desc: &Self::Desc<'_>) -> bool;
     fn create(gpu: &Gpu, desc: Self::Desc<'_>) -> Self;
 }
 
@@ -125,6 +126,10 @@ impl SubResource for Texture {
             && desc.desc.sample_count == other.desc.sample_count
     }
 
+    fn is_persistent(desc: &Self::Desc<'_>) -> bool {
+        desc.desc.persistent
+    }
+
     fn create(gpu: &Gpu, desc: Self::Desc<'_>) -> Self {
         gpu.device.create_texture(&TextureDescriptor {
             label: Some(&desc.desc.label),
@@ -144,6 +149,10 @@ impl SubResource for Buffer {
 
     fn is_compatible(desc: &Self::Desc<'_>, other: &Self::Desc<'_>) -> bool {
         desc.size == other.size
+    }
+
+    fn is_persistent(desc: &Self::Desc<'_>) -> bool {
+        false
     }
 
     fn create(gpu: &Gpu, desc: Self::Desc<'_>) -> Self {
@@ -175,38 +184,56 @@ impl<Handle: slotmap::Key, Data: SubResource> ResourceAllocator<Handle, Data> {
     ) where
         Handle: Into<ResourceHandle>,
     {
-        let mut buckets: Vec<Bucket<Data::Desc<'a>>> = Vec::new();
-
-        self.bucket_map.clear();
+        let mut buckets: Vec<(Bucket<Data::Desc<'a>>, Vec<Handle>)> = Vec::new();
 
         for (handle, desc, lifetime) in resources {
             // Find suitable bucket
             let bucket_id = lifetime.and_then(|lifetime| {
-                buckets
-                    .iter_mut()
-                    .find_position(|v| Data::is_compatible(&desc, &v.desc) && !v.overlaps(lifetime))
+                buckets.iter_mut().find_position(|(v, _)| {
+                    Data::is_compatible(&desc, &v.desc) && !v.overlaps(lifetime)
+                })
             });
 
             let lifetime = lifetime.unwrap_or(Lifetime::new(0, u32::MAX));
 
-            if let Some((bucket_id, bucket)) = bucket_id {
+            if let Some((_, (bucket, handles))) = bucket_id {
                 bucket.lifetimes.push(lifetime);
-                self.bucket_map.insert(handle, bucket_id);
+                handles.push(handle);
             } else {
-                self.bucket_map.insert(handle, buckets.len());
-                buckets.push(Bucket {
-                    desc: desc.clone(),
-                    lifetimes: vec![lifetime],
-                })
+                buckets.push((
+                    Bucket {
+                        desc: desc.clone(),
+                        lifetimes: vec![lifetime],
+                    },
+                    vec![handle],
+                ))
             }
         }
 
-        tracing::info!("Allocating {} resources", buckets.len());
+        buckets.sort_by_key(|(v, _)| !Data::is_persistent(&v.desc));
 
-        self.bucket_data = buckets
-            .iter()
-            .map(|bucket| Data::create(gpu, bucket.desc.clone()))
-            .collect_vec();
+        let persistent_count = if self.bucket_data.is_empty() {
+            0
+        } else {
+            buckets
+                .iter()
+                .take_while(|(v, _)| Data::is_persistent(&v.desc))
+                .count()
+        };
+
+        self.bucket_data.drain(persistent_count..);
+
+        // Preserve persistent resources
+        for (bucket, handles) in &buckets[persistent_count..] {
+            let bucket_id = self.bucket_data.len();
+
+            for handle in handles {
+                self.bucket_map.insert(*handle, bucket_id);
+            }
+
+            self.bucket_data
+                .push(Data::create(gpu, bucket.desc.clone()));
+        }
     }
 }
 

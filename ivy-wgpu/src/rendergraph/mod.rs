@@ -67,7 +67,7 @@ pub trait Node: 'static {
 
     fn draw(&mut self, ctx: NodeExecutionContext) -> anyhow::Result<()>;
 
-    fn on_resource_changed(&mut self, _resource: ResourceHandle) {}
+    fn on_resource_changed(&mut self, _resource: ResourceHandle);
 
     fn read_dependencies(&self) -> Vec<Dependency>;
     fn write_dependencies(&self) -> Vec<Dependency>;
@@ -478,6 +478,8 @@ mod test {
             fn update(&mut self, _ctx: super::NodeUpdateContext) -> anyhow::Result<()> {
                 Ok(())
             }
+
+            fn on_resource_changed(&mut self, _resource: super::ResourceHandle) {}
         }
 
         struct ReadFromTexture {
@@ -545,6 +547,8 @@ mod test {
             fn update(&mut self, _ctx: super::NodeUpdateContext) -> anyhow::Result<()> {
                 Ok(())
             }
+
+            fn on_resource_changed(&mut self, _resource: super::ResourceHandle) {}
         }
 
         struct WriteIntoTexture {
@@ -584,6 +588,8 @@ mod test {
             fn update(&mut self, _ctx: super::NodeUpdateContext) -> anyhow::Result<()> {
                 Ok(())
             }
+
+            fn on_resource_changed(&mut self, _resource: super::ResourceHandle) {}
         }
 
         let mut render_graph = RenderGraph::new();

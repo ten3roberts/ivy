@@ -51,6 +51,10 @@ impl Node for MsaaResolve {
         type_name::<Self>()
     }
 
+    fn update(&mut self, _ctx: crate::rendergraph::NodeUpdateContext) -> anyhow::Result<()> {
+        Ok(())
+    }
+
     fn draw(&mut self, ctx: crate::rendergraph::NodeExecutionContext) -> anyhow::Result<()> {
         let final_color = ctx
             .get_texture(self.final_color)
@@ -77,6 +81,8 @@ impl Node for MsaaResolve {
         Ok(())
     }
 
+    fn on_resource_changed(&mut self, _resource: crate::rendergraph::ResourceHandle) {}
+
     fn read_dependencies(&self) -> Vec<Dependency> {
         vec![Dependency::texture(
             self.final_color,
@@ -89,10 +95,6 @@ impl Node for MsaaResolve {
             self.resolve_target,
             TextureUsages::RENDER_ATTACHMENT,
         )]
-    }
-
-    fn update(&mut self, _ctx: crate::rendergraph::NodeUpdateContext) -> anyhow::Result<()> {
-        Ok(())
     }
 }
 

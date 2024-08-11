@@ -220,6 +220,8 @@ impl Node for GizmosRendererNode {
     fn write_dependencies(&self) -> Vec<crate::rendergraph::Dependency> {
         vec![]
     }
+
+    fn on_resource_changed(&mut self, _resource: crate::rendergraph::ResourceHandle) {}
 }
 
 #[repr(C)]

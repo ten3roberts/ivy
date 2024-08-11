@@ -326,6 +326,10 @@ impl Node for ShadowMapNode {
             Dependency::buffer(self.shadow_camera_buffer, BufferUsages::COPY_DST),
         ]
     }
+
+    fn on_resource_changed(&mut self, _resource: crate::rendergraph::ResourceHandle) {
+        self.bind_groups = None;
+    }
 }
 
 struct Frustrum {
