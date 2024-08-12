@@ -7,32 +7,29 @@ use palette::{
     Srgb, WithAlpha,
 };
 use slotmap::SlotMap;
-use smallvec::{smallvec, Array, SmallVec};
 
 use crate::{
-    intersect, BoundingBox, Collision, CollisionTreeNode, NodeIndex, NodeState, Nodes, Object,
-    ObjectData, ObjectIndex,
+    intersect, BoundingBox, Collision, CollisionTreeNode, CollisionTreeObject, NodeIndex,
+    NodeState, Nodes, ObjectData, ObjectIndex,
 };
 
 const MARGIN: f32 = 1.2;
+const NODE_CAPACITY: usize = 16;
 
 #[derive(Debug, Clone)]
-pub struct BvhNode<O: Array<Item = Object> = [Object; 1]> {
+pub struct BvhNode {
     bounds: BoundingBox,
-    objects: SmallVec<O>,
-    axis: Axis,
+    objects: Vec<ObjectIndex>,
     children: Option<[NodeIndex; 2]>,
     depth: u32,
-    /// all objects inside this subtree is static
     state: NodeState,
 }
 
-impl<O: Array<Item = Object>> Default for BvhNode<O> {
+impl Default for BvhNode {
     fn default() -> Self {
         Self {
             bounds: Default::default(),
             objects: Default::default(),
-            axis: Default::default(),
             children: Default::default(),
             depth: Default::default(),
             state: NodeState::Static,
@@ -73,15 +70,11 @@ impl Axis {
     }
 }
 
-impl<O> BvhNode<O>
-where
-    O: Array<Item = Object>,
-{
-    pub fn new(bounds: BoundingBox, axis: Axis) -> Self {
+impl BvhNode {
+    pub fn new(bounds: BoundingBox) -> Self {
         Self {
             bounds,
-            objects: SmallVec::new(),
-            axis,
+            objects: Vec::new(),
             children: None,
             depth: 0,
             state: NodeState::Static,
@@ -90,21 +83,19 @@ where
 
     fn from_objects(
         nodes: &mut Nodes<Self>,
-        objects: SmallVec<O>,
+        objects: &[ObjectIndex],
         data: &SlotMap<ObjectIndex, ObjectData>,
-        axis: Axis,
         depth: u32,
     ) -> NodeIndex {
         let state = objects
             .iter()
-            .fold(NodeState::Static, |s, v| s.merge(data[v.index].state));
+            .fold(NodeState::Static, |s, &v| s.merge(data[v].state));
 
         let bounds = Self::calculate_bounds(&objects, data, state);
 
         let node = Self {
             bounds,
-            objects,
-            axis,
+            objects: objects.to_vec(),
             children: None,
             depth,
             state,
@@ -125,23 +116,36 @@ where
         data: &SlotMap<ObjectIndex, ObjectData>,
     ) {
         let node = &mut nodes[index];
-        if node.objects.len() <= node.objects.inline_size() {
+        if node.objects.len() <= NODE_CAPACITY {
             return;
         }
 
+        let bounds = Self::calculate_bounds(&node.objects, data, NodeState::Static).size();
+        let axis = if bounds.x > bounds.y {
+            if bounds.x > bounds.z {
+                Axis::X
+            } else {
+                Axis::Z
+            }
+        } else if bounds.y > bounds.x {
+            Axis::Y
+        } else {
+            Axis::Z
+        };
+
         // Sort by axis and select the median
-        node.sort_by_axis(data);
+        node.sort_by_axis(axis, data);
         let median = node.objects.len() / 2;
-        let left: SmallVec<O> = node.objects[0..median].into();
-        let right: SmallVec<O> = node.objects[median..].into();
+
+        let left = &node.objects[0..median].to_vec();
+        let right = &node.objects[median..].to_vec();
         assert_eq!(left.len() + right.len(), node.objects.len());
-        let new_axis = node.axis.rotate();
         let depth = node.depth + 1;
 
         node.objects.clear();
 
-        let left = Self::from_objects(nodes, left, data, new_axis, depth);
-        let right = Self::from_objects(nodes, right, data, new_axis, depth);
+        let left = Self::from_objects(nodes, left, data, depth);
+        let right = Self::from_objects(nodes, right, data, depth);
 
         nodes[index].children = Some([left, right]);
     }
@@ -157,27 +161,27 @@ where
 
     /// Updates the bounds of the object
     pub fn calculate_bounds(
-        objects: &[Object],
+        objects: &[ObjectIndex],
         data: &SlotMap<ObjectIndex, ObjectData>,
         state: NodeState,
     ) -> BoundingBox {
         let mut l = Vec3::new(f32::MAX, f32::MAX, f32::MAX);
         let mut r = Vec3::new(f32::MIN, f32::MIN, f32::MIN);
 
-        objects.iter().for_each(|val| {
-            let bounds = data[val.index].extended_bounds;
-            let (l_obj, r_obj) = bounds.into_corners();
-            l = l.min(l_obj);
-            r = r.max(r_obj);
-        });
+        for &val in objects.iter() {
+            let bounds = data[val].extended_bounds;
+            l = l.min(bounds.min);
+            r = r.max(bounds.max);
+        }
 
         BoundingBox::from_corners(l, r).margin(if state.is_dynamic() { MARGIN } else { 1.0 })
     }
 
-    fn sort_by_axis(&mut self, data: &SlotMap<ObjectIndex, ObjectData>) {
-        let axis = self.axis.into();
+    fn sort_by_axis(&mut self, axis: Axis, data: &SlotMap<ObjectIndex, ObjectData>) {
+        let axis = axis.into();
+
         self.objects
-            .sort_unstable_by_key(|val| OrderedFloat(data[val.index].bounds.origin[axis]))
+            .sort_unstable_by_key(|val| OrderedFloat(data[*val].bounds.midpoint()[axis]))
     }
 
     fn traverse<F: FnMut(&Self, &Self)>(
@@ -221,7 +225,7 @@ where
     }
 
     /// Collapses a whole tree and fills `objects` with the objects in the tree
-    fn collapse(index: NodeIndex, nodes: &mut Nodes<Self>, objects: &mut SmallVec<O>) {
+    fn collapse(index: NodeIndex, nodes: &mut Nodes<Self>, objects: &mut Vec<ObjectIndex>) {
         let node = &mut nodes[index];
 
         objects.append(&mut node.objects);
@@ -238,7 +242,7 @@ where
         index: NodeIndex,
         nodes: &mut Nodes<Self>,
         data: &SlotMap<ObjectIndex, ObjectData>,
-        to_refit: &mut Vec<Object>,
+        to_refit: &mut Vec<ObjectIndex>,
         changed: &mut usize,
     ) -> NodeState {
         let node = &mut nodes[index];
@@ -262,8 +266,8 @@ where
             let mut removed = 0;
             let mut new_state = NodeState::Static;
 
-            node.objects.retain(|val| {
-                let obj = match data.get(val.index) {
+            node.objects.retain(|&val| {
+                let obj = match data.get(val) {
                     Some(val) => val,
                     // Entity was removed
                     None => {
@@ -279,7 +283,7 @@ where
                     true
                 } else {
                     removed += 1;
-                    to_refit.push(*val);
+                    to_refit.push(val);
                     false
                 }
             });
@@ -294,19 +298,19 @@ where
     }
 }
 
-impl<O: Array<Item = Object> + ComponentValue> CollisionTreeNode for BvhNode<O> {
-    fn objects(&self) -> &[Object] {
+impl CollisionTreeNode for BvhNode {
+    fn objects(&self) -> &[ObjectIndex] {
         &self.objects
     }
 
     fn insert(
         index: NodeIndex,
         nodes: &mut Nodes<Self>,
-        object: Object,
+        object: ObjectIndex,
         data: &SlotMap<ObjectIndex, ObjectData>,
     ) {
         let node = &mut nodes[index];
-        let obj = &data[object.index];
+        let obj = &data[object];
 
         // Make bound fit object
         node.bounds = node.calculate_bounds_incremental(obj);
@@ -324,7 +328,7 @@ impl<O: Array<Item = Object> + ComponentValue> CollisionTreeNode for BvhNode<O> 
             // Object did not fit in any child.
             // Gather up both children and all descendants, and re-add all objects by splitting.
             else {
-                let mut objects = smallvec![object];
+                let mut objects = vec![object];
                 Self::collapse(index, nodes, &mut objects);
 
                 let node = &mut nodes[index];
@@ -341,8 +345,8 @@ impl<O: Array<Item = Object> + ComponentValue> CollisionTreeNode for BvhNode<O> 
         }
     }
 
-    fn remove(&mut self, object: Object) -> Option<Object> {
-        if let Some(idx) = self.objects.iter().position(|val| *val == object) {
+    fn remove(&mut self, object: ObjectIndex) -> Option<ObjectIndex> {
+        if let Some(idx) = self.objects.iter().position(|&val| val == object) {
             Some(self.objects.swap_remove(idx))
         } else {
             None
@@ -364,10 +368,11 @@ impl<O: Array<Item = Object> + ComponentValue> CollisionTreeNode for BvhNode<O> 
         index: NodeIndex,
         nodes: &mut Nodes<Self>,
         data: &SlotMap<ObjectIndex, ObjectData>,
-        to_refit: &mut Vec<Object>,
+        to_refit: &mut Vec<ObjectIndex>,
         despawned: &mut usize,
     ) {
-        Self::update_impl(index, nodes, data, to_refit, despawned);
+        unimplemented!()
+        // Self::update_impl(index, nodes, data, to_refit, despawned);
     }
 
     fn check_collisions(
@@ -379,13 +384,13 @@ impl<O: Array<Item = Object> + ComponentValue> CollisionTreeNode for BvhNode<O> 
         let mut on_overlap = |a: &Self, b: &Self| {
             assert!(a.is_leaf());
             assert!(b.is_leaf());
-            for a in a.objects() {
-                let a_obj = &data[a.index];
-                for b in b.objects() {
-                    let b_obj = &data[b.index];
-                    if let Some(collision) = check_collision(data, *a, a_obj, *b, b_obj) {
-                        events.send(collision)
-                    }
+            for &a in a.objects() {
+                let a_obj = &data[a];
+                for &b in b.objects() {
+                    let b_obj = &data[b];
+                    // if let Some(collision) = check_collision(data, *a, a_obj, *b, b_obj) {
+                    //     events.send(collision)
+                    // }
                 }
             }
         };
@@ -399,25 +404,22 @@ impl<O: Array<Item = Object> + ComponentValue> CollisionTreeNode for BvhNode<O> 
             Self::check_collisions(events, right, nodes, data);
         } else if !node.state.dormant() {
             // Check collisions for objects in the same leaf
-            for (i, a) in node.objects.iter().enumerate() {
-                let a_obj = &data[a.index];
+            for (i, &a) in node.objects.iter().enumerate() {
+                let a_obj = &data[a];
 
-                for b in node.objects.iter().skip(i + 1) {
+                for &b in node.objects.iter().skip(i + 1) {
                     assert_ne!(a, b);
-                    let b_obj = &data[b.index];
-                    if let Some(collision) = check_collision(data, *a, a_obj, *b, b_obj) {
-                        events.send(collision)
-                    }
+                    let b_obj = &data[b];
+                    // if let Some(collision) = check_collision(data, *a, a_obj, *b, b_obj) {
+                    //     events.send(collision)
+                    // }
                 }
             }
         }
     }
 }
 
-impl<O> DrawGizmos for BvhNode<O>
-where
-    O: Array<Item = Object> + ComponentValue,
-{
+impl DrawGizmos for BvhNode {
     fn draw_primitives(&self, gizmos: &mut GizmosSection) {
         if !self.is_leaf() {
             return;
@@ -430,8 +432,8 @@ where
         };
 
         gizmos.draw(Cube {
-            origin: self.bounds.origin,
-            half_extents: self.bounds.extents,
+            origin: self.bounds.midpoint(),
+            half_extents: self.bounds.size() / 2.0,
             color: Srgb::from_format(color).with_alpha(1.0),
             ..Default::default()
         })
@@ -440,9 +442,9 @@ where
 
 fn check_collision(
     data: &SlotMap<ObjectIndex, ObjectData>,
-    a: Object,
+    a: CollisionTreeObject,
     a_obj: &ObjectData,
-    b: Object,
+    b: CollisionTreeObject,
     b_obj: &ObjectData,
 ) -> Option<Collision> {
     if !a_obj.bounds.overlaps(b_obj.bounds) {

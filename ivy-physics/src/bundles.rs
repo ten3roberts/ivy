@@ -37,10 +37,10 @@ impl Default for RbQuery {
 #[derive(Default, Debug)]
 /// Bundle for all things neccessary for all things physics
 pub struct RbBundle {
-    pub vel: Vec3,
+    pub velocity: Vec3,
     pub mass: f32,
-    pub ang_mass: f32,
-    pub ang_vel: Vec3,
+    pub angular_mass: f32,
+    pub angular_velocity: Vec3,
     pub restitution: f32,
     pub friction: f32,
 }
@@ -55,23 +55,59 @@ impl RbBundle {
         friction: f32,
     ) -> Self {
         Self {
-            vel,
+            velocity: vel,
             mass,
-            ang_vel,
-            ang_mass,
+            angular_velocity: ang_vel,
+            angular_mass: ang_mass,
             restitution: resitution,
             friction,
         }
+    }
+
+    /// Set the mass
+    pub fn with_mass(mut self, mass: f32) -> Self {
+        self.mass = mass;
+        self
+    }
+
+    /// Set the velocity
+    pub fn with_velocity(mut self, velocity: Vec3) -> Self {
+        self.velocity = velocity;
+        self
+    }
+
+    /// Set the ang mass
+    pub fn with_angular_mass(mut self, angular_mass: f32) -> Self {
+        self.angular_mass = angular_mass;
+        self
+    }
+
+    /// Set the angular velocity
+    pub fn with_angular_velocity(mut self, angular_velocity: Vec3) -> Self {
+        self.angular_velocity = angular_velocity;
+        self
+    }
+
+    /// Set the restitution
+    pub fn with_restitution(mut self, restitution: f32) -> Self {
+        self.restitution = restitution;
+        self
+    }
+
+    /// Set the friction
+    pub fn with_friction(mut self, friction: f32) -> Self {
+        self.friction = friction;
+        self
     }
 }
 
 impl Bundle for RbBundle {
     fn mount(self, entity: &mut EntityBuilder) {
         entity
-            .set(velocity(), self.vel)
+            .set(velocity(), self.velocity)
             .set(mass(), self.mass)
-            .set(angular_mass(), self.ang_mass)
-            .set(angular_velocity(), self.ang_vel)
+            .set(angular_mass(), self.angular_mass)
+            .set(angular_velocity(), self.angular_velocity)
             .set(restitution(), self.restitution)
             .set(friction(), self.friction)
             .set(effector(), Default::default());

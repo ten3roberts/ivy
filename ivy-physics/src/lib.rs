@@ -1,14 +1,14 @@
 pub mod bundles;
 pub mod collision;
+pub mod components;
 pub mod connections;
 mod effector;
 mod error;
-mod layer;
+mod plugin;
 pub mod systems;
 pub mod util;
-pub mod components;
 
 pub use bundles::*;
 pub use effector::*;
 pub use error::*;
-pub use layer::*;
+pub use plugin::*;

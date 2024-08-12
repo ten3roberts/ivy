@@ -20,6 +20,7 @@ impl<'a> Lerp<'a> for ColliderOffset {
 /// Generic collider holding any primitive implementing a support function.
 #[derive(Debug, Clone)]
 pub struct Collider {
+    // TODO: enum
     primitive: Arc<dyn CollisionPrimitive + Send + Sync>,
 }
 

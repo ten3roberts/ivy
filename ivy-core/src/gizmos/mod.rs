@@ -97,17 +97,32 @@ impl Default for Line {
     }
 }
 
-#[records::record]
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Cube {
-    origin: Vec3,
-    half_extents: Vec3,
-    line_radius: f32,
-    corner_radius: f32,
-    color: Color,
+    pub origin: Vec3,
+    pub half_extents: Vec3,
+    pub line_radius: f32,
+    pub corner_radius: f32,
+    pub color: Color,
 }
 
 impl Cube {
+    pub fn new(
+        origin: Vec3,
+        half_extents: Vec3,
+        line_radius: f32,
+        corner_radius: f32,
+        color: Color,
+    ) -> Self {
+        Self {
+            origin,
+            half_extents,
+            line_radius,
+            corner_radius,
+            color,
+        }
+    }
+
     /// Set the color
     pub fn with_color(mut self, color: Color) -> Self {
         self.color = color;

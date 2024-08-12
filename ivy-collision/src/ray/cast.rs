@@ -7,7 +7,8 @@ use slotmap::SlotMap;
 
 use super::Ray;
 use crate::{
-    components::collider, CollisionTreeNode, Contact, Object, ObjectData, ObjectIndex, Visitor,
+    components::collider, CollisionTreeNode, CollisionTreeObject, Contact, ObjectData, ObjectIndex,
+    Visitor,
 };
 
 /// Represents a collider ray intersection.
@@ -94,7 +95,7 @@ impl<'a, N: CollisionTreeNode, Q: 'a> Visitor<'a, N> for RayCaster<'a, Q> {
 pub struct RayCastIterator<'a, Q> {
     ray: &'a Ray,
     world: &'a World,
-    objects: Iter<'a, Object>,
+    objects: Iter<'a, ObjectIndex>,
     data: &'a SlotMap<ObjectIndex, ObjectData>,
     filter: &'a Q,
 }
@@ -105,8 +106,8 @@ impl<'a, Q: for<'x> Fetch<'x>> Iterator for RayCastIterator<'a, Q> {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            let object = self.objects.next()?;
-            let data = &self.data[object.index];
+            let &object = self.objects.next()?;
+            let data = &self.data[object];
 
             if !data.bounds.check_ray(self.ray) {
                 continue;
@@ -114,7 +115,7 @@ impl<'a, Q: for<'x> Fetch<'x>> Iterator for RayCastIterator<'a, Q> {
 
             let query = &(collider(), self.filter);
 
-            let entity = self.world.entity(object.entity).unwrap();
+            let entity = self.world.entity(data.id).unwrap();
 
             if let Some((collider, _)) = entity.query(query).get() {
                 // TODO
@@ -123,7 +124,7 @@ impl<'a, Q: for<'x> Fetch<'x>> Iterator for RayCastIterator<'a, Q> {
                 // }
 
                 if let Some(contact) = self.ray.intersects(collider, &data.transform) {
-                    return Some(RayIntersection::new(object.entity, contact));
+                    return Some(RayIntersection::new(data.id, contact));
                 }
             };
         }

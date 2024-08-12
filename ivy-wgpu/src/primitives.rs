@@ -188,9 +188,9 @@ pub fn generate_cube(halfextent: f32) -> MeshData {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
-pub struct CubeDesc;
+pub struct CubePrimitive;
 
-impl AssetDesc<MeshData> for CubeDesc {
+impl AssetDesc<MeshData> for CubePrimitive {
     type Error = Infallible;
 
     fn create(

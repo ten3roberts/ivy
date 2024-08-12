@@ -12,6 +12,15 @@
       }
     }
   },
+  "debug physics": {
+    "cmd": "cargo build --example physics",
+    "components": {
+      "dap": {
+        "program": "./target/debug/examples/physics",
+        "adapter": "rust"
+      }
+    }
+  },
   "build-vulkan": "cargo build --example vulkan",
   "run-wgpu": {
     "cmd": "cargo run --example wgpu",

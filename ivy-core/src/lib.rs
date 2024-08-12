@@ -42,6 +42,7 @@ pub mod math;
 mod systems;
 mod time;
 mod updatable;
+pub mod update_layer;
 
 use std::f32::consts::PI;
 

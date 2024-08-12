@@ -1,12 +1,12 @@
 use flax::{
     components::is_static, entity_ids, fetch::Satisfied, sink::Sink, BoxedSystem, CommandBuffer,
-    Component, Entity, Error, Fetch, FetchExt, Mutable, Opt, OptOr, Query, QueryBorrow, System,
-    World,
+    Component, Entity, EntityIds, Error, Fetch, FetchExt, Mutable, Opt, OptOr, Query, QueryBorrow,
+    System, World,
 };
 use flume::{Receiver, Sender};
 use glam::{Mat4, Vec3};
 use ivy_core::{is_trigger, mass, velocity, world_transform, DrawGizmos, Events, GizmosSection};
-use slotmap::{new_key_type, SlotMap};
+use slotmap::{new_key_type, Key, SlotMap};
 use smallvec::Array;
 
 use crate::{
@@ -33,8 +33,8 @@ use self::query::TreeQuery;
 pub type Nodes<N> = SlotMap<NodeIndex, N>;
 
 pub struct OnDrop {
-    object: Object,
-    tx: Sender<Object>,
+    object: CollisionTreeObject,
+    tx: Sender<CollisionTreeObject>,
 }
 
 impl Drop for OnDrop {
@@ -51,7 +51,7 @@ new_key_type! {
 
 /// Marker for where the object is in the tree
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct Object {
+pub struct CollisionTreeObject {
     pub entity: Entity,
     pub index: ObjectIndex,
 }
@@ -64,12 +64,11 @@ pub struct CollisionTree<N> {
 
     objects: SlotMap<ObjectIndex, ObjectData>,
     /// Objects that need to be reinserted into the tree
-    popped: Vec<Object>,
-    rx: Receiver<ObjectIndex>,
+    popped: Vec<CollisionTreeObject>,
 }
 
 impl<N: CollisionTreeNode> CollisionTree<N> {
-    pub fn new(root: N, despawned: Receiver<ObjectIndex>) -> Self {
+    pub fn new(root: N) -> Self {
         let mut nodes = SlotMap::with_key();
 
         let root = nodes.insert(root);
@@ -79,7 +78,6 @@ impl<N: CollisionTreeNode> CollisionTree<N> {
             root,
             objects: SlotMap::with_key(),
             popped: Vec::new(),
-            rx: despawned,
         }
     }
 
@@ -97,11 +95,11 @@ impl<N: CollisionTreeNode> CollisionTree<N> {
         &mut self.nodes
     }
 
-    fn insert(&mut self, entity: Entity, object: ObjectData) -> Object {
+    fn insert_impl(&mut self, entity: Entity, object: ObjectData) -> CollisionTreeObject {
         let index = self.objects.insert(object);
-        let object = Object { entity, index };
+        let object = CollisionTreeObject { entity, index };
 
-        N::insert(self.root, &mut self.nodes, object, &self.objects);
+        N::insert(self.root, &mut self.nodes, object.index, &self.objects);
 
         object
     }
@@ -112,45 +110,34 @@ impl<N: CollisionTreeNode> CollisionTree<N> {
 
         for (id, q) in query.borrow(world).iter() {
             let obj: ObjectData = q.into_object_data();
-            let tree_index = self.insert(id, obj);
+            let tree_index = self.insert_impl(id, obj);
             tracing::info!(?id, ?tree_index.index, "registering entity into tree");
 
             cmd.set(id, components::tree_index(), tree_index.index);
         }
     }
 
-    fn handle_despawned(&mut self) -> usize {
-        self.rx
-            .try_iter()
-            .map(|index| {
-                self.objects.remove(index);
-            })
-            .count()
-    }
-
     pub fn update(&mut self, world: &World) -> Result<(), Error> {
         let mut query = Query::new((tree_index(), ObjectQuery::new()));
+
+        let mut to_refit = Vec::new();
+
         // Update object data
-        for (&index, q) in query.borrow(world).iter() {
-            tracing::info!(?index);
-            let data: ObjectData = q.into_object_data();
-            self.objects[index] = data;
+        for (&object_index, q) in query.borrow(world).iter() {
+            tracing::info!(?object_index);
+            let object_data = &mut self.objects[object_index];
+            object_data.transform = *q.transform;
+
+            if !object_data
+                .containing_bounds
+                .contains(object_data.extended_bounds)
+            {
+                self.nodes[object_data.node].remove(object_index);
+                to_refit.push(object_index);
+            }
         }
 
-        let mut despawned = self.handle_despawned();
-
-        // Update tree
-        N::update(
-            self.root,
-            &mut self.nodes,
-            &self.objects,
-            &mut self.popped,
-            &mut despawned,
-        );
-
-        assert_eq!(despawned, 0);
-
-        for object in self.popped.drain(..) {
+        for object in to_refit {
             N::insert(self.root, &mut self.nodes, object, &self.objects)
         }
 
@@ -299,6 +286,7 @@ pub fn check_collisions_system<N: CollisionTreeNode>(
 /// Copied and retained from the ECS for easy access
 /// TODO: reduce size
 pub struct ObjectData {
+    pub id: Entity,
     pub collider: Collider,
     pub bounds: BoundingBox,
     pub extended_bounds: BoundingBox,
@@ -306,9 +294,13 @@ pub struct ObjectData {
     pub is_trigger: bool,
     pub state: NodeState,
     pub movable: bool,
+    pub containing_bounds: BoundingBox,
+    pub node: NodeIndex,
 }
+
 #[derive(Fetch)]
 pub struct ObjectQuery {
+    id: EntityIds,
     transform: Component<Mat4>,
     mass: Opt<Component<f32>>,
     collider: Component<Collider>,
@@ -321,6 +313,7 @@ pub struct ObjectQuery {
 impl ObjectQuery {
     fn new() -> Self {
         Self {
+            id: entity_ids(),
             transform: world_transform(),
             mass: mass().opt(),
             collider: collider(),
@@ -360,6 +353,7 @@ impl ObjectQueryItem<'_> {
         let extended_bounds = bounds.expand(*self.velocity * 0.1);
 
         ObjectData {
+            id: self.id,
             bounds,
             extended_bounds,
             transform,
@@ -374,6 +368,8 @@ impl ObjectQueryItem<'_> {
             // },
             movable: self.mass.map(|v| v.is_normal()).unwrap_or(false),
             collider: self.collider.clone(),
+            containing_bounds: Default::default(),
+            node: NodeIndex::null(),
         }
     }
 }

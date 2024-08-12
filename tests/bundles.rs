@@ -11,9 +11,9 @@ fn bundles() {
 
     let entity = Entity::builder()
         .mount(RbBundle {
-            vel: vec3(1.0, 0.0, 0.0),
+            velocity: vec3(1.0, 0.0, 0.0),
             mass: 5.0,
-            ang_mass: 2.0,
+            angular_mass: 2.0,
             ..Default::default()
         })
         .set(name(), "My Entity".into())

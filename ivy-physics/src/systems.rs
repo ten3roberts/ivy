@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use crate::{
     bundles::*,
     collision::{resolve_collision, ResolveObject},
-    components::{collision_state, effector, gravity_state, physics_state, PhysicsState},
+    components::{collision_state, effector, gravity_state},
     Result,
 };
 use flax::{
@@ -11,63 +11,29 @@ use flax::{
 };
 use flume::Receiver;
 use glam::Quat;
+use ivy_collision::{Collision, Contact};
 use ivy_core::{
     angular_velocity, connection, engine, friction, gravity_influence, position, restitution,
     rotation, sleeping, velocity,
 };
-use ivy_collision::{Collision, Contact};
 
-pub fn integrate_velocity() -> BoxedSystem {
+pub fn integrate_velocity_system(dt: f32) -> BoxedSystem {
     System::builder()
-        .with_query(
-            Query::new((
-                physics_state().source(engine()),
-                position().as_mut(),
-                velocity(),
-            ))
-            .without(sleeping()),
-        )
-        .for_each(|(state, pos, vel)| {
-            *pos += *vel * state.dt;
+        .with_query(Query::new((position().as_mut(), velocity())).without(sleeping()))
+        .for_each(move |(pos, vel)| {
+            *pos += *vel * dt;
         })
         .boxed()
 }
 
-pub fn integrate_angular_velocity() -> BoxedSystem {
+pub fn integrate_angular_velocity_system(dt: f32) -> BoxedSystem {
     System::builder()
-        .with_query(
-            Query::new((
-                physics_state().source(engine()),
-                rotation().as_mut(),
-                angular_velocity(),
-            ))
-            .without(sleeping()),
-        )
-        .for_each(|(state, rot, &w)| {
-            *rot *= Quat::from_axis_angle(w / w.length(), w.length() * state.dt);
-        })
+        .with_query(Query::new((rotation().as_mut(), angular_velocity())).without(sleeping()))
+        .for_each(move |(rot, &w)| *rot *= Quat::from_scaled_axis(w * dt))
         .boxed()
 }
 
-// pub fn integrate_velocity(world: &World, dt: Read<DeltaTime>, mut cmd: Write<CommandBuffer>) {
-//     world
-//         .native_query()
-//         .without::<Static>()
-//         .without::<Sleeping>()
-//         .iter()
-//         .for_each(|(e, (pos, rot, w, vel, f))| {
-//             *pos += Position(**vel * **dt);
-//             let mag = w.length();
-//             if mag > 0.2 {
-//                 let w = Quat::from_axis_angle(w.0 / mag, mag * **dt);
-//                 *rot = Rotation(w * rot.0);
-//             } else if vel.length_squared() < 0.01 && !f.should_wake() {
-//                 cmd.insert_one(e, Sleeping)
-//             }
-//         });
-// }
-
-pub fn gravity() -> BoxedSystem {
+pub fn gravity_system() -> BoxedSystem {
     System::builder()
         .with_query(Query::new((
             gravity_state(),
@@ -79,32 +45,6 @@ pub fn gravity() -> BoxedSystem {
         })
         .boxed()
 }
-// pub fn gravity(
-//     world: SubWorld<(&GravityInfluence, &Mass, &mut Effector)>,
-//     gravity: Read<Gravity>,
-//     collisions: DefaultResource<CollisionState>,
-// ) {
-//     if gravity.length_squared() < TOLERANCE {
-//         return;
-//     }
-
-//     world
-//         .native_query()
-//         .without::<Static>()
-//         .without::<Sleeping>()
-//         .par_for_each(BATCH_SIZE, |(e, (influence, mass, effector))| mut {
-//             let supported = collisions.has_collision(e);
-//             effector.apply_force(**gravity * **influence * **mass, !supported)
-//         })
-// }
-
-// pub fn wrap_around_system(world: SubWorld<&mut Position>) {
-//     world.native_query().iter().for_each(|(_, pos)| {
-//         if pos.y < -100.0 {
-//             pos.y = 100.0
-//         }
-//     });
-// }
 
 pub fn get_rigid_root<'a>(entity: &EntityRef<'a>) -> EntityRef<'a> {
     let mut entity = *entity;
@@ -193,15 +133,15 @@ impl Default for CollisionState {
 }
 
 /// Resolves all pending collisions to be processed
-pub fn resolve_collisions_system(collisions: Receiver<Collision>) -> BoxedSystem {
+pub fn resolve_collisions_system() -> BoxedSystem {
     System::builder()
         .with_world()
-        .with_query(Query::new((collision_state().as_mut(), physics_state())))
+        .with_query(Query::new((collision_state().as_mut())))
         .build(
-            move |world:&World, mut query: QueryBorrow<(Mutable<CollisionState>, Component<PhysicsState>)>| {
-                query.for_each(|(collision_state, physics_state)| {
-                    resolve_collisions(world, collision_state, collisions.try_iter(), physics_state.dt).unwrap();
-                })
+            move |world: &World, mut query: QueryBorrow<(Mutable<CollisionState>)>| {
+                // query.for_each(|(collision_state, physics_state)| {
+                //     resolve_collisions(world, collision_state, collisions.try_iter(), physics_state.dt).unwrap();
+                // })
             },
         )
         .boxed()
@@ -343,22 +283,21 @@ fn resolve_static(a: &EntityRef, b: &EntityRef, contact: Contact, dt: f32) -> Re
 }
 
 /// Applies effectors to their respective entities and clears the effects.
-pub fn apply_effectors() -> BoxedSystem {
+pub fn apply_effectors_system(dt: f32) -> BoxedSystem {
     System::builder()
         .with_query(Query::new((
-            physics_state().source(engine()),
             RbQueryMut::new(),
             position().as_mut(),
             effector().as_mut(),
             sleeping().satisfied(),
         )))
-        .for_each(|(physics_state, rb, position, effector, is_sleeping)| {
+        .for_each(move |(rb, position, effector, is_sleeping)| {
             if !is_sleeping || effector.should_wake() {
                 // tracing::info!(%physics_state.dt, ?effector, "updating effector");
-                *rb.vel += effector.net_velocity_change(physics_state.dt);
+                *rb.vel += effector.net_velocity_change(dt);
                 *position += effector.translation();
 
-                *rb.ang_vel += effector.net_angular_velocity_change(physics_state.dt);
+                *rb.ang_vel += effector.net_angular_velocity_change(dt);
             }
 
             effector.set_mass(*rb.mass);

@@ -53,7 +53,8 @@ impl CollisionPrimitive for Cube {
     }
 
     fn max_radius(&self) -> f32 {
-        self.half_extents.length()
+        // TODO: incorrect, radius is not the best in general
+        self.half_extents.max_element()
     }
 
     fn dyn_clone(&self) -> Box<dyn CollisionPrimitive + Send + Sync> {

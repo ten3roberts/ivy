@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use flax::{Component, Debuggable, EntityBuilder, Fetch, Mutable};
 use glam::{Mat4, Quat, Vec2, Vec3};
 mod connections;
@@ -16,9 +18,6 @@ flax::component! {
     /// Computed world space transform based on [`position`], [`rotation`], and [`scale`].
     pub world_transform: Mat4 => [ Debuggable ],
 
-    /// TODO: remove
-    pub position2v: Vec2 => [ Debuggable ],
-
     pub size:Vec2 => [ Debuggable ],
 
     pub is_static: () => [ Debuggable ],
@@ -30,6 +29,9 @@ flax::component! {
 
     pub gizmos: Gizmos,
     pub async_commandbuffer: AsyncCommandBuffer,
+
+    /// Time since last tick
+    pub delta_time: Duration,
 
     pub engine,
 }

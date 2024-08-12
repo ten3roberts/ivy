@@ -62,6 +62,7 @@ impl Gpu {
                         wgpu::Limits::default()
                     },
                     label: None,
+                    ..Default::default()
                 },
                 None, // Trace path
             )
@@ -113,6 +114,7 @@ impl Gpu {
                         wgpu::Limits::default()
                     },
                     label: None,
+                    ..Default::default()
                 },
                 None, // Trace path
             )

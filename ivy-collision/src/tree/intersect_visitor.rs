@@ -6,7 +6,7 @@ use slotmap::SlotMap;
 
 use crate::{
     components, intersect, query::TreeQuery, BoundingBox, CollisionPrimitive, CollisionTree,
-    CollisionTreeNode, Contact, Object, ObjectData, ObjectIndex, Visitor,
+    CollisionTreeNode, Contact, ObjectData, ObjectIndex, Visitor,
 };
 
 /// Performs intersection testing for a provided temporary collider.
@@ -86,7 +86,7 @@ where
 pub struct IntersectIterator<'a, C, Q> {
     bounds: BoundingBox,
     collider: &'a C,
-    objects: Iter<'a, Object>,
+    objects: Iter<'a, ObjectIndex>,
     data: &'a SlotMap<ObjectIndex, ObjectData>,
     transform: Mat4,
     world: &'a World,
@@ -102,17 +102,14 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            let object = self.objects.next()?;
-            let data = &self.data[object.index];
+            let &object = self.objects.next()?;
+            let data = &self.data[object];
 
             if !data.bounds.overlaps(self.bounds) {
                 continue;
             }
 
-            let entity = self
-                .world
-                .entity(object.entity)
-                .expect("Invalid entity in tree");
+            let entity = self.world.entity(data.id).expect("Invalid entity in tree");
 
             let query = (components::collider(), self.filter);
 

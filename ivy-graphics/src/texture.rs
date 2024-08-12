@@ -1,5 +1,6 @@
 use image::DynamicImage;
 use ivy_assets::Asset;
+use ivy_core::palette::Srgba;
 
 /// Describes a texture
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -28,6 +29,16 @@ impl TextureDesc {
 
     pub fn content(content: Asset<DynamicImage>) -> Self {
         Self::Content(content)
+    }
+
+    pub fn srgba(color: Srgba) -> Self {
+        let color = Srgba::<u8>::from_format(color);
+        Self::Color(image::Rgba([
+            color.red,
+            color.green,
+            color.blue,
+            color.alpha,
+        ]))
     }
 
     pub fn white() -> Self {

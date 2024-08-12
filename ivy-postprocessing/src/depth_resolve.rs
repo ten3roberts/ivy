@@ -55,6 +55,7 @@ impl MsaaDepthResolve {
                     }),
                 entry_point: "main",
                 compilation_options: Default::default(),
+                cache: None,
             });
 
         Self {

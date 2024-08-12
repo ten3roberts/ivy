@@ -34,13 +34,13 @@ pub fn apply_connection_constraints(
     match kind {
         ConnectionKind::Rigid => {
             // The desired velocity
-            let vel = point_vel(pos - parent_pos, parent_rb.ang_vel) + parent_rb.vel;
+            let vel = point_vel(pos - parent_pos, parent_rb.angular_velocity) + parent_rb.velocity;
 
             let total_mass = *rb.mass + parent_rb.mass;
 
             let vel_diff = vel - *rb.vel;
 
-            *rb.ang_vel = parent_rb.ang_vel;
+            *rb.ang_vel = parent_rb.angular_velocity;
             // *child_trans.rot = parent_trans.rot * **offset_rot;
 
             let child_inf = *rb.mass / total_mass;
@@ -62,7 +62,7 @@ pub fn apply_connection_constraints(
             effector.apply_force(force, true);
             parent_effector.apply_force(-force, true);
 
-            *rb.ang_vel = parent_rb.ang_vel;
+            *rb.ang_vel = parent_rb.angular_velocity;
             *child_trans.rotation = parent_rot * offset_rot;
         }
     }

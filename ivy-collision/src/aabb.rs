@@ -4,28 +4,25 @@ use ivy_core::{Cube, DrawGizmos, GizmosSection};
 use crate::Ray;
 
 /// Represents an axis aligned bounding box
+// TODO: corners
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct BoundingBox {
-    pub origin: Vec3,
-    pub extents: Vec3,
+    pub min: Vec3,
+    pub max: Vec3,
 }
 
 impl BoundingBox {
     pub fn new(half_extents: Vec3, origin: Vec3) -> Self {
         Self {
-            origin,
-            extents: half_extents,
+            min: origin - half_extents,
+            max: origin + half_extents,
         }
     }
 
     /// Creates a new boundning box from bottom left back corner to the top
     /// right front corner.
-    pub fn from_corners(l: Vec3, r: Vec3) -> Self {
-        let origin = (l + r) * 0.5;
-
-        let half_extents = (r - l) * 0.5;
-
-        Self::new(half_extents, origin)
+    pub fn from_corners(min: Vec3, max: Vec3) -> Self {
+        Self { min, max }
     }
 
     pub fn from_points(points: impl Iterator<Item = Vec3>) -> Self {
@@ -40,50 +37,43 @@ impl BoundingBox {
         BoundingBox::from_corners(l, r)
     }
 
-    pub fn into_corners(&self) -> (Vec3, Vec3) {
-        let l = Vec3::new(self.neg_x(), self.neg_y(), self.neg_z());
-        let r = Vec3::new(self.x(), self.y(), self.z());
-
-        (l, r)
-    }
-
     #[inline]
     pub fn x(&self) -> f32 {
-        self.extents.x + self.origin.x
+        self.max.x
     }
 
     #[inline]
     pub fn neg_x(&self) -> f32 {
-        -self.extents.x + self.origin.x
+        self.min.x
     }
 
     #[inline]
     pub fn y(&self) -> f32 {
-        self.extents.y + self.origin.y
+        self.max.y
     }
 
     #[inline]
     pub fn neg_y(&self) -> f32 {
-        -self.extents.y + self.origin.y
+        self.min.y
     }
 
     #[inline]
     pub fn z(&self) -> f32 {
-        self.extents.z + self.origin.z
+        self.max.z
     }
 
     #[inline]
     pub fn neg_z(&self) -> f32 {
-        -self.extents.z + self.origin.z
+        -self.min.z
     }
 
     pub fn contains(&self, other: BoundingBox) -> bool {
-        self.x() >= other.x()
-            && self.neg_x() <= other.neg_x()
-            && self.y() >= other.y()
-            && self.neg_y() <= other.neg_y()
-            && self.z() >= other.z()
-            && self.neg_z() <= other.neg_z()
+        self.min.x <= other.min.x
+            && self.min.y <= other.min.y
+            && self.min.z <= other.min.z
+            && self.max.x >= other.max.x
+            && self.max.y >= other.max.y
+            && self.max.z >= other.max.z
     }
 
     /// Performs ray intersection testing by assuming the cube is axis aligned
@@ -92,10 +82,12 @@ impl BoundingBox {
         let dir = ray.dir();
         let inv_dir = Vec3::new(1.0 / dir.x, 1.0 / dir.y, 1.0 / dir.z);
 
-        let origin = ray.origin - self.origin;
+        let origin = ray.origin - (self.min + self.max) / 2.0;
 
-        let t1 = (-self.extents - origin) * inv_dir;
-        let t2 = (self.extents - origin) * inv_dir;
+        let extents = self.max - self.min;
+
+        let t1 = (-extents - origin) * inv_dir;
+        let t2 = (extents - origin) * inv_dir;
         let tmin = t1.min(t2);
         let tmax = t1.max(t2);
 
@@ -122,11 +114,8 @@ impl BoundingBox {
 
     /// Creates a new bounding box encompassing both
     pub fn merge(&self, other: Self) -> Self {
-        let (l0, r0) = self.into_corners();
-        let (l1, r1) = other.into_corners();
-
-        let l = l0.min(l1);
-        let r = r0.max(r1);
+        let l = self.min.min(other.min);
+        let r = self.max.max(other.max);
 
         Self::from_corners(l, r)
     }
@@ -134,8 +123,8 @@ impl BoundingBox {
     /// Returns a new bounding box with a margin
     pub fn margin(&self, margin: f32) -> BoundingBox {
         BoundingBox {
-            origin: self.origin,
-            extents: self.extents + Vec3::new(0.5, 0.5, 0.5) * margin,
+            min: self.min - margin,
+            max: self.max + margin,
         }
     }
 
@@ -144,25 +133,34 @@ impl BoundingBox {
     /// If `margin` is less than 1, the bounding box may not contain the original
     /// object
     pub fn rel_margin(&self, margin: f32) -> BoundingBox {
+        let size = self.max - self.min;
         BoundingBox {
-            origin: self.origin,
-            extents: self.extents * margin,
+            min: self.min - size * margin,
+            max: self.max + size * margin,
         }
     }
 
     pub(crate) fn expand(&self, amount: Vec3) -> BoundingBox {
-        let extents = self.extents + amount.abs();
-        let origin = self.origin + amount * 0.5;
+        BoundingBox {
+            min: self.min - amount,
+            max: self.max + amount,
+        }
+    }
 
-        BoundingBox { origin, extents }
+    pub fn midpoint(&self) -> Vec3 {
+        (self.min + self.max) / 2.0
+    }
+
+    pub fn size(&self) -> Vec3 {
+        self.max - self.min
     }
 }
 
 impl DrawGizmos for BoundingBox {
     fn draw_primitives(&self, gizmos: &mut GizmosSection) {
         gizmos.draw(Cube {
-            origin: self.origin,
-            half_extents: self.extents,
+            origin: self.midpoint(),
+            half_extents: self.size(),
             ..Default::default()
         });
     }
@@ -181,9 +179,9 @@ mod tests {
 
         let bounds = BoundingBox::from_corners(l, r);
 
-        assert_eq!(bounds.extents, vec3(0.5, 1.5, 0.5));
-        assert_eq!(bounds.origin, vec3(-0.5, 0.5, -0.5));
-        assert_eq!(bounds.into_corners(), (l, r));
+        assert_eq!(bounds.size(), vec3(0.5, 1.5, 0.5));
+        assert_eq!(bounds.midpoint(), vec3(-0.5, 0.5, -0.5));
+        assert_eq!((bounds.min, bounds.max), (l, r));
 
         let smaller = BoundingBox::new(vec3(0.5, 0.5, 0.5), Vec3::ZERO);
 
