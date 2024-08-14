@@ -7,8 +7,7 @@ use slotmap::SlotMap;
 
 use super::Ray;
 use crate::{
-    components::collider, CollisionTreeNode, CollisionTreeObject, Contact, ObjectData, ObjectIndex,
-    Visitor,
+    components::collider, BvhNode, CollisionTreeNode, Contact, ObjectData, ObjectIndex, Visitor,
 };
 
 /// Represents a collider ray intersection.
@@ -70,12 +69,12 @@ impl<'a, Q> RayCaster<'a, Q> {
     }
 }
 
-impl<'a, N: CollisionTreeNode, Q: 'a> Visitor<'a, N> for RayCaster<'a, Q> {
+impl<'a, Q: 'a> Visitor<'a> for RayCaster<'a, Q> {
     type Output = RayCastIterator<'a, Q>;
 
     fn accept(
         &self,
-        node: &'a N,
+        node: &'a BvhNode,
         data: &'a SlotMap<ObjectIndex, ObjectData>,
     ) -> Option<Self::Output> {
         if !node.bounds().check_ray(self.ray) {

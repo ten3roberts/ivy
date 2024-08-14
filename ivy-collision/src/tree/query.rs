@@ -2,14 +2,14 @@ use smallvec::SmallVec;
 
 use crate::{CollisionTree, CollisionTreeNode, NodeIndex, Visitor};
 
-pub struct TreeQuery<'a, N, V> {
+pub struct TreeQuery<'a, V> {
     visitor: V,
-    tree: &'a CollisionTree<N>,
+    tree: &'a CollisionTree,
     stack: SmallVec<[NodeIndex; 16]>,
 }
 
-impl<'a, N, V> TreeQuery<'a, N, V> {
-    pub fn new(visitor: V, tree: &'a CollisionTree<N>, root: NodeIndex) -> Self {
+impl<'a, V> TreeQuery<'a, V> {
+    pub fn new(visitor: V, tree: &'a CollisionTree, root: NodeIndex) -> Self {
         Self {
             visitor,
             tree,
@@ -18,10 +18,9 @@ impl<'a, N, V> TreeQuery<'a, N, V> {
     }
 }
 
-impl<'a, N, V> Iterator for TreeQuery<'a, N, V>
+impl<'a, V> Iterator for TreeQuery<'a, V>
 where
-    N: CollisionTreeNode,
-    V: Visitor<'a, N>,
+    V: Visitor<'a>,
     V::Output: 'a,
 {
     type Item = V::Output;

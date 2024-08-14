@@ -1,14 +1,14 @@
-use crate::{
-    components::collision_tree,
-    systems::{
-        apply_effectors_system, gravity_system, integrate_angular_velocity_system,
-        integrate_velocity_system,
-    },
+use crate::systems::{
+    apply_effectors_system, gravity_system, integrate_angular_velocity_system,
+    integrate_velocity_system,
 };
 use flax::World;
 use glam::Vec3;
 use ivy_assets::AssetCache;
-use ivy_collision::{BvhNode, CollisionTree};
+use ivy_collision::{
+    check_collisions_system, collisions_tree_gizmos_system, components::collision_tree,
+    register_system, update_system, BoundingBox, BvhNode, CollisionTree,
+};
 use ivy_core::{
     engine, gravity,
     update_layer::{FixedTimeStep, Plugin},
@@ -58,7 +58,7 @@ impl Plugin<FixedTimeStep> for PhysicsPlugin {
         world.set(
             engine(),
             collision_tree(),
-            CollisionTree::new(BvhNode::default()),
+            CollisionTree::new(BvhNode::new(BoundingBox::new(Vec3::ONE * 1.0, Vec3::ZERO))),
         )?;
 
         let dt = time_step.delta_time() as f32;
@@ -67,7 +67,14 @@ impl Plugin<FixedTimeStep> for PhysicsPlugin {
             .with_system(gravity_system())
             .with_system(integrate_velocity_system(dt))
             .with_system(integrate_angular_velocity_system(dt))
-            .with_system(apply_effectors_system(dt));
+            .with_system(apply_effectors_system(dt))
+            .with_system(register_system())
+            .with_system(update_system())
+            .with_system(check_collisions_system());
+
+        if self.enable_gizmos {
+            schedule.with_system(collisions_tree_gizmos_system());
+        }
 
         Ok(())
     }

@@ -5,12 +5,12 @@ use ivy_assets::AssetDesc;
 use ivy_graphics::mesh::MeshData;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct UvSphereDesc {
+pub struct UvSpherePrimitive {
     latitudes: u32,
     longitudes: u32,
 }
 
-impl Default for UvSphereDesc {
+impl Default for UvSpherePrimitive {
     fn default() -> Self {
         Self {
             latitudes: 32,
@@ -19,7 +19,7 @@ impl Default for UvSphereDesc {
     }
 }
 
-impl AssetDesc<MeshData> for UvSphereDesc {
+impl AssetDesc<MeshData> for UvSpherePrimitive {
     type Error = Infallible;
 
     fn create(

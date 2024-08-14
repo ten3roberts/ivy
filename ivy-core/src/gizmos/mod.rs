@@ -99,30 +99,13 @@ impl Default for Line {
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Cube {
-    pub origin: Vec3,
-    pub half_extents: Vec3,
+    pub min: Vec3,
+    pub max: Vec3,
     pub line_radius: f32,
-    pub corner_radius: f32,
     pub color: Color,
 }
 
 impl Cube {
-    pub fn new(
-        origin: Vec3,
-        half_extents: Vec3,
-        line_radius: f32,
-        corner_radius: f32,
-        color: Color,
-    ) -> Self {
-        Self {
-            origin,
-            half_extents,
-            line_radius,
-            corner_radius,
-            color,
-        }
-    }
-
     /// Set the color
     pub fn with_color(mut self, color: Color) -> Self {
         self.color = color;
@@ -133,10 +116,9 @@ impl Cube {
 impl Default for Cube {
     fn default() -> Self {
         Self {
-            origin: Default::default(),
-            line_radius: DEFAULT_RADIUS,
-            half_extents: Vec3::ONE,
-            corner_radius: 1.0,
+            min: Vec3::ZERO,
+            max: Vec3::ZERO,
+            line_radius: 0.02,
             color: Color::green(),
         }
     }
@@ -161,16 +143,19 @@ impl DrawGizmos for Cube {
             (-Vec3::X, Vec3::Z),
         ];
 
+        let midpoint = (self.max + self.min) / 2.0;
+        let extent = (self.max - self.min) / 2.0;
+
         let lines = sides.iter().map(|side| {
-            let mid = self.origin + (side.0 + side.1) * self.half_extents;
-            let dir =
-                side.0.cross(side.1).normalize() * (self.half_extents + self.line_radius) * 2.0;
+            let mid = midpoint + (side.0 + side.1) * extent;
+            let dir = side.0.cross(side.1).normalize() * (extent + self.line_radius) * 2.0;
+
             let pos = mid - dir * 0.5;
 
             GizmoPrimitive::Line {
                 origin: pos,
                 dir,
-                corner_radius: self.corner_radius,
+                corner_radius: 1.0,
                 color: self.color,
                 radius: self.line_radius,
             }

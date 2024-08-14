@@ -98,34 +98,27 @@ impl Ray {
     }
 
     /// Cast the ray into the world and returns the closest intersection
-    pub fn cast_one<W, N>(&self, world: &World, tree: &CollisionTree<N>) -> Option<RayIntersection>
-    where
-        N: 'static + CollisionTreeNode,
-    {
+    pub fn cast_one<W>(&self, world: &World, tree: &CollisionTree) -> Option<RayIntersection> {
         tree.query(RayCaster::new(self, world, &())).flatten().min()
     }
 
-    pub fn cast<'a, N, Q>(
+    pub fn cast<'a, Q>(
         &'a self,
         world: &'a World,
-        tree: &'a CollisionTree<N>,
+        tree: &'a CollisionTree,
         filter: &'a Q,
-    ) -> TreeQuery<'a, N, RayCaster<'a, Q>>
-    where
-        N: CollisionTreeNode,
-    {
+    ) -> TreeQuery<'a, RayCaster<'a, Q>> {
         tree.query(RayCaster::new(self, world, filter))
     }
     /// Cast the ray into the world and returns the closest intersection
-    pub fn cast_one_with<'a, Q, T, N>(
+    pub fn cast_one_with<'a, Q, T>(
         &'a self,
         world: &'a World,
         tree: &'a T,
         filter: &'a Q,
     ) -> Option<RayIntersection>
     where
-        T: Deref<Target = CollisionTree<N>>,
-        N: 'static + CollisionTreeNode,
+        T: Deref<Target = CollisionTree>,
         Q: for<'x> Fetch<'x>,
     {
         tree.query(RayCaster::<Q>::new(self, world, filter))
@@ -133,15 +126,14 @@ impl Ray {
             .min()
     }
 
-    pub fn cast_with<'a, Q, T, N>(
+    pub fn cast_with<'a, Q, T>(
         &'a self,
         world: &'a World,
         tree: &'a T,
         filter: &'a Q,
-    ) -> TreeQuery<'a, N, RayCaster<'a, Q>>
+    ) -> TreeQuery<'a, RayCaster<'a, Q>>
     where
-        T: Deref<Target = CollisionTree<N>>,
-        N: 'static + CollisionTreeNode,
+        T: Deref<Target = CollisionTree>,
     {
         tree.query(RayCaster::new(self, world, filter))
     }

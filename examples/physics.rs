@@ -17,9 +17,9 @@ use ivy_core::{
     rotation,
     update_layer::{FixedTimeStep, PerTick, Plugin, ScheduledLayer},
     velocity, world_transform, App, AsyncCommandBuffer, Color, ColorExt, EngineLayer,
-    EntityBuilderExt, Layer, TransformBundle, DEG_90,
+    EntityBuilderExt, Layer, TransformBundle, DEG_45, DEG_90,
 };
-use ivy_engine::{Collider, Cube, RbBundle};
+use ivy_engine::{Collider, Cube, RbBundle, Sphere};
 use ivy_gltf::{components::animator, Document};
 use ivy_graphics::texture::TextureDesc;
 use ivy_input::{
@@ -42,7 +42,7 @@ use ivy_wgpu::{
     light::{LightData, LightKind},
     material_desc::{MaterialData, MaterialDesc},
     mesh_desc::MeshDesc,
-    primitives::CubePrimitive,
+    primitives::{CubePrimitive, UvSpherePrimitive},
     renderer::{EnvironmentData, RenderObjectBundle},
     rendergraph::{self, ExternalResources, RenderGraph},
     shader_library::{ModuleDesc, ShaderLibrary},
@@ -85,7 +85,10 @@ pub fn main() -> anyhow::Result<()> {
                 .with_plugin(CameraInputPlugin)
                 .with_plugin(GizmosPlugin),
         )
-        .with_layer(ScheduledLayer::new(FixedTimeStep::new(0.02)).with_plugin(PhysicsPlugin::new()))
+        .with_layer(
+            ScheduledLayer::new(FixedTimeStep::new(0.02))
+                .with_plugin(PhysicsPlugin::new().with_gizmos(true)),
+        )
         .run()
     {
         tracing::error!("{err:?}");
@@ -139,10 +142,7 @@ impl Plugin<PerTick> for GizmosPlugin {
         schedule: &mut ScheduleBuilder,
         _: &PerTick,
     ) -> anyhow::Result<()> {
-        schedule
-            .with_system(point_light_gizmo_system())
-            .with_system(origin_gizmo_system())
-            .with_system(collider_gizmo_system());
+        schedule.with_system(point_light_gizmo_system());
 
         Ok(())
     }
@@ -156,26 +156,26 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
             .with_albedo(TextureDesc::srgba(Srgba::new(1.0, 1.0, 1.0, 1.0))),
     );
 
-    let mesh = MeshDesc::Content(assets.load(&CubePrimitive));
+    let cube_mesh = MeshDesc::Content(assets.load(&CubePrimitive));
 
     let shader = assets.load(&PbrShaderDesc);
 
     Entity::builder()
         .mount(TransformBundle::default().with_position(Vec3::X * 10.0))
+        .mount(RbBundle::default().with_velocity(-Vec3::X))
+        .set(collider(), Collider::new(Cube::uniform(1.0)))
         .mount(RenderObjectBundle::new(
-            mesh.clone(),
+            cube_mesh.clone(),
             material.clone(),
             shader.clone(),
         ))
-        .mount(RbBundle::default().with_velocity(-Vec3::X))
-        .set(collider(), Collider::new(Cube::uniform(1.0)))
         .spawn(world);
 
     Entity::builder()
-        .mount(TransformBundle::default())
+        .mount(TransformBundle::default().with_position(Vec3::Y * 5.0))
         .mount(RbBundle::default().with_angular_velocity(vec3(1.0, 0.2, 0.0)))
         .mount(RenderObjectBundle::new(
-            mesh.clone(),
+            cube_mesh.clone(),
             material.clone(),
             shader.clone(),
         ))
@@ -184,8 +184,10 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
 
     Entity::builder()
         .mount(TransformBundle::default().with_position(Vec3::X * -10.0))
-        .mount(RenderObjectBundle::new(mesh, material, shader))
-        .mount(RbBundle::default().with_velocity(Vec3::X))
+        .mount(
+            RbBundle::default().with_velocity(Vec3::X), // .with_angular_velocity(Vec3::Y * 0.1),
+        )
+        .mount(RenderObjectBundle::new(cube_mesh, material, shader))
         .set(collider(), Collider::new(Cube::uniform(1.0)))
         .spawn(world);
 
@@ -226,7 +228,7 @@ fn setup_camera(world: &mut World) {
 
     Entity::builder()
         .mount(TransformBundle::new(
-            vec3(0.0, 5.0, 5.0),
+            vec3(0.0, 10.0, 10.0),
             Quat::IDENTITY,
             Vec3::ONE,
         ))
@@ -250,7 +252,7 @@ fn setup_camera(world: &mut World) {
         )
         .set_default(movement())
         .set_default(rotation_input())
-        .set_default(euler_rotation())
+        .set(euler_rotation(), vec3(DEG_45, 0.0, 0.0))
         .set_default(pan_active())
         .set(camera_speed(), 5.0)
         .spawn(world);
@@ -356,59 +358,6 @@ fn animate_system() -> BoxedSystem {
         .par_for_each(move |(animator, dt)| {
             animator.step(dt.as_secs_f32());
         })
-        .boxed()
-}
-
-fn origin_gizmo_system() -> BoxedSystem {
-    System::builder()
-        .with_query(Query::new(gizmos().source(engine())))
-        .with_query(Query::new((
-            world_transform(),
-            velocity().opt_or(Vec3::ZERO),
-        )))
-        .build(
-            |mut gizmos: QueryBorrow<flax::fetch::Source<Component<gizmos::Gizmos>, Entity>>,
-             mut query: QueryBorrow<(Component<Mat4>, OptOr<Component<Vec3>, Vec3>)>| {
-                let mut gizmos = gizmos.first().unwrap().begin_section("origin_gizmo_system");
-
-                query.iter().for_each(|(transform, &velocity)| {
-                    let pos = transform.transform_point3(Vec3::ZERO);
-                    let dir = transform.transform_vector3(velocity);
-
-                    gizmos.draw(gizmos::Sphere::new(pos, 0.1, Color::blue()));
-                    gizmos.draw(gizmos::Line::new(pos, dir, 0.02, 1.0, Color::blue()))
-                });
-            },
-        )
-        .boxed()
-}
-
-fn collider_gizmo_system() -> BoxedSystem {
-    System::builder()
-        .with_query(Query::new(gizmos().source(engine())))
-        .with_query(Query::new((world_transform(), collider())))
-        .build(
-            |mut gizmos: QueryBorrow<flax::fetch::Source<Component<gizmos::Gizmos>, Entity>>,
-             mut query: QueryBorrow<(Component<Mat4>, Component<Collider>)>| {
-                let mut gizmos = gizmos
-                    .first()
-                    .unwrap()
-                    .begin_section("collider_gizmo_system");
-
-                query.iter().for_each(|(transform, collider)| {
-                    let radius = collider.max_radius();
-                    let pos = transform.transform_point3(Vec3::ZERO);
-
-                    gizmos.draw(gizmos::Cube::new(
-                        pos,
-                        Vec3::ONE * radius,
-                        0.02,
-                        1.0,
-                        Color::blue(),
-                    ));
-                });
-            },
-        )
         .boxed()
 }
 

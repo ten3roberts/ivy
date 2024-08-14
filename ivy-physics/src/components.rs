@@ -8,7 +8,6 @@ component! {
     pub collision_state: CollisionState,
     pub effector: Effector,
     pub gravity_state: GravityState,
-    pub collision_tree: CollisionTree<BvhNode>,
 }
 
 pub struct GravityState {

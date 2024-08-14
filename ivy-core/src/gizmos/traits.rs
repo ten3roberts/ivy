@@ -7,6 +7,12 @@ pub trait DrawGizmos {
     fn draw_primitives(&self, gizmos: &mut GizmosSection);
 }
 
+impl<T: DrawGizmos> DrawGizmos for &T {
+    fn draw_primitives(&self, gizmos: &mut GizmosSection) {
+        (*self).draw_primitives(gizmos)
+    }
+}
+
 impl DrawGizmos for Vec3 {
     fn draw_primitives(&self, gizmos: &mut GizmosSection) {
         gizmos.draw(Sphere {

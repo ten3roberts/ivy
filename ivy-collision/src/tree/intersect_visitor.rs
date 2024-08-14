@@ -9,6 +9,8 @@ use crate::{
     CollisionTreeNode, Contact, ObjectData, ObjectIndex, Visitor,
 };
 
+use super::BvhNode;
+
 /// Performs intersection testing for a provided temporary collider.
 ///
 /// Use with [crate::CollisionTree::query].
@@ -38,14 +40,11 @@ where
     }
 
     /// Returns all intersections
-    pub fn intersections<N: CollisionTreeNode>(
-        self,
-        tree: &'a CollisionTree<N>,
-    ) -> TreeQuery<N, Self> {
+    pub fn intersections(self, tree: &'a CollisionTree) -> TreeQuery<Self> {
         tree.query(self)
     }
     /// Returns the first intersection, by no order.
-    pub fn intersection<N: CollisionTreeNode>(self, tree: &'a CollisionTree<N>) -> Option<Contact>
+    pub fn intersection(self, tree: &'a CollisionTree) -> Option<Contact>
     where
         Q: for<'x> Fetch<'x>,
     {
@@ -53,9 +52,8 @@ where
     }
 }
 
-impl<'a, N, C, Q> Visitor<'a, N> for IntersectVisitor<'a, C, Q>
+impl<'a, C, Q> Visitor<'a> for IntersectVisitor<'a, C, Q>
 where
-    N: CollisionTreeNode,
     C: CollisionPrimitive,
     Q: 'a,
 {
@@ -63,7 +61,7 @@ where
 
     fn accept(
         &self,
-        node: &'a N,
+        node: &'a BvhNode,
         data: &'a SlotMap<ObjectIndex, ObjectData>,
     ) -> Option<Self::Output> {
         if node.bounds().contains(self.bounds) {

@@ -16,8 +16,7 @@ use ivy_core::{
     profiling::ProfilingLayer,
     rotation,
     update_layer::{FixedTimeStep, PerTick, Plugin, ScheduledLayer},
-    velocity, world_transform, App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer,
-    TransformBundle,
+    velocity, world_transform, App, EngineLayer, EntityBuilderExt, Layer, TransformBundle,
 };
 use ivy_gltf::{animation::player::Animator, components::animator, Document};
 use ivy_graphics::texture::TextureDesc;
@@ -41,7 +40,7 @@ use ivy_wgpu::{
     light::{LightData, LightKind},
     material_desc::{MaterialData, MaterialDesc},
     mesh_desc::MeshDesc,
-    primitives::{generate_plane, CubePrimitive, UvSphereDesc},
+    primitives::{generate_plane, CubePrimitive, UvSpherePrimitive},
     renderer::{EnvironmentData, RenderObjectBundle},
     rendergraph::{self, ExternalResources, RenderGraph},
     shader_library::{ModuleDesc, ShaderLibrary},
@@ -139,9 +138,7 @@ impl Plugin<PerTick> for GizmosPlugin {
         schedule: &mut ScheduleBuilder,
         _: &PerTick,
     ) -> anyhow::Result<()> {
-        schedule
-            .with_system(point_light_gizmo_system())
-            .with_system(gizmos_test_system());
+        schedule.with_system(point_light_gizmo_system());
 
         Ok(())
     }
@@ -169,7 +166,7 @@ impl LogicLayer {
             let assets = assets.clone();
             async move {
                 let shader = assets.load(&PbrShaderDesc);
-                let sphere_mesh = MeshDesc::content(assets.load(&UvSphereDesc::default()));
+                let sphere_mesh = MeshDesc::content(assets.load(&UvSpherePrimitive::default()));
                 let materials: Asset<Document> = assets.load_async("textures/materials.glb").await;
 
                 {
@@ -235,7 +232,7 @@ impl LogicLayer {
                         .set(shadow_pass(), assets.load(&ShadowShaderDesc)),
                 );
 
-                let sphere_mesh = MeshDesc::content(assets.load(&UvSphereDesc::default()));
+                let sphere_mesh = MeshDesc::content(assets.load(&UvSpherePrimitive::default()));
                 let cube_mesh = MeshDesc::content(assets.load(&CubePrimitive));
 
                 for i in 0..8 {
@@ -571,31 +568,6 @@ fn point_light_gizmo_system() -> BoxedSystem {
                     });
             },
         )
-        .boxed()
-}
-
-fn gizmos_test_system() -> BoxedSystem {
-    System::builder()
-        .with_query(Query::new(gizmos().as_mut()))
-        .for_each(|gizmos| {
-            let mut section = gizmos.begin_section("basic example");
-
-            section.draw(gizmos::Cube {
-                origin: vec3(5.0, 2.0, -5.0),
-                half_extents: Vec3::ONE,
-                line_radius: 0.05,
-                corner_radius: 1.0,
-                color: Color::green(),
-            });
-
-            section.draw(gizmos::Cube {
-                origin: vec3(2.0, 3.0, -5.0),
-                half_extents: Vec3::ONE * 2.0,
-                line_radius: 0.05,
-                corner_radius: 1.0,
-                color: Color::cyan(),
-            });
-        })
         .boxed()
 }
 

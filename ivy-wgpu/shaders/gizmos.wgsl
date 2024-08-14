@@ -106,10 +106,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let depth_at = textureSample(depth_texture, depth_sampler, uv).r;
 
     var mask = vec4(1f);
-    if depth_at < in.clip_pos.z {
-        mask = vec4(0.2);
-    } else {
-    }
+    // if depth_at < in.clip_pos.z {
+    //     mask = vec4(0.2);
+    // } else {
+    // }
 
     let width = in.frag_scale.x;
     let height = in.frag_scale.y;

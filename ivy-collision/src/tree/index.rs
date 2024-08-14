@@ -2,12 +2,16 @@ use ivy_core::DrawGizmos;
 use ivy_core::GizmosSection;
 use slotmap::new_key_type;
 use slotmap::Key;
+use slotmap::SlotMap;
 use std::fmt::Debug;
 use std::ops::DerefMut;
 
 use crate::CollisionTreeNode;
 
+use super::BvhNode;
 use super::Nodes;
+use super::ObjectData;
+use super::ObjectIndex;
 
 new_key_type!(
     pub struct NodeIndex;
@@ -34,15 +38,16 @@ impl NodeIndex {
 }
 
 impl NodeIndex {
-    pub fn draw_gizmos_recursive<N: CollisionTreeNode + DrawGizmos>(
+    pub fn draw_gizmos_recursive(
         self,
-        nodes: &Nodes<N>,
+        nodes: &Nodes<BvhNode>,
         mut gizmos: &mut GizmosSection,
+        data: &SlotMap<ObjectIndex, ObjectData>,
     ) {
-        nodes[self].draw_primitives(gizmos.deref_mut());
+        nodes[self].draw_primitives(gizmos.deref_mut(), data);
 
         for val in nodes[self].children() {
-            val.draw_gizmos_recursive(nodes, gizmos)
+            val.draw_gizmos_recursive(nodes, gizmos, data)
         }
     }
 }

@@ -1,6 +1,7 @@
 use flax::component::ComponentValue;
+use flume::bounded;
 use glam::Vec3;
-use ivy_core::{Cube, DrawGizmos, Events, GizmosSection};
+use ivy_core::{Cube, DrawGizmos, Events, GizmosSection, Sphere};
 use ordered_float::OrderedFloat;
 use palette::{
     named::{BLUE, GREEN, YELLOW},
@@ -9,8 +10,8 @@ use palette::{
 use slotmap::SlotMap;
 
 use crate::{
-    intersect, BoundingBox, Collision, CollisionTreeNode, CollisionTreeObject, NodeIndex,
-    NodeState, Nodes, ObjectData, ObjectIndex,
+    intersect, BoundingBox, Collision, CollisionTreeNode, NodeIndex, NodeState, Nodes, ObjectData,
+    ObjectIndex,
 };
 
 const MARGIN: f32 = 1.2;
@@ -84,7 +85,7 @@ impl BvhNode {
     fn from_objects(
         nodes: &mut Nodes<Self>,
         objects: &[ObjectIndex],
-        data: &SlotMap<ObjectIndex, ObjectData>,
+        data: &mut SlotMap<ObjectIndex, ObjectData>,
         depth: u32,
     ) -> NodeIndex {
         let state = objects
@@ -104,7 +105,13 @@ impl BvhNode {
         let index = nodes.insert(node);
 
         // Recurse if the number of objects are more than allowed
-        Self::try_split(index, nodes, data);
+        if !Self::try_split(index, nodes, data) {
+            for &object in &nodes[index].objects {
+                let data = &mut data[object];
+                data.containing_bounds = bounds;
+                data.node = index;
+            }
+        }
 
         index
     }
@@ -113,11 +120,11 @@ impl BvhNode {
     fn try_split(
         index: NodeIndex,
         nodes: &mut Nodes<Self>,
-        data: &SlotMap<ObjectIndex, ObjectData>,
-    ) {
+        data: &mut SlotMap<ObjectIndex, ObjectData>,
+    ) -> bool {
         let node = &mut nodes[index];
         if node.objects.len() <= NODE_CAPACITY {
-            return;
+            return false;
         }
 
         let bounds = Self::calculate_bounds(&node.objects, data, NodeState::Static).size();
@@ -148,6 +155,7 @@ impl BvhNode {
         let right = Self::from_objects(nodes, right, data, depth);
 
         nodes[index].children = Some([left, right]);
+        true
     }
 
     pub fn calculate_bounds_incremental(&self, object: &ObjectData) -> BoundingBox {
@@ -224,6 +232,49 @@ impl BvhNode {
         }
     }
 
+    pub fn check_collisions(
+        index: NodeIndex,
+        nodes: &Nodes<Self>,
+        data: &SlotMap<ObjectIndex, ObjectData>,
+        on_collision: &mut impl FnMut(Collision),
+    ) {
+        let mut on_overlap = |a: &Self, b: &Self| {
+            assert!(a.is_leaf());
+            assert!(b.is_leaf());
+            for &a in a.objects() {
+                let a_obj = &data[a];
+                for &b in b.objects() {
+                    let b_obj = &data[b];
+                    if let Some(collision) = test_intersect(data, a, a_obj, b, b_obj) {
+                        // collisions
+                    }
+                }
+            }
+        };
+
+        // check if children overlap
+        let node = &nodes[index];
+        if let Some([left, right]) = node.children {
+            assert!(node.objects.is_empty());
+            Self::traverse(left, right, nodes, &mut on_overlap);
+            Self::check_collisions(left, nodes, data, on_collision);
+            Self::check_collisions(right, nodes, data, on_collision);
+        } else if !node.state.dormant() {
+            // Check collisions for objects in the same leaf
+            for (i, &a) in node.objects.iter().enumerate() {
+                let a_obj = &data[a];
+
+                for &b in node.objects.iter().skip(i + 1) {
+                    assert_ne!(a, b);
+                    let b_obj = &data[b];
+                    if let Some(collision) = test_intersect(data, a, a_obj, b, b_obj) {
+                        on_collision(collision);
+                    }
+                }
+            }
+        }
+    }
+
     /// Collapses a whole tree and fills `objects` with the objects in the tree
     fn collapse(index: NodeIndex, nodes: &mut Nodes<Self>, objects: &mut Vec<ObjectIndex>) {
         let node = &mut nodes[index];
@@ -237,65 +288,6 @@ impl BvhNode {
             nodes.remove(r).unwrap();
         }
     }
-
-    fn update_impl(
-        index: NodeIndex,
-        nodes: &mut Nodes<Self>,
-        data: &SlotMap<ObjectIndex, ObjectData>,
-        to_refit: &mut Vec<ObjectIndex>,
-        changed: &mut usize,
-    ) -> NodeState {
-        let node = &mut nodes[index];
-
-        if node.state.is_static() && *changed == 0 {
-            return node.state;
-        }
-
-        // Traverse children
-        if let Some([left, right]) = node.children {
-            assert!(node.objects.is_empty());
-            let l = Self::update_impl(left, nodes, data, to_refit, changed);
-            let r = Self::update_impl(right, nodes, data, to_refit, changed);
-            let new_state = l.merge(r);
-
-            nodes[index].state = new_state;
-            new_state
-        } else {
-            let bounds = node.bounds;
-
-            let mut removed = 0;
-            let mut new_state = NodeState::Static;
-
-            node.objects.retain(|&val| {
-                let obj = match data.get(val) {
-                    Some(val) => val,
-                    // Entity was removed
-                    None => {
-                        removed += 1;
-                        *changed -= 1;
-                        return false;
-                    }
-                };
-
-                new_state = new_state.merge(obj.state);
-
-                if bounds.contains(obj.bounds) {
-                    true
-                } else {
-                    removed += 1;
-                    to_refit.push(val);
-                    false
-                }
-            });
-
-            if removed > 0 {
-                node.bounds = Self::calculate_bounds(&node.objects, data, new_state);
-            }
-
-            node.state = new_state;
-            new_state
-        }
-    }
 }
 
 impl CollisionTreeNode for BvhNode {
@@ -307,7 +299,7 @@ impl CollisionTreeNode for BvhNode {
         index: NodeIndex,
         nodes: &mut Nodes<Self>,
         object: ObjectIndex,
-        data: &SlotMap<ObjectIndex, ObjectData>,
+        data: &mut SlotMap<ObjectIndex, ObjectData>,
     ) {
         let node = &mut nodes[index];
         let obj = &data[object];
@@ -339,6 +331,11 @@ impl CollisionTreeNode for BvhNode {
             }
         } else {
             node.objects.push(object);
+            {
+                let data = &mut data[object];
+                data.containing_bounds = node.bounds;
+                data.node = index;
+            }
 
             // Split
             Self::try_split(index, nodes, data);
@@ -363,64 +360,14 @@ impl CollisionTreeNode for BvhNode {
             None => &[],
         }
     }
-
-    fn update(
-        index: NodeIndex,
-        nodes: &mut Nodes<Self>,
-        data: &SlotMap<ObjectIndex, ObjectData>,
-        to_refit: &mut Vec<ObjectIndex>,
-        despawned: &mut usize,
-    ) {
-        unimplemented!()
-        // Self::update_impl(index, nodes, data, to_refit, despawned);
-    }
-
-    fn check_collisions(
-        events: &Events,
-        index: NodeIndex,
-        nodes: &Nodes<Self>,
-        data: &SlotMap<ObjectIndex, ObjectData>,
-    ) {
-        let mut on_overlap = |a: &Self, b: &Self| {
-            assert!(a.is_leaf());
-            assert!(b.is_leaf());
-            for &a in a.objects() {
-                let a_obj = &data[a];
-                for &b in b.objects() {
-                    let b_obj = &data[b];
-                    // if let Some(collision) = check_collision(data, *a, a_obj, *b, b_obj) {
-                    //     events.send(collision)
-                    // }
-                }
-            }
-        };
-
-        // check if children overlap
-        let node = &nodes[index];
-        if let Some([left, right]) = node.children {
-            assert!(node.objects.is_empty());
-            Self::traverse(left, right, nodes, &mut on_overlap);
-            Self::check_collisions(events, left, nodes, data);
-            Self::check_collisions(events, right, nodes, data);
-        } else if !node.state.dormant() {
-            // Check collisions for objects in the same leaf
-            for (i, &a) in node.objects.iter().enumerate() {
-                let a_obj = &data[a];
-
-                for &b in node.objects.iter().skip(i + 1) {
-                    assert_ne!(a, b);
-                    let b_obj = &data[b];
-                    // if let Some(collision) = check_collision(data, *a, a_obj, *b, b_obj) {
-                    //     events.send(collision)
-                    // }
-                }
-            }
-        }
-    }
 }
 
-impl DrawGizmos for BvhNode {
-    fn draw_primitives(&self, gizmos: &mut GizmosSection) {
+impl BvhNode {
+    pub fn draw_primitives(
+        &self,
+        gizmos: &mut GizmosSection,
+        data: &SlotMap<ObjectIndex, ObjectData>,
+    ) {
         if !self.is_leaf() {
             return;
         }
@@ -430,46 +377,64 @@ impl DrawGizmos for BvhNode {
             NodeState::Static => BLUE,
             NodeState::Sleeping => YELLOW,
         };
+        let color = Srgb::from_format(color).with_alpha(1.0);
 
         gizmos.draw(Cube {
-            origin: self.bounds.midpoint(),
-            half_extents: self.bounds.size() / 2.0,
-            color: Srgb::from_format(color).with_alpha(1.0),
-            ..Default::default()
-        })
+            min: self.bounds.min,
+            max: self.bounds.max,
+            color,
+            line_radius: 0.02,
+        });
+
+        for &object in self.objects() {
+            let data = &data[object];
+
+            gizmos.draw(Cube {
+                min: data.bounds.min,
+                max: data.bounds.max,
+                color,
+                line_radius: 0.01,
+            });
+
+            gizmos.draw(Sphere {
+                origin: data.transform.transform_point3(Vec3::ZERO),
+                radius: 0.1,
+                color,
+            })
+        }
     }
 }
 
-fn check_collision(
+fn test_intersect(
     data: &SlotMap<ObjectIndex, ObjectData>,
-    a: CollisionTreeObject,
-    a_obj: &ObjectData,
-    b: CollisionTreeObject,
-    b_obj: &ObjectData,
+    a: ObjectIndex,
+    a_data: &ObjectData,
+    b: ObjectIndex,
+    b_data: &ObjectData,
 ) -> Option<Collision> {
-    if !a_obj.bounds.overlaps(b_obj.bounds) {
+    if !a_data.bounds.overlaps(b_data.bounds) {
         return None;
     }
 
-    let a_data = &data[a.index];
-    let b_data = &data[b.index];
+    let a_data = &data[a];
+    let b_data = &data[b];
 
     if let Some(contact) = intersect(
-        &a_obj.transform,
-        &b_obj.transform,
+        &a_data.transform,
+        &b_data.transform,
         &a_data.collider,
         &b_data.collider,
     ) {
         let collision = Collision {
             a: crate::EntityPayload {
-                entity: a.entity,
-                is_trigger: a_obj.is_trigger,
-                state: a_obj.state,
+                entity: a_data.id,
+                is_trigger: a_data.is_trigger,
+                state: a_data.state,
             },
             b: crate::EntityPayload {
-                entity: b.entity,
-                is_trigger: b_obj.is_trigger,
-                state: b_obj.state,
+                entity: b_data.id,
+                is_trigger: b_data.is_trigger,
+                state: b_data.state,
             },
             contact,
         };

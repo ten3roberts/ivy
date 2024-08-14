@@ -95,12 +95,12 @@ impl BoundingBox {
     }
 
     pub fn overlaps(&self, other: Self) -> bool {
-        self.x() >= other.neg_x()
-            && self.neg_x() <= other.x()
-            && self.y() >= other.neg_y()
-            && self.neg_y() <= other.y()
-            && self.z() >= other.neg_z()
-            && self.neg_z() <= other.z()
+        self.max.x >= other.min.x
+            && self.min.x <= other.max.x
+            && self.max.y >= other.min.y
+            && self.min.y <= other.max.y
+            && self.max.z >= other.min.z
+            && self.min.z <= other.max.z
     }
 
     pub fn contains_point(&self, point: Vec3) -> bool {
@@ -159,8 +159,8 @@ impl BoundingBox {
 impl DrawGizmos for BoundingBox {
     fn draw_primitives(&self, gizmos: &mut GizmosSection) {
         gizmos.draw(Cube {
-            origin: self.midpoint(),
-            half_extents: self.size(),
+            min: self.min,
+            max: self.max,
             ..Default::default()
         });
     }
