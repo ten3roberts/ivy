@@ -45,24 +45,30 @@ impl DrawGizmos for Sphere {
     }
 }
 
-#[records::record]
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Line {
-    origin: Vec3,
-    dir: Vec3,
-    radius: f32,
-    corner_radius: f32,
-    color: Color,
+    pub origin: Vec3,
+    pub dir: Vec3,
+    pub radius: f32,
+    pub color: Color,
 }
 
 impl Line {
-    pub fn from_points(a: Vec3, b: Vec3, radius: f32, corner_radius: f32) -> Self {
+    pub fn new(origin: Vec3, dir: Vec3, radius: f32, color: Color) -> Self {
         Self {
-            origin: a,
-            dir: (b - a),
+            origin,
+            dir,
             radius,
-            corner_radius,
-            color: Color::blue(),
+            color,
+        }
+    }
+
+    pub fn from_points(start: Vec3, end: Vec3, radius: f32, color: Color) -> Self {
+        Self {
+            origin: start,
+            dir: (end - start),
+            radius,
+            color,
         }
     }
 
@@ -80,7 +86,7 @@ impl DrawGizmos for Line {
             color: self.color,
             dir: self.dir,
             radius: self.radius,
-            corner_radius: self.corner_radius,
+            corner_radius: 1.0,
         })
     }
 }
@@ -91,7 +97,6 @@ impl Default for Line {
             origin: Default::default(),
             radius: DEFAULT_RADIUS,
             dir: Vec3::Z,
-            corner_radius: 1.0,
             color: Color::blue(),
         }
     }

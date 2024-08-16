@@ -1,5 +1,5 @@
 use glam::Vec3;
-use ordered_float::OrderedFloat;
+use ordered_float::{Float, OrderedFloat};
 use smallvec::{Array, SmallVec};
 use std::ops::Index;
 
@@ -31,6 +31,7 @@ impl Face {
         // Distance to the origin of the minkowski difference
         let distance = normal.dot(p1.support);
 
+        // assert!(distance.is_finite());
         // Take care of handedness
         let normal = normal * distance.signum();
         let distance = distance.abs();
@@ -88,7 +89,7 @@ impl Face {
 
 type Edge = (u16, u16);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Polytype {
     pub points: SmallVec<[SupportPoint; 32]>,
     // Normals and distances combined
@@ -124,26 +125,28 @@ impl Polytype {
         self.faces
             .iter()
             .enumerate()
-            .filter(|(_, val)| val.distance.is_finite())
-            .min_by(|a, b| a.1.distance.partial_cmp(&b.1.distance).unwrap())
+            .min_by_key(|v| ordered_float::NotNan::new(v.1.distance).unwrap())
             .map(|(a, b)| (a as u16, *b))
     }
 
     // Adds a point to the polytype
-    // If the polytype collapses and add failed, false is returned
-    pub fn add<F: Fn(&[SupportPoint], [u16; 3]) -> Face>(&mut self, p: SupportPoint, face_func: F) {
+    pub fn add_point<F: Fn(&[SupportPoint], [u16; 3]) -> Face>(
+        &mut self,
+        p: SupportPoint,
+        face_func: F,
+    ) {
         // remove faces that can see the point
         let mut edges = SmallVec::<[Edge; 16]>::new();
         let points = &self.points;
 
         self.faces.retain(|face| {
-            let to = p.support - points[face.indices[0] as usize].support;
-            let dot = face.normal.dot(to);
+            let to_support = p.support - points[face.indices[0] as usize].support;
+            let dot = face.normal.dot(to_support);
 
             if dot > 0.0 {
-                face.edges()
-                    .iter()
-                    .for_each(|edge| remove_or_add_edge(&mut edges, *edge));
+                face.edges().iter().for_each(|edge| {
+                    add_if_unique(&mut edges, *edge);
+                });
                 false
             } else {
                 true
@@ -151,17 +154,17 @@ impl Polytype {
         });
 
         // add vertex
-        let n = self.points.len();
+        let new_index = self.points.len();
         self.points.push(p);
         let points = &self.points;
 
         // add new faces
         let new_faces = edges
             .into_iter()
-            .map(|(a, b)| face_func(points, [n as _, a, b]));
+            .map(|(a, b)| face_func(points, [new_index as _, a, b]));
 
         self.faces.extend(new_faces);
-        // assert_ne!(self.faces.len(), 0);
+        assert_ne!(self.faces.len(), 0);
     }
 
     // Adds a point to the polytype onto the specified face.
@@ -231,13 +234,14 @@ impl Index<u16> for Polytype {
     }
 }
 
-fn remove_or_add_edge<T: Array<Item = Edge>>(edges: &mut SmallVec<T>, edge: Edge) {
+fn add_if_unique<T: Array<Item = Edge>>(edges: &mut SmallVec<T>, edge: Edge) -> bool {
     if let Some((index, _)) = edges.iter().enumerate().find(|(_, val)| {
         // assert_ne!(**val, edge);
         (val.0, val.1) == (edge.1, edge.0)
     }) {
-        edges.remove(index);
+        false
     } else {
         edges.push(edge);
+        true
     }
 }

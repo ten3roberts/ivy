@@ -52,6 +52,7 @@ pub fn epa_ray<F: Fn(Vec3) -> SupportPoint>(
                 points: ContactPoints::single(point),
                 depth: (point - ray.origin).length(),
                 normal: dir,
+                polytype,
             };
         }
         // Support is further than the current closest face

@@ -178,6 +178,7 @@ pub fn resolve_collisions(
                     points: collision.contact.points.reverse(),
                     depth: collision.contact.depth,
                     normal: -collision.contact.normal,
+                    polytype: collision.contact.polytype,
                 },
                 dt,
             )?;

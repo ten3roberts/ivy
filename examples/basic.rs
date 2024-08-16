@@ -561,7 +561,6 @@ fn point_light_gizmo_system() -> BoxedSystem {
                                 pos,
                                 dir,
                                 0.02,
-                                1.0,
                                 light.color.with_alpha(1.0),
                             ))
                         }

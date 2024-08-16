@@ -6,6 +6,7 @@ use ivy_core::{DrawGizmos, GizmosSection, Line};
 
 mod cast;
 pub use cast::*;
+use ordered_float::OrderedFloat;
 
 use crate::{
     epa,
@@ -99,7 +100,9 @@ impl Ray {
 
     /// Cast the ray into the world and returns the closest intersection
     pub fn cast_one<W>(&self, world: &World, tree: &CollisionTree) -> Option<RayIntersection> {
-        tree.query(RayCaster::new(self, world, &())).flatten().min()
+        tree.query(RayCaster::new(self, world, &()))
+            .flatten()
+            .min_by_key(|v| OrderedFloat(v.distance()))
     }
 
     pub fn cast<'a, Q>(
@@ -123,7 +126,7 @@ impl Ray {
     {
         tree.query(RayCaster::<Q>::new(self, world, filter))
             .flatten()
-            .min()
+            .min_by_key(|v| OrderedFloat(v.distance()))
     }
 
     pub fn cast_with<'a, Q, T>(

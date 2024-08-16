@@ -30,12 +30,13 @@ pub fn gjk<A: CollisionPrimitive, B: CollisionPrimitive>(
 
     let mut simplex = Simplex::Point([a]);
 
-    let mut iterations = 0;
     while let Some(dir) = simplex.next_dir() {
+        assert!(dir.is_finite(), "{simplex:?}");
         let dir = dir.normalize();
 
-        // Objects are inside of each other completely
+        // Objects are fully enveloping
         if dir.length_squared() - 1.0 > TOLERANCE {
+            panic!("");
             return (false, simplex);
         }
 
@@ -52,13 +53,15 @@ pub fn gjk<A: CollisionPrimitive, B: CollisionPrimitive>(
 
         // New point was not past the origin
         // No collision
-        if iterations > MAX_ITERATIONS || p.support.dot(dir) <= 0.0 {
+        if p.support.dot(dir) <= -TOLERANCE {
+            tracing::info!(dot = p.support.dot(dir), "no collision");
             return (false, simplex);
         }
 
         simplex.push(p);
-        iterations += 1;
     }
+
+    tracing::info!("collision");
 
     // Collision found
     (true, simplex)

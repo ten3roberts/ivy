@@ -160,43 +160,37 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
 
     let shader = assets.load(&PbrShaderDesc);
 
-    Entity::builder()
-        .mount(TransformBundle::default().with_position(Vec3::X * 10.0))
-        .mount(RbBundle::default().with_velocity(-Vec3::X))
-        .set(collider(), Collider::new(Cube::uniform(1.0)))
-        .mount(RenderObjectBundle::new(
-            cube_mesh.clone(),
-            material.clone(),
-            shader.clone(),
-        ))
-        .spawn(world);
+    let distance = 0.8;
 
     Entity::builder()
-        .mount(TransformBundle::default().with_position(Vec3::Y * 5.0))
-        .mount(RbBundle::default().with_angular_velocity(vec3(1.0, 0.2, 0.0)))
-        .mount(RenderObjectBundle::new(
-            cube_mesh.clone(),
-            material.clone(),
-            shader.clone(),
-        ))
-        .set(collider(), Collider::new(Cube::uniform(1.0)))
-        .spawn(world);
-
-    Entity::builder()
-        .mount(TransformBundle::default().with_position(Vec3::X * -10.0))
         .mount(
-            RbBundle::default().with_velocity(Vec3::X), // .with_angular_velocity(Vec3::Y * 0.1),
+            TransformBundle::default().with_position(Vec3::X * (distance)), // .with_rotation(Quat::from_scaled_axis(Vec3::Y * 0.3)),
+        )
+        .mount(RbBundle::default()) // .with_velocity(-Vec3::X))
+        .set(collider(), Collider::new(Cube::uniform(1.0)))
+        .mount(RenderObjectBundle::new(
+            cube_mesh.clone(),
+            material.clone(),
+            shader.clone(),
+        ))
+        .spawn(world);
+
+    Entity::builder()
+        .mount(TransformBundle::default().with_position(Vec3::X * -distance))
+        .mount(
+            RbBundle::default().with_angular_velocity(Vec3::Y * 0.0), // .with_velocity(Vec3::X), // .with_angular_velocity(Vec3::Y * 0.1),
         )
         .mount(RenderObjectBundle::new(cube_mesh, material, shader))
         .set(collider(), Collider::new(Cube::uniform(1.0)))
         .spawn(world);
 
     Entity::builder()
-        .mount(
-            TransformBundle::default()
-                .with_position(Vec3::Y * 5.0)
-                .with_rotation(Quat::from_euler(EulerRot::YXZ, 1.0, 1.0, 0.0)),
-        )
+        .mount(TransformBundle::default().with_rotation(Quat::from_euler(
+            EulerRot::YXZ,
+            1.0,
+            1.0,
+            0.0,
+        )))
         .set(light_data(), LightData::new(Srgb::new(1.0, 1.0, 1.0), 1.0))
         .set(light_kind(), LightKind::Directional)
         .set_default(cast_shadow())
@@ -395,7 +389,6 @@ fn point_light_gizmo_system() -> BoxedSystem {
                                 pos,
                                 dir,
                                 0.02,
-                                1.0,
                                 light.color.with_alpha(1.0),
                             ))
                         }

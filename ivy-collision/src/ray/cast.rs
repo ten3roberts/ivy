@@ -12,24 +12,10 @@ use crate::{
 
 /// Represents a collider ray intersection.
 /// Data about the ray is not saved.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct RayIntersection {
     pub id: Entity,
     pub contact: Contact,
-}
-
-impl PartialOrd for RayIntersection {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Eq for RayIntersection {}
-
-impl Ord for RayIntersection {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        OrderedFloat(self.contact.depth).cmp(&OrderedFloat(other.contact.depth))
-    }
 }
 
 impl RayIntersection {

@@ -1,7 +1,7 @@
 use std::ops::Index;
 
 use glam::{Mat4, Vec3};
-use ivy_core::{Color, ColorExt, DrawGizmos, Line, Sphere};
+use ivy_core::{Color, ColorExt, DrawGizmos, Line, Sphere, Triangle};
 
 use crate::{epa, gjk, util::minkowski_diff, CollisionPrimitive, EntityPayload};
 
@@ -90,23 +90,39 @@ impl Index<usize> for ContactPoints {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Contact {
     /// The closest points on the two colliders, respectively
     pub points: ContactPoints,
     pub depth: f32,
     pub normal: Vec3,
+    pub polytype: epa::Polytype,
 }
 
 impl DrawGizmos for Contact {
     fn draw_primitives(&self, gizmos: &mut ivy_core::GizmosSection) {
         gizmos.draw(self.points);
+
         gizmos.draw(Line {
             origin: self.points[0],
             dir: self.normal * 0.2,
             color: Color::blue(),
             ..Default::default()
         });
+
+        for face in &self.polytype.faces {
+            for edge in face.edges() {
+                let p1 = self.polytype.points[edge.0 as usize];
+                let p2 = self.polytype.points[edge.1 as usize];
+
+                gizmos.draw(Line::from_points(
+                    p1.support,
+                    p2.support,
+                    0.01,
+                    Color::cyan(),
+                ))
+            }
+        }
     }
 }
 

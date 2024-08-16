@@ -1,8 +1,9 @@
 use std::ops::Index;
 
-use glam::Vec3;
+use glam::{Vec3, Vec3Swizzles};
+use palette::num::Abs;
 
-use crate::util::{project_plane, triple_prod, SupportPoint};
+use crate::util::{project_plane, triple_prod, SupportPoint, TOLERANCE};
 
 #[derive(Debug)]
 pub enum Simplex {
@@ -13,9 +14,7 @@ pub enum Simplex {
 }
 
 impl Simplex {
-    // Returns the next simplex that better encloses the origin.
-    // Returns None if the origin is enclosed in the tetrahedron.
-    #[inline]
+    /// Returns the next direction more likely to enclose origin
     pub fn next_dir(&mut self) -> Option<Vec3> {
         match *self {
             Self::Point([a]) => Some(-a.support),
@@ -23,7 +22,13 @@ impl Simplex {
                 let ab = b.support - a.support;
                 let a0 = -a.support;
 
-                if ab.dot(a0) > 0.0 {
+                assert!(ab.length() > 0.0);
+
+                tracing::info!(?ab, dot=?ab.dot(a0));
+
+                if ab.normalize().dot(a0.normalize()).abs() > 1.0 - TOLERANCE {
+                    Some(ab.yxz())
+                } else if ab.dot(a0) > 0.0 {
                     Some(triple_prod(ab, a0, ab))
                 } else {
                     *self = Self::Point([a]);

@@ -3,7 +3,7 @@ use glam::{Mat4, Vec3};
 use crate::{CollisionPrimitive, Ray};
 
 pub const TOLERANCE: f32 = 0.001;
-pub const MAX_ITERATIONS: usize = 10;
+pub const MAX_ITERATIONS: usize = 16;
 
 // Represents a point on the minkowski difference boundary which carries the
 // individual support points
