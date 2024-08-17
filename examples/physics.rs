@@ -160,7 +160,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
 
     let shader = assets.load(&PbrShaderDesc);
 
-    let distance = 0.8;
+    let distance = 1.1;
 
     Entity::builder()
         .mount(
@@ -176,7 +176,11 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
         .spawn(world);
 
     Entity::builder()
-        .mount(TransformBundle::default().with_position(Vec3::X * -distance))
+        .mount(
+            TransformBundle::default()
+                .with_position(Vec3::X * -distance)
+                .with_rotation(Quat::from_scaled_axis(vec3(0.0, 0.4, 0.0))),
+        )
         .mount(
             RbBundle::default().with_angular_velocity(Vec3::Y * 0.0), // .with_velocity(Vec3::X), // .with_angular_velocity(Vec3::Y * 0.1),
         )

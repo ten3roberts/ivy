@@ -386,8 +386,8 @@ impl std::ops::Deref for EntityPayload {
 
 impl DrawGizmos for CollisionTree {
     fn draw_primitives(&self, gizmos: &mut GizmosSection) {
-        self.root
-            .draw_gizmos_recursive(&self.nodes, gizmos, &self.object_data);
+        // self.root
+        //     .draw_gizmos_recursive(&self.nodes, gizmos, &self.object_data);
 
         for collision in &self.active_collisions {
             collision.contact.draw_primitives(gizmos);

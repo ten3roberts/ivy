@@ -19,8 +19,16 @@ pub fn epa<F: Fn(Vec3) -> SupportPoint>(support_func: F, simplex: Simplex) -> Co
         ],
         Face::new,
     );
+    tracing::info!("starting epa");
 
+    return Contact {
+        points: polytype.contact_points(polytype.faces[0]),
+        depth: 0.0,
+        normal: Default::default(),
+        polytype,
+    };
     let mut iterations = 0;
+    let iteration_count = 8;
     loop {
         let (_, min) = if let Some(val) = polytype.find_closest_face() {
             val
@@ -44,24 +52,25 @@ pub fn epa<F: Fn(Vec3) -> SupportPoint>(support_func: F, simplex: Simplex) -> Co
             // };
         };
 
-        if iterations > MAX_ITERATIONS {
-            tracing::error!("reached max iterations");
-            return Contact {
-                points: polytype.contact_points(min),
-                depth: min.distance,
-                normal: min.normal,
-                polytype,
-            };
-        }
-        // assert_eq!(min.normal.mag(), 1.0);
+        // if iterations > iteration_count {
+        //     tracing::error!("reached max iterations");
+        //     panic!("");
+        //     return Contact {
+        //         points: polytype.contact_points(min),
+        //         depth: min.distance,
+        //         normal: min.normal,
+        //         polytype,
+        //     };
+        // }
+        // // assert_eq!(min.normal.mag(), 1.0);
 
         let new_support = support_func(min.normal);
 
         let support_dist = min.normal.dot(new_support.support);
 
-        if (support_dist - min.distance) > TOLERANCE {
-            polytype.add_point(new_support, Face::new);
-        } else {
+        tracing::info!(%new_support, support_dist, ?min.distance, ?min.normal, "new support");
+
+        if (support_dist - min.distance) < TOLERANCE {
             return Contact {
                 points: polytype.contact_points(min),
                 depth: min.distance,
@@ -70,6 +79,7 @@ pub fn epa<F: Fn(Vec3) -> SupportPoint>(support_func: F, simplex: Simplex) -> Co
             };
         }
 
+        polytype.add_point(new_support, Face::new);
         iterations += 1;
     }
 }

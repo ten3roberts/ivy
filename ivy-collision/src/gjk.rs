@@ -15,6 +15,7 @@ pub fn gjk<A: CollisionPrimitive, B: CollisionPrimitive>(
     a_coll: &A,
     b_coll: &B,
 ) -> (bool, Simplex) {
+    let _span = tracing::info_span!("gjk").entered();
     // Get first support function in direction of separation
     // let dir = (a_pos - b_pos).normalized();
     let dir = Vec3::X;
@@ -33,6 +34,8 @@ pub fn gjk<A: CollisionPrimitive, B: CollisionPrimitive>(
     while let Some(dir) = simplex.next_dir() {
         assert!(dir.is_finite(), "{simplex:?}");
         let dir = dir.normalize();
+
+        tracing::info!(%dir, "new support");
 
         // Objects are fully enveloping
         if dir.length_squared() - 1.0 > TOLERANCE {

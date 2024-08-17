@@ -1,5 +1,5 @@
 use glam::Vec3;
-use ordered_float::{Float, OrderedFloat};
+use ordered_float::OrderedFloat;
 use smallvec::{Array, SmallVec};
 use std::ops::Index;
 
@@ -27,6 +27,8 @@ impl Face {
         let normal = (p2.support - p1.support)
             .cross(p3.support - p1.support)
             .normalize();
+
+        assert!(normal.is_finite());
 
         // Distance to the origin of the minkowski difference
         let distance = normal.dot(p1.support);
@@ -141,9 +143,11 @@ impl Polytype {
 
         self.faces.retain(|face| {
             let to_support = p.support - points[face.indices[0] as usize].support;
-            let dot = face.normal.dot(to_support);
-
-            if dot > 0.0 {
+            if face.normal.dot(p.support)
+                > face
+                    .normal
+                    .dot(self.points[face.indices[0] as usize].support)
+            {
                 face.edges().iter().for_each(|edge| {
                     add_if_unique(&mut edges, *edge);
                 });
@@ -161,7 +165,7 @@ impl Polytype {
         // add new faces
         let new_faces = edges
             .into_iter()
-            .map(|(a, b)| face_func(points, [new_index as _, a, b]));
+            .map(|(a, b)| face_func(points, [a, b, new_index as u16]));
 
         self.faces.extend(new_faces);
         assert_ne!(self.faces.len(), 0);
@@ -235,10 +239,11 @@ impl Index<u16> for Polytype {
 }
 
 fn add_if_unique<T: Array<Item = Edge>>(edges: &mut SmallVec<T>, edge: Edge) -> bool {
-    if let Some((index, _)) = edges.iter().enumerate().find(|(_, val)| {
+    if let Some(index) = edges.iter().position(|val| {
         // assert_ne!(**val, edge);
-        (val.0, val.1) == (edge.1, edge.0)
+        (val.0, val.1) == (edge.1, edge.0) || *val == edge
     }) {
+        edges.remove(index);
         false
     } else {
         edges.push(edge);

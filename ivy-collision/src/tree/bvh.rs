@@ -275,15 +275,15 @@ impl BvhNode {
         }
     }
 
-    /// Collapses a whole tree and fills `objects` with the objects in the tree
-    fn collapse(index: NodeIndex, nodes: &mut Nodes<Self>, objects: &mut Vec<ObjectIndex>) {
+    /// Merge a whole tree and fills `objects` with the objects in the tree
+    fn merge(index: NodeIndex, nodes: &mut Nodes<Self>, objects: &mut Vec<ObjectIndex>) {
         let node = &mut nodes[index];
 
         objects.append(&mut node.objects);
 
         if let Some([l, r]) = node.children.take() {
-            Self::collapse(l, nodes, objects);
-            Self::collapse(r, nodes, objects);
+            Self::merge(l, nodes, objects);
+            Self::merge(r, nodes, objects);
             nodes.remove(l).unwrap();
             nodes.remove(r).unwrap();
         }
@@ -321,7 +321,7 @@ impl CollisionTreeNode for BvhNode {
             // Gather up both children and all descendants, and re-add all objects by splitting.
             else {
                 let mut objects = vec![object];
-                Self::collapse(index, nodes, &mut objects);
+                Self::merge(index, nodes, &mut objects);
 
                 let node = &mut nodes[index];
 

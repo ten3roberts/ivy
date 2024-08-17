@@ -111,16 +111,22 @@ impl DrawGizmos for Contact {
         });
 
         for face in &self.polytype.faces {
-            for edge in face.edges() {
-                let p1 = self.polytype.points[edge.0 as usize];
-                let p2 = self.polytype.points[edge.1 as usize];
+            let color = Color::blue();
 
-                gizmos.draw(Line::from_points(
-                    p1.support,
-                    p2.support,
-                    0.01,
-                    Color::cyan(),
-                ))
+            let p1 = self.polytype.points[face.indices[0] as usize].support;
+            let p2 = self.polytype.points[face.indices[1] as usize].support;
+            let p3 = self.polytype.points[face.indices[2] as usize].support;
+
+            let midpoint = (p1 + p2 + p3) / 3.0;
+            gizmos.draw(Line::new(midpoint, face.normal, 0.01, color));
+
+            let indent = |p: Vec3| p - (p - midpoint).reject_from(face.normal).normalize() * 0.1;
+
+            let p1 = indent(p1);
+            let p2 = indent(p2);
+            let p3 = indent(p3);
+            for edge in [(p1, p2), (p2, p3), (p3, p1)] {
+                gizmos.draw(Line::from_points(edge.0, edge.1, 0.01, color))
             }
         }
     }
