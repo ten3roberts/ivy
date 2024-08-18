@@ -1,41 +1,43 @@
-use glam::{Mat4, Vec3};
+use glam::{vec3, Vec3};
+use rand::{Rng, SeedableRng};
 
 use crate::{
-    util::{minkowski_diff, MAX_ITERATIONS, TOLERANCE},
-    CollisionPrimitive, Simplex,
+    util::{minkowski_diff, TOLERANCE},
+    Shape, Simplex,
 };
 
 /// Performs a gjk intersection test.
 /// Returns true if the shapes intersect.
-pub fn gjk<A: CollisionPrimitive, B: CollisionPrimitive>(
-    a_transform: &Mat4,
-    b_transform: &Mat4,
-    a_transform_inv: &Mat4,
-    b_transform_inv: &Mat4,
-    a_coll: &A,
-    b_coll: &B,
-) -> (bool, Simplex) {
+pub fn gjk<A: Shape, B: Shape>(a: &A, b: &B) -> (bool, Simplex) {
     let _span = tracing::info_span!("gjk").entered();
     // Get first support function in direction of separation
     // let dir = (a_pos - b_pos).normalized();
     let dir = Vec3::X;
-    let a = minkowski_diff(
-        a_transform,
-        b_transform,
-        a_transform_inv,
-        b_transform_inv,
-        a_coll,
-        b_coll,
-        dir,
-    );
+    let p1 = minkowski_diff(a, b, dir);
 
-    let mut simplex = Simplex::Point([a]);
+    let mut simplex = Simplex::Point([p1]);
 
-    while let Some(dir) = simplex.next_dir() {
+    let mut fallback_directions = [Vec3::X, Vec3::Y, Vec3::Z].into_iter().cycle();
+
+    let mut iteration_count = 0;
+    let mut perturberance_rng = rand_pcg::Pcg32::seed_from_u64(42);
+
+    loop {
+        // while let Some(dir) = simplex.next_dir() {
+
+        let dir = match simplex.next_dir() {
+            crate::SimplexExpansion::Direction(v) => v,
+            crate::SimplexExpansion::Degenerate => {
+                tracing::info!("picking new direction");
+                fallback_directions.next().unwrap()
+            }
+            crate::SimplexExpansion::Enveloped => break,
+        };
+
         assert!(dir.is_finite(), "{simplex:?}");
         let dir = dir.normalize();
 
-        tracing::info!(%dir, "new support");
+        // tracing::info!(%dir, "new support");
 
         // Objects are fully enveloping
         if dir.length_squared() - 1.0 > TOLERANCE {
@@ -44,27 +46,30 @@ pub fn gjk<A: CollisionPrimitive, B: CollisionPrimitive>(
         }
 
         // Get the next simplex
-        let p = minkowski_diff(
-            a_transform,
-            b_transform,
-            a_transform_inv,
-            b_transform_inv,
-            a_coll,
-            b_coll,
-            dir,
-        );
+        let mut p = minkowski_diff(a, b, dir);
+        p.support += vec3(
+            perturberance_rng.gen(),
+            perturberance_rng.gen(),
+            perturberance_rng.gen(),
+        ) * 0.01;
 
         // New point was not past the origin
         // No collision
-        if p.support.dot(dir) <= -TOLERANCE {
+        tracing::info!(dot = p.support.dot(dir), "new support");
+        if p.support.dot(dir) < 0.0 {
             tracing::info!(dot = p.support.dot(dir), "no collision");
             return (false, simplex);
         }
 
         simplex.push(p);
+        iteration_count += 1;
+        if iteration_count > 1024 {
+            tracing::error!("max gjk iteration");
+            return (false, simplex);
+        }
     }
 
-    tracing::info!("collision");
+    // tracing::info!("collision");
 
     // Collision found
     (true, simplex)

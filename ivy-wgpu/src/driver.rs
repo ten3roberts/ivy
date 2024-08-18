@@ -8,7 +8,7 @@ use flax::{components::name, Entity};
 use glam::{vec2, Vec2};
 use ivy_core::{driver::Driver, App};
 use ivy_input::types::{
-    CursorEntered, CursorLeft, CursorMoved, KeyboardInput, MouseInput, MouseMotion, ScrollInput,
+    CursorEntered, CursorLeft, CursorMoved, KeyboardInput, MouseInput, MouseMotion, ScrollMotion,
 };
 use winit::{
     application::ApplicationHandler,
@@ -207,7 +207,7 @@ impl<'a> WinitEventHandler<'a> {
                 self.app.emit(CursorLeft)?;
             }
             WindowEvent::MouseWheel { delta, .. } => {
-                self.app.emit(ScrollInput {
+                self.app.emit(ScrollMotion {
                     delta: match delta {
                         winit::event::MouseScrollDelta::LineDelta(x, y) => vec2(x, y) * 4.0,
                         winit::event::MouseScrollDelta::PixelDelta(v) => {

@@ -1,10 +1,8 @@
-use std::sync::Arc;
-
 use derive_more::{Deref, DerefMut, Display, From, Into};
 use ezy::Lerp;
 use glam::{Mat4, Vec3};
 
-use crate::{Capsule, CollisionPrimitive, Cube, Sphere};
+use crate::{BoundingBox, Capsule, Shape, Sphere};
 
 #[derive(Debug, Display, Clone, Copy, Deref, DerefMut, Default, From, Into)]
 pub struct ColliderOffset(pub Mat4);
@@ -19,51 +17,50 @@ impl<'a> Lerp<'a> for ColliderOffset {
 
 /// Generic collider holding any primitive implementing a support function.
 #[derive(Debug, Clone)]
-pub struct Collider {
-    // TODO: enum
-    primitive: Arc<dyn CollisionPrimitive + Send + Sync>,
+pub enum Collider {
+    Cube(BoundingBox),
+    Sphere(Sphere),
+    Capsule(Capsule),
 }
 
 impl Collider {
-    /// Creates a new collider from arbitrary collision primitive.
-    pub fn new<T: 'static + CollisionPrimitive + Send + Sync>(primitive: T) -> Self {
-        Self {
-            primitive: Arc::new(primitive),
-        }
+    /// Creates a cuboidal collider
+    pub fn cube(min: Vec3, max: Vec3) -> Self {
+        Self::Cube(BoundingBox::from_corners(min, max))
     }
 
-    /// Creates a cuboidal collider
-    pub fn cube(x: f32, y: f32, z: f32) -> Self {
-        Self::new(Cube::new(x, y, z))
+    pub fn cube_from_center(center: Vec3, half_extents: Vec3) -> Self {
+        Self::Cube(BoundingBox::from_corners(
+            center - half_extents,
+            center + half_extents,
+        ))
     }
 
     /// Creates a spherical collider
     pub fn sphere(radius: f32) -> Self {
-        Self::new(Sphere::new(radius))
+        Self::Sphere(Sphere::new(radius))
     }
 
     /// Creates a capsule collider
     pub fn capsule(half_height: f32, radius: f32) -> Self {
-        Self::new(Capsule::new(half_height, radius))
+        Self::Capsule(Capsule::new(half_height, radius))
     }
 }
 
-impl Default for Collider {
-    fn default() -> Self {
-        Self::new(Cube::uniform(1.0))
-    }
-}
-
-impl CollisionPrimitive for Collider {
+impl Shape for Collider {
     fn support(&self, dir: Vec3) -> Vec3 {
-        self.primitive.support(dir)
+        match self {
+            Collider::Cube(v) => v.support(dir),
+            Collider::Sphere(v) => v.support(dir),
+            Collider::Capsule(v) => v.support(dir),
+        }
     }
 
     fn max_radius(&self) -> f32 {
-        self.primitive.max_radius()
-    }
-
-    fn dyn_clone(&self) -> Box<dyn CollisionPrimitive + Send + Sync> {
-        unimplemented!()
+        match self {
+            Collider::Cube(v) => v.max_radius(),
+            Collider::Sphere(v) => v.max_radius(),
+            Collider::Capsule(v) => v.max_radius(),
+        }
     }
 }

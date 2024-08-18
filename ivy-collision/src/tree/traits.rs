@@ -1,6 +1,6 @@
 use slotmap::SlotMap;
 
-use crate::{BoundingBox, Collision, Nodes, ObjectData, ObjectIndex};
+use crate::{BoundingBox, Intersection, Nodes, ObjectData, ObjectIndex};
 
 use super::NodeIndex;
 

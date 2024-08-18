@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use glam::{Mat4, Vec3};
 
-use crate::{CollisionPrimitive, Ray};
+use crate::{Ray, Shape};
 
 pub const TOLERANCE: f32 = 0.001;
 pub const MAX_ITERATIONS: usize = 16;
@@ -25,33 +25,15 @@ impl Display for SupportPoint {
 /// Returns a point on the minkowski difference given from two colliders, their
 /// transform, and a direction.
 #[inline]
-pub fn minkowski_diff<A: CollisionPrimitive, B: CollisionPrimitive>(
-    a_transform: &Mat4,
-    b_transform: &Mat4,
-    a_transform_inv: &Mat4,
-    b_transform_inv: &Mat4,
-    a_coll: &A,
-    b_coll: &B,
-    dir: Vec3,
-) -> SupportPoint {
-    let a = support(a_transform, a_transform_inv, a_coll, dir);
-    let b = support(b_transform, b_transform_inv, b_coll, -dir);
+pub fn minkowski_diff<A: Shape, B: Shape>(a: &A, b: &B, dir: Vec3) -> SupportPoint {
+    let a = a.support(dir);
+    let b = b.support(-dir);
 
     SupportPoint {
         support: a - b,
         a,
         b,
     }
-}
-
-#[inline]
-pub fn support<T: CollisionPrimitive>(
-    transform: &Mat4,
-    transform_inv: &Mat4,
-    coll: &T,
-    dir: Vec3,
-) -> Vec3 {
-    transform.transform_point3(coll.support(transform_inv.transform_vector3(dir).normalize()))
 }
 
 /// Compute barycentric coordinates of p in relation to the triangle defined by (a, b, c).

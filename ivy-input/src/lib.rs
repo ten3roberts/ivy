@@ -297,6 +297,7 @@ pub enum InputKind {
     MouseButton(MouseButton),
     CursorMoved,
     CursorDelta,
+    Scroll,
 }
 
 pub struct KeyBinding {
@@ -401,6 +402,41 @@ impl Binding<Vec2> for CursorMovement {
 
     fn binding(&self) -> InputKind {
         InputKind::CursorDelta
+    }
+}
+
+pub struct ScrollBinding {
+    value: Vec2,
+}
+
+impl ScrollBinding {
+    pub fn new() -> Self {
+        Self { value: Vec2::ZERO }
+    }
+}
+
+impl Default for ScrollBinding {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Binding<Vec2> for ScrollBinding {
+    type Input = InputEvent;
+
+    fn apply(&mut self, input: &Self::Input) {
+        match input {
+            &InputEvent::Scroll(delta) => self.value += delta,
+            _ => panic!("Invalid input event"),
+        }
+    }
+
+    fn read(&mut self) -> Vec2 {
+        mem::take(&mut self.value)
+    }
+
+    fn binding(&self) -> InputKind {
+        InputKind::Scroll
     }
 }
 

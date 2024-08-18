@@ -1,36 +1,36 @@
 use std::sync::Arc;
 
 use flax::{
-    component, BoxedSystem, Component, Entity, FetchExt, Mutable, OptOr, Query, QueryBorrow,
+    component, BoxedSystem, Component, Entity, FetchExt, Mutable, Query, QueryBorrow,
     ScheduleBuilder, System, World,
 };
 use glam::{vec3, EulerRot, Mat4, Quat, Vec2, Vec3};
-use ivy_assets::{Asset, AssetCache, AsyncAssetKey, DynAssetDesc};
-use ivy_collision::{components::collider, CollisionPrimitive};
+use ivy_assets::AssetCache;
+use ivy_collision::{components::collider, Axis};
 use ivy_core::{
     app::InitEvent,
-    async_commandbuffer, delta_time, engine, gizmos,
+    delta_time, engine, gizmos,
     layer::events::EventRegisterContext,
     main_camera,
-    palette::{Srgb, Srgba, WithAlpha},
+    palette::{Srgb, Srgba},
     profiling::ProfilingLayer,
     rotation,
     update_layer::{FixedTimeStep, PerTick, Plugin, ScheduledLayer},
-    velocity, world_transform, App, AsyncCommandBuffer, Color, ColorExt, EngineLayer,
-    EntityBuilderExt, Layer, TransformBundle, DEG_45, DEG_90,
+    velocity, App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer, TransformBundle,
+    DEFAULT_RADIUS, DEG_45,
 };
-use ivy_engine::{Collider, Cube, RbBundle, Sphere};
-use ivy_gltf::{components::animator, Document};
+use ivy_engine::{Collider, RbBundle};
+use ivy_gltf::components::animator;
 use ivy_graphics::texture::TextureDesc;
 use ivy_input::{
     components::input_state,
     layer::InputLayer,
     types::{Key, NamedKey},
-    Action, BindingExt, CursorMovement, InputState, KeyBinding, MouseButtonBinding,
+    Action, Axis2, BindingExt, CursorMovement, InputState, KeyBinding, MouseButtonBinding,
+    ScrollBinding,
 };
 use ivy_physics::PhysicsPlugin;
 use ivy_postprocessing::preconfigured::{PbrRenderGraph, PbrRenderGraphConfig, SkyboxConfig};
-use ivy_scene::{GltfNodeExt, NodeMountOptions};
 use ivy_wgpu::{
     components::{
         cast_shadow, environment_data, light_data, light_kind, main_window, projection_matrix,
@@ -42,7 +42,7 @@ use ivy_wgpu::{
     light::{LightData, LightKind},
     material_desc::{MaterialData, MaterialDesc},
     mesh_desc::MeshDesc,
-    primitives::{CubePrimitive, UvSpherePrimitive},
+    primitives::CubePrimitive,
     renderer::{EnvironmentData, RenderObjectBundle},
     rendergraph::{self, ExternalResources, RenderGraph},
     shader_library::{ModuleDesc, ShaderLibrary},
@@ -125,6 +125,7 @@ impl Plugin<PerTick> for CameraInputPlugin {
     ) -> anyhow::Result<()> {
         schedule
             .with_system(cursor_lock_system())
+            .with_system(camera_speed_input_system())
             .with_system(camera_rotation_input_system())
             .with_system(camera_movement_input_system());
 
@@ -142,7 +143,7 @@ impl Plugin<PerTick> for GizmosPlugin {
         schedule: &mut ScheduleBuilder,
         _: &PerTick,
     ) -> anyhow::Result<()> {
-        schedule.with_system(point_light_gizmo_system());
+        schedule.with_system(gizmos_system());
 
         Ok(())
     }
@@ -166,8 +167,11 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
         .mount(
             TransformBundle::default().with_position(Vec3::X * (distance)), // .with_rotation(Quat::from_scaled_axis(Vec3::Y * 0.3)),
         )
-        .mount(RbBundle::default()) // .with_velocity(-Vec3::X))
-        .set(collider(), Collider::new(Cube::uniform(1.0)))
+        .mount(RbBundle::default().with_velocity(-Vec3::Z * 0.1))
+        .set(
+            collider(),
+            Collider::cube_from_center(Vec3::ZERO, Vec3::ONE),
+        )
         .mount(RenderObjectBundle::new(
             cube_mesh.clone(),
             material.clone(),
@@ -182,10 +186,13 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
                 .with_rotation(Quat::from_scaled_axis(vec3(0.0, 0.4, 0.0))),
         )
         .mount(
-            RbBundle::default().with_angular_velocity(Vec3::Y * 0.0), // .with_velocity(Vec3::X), // .with_angular_velocity(Vec3::Y * 0.1),
+            RbBundle::default().with_angular_velocity(Vec3::Y * 0.5), // .with_velocity(Vec3::X), // .with_angular_velocity(Vec3::Y * 0.1),
         )
         .mount(RenderObjectBundle::new(cube_mesh, material, shader))
-        .set(collider(), Collider::new(Cube::uniform(1.0)))
+        .set(
+            collider(),
+            Collider::cube_from_center(Vec3::ZERO, Vec3::ONE),
+        )
         .spawn(world);
 
     Entity::builder()
@@ -204,6 +211,9 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
 }
 
 fn setup_camera(world: &mut World) {
+    let mut speed_action = Action::new(camera_speed_delta());
+    speed_action.add(ScrollBinding::new().decompose(Axis2::Y));
+
     let mut move_action = Action::new(movement());
     move_action.add(KeyBinding::new(Key::Character("w".into())).compose(Vec3::Z));
     move_action.add(KeyBinding::new(Key::Character("a".into())).compose(-Vec3::X));
@@ -246,13 +256,15 @@ fn setup_camera(world: &mut World) {
             InputState::new()
                 .with_action(move_action)
                 .with_action(rotate_action)
-                .with_action(pan_action),
+                .with_action(pan_action)
+                .with_action(speed_action),
         )
         .set_default(movement())
         .set_default(rotation_input())
         .set(euler_rotation(), vec3(DEG_45, 0.0, 0.0))
         .set_default(pan_active())
         .set(camera_speed(), 5.0)
+        .set_default(camera_speed_delta())
         .spawn(world);
 }
 
@@ -297,6 +309,7 @@ component! {
     euler_rotation: Vec3,
     movement: Vec3,
     camera_speed: f32,
+    camera_speed_delta: f32,
 }
 
 fn cursor_lock_system() -> BoxedSystem {
@@ -313,6 +326,20 @@ fn cursor_lock_system() -> BoxedSystem {
                 });
             },
         )
+        .boxed()
+}
+
+fn camera_speed_input_system() -> BoxedSystem {
+    System::builder()
+        .with_query(Query::new((
+            camera_speed().as_mut(),
+            camera_speed_delta().modified(),
+        )))
+        .for_each(|(speed, &delta)| {
+            let change = 2_f32.powf(-delta * 0.05);
+            *speed = (*speed * change).clamp(0.1, 100.0);
+            tracing::info!("camera speed: {speed} {delta}");
+        })
         .boxed()
 }
 
@@ -359,44 +386,18 @@ fn animate_system() -> BoxedSystem {
         .boxed()
 }
 
-fn point_light_gizmo_system() -> BoxedSystem {
+fn gizmos_system() -> BoxedSystem {
     System::builder()
         .with_query(Query::new(gizmos().source(engine())))
-        .with_query(Query::new((world_transform(), light_data(), light_kind())))
         .build(
-            |mut gizmos: QueryBorrow<flax::fetch::Source<Component<gizmos::Gizmos>, Entity>>,
-             mut query: QueryBorrow<(
-                Component<Mat4>,
-                Component<LightData>,
-                Component<LightKind>,
-            )>| {
-                let mut gizmos = gizmos
-                    .first()
-                    .unwrap()
-                    .begin_section("point_light_gizmo_system");
+            |mut gizmos: QueryBorrow<flax::fetch::Source<Component<gizmos::Gizmos>, Entity>>| {
+                let mut gizmos = gizmos.first().unwrap().begin_section("gizmos_system");
 
-                query
-                    .iter()
-                    .for_each(|(transform, light, kind)| match kind {
-                        LightKind::Point => gizmos.draw(gizmos::Sphere::new(
-                            transform.transform_point3(Vec3::ZERO),
-                            0.1,
-                            light.color.with_alpha(1.0),
-                        )),
-                        LightKind::Directional => {
-                            let pos = transform.transform_point3(Vec3::ZERO);
-                            let dir = transform.transform_vector3(Vec3::Z);
-
-                            gizmos.draw(gizmos::Sphere::new(pos, 0.1, light.color.with_alpha(1.0)));
-
-                            gizmos.draw(gizmos::Line::new(
-                                pos,
-                                dir,
-                                0.02,
-                                light.color.with_alpha(1.0),
-                            ))
-                        }
-                    });
+                gizmos.draw(gizmos::Sphere::new(
+                    Vec3::ZERO,
+                    DEFAULT_RADIUS,
+                    Color::red(),
+                ));
             },
         )
         .boxed()

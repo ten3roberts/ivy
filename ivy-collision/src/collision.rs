@@ -1,9 +1,9 @@
 use std::ops::Index;
 
-use glam::{Mat4, Vec3};
-use ivy_core::{Color, ColorExt, DrawGizmos, Line, Sphere, Triangle};
+use glam::Vec3;
+use ivy_core::{Color, ColorExt, DrawGizmos, Line, Sphere};
 
-use crate::{epa, gjk, util::minkowski_diff, CollisionPrimitive, EntityPayload};
+use crate::{epa, gjk, util::minkowski_diff, EntityPayload, Shape};
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum ContactPoints {
@@ -44,7 +44,7 @@ impl DrawGizmos for ContactPoints {
         for &p in self.iter() {
             gizmos.draw(Sphere {
                 origin: p,
-                radius: 0.1,
+                color: Color::green(),
                 ..Default::default()
             })
         }
@@ -110,69 +110,23 @@ impl DrawGizmos for Contact {
             ..Default::default()
         });
 
-        for face in &self.polytype.faces {
-            let color = Color::blue();
-
-            let p1 = self.polytype.points[face.indices[0] as usize].support;
-            let p2 = self.polytype.points[face.indices[1] as usize].support;
-            let p3 = self.polytype.points[face.indices[2] as usize].support;
-
-            let midpoint = (p1 + p2 + p3) / 3.0;
-            gizmos.draw(Line::new(midpoint, face.normal, 0.01, color));
-
-            let indent = |p: Vec3| p - (p - midpoint).reject_from(face.normal).normalize() * 0.1;
-
-            let p1 = indent(p1);
-            let p2 = indent(p2);
-            let p3 = indent(p3);
-            for edge in [(p1, p2), (p2, p3), (p3, p1)] {
-                gizmos.draw(Line::from_points(edge.0, edge.1, 0.01, color))
-            }
-        }
+        self.polytype.draw_primitives(gizmos);
     }
 }
 
 /// Represents a collision between two entities.
 #[derive(Debug, Clone)]
-pub struct Collision {
+pub struct Intersection {
     pub a: EntityPayload,
     pub b: EntityPayload,
     pub contact: Contact,
 }
 
-pub fn intersect<A: CollisionPrimitive, B: CollisionPrimitive>(
-    a_transform: &Mat4,
-    b_transform: &Mat4,
-    a: &A,
-    b: &B,
-) -> Option<Contact> {
-    let a_transform_inv = a_transform.inverse();
-    let b_transform_inv = b_transform.inverse();
-
-    let (intersect, simplex) = gjk(
-        a_transform,
-        b_transform,
-        &a_transform_inv,
-        &b_transform_inv,
-        a,
-        b,
-    );
+pub fn intersect<A: Shape, B: Shape>(a: &A, b: &B) -> Option<Contact> {
+    let (intersect, simplex) = gjk(a, b);
 
     if intersect {
-        Some(epa(
-            |dir| {
-                minkowski_diff(
-                    a_transform,
-                    b_transform,
-                    &a_transform_inv,
-                    &b_transform_inv,
-                    a,
-                    b,
-                    dir,
-                )
-            },
-            simplex,
-        ))
+        Some(epa(simplex, |dir| minkowski_diff(a, b, dir)))
     } else {
         None
     }

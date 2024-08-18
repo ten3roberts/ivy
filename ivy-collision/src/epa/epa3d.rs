@@ -7,7 +7,10 @@ use crate::{
     {util::SupportPoint, util::TOLERANCE},
 };
 
-pub fn epa<F: Fn(Vec3) -> SupportPoint>(support_func: F, simplex: Simplex) -> Contact {
+pub fn epa(simplex: Simplex, support_func: impl Fn(Vec3) -> SupportPoint) -> Contact {
+    let _span = tracing::info_span!("epa").entered();
+    let midpoint = simplex.points().iter().map(|v| v.support).sum::<Vec3>() / 4.0;
+
     assert_eq!(simplex.points().len(), 4);
     let mut polytype = Polytype::new(
         simplex.points(),
@@ -19,49 +22,32 @@ pub fn epa<F: Fn(Vec3) -> SupportPoint>(support_func: F, simplex: Simplex) -> Co
         ],
         Face::new,
     );
-    tracing::info!("starting epa");
 
-    return Contact {
-        points: polytype.contact_points(polytype.faces[0]),
-        depth: 0.0,
-        normal: Default::default(),
-        polytype,
-    };
+    // for face in &polytype.faces {
+    //     let p1 = polytype.points[face.indices[0] as usize].support;
+    //     let p2 = polytype.points[face.indices[1] as usize].support;
+    //     let p3 = polytype.points[face.indices[2] as usize].support;
+
+    //     let face_midpoint = (p1 + p2 + p3) / 3.0;
+
+    //     assert!(face.normal.dot(face_midpoint - midpoint) > 0.0);
+    // }
+
+    // return Contact {
+    //     points: polytype.contact_points(polytype.faces[0]),
+    //     depth: 0.0,
+    //     normal: Default::default(),
+    //     polytype,
+    // };
+
     let mut iterations = 0;
-    let iteration_count = 8;
+    let iteration_count = 64;
     loop {
         let (_, min) = if let Some(val) = polytype.find_closest_face() {
             val
         } else {
             panic!("Empty polytype");
-            // // eprintln!("The two shapes are the same");
-            // let p = support_func(Vec3::X);
-            // return Contact {
-            //     points: ContactPoints::double(p.a, p.b),
-            //     depth: p.support.length(),
-            //     normal: p.support.normalize(),
-            // };
-            // let p = support(a_transform, a_transform_inv, a_coll, Vec3::unit_x());
-            // return Intersection {
-            //     points: [
-            //         a_transform.extract_translation(),
-            //         b_transform.extract_translation(),
-            //     ],
-            //     depth: p.mag(),
-            //     normal: p.normalized(),
-            // };
         };
-
-        // if iterations > iteration_count {
-        //     tracing::error!("reached max iterations");
-        //     panic!("");
-        //     return Contact {
-        //         points: polytype.contact_points(min),
-        //         depth: min.distance,
-        //         normal: min.normal,
-        //         polytype,
-        //     };
-        // }
         // // assert_eq!(min.normal.mag(), 1.0);
 
         let new_support = support_func(min.normal);
@@ -71,6 +57,17 @@ pub fn epa<F: Fn(Vec3) -> SupportPoint>(support_func: F, simplex: Simplex) -> Co
         tracing::info!(%new_support, support_dist, ?min.distance, ?min.normal, "new support");
 
         if (support_dist - min.distance) < TOLERANCE {
+            tracing::info!("found edge of polytype");
+            return Contact {
+                points: polytype.contact_points(min),
+                depth: min.distance,
+                normal: min.normal,
+                polytype,
+            };
+        }
+
+        if iterations >= iteration_count {
+            tracing::error!("reached max iterations");
             return Contact {
                 points: polytype.contact_points(min),
                 depth: min.distance,

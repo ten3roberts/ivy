@@ -12,7 +12,7 @@ use smallvec::Array;
 
 use crate::{
     components::{self, collider, collider_offset, collision_tree, tree_index},
-    BoundingBox, Collider, Collision, CollisionPrimitive,
+    BoundingBox, Collider, Intersection, Shape,
 };
 
 mod binary_node;
@@ -44,7 +44,7 @@ pub struct CollisionTree {
     root: NodeIndex,
 
     object_data: SlotMap<ObjectIndex, ObjectData>,
-    active_collisions: Vec<Collision>,
+    active_collisions: Vec<Intersection>,
 }
 
 impl CollisionTree {
@@ -131,7 +131,7 @@ impl CollisionTree {
             self.root,
             &self.nodes,
             &self.object_data,
-            &mut |collision: Collision| {
+            &mut |collision: Intersection| {
                 self.active_collisions.push(collision);
             },
         );

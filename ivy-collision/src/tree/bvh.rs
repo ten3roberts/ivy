@@ -10,8 +10,8 @@ use palette::{
 use slotmap::SlotMap;
 
 use crate::{
-    intersect, BoundingBox, Collision, CollisionTreeNode, NodeIndex, NodeState, Nodes, ObjectData,
-    ObjectIndex,
+    intersect, BoundingBox, CollisionTreeNode, Intersection, NodeIndex, NodeState, Nodes,
+    ObjectData, ObjectIndex, TransformedShape,
 };
 
 const MARGIN: f32 = 1.2;
@@ -236,7 +236,7 @@ impl BvhNode {
         index: NodeIndex,
         nodes: &Nodes<Self>,
         data: &SlotMap<ObjectIndex, ObjectData>,
-        on_collision: &mut impl FnMut(Collision),
+        on_collision: &mut impl FnMut(Intersection),
     ) {
         let mut on_overlap = |a: &Self, b: &Self| {
             assert!(a.is_leaf());
@@ -245,7 +245,7 @@ impl BvhNode {
                 let a_obj = &data[a];
                 for &b in b.objects() {
                     let b_obj = &data[b];
-                    if let Some(collision) = test_intersect(data, a, a_obj, b, b_obj) {
+                    if let Some(collision) = query_intersection(data, a, a_obj, b, b_obj) {
                         // collisions
                     }
                 }
@@ -267,7 +267,7 @@ impl BvhNode {
                 for &b in node.objects.iter().skip(i + 1) {
                     assert_ne!(a, b);
                     let b_obj = &data[b];
-                    if let Some(collision) = test_intersect(data, a, a_obj, b, b_obj) {
+                    if let Some(collision) = query_intersection(data, a, a_obj, b, b_obj) {
                         on_collision(collision);
                     }
                 }
@@ -405,13 +405,13 @@ impl BvhNode {
     }
 }
 
-fn test_intersect(
+fn query_intersection(
     data: &SlotMap<ObjectIndex, ObjectData>,
     a: ObjectIndex,
     a_data: &ObjectData,
     b: ObjectIndex,
     b_data: &ObjectData,
-) -> Option<Collision> {
+) -> Option<Intersection> {
     if !a_data.bounds.overlaps(b_data.bounds) {
         return None;
     }
@@ -420,12 +420,10 @@ fn test_intersect(
     let b_data = &data[b];
 
     if let Some(contact) = intersect(
-        &a_data.transform,
-        &b_data.transform,
-        &a_data.collider,
-        &b_data.collider,
+        &TransformedShape::new(&a_data.collider, a_data.transform),
+        &TransformedShape::new(&b_data.collider, b_data.transform),
     ) {
-        let collision = Collision {
+        let collision = Intersection {
             a: crate::EntityPayload {
                 entity: a_data.id,
                 is_trigger: a_data.is_trigger,

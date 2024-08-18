@@ -11,7 +11,7 @@ use flax::{
 };
 use flume::Receiver;
 use glam::Quat;
-use ivy_collision::{Collision, Contact};
+use ivy_collision::{Intersection, Contact};
 use ivy_core::{
     angular_velocity, connection, engine, friction, gravity_influence, position, restitution,
     rotation, sleeping, velocity,
@@ -59,8 +59,8 @@ pub fn get_rigid_root<'a>(entity: &EntityRef<'a>) -> EntityRef<'a> {
 
 #[derive(Debug, Clone)]
 pub struct CollisionState {
-    sleeping: BTreeMap<(Entity, Entity), Collision>,
-    active: BTreeMap<(Entity, Entity), Collision>,
+    sleeping: BTreeMap<(Entity, Entity), Intersection>,
+    active: BTreeMap<(Entity, Entity), Intersection>,
 }
 
 impl CollisionState {
@@ -71,7 +71,7 @@ impl CollisionState {
         }
     }
 
-    pub fn register(&mut self, col: Collision) {
+    pub fn register(&mut self, col: Intersection) {
         let slot = if col.a.state.dormant() && col.b.state.dormant() {
             &mut self.sleeping
         } else {
@@ -97,7 +97,7 @@ impl CollisionState {
         self.active.keys().any(|v| v.0 == e)
     }
 
-    pub fn get(&self, e: Entity) -> impl Iterator<Item = &'_ Collision> {
+    pub fn get(&self, e: Entity) -> impl Iterator<Item = &'_ Intersection> {
         self.active
             .iter()
             .skip_while(move |((a, _), _)| *a != e)
@@ -111,7 +111,7 @@ impl CollisionState {
             .map(|(_, v)| v)
     }
 
-    pub fn get_all(&self) -> impl Iterator<Item = (Entity, Entity, &Collision)> {
+    pub fn get_all(&self) -> impl Iterator<Item = (Entity, Entity, &Intersection)> {
         self.active
             .iter()
             .chain(self.sleeping.iter())
@@ -150,7 +150,7 @@ pub fn resolve_collisions_system() -> BoxedSystem {
 pub fn resolve_collisions(
     world: &World,
     state: &mut CollisionState,
-    collisions: impl Iterator<Item = Collision>,
+    collisions: impl Iterator<Item = Intersection>,
     dt: f32,
 ) -> Result<()> {
     state.next_frame();

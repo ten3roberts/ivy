@@ -2,7 +2,7 @@ use std::ops::Deref;
 
 use glam::{Mat4, Vec3};
 
-use crate::{CollisionPrimitive, Ray, RayIntersect};
+use crate::{Ray, RayIntersect, Shape};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Cube {
@@ -31,7 +31,7 @@ impl Deref for Cube {
     }
 }
 
-impl CollisionPrimitive for Cube {
+impl Shape for Cube {
     fn support(&self, dir: Vec3) -> Vec3 {
         let x = if dir.x > 0.0 {
             self.half_extents.x
@@ -55,10 +55,6 @@ impl CollisionPrimitive for Cube {
     fn max_radius(&self) -> f32 {
         // TODO: incorrect, radius is not the best in general
         self.half_extents.max_element()
-    }
-
-    fn dyn_clone(&self) -> Box<dyn CollisionPrimitive + Send + Sync> {
-        Box::new(*self)
     }
 }
 
@@ -104,7 +100,7 @@ impl Sphere {
 
     /// Creates a bounding sphere fully enclosign a primitive
     #[inline]
-    pub fn enclose<T: CollisionPrimitive>(collider: &T, scale: Vec3) -> Self {
+    pub fn enclose<T: Shape>(collider: &T, scale: Vec3) -> Self {
         Self {
             radius: collider.max_radius() * scale.min_element(),
         }
@@ -132,17 +128,13 @@ impl Sphere {
     }
 }
 
-impl CollisionPrimitive for Sphere {
+impl Shape for Sphere {
     fn support(&self, dir: Vec3) -> Vec3 {
         self.radius * dir
     }
 
     fn max_radius(&self) -> f32 {
         self.radius
-    }
-
-    fn dyn_clone(&self) -> Box<dyn CollisionPrimitive + Send + Sync> {
-        Box::new(*self)
     }
 }
 
@@ -185,7 +177,7 @@ impl Capsule {
     }
 }
 
-impl CollisionPrimitive for Capsule {
+impl Shape for Capsule {
     fn support(&self, dir: Vec3) -> Vec3 {
         let mut result = Vec3::ZERO;
         result.y = dir.y.signum() * self.half_height;
@@ -194,10 +186,6 @@ impl CollisionPrimitive for Capsule {
 
     fn max_radius(&self) -> f32 {
         self.half_height + self.radius
-    }
-
-    fn dyn_clone(&self) -> Box<dyn CollisionPrimitive + Send + Sync> {
-        Box::new(*self)
     }
 }
 

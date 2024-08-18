@@ -5,8 +5,8 @@ use glam::Mat4;
 use slotmap::SlotMap;
 
 use crate::{
-    components, intersect, query::TreeQuery, BoundingBox, CollisionPrimitive, CollisionTree,
-    CollisionTreeNode, Contact, ObjectData, ObjectIndex, Visitor,
+    components, intersect, query::TreeQuery, BoundingBox, CollisionTree, CollisionTreeNode,
+    Contact, ObjectData, ObjectIndex, Shape, TransformedShape, Visitor,
 };
 
 use super::BvhNode;
@@ -24,7 +24,7 @@ pub struct IntersectVisitor<'a, C, Q> {
 
 impl<'a, C, Q> IntersectVisitor<'a, C, Q>
 where
-    C: CollisionPrimitive,
+    C: Shape,
 {
     pub fn new(world: &'a World, collider: &'a C, transform: Mat4, filter: &'a Q) -> Self
     where
@@ -54,7 +54,7 @@ where
 
 impl<'a, C, Q> Visitor<'a> for IntersectVisitor<'a, C, Q>
 where
-    C: CollisionPrimitive,
+    C: Shape,
     Q: 'a,
 {
     type Output = IntersectIterator<'a, C, Q>;
@@ -93,7 +93,7 @@ pub struct IntersectIterator<'a, C, Q> {
 
 impl<'a, C, Q> Iterator for IntersectIterator<'a, C, Q>
 where
-    C: CollisionPrimitive,
+    C: Shape,
     Q: for<'x> Fetch<'x>,
 {
     type Item = Contact;
@@ -112,9 +112,10 @@ where
             let query = (components::collider(), self.filter);
 
             if let Some((collider, _)) = entity.query(&query).get() {
-                if let Some(intersection) =
-                    intersect(&data.transform, &self.transform, collider, self.collider)
-                {
+                if let Some(intersection) = intersect(
+                    &TransformedShape::new(&collider, data.transform),
+                    &TransformedShape::new(&self.collider, self.transform),
+                ) {
                     return Some(intersection);
                 }
             };

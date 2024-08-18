@@ -1,10 +1,9 @@
-use glam::Vec3;
+use glam::{vec3, Vec3};
 use ivy_core::{Cube, DrawGizmos, GizmosSection};
 
-use crate::Ray;
+use crate::{Ray, Shape};
 
 /// Represents an axis aligned bounding box
-// TODO: corners
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct BoundingBox {
     pub min: Vec3,
@@ -163,6 +162,20 @@ impl DrawGizmos for BoundingBox {
             max: self.max,
             ..Default::default()
         });
+    }
+}
+
+impl Shape for BoundingBox {
+    fn support(&self, dir: Vec3) -> Vec3 {
+        let x = if dir.x > 0.0 { self.max.x } else { self.min.x };
+        let y = if dir.y > 0.0 { self.max.y } else { self.min.y };
+        let z = if dir.z > 0.0 { self.max.z } else { self.min.z };
+
+        vec3(x, y, z)
+    }
+
+    fn max_radius(&self) -> f32 {
+        todo!()
     }
 }
 

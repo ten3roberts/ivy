@@ -1,4 +1,8 @@
 use glam::Vec3;
+use ivy_core::{
+    gizmos::{self, DrawGizmos},
+    Color, ColorExt, Line, DEFAULT_RADIUS,
+};
 use ordered_float::OrderedFloat;
 use smallvec::{Array, SmallVec};
 use std::ops::Index;
@@ -27,6 +31,10 @@ impl Face {
         let normal = (p2.support - p1.support)
             .cross(p3.support - p1.support)
             .normalize();
+
+        if !normal.is_finite() {
+            tracing::info!("normal: {normal} {p1} {p2} {p3}");
+        }
 
         assert!(normal.is_finite());
 
@@ -230,6 +238,39 @@ impl Polytype {
     }
 }
 
+impl DrawGizmos for Polytype {
+    fn draw_primitives(&self, gizmos: &mut ivy_core::GizmosSection) {
+        for (i, point) in self.points.iter().enumerate() {
+            gizmos.draw(gizmos::Sphere::new(
+                point.support,
+                DEFAULT_RADIUS,
+                Color::from_hsla(i as f32 * 60.0, 1.0, 0.5, 1.0),
+            ));
+        }
+
+        for face in &self.faces {
+            let color = Color::blue();
+
+            let p1 = self.points[face.indices[0] as usize].support;
+            let p2 = self.points[face.indices[1] as usize].support;
+            let p3 = self.points[face.indices[2] as usize].support;
+
+            let midpoint = (p1 + p2 + p3) / 3.0;
+            gizmos.draw(Line::new(midpoint, face.normal * 0.2, 0.002, color));
+            gizmos.draw(gizmos::Sphere::new(midpoint, 0.01, color));
+
+            let indent = |p: Vec3| p - (p - midpoint).reject_from(face.normal).normalize() * 0.0;
+
+            let p1 = indent(p1);
+            let p2 = indent(p2);
+            let p3 = indent(p3);
+            for edge in [(p1, p2), (p2, p3), (p3, p1)] {
+                gizmos.draw(Line::from_points(edge.0, edge.1, 0.002, color))
+            }
+        }
+    }
+}
+
 impl Index<u16> for Polytype {
     type Output = SupportPoint;
 
@@ -241,7 +282,7 @@ impl Index<u16> for Polytype {
 fn add_if_unique<T: Array<Item = Edge>>(edges: &mut SmallVec<T>, edge: Edge) -> bool {
     if let Some(index) = edges.iter().position(|val| {
         // assert_ne!(**val, edge);
-        (val.0, val.1) == (edge.1, edge.0) || *val == edge
+        (val.0, val.1) == (edge.1, edge.0)
     }) {
         edges.remove(index);
         false
