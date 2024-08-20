@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
 use flax::{
-    component, BoxedSystem, Component, Entity, FetchExt, Mutable, Query, QueryBorrow,
-    ScheduleBuilder, System, World,
+    component, fetch::Source, BoxedSystem, Component, Entity, FetchExt, Mutable, Query,
+    QueryBorrow, ScheduleBuilder, System, World,
 };
 use glam::{vec3, EulerRot, Mat4, Quat, Vec2, Vec3};
 use ivy_assets::AssetCache;
-use ivy_collision::{components::collider, Axis};
+use ivy_collision::components::collider;
 use ivy_core::{
     app::InitEvent,
     delta_time, engine, gizmos,
@@ -16,8 +16,8 @@ use ivy_core::{
     profiling::ProfilingLayer,
     rotation,
     update_layer::{FixedTimeStep, PerTick, Plugin, ScheduledLayer},
-    velocity, App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer, TransformBundle,
-    DEFAULT_RADIUS, DEG_45,
+    velocity, world_transform, App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer,
+    TransformBundle, DEFAULT_RADIUS, DEG_45,
 };
 use ivy_engine::{Collider, RbBundle};
 use ivy_gltf::components::animator;
@@ -161,40 +161,55 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
 
     let shader = assets.load(&PbrShaderDesc);
 
-    let distance = 1.1;
+    let mut cube = |position: Vec3, rotation: Quat| {
+        Entity::builder()
+            .mount(
+                TransformBundle::default()
+                    .with_position(position + Vec3::Z)
+                    .with_rotation(rotation),
+            )
+            .mount(RbBundle::default())
+            .set(
+                collider(),
+                Collider::cube_from_center(Vec3::ZERO, Vec3::ONE),
+            )
+            .mount(RenderObjectBundle::new(
+                cube_mesh.clone(),
+                material.clone(),
+                shader.clone(),
+            ))
+            .spawn(world);
+    };
 
-    Entity::builder()
-        .mount(
-            TransformBundle::default().with_position(Vec3::X * (distance)), // .with_rotation(Quat::from_scaled_axis(Vec3::Y * 0.3)),
-        )
-        .mount(RbBundle::default().with_velocity(-Vec3::Z * 0.1))
-        .set(
-            collider(),
-            Collider::cube_from_center(Vec3::ZERO, Vec3::ONE),
-        )
-        .mount(RenderObjectBundle::new(
-            cube_mesh.clone(),
-            material.clone(),
-            shader.clone(),
-        ))
-        .spawn(world);
+    cube(vec3(0.2, 0.0, 0.99), Quat::IDENTITY);
+    cube(
+        vec3(0.0, 0.0, -0.99),
+        Quat::from_scaled_axis(vec3(0.0, 0.0, 0.5)),
+    );
 
-    Entity::builder()
-        .mount(
-            TransformBundle::default()
-                .with_position(Vec3::X * -distance)
-                .with_rotation(Quat::from_scaled_axis(vec3(0.0, 0.4, 0.0))),
-        )
-        .mount(
-            RbBundle::default().with_angular_velocity(Vec3::Y * 0.5), // .with_velocity(Vec3::X), // .with_angular_velocity(Vec3::Y * 0.1),
-        )
-        .mount(RenderObjectBundle::new(cube_mesh, material, shader))
-        .set(
-            collider(),
-            Collider::cube_from_center(Vec3::ZERO, Vec3::ONE),
-        )
-        .spawn(world);
+    cube(vec3(4.0, 0.0, 0.99), Quat::IDENTITY);
+    cube(
+        vec3(4.0, 0.0, -0.99),
+        Quat::from_scaled_axis(vec3(0.0, 0.0, 0.5)),
+    );
 
+    cube(vec3(8.4, 0.0, 0.99), Quat::IDENTITY);
+    cube(
+        vec3(8.0, 0.0, -0.99),
+        Quat::from_scaled_axis(vec3(0.0, 0.0, 0.0)),
+    );
+
+    cube(vec3(-4.0, 0.0, 1.1), Quat::IDENTITY);
+    cube(
+        vec3(-4.0, 0.0, -1.1),
+        Quat::from_scaled_axis(vec3(0.0, 0.5, 0.0)),
+    );
+
+    cube(vec3(-8.0, 0.0, 1.3), Quat::IDENTITY);
+    cube(
+        vec3(-8.0, 0.0, -1.3),
+        Quat::from_scaled_axis(vec3(0.5, 0.5, 0.0)),
+    );
     Entity::builder()
         .mount(TransformBundle::default().with_rotation(Quat::from_euler(
             EulerRot::YXZ,
@@ -389,8 +404,10 @@ fn animate_system() -> BoxedSystem {
 fn gizmos_system() -> BoxedSystem {
     System::builder()
         .with_query(Query::new(gizmos().source(engine())))
+        .with_query(Query::new(world_transform()))
         .build(
-            |mut gizmos: QueryBorrow<flax::fetch::Source<Component<gizmos::Gizmos>, Entity>>| {
+            |mut gizmos: QueryBorrow<Source<Component<gizmos::Gizmos>, Entity>>,
+             mut query: QueryBorrow<Component<Mat4>>| {
                 let mut gizmos = gizmos.first().unwrap().begin_section("gizmos_system");
 
                 gizmos.draw(gizmos::Sphere::new(
@@ -398,6 +415,14 @@ fn gizmos_system() -> BoxedSystem {
                     DEFAULT_RADIUS,
                     Color::red(),
                 ));
+
+                for transform in query.iter() {
+                    gizmos.draw(gizmos::Sphere::new(
+                        transform.transform_point3(Vec3::ZERO),
+                        DEFAULT_RADIUS,
+                        Color::red(),
+                    ));
+                }
             },
         )
         .boxed()

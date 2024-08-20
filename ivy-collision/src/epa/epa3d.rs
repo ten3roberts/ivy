@@ -3,11 +3,11 @@ use glam::Vec3;
 
 use crate::{
     util::MAX_ITERATIONS,
-    Contact, ContactPoints, Polytype, Simplex,
+    ContactPoints, Penetration, Polytype, Simplex,
     {util::SupportPoint, util::TOLERANCE},
 };
 
-pub fn epa(simplex: Simplex, support_func: impl Fn(Vec3) -> SupportPoint) -> Contact {
+pub fn epa(simplex: Simplex, support_func: impl Fn(Vec3) -> SupportPoint) -> Penetration {
     let _span = tracing::info_span!("epa").entered();
     let midpoint = simplex.points().iter().map(|v| v.support).sum::<Vec3>() / 4.0;
 
@@ -58,7 +58,7 @@ pub fn epa(simplex: Simplex, support_func: impl Fn(Vec3) -> SupportPoint) -> Con
 
         if (support_dist - min.distance) < TOLERANCE {
             tracing::info!("found edge of polytype");
-            return Contact {
+            return Penetration {
                 points: polytype.contact_points(min),
                 depth: min.distance,
                 normal: min.normal,
@@ -68,7 +68,7 @@ pub fn epa(simplex: Simplex, support_func: impl Fn(Vec3) -> SupportPoint) -> Con
 
         if iterations >= iteration_count {
             tracing::error!("reached max iterations");
-            return Contact {
+            return Penetration {
                 points: polytype.contact_points(min),
                 depth: min.distance,
                 normal: min.normal,

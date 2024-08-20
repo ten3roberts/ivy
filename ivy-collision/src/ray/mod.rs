@@ -9,7 +9,7 @@ pub use cast::*;
 use ordered_float::OrderedFloat;
 
 use crate::{
-    epa, query::TreeQuery, util::SupportPoint, CollisionTree, CollisionTreeNode, Contact, Shape,
+    epa, query::TreeQuery, util::SupportPoint, CollisionTree, CollisionTreeNode, Penetration, Shape,
     Simplex, TransformedShape,
 };
 
@@ -44,7 +44,7 @@ impl Ray {
     }
 
     /// Returns true if a shape intersects the ray
-    pub fn intersects<T: Shape>(&self, collider: &T, transform: &Mat4) -> Option<Contact> {
+    pub fn intersects<T: Shape>(&self, collider: &T, transform: &Mat4) -> Option<Penetration> {
         // Check if any point is behind ray
 
         let transform_inv = transform.inverse();

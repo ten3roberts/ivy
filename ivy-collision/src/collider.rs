@@ -56,6 +56,14 @@ impl Shape for Collider {
         }
     }
 
+    fn clipping_surface(&self, dir: Vec3, points: &mut Vec<Vec3>) {
+        match self {
+            Collider::Cube(v) => v.clipping_surface(dir, points),
+            Collider::Sphere(v) => v.clipping_surface(dir, points),
+            Collider::Capsule(v) => v.clipping_surface(dir, points),
+        }
+    }
+
     fn max_radius(&self) -> f32 {
         match self {
             Collider::Cube(v) => v.max_radius(),

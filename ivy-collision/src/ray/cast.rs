@@ -7,7 +7,7 @@ use slotmap::SlotMap;
 
 use super::Ray;
 use crate::{
-    components::collider, BvhNode, CollisionTreeNode, Contact, ObjectData, ObjectIndex, Visitor,
+    components::collider, BvhNode, CollisionTreeNode, Penetration, ObjectData, ObjectIndex, Visitor,
 };
 
 /// Represents a collider ray intersection.
@@ -15,11 +15,11 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct RayIntersection {
     pub id: Entity,
-    pub contact: Contact,
+    pub contact: Penetration,
 }
 
 impl RayIntersection {
-    pub fn new(entity: Entity, contact: Contact) -> Self {
+    pub fn new(entity: Entity, contact: Penetration) -> Self {
         Self {
             id: entity,
             contact,

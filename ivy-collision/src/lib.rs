@@ -10,6 +10,7 @@ mod traits;
 mod tree;
 pub mod util;
 pub mod components;
+pub mod contact;
 
 pub use aabb::*;
 pub use collider::*;

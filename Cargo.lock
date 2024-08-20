@@ -1447,6 +1447,7 @@ dependencies = [
  "flax",
  "flume",
  "glam 0.28.0",
+ "itertools 0.13.0",
  "ivy-assets",
  "ivy-core",
  "ordered-float 3.9.2",

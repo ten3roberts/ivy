@@ -3,7 +3,12 @@ use std::ops::Index;
 use glam::Vec3;
 use ivy_core::{Color, ColorExt, DrawGizmos, Line, Sphere};
 
-use crate::{epa, gjk, util::minkowski_diff, EntityPayload, Shape};
+use crate::{
+    contact::{generate_contact_surface, ContactSurface},
+    epa, gjk,
+    util::minkowski_diff,
+    EntityPayload, Shape,
+};
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum ContactPoints {
@@ -91,7 +96,7 @@ impl Index<usize> for ContactPoints {
 }
 
 #[derive(Debug, Clone)]
-pub struct Contact {
+pub struct Penetration {
     /// The closest points on the two colliders, respectively
     pub points: ContactPoints,
     pub depth: f32,
@@ -99,9 +104,15 @@ pub struct Contact {
     pub polytype: epa::Polytype,
 }
 
-impl DrawGizmos for Contact {
+#[derive(Debug, Clone)]
+pub struct ContactManifold {
+    pub surface: ContactSurface,
+    pub penetration: Penetration,
+}
+
+impl DrawGizmos for Penetration {
     fn draw_primitives(&self, gizmos: &mut ivy_core::GizmosSection) {
-        gizmos.draw(self.points);
+        // gizmos.draw(self.points);
 
         gizmos.draw(Line {
             origin: self.points[0],
@@ -114,20 +125,35 @@ impl DrawGizmos for Contact {
     }
 }
 
+impl DrawGizmos for ContactManifold {
+    fn draw_primitives(&self, gizmos: &mut ivy_core::GizmosSection) {
+        gizmos.draw(&self.surface);
+        // gizmos.draw(&self.penetration);
+    }
+}
+
 /// Represents a collision between two entities.
 #[derive(Debug, Clone)]
 pub struct Intersection {
     pub a: EntityPayload,
     pub b: EntityPayload,
-    pub contact: Contact,
+    pub contact: ContactManifold,
 }
 
-pub fn intersect<A: Shape, B: Shape>(a: &A, b: &B) -> Option<Contact> {
+pub fn intersect<A: Shape, B: Shape>(a: &A, b: &B) -> Option<ContactManifold> {
     let (intersect, simplex) = gjk(a, b);
 
-    if intersect {
-        Some(epa(simplex, |dir| minkowski_diff(a, b, dir)))
-    } else {
-        None
+    if !intersect {
+        return None;
     }
+
+    let contact_info = epa(simplex, |dir| minkowski_diff(a, b, dir));
+
+    let surface =
+        generate_contact_surface(a, b, contact_info.normal, contact_info.points.points()[0]);
+
+    Some(ContactManifold {
+        surface,
+        penetration: contact_info,
+    })
 }

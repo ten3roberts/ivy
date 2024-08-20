@@ -6,7 +6,7 @@ use slotmap::SlotMap;
 
 use crate::{
     components, intersect, query::TreeQuery, BoundingBox, CollisionTree, CollisionTreeNode,
-    Contact, ObjectData, ObjectIndex, Shape, TransformedShape, Visitor,
+    ContactManifold, ObjectData, ObjectIndex, Penetration, Shape, TransformedShape, Visitor,
 };
 
 use super::BvhNode;
@@ -44,7 +44,7 @@ where
         tree.query(self)
     }
     /// Returns the first intersection, by no order.
-    pub fn intersection(self, tree: &'a CollisionTree) -> Option<Contact>
+    pub fn intersection(self, tree: &'a CollisionTree) -> Option<ContactManifold>
     where
         Q: for<'x> Fetch<'x>,
     {
@@ -96,7 +96,7 @@ where
     C: Shape,
     Q: for<'x> Fetch<'x>,
 {
-    type Item = Contact;
+    type Item = ContactManifold;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {

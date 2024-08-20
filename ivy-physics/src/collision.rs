@@ -4,7 +4,7 @@ use ivy_core::{
     angular_mass, angular_velocity, friction, mass, math::Inverse, restitution, velocity,
     world_transform,
 };
-use ivy_collision::Contact;
+use ivy_collision::Penetration;
 
 use crate::util::point_vel;
 
@@ -35,7 +35,7 @@ impl ResolveObject {
 
 /// Generates an impulse for solving a collision.
 pub(crate) fn resolve_collision(
-    intersection: &Contact,
+    intersection: &Penetration,
     a: &ResolveObject,
     b: &ResolveObject,
 ) -> Vec3 {

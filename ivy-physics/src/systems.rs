@@ -11,7 +11,7 @@ use flax::{
 };
 use flume::Receiver;
 use glam::Quat;
-use ivy_collision::{Intersection, Contact};
+use ivy_collision::{ContactManifold, Intersection, Penetration};
 use ivy_core::{
     angular_velocity, connection, engine, friction, gravity_influence, position, restitution,
     rotation, sleeping, velocity,
@@ -174,11 +174,14 @@ pub fn resolve_collisions(
             resolve_static(
                 &b,
                 &a,
-                Contact {
-                    points: collision.contact.points.reverse(),
-                    depth: collision.contact.depth,
-                    normal: -collision.contact.normal,
-                    polytype: collision.contact.polytype,
+                ContactManifold {
+                    surface: collision.contact.surface,
+                    penetration: Penetration {
+                        points: collision.contact.penetration.points.reverse(),
+                        depth: collision.contact.penetration.depth,
+                        normal: -collision.contact.penetration.normal,
+                        polytype: collision.contact.penetration.polytype,
+                    },
                 },
                 dt,
             )?;
@@ -213,19 +216,27 @@ pub fn resolve_collisions(
 
         let total_mass = a_object.mass + b_object.mass;
 
-        let impulse = resolve_collision(&collision.contact, &a_object, &b_object);
+        let impulse = resolve_collision(&collision.contact.penetration, &a_object, &b_object);
 
-        let dir = collision.contact.normal * collision.contact.depth;
+        let dir = collision.contact.penetration.normal * collision.contact.penetration.depth;
 
         {
             let effector = &mut *a.get_mut(effector())?;
-            effector.apply_impulse_at(impulse, collision.contact.points[0] - a_object.pos, true);
+            effector.apply_impulse_at(
+                impulse,
+                collision.contact.penetration.points[0] - a_object.pos,
+                true,
+            );
             effector.translate(-dir * (a_object.mass / total_mass));
         }
 
         {
             let effector = &mut *b.get_mut(effector())?;
-            effector.apply_impulse_at(-impulse, collision.contact.points[1] - b_object.pos, true);
+            effector.apply_impulse_at(
+                -impulse,
+                collision.contact.penetration.points[1] - b_object.pos,
+                true,
+            );
             effector.translate(dir * (b_object.mass / total_mass));
         }
     }
@@ -234,7 +245,7 @@ pub fn resolve_collisions(
 }
 
 // Resolves collision against a static or immovable object
-fn resolve_static(a: &EntityRef, b: &EntityRef, contact: Contact, dt: f32) -> Result<()> {
+fn resolve_static(a: &EntityRef, b: &EntityRef, contact: ContactManifold, dt: f32) -> Result<()> {
     let query = &(
         restitution().opt_or_default(),
         friction().opt_or_default(),
@@ -273,12 +284,12 @@ fn resolve_static(a: &EntityRef, b: &EntityRef, contact: Contact, dt: f32) -> Re
         return Ok(());
     }
 
-    let impulse = resolve_collision(&contact, &a, &b);
+    let impulse = resolve_collision(&contact.penetration, &a, &b);
 
-    b_effector.apply_impulse_at(-impulse, contact.points[1] - b.pos, false);
+    b_effector.apply_impulse_at(-impulse, contact.penetration.points[1] - b.pos, false);
     // effector.apply_force_at(b_f, contact.points[1] - b.pos);
 
-    b_effector.translate(contact.normal * contact.depth);
+    b_effector.translate(contact.penetration.normal * contact.penetration.depth);
 
     Ok(())
 }

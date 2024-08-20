@@ -1,5 +1,8 @@
+use core::f32;
+
 use glam::{vec3, Vec3};
 use ivy_core::{Cube, DrawGizmos, GizmosSection};
+use ordered_float::NotNan;
 
 use crate::{Ray, Shape};
 
@@ -172,6 +175,53 @@ impl Shape for BoundingBox {
         let z = if dir.z > 0.0 { self.max.z } else { self.min.z };
 
         vec3(x, y, z)
+    }
+
+    fn clipping_surface(&self, dir: Vec3, points: &mut Vec<Vec3>) {
+        const TOLERANCE: f32 = 0.01;
+
+        assert!(dir.is_normalized());
+        let corners = [
+            vec3(self.min.x, self.min.y, self.min.z),
+            vec3(self.min.x, self.min.y, self.max.z),
+            vec3(self.min.x, self.max.y, self.max.z),
+            vec3(self.min.x, self.max.y, self.min.z),
+            vec3(self.max.x, self.min.y, self.min.z),
+            vec3(self.max.x, self.min.y, self.max.z),
+            vec3(self.max.x, self.max.y, self.max.z),
+            vec3(self.max.x, self.max.y, self.min.z),
+        ];
+
+        let support_dist = self.support(dir).dot(dir);
+
+        points.extend(corners.iter().filter(|v| {
+            let dist = (support_dist - v.dot(dir)).abs();
+            tracing::info!(
+                ?support_dist,
+                dot = v.dot(dir),
+                pass = dist < TOLERANCE,
+                "point"
+            );
+            dist < TOLERANCE
+        }));
+
+        let tan = if dir.dot(Vec3::X) > 1.0 - TOLERANCE {
+            Vec3::Y
+        } else {
+            dir.cross(Vec3::X)
+        };
+
+        let bitan = tan.cross(dir);
+        let midpoint = self.midpoint();
+        // sort points by the angle they make with the tangent
+        assert!(points.len() <= 4, "Too many points: {points:?}");
+        if points.len() == 4 {
+            points.sort_by_key(|&v| {
+                let v = (v - midpoint).normalize();
+
+                NotNan::new(v.dot(tan).atan2(v.dot(bitan))).unwrap()
+            });
+        }
     }
 
     fn max_radius(&self) -> f32 {

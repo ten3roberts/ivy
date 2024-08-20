@@ -1,6 +1,6 @@
 use crate::{
     util::{plane_ray, ray_distance, SupportPoint, MAX_ITERATIONS, TOLERANCE},
-    Contact, ContactPoints, Face, Polytype, Ray, Simplex,
+    Penetration, ContactPoints, Face, Polytype, Ray, Simplex,
 };
 
 use glam::Vec3;
@@ -9,7 +9,7 @@ pub fn epa_ray<F: Fn(Vec3) -> SupportPoint>(
     support_func: F,
     simplex: Simplex,
     ray: &Ray,
-) -> Contact {
+) -> Penetration {
     let mut polytype =
         Polytype::from_simplex(&simplex, |a, b| Face::new_ray(a, b, ray, Vec3::ZERO));
 
@@ -47,7 +47,7 @@ pub fn epa_ray<F: Fn(Vec3) -> SupportPoint>(
         {
             let point = plane_ray(polytype[max_face.indices[0]].a, max_face.normal, ray);
 
-            return Contact {
+            return Penetration {
                 // points: ContactPoints::new(&[polytype[min_face.indices[0]].a]),
                 points: ContactPoints::single(point),
                 depth: (point - ray.origin).length(),
