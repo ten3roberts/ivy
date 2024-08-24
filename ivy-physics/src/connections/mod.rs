@@ -4,7 +4,7 @@ use ivy_core::{ConnectionKind, TransformQueryMutItem};
 mod systems;
 pub use systems::*;
 
-use crate::{bundles::*, util::point_vel, Effector};
+use crate::{bundles::*, util::velocity_at_point, Effector};
 
 /// Updates a connection that has no rigidbody
 pub fn update_fixed(_: Vec3, offset_rot: Quat, parent: Mat4, child: &mut TransformQueryMutItem) {
@@ -34,7 +34,7 @@ pub fn apply_connection_constraints(
     match kind {
         ConnectionKind::Rigid => {
             // The desired velocity
-            let vel = point_vel(pos - parent_pos, parent_rb.angular_velocity) + parent_rb.velocity;
+            let vel = velocity_at_point(pos - parent_pos, parent_rb.angular_velocity) + parent_rb.velocity;
 
             let total_mass = *rb.mass + parent_rb.mass;
 

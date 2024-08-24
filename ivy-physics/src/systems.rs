@@ -2,19 +2,23 @@ use std::collections::BTreeMap;
 
 use crate::{
     bundles::*,
-    collision::{resolve_collision, ResolveObject},
-    components::{collision_state, effector, gravity_state},
+    collision::{calculate_impulse_response, ResolveObject},
+    components::{effector, gravity_state},
     Result,
 };
+use anyhow::Context;
 use flax::{
-    BoxedSystem, Component, Entity, EntityRef, FetchExt, Mutable, Query, QueryBorrow, System, World,
+    BoxedSystem, Component, Entity, EntityRef, FetchExt, Query, QueryBorrow, System, World,
 };
-use flume::Receiver;
-use glam::Quat;
-use ivy_collision::{ContactManifold, Intersection, Penetration};
+use glam::{Mat4, Quat, Vec3};
+use ivy_collision::{
+    components::collision_tree, contact::ContactSurface, Collision, CollisionTree,
+};
 use ivy_core::{
-    angular_velocity, connection, engine, friction, gravity_influence, position, restitution,
-    rotation, sleeping, velocity,
+    angular_velocity, connection, engine, friction,
+    gizmos::{Line, DEFAULT_THICKNESS},
+    gravity_influence, position, restitution, rotation, sleeping, velocity, world_transform, Color,
+    ColorExt,
 };
 
 pub fn integrate_velocity_system(dt: f32) -> BoxedSystem {
@@ -59,8 +63,8 @@ pub fn get_rigid_root<'a>(entity: &EntityRef<'a>) -> EntityRef<'a> {
 
 #[derive(Debug, Clone)]
 pub struct CollisionState {
-    sleeping: BTreeMap<(Entity, Entity), Intersection>,
-    active: BTreeMap<(Entity, Entity), Intersection>,
+    sleeping: BTreeMap<(Entity, Entity), Collision>,
+    active: BTreeMap<(Entity, Entity), Collision>,
 }
 
 impl CollisionState {
@@ -71,7 +75,7 @@ impl CollisionState {
         }
     }
 
-    pub fn register(&mut self, col: Intersection) {
+    pub fn register(&mut self, col: Collision) {
         let slot = if col.a.state.dormant() && col.b.state.dormant() {
             &mut self.sleeping
         } else {
@@ -97,7 +101,7 @@ impl CollisionState {
         self.active.keys().any(|v| v.0 == e)
     }
 
-    pub fn get(&self, e: Entity) -> impl Iterator<Item = &'_ Intersection> {
+    pub fn get(&self, e: Entity) -> impl Iterator<Item = &'_ Collision> {
         self.active
             .iter()
             .skip_while(move |((a, _), _)| *a != e)
@@ -111,7 +115,7 @@ impl CollisionState {
             .map(|(_, v)| v)
     }
 
-    pub fn get_all(&self) -> impl Iterator<Item = (Entity, Entity, &Intersection)> {
+    pub fn get_all(&self) -> impl Iterator<Item = (Entity, Entity, &Collision)> {
         self.active
             .iter()
             .chain(self.sleeping.iter())
@@ -133,32 +137,22 @@ impl Default for CollisionState {
 }
 
 /// Resolves all pending collisions to be processed
-pub fn resolve_collisions_system() -> BoxedSystem {
+pub fn resolve_collisions_system(dt: f32) -> BoxedSystem {
     System::builder()
         .with_world()
-        .with_query(Query::new((collision_state().as_mut())))
+        .with_query(Query::new(collision_tree()))
         .build(
-            move |world: &World, mut query: QueryBorrow<(Mutable<CollisionState>)>| {
-                // query.for_each(|(collision_state, physics_state)| {
-                //     resolve_collisions(world, collision_state, collisions.try_iter(), physics_state.dt).unwrap();
-                // })
+            move |world: &World, mut query: QueryBorrow<Component<CollisionTree>>| {
+                query.for_each(|collision_tree| {
+                    resolve_collisions(world, collision_tree, dt).unwrap();
+                })
             },
         )
         .boxed()
 }
 
-pub fn resolve_collisions(
-    world: &World,
-    state: &mut CollisionState,
-    collisions: impl Iterator<Item = Intersection>,
-    dt: f32,
-) -> Result<()> {
-    state.next_frame();
-
-    for collision in collisions {
-        tracing::info!(?collision, "resolve collision");
-        state.register(collision.clone());
-
+pub fn resolve_collisions(world: &World, collision_tree: &CollisionTree, dt: f32) -> Result<()> {
+    for collision in collision_tree.active_collisions() {
         let a = world.entity(collision.a.entity)?;
         let b = world.entity(collision.b.entity)?;
 
@@ -168,23 +162,10 @@ pub fn resolve_collisions(
         }
         // Check for static collision
         else if collision.a.state.is_static() {
-            resolve_static(&a, &b, collision.contact, dt)?;
+            resolve_static(&a, &b, &collision.contact, 1.0, dt)?;
             continue;
         } else if collision.b.state.is_static() {
-            resolve_static(
-                &b,
-                &a,
-                ContactManifold {
-                    surface: collision.contact.surface,
-                    penetration: Penetration {
-                        points: collision.contact.penetration.points.reverse(),
-                        depth: collision.contact.penetration.depth,
-                        normal: -collision.contact.penetration.normal,
-                        polytype: collision.contact.penetration.polytype,
-                    },
-                },
-                dt,
-            )?;
+            resolve_static(&b, &a, &collision.contact, -1.0, dt)?;
             continue;
         } else if collision.a.state.is_static() && collision.b.state.is_static() {
             tracing::warn!("static-static collision detected, ignoring");
@@ -216,27 +197,24 @@ pub fn resolve_collisions(
 
         let total_mass = a_object.mass + b_object.mass;
 
-        let impulse = resolve_collision(&collision.contact.penetration, &a_object, &b_object);
+        assert!(
+            total_mass > 0.0,
+            "mass of two colliding objects must not be both zero"
+        );
 
-        let dir = collision.contact.penetration.normal * collision.contact.penetration.depth;
+        let impulse = calculate_impulse_response(&collision.contact, &a_object, &b_object);
+
+        let dir = collision.contact.normal() * collision.contact.depth();
 
         {
             let effector = &mut *a.get_mut(effector())?;
-            effector.apply_impulse_at(
-                impulse,
-                collision.contact.penetration.points[0] - a_object.pos,
-                true,
-            );
+            effector.apply_impulse_at(impulse, collision.contact.midpoint() - a_object.pos, true);
             effector.translate(-dir * (a_object.mass / total_mass));
         }
 
         {
             let effector = &mut *b.get_mut(effector())?;
-            effector.apply_impulse_at(
-                -impulse,
-                collision.contact.penetration.points[1] - b_object.pos,
-                true,
-            );
+            effector.apply_impulse_at(-impulse, collision.contact.midpoint() - b_object.pos, true);
             effector.translate(dir * (b_object.mass / total_mass));
         }
     }
@@ -245,7 +223,13 @@ pub fn resolve_collisions(
 }
 
 // Resolves collision against a static or immovable object
-fn resolve_static(a: &EntityRef, b: &EntityRef, contact: ContactManifold, dt: f32) -> Result<()> {
+fn resolve_static(
+    a: &EntityRef,
+    b: &EntityRef,
+    contact: &ContactSurface,
+    polarity: f32,
+    dt: f32,
+) -> Result<()> {
     let query = &(
         restitution().opt_or_default(),
         friction().opt_or_default(),
@@ -284,14 +268,37 @@ fn resolve_static(a: &EntityRef, b: &EntityRef, contact: ContactManifold, dt: f3
         return Ok(());
     }
 
-    let impulse = resolve_collision(&contact.penetration, &a, &b);
+    let impulse = calculate_impulse_response(contact, &a, &b);
 
-    b_effector.apply_impulse_at(-impulse, contact.penetration.points[1] - b.pos, false);
+    b_effector.apply_impulse_at(-impulse * polarity, contact.midpoint() - b.pos, false);
+    b_effector.translate(contact.normal() * contact.depth() * polarity);
     // effector.apply_force_at(b_f, contact.points[1] - b.pos);
 
-    b_effector.translate(contact.penetration.normal * contact.penetration.depth);
-
     Ok(())
+}
+
+pub fn effectors_gizmo_system() -> BoxedSystem {
+    System::builder()
+        .with_query(Query::new(ivy_core::components::gizmos()))
+        .with_query(Query::new((world_transform(), effector())))
+        .build(
+            |mut gizmos: QueryBorrow<Component<ivy_core::gizmos::Gizmos>>,
+             mut query: QueryBorrow<(Component<Mat4>, Component<crate::Effector>)>| {
+                let mut gizmos = gizmos
+                    .get(engine())?
+                    .begin_section("effectors_gizmo_system");
+
+                for (transform, effector) in query.iter() {
+                    let origin = transform.transform_point3(Vec3::ZERO);
+
+                    let dv = effector.net_velocity_change(1.0);
+                    gizmos.draw(Line::new(origin, dv, DEFAULT_THICKNESS, Color::red()));
+                }
+
+                anyhow::Ok(())
+            },
+        )
+        .boxed()
 }
 
 /// Applies effectors to their respective entities and clears the effects.
@@ -303,7 +310,7 @@ pub fn apply_effectors_system(dt: f32) -> BoxedSystem {
             effector().as_mut(),
             sleeping().satisfied(),
         )))
-        .for_each(move |(rb, position, effector, is_sleeping)| {
+        .par_for_each(move |(rb, position, effector, is_sleeping)| {
             if !is_sleeping || effector.should_wake() {
                 // tracing::info!(%physics_state.dt, ?effector, "updating effector");
                 *rb.vel += effector.net_velocity_change(dt);

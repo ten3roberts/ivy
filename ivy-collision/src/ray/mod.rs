@@ -2,15 +2,15 @@ use std::ops::Deref;
 
 use flax::{Fetch, World};
 use glam::{Mat4, Vec3};
-use ivy_core::{DrawGizmos, GizmosSection, Line};
+use ivy_core::gizmos::{DrawGizmos, GizmosSection, Line};
 
 mod cast;
 pub use cast::*;
 use ordered_float::OrderedFloat;
 
 use crate::{
-    epa, query::TreeQuery, util::SupportPoint, CollisionTree, CollisionTreeNode, Penetration, Shape,
-    Simplex, TransformedShape,
+    epa, query::TreeQuery, util::SupportPoint, CollisionTree, Intersection, Shape, Simplex,
+    TransformedShape,
 };
 
 #[derive(Debug, Clone)]
@@ -44,7 +44,7 @@ impl Ray {
     }
 
     /// Returns true if a shape intersects the ray
-    pub fn intersects<T: Shape>(&self, collider: &T, transform: &Mat4) -> Option<Penetration> {
+    pub fn intersects<T: Shape>(&self, collider: &T, transform: &Mat4) -> Option<Intersection> {
         // Check if any point is behind ray
 
         let transform_inv = transform.inverse();

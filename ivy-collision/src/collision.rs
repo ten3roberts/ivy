@@ -1,7 +1,10 @@
 use std::ops::Index;
 
 use glam::Vec3;
-use ivy_core::{Color, ColorExt, DrawGizmos, Line, Sphere};
+use ivy_core::{
+    gizmos::{self, DrawGizmos, GizmosSection, Line},
+    Color, ColorExt,
+};
 
 use crate::{
     contact::{generate_contact_surface, ContactSurface},
@@ -45,9 +48,9 @@ impl ContactPoints {
 }
 
 impl DrawGizmos for ContactPoints {
-    fn draw_primitives(&self, gizmos: &mut ivy_core::GizmosSection) {
+    fn draw_primitives(&self, gizmos: &mut GizmosSection) {
         for &p in self.iter() {
-            gizmos.draw(Sphere {
+            gizmos.draw(gizmos::Sphere {
                 origin: p,
                 color: Color::green(),
                 ..Default::default()
@@ -96,7 +99,7 @@ impl Index<usize> for ContactPoints {
 }
 
 #[derive(Debug, Clone)]
-pub struct Penetration {
+pub struct Intersection {
     /// The closest points on the two colliders, respectively
     pub points: ContactPoints,
     pub depth: f32,
@@ -104,14 +107,8 @@ pub struct Penetration {
     pub polytype: epa::Polytype,
 }
 
-#[derive(Debug, Clone)]
-pub struct ContactManifold {
-    pub surface: ContactSurface,
-    pub penetration: Penetration,
-}
-
-impl DrawGizmos for Penetration {
-    fn draw_primitives(&self, gizmos: &mut ivy_core::GizmosSection) {
+impl DrawGizmos for Intersection {
+    fn draw_primitives(&self, gizmos: &mut GizmosSection) {
         // gizmos.draw(self.points);
 
         gizmos.draw(Line {
@@ -125,22 +122,15 @@ impl DrawGizmos for Penetration {
     }
 }
 
-impl DrawGizmos for ContactManifold {
-    fn draw_primitives(&self, gizmos: &mut ivy_core::GizmosSection) {
-        gizmos.draw(&self.surface);
-        // gizmos.draw(&self.penetration);
-    }
-}
-
 /// Represents a collision between two entities.
 #[derive(Debug, Clone)]
-pub struct Intersection {
+pub struct Collision {
     pub a: EntityPayload,
     pub b: EntityPayload,
-    pub contact: ContactManifold,
+    pub contact: ContactSurface,
 }
 
-pub fn intersect<A: Shape, B: Shape>(a: &A, b: &B) -> Option<ContactManifold> {
+pub fn intersect<A: Shape, B: Shape>(a: &A, b: &B) -> Option<ContactSurface> {
     let (intersect, simplex) = gjk(a, b);
 
     if !intersect {
@@ -149,11 +139,16 @@ pub fn intersect<A: Shape, B: Shape>(a: &A, b: &B) -> Option<ContactManifold> {
 
     let contact_info = epa(simplex, |dir| minkowski_diff(a, b, dir));
 
-    let surface =
-        generate_contact_surface(a, b, contact_info.normal, contact_info.points.points()[0]);
+    let mut surface = generate_contact_surface(
+        a,
+        b,
+        contact_info.normal,
+        contact_info.points.points().iter().sum::<Vec3>()
+            / contact_info.points.points().len() as f32,
+        contact_info.depth,
+    );
 
-    Some(ContactManifold {
-        surface,
-        penetration: contact_info,
-    })
+    surface.points = contact_info.points.into();
+
+    Some(surface)
 }

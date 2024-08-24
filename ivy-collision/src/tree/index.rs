@@ -1,5 +1,4 @@
-use ivy_core::DrawGizmos;
-use ivy_core::GizmosSection;
+use ivy_core::gizmos::GizmosSection;
 use slotmap::new_key_type;
 use slotmap::Key;
 use slotmap::SlotMap;

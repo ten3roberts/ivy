@@ -5,8 +5,8 @@ use glam::Mat4;
 use slotmap::SlotMap;
 
 use crate::{
-    components, intersect, query::TreeQuery, BoundingBox, CollisionTree, CollisionTreeNode,
-    ContactManifold, ObjectData, ObjectIndex, Penetration, Shape, TransformedShape, Visitor,
+    components, contact::ContactSurface, intersect, query::TreeQuery, BoundingBox, CollisionTree,
+    CollisionTreeNode, Intersection, ObjectData, ObjectIndex, Shape, TransformedShape, Visitor,
 };
 
 use super::BvhNode;
@@ -44,7 +44,7 @@ where
         tree.query(self)
     }
     /// Returns the first intersection, by no order.
-    pub fn intersection(self, tree: &'a CollisionTree) -> Option<ContactManifold>
+    pub fn intersection(self, tree: &'a CollisionTree) -> Option<ContactSurface>
     where
         Q: for<'x> Fetch<'x>,
     {
@@ -96,7 +96,7 @@ where
     C: Shape,
     Q: for<'x> Fetch<'x>,
 {
-    type Item = ContactManifold;
+    type Item = ContactSurface;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {

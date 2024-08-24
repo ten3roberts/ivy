@@ -1,7 +1,5 @@
-use flax::component::ComponentValue;
-use flume::bounded;
 use glam::Vec3;
-use ivy_core::{Cube, DrawGizmos, Events, GizmosSection, Sphere};
+use ivy_core::gizmos::{Cube, GizmosSection, Sphere};
 use ordered_float::OrderedFloat;
 use palette::{
     named::{BLUE, GREEN, YELLOW},
@@ -10,8 +8,8 @@ use palette::{
 use slotmap::SlotMap;
 
 use crate::{
-    intersect, BoundingBox, CollisionTreeNode, Intersection, NodeIndex, NodeState, Nodes,
-    ObjectData, ObjectIndex, TransformedShape,
+    intersect, BoundingBox, Collision, CollisionTreeNode, NodeIndex, NodeState, Nodes, ObjectData,
+    ObjectIndex, TransformedShape,
 };
 
 const MARGIN: f32 = 1.2;
@@ -61,16 +59,6 @@ impl From<Axis> for usize {
     }
 }
 
-impl Axis {
-    fn rotate(&self) -> Self {
-        match self {
-            Axis::X => Axis::Y,
-            Axis::Y => Axis::Z,
-            Axis::Z => Axis::X,
-        }
-    }
-}
-
 impl BvhNode {
     pub fn new(bounds: BoundingBox) -> Self {
         Self {
@@ -92,7 +80,7 @@ impl BvhNode {
             .iter()
             .fold(NodeState::Static, |s, &v| s.merge(data[v].state));
 
-        let bounds = Self::calculate_bounds(&objects, data, state);
+        let bounds = Self::calculate_bounds(objects, data, state);
 
         let node = Self {
             bounds,
@@ -236,7 +224,7 @@ impl BvhNode {
         index: NodeIndex,
         nodes: &Nodes<Self>,
         data: &SlotMap<ObjectIndex, ObjectData>,
-        on_collision: &mut impl FnMut(Intersection),
+        on_collision: &mut impl FnMut(Collision),
     ) {
         let mut on_overlap = |a: &Self, b: &Self| {
             assert!(a.is_leaf());
@@ -411,7 +399,7 @@ fn query_intersection(
     a_data: &ObjectData,
     b: ObjectIndex,
     b_data: &ObjectData,
-) -> Option<Intersection> {
+) -> Option<Collision> {
     if !a_data.bounds.overlaps(b_data.bounds) {
         return None;
     }
@@ -423,7 +411,7 @@ fn query_intersection(
         &TransformedShape::new(&a_data.collider, a_data.transform),
         &TransformedShape::new(&b_data.collider, b_data.transform),
     ) {
-        let collision = Intersection {
+        let collision = Collision {
             a: crate::EntityPayload {
                 entity: a_data.id,
                 is_trigger: a_data.is_trigger,

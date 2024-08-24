@@ -5,14 +5,15 @@ use flax::{
 };
 use glam::{Mat4, Vec3};
 use ivy_core::{
-    gizmos, is_trigger, mass, velocity, world_transform, DrawGizmos, Gizmos, GizmosSection,
+    gizmos::{self, DrawGizmos, Gizmos, GizmosSection},
+    is_trigger, mass, velocity, world_transform,
 };
 use slotmap::{new_key_type, SlotMap};
 use smallvec::Array;
 
 use crate::{
     components::{self, collider, collider_offset, collision_tree, tree_index},
-    BoundingBox, Collider, Intersection, Shape,
+    BoundingBox, Collider, Collision, Shape,
 };
 
 mod binary_node;
@@ -44,7 +45,7 @@ pub struct CollisionTree {
     root: NodeIndex,
 
     object_data: SlotMap<ObjectIndex, ObjectData>,
-    active_collisions: Vec<Intersection>,
+    active_collisions: Vec<Collision>,
 }
 
 impl CollisionTree {
@@ -131,7 +132,7 @@ impl CollisionTree {
             self.root,
             &self.nodes,
             &self.object_data,
-            &mut |collision: Intersection| {
+            &mut |collision: Collision| {
                 self.active_collisions.push(collision);
             },
         );
@@ -150,6 +151,10 @@ impl CollisionTree {
     /// Get a reference to the collision tree's objects.
     pub fn objects(&self) -> &SlotMap<ObjectIndex, ObjectData> {
         &self.object_data
+    }
+
+    pub fn active_collisions(&self) -> &[Collision] {
+        &self.active_collisions
     }
 }
 
@@ -226,7 +231,7 @@ pub fn check_collisions_system() -> BoxedSystem {
 
 pub fn collisions_tree_gizmos_system() -> BoxedSystem {
     System::builder()
-        .with_query(Query::new(gizmos()))
+        .with_query(Query::new(ivy_core::components::gizmos()))
         .with_query(Query::new(collision_tree()))
         .build(
             |mut gizmos_query: QueryBorrow<Component<Gizmos>>,

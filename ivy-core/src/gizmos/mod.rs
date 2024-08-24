@@ -1,5 +1,6 @@
 use dashmap::DashMap;
 use glam::Vec3;
+use itertools::Itertools;
 
 use crate::{Color, ColorExt};
 
@@ -10,15 +11,22 @@ pub use traits::*;
 pub const DEFAULT_RADIUS: f32 = 0.02;
 pub const DEFAULT_THICKNESS: f32 = 0.005;
 
-#[records::record]
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Sphere {
-    origin: Vec3,
-    radius: f32,
-    color: Color,
+    pub origin: Vec3,
+    pub radius: f32,
+    pub color: Color,
 }
 
 impl Sphere {
+    pub fn new(origin: Vec3, radius: f32, color: Color) -> Self {
+        Self {
+            origin,
+            radius,
+            color,
+        }
+    }
+
     /// Set the color
     pub fn with_color(mut self, color: Color) -> Self {
         self.color = color;
@@ -171,13 +179,59 @@ impl DrawGizmos for Cube {
     }
 }
 
-#[records::record]
+pub struct Polygon<I> {
+    pub points: I,
+    pub color: Color,
+}
+
+impl<I> Polygon<I>
+where
+    I: IntoIterator<Item = Vec3>,
+{
+    pub fn new(points: I) -> Self {
+        Self {
+            points,
+            color: Color::green(),
+        }
+    }
+
+    /// Set the color
+    pub fn with_color(mut self, color: Color) -> Self {
+        self.color = color;
+        self
+    }
+}
+
+impl<I> DrawGizmos for Polygon<I>
+where
+    for<'x> I: Clone + IntoIterator<Item = Vec3>,
+    for<'x> <I as IntoIterator>::IntoIter: Clone + ExactSizeIterator,
+{
+    fn draw_primitives(&self, gizmos: &mut GizmosSection) {
+        for (p1, p2) in self.points.clone().into_iter().circular_tuple_windows() {
+            gizmos.draw(Line::from_points(p1, p2, DEFAULT_THICKNESS, self.color));
+            gizmos.draw(Sphere::new(p1, DEFAULT_RADIUS, self.color));
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Triangle {
     origin: Vec3,
     points: [Vec3; 3],
     radius: f32,
     corner_radius: f32,
+}
+
+impl Triangle {
+    pub fn new(origin: Vec3, points: [Vec3; 3], radius: f32, corner_radius: f32) -> Self {
+        Self {
+            origin,
+            points,
+            radius,
+            corner_radius,
+        }
+    }
 }
 
 impl Default for Triangle {

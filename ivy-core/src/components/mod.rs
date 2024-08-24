@@ -7,7 +7,7 @@ mod physics;
 pub use connections::*;
 pub use physics::*;
 
-use crate::{AsyncCommandBuffer, Bundle, Color, Gizmos};
+use crate::{gizmos::Gizmos, AsyncCommandBuffer, Bundle, Color};
 
 flax::component! {
     pub position: Vec3 => [Debuggable],

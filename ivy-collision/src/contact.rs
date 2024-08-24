@@ -2,20 +2,40 @@ use std::mem;
 
 use glam::{vec2, Vec2, Vec3};
 use itertools::Itertools;
-use ivy_core::{gizmos, Color, ColorExt, DrawGizmos, DEFAULT_RADIUS, DEFAULT_THICKNESS};
-use ordered_float::Float;
-use palette::{
-    cast::{into_uint_ref, try_from_component_vec},
-    num::Abs,
+use ivy_core::{
+    gizmos::{self, DrawGizmos, GizmosSection, Polygon, DEFAULT_RADIUS, DEFAULT_THICKNESS},
+    Color, ColorExt,
 };
 
-use crate::{util::TOLERANCE, Shape};
+use crate::{util::TOLERANCE, ContactPoints, Shape};
 
 #[derive(Debug, Clone)]
 pub struct ContactSurface {
     intersection: Vec<Vec3>,
     midpoint: Vec3,
     normal: Vec3,
+    depth: f32,
+    pub points: Option<ContactPoints>,
+    a: Vec<Vec3>,
+    b: Vec<Vec3>,
+}
+
+impl ContactSurface {
+    pub fn midpoint(&self) -> Vec3 {
+        self.midpoint
+    }
+
+    pub fn normal(&self) -> Vec3 {
+        self.normal
+    }
+
+    pub fn intersection(&self) -> &[Vec3] {
+        &self.intersection
+    }
+
+    pub fn depth(&self) -> f32 {
+        self.depth
+    }
 }
 
 pub fn generate_contact_surface<A: Shape, B: Shape>(
@@ -23,38 +43,138 @@ pub fn generate_contact_surface<A: Shape, B: Shape>(
     b: B,
     normal: Vec3,
     contact_basis: Vec3,
+    depth: f32,
 ) -> ContactSurface {
     let mut a_surface = Vec::new();
     let mut b_surface = Vec::new();
 
-    a.clipping_surface(normal, &mut a_surface);
-    b.clipping_surface(-normal, &mut b_surface);
+    a.surface_contour(normal, &mut a_surface);
+    b.surface_contour(-normal, &mut b_surface);
 
-    if a_surface.len() == 1 {
-        return ContactSurface {
-            intersection: a_surface[0..1].to_vec(),
-            midpoint: a_surface[0],
-            normal,
-        };
-    }
-
-    if b_surface.len() == 1 {
-        return ContactSurface {
-            intersection: b_surface[0..1].to_vec(),
-            midpoint: b_surface[0],
-            normal,
-        };
-    }
+    assert!(!a_surface.is_empty());
+    assert!(!b_surface.is_empty());
 
     let tan = if normal.dot(Vec3::X).abs() > 1.0 - TOLERANCE {
         Vec3::Y
     } else {
-        normal.cross(Vec3::X)
+        normal.cross(Vec3::X).normalize()
     };
 
-    let bitan = tan.cross(normal);
+    assert!(tan.is_normalized());
+
+    let bitan = tan.cross(normal).normalize();
 
     let flatten = |v: &Vec3| vec2(v.dot(tan), v.dot(bitan));
+
+    let to_world = |v: Vec2| v.x * tan + v.y * bitan + contact_basis.dot(normal) * normal;
+
+    if a_surface.len() == 1 {
+        let p = to_world(flatten(&a_surface[0]));
+
+        return ContactSurface {
+            a: a_surface,
+            b: b_surface,
+            intersection: vec![p],
+            midpoint: p,
+            normal,
+            depth,
+            points: None,
+        };
+    }
+
+    if b_surface.len() == 1 {
+        let p = to_world(flatten(&b_surface[0]));
+
+        return ContactSurface {
+            a: a_surface,
+            b: b_surface,
+            intersection: vec![p],
+            midpoint: p,
+            normal,
+            depth,
+            points: None,
+        };
+    }
+
+    if let ([a1, a2], [b1, b2]) = (&a_surface[..], &b_surface[..]) {
+        let a1 = flatten(a1);
+        let a2 = flatten(a2);
+        let mut b1 = flatten(b1);
+        let mut b2 = flatten(b2);
+
+        let a_dir = (a2 - a1).normalize();
+        let b_dir = b2 - b1;
+
+        // Clip colinear line segments
+        if a_dir.perp_dot(b_dir) < TOLERANCE {
+            if a_dir.dot(b_dir) < 0.0 {
+                mem::swap(&mut b1, &mut b2);
+            }
+
+            let basis = a1.reject_from(a_dir);
+
+            let a1 = a1.dot(a_dir);
+            let a2 = a2.dot(a_dir);
+            let b1 = b1.dot(a_dir);
+            let b2 = b2.dot(a_dir);
+
+            assert!(a1 < a2);
+
+            let p1 = a1.max(b1);
+            let p2 = a2.min(b2);
+
+            let mid = (p1 + p2) / 2.0;
+            let midpoint = to_world(mid * a_dir + basis);
+            return ContactSurface {
+                a: a_surface.clone(),
+                b: b_surface.clone(),
+                intersection: vec![midpoint],
+                midpoint,
+                normal,
+                depth,
+                points: None,
+            };
+        }
+
+        let p = clip_segment((b2 - b1).perp(), b2, a1, a2).unwrap();
+        return ContactSurface {
+            a: a_surface.clone(),
+            b: b_surface.clone(),
+            intersection: vec![to_world(p)],
+            midpoint: to_world(p),
+            normal,
+            depth,
+            points: None,
+        };
+    }
+
+    let line_case = |p1, p2, surface: &[Vec3], winding| {
+        let [p1, p2] = clip_line_face(
+            [flatten(&p1), flatten(&p2)],
+            surface.iter().map(flatten),
+            winding,
+        );
+
+        let midpoint = to_world((p1 + p2) / 2.0);
+
+        ContactSurface {
+            a: a_surface.clone(),
+            b: b_surface.clone(),
+            intersection: vec![to_world(p1), to_world(p2)],
+            midpoint,
+            normal,
+            depth,
+            points: None,
+        }
+    };
+
+    if let [p1, p2] = a_surface[..] {
+        return line_case(p1, p2, &b_surface, 1.0);
+    }
+
+    if let [p1, p2] = b_surface[..] {
+        return line_case(p1, p2, &a_surface, -1.0);
+    }
 
     let mut input = a_surface.iter().map(flatten).collect_vec();
     let mut output = Vec::new();
@@ -72,10 +192,8 @@ pub fn generate_contact_surface<A: Shape, B: Shape>(
 
             // output.push(a2);
             // current point is inside
-            let current_dot = (b1 - current_point).dot(clip_edge);
-            let prev_dot = (b1 - prev_point).dot(clip_edge);
-
-            tracing::info!(current_dot, prev_dot, %clip_edge);
+            let current_dot = (b2 - current_point).dot(clip_edge);
+            let prev_dot = (b2 - prev_point).dot(clip_edge);
 
             if current_dot <= 0.0 {
                 if prev_dot > 0.0 {
@@ -90,13 +208,45 @@ pub fn generate_contact_surface<A: Shape, B: Shape>(
 
     let midpoint = output.iter().sum::<Vec2>() / output.len() as f32;
 
-    let to_world = |v: Vec2| v.x * tan + v.y * bitan - contact_basis * normal;
-
     ContactSurface {
-        intersection: output.into_iter().map(|v| to_world(v)).collect_vec(),
+        a: a_surface,
+        b: b_surface,
+        intersection: output.into_iter().map(to_world).collect_vec(),
         midpoint: to_world(midpoint),
         normal,
+        depth,
+        points: None,
     }
+}
+
+fn clip_line_face(
+    line: [Vec2; 2],
+    face: impl ExactSizeIterator<Item = Vec2> + Clone,
+    winding: f32,
+) -> [Vec2; 2] {
+    let [mut a, mut b] = line;
+    for (e1, e2) in face.circular_tuple_windows() {
+        let clip_edge = (e2 - e1).perp().normalize() * winding;
+
+        let intersection = clip_segment(clip_edge, e2, a, b);
+
+        let a_dot = (e2 - a).dot(clip_edge);
+        let b_dot = (e2 - b).dot(clip_edge);
+
+        // tracing::info!(a_dot, b_dot, ?intersection);
+
+        // if a is outside, clip
+        if a_dot > 0.0 {
+            a = intersection.unwrap();
+        }
+
+        // if b is outside, clip
+        if b_dot > 0.0 {
+            b = intersection.unwrap();
+        }
+    }
+
+    [a, b]
 }
 
 fn clip_segment(normal: Vec2, point: Vec2, start: Vec2, end: Vec2) -> Option<Vec2> {
@@ -106,45 +256,44 @@ fn clip_segment(normal: Vec2, point: Vec2, start: Vec2, end: Vec2) -> Option<Vec
 
     let t = num / denom;
 
-    if !(-TOLERANCE..=1.0 + TOLERANCE).contains(&t) {
-        tracing::info!(t, num, denom, "outside");
-        return None;
-    }
+    // if !(-TOLERANCE..=1.0 + TOLERANCE).contains(&t) {
+    //     return None;
+    // }
 
     let dot = normal.dot(segment_dir);
 
     // colinear
-    if dot.abs() < TOLERANCE {
-        tracing::info!(dot, "colinear");
-        return None;
-    }
+    // if dot.abs() <= 0.0 {
+    //     return None;
+    // }
 
     let p = start + t * segment_dir;
     Some(p)
 }
 
 impl DrawGizmos for ContactSurface {
-    fn draw_primitives(&self, gizmos: &mut ivy_core::GizmosSection) {
-        for (&p1, &p2) in self.intersection.iter().circular_tuple_windows() {
-            gizmos.draw(gizmos::Sphere::new(p1, DEFAULT_RADIUS, Color::red()));
-            gizmos.draw(gizmos::Line::from_points(
-                p1,
-                p2,
-                DEFAULT_THICKNESS,
-                Color::cyan(),
-            ));
+    fn draw_primitives(&self, gizmos: &mut GizmosSection) {
+        for (shape, color) in [(&self.a, Color::green()), (&self.b, Color::red())] {
+            gizmos.draw(Polygon::new(shape.iter().copied()).with_color(color));
         }
+
+        gizmos.draw(Polygon::new(self.intersection.iter().copied()).with_color(Color::blue()));
 
         gizmos.draw(gizmos::Sphere::new(
             self.midpoint,
             DEFAULT_RADIUS,
-            Color::purple(),
+            Color::cyan(),
         ));
+
         gizmos.draw(gizmos::Line::new(
             self.midpoint,
-            self.normal * 0.2,
+            self.normal * self.depth,
             DEFAULT_THICKNESS,
             Color::blue(),
         ));
+
+        for &p in self.points.iter().flat_map(|v| v.points()) {
+            gizmos.draw(gizmos::Sphere::new(p, DEFAULT_RADIUS, Color::purple()));
+        }
     }
 }

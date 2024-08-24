@@ -1,12 +1,12 @@
 use flax::{error::MissingComponent, EntityRef};
 use glam::Vec3;
+use ivy_collision::{contact::ContactSurface, Intersection};
 use ivy_core::{
-    angular_mass, angular_velocity, friction, mass, math::Inverse, restitution, velocity,
-    world_transform,
+    angular_mass, angular_velocity, friction, mass, math::Inverse, palette::convert, restitution,
+    velocity, world_transform,
 };
-use ivy_collision::Penetration;
 
-use crate::util::point_vel;
+use crate::util::velocity_at_point;
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ResolveObject {
@@ -34,34 +34,57 @@ impl ResolveObject {
 }
 
 /// Generates an impulse for solving a collision.
-pub(crate) fn resolve_collision(
-    intersection: &Penetration,
+pub(crate) fn calculate_impulse_response(
+    intersection: &ContactSurface,
     a: &ResolveObject,
     b: &ResolveObject,
 ) -> Vec3 {
-    let ra = intersection.points[0] - a.pos;
-    let rb = intersection.points[1] - b.pos;
-    let aw = a.ang_vel;
-    let bw = b.ang_vel;
-    let n = intersection.normal;
+    let to_a = intersection.midpoint() - a.pos;
+    let to_b = intersection.midpoint() - b.pos;
 
-    let a_vel = a.vel + point_vel(ra, aw);
-    let b_vel = b.vel + point_vel(rb, bw);
-    let contact_rel = (a_vel - b_vel).dot(n);
+    let a_w = a.ang_vel;
+    let b_w = b.ang_vel;
 
-    let resitution = a.resitution.min(b.resitution);
+    let normal = intersection.normal();
 
-    if contact_rel < 0.01 {
-        // eprintln!("Separating");
+    assert!(normal.is_normalized());
+
+    let a_vel = a.vel + velocity_at_point(to_a, a_w);
+    let b_vel = b.vel + velocity_at_point(to_b, b_w);
+
+    let contact_velocity = (a_vel - b_vel).dot(normal);
+
+    let restitution = a.resitution.min(b.resitution);
+
+    // objects are separating
+    if contact_velocity < 0.0 {
         return Vec3::ZERO;
     }
 
-    let j = -(1.0 + resitution) * contact_rel * (a.mass.inv() + b.mass.inv()).inv()
-        + ra.cross(n).length_squared() * a.ang_mass.inv()
-        + rb.cross(n).length_squared() * b.ang_mass.inv();
+    let inverse_inertia = 1.0 / a.mass + 1.0 / b.mass;
 
-    let friction =
-        a.friction.min(b.friction) * j * (a_vel - b_vel).reject_from(n).normalize_or_zero();
+    let a_inertia_tensor = 1.0 / a.ang_mass * to_a.cross(normal).cross(to_a);
+    let b_inertia_tensor = 1.0 / b.ang_mass * to_b.cross(-normal).cross(-normal);
 
-    j * 0.99 * n + friction
+    let inverse_inertia_tensor = a_inertia_tensor + b_inertia_tensor;
+
+    let num = -(1.0 + restitution) * contact_velocity;
+    let denom: f32 = inverse_inertia + inverse_inertia_tensor.dot(normal);
+
+    let impulse = num / denom;
+
+    let friction = a.friction.min(b.friction)
+        * impulse
+        * (a_vel - b_vel).reject_from(normal).normalize_or_zero();
+
+    return impulse * 0.99 * normal + friction;
+
+    // let angular_impulse = to_a.cross(normal).length_squared() * 1.0 / a.ang_mass ;
+
+    // let j = -(1.0 + restitution) * contact_rel * (a.mass.recip() + b.mass.recip()).recip()
+    //     + to_a.cross(normal).length_squared() * a.ang_mass.inv()
+    //     + to_b.cross(normal).length_squared() * b.ang_mass.inv();
+
+    // j * normal + friction
+    // return linear_impulse * 0.99;
 }

@@ -1,7 +1,7 @@
 use glam::Vec3;
 use ivy_core::{
-    gizmos::{self, DrawGizmos},
-    Color, ColorExt, Line, DEFAULT_RADIUS,
+    gizmos::{self, DrawGizmos, GizmosSection, Line, DEFAULT_RADIUS},
+    Color, ColorExt,
 };
 use ordered_float::OrderedFloat;
 use smallvec::{Array, SmallVec};
@@ -239,7 +239,7 @@ impl Polytype {
 }
 
 impl DrawGizmos for Polytype {
-    fn draw_primitives(&self, gizmos: &mut ivy_core::GizmosSection) {
+    fn draw_primitives(&self, gizmos: &mut GizmosSection) {
         for (i, point) in self.points.iter().enumerate() {
             gizmos.draw(gizmos::Sphere::new(
                 point.support,

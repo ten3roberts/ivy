@@ -9,7 +9,8 @@ use ivy_assets::AssetCache;
 use ivy_collision::components::collider;
 use ivy_core::{
     app::InitEvent,
-    delta_time, engine, gizmos,
+    delta_time, engine,
+    gizmos::{self, DEFAULT_RADIUS},
     layer::events::EventRegisterContext,
     main_camera,
     palette::{Srgb, Srgba},
@@ -17,11 +18,11 @@ use ivy_core::{
     rotation,
     update_layer::{FixedTimeStep, PerTick, Plugin, ScheduledLayer},
     velocity, world_transform, App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer,
-    TransformBundle, DEFAULT_RADIUS, DEG_45,
+    TransformBundle, DEG_180, DEG_45, DEG_90,
 };
 use ivy_engine::{Collider, RbBundle};
 use ivy_gltf::components::animator;
-use ivy_graphics::texture::TextureDesc;
+use ivy_graphics::texture::{ColorChannel, MetallicRoughnessProcessor, TextureDesc};
 use ivy_input::{
     components::input_state,
     layer::InputLayer,
@@ -42,7 +43,7 @@ use ivy_wgpu::{
     light::{LightData, LightKind},
     material_desc::{MaterialData, MaterialDesc},
     mesh_desc::MeshDesc,
-    primitives::CubePrimitive,
+    primitives::{CapsulePrimitive, CubePrimitive, UvSpherePrimitive},
     renderer::{EnvironmentData, RenderObjectBundle},
     rendergraph::{self, ExternalResources, RenderGraph},
     shader_library::{ModuleDesc, ShaderLibrary},
@@ -157,21 +158,38 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
             .with_albedo(TextureDesc::srgba(Srgba::new(1.0, 1.0, 1.0, 1.0))),
     );
 
-    let cube_mesh = MeshDesc::Content(assets.load(&CubePrimitive));
+    let cube_mesh = MeshDesc::Content(assets.load(&CapsulePrimitive::default()));
 
     let shader = assets.load(&PbrShaderDesc);
 
-    let mut cube = |position: Vec3, rotation: Quat| {
+    let simulate = true;
+
+    let mut cube = |mut position: Vec3, rotation: Quat| {
+        let mut velocity = Vec3::ZERO;
+        if simulate {
+            position.z = position.z.signum() * 8.0;
+
+            velocity = Vec3::Z * -position.z.signum() * 0.5;
+        }
+
         Entity::builder()
             .mount(
                 TransformBundle::default()
                     .with_position(position + Vec3::Z)
                     .with_rotation(rotation),
             )
-            .mount(RbBundle::default())
+            .mount(
+                RbBundle::default()
+                    .with_velocity(velocity)
+                    .with_mass(5.0)
+                    .with_angular_mass(10.0)
+                    .with_restitution(0.01)
+                    .with_friction(0.7),
+            )
             .set(
                 collider(),
-                Collider::cube_from_center(Vec3::ZERO, Vec3::ONE),
+                // Collider::cube_from_center(Vec3::ZERO, Vec3::ONE),
+                Collider::capsule(1.0, 1.0),
             )
             .mount(RenderObjectBundle::new(
                 cube_mesh.clone(),
@@ -181,35 +199,54 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
             .spawn(world);
     };
 
+    // Twisted and offset
     cube(vec3(0.2, 0.0, 0.99), Quat::IDENTITY);
     cube(
         vec3(0.0, 0.0, -0.99),
         Quat::from_scaled_axis(vec3(0.0, 0.0, 0.5)),
     );
 
+    // Twisted
     cube(vec3(4.0, 0.0, 0.99), Quat::IDENTITY);
     cube(
         vec3(4.0, 0.0, -0.99),
         Quat::from_scaled_axis(vec3(0.0, 0.0, 0.5)),
     );
 
+    // Offset
     cube(vec3(8.4, 0.0, 0.99), Quat::IDENTITY);
     cube(
         vec3(8.0, 0.0, -0.99),
         Quat::from_scaled_axis(vec3(0.0, 0.0, 0.0)),
     );
 
-    cube(vec3(-4.0, 0.0, 1.1), Quat::IDENTITY);
+    // edge-face
     cube(
-        vec3(-4.0, 0.0, -1.1),
+        vec3(-4.0, 0.5, 0.9),
+        Quat::from_scaled_axis(vec3(0.0, 0.0, DEG_180)),
+    );
+    cube(
+        vec3(-4.0, 0.0, -1.0),
         Quat::from_scaled_axis(vec3(0.0, 0.5, 0.0)),
     );
 
-    cube(vec3(-8.0, 0.0, 1.3), Quat::IDENTITY);
+    // edge-edge
     cube(
-        vec3(-8.0, 0.0, -1.3),
+        vec3(-8.0, 0.5, 0.8),
+        Quat::from_scaled_axis(vec3(DEG_45, 0.0, 0.0)),
+    );
+    cube(
+        vec3(-8.0, 0.0, -0.8),
+        Quat::from_scaled_axis(vec3(0.0, 0.5, 0.0)),
+    );
+
+    // point-face
+    cube(vec3(-12.0, 0.0, 1.3), Quat::IDENTITY);
+    cube(
+        vec3(-12.0, 0.0, -1.3),
         Quat::from_scaled_axis(vec3(0.5, 0.5, 0.0)),
     );
+
     Entity::builder()
         .mount(TransformBundle::default().with_rotation(Quat::from_euler(
             EulerRot::YXZ,
@@ -217,7 +254,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
             1.0,
             0.0,
         )))
-        .set(light_data(), LightData::new(Srgb::new(1.0, 1.0, 1.0), 1.0))
+        .set(light_data(), LightData::new(Srgb::new(1.0, 1.0, 1.0), 0.4))
         .set(light_kind(), LightKind::Directional)
         .set_default(cast_shadow())
         .spawn(world);
@@ -351,7 +388,7 @@ fn camera_speed_input_system() -> BoxedSystem {
             camera_speed_delta().modified(),
         )))
         .for_each(|(speed, &delta)| {
-            let change = 2_f32.powf(-delta * 0.05);
+            let change = 2_f32.powf(delta * 0.05);
             *speed = (*speed * change).clamp(0.1, 100.0);
             tracing::info!("camera speed: {speed} {delta}");
         })
@@ -403,7 +440,7 @@ fn animate_system() -> BoxedSystem {
 
 fn gizmos_system() -> BoxedSystem {
     System::builder()
-        .with_query(Query::new(gizmos().source(engine())))
+        .with_query(Query::new(ivy_core::components::gizmos().source(engine())))
         .with_query(Query::new(world_transform()))
         .build(
             |mut gizmos: QueryBorrow<Source<Component<gizmos::Gizmos>, Entity>>,

@@ -56,11 +56,11 @@ impl Shape for Collider {
         }
     }
 
-    fn clipping_surface(&self, dir: Vec3, points: &mut Vec<Vec3>) {
+    fn surface_contour(&self, dir: Vec3, points: &mut Vec<Vec3>) {
         match self {
-            Collider::Cube(v) => v.clipping_surface(dir, points),
-            Collider::Sphere(v) => v.clipping_surface(dir, points),
-            Collider::Capsule(v) => v.clipping_surface(dir, points),
+            Collider::Cube(v) => v.surface_contour(dir, points),
+            Collider::Sphere(v) => v.surface_contour(dir, points),
+            Collider::Capsule(v) => v.surface_contour(dir, points),
         }
     }
 

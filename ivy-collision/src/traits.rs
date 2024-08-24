@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use glam::{Mat4, Vec3};
 
-use crate::{BoundingBox, Penetration, Ray};
+use crate::{BoundingBox, Intersection, Ray};
 
 pub trait Shape: Debug {
     /// Returns the furtherst vertex in `dir`.
@@ -12,9 +12,7 @@ pub trait Shape: Debug {
     /// Returns the maximum radius of the primitive. Used for sphere bounding.
     fn max_radius(&self) -> f32;
 
-    fn clipping_surface(&self, dir: Vec3, points: &mut Vec<Vec3>) {
-        todo!()
-    }
+    fn surface_contour(&self, dir: Vec3, points: &mut Vec<Vec3>);
 
     /// Returns an axis aligned bounding box enclosing the shape at the current
     /// rotation and scale
@@ -43,8 +41,8 @@ where
         (*self).support(dir)
     }
 
-    fn clipping_surface(&self, dir: Vec3, points: &mut Vec<Vec3>) {
-        (*self).clipping_surface(dir, points)
+    fn surface_contour(&self, dir: Vec3, points: &mut Vec<Vec3>) {
+        (*self).surface_contour(dir, points)
     }
 
     fn max_radius(&self) -> f32 {
@@ -56,7 +54,7 @@ pub trait RayIntersect: Shape + Sized {
     // Returns true if the shape intersects the ray
     fn check_intersect(&self, transform: &Mat4, ray: &Ray) -> bool;
     // Returns the intersection point of a ray onto shape
-    fn intersect(&self, transform: &Mat4, ray: &Ray) -> Option<Penetration> {
+    fn intersect(&self, transform: &Mat4, ray: &Ray) -> Option<Intersection> {
         ray.intersects(self, transform)
     }
 }
@@ -98,8 +96,8 @@ impl<T: Shape> Shape for TransformedShape<T> {
         self.transform.transform_point3(local_support)
     }
 
-    fn clipping_surface(&self, dir: Vec3, points: &mut Vec<Vec3>) {
-        self.shape.clipping_surface(
+    fn surface_contour(&self, dir: Vec3, points: &mut Vec<Vec3>) {
+        self.shape.surface_contour(
             self.inv_transform.transform_vector3(dir).normalize(),
             points,
         );

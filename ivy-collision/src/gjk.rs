@@ -47,17 +47,16 @@ pub fn gjk<A: Shape, B: Shape>(a: &A, b: &B) -> (bool, Simplex) {
 
         // Get the next simplex
         let mut p = minkowski_diff(a, b, dir);
+        let perturberance_strength = 0.01;
         p.support += vec3(
             perturberance_rng.gen(),
             perturberance_rng.gen(),
             perturberance_rng.gen(),
-        ) * 0.01;
+        ) * perturberance_strength;
 
         // New point was not past the origin
         // No collision
-        tracing::info!(dot = p.support.dot(dir), "new support");
         if p.support.dot(dir) < 0.0 {
-            tracing::info!(dot = p.support.dot(dir), "no collision");
             return (false, simplex);
         }
 

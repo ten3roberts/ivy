@@ -1,8 +1,10 @@
 use std::ops::Deref;
 
-use glam::{Mat4, Vec3};
+use glam::{Mat4, Vec2, Vec3};
+use ordered_float::Float;
+use palette::num::{Abs, Signum};
 
-use crate::{Ray, RayIntersect, Shape};
+use crate::{util::TOLERANCE, Ray, RayIntersect, Shape};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Cube {
@@ -55,6 +57,10 @@ impl Shape for Cube {
     fn max_radius(&self) -> f32 {
         // TODO: incorrect, radius is not the best in general
         self.half_extents.max_element()
+    }
+
+    fn surface_contour(&self, dir: Vec3, points: &mut Vec<Vec3>) {
+        todo!()
     }
 }
 
@@ -136,6 +142,10 @@ impl Shape for Sphere {
     fn max_radius(&self) -> f32 {
         self.radius
     }
+
+    fn surface_contour(&self, dir: Vec3, points: &mut Vec<Vec3>) {
+        points.push(self.radius * dir)
+    }
 }
 
 impl RayIntersect for Sphere {
@@ -179,13 +189,34 @@ impl Capsule {
 
 impl Shape for Capsule {
     fn support(&self, dir: Vec3) -> Vec3 {
-        let mut result = Vec3::ZERO;
-        result.y = dir.y.signum() * self.half_height;
-        result + dir * self.radius
+        assert!(dir.is_normalized());
+
+        dir.y.signum() * self.half_height * Vec3::Y + dir * self.radius
+
+        // let mut result = Vec3::ZERO;
+        // Vec3::Y * dir.y.signum() * self.half_height
+        //     + dir.reject_from_normalized(Vec3::Y).normalize_or_zero() * self.radius
+        // result.y = dir.y.signum() * self.half_height;
+        // result + dir * self.radius
     }
 
     fn max_radius(&self) -> f32 {
         self.half_height + self.radius
+    }
+
+    fn surface_contour(&self, dir: Vec3, points: &mut Vec<Vec3>) {
+        assert!(dir.is_normalized());
+        if dir.dot(Vec3::Y).abs() < TOLERANCE {
+            let extension = dir.reject_from_normalized(Vec3::Y).normalize_or_zero() * self.radius;
+
+            points.extend([
+                extension + Vec3::Y * self.half_height,
+                extension - Vec3::Y * self.half_height,
+            ])
+        } else {
+            let p = dir * self.radius + Vec3::Y * self.half_height * dir.y.signum();
+            points.push(p);
+        }
     }
 }
 

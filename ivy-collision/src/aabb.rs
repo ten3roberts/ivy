@@ -1,10 +1,11 @@
 use core::f32;
 
 use glam::{vec3, Vec3};
-use ivy_core::{Cube, DrawGizmos, GizmosSection};
+use ivy_core::gizmos::{Cube, DrawGizmos, GizmosSection};
 use ordered_float::NotNan;
+use palette::num::Abs;
 
-use crate::{Ray, Shape};
+use crate::{util::TOLERANCE, Ray, Shape};
 
 /// Represents an axis aligned bounding box
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
@@ -177,8 +178,8 @@ impl Shape for BoundingBox {
         vec3(x, y, z)
     }
 
-    fn clipping_surface(&self, dir: Vec3, points: &mut Vec<Vec3>) {
-        const TOLERANCE: f32 = 0.01;
+    fn surface_contour(&self, dir: Vec3, points: &mut Vec<Vec3>) {
+        const TOLERANCE: f32 = 0.1;
 
         assert!(dir.is_normalized());
         let corners = [
@@ -196,30 +197,48 @@ impl Shape for BoundingBox {
 
         points.extend(corners.iter().filter(|v| {
             let dist = (support_dist - v.dot(dir)).abs();
-            tracing::info!(
-                ?support_dist,
-                dot = v.dot(dir),
-                pass = dist < TOLERANCE,
-                "point"
-            );
+            // tracing::info!(
+            //     ?support_dist,
+            //     dot = v.dot(dir),
+            //     pass = dist < TOLERANCE,
+            //     "point"
+            // );
             dist < TOLERANCE
         }));
 
-        let tan = if dir.dot(Vec3::X) > 1.0 - TOLERANCE {
+        // let extreme = |v| {
+        //     if v > 0.0 {
+        //         1.0
+        //     } else if v < 0.0 {
+        //         -1.0
+        //     } else {
+        //         0.0
+        //     }
+        // };
+
+        // let dir = vec3(extreme(dir.x), extreme(dir.y), extreme(dir.z));
+
+        let tan = if dir.dot(Vec3::X).abs() > 1.0 - TOLERANCE {
             Vec3::Y
         } else {
-            dir.cross(Vec3::X)
+            dir.cross(Vec3::X).normalize()
         };
 
-        let bitan = tan.cross(dir);
-        let midpoint = self.midpoint();
-        // sort points by the angle they make with the tangent
+        let bitan = tan.cross(dir).normalize();
         assert!(points.len() <= 4, "Too many points: {points:?}");
+        // assert!([1, 2, 4].contains(&points.len()));
+
+        let midpoint = self.midpoint();
+
+        // sort points by the angle to ensure correct winding
+        let reference_point = points[0];
         if points.len() == 4 {
             points.sort_by_key(|&v| {
-                let v = (v - midpoint).normalize();
+                let v = (v - midpoint).normalize_or_zero();
+                let x = v.dot(tan);
+                let y = v.dot(bitan);
 
-                NotNan::new(v.dot(tan).atan2(v.dot(bitan))).unwrap()
+                NotNan::new(x.atan2(y)).unwrap()
             });
         }
     }

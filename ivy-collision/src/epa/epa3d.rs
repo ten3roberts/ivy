@@ -3,11 +3,11 @@ use glam::Vec3;
 
 use crate::{
     util::MAX_ITERATIONS,
-    ContactPoints, Penetration, Polytype, Simplex,
+    ContactPoints, Intersection, Polytype, Simplex,
     {util::SupportPoint, util::TOLERANCE},
 };
 
-pub fn epa(simplex: Simplex, support_func: impl Fn(Vec3) -> SupportPoint) -> Penetration {
+pub fn epa(simplex: Simplex, support_func: impl Fn(Vec3) -> SupportPoint) -> Intersection {
     let _span = tracing::info_span!("epa").entered();
     let midpoint = simplex.points().iter().map(|v| v.support).sum::<Vec3>() / 4.0;
 
@@ -54,11 +54,8 @@ pub fn epa(simplex: Simplex, support_func: impl Fn(Vec3) -> SupportPoint) -> Pen
 
         let support_dist = min.normal.dot(new_support.support);
 
-        tracing::info!(%new_support, support_dist, ?min.distance, ?min.normal, "new support");
-
         if (support_dist - min.distance) < TOLERANCE {
-            tracing::info!("found edge of polytype");
-            return Penetration {
+            return Intersection {
                 points: polytype.contact_points(min),
                 depth: min.distance,
                 normal: min.normal,
@@ -66,15 +63,15 @@ pub fn epa(simplex: Simplex, support_func: impl Fn(Vec3) -> SupportPoint) -> Pen
             };
         }
 
-        if iterations >= iteration_count {
-            tracing::error!("reached max iterations");
-            return Penetration {
-                points: polytype.contact_points(min),
-                depth: min.distance,
-                normal: min.normal,
-                polytype,
-            };
-        }
+        // if iterations >= iteration_count {
+        //     tracing::error!("reached max iterations");
+        //     return Intersection {
+        //         points: polytype.contact_points(min),
+        //         depth: min.distance,
+        //         normal: min.normal,
+        //         polytype,
+        //     };
+        // }
 
         polytype.add_point(new_support, Face::new);
         iterations += 1;

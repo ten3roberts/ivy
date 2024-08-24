@@ -140,7 +140,7 @@ impl Simplex {
                 let acd_dot = acd.dot(a0);
                 let adb_dot = adb.dot(a0);
 
-                tracing::info!(%abc, abc_dot, acd_dot, adb_dot);
+                // tracing::info!(%abc, abc_dot, acd_dot, adb_dot);
 
                 if abc_dot > 0.0 {
                     *self = Self::Triangle([a, b, c]);

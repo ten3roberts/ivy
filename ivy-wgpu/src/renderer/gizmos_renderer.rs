@@ -102,7 +102,7 @@ impl Node for GizmosRendererNode {
         for section in gizmos.sections() {
             for primitive in section.primitives() {
                 match primitive {
-                    ivy_core::GizmoPrimitive::Sphere {
+                    ivy_core::gizmos::GizmoPrimitive::Sphere {
                         origin,
                         color,
                         radius,
@@ -115,7 +115,7 @@ impl Node for GizmosRendererNode {
                             corner_radius: 1.0,
                         });
                     }
-                    ivy_core::GizmoPrimitive::Line {
+                    ivy_core::gizmos::GizmoPrimitive::Line {
                         origin,
                         color,
                         dir,

@@ -1471,6 +1471,7 @@ dependencies = [
  "flax",
  "flume",
  "glam 0.28.0",
+ "itertools 0.13.0",
  "ivy-assets",
  "ivy-profiling",
  "ivy-random",
@@ -1480,7 +1481,6 @@ dependencies = [
  "puffin_http",
  "rand",
  "rand_distr",
- "records",
  "serde",
  "thiserror",
  "tracing",
@@ -2786,16 +2786,6 @@ checksum = "1465873a3dfdaa8ae7cb14b4383657caab0b3e8a0aa9ae8e04b044854c8dfce2"
 dependencies = [
  "crossbeam-deque",
  "crossbeam-utils",
-]
-
-[[package]]
-name = "records"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09c832e283c5ff334e02424a91f07da94286f150142089ecd42f4c78f70389ab"
-dependencies = [
- "quote",
- "syn 1.0.109",
 ]
 
 [[package]]

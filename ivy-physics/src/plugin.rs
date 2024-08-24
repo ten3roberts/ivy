@@ -1,6 +1,6 @@
 use crate::systems::{
-    apply_effectors_system, gravity_system, integrate_angular_velocity_system,
-    integrate_velocity_system,
+    apply_effectors_system, effectors_gizmo_system, gravity_system,
+    integrate_angular_velocity_system, integrate_velocity_system, resolve_collisions_system,
 };
 use flax::World;
 use glam::Vec3;
@@ -67,10 +67,16 @@ impl Plugin<FixedTimeStep> for PhysicsPlugin {
             .with_system(gravity_system())
             .with_system(integrate_velocity_system(dt))
             .with_system(integrate_angular_velocity_system(dt))
-            .with_system(apply_effectors_system(dt))
             .with_system(register_system())
             .with_system(update_system())
-            .with_system(check_collisions_system());
+            .with_system(check_collisions_system())
+            .with_system(resolve_collisions_system(dt));
+
+        if self.enable_gizmos {
+            schedule.with_system(effectors_gizmo_system());
+        }
+
+        schedule.with_system(apply_effectors_system(dt));
 
         if self.enable_gizmos {
             schedule.with_system(collisions_tree_gizmos_system());

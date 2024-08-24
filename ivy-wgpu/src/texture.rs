@@ -56,6 +56,22 @@ impl AssetDesc<Texture> for TextureAndKindDesc {
                 color: v.0,
                 format: self.format,
             })),
+            v => {
+                let image = assets.try_load(v)?;
+
+                Ok(assets.insert(
+                    texture_from_image(
+                        &gpu,
+                        &image,
+                        TextureFromImageDesc {
+                            label: v.label().to_owned().into(),
+                            format: self.format,
+                            ..Default::default()
+                        },
+                    )
+                    .unwrap(),
+                ))
+            }
         }
     }
 }
@@ -99,6 +115,22 @@ impl AsyncAssetDesc<Texture> for TextureAndKindDesc {
                 color: v.0,
                 format: self.format,
             })),
+            v => {
+                let image = assets.try_load(v)?;
+
+                Ok(assets.insert(
+                    texture_from_image(
+                        &gpu,
+                        &image,
+                        TextureFromImageDesc {
+                            label: v.label().to_owned().into(),
+                            format: self.format,
+                            ..Default::default()
+                        },
+                    )
+                    .unwrap(),
+                ))
+            }
         }
     }
 }

@@ -29,7 +29,6 @@ pub use handle::Asset;
 use image::DynamicImage;
 use parking_lot::{RwLock, RwLockReadGuard};
 use service::Service;
-use tracing::Instrument;
 
 use self::{cell::AssetCell, handle::WeakHandle};
 
