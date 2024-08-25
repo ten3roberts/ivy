@@ -5,8 +5,9 @@ use glam::Mat4;
 use slotmap::SlotMap;
 
 use crate::{
-    components, contact::ContactSurface, intersect, query::TreeQuery, BoundingBox, CollisionTree,
-    CollisionTreeNode, Intersection, ObjectData, ObjectIndex, Shape, TransformedShape, Visitor,
+    components, contact::ContactSurface, query::TreeQuery, BoundingBox, CollisionTree,
+    CollisionTreeNode, Intersection, IntersectionGenerator, ObjectData, ObjectIndex, Shape,
+    TransformedShape, Visitor,
 };
 
 use super::BvhNode;
@@ -73,6 +74,7 @@ where
                 bounds: self.bounds,
                 world: self.world,
                 filter: self.filter,
+                intersection_generator: Default::default(),
             })
         } else {
             None
@@ -89,6 +91,7 @@ pub struct IntersectIterator<'a, C, Q> {
     transform: Mat4,
     world: &'a World,
     filter: &'a Q,
+    intersection_generator: IntersectionGenerator,
 }
 
 impl<'a, C, Q> Iterator for IntersectIterator<'a, C, Q>
@@ -112,7 +115,7 @@ where
             let query = (components::collider(), self.filter);
 
             if let Some((collider, _)) = entity.query(&query).get() {
-                if let Some(intersection) = intersect(
+                if let Some(intersection) = self.intersection_generator.intersect(
                     &TransformedShape::new(&collider, data.transform),
                     &TransformedShape::new(&self.collider, self.transform),
                 ) {

@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use flax::{
     components::is_static, entity_ids, fetch::Satisfied, sink::Sink, BoxedSystem, CommandBuffer,
     Component, Entity, EntityIds, Error, Fetch, FetchExt, Mutable, Opt, OptOr, Query, QueryBorrow,
@@ -13,7 +15,7 @@ use smallvec::Array;
 
 use crate::{
     components::{self, collider, collider_offset, collision_tree, tree_index},
-    BoundingBox, Collider, Collision, Shape,
+    BoundingBox, Collider, Collision, IntersectionGenerator, Shape, TransformedShape,
 };
 
 mod binary_node;
@@ -46,6 +48,7 @@ pub struct CollisionTree {
 
     object_data: SlotMap<ObjectIndex, ObjectData>,
     active_collisions: Vec<Collision>,
+    intersection_generator: IntersectionGenerator,
 }
 
 impl CollisionTree {
@@ -59,6 +62,7 @@ impl CollisionTree {
             root,
             object_data: SlotMap::with_key(),
             active_collisions: Vec::new(),
+            intersection_generator: Default::default(),
         }
     }
 
@@ -91,7 +95,6 @@ impl CollisionTree {
         for (id, q) in query.borrow(world).iter() {
             let obj: ObjectData = q.into_object_data();
             let tree_index = self.insert_impl(id, obj);
-            tracing::info!(?id, ?tree_index, "registering entity into tree");
 
             cmd.set(id, components::tree_index(), tree_index);
         }
@@ -113,7 +116,10 @@ impl CollisionTree {
                 .containing_bounds
                 .contains(object_data.extended_bounds)
             {
-                self.nodes[object_data.node].remove(object_index);
+                self.nodes[object_data.node]
+                    .remove(object_index)
+                    .expect("object not in node");
+
                 to_refit.push(object_index);
             }
         }
@@ -122,20 +128,44 @@ impl CollisionTree {
             BvhNode::insert(self.root, &mut self.nodes, object, &mut self.object_data)
         }
 
+        BvhNode::update_bounds(self.root, &mut self.nodes, &self.object_data);
+
+        BvhNode::rebalance(self.root, &mut self.nodes, &mut self.object_data);
+
         Ok(())
     }
 
     pub fn check_collisions(&mut self, _: &World) -> anyhow::Result<()> {
         self.active_collisions.clear();
 
-        BvhNode::check_collisions(
-            self.root,
-            &self.nodes,
-            &self.object_data,
-            &mut |collision: Collision| {
-                self.active_collisions.push(collision);
-            },
-        );
+        let mut intersecting_pairs = Vec::new();
+
+        BvhNode::check_collisions(self.root, &self.nodes, &self.object_data, &mut |a, b| {
+            intersecting_pairs.push((a, b));
+        });
+
+        for (a, b) in intersecting_pairs {
+            let contact = self.intersection_generator.intersect(
+                &TransformedShape::new(&a.collider, a.transform),
+                &TransformedShape::new(&b.collider, b.transform),
+            );
+
+            if let Some(contact) = contact {
+                self.active_collisions.push(Collision {
+                    a: EntityPayload {
+                        entity: a.id,
+                        is_trigger: false,
+                        state: a.state,
+                    },
+                    b: EntityPayload {
+                        entity: b.id,
+                        is_trigger: false,
+                        state: b.state,
+                    },
+                    contact,
+                })
+            }
+        }
 
         Ok(())
     }
@@ -371,6 +401,14 @@ impl NodeState {
     pub fn is_dynamic(&self) -> bool {
         matches!(self, Self::Dynamic)
     }
+
+    fn inflate_amount(&self) -> f32 {
+        match self {
+            NodeState::Dynamic => MARGIN,
+            NodeState::Static => 1.0,
+            NodeState::Sleeping => 1.0,
+        }
+    }
 }
 
 /// Entity with additional contextual data
@@ -391,8 +429,14 @@ impl std::ops::Deref for EntityPayload {
 
 impl DrawGizmos for CollisionTree {
     fn draw_primitives(&self, gizmos: &mut GizmosSection) {
-        // self.root
-        //     .draw_gizmos_recursive(&self.nodes, gizmos, &self.object_data);
+        BvhNode::draw_gizmos_recursive(
+            self.root,
+            &self.nodes,
+            gizmos,
+            &self.object_data,
+            &mut HashSet::new(),
+            0,
+        );
 
         for collision in &self.active_collisions {
             collision.contact.draw_primitives(gizmos);

@@ -7,7 +7,7 @@ use ivy_core::{
     Color, ColorExt,
 };
 
-use crate::{util::TOLERANCE, ContactPoints, Shape};
+use crate::{util::TOLERANCE, Shape};
 
 #[derive(Debug, Clone)]
 pub struct ContactSurface {
@@ -15,9 +15,6 @@ pub struct ContactSurface {
     midpoint: Vec3,
     normal: Vec3,
     depth: f32,
-    pub points: Option<ContactPoints>,
-    a: Vec<Vec3>,
-    b: Vec<Vec3>,
 }
 
 impl ContactSurface {
@@ -38,184 +35,184 @@ impl ContactSurface {
     }
 }
 
-pub fn generate_contact_surface<A: Shape, B: Shape>(
-    a: A,
-    b: B,
-    normal: Vec3,
-    contact_basis: Vec3,
-    depth: f32,
-) -> ContactSurface {
-    let mut a_surface = Vec::new();
-    let mut b_surface = Vec::new();
+pub struct ContactGenerator {
+    a_surface: Vec<Vec3>,
+    b_surface: Vec<Vec3>,
+}
 
-    a.surface_contour(normal, &mut a_surface);
-    b.surface_contour(-normal, &mut b_surface);
-
-    assert!(!a_surface.is_empty());
-    assert!(!b_surface.is_empty());
-
-    let tan = if normal.dot(Vec3::X).abs() > 1.0 - TOLERANCE {
-        Vec3::Y
-    } else {
-        normal.cross(Vec3::X).normalize()
-    };
-
-    assert!(tan.is_normalized());
-
-    let bitan = tan.cross(normal).normalize();
-
-    let flatten = |v: &Vec3| vec2(v.dot(tan), v.dot(bitan));
-
-    let to_world = |v: Vec2| v.x * tan + v.y * bitan + contact_basis.dot(normal) * normal;
-
-    if a_surface.len() == 1 {
-        let p = to_world(flatten(&a_surface[0]));
-
-        return ContactSurface {
-            a: a_surface,
-            b: b_surface,
-            intersection: vec![p],
-            midpoint: p,
-            normal,
-            depth,
-            points: None,
-        };
+impl ContactGenerator {
+    pub fn new() -> Self {
+        Self {
+            a_surface: Default::default(),
+            b_surface: Default::default(),
+        }
     }
 
-    if b_surface.len() == 1 {
-        let p = to_world(flatten(&b_surface[0]));
+    pub fn generate<A: Shape, B: Shape>(
+        &mut self,
+        a: A,
+        b: B,
+        normal: Vec3,
+        contact_basis: Vec3,
+        depth: f32,
+    ) -> ContactSurface {
+        let a_surface = &mut self.a_surface;
+        let b_surface = &mut self.b_surface;
 
-        return ContactSurface {
-            a: a_surface,
-            b: b_surface,
-            intersection: vec![p],
-            midpoint: p,
-            normal,
-            depth,
-            points: None,
+        a_surface.clear();
+        b_surface.clear();
+
+        a.surface_contour(normal, a_surface);
+        b.surface_contour(-normal, b_surface);
+
+        assert!(!a_surface.is_empty());
+        assert!(!b_surface.is_empty());
+
+        let tan = if normal.dot(Vec3::X).abs() > 1.0 - TOLERANCE {
+            Vec3::Y
+        } else {
+            normal.cross(Vec3::X).normalize()
         };
-    }
 
-    if let ([a1, a2], [b1, b2]) = (&a_surface[..], &b_surface[..]) {
-        let a1 = flatten(a1);
-        let a2 = flatten(a2);
-        let mut b1 = flatten(b1);
-        let mut b2 = flatten(b2);
+        assert!(tan.is_normalized());
 
-        let a_dir = (a2 - a1).normalize();
-        let b_dir = b2 - b1;
+        let bitan = tan.cross(normal).normalize();
 
-        // Clip colinear line segments
-        if a_dir.perp_dot(b_dir) < TOLERANCE {
-            if a_dir.dot(b_dir) < 0.0 {
-                mem::swap(&mut b1, &mut b2);
-            }
+        let flatten = |v: &Vec3| vec2(v.dot(tan), v.dot(bitan));
 
-            let basis = a1.reject_from(a_dir);
+        let to_world = |v: Vec2| v.x * tan + v.y * bitan + contact_basis.dot(normal) * normal;
 
-            let a1 = a1.dot(a_dir);
-            let a2 = a2.dot(a_dir);
-            let b1 = b1.dot(a_dir);
-            let b2 = b2.dot(a_dir);
+        if a_surface.len() == 1 {
+            let p = to_world(flatten(&a_surface[0]));
 
-            assert!(a1 < a2);
-
-            let p1 = a1.max(b1);
-            let p2 = a2.min(b2);
-
-            let mid = (p1 + p2) / 2.0;
-            let midpoint = to_world(mid * a_dir + basis);
             return ContactSurface {
-                a: a_surface.clone(),
-                b: b_surface.clone(),
-                intersection: vec![midpoint],
-                midpoint,
+                intersection: vec![p],
+                midpoint: p,
                 normal,
                 depth,
-                points: None,
             };
         }
 
-        let p = clip_segment((b2 - b1).perp(), b2, a1, a2).unwrap();
-        return ContactSurface {
-            a: a_surface.clone(),
-            b: b_surface.clone(),
-            intersection: vec![to_world(p)],
-            midpoint: to_world(p),
-            normal,
-            depth,
-            points: None,
-        };
-    }
+        if b_surface.len() == 1 {
+            let p = to_world(flatten(&b_surface[0]));
 
-    let line_case = |p1, p2, surface: &[Vec3], winding| {
-        let [p1, p2] = clip_line_face(
-            [flatten(&p1), flatten(&p2)],
-            surface.iter().map(flatten),
-            winding,
-        );
-
-        let midpoint = to_world((p1 + p2) / 2.0);
-
-        ContactSurface {
-            a: a_surface.clone(),
-            b: b_surface.clone(),
-            intersection: vec![to_world(p1), to_world(p2)],
-            midpoint,
-            normal,
-            depth,
-            points: None,
+            return ContactSurface {
+                intersection: vec![p],
+                midpoint: p,
+                normal,
+                depth,
+            };
         }
-    };
 
-    if let [p1, p2] = a_surface[..] {
-        return line_case(p1, p2, &b_surface, 1.0);
-    }
+        if let ([a1, a2], [b1, b2]) = (&a_surface[..], &b_surface[..]) {
+            let a1 = flatten(a1);
+            let a2 = flatten(a2);
+            let mut b1 = flatten(b1);
+            let mut b2 = flatten(b2);
 
-    if let [p1, p2] = b_surface[..] {
-        return line_case(p1, p2, &a_surface, -1.0);
-    }
+            let a_dir = (a2 - a1).normalize();
+            let b_dir = b2 - b1;
 
-    let mut input = a_surface.iter().map(flatten).collect_vec();
-    let mut output = Vec::new();
-    mem::swap(&mut input, &mut output);
+            // Clip colinear line segments
+            if a_dir.perp_dot(b_dir) < TOLERANCE {
+                if a_dir.dot(b_dir) < 0.0 {
+                    mem::swap(&mut b1, &mut b2);
+                }
 
-    for (b1, b2) in b_surface.iter().map(flatten).circular_tuple_windows() {
+                let basis = a1.reject_from(a_dir);
+
+                let a1 = a1.dot(a_dir);
+                let a2 = a2.dot(a_dir);
+                let b1 = b1.dot(a_dir);
+                let b2 = b2.dot(a_dir);
+
+                assert!(a1 < a2);
+
+                let p1 = a1.max(b1);
+                let p2 = a2.min(b2);
+
+                let mid = (p1 + p2) / 2.0;
+                let midpoint = to_world(mid * a_dir + basis);
+                return ContactSurface {
+                    intersection: vec![midpoint],
+                    midpoint,
+                    normal,
+                    depth,
+                };
+            }
+
+            let p = clip_segment((b2 - b1).perp(), b2, a1, a2).unwrap();
+            return ContactSurface {
+                intersection: vec![to_world(p)],
+                midpoint: to_world(p),
+                normal,
+                depth,
+            };
+        }
+
+        let line_case = |p1, p2, surface: &[Vec3], winding| {
+            let [p1, p2] = clip_line_face(
+                [flatten(&p1), flatten(&p2)],
+                surface.iter().map(flatten),
+                winding,
+            );
+
+            let midpoint = to_world((p1 + p2) / 2.0);
+
+            ContactSurface {
+                intersection: vec![to_world(p1), to_world(p2)],
+                midpoint,
+                normal,
+                depth,
+            }
+        };
+
+        if let [p1, p2] = a_surface[..] {
+            return line_case(p1, p2, &b_surface, 1.0);
+        }
+
+        if let [p1, p2] = b_surface[..] {
+            return line_case(p1, p2, &a_surface, -1.0);
+        }
+
+        let mut input = a_surface.iter().map(flatten).collect_vec();
+        let mut output = Vec::new();
         mem::swap(&mut input, &mut output);
-        output.clear();
 
-        let clip_dir = b2 - b1;
-        let clip_edge = clip_dir.perp().normalize();
+        for (b1, b2) in b_surface.iter().map(flatten).circular_tuple_windows() {
+            mem::swap(&mut input, &mut output);
+            output.clear();
 
-        for (&prev_point, &current_point) in input.iter().circular_tuple_windows() {
-            let intersect = clip_segment(clip_edge, b2, prev_point, current_point);
+            let clip_dir = b2 - b1;
+            let clip_edge = clip_dir.perp().normalize();
 
-            // output.push(a2);
-            // current point is inside
-            let current_dot = (b2 - current_point).dot(clip_edge);
-            let prev_dot = (b2 - prev_point).dot(clip_edge);
+            for (&prev_point, &current_point) in input.iter().circular_tuple_windows() {
+                let intersect = clip_segment(clip_edge, b2, prev_point, current_point);
 
-            if current_dot <= 0.0 {
-                if prev_dot > 0.0 {
+                // output.push(a2);
+                // current point is inside
+                let current_dot = (b2 - current_point).dot(clip_edge);
+                let prev_dot = (b2 - prev_point).dot(clip_edge);
+
+                if current_dot <= 0.0 {
+                    if prev_dot > 0.0 {
+                        output.push(intersect.unwrap())
+                    }
+                    output.push(current_point);
+                } else if prev_dot <= 0.0 {
                     output.push(intersect.unwrap())
                 }
-                output.push(current_point);
-            } else if prev_dot <= 0.0 {
-                output.push(intersect.unwrap())
             }
         }
-    }
 
-    let midpoint = output.iter().sum::<Vec2>() / output.len() as f32;
+        let midpoint = output.iter().sum::<Vec2>() / output.len() as f32;
 
-    ContactSurface {
-        a: a_surface,
-        b: b_surface,
-        intersection: output.into_iter().map(to_world).collect_vec(),
-        midpoint: to_world(midpoint),
-        normal,
-        depth,
-        points: None,
+        ContactSurface {
+            intersection: output.into_iter().map(to_world).collect_vec(),
+            midpoint: to_world(midpoint),
+            normal,
+            depth,
+        }
     }
 }
 
@@ -273,10 +270,6 @@ fn clip_segment(normal: Vec2, point: Vec2, start: Vec2, end: Vec2) -> Option<Vec
 
 impl DrawGizmos for ContactSurface {
     fn draw_primitives(&self, gizmos: &mut GizmosSection) {
-        for (shape, color) in [(&self.a, Color::green()), (&self.b, Color::red())] {
-            gizmos.draw(Polygon::new(shape.iter().copied()).with_color(color));
-        }
-
         gizmos.draw(Polygon::new(self.intersection.iter().copied()).with_color(Color::blue()));
 
         gizmos.draw(gizmos::Sphere::new(
@@ -291,9 +284,5 @@ impl DrawGizmos for ContactSurface {
             DEFAULT_THICKNESS,
             Color::blue(),
         ));
-
-        for &p in self.points.iter().flat_map(|v| v.points()) {
-            gizmos.draw(gizmos::Sphere::new(p, DEFAULT_RADIUS, Color::purple()));
-        }
     }
 }

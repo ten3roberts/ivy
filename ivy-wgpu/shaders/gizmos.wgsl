@@ -125,5 +125,5 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         discard;
     }
 
-    return vec4(in.color.xyz, 1f) * mask;
+    return vec4(in.color) * mask;
 }

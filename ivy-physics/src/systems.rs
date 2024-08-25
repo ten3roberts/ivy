@@ -176,11 +176,9 @@ pub fn resolve_collisions(world: &World, collision_tree: &CollisionTree, dt: f32
 
         // Trace up to the root of the rigid connection before solving
         // collisions
-        tracing::info!("get rigid roots");
         let a = get_rigid_root(&world.entity(*collision.a).unwrap());
         let b = get_rigid_root(&world.entity(*collision.b).unwrap());
 
-        tracing::info!(%a, %b, "found roots");
         // Ignore collisions between two immovable objects
         // if !a_mass.is_normal() && !b_mass.is_normal() {
         //     tracing::warn!("ignoring collision between two immovable objects");

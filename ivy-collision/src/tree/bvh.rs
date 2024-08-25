@@ -1,52 +1,50 @@
+use std::{collections::HashSet, mem};
+
 use glam::Vec3;
-use ivy_core::gizmos::{Cube, GizmosSection, Sphere};
+use ivy_core::{
+    gizmos::{Cube, GizmosSection, Sphere, DEFAULT_THICKNESS},
+    Color, ColorExt,
+};
 use ordered_float::OrderedFloat;
 use palette::{
     named::{BLUE, GREEN, YELLOW},
     Srgb, WithAlpha,
 };
-use slotmap::SlotMap;
+use slotmap::{SecondaryMap, SlotMap};
 
-use crate::{
-    intersect, BoundingBox, Collision, CollisionTreeNode, NodeIndex, NodeState, Nodes, ObjectData,
-    ObjectIndex, TransformedShape,
-};
+use crate::{BoundingBox, CollisionTreeNode, NodeIndex, NodeState, Nodes, ObjectData, ObjectIndex};
 
-const MARGIN: f32 = 1.2;
-const NODE_CAPACITY: usize = 16;
+pub(crate) const MARGIN: f32 = 1.2;
+const NODE_CAPACITY: usize = 1;
 
 #[derive(Debug, Clone)]
 pub struct BvhNode {
-    bounds: BoundingBox,
+    current_bounds: BoundingBox,
+    allocated_bounds: BoundingBox,
     objects: Vec<ObjectIndex>,
     children: Option<[NodeIndex; 2]>,
-    depth: u32,
     state: NodeState,
+    dirty_bounds: bool,
 }
 
 impl Default for BvhNode {
     fn default() -> Self {
         Self {
-            bounds: Default::default(),
+            current_bounds: Default::default(),
+            allocated_bounds: Default::default(),
             objects: Default::default(),
             children: Default::default(),
-            depth: Default::default(),
             state: NodeState::Static,
+            dirty_bounds: false,
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Axis {
+enum Axis {
     X,
     Y,
     Z,
-}
-
-impl Default for Axis {
-    fn default() -> Self {
-        Self::X
-    }
 }
 
 impl From<Axis> for usize {
@@ -62,46 +60,48 @@ impl From<Axis> for usize {
 impl BvhNode {
     pub fn new(bounds: BoundingBox) -> Self {
         Self {
-            bounds,
+            current_bounds: bounds,
+            allocated_bounds: bounds,
             objects: Vec::new(),
             children: None,
-            depth: 0,
             state: NodeState::Static,
+            dirty_bounds: false,
         }
     }
 
     fn from_objects(
         nodes: &mut Nodes<Self>,
-        objects: &[ObjectIndex],
+        objects: Vec<ObjectIndex>,
         data: &mut SlotMap<ObjectIndex, ObjectData>,
-        depth: u32,
-    ) -> NodeIndex {
+    ) -> (NodeIndex, u32) {
         let state = objects
             .iter()
             .fold(NodeState::Static, |s, &v| s.merge(data[v].state));
 
-        let bounds = Self::calculate_bounds(objects, data, state);
+        let bounds = Self::calculate_bounds(&objects, data);
 
+        let outer_bounds = bounds.margin(state.inflate_amount());
         let node = Self {
-            bounds,
-            objects: objects.to_vec(),
+            current_bounds: bounds,
+            objects,
             children: None,
-            depth,
             state,
+            dirty_bounds: false,
+            allocated_bounds: outer_bounds,
         };
 
         let index = nodes.insert(node);
 
         // Recurse if the number of objects are more than allowed
-        if !Self::try_split(index, nodes, data) {
-            for &object in &nodes[index].objects {
-                let data = &mut data[object];
-                data.containing_bounds = bounds;
-                data.node = index;
-            }
+        let height = Self::try_split(index, nodes, data);
+        let node = &mut nodes[index];
+        for &object in &node.objects {
+            let data = &mut data[object];
+            data.containing_bounds = outer_bounds;
+            data.node = index;
         }
 
-        index
+        (index, height + 1)
     }
 
     /// Splits the node into subtrees as far as is needed
@@ -109,13 +109,13 @@ impl BvhNode {
         index: NodeIndex,
         nodes: &mut Nodes<Self>,
         data: &mut SlotMap<ObjectIndex, ObjectData>,
-    ) -> bool {
+    ) -> u32 {
         let node = &mut nodes[index];
         if node.objects.len() <= NODE_CAPACITY {
-            return false;
+            return 0;
         }
 
-        let bounds = Self::calculate_bounds(&node.objects, data, NodeState::Static).size();
+        let bounds = Self::calculate_bounds(&node.objects, data).size();
         let axis = if bounds.x > bounds.y {
             if bounds.x > bounds.z {
                 Axis::X
@@ -132,22 +132,24 @@ impl BvhNode {
         node.sort_by_axis(axis, data);
         let median = node.objects.len() / 2;
 
-        let left = &node.objects[0..median].to_vec();
-        let right = &node.objects[median..].to_vec();
+        let left = node.objects[0..median].to_vec();
+        let right = node.objects[median..].to_vec();
         assert_eq!(left.len() + right.len(), node.objects.len());
-        let depth = node.depth + 1;
 
         node.objects.clear();
 
-        let left = Self::from_objects(nodes, left, data, depth);
-        let right = Self::from_objects(nodes, right, data, depth);
+        let (left, left_h) = Self::from_objects(nodes, left, data);
+        let (right, right_h) = Self::from_objects(nodes, right, data);
 
-        nodes[index].children = Some([left, right]);
-        true
+        let new_height = left_h.max(right_h) + 1;
+        let node = &mut nodes[index];
+
+        node.children = Some([left, right]);
+        new_height
     }
 
     pub fn calculate_bounds_incremental(&self, object: &ObjectData) -> BoundingBox {
-        self.bounds
+        self.current_bounds
             .merge(object.extended_bounds.rel_margin(if !object.is_movable() {
                 1.0
             } else {
@@ -159,7 +161,6 @@ impl BvhNode {
     pub fn calculate_bounds(
         objects: &[ObjectIndex],
         data: &SlotMap<ObjectIndex, ObjectData>,
-        state: NodeState,
     ) -> BoundingBox {
         let mut l = Vec3::new(f32::MAX, f32::MAX, f32::MAX);
         let mut r = Vec3::new(f32::MIN, f32::MIN, f32::MIN);
@@ -170,7 +171,7 @@ impl BvhNode {
             r = r.max(bounds.max);
         }
 
-        BoundingBox::from_corners(l, r).margin(if state.is_dynamic() { MARGIN } else { 1.0 })
+        BoundingBox::from_corners(l, r)
     }
 
     fn sort_by_axis(&mut self, axis: Axis, data: &SlotMap<ObjectIndex, ObjectData>) {
@@ -180,11 +181,11 @@ impl BvhNode {
             .sort_unstable_by_key(|val| OrderedFloat(data[*val].bounds.midpoint()[axis]))
     }
 
-    fn traverse<F: FnMut(&Self, &Self)>(
+    pub fn traverse_overlapping_nodes(
         a: NodeIndex,
         b: NodeIndex,
         nodes: &Nodes<Self>,
-        on_overlap: &mut F,
+        on_overlap: &mut impl FnMut(NodeIndex, &Self, NodeIndex, &Self),
     ) {
         let a_node = &nodes[a];
         let b_node = &nodes[b];
@@ -194,57 +195,60 @@ impl BvhNode {
             return;
         }
 
-        if !a_node.bounds.overlaps(b_node.bounds) {
+        if !a_node.current_bounds.overlaps(b_node.current_bounds) {
             return;
         }
 
         match (a_node.children, b_node.children) {
             // Both are leaves and intersecting
-            (None, None) => on_overlap(a_node, b_node),
+            (None, None) => on_overlap(a, a_node, b, b_node),
             // Traverse the other tree
             (None, Some([l, r])) => {
-                Self::traverse(a, l, nodes, on_overlap);
-                Self::traverse(a, r, nodes, on_overlap);
+                Self::traverse_overlapping_nodes(a, l, nodes, on_overlap);
+                Self::traverse_overlapping_nodes(a, r, nodes, on_overlap);
             }
             // Traverse the current tree
             (Some([l, r]), None) => {
-                Self::traverse(l, b, nodes, on_overlap);
-                Self::traverse(r, b, nodes, on_overlap);
+                Self::traverse_overlapping_nodes(l, b, nodes, on_overlap);
+                Self::traverse_overlapping_nodes(r, b, nodes, on_overlap);
             }
             (Some([l0, r0]), Some([l1, r1])) => {
-                Self::traverse(l0, l1, nodes, on_overlap);
-                Self::traverse(l0, r1, nodes, on_overlap);
-                Self::traverse(r0, l1, nodes, on_overlap);
-                Self::traverse(r0, r1, nodes, on_overlap);
+                Self::traverse_overlapping_nodes(l0, l1, nodes, on_overlap);
+                Self::traverse_overlapping_nodes(l0, r1, nodes, on_overlap);
+                Self::traverse_overlapping_nodes(r0, l1, nodes, on_overlap);
+                Self::traverse_overlapping_nodes(r0, r1, nodes, on_overlap);
             }
         }
     }
 
-    pub fn check_collisions(
+    pub fn check_collisions<'a>(
         index: NodeIndex,
         nodes: &Nodes<Self>,
-        data: &SlotMap<ObjectIndex, ObjectData>,
-        on_collision: &mut impl FnMut(Collision),
+        data: &'a SlotMap<ObjectIndex, ObjectData>,
+        on_collision: &mut impl FnMut(&'a ObjectData, &'a ObjectData),
     ) {
-        let mut on_overlap = |a: &Self, b: &Self| {
+        let mut on_overlap = |_, a: &Self, _, b: &Self| {
             assert!(a.is_leaf());
             assert!(b.is_leaf());
+
             for &a in a.objects() {
                 let a_obj = &data[a];
                 for &b in b.objects() {
                     let b_obj = &data[b];
-                    if let Some(collision) = query_intersection(data, a, a_obj, b, b_obj) {
-                        // collisions
+
+                    if a_obj.bounds.overlaps(b_obj.bounds) {
+                        on_collision(a_obj, b_obj);
                     }
                 }
             }
         };
 
-        // check if children overlap
         let node = &nodes[index];
+
         if let Some([left, right]) = node.children {
             assert!(node.objects.is_empty());
-            Self::traverse(left, right, nodes, &mut on_overlap);
+            Self::traverse_overlapping_nodes(left, right, nodes, &mut on_overlap);
+
             Self::check_collisions(left, nodes, data, on_collision);
             Self::check_collisions(right, nodes, data, on_collision);
         } else if !node.state.dormant() {
@@ -255,8 +259,8 @@ impl BvhNode {
                 for &b in node.objects.iter().skip(i + 1) {
                     assert_ne!(a, b);
                     let b_obj = &data[b];
-                    if let Some(collision) = query_intersection(data, a, a_obj, b, b_obj) {
-                        on_collision(collision);
+                    if a_obj.bounds.overlaps(b_obj.bounds) {
+                        on_collision(a_obj, b_obj);
                     }
                 }
             }
@@ -267,13 +271,130 @@ impl BvhNode {
     fn merge(index: NodeIndex, nodes: &mut Nodes<Self>, objects: &mut Vec<ObjectIndex>) {
         let node = &mut nodes[index];
 
+        node.dirty_bounds = true;
         objects.append(&mut node.objects);
+        node.objects.clear();
 
         if let Some([l, r]) = node.children.take() {
             Self::merge(l, nodes, objects);
             Self::merge(r, nodes, objects);
             nodes.remove(l).unwrap();
             nodes.remove(r).unwrap();
+        }
+    }
+
+    fn insert(
+        index: NodeIndex,
+        nodes: &mut Nodes<Self>,
+        object: ObjectIndex,
+        data: &mut SlotMap<ObjectIndex, ObjectData>,
+    ) {
+        let node = &mut nodes[index];
+        let obj = &data[object];
+
+        // Refit bounds
+        // NOTE: parents are refit at the end of the frame
+        node.current_bounds = node.calculate_bounds_incremental(obj);
+        node.allocated_bounds = node.current_bounds.margin(node.state.inflate_amount());
+
+        node.state = node.state.merge(obj.state);
+
+        // Internal node
+        if let Some([left, right]) = node.children {
+            assert!(node.objects.is_empty());
+            if nodes[left].allocated_bounds.contains(obj.bounds) {
+                Self::insert(left, nodes, object, data)
+            } else if nodes[right].allocated_bounds.contains(obj.bounds) {
+                Self::insert(right, nodes, object, data)
+            }
+            // Object did not fit in any child.
+            // Gather up both children and all descendants, and re-add all objects by splitting.
+            else {
+                let mut objects = vec![];
+                Self::merge(index, nodes, &mut objects);
+                objects.push(object);
+
+                tracing::info!(count = objects.len(), "merged");
+
+                let node = &mut nodes[index];
+
+                node.current_bounds = Self::calculate_bounds(&objects, data);
+                node.allocated_bounds = node.current_bounds.margin(node.state.inflate_amount());
+                node.objects = objects;
+                Self::try_split(index, nodes, data);
+
+                let node = &mut nodes[index];
+
+                for &object in &node.objects {
+                    let data = &mut data[object];
+                    data.containing_bounds = node.allocated_bounds;
+                    data.node = index;
+                }
+            }
+        } else {
+            node.objects.push(object);
+            {
+                let data = &mut data[object];
+                data.containing_bounds = node.allocated_bounds;
+                data.node = index;
+            }
+
+            // Split
+            Self::try_split(index, nodes, data);
+        }
+    }
+
+    pub fn rebalance(
+        index: NodeIndex,
+        nodes: &mut Nodes<Self>,
+        data: &mut SlotMap<ObjectIndex, ObjectData>,
+    ) -> u32 {
+        if let Some([l, r]) = nodes[index].children {
+            let l = Self::rebalance(l, nodes, data);
+            let r = Self::rebalance(r, nodes, data);
+
+            if (l as i32 - r as i32).abs() > 1 {
+                let mut objects = vec![];
+                Self::merge(index, nodes, &mut objects);
+
+                let node = &mut nodes[index];
+
+                let bounds = Self::calculate_bounds(&objects, data);
+                let outer_bounds = bounds.margin(node.state.inflate_amount());
+
+                let node = &mut nodes[index];
+                node.current_bounds = bounds;
+                node.allocated_bounds = outer_bounds;
+                node.objects = objects;
+
+                Self::try_split(index, nodes, data) + 1
+            } else {
+                l.max(r) + 1
+            }
+        } else {
+            0
+        }
+    }
+
+    pub fn update_bounds(
+        index: NodeIndex,
+        nodes: &mut Nodes<Self>,
+        objects: &SlotMap<ObjectIndex, ObjectData>,
+    ) -> BoundingBox {
+        if let Some([l, r]) = nodes[index].children {
+            let l = Self::update_bounds(l, nodes, objects);
+            let r = Self::update_bounds(r, nodes, objects);
+            let bounds = l.merge(r);
+            nodes[index].current_bounds = bounds;
+            bounds
+        } else {
+            let node = &mut nodes[index];
+            // if mem::take(&mut node.dirty_bounds) {
+            node.current_bounds = Self::calculate_bounds(&node.objects, objects);
+            node.current_bounds
+            // } else {
+            //     node.bounds
+            // }
         }
     }
 }
@@ -289,57 +410,19 @@ impl CollisionTreeNode for BvhNode {
         object: ObjectIndex,
         data: &mut SlotMap<ObjectIndex, ObjectData>,
     ) {
-        let node = &mut nodes[index];
-        let obj = &data[object];
-
-        // Make bound fit object
-        node.bounds = node.calculate_bounds_incremental(obj);
-
-        node.state = node.state.merge(obj.state);
-
-        // Internal node
-        if let Some([left, right]) = node.children {
-            assert!(node.objects.is_empty());
-            if nodes[left].bounds.contains(obj.bounds) {
-                Self::insert(left, nodes, object, data)
-            } else if nodes[right].bounds.contains(obj.bounds) {
-                Self::insert(right, nodes, object, data)
-            }
-            // Object did not fit in any child.
-            // Gather up both children and all descendants, and re-add all objects by splitting.
-            else {
-                let mut objects = vec![object];
-                Self::merge(index, nodes, &mut objects);
-
-                let node = &mut nodes[index];
-
-                node.bounds = Self::calculate_bounds(&objects, data, node.state);
-                node.objects = objects;
-                Self::try_split(index, nodes, data);
-            }
-        } else {
-            node.objects.push(object);
-            {
-                let data = &mut data[object];
-                data.containing_bounds = node.bounds;
-                data.node = index;
-            }
-
-            // Split
-            Self::try_split(index, nodes, data);
-        }
+        Self::insert(index, nodes, object, data);
     }
 
     fn remove(&mut self, object: ObjectIndex) -> Option<ObjectIndex> {
-        if let Some(idx) = self.objects.iter().position(|&val| val == object) {
-            Some(self.objects.swap_remove(idx))
-        } else {
-            None
-        }
+        let idx = self.objects.iter().position(|&val| val == object)?;
+
+        self.dirty_bounds = true;
+        let object = self.objects.swap_remove(idx);
+        Some(object)
     }
 
     fn bounds(&self) -> BoundingBox {
-        self.bounds
+        self.current_bounds
     }
 
     fn children(&self) -> &[NodeIndex] {
@@ -351,38 +434,74 @@ impl CollisionTreeNode for BvhNode {
 }
 
 impl BvhNode {
+    pub fn draw_gizmos_recursive(
+        index: NodeIndex,
+        nodes: &Nodes<BvhNode>,
+        gizmos: &mut GizmosSection,
+        data: &SlotMap<ObjectIndex, ObjectData>,
+        overlapping: &mut HashSet<NodeIndex>,
+        depth: usize,
+    ) {
+        if depth > 50 {
+            panic!("");
+        }
+        let node = &nodes[index];
+
+        node.draw_primitives(
+            gizmos,
+            data,
+            Color::from_hsla(
+                depth as f32 * 15.0,
+                1.0,
+                if overlapping.contains(&index) {
+                    0.5
+                } else {
+                    0.1
+                },
+                if overlapping.contains(&index) {
+                    0.5
+                } else {
+                    0.1
+                },
+            ),
+        );
+
+        if let Some([l, r]) = node.children {
+            Self::traverse_overlapping_nodes(l, r, nodes, &mut |a, _, b, _| {
+                overlapping.extend([a, b]);
+            });
+
+            Self::draw_gizmos_recursive(l, nodes, gizmos, data, overlapping, depth + 1);
+            Self::draw_gizmos_recursive(r, nodes, gizmos, data, overlapping, depth + 1);
+        }
+    }
+
     pub fn draw_primitives(
         &self,
         gizmos: &mut GizmosSection,
         data: &SlotMap<ObjectIndex, ObjectData>,
+        color: Color,
     ) {
-        if !self.is_leaf() {
-            return;
-        }
+        // if !self.is_leaf() {
+        //     return;
+        // }
 
-        let color = match self.state {
-            NodeState::Dynamic => GREEN,
-            NodeState::Static => BLUE,
-            NodeState::Sleeping => YELLOW,
-        };
-        let color = Srgb::from_format(color).with_alpha(1.0);
+        // let color = match self.state {
+        //     NodeState::Dynamic => GREEN,
+        //     NodeState::Static => BLUE,
+        //     NodeState::Sleeping => YELLOW,
+        // };
+        // let color = Srgb::from_format(color).with_alpha(1.0);
 
         gizmos.draw(Cube {
-            min: self.bounds.min,
-            max: self.bounds.max,
+            min: self.current_bounds.min,
+            max: self.current_bounds.max,
             color,
-            line_radius: 0.02,
+            line_radius: DEFAULT_THICKNESS,
         });
 
         for &object in self.objects() {
             let data = &data[object];
-
-            gizmos.draw(Cube {
-                min: data.bounds.min,
-                max: data.bounds.max,
-                color,
-                line_radius: 0.01,
-            });
 
             gizmos.draw(Sphere {
                 origin: data.transform.transform_point3(Vec3::ZERO),
@@ -390,43 +509,5 @@ impl BvhNode {
                 color,
             })
         }
-    }
-}
-
-fn query_intersection(
-    data: &SlotMap<ObjectIndex, ObjectData>,
-    a: ObjectIndex,
-    a_data: &ObjectData,
-    b: ObjectIndex,
-    b_data: &ObjectData,
-) -> Option<Collision> {
-    if !a_data.bounds.overlaps(b_data.bounds) {
-        return None;
-    }
-
-    let a_data = &data[a];
-    let b_data = &data[b];
-
-    if let Some(contact) = intersect(
-        &TransformedShape::new(&a_data.collider, a_data.transform),
-        &TransformedShape::new(&b_data.collider, b_data.transform),
-    ) {
-        let collision = Collision {
-            a: crate::EntityPayload {
-                entity: a_data.id,
-                is_trigger: a_data.is_trigger,
-                state: a_data.state,
-            },
-            b: crate::EntityPayload {
-                entity: b_data.id,
-                is_trigger: b_data.is_trigger,
-                state: b_data.state,
-            },
-            contact,
-        };
-
-        Some(collision)
-    } else {
-        None
     }
 }

@@ -7,11 +7,16 @@ use ivy_core::{
 };
 
 use crate::{
-    contact::{generate_contact_surface, ContactSurface},
+    contact::{ContactGenerator, ContactSurface},
     epa, gjk,
     util::minkowski_diff,
     EntityPayload, Shape,
 };
+
+/// Contains temporary state to accelerate contact generation
+pub struct IntersectionGenerator {
+    contact_generator: ContactGenerator,
+}
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum ContactPoints {
@@ -130,25 +135,38 @@ pub struct Collision {
     pub contact: ContactSurface,
 }
 
-pub fn intersect<A: Shape, B: Shape>(a: &A, b: &B) -> Option<ContactSurface> {
-    let (intersect, simplex) = gjk(a, b);
-
-    if !intersect {
-        return None;
+impl IntersectionGenerator {
+    pub fn new() -> Self {
+        Self {
+            contact_generator: ContactGenerator::new(),
+        }
     }
 
-    let contact_info = epa(simplex, |dir| minkowski_diff(a, b, dir));
+    /// Returns the intersection of two shapes
+    pub fn intersect<A: Shape, B: Shape>(&mut self, a: &A, b: &B) -> Option<ContactSurface> {
+        let (intersect, simplex) = gjk(a, b);
 
-    let mut surface = generate_contact_surface(
-        a,
-        b,
-        contact_info.normal,
-        contact_info.points.points().iter().sum::<Vec3>()
-            / contact_info.points.points().len() as f32,
-        contact_info.depth,
-    );
+        if !intersect {
+            return None;
+        }
 
-    surface.points = contact_info.points.into();
+        let contact_info = epa(simplex, |dir| minkowski_diff(a, b, dir));
 
-    Some(surface)
+        let surface = self.contact_generator.generate(
+            a,
+            b,
+            contact_info.normal,
+            contact_info.points.points().iter().sum::<Vec3>()
+                / contact_info.points.points().len() as f32,
+            contact_info.depth,
+        );
+
+        Some(surface)
+    }
+}
+
+impl Default for IntersectionGenerator {
+    fn default() -> Self {
+        Self::new()
+    }
 }

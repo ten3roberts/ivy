@@ -1,7 +1,10 @@
 use ivy_core::gizmos::GizmosSection;
+use ivy_core::Color;
+use ivy_core::ColorExt;
 use slotmap::new_key_type;
 use slotmap::Key;
 use slotmap::SlotMap;
+use std::collections::HashSet;
 use std::fmt::Debug;
 use std::ops::DerefMut;
 
@@ -33,21 +36,6 @@ impl NodeIndex {
     /// `a.is_null() && b.is_null()` implies `a == b`.
     pub fn is_null(&self) -> bool {
         Key::is_null(self)
-    }
-}
-
-impl NodeIndex {
-    pub fn draw_gizmos_recursive(
-        self,
-        nodes: &Nodes<BvhNode>,
-        mut gizmos: &mut GizmosSection,
-        data: &SlotMap<ObjectIndex, ObjectData>,
-    ) {
-        nodes[self].draw_primitives(gizmos.deref_mut(), data);
-
-        for val in nodes[self].children() {
-            val.draw_gizmos_recursive(nodes, gizmos, data)
-        }
     }
 }
 
