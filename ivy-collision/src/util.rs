@@ -1,6 +1,7 @@
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 
 use glam::{Mat4, Vec3};
+use rayon::iter::ParallelExtend;
 
 use crate::{Ray, Shape};
 
@@ -9,11 +10,23 @@ pub const MAX_ITERATIONS: usize = 16;
 
 // Represents a point on the minkowski difference boundary which carries the
 // individual support points
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Default, Clone, Copy)]
 pub struct SupportPoint {
     pub support: Vec3,
     pub a: Vec3,
     pub b: Vec3,
+}
+
+impl Debug for SupportPoint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(&self.support, f)
+    }
+}
+
+impl PartialEq for SupportPoint {
+    fn eq(&self, other: &Self) -> bool {
+        self.support == other.support
+    }
 }
 
 impl Display for SupportPoint {

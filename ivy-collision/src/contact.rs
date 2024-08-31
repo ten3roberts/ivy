@@ -6,6 +6,8 @@ use ivy_core::{
     gizmos::{self, DrawGizmos, GizmosSection, Polygon, DEFAULT_RADIUS, DEFAULT_THICKNESS},
     Color, ColorExt,
 };
+use ordered_float::Float;
+use palette::num::Signum;
 
 use crate::{util::TOLERANCE, Shape};
 
@@ -15,6 +17,8 @@ pub struct ContactSurface {
     midpoint: Vec3,
     normal: Vec3,
     depth: f32,
+    b_surface: Vec<Vec3>,
+    a_surface: Vec<Vec3>,
 }
 
 impl ContactSurface {
@@ -69,7 +73,7 @@ impl ContactGenerator {
         assert!(!b_surface.is_empty());
 
         let tan = if normal.dot(Vec3::X).abs() > 1.0 - TOLERANCE {
-            Vec3::Y
+            Vec3::Y * normal.dot(Vec3::X).signum()
         } else {
             normal.cross(Vec3::X).normalize()
         };
@@ -90,6 +94,8 @@ impl ContactGenerator {
                 midpoint: p,
                 normal,
                 depth,
+                b_surface: b_surface.clone(),
+                a_surface: a_surface.clone(),
             };
         }
 
@@ -101,6 +107,8 @@ impl ContactGenerator {
                 midpoint: p,
                 normal,
                 depth,
+                b_surface: b_surface.clone(),
+                a_surface: a_surface.clone(),
             };
         }
 
@@ -138,6 +146,8 @@ impl ContactGenerator {
                     midpoint,
                     normal,
                     depth,
+                    b_surface: b_surface.clone(),
+                    a_surface: a_surface.clone(),
                 };
             }
 
@@ -147,6 +157,8 @@ impl ContactGenerator {
                 midpoint: to_world(p),
                 normal,
                 depth,
+                b_surface: b_surface.clone(),
+                a_surface: a_surface.clone(),
             };
         }
 
@@ -164,15 +176,17 @@ impl ContactGenerator {
                 midpoint,
                 normal,
                 depth,
+                b_surface: b_surface.clone(),
+                a_surface: a_surface.clone(),
             }
         };
 
         if let [p1, p2] = a_surface[..] {
-            return line_case(p1, p2, &b_surface, 1.0);
+            return line_case(p1, p2, b_surface, 1.0);
         }
 
         if let [p1, p2] = b_surface[..] {
-            return line_case(p1, p2, &a_surface, -1.0);
+            return line_case(p1, p2, a_surface, -1.0);
         }
 
         let mut input = a_surface.iter().map(flatten).collect_vec();
@@ -194,6 +208,9 @@ impl ContactGenerator {
                 let current_dot = (b2 - current_point).dot(clip_edge);
                 let prev_dot = (b2 - prev_point).dot(clip_edge);
 
+                assert!(current_dot.is_finite());
+                assert!(prev_dot.is_finite());
+                tracing::info!(current_dot, prev_dot);
                 if current_dot <= 0.0 {
                     if prev_dot > 0.0 {
                         output.push(intersect.unwrap())
@@ -203,11 +220,20 @@ impl ContactGenerator {
                     output.push(intersect.unwrap())
                 }
             }
+
+            tracing::info!(output = output.len());
         }
 
         let midpoint = output.iter().sum::<Vec2>() / output.len() as f32;
 
+        assert!(
+            midpoint.is_finite(),
+            "{a_surface:?} {b_surface:?} {output:?}"
+        );
+
         ContactSurface {
+            b_surface: b_surface.clone(),
+            a_surface: a_surface.clone(),
             intersection: output.into_iter().map(to_world).collect_vec(),
             midpoint: to_world(midpoint),
             normal,
@@ -260,9 +286,9 @@ fn clip_segment(normal: Vec2, point: Vec2, start: Vec2, end: Vec2) -> Option<Vec
     let dot = normal.dot(segment_dir);
 
     // colinear
-    // if dot.abs() <= 0.0 {
-    //     return None;
-    // }
+    if dot.abs() <= 0.0 {
+        return None;
+    }
 
     let p = start + t * segment_dir;
     Some(p)
@@ -271,6 +297,8 @@ fn clip_segment(normal: Vec2, point: Vec2, start: Vec2, end: Vec2) -> Option<Vec
 impl DrawGizmos for ContactSurface {
     fn draw_primitives(&self, gizmos: &mut GizmosSection) {
         gizmos.draw(Polygon::new(self.intersection.iter().copied()).with_color(Color::blue()));
+        gizmos.draw(Polygon::new(self.a_surface.iter().copied()).with_color(Color::green()));
+        gizmos.draw(Polygon::new(self.b_surface.iter().copied()).with_color(Color::red()));
 
         gizmos.draw(gizmos::Sphere::new(
             self.midpoint,
@@ -280,7 +308,7 @@ impl DrawGizmos for ContactSurface {
 
         gizmos.draw(gizmos::Line::new(
             self.midpoint,
-            self.normal * self.depth,
+            self.normal * 0.1,
             DEFAULT_THICKNESS,
             Color::blue(),
         ));

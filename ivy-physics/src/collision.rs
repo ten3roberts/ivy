@@ -45,7 +45,8 @@ pub(crate) fn calculate_impulse_response(
     let a_w = a.ang_vel;
     let b_w = b.ang_vel;
 
-    let normal = intersection.normal();
+    let normal = intersection.normal().normalize();
+    // tracing::info!(?a, ?b, ?normal, "impulse response");
 
     assert!(normal.is_normalized());
 
@@ -64,13 +65,16 @@ pub(crate) fn calculate_impulse_response(
     let inverse_inertia = 1.0 / a.mass + 1.0 / b.mass;
 
     let a_inertia_tensor = 1.0 / a.ang_mass * to_a.cross(normal).cross(to_a);
-    let b_inertia_tensor = 1.0 / b.ang_mass * to_b.cross(-normal).cross(-normal);
+    let b_inertia_tensor = 1.0 / b.ang_mass * to_b.cross(-normal).cross(-to_b);
 
     let inverse_inertia_tensor = a_inertia_tensor + b_inertia_tensor;
 
     let num = -(1.0 + restitution) * contact_velocity;
     let denom: f32 = inverse_inertia + inverse_inertia_tensor.dot(normal);
 
+    tracing::info!(?inverse_inertia, ?inverse_inertia_tensor, ?to_a, ?to_b);
+
+    assert!(denom.is_normal());
     let impulse = num / denom;
 
     let friction = a.friction.min(b.friction)

@@ -7,9 +7,4 @@ use crate::{systems::CollisionState, Effector};
 component! {
     pub collision_state: CollisionState,
     pub effector: Effector,
-    pub gravity_state: GravityState,
-}
-
-pub struct GravityState {
-    pub gravity: Vec3,
 }

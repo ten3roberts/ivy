@@ -22,8 +22,19 @@ pub enum Simplex {
 }
 
 impl Simplex {
+    pub fn is_unique(&self) -> bool {
+        match self {
+            Simplex::Point(_) => true,
+            Simplex::Line([a, b]) => a != b,
+            Simplex::Triangle([a, b, c]) => a != b && a != c && b != c,
+            Simplex::Tetrahedron([a, b, c, d]) => {
+                a != b && a != c && a != d && b != c && b != d && c != d
+            }
+        }
+    }
+
     /// Returns the next direction more likely to enclose origin
-    pub fn next_dir(&mut self) -> SimplexExpansion {
+    pub(crate) fn next_dir(&mut self) -> SimplexExpansion {
         let same_direction = |a: Vec3, b: Vec3| a.dot(b) > 0.0;
 
         match *self {
@@ -72,26 +83,32 @@ impl Simplex {
 
                 let abc = ab.cross(ac);
 
-                if same_direction(abc.cross(ac), a0) {
+                if abc.cross(ac).dot(a0) > 0.0 {
                     // outside ac
-                    if same_direction(ac, a0) {
+                    if ac.dot(a0) > 0.0 {
                         *self = Self::Line([a, c]);
                         SimplexExpansion::Direction(ac.cross(a0).cross(ac))
-                    } else {
+                    } else if ac.dot(a0) < 0.0 {
                         *self = Self::Line([a, b]);
                         self.next_dir()
+                    } else {
+                        panic!("");
                     }
-                } else if same_direction(ab.cross(abc), a0) {
+                } else if ab.cross(abc).dot(a0) > 0.0 {
                     // outside ab
                     *self = Self::Line([a, b]);
                     self.next_dir()
-                } else if same_direction(abc, a0) {
+                } else if abc.dot(a0) > 0.0 {
                     // inside ac, ab, above triangle
                     SimplexExpansion::Direction(abc)
-                } else {
-                    // below or coplanar to triangle
+                } else if abc.dot(a0) < 0.0 {
+                    // below triangle
                     *self = Self::Triangle([a, c, b]);
                     SimplexExpansion::Direction(-abc)
+                } else {
+                    tracing::warn!("degenerate triangle");
+                    *self = Self::Line([a, b]);
+                    SimplexExpansion::Degenerate
                 }
 
                 // // Outside ac face
@@ -140,17 +157,26 @@ impl Simplex {
                 let acd_dot = acd.dot(a0);
                 let adb_dot = adb.dot(a0);
 
-                // tracing::info!(%abc, abc_dot, acd_dot, adb_dot);
+                tracing::info!(%abc, abc_dot, acd_dot, adb_dot);
 
                 if abc_dot > 0.0 {
                     *self = Self::Triangle([a, b, c]);
                     self.next_dir()
+                } else if abc_dot == 0.0 {
+                    *self = Self::Line([a, d]);
+                    SimplexExpansion::Degenerate
                 } else if acd_dot > 0.0 {
                     *self = Self::Triangle([a, c, d]);
                     self.next_dir()
+                } else if acd_dot == 0.0 {
+                    *self = Self::Line([a, b]);
+                    SimplexExpansion::Degenerate
                 } else if adb_dot > 0.0 {
                     *self = Self::Triangle([a, d, b]);
                     self.next_dir()
+                } else if adb_dot == 0.0 {
+                    *self = Self::Line([a, c]);
+                    SimplexExpansion::Degenerate
                 } else {
                     // Collision occurred
                     SimplexExpansion::Enveloped

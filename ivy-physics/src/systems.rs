@@ -1,12 +1,12 @@
+use core::f32;
 use std::collections::BTreeMap;
 
 use crate::{
     bundles::*,
     collision::{calculate_impulse_response, ResolveObject},
-    components::{effector, gravity_state},
+    components::effector,
     Result,
 };
-use anyhow::Context;
 use flax::{
     BoxedSystem, Component, Entity, EntityRef, FetchExt, Query, QueryBorrow, System, World,
 };
@@ -17,8 +17,8 @@ use ivy_collision::{
 use ivy_core::{
     angular_velocity, connection, engine, friction,
     gizmos::{Line, DEFAULT_THICKNESS},
-    gravity_influence, position, restitution, rotation, sleeping, velocity, world_transform, Color,
-    ColorExt,
+    gravity, gravity_influence, position, restitution, rotation, sleeping, velocity,
+    world_transform, Color, ColorExt,
 };
 
 pub fn integrate_velocity_system(dt: f32) -> BoxedSystem {
@@ -40,12 +40,12 @@ pub fn integrate_angular_velocity_system(dt: f32) -> BoxedSystem {
 pub fn gravity_system() -> BoxedSystem {
     System::builder()
         .with_query(Query::new((
-            gravity_state(),
+            gravity().source(engine()),
             effector().as_mut(),
             gravity_influence(),
         )))
-        .for_each(|(state, effector, &gravity_influence)| {
-            effector.apply_acceleration(gravity_influence * state.gravity, true);
+        .for_each(|(&state, effector, &gravity_influence)| {
+            effector.apply_acceleration(gravity_influence * state, true);
         })
         .boxed()
 }
@@ -207,13 +207,13 @@ pub fn resolve_collisions(world: &World, collision_tree: &CollisionTree, dt: f32
         {
             let effector = &mut *a.get_mut(effector())?;
             effector.apply_impulse_at(impulse, collision.contact.midpoint() - a_object.pos, true);
-            effector.translate(-dir * (a_object.mass / total_mass));
+            effector.translate(-dir * (b_object.mass / total_mass));
         }
 
         {
             let effector = &mut *b.get_mut(effector())?;
             effector.apply_impulse_at(-impulse, collision.contact.midpoint() - b_object.pos, true);
-            effector.translate(dir * (b_object.mass / total_mass));
+            effector.translate(dir * (a_object.mass / total_mass));
         }
     }
 
@@ -260,37 +260,52 @@ fn resolve_static(
         ..Default::default()
     };
 
-    // let mut b_query = world.try_query_one::<(RbQuery, &Position, &mut Effector)>(b)?;
+    let impulse = calculate_impulse_response(
+        contact,
+        &ResolveObject {
+            mass: f32::INFINITY,
+            ang_mass: f32::INFINITY,
+            ..a
+        },
+        &b,
+    );
 
-    if !b.mass.is_normal() {
-        return Ok(());
-    }
+    assert!(!impulse.is_nan());
+    assert!(impulse.is_finite());
 
-    let impulse = calculate_impulse_response(contact, &a, &b);
-
-    b_effector.apply_impulse_at(-impulse * polarity, contact.midpoint() - b.pos, false);
+    b_effector.apply_impulse_at(-impulse * polarity, contact.midpoint() - b.pos, true);
     b_effector.translate(contact.normal() * contact.depth() * polarity);
     // effector.apply_force_at(b_f, contact.points[1] - b.pos);
 
     Ok(())
 }
 
-pub fn effectors_gizmo_system() -> BoxedSystem {
+pub fn gizmo_system(dt: f32) -> BoxedSystem {
     System::builder()
         .with_query(Query::new(ivy_core::components::gizmos()))
-        .with_query(Query::new((world_transform(), effector())))
+        .with_query(Query::new((world_transform(), velocity(), effector())))
         .build(
-            |mut gizmos: QueryBorrow<Component<ivy_core::gizmos::Gizmos>>,
-             mut query: QueryBorrow<(Component<Mat4>, Component<crate::Effector>)>| {
+            move |mut gizmos: QueryBorrow<Component<ivy_core::gizmos::Gizmos>>,
+                  mut query: QueryBorrow<(
+                Component<Mat4>,
+                Component<Vec3>,
+                Component<crate::Effector>,
+            )>| {
                 let mut gizmos = gizmos
                     .get(engine())?
                     .begin_section("effectors_gizmo_system");
 
-                for (transform, effector) in query.iter() {
+                for (transform, &velocity, effector) in query.iter() {
                     let origin = transform.transform_point3(Vec3::ZERO);
 
-                    let dv = effector.net_velocity_change(1.0);
+                    let dv = effector.net_velocity_change(dt);
                     gizmos.draw(Line::new(origin, dv, DEFAULT_THICKNESS, Color::red()));
+                    gizmos.draw(Line::new(
+                        origin,
+                        velocity,
+                        DEFAULT_THICKNESS,
+                        Color::green(),
+                    ));
                 }
 
                 anyhow::Ok(())

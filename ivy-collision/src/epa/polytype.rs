@@ -36,7 +36,7 @@ impl Face {
             tracing::info!("normal: {normal} {p1} {p2} {p3}");
         }
 
-        assert!(normal.is_finite());
+        // assert!(normal.is_finite());
 
         // Distance to the origin of the minkowski difference
         let distance = normal.dot(p1.support);
@@ -135,6 +135,7 @@ impl Polytype {
         self.faces
             .iter()
             .enumerate()
+            .filter(|v| v.1.normal.is_finite())
             .min_by_key(|v| ordered_float::NotNan::new(v.1.distance).unwrap())
             .map(|(a, b)| (a as u16, *b))
     }

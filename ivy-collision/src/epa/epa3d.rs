@@ -43,6 +43,7 @@ pub fn epa(simplex: Simplex, support_func: impl Fn(Vec3) -> SupportPoint) -> Int
     let mut iterations = 0;
     let iteration_count = 64;
     loop {
+        tracing::info!(iterations);
         let (_, min) = if let Some(val) = polytype.find_closest_face() {
             val
         } else {
@@ -52,9 +53,14 @@ pub fn epa(simplex: Simplex, support_func: impl Fn(Vec3) -> SupportPoint) -> Int
 
         let new_support = support_func(min.normal);
 
-        let support_dist = min.normal.dot(new_support.support);
+        // let support_dist = min.normal.dot(new_support.support);
 
-        if (support_dist - min.distance) < TOLERANCE {
+        // if (support_dist - min.distance) > TOLERANCE {
+        assert!(min.normal.is_normalized());
+        let d = new_support.support.dot(min.normal);
+
+        tracing::info!(?new_support, d, min.distance);
+        if (d - min.distance < TOLERANCE) {
             return Intersection {
                 points: polytype.contact_points(min),
                 depth: min.distance,

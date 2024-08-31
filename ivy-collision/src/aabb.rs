@@ -3,7 +3,7 @@ use core::f32;
 use glam::{vec3, Vec3};
 use ivy_core::gizmos::{Cube, DrawGizmos, GizmosSection};
 use ordered_float::NotNan;
-use palette::num::Abs;
+use palette::num::{Abs, Signum};
 
 use crate::{util::TOLERANCE, Ray, Shape};
 
@@ -219,7 +219,7 @@ impl Shape for BoundingBox {
         // let dir = vec3(extreme(dir.x), extreme(dir.y), extreme(dir.z));
 
         let tan = if dir.dot(Vec3::X).abs() > 1.0 - TOLERANCE {
-            Vec3::Y
+            Vec3::Y * dir.dot(Vec3::X).signum()
         } else {
             dir.cross(Vec3::X).normalize()
         };

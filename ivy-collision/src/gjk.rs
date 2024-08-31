@@ -34,6 +34,8 @@ pub fn gjk<A: Shape, B: Shape>(a: &A, b: &B) -> (bool, Simplex) {
             crate::SimplexExpansion::Enveloped => break,
         };
 
+        tracing::info!(%dir);
+
         assert!(dir.is_finite(), "{simplex:?}");
         let dir = dir.normalize();
 
@@ -47,7 +49,7 @@ pub fn gjk<A: Shape, B: Shape>(a: &A, b: &B) -> (bool, Simplex) {
 
         // Get the next simplex
         let mut p = minkowski_diff(a, b, dir);
-        let perturberance_strength = 0.01;
+        let perturberance_strength = 0.0;
         p.support += vec3(
             perturberance_rng.gen(),
             perturberance_rng.gen(),
@@ -61,6 +63,7 @@ pub fn gjk<A: Shape, B: Shape>(a: &A, b: &B) -> (bool, Simplex) {
         }
 
         simplex.push(p);
+        assert!(simplex.is_unique(), "{simplex:?}");
         iteration_count += 1;
         if iteration_count > 1024 {
             tracing::error!("max gjk iteration");

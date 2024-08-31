@@ -36,6 +36,6 @@ var default_sampler: sampler;
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var a = textureSample(hdr, default_sampler, in.uv).rgb;
     var b = textureSample(bloom, default_sampler, in.uv).rgb;
-    return vec4(mix(a, b, 0.04), 1f);
+    return vec4(mix(a, b, 0.02), 1f);
 }
  

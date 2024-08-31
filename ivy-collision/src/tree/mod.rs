@@ -342,7 +342,11 @@ impl ObjectQueryItem<'_> {
             extended_bounds,
             transform,
             is_trigger: self.is_trigger,
-            state: NodeState::Dynamic,
+            state: if self.is_static {
+                NodeState::Static
+            } else {
+                NodeState::Dynamic
+            },
             // state: if self.is_sleeping.is_some() {
             //     NodeState::Sleeping
             // } else if self.is_static.is_some() {

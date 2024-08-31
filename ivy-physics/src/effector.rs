@@ -137,9 +137,9 @@ impl Effector {
     pub fn net_velocity_change(&self, dt: f32) -> Vec3 {
         self.dv * dt + self.instant_dv
     }
+
     /// Returns the total net effect of torques, angular impulses, and angular
     /// velocity changes. Note: Effector should be cleared afterwards.
-
     pub fn net_angular_velocity_change(&self, dt: f32) -> Vec3 {
         self.dw * dt + self.instant_dw
     }
