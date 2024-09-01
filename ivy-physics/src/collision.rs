@@ -35,53 +35,51 @@ impl ResolveObject {
 
 /// Generates an impulse for solving a collision.
 pub(crate) fn calculate_impulse_response(
-    intersection: &ContactSurface,
     a: &ResolveObject,
     b: &ResolveObject,
+    normal: Vec3,
+    point: Vec3,
 ) -> Vec3 {
-    let to_a = intersection.midpoint() - a.pos;
-    let to_b = intersection.midpoint() - b.pos;
+    let to_a = point - a.pos;
+    let to_b = point - b.pos;
 
     let a_w = a.ang_vel;
     let b_w = b.ang_vel;
 
-    let normal = intersection.normal().normalize();
-    // tracing::info!(?a, ?b, ?normal, "impulse response");
-
     assert!(normal.is_normalized());
+    let normal = normal.normalize();
 
-    let a_vel = a.vel + velocity_at_point(to_a, a_w);
-    let b_vel = b.vel + velocity_at_point(to_b, b_w);
+    let a_vel = a.vel + a_w.cross(to_a);
+    let b_vel = b.vel + b_w.cross(to_b);
 
-    let contact_velocity = (a_vel - b_vel).dot(normal);
+    let contact_velocity = (b_vel - a_vel).dot(normal);
 
     let restitution = a.resitution.min(b.resitution);
 
     // objects are separating
-    if contact_velocity < 0.0 {
+    if contact_velocity >= 0.0 {
         return Vec3::ZERO;
     }
 
     let inverse_inertia = 1.0 / a.mass + 1.0 / b.mass;
 
     let a_inertia_tensor = 1.0 / a.ang_mass * to_a.cross(normal).cross(to_a);
-    let b_inertia_tensor = 1.0 / b.ang_mass * to_b.cross(-normal).cross(-to_b);
+    let b_inertia_tensor = 1.0 / b.ang_mass * to_b.cross(normal).cross(to_b);
 
-    let inverse_inertia_tensor = a_inertia_tensor + b_inertia_tensor;
+    let inverse_inertia_tensor = (a_inertia_tensor + b_inertia_tensor).dot(normal);
 
     let num = -(1.0 + restitution) * contact_velocity;
-    let denom: f32 = inverse_inertia + inverse_inertia_tensor.dot(normal);
+    let denom: f32 = inverse_inertia + inverse_inertia_tensor;
 
-    tracing::info!(?inverse_inertia, ?inverse_inertia_tensor, ?to_a, ?to_b);
-
-    assert!(denom.is_normal());
+    // assert!(denom.is_normal());
     let impulse = num / denom;
 
     let friction = a.friction.min(b.friction)
         * impulse
         * (a_vel - b_vel).reject_from(normal).normalize_or_zero();
 
-    return impulse * 0.99 * normal + friction;
+    // assert!(impulse > 0.0);
+    return impulse * normal + friction;
 
     // let angular_impulse = to_a.cross(normal).length_squared() * 1.0 / a.ang_mass ;
 

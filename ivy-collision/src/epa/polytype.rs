@@ -13,13 +13,13 @@ use crate::{
 };
 
 #[derive(Clone, Copy, Debug)]
-pub struct Face {
+pub(crate) struct PolytypeFace {
     pub indices: [u16; 3],
     pub normal: Vec3,
     pub distance: f32,
 }
 
-impl Face {
+impl PolytypeFace {
     /// Returns None if the normal cannot be calculated
     pub fn new(points: &[SupportPoint], indices: [u16; 3]) -> Self {
         let [p1, p2, p3] = [
@@ -33,10 +33,10 @@ impl Face {
             .normalize();
 
         if !normal.is_finite() {
-            tracing::info!("normal: {normal} {p1} {p2} {p3}");
+            tracing::debug!("normal: {normal} {p1} {p2} {p3}");
         }
 
-        // assert!(normal.is_finite());
+        assert!(normal.is_finite());
 
         // Distance to the origin of the minkowski difference
         let distance = normal.dot(p1.support);
@@ -46,7 +46,7 @@ impl Face {
         let normal = normal * distance.signum();
         let distance = distance.abs();
 
-        Face {
+        PolytypeFace {
             indices: [indices[0], indices[1], indices[2]],
             normal,
             distance,
@@ -81,7 +81,7 @@ impl Face {
 
         let distance = ray_distance(p1, normal, ray);
 
-        Face {
+        PolytypeFace {
             indices: [indices[0], indices[1], indices[2]],
             normal,
             distance,
@@ -103,11 +103,11 @@ type Edge = (u16, u16);
 pub struct Polytype {
     pub points: SmallVec<[SupportPoint; 32]>,
     // Normals and distances combined
-    pub faces: SmallVec<[Face; 32]>,
+    pub faces: SmallVec<[PolytypeFace; 32]>,
 }
 
 impl Polytype {
-    pub fn new<F: Fn(&[SupportPoint], [u16; 3]) -> Face>(
+    pub fn new<F: Fn(&[SupportPoint], [u16; 3]) -> PolytypeFace>(
         points: &[SupportPoint],
         faces: &[u16],
         face_func: F,
@@ -123,7 +123,7 @@ impl Polytype {
         }
     }
 
-    pub fn find_furthest_face(&self) -> Option<(u16, Face)> {
+    pub fn find_furthest_face(&self) -> Option<(u16, PolytypeFace)> {
         self.faces
             .iter()
             .enumerate()
@@ -131,7 +131,7 @@ impl Polytype {
             .map(|(a, b)| (a as u16, *b))
     }
 
-    pub fn find_closest_face(&self) -> Option<(u16, Face)> {
+    pub fn find_closest_face(&self) -> Option<(u16, PolytypeFace)> {
         self.faces
             .iter()
             .enumerate()
@@ -141,7 +141,7 @@ impl Polytype {
     }
 
     // Adds a point to the polytype
-    pub fn add_point<F: Fn(&[SupportPoint], [u16; 3]) -> Face>(
+    pub fn add_point<F: Fn(&[SupportPoint], [u16; 3]) -> PolytypeFace>(
         &mut self,
         p: SupportPoint,
         face_func: F,
@@ -182,14 +182,14 @@ impl Polytype {
 
     // Adds a point to the polytype onto the specified face.
     // Polytype will not have any back faces
-    pub fn add_decimate(&mut self, face: Face, p: SupportPoint, ray: &Ray) {
+    pub fn add_decimate(&mut self, face: PolytypeFace, p: SupportPoint, ray: &Ray) {
         // add vertex
         let n = self.points.len() as u16;
         self.points.push(p);
         let points = &self.points;
 
         let new_faces = [(0, 1, 2), (0, 2, 1), (1, 2, 0)].iter().map(|val| {
-            Face::new_ray(
+            PolytypeFace::new_ray(
                 points,
                 [face.indices[val.0], face.indices[val.1], n],
                 ray,
@@ -202,7 +202,7 @@ impl Polytype {
         assert_eq!(self.faces.len(), 3);
     }
 
-    pub fn contact_points(&self, face: Face) -> ContactPoints {
+    pub fn contact_points(&self, face: PolytypeFace) -> ContactPoints {
         let [p1, p2, p3] = [
             self[face.indices[0]],
             self[face.indices[1]],
@@ -225,7 +225,7 @@ impl Polytype {
 
     /// Constructs a polytype from a simplex.
     /// Currently only implemented for Triangle and Tetrahedron simplex
-    pub fn from_simplex<F: Fn(&[SupportPoint], [u16; 3]) -> Face>(
+    pub fn from_simplex<F: Fn(&[SupportPoint], [u16; 3]) -> PolytypeFace>(
         simplex: &Simplex,
         face_func: F,
     ) -> Self {

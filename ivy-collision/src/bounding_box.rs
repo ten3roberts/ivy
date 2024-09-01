@@ -3,9 +3,20 @@ use core::f32;
 use glam::{vec3, Vec3};
 use ivy_core::gizmos::{Cube, DrawGizmos, GizmosSection};
 use ordered_float::NotNan;
-use palette::num::{Abs, Signum};
+use palette::num::Abs;
 
-use crate::{util::TOLERANCE, Ray, Shape};
+use crate::{plane::Plane, util::TOLERANCE, PolytypeFace, Ray, Shape};
+
+pub struct CubeFace {
+    normal: Vec3,
+    points: [Vec3; 4],
+}
+
+impl CubeFace {
+    pub fn new(normal: Vec3, points: [Vec3; 4]) -> Self {
+        Self { normal, points }
+    }
+}
 
 /// Represents an axis aligned bounding box
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
@@ -157,6 +168,69 @@ impl BoundingBox {
     pub fn size(&self) -> Vec3 {
         self.max - self.min
     }
+
+    pub fn points(&self) -> [Vec3; 8] {
+        [
+            vec3(self.min.x, self.min.y, self.min.z),
+            vec3(self.min.x, self.min.y, self.max.z),
+            vec3(self.min.x, self.max.y, self.max.z),
+            vec3(self.min.x, self.max.y, self.min.z),
+            vec3(self.max.x, self.min.y, self.min.z),
+            vec3(self.max.x, self.min.y, self.max.z),
+            vec3(self.max.x, self.max.y, self.max.z),
+            vec3(self.max.x, self.max.y, self.min.z),
+        ]
+    }
+
+    pub fn faces(&self) -> [Plane; 6] {
+        [
+            Plane::new(self.min.x, -Vec3::X),
+            Plane::new(self.min.y, -Vec3::Y),
+            Plane::new(self.min.z, -Vec3::Z),
+            Plane::new(self.max.x, Vec3::X),
+            Plane::new(self.max.y, Vec3::Y),
+            Plane::new(self.max.z, Vec3::Z),
+        ]
+    }
+
+    pub fn edges(&self) -> [(Vec3, Vec3); 12] {
+        // Extract coordinates from the min and max points
+        // x_min, y_min, z_min = min_point
+        // x_max, y_max, z_max = max_point
+
+        let x_min = self.min.x;
+        let y_min = self.min.y;
+        let z_min = self.min.z;
+        let x_max = self.max.x;
+        let y_max = self.max.y;
+        let z_max = self.max.z;
+
+        let vertices = [
+            vec3(x_min, y_min, z_min),
+            vec3(x_min, y_min, z_max),
+            vec3(x_min, y_max, z_min),
+            vec3(x_min, y_max, z_max),
+            vec3(x_max, y_min, z_min),
+            vec3(x_max, y_min, z_max),
+            vec3(x_max, y_max, z_min),
+            vec3(x_max, y_max, z_max),
+        ];
+
+        [
+            (vertices[0], vertices[1]),
+            (vertices[0], vertices[2]),
+            (vertices[0], vertices[4]),
+            (vertices[1], vertices[3]),
+            (vertices[1], vertices[5]),
+            (vertices[2], vertices[3]),
+            (vertices[2], vertices[6]),
+            (vertices[3], vertices[7]),
+            (vertices[4], vertices[5]),
+            (vertices[4], vertices[6]),
+            (vertices[5], vertices[7]),
+            (vertices[6], vertices[7]),
+        ]
+    }
 }
 
 impl DrawGizmos for BoundingBox {
@@ -179,9 +253,65 @@ impl Shape for BoundingBox {
     }
 
     fn surface_contour(&self, dir: Vec3, points: &mut Vec<Vec3>) {
-        const TOLERANCE: f32 = 0.1;
+        const TOLERANCE: f32 = 0.0001;
 
-        assert!(dir.is_normalized());
+        for face in self.faces() {
+            if face.normal.dot(dir) > 1.0 - TOLERANCE {
+                points.extend(self.points().iter().filter(|v| v.dot(face.normal) >= 0.0));
+
+                let tan = if dir.dot(Vec3::X).abs() > 1.0 - TOLERANCE {
+                    Vec3::Y * dir.dot(Vec3::X).signum()
+                } else {
+                    dir.cross(Vec3::X).normalize()
+                };
+
+                let bitan = tan.cross(dir).normalize();
+                assert!(points.len() <= 4, "Too many points: {points:?}");
+                // assert!([1, 2, 4].contains(&points.len()));
+
+                let midpoint = self.midpoint();
+
+                // sort points by the angle to ensure correct winding
+                let reference_point = points[0];
+                if points.len() == 4 {
+                    points.sort_by_key(|&v| {
+                        let v = (v - midpoint).normalize_or_zero();
+                        let x = v.dot(tan);
+                        let y = v.dot(bitan);
+
+                        NotNan::new(x.atan2(y)).unwrap()
+                    });
+                }
+
+                assert_eq!(points.len(), 4);
+                return;
+                //
+            }
+        }
+
+        if let Some((a, b)) = self
+            .edges()
+            .into_iter()
+            .filter(|&(a, b)| {
+                let mid = (a + b) / 2.0;
+                let facet_dir = mid.normalize();
+                let along = (b - a).normalize();
+
+                mid.dot(dir) > 0.0 && along.dot(dir).abs() < TOLERANCE
+                //     points.extend([a, b]);
+                //     return;
+                // }
+            })
+            .max_by_key(|v| ordered_float::OrderedFloat(((v.0 + v.1) / 2.0).dot(dir)))
+        {
+            points.extend([a, b]);
+            return;
+        }
+
+        // let support = self.support(dir);
+        // points.push(support);
+
+        // assert!(dir.is_normalized());
         let corners = [
             vec3(self.min.x, self.min.y, self.min.z),
             vec3(self.min.x, self.min.y, self.max.z),
@@ -193,32 +323,16 @@ impl Shape for BoundingBox {
             vec3(self.max.x, self.max.y, self.min.z),
         ];
 
-        let support_dist = self.support(dir).dot(dir);
+        let support = self.support(dir);
+        let support_plane = support.dot(dir) - TOLERANCE;
 
         points.extend(corners.iter().filter(|v| {
-            let dist = (support_dist - v.dot(dir)).abs();
-            // tracing::info!(
-            //     ?support_dist,
-            //     dot = v.dot(dir),
-            //     pass = dist < TOLERANCE,
-            //     "point"
-            // );
-            dist < TOLERANCE
+            let dist = v.dot(dir);
+
+            dist >= support_plane
         }));
 
-        // let extreme = |v| {
-        //     if v > 0.0 {
-        //         1.0
-        //     } else if v < 0.0 {
-        //         -1.0
-        //     } else {
-        //         0.0
-        //     }
-        // };
-
-        // let dir = vec3(extreme(dir.x), extreme(dir.y), extreme(dir.z));
-
-        let tan = if dir.dot(Vec3::X).abs() > 1.0 - TOLERANCE {
+        let tan = if dir.dot(Vec3::X).abs() == 1.0 {
             Vec3::Y * dir.dot(Vec3::X).signum()
         } else {
             dir.cross(Vec3::X).normalize()

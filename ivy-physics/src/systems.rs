@@ -10,7 +10,7 @@ use crate::{
 use flax::{
     BoxedSystem, Component, Entity, EntityRef, FetchExt, Query, QueryBorrow, System, World,
 };
-use glam::{Mat4, Quat, Vec3};
+use glam::{vec3, Mat4, Quat, Vec3};
 use ivy_collision::{
     components::collision_tree, contact::ContactSurface, Collision, CollisionTree,
 };
@@ -33,7 +33,9 @@ pub fn integrate_velocity_system(dt: f32) -> BoxedSystem {
 pub fn integrate_angular_velocity_system(dt: f32) -> BoxedSystem {
     System::builder()
         .with_query(Query::new((rotation().as_mut(), angular_velocity())).without(sleeping()))
-        .for_each(move |(rot, &w)| *rot *= Quat::from_scaled_axis(w * dt))
+        .for_each(move |(rot, &w)| {
+            *rot = Quat::from_axis_angle(w.normalize_or_zero(), w.length() * dt) * *rot
+        })
         .boxed()
 }
 
@@ -200,7 +202,12 @@ pub fn resolve_collisions(world: &World, collision_tree: &CollisionTree, dt: f32
             "mass of two colliding objects must not be both zero"
         );
 
-        let impulse = calculate_impulse_response(&collision.contact, &a_object, &b_object);
+        let impulse = calculate_impulse_response(
+            &a_object,
+            &b_object,
+            collision.contact.normal(),
+            collision.contact.midpoint(),
+        );
 
         let dir = collision.contact.normal() * collision.contact.depth();
 
@@ -243,10 +250,13 @@ fn resolve_static(
     let Some(b) = b.get() else { return Ok(()) };
     let b_effector = b.2;
 
+    let dv = b_effector.net_velocity_change(dt);
+    let dw = b_effector.net_angular_velocity_change(dt);
+
     let b = ResolveObject {
         pos: *b.1,
-        vel: *b.0.vel + b_effector.net_velocity_change(dt),
-        ang_vel: *b.0.ang_vel,
+        vel: *b.0.vel + dv,
+        ang_vel: *b.0.ang_vel + dw,
         resitution: *b.0.restitution,
         mass: *b.0.mass,
         ang_mass: *b.0.ang_mass,
@@ -260,21 +270,35 @@ fn resolve_static(
         ..Default::default()
     };
 
+    let normal = (contact.normal() * polarity).normalize();
+
+    // tracing::info!(polarity, "{contact:.1}");
     let impulse = calculate_impulse_response(
-        contact,
         &ResolveObject {
             mass: f32::INFINITY,
             ang_mass: f32::INFINITY,
             ..a
         },
         &b,
+        normal,
+        contact.midpoint(),
     );
 
-    assert!(!impulse.is_nan());
-    assert!(impulse.is_finite());
+    // assert!(!impulse.is_nan());
+    // assert!(impulse.is_finite());
 
-    b_effector.apply_impulse_at(-impulse * polarity, contact.midpoint() - b.pos, true);
-    b_effector.translate(contact.normal() * contact.depth() * polarity);
+    if !impulse.is_finite() {
+        tracing::info!("");
+    }
+
+    let impulse = round_to_zero(impulse);
+
+    // let dot = impulse.reject_from(normal);
+    // tracing::info!(?dot);
+
+    b_effector.apply_impulse_at(impulse * polarity, contact.midpoint() - b.pos, true);
+    // b_effector.apply_impulse(impulse * polarity, true);
+    b_effector.translate(normal * contact.depth() * polarity);
     // effector.apply_force_at(b_f, contact.points[1] - b.pos);
 
     Ok(())
@@ -283,11 +307,17 @@ fn resolve_static(
 pub fn gizmo_system(dt: f32) -> BoxedSystem {
     System::builder()
         .with_query(Query::new(ivy_core::components::gizmos()))
-        .with_query(Query::new((world_transform(), velocity(), effector())))
+        .with_query(Query::new((
+            world_transform(),
+            velocity(),
+            angular_velocity(),
+            effector(),
+        )))
         .build(
             move |mut gizmos: QueryBorrow<Component<ivy_core::gizmos::Gizmos>>,
                   mut query: QueryBorrow<(
                 Component<Mat4>,
+                Component<Vec3>,
                 Component<Vec3>,
                 Component<crate::Effector>,
             )>| {
@@ -295,23 +325,53 @@ pub fn gizmo_system(dt: f32) -> BoxedSystem {
                     .get(engine())?
                     .begin_section("effectors_gizmo_system");
 
-                for (transform, &velocity, effector) in query.iter() {
+                for (transform, &velocity, &w, effector) in query.iter() {
                     let origin = transform.transform_point3(Vec3::ZERO);
 
                     let dv = effector.net_velocity_change(dt);
                     gizmos.draw(Line::new(origin, dv, DEFAULT_THICKNESS, Color::red()));
                     gizmos.draw(Line::new(
                         origin,
-                        velocity,
+                        transform.transform_vector3(Vec3::Z),
+                        DEFAULT_THICKNESS,
+                        Color::blue(),
+                    ));
+                    gizmos.draw(Line::new(
+                        origin,
+                        transform.transform_vector3(Vec3::X),
+                        DEFAULT_THICKNESS,
+                        Color::red(),
+                    ));
+                    gizmos.draw(Line::new(
+                        origin,
+                        transform.transform_vector3(Vec3::Y),
                         DEFAULT_THICKNESS,
                         Color::green(),
                     ));
+                    gizmos.draw(Line::new(
+                        origin,
+                        velocity,
+                        DEFAULT_THICKNESS,
+                        Color::cyan(),
+                    ));
+                    gizmos.draw(Line::new(origin, w, DEFAULT_THICKNESS, Color::purple()));
                 }
 
                 anyhow::Ok(())
             },
         )
         .boxed()
+}
+
+/// Removes small unwanted floating point accumulation by cutting values toward zero
+pub(crate) fn round_to_zero(v: Vec3) -> Vec3 {
+    const THRESHOLD: f32 = 1e-3;
+
+    vec3(
+        if v.x.abs() < THRESHOLD { 0.0 } else { v.x },
+        if v.y.abs() < THRESHOLD { 0.0 } else { v.y },
+        if v.z.abs() < THRESHOLD { 0.0 } else { v.z },
+    )
 }
 
 /// Applies effectors to their respective entities and clears the effects.
@@ -326,10 +386,10 @@ pub fn apply_effectors_system(dt: f32) -> BoxedSystem {
         .par_for_each(move |(rb, position, effector, is_sleeping)| {
             if !is_sleeping || effector.should_wake() {
                 // tracing::info!(%physics_state.dt, ?effector, "updating effector");
-                *rb.vel += effector.net_velocity_change(dt);
-                *position += effector.translation();
+                *rb.vel = round_to_zero(*rb.vel + effector.net_velocity_change(dt));
+                *position = round_to_zero(*position + effector.translation());
 
-                *rb.ang_vel += effector.net_angular_velocity_change(dt);
+                *rb.ang_vel = round_to_zero(*rb.ang_vel + effector.net_angular_velocity_change(dt));
             }
 
             effector.set_mass(*rb.mass);
@@ -343,34 +403,3 @@ pub fn apply_effectors_system(dt: f32) -> BoxedSystem {
         })
         .boxed()
 }
-
-// pub fn apply_effectors(
-//     world: SubWorld<(
-//         RbQueryMut,
-//         &mut Position,
-//         &mut Effector,
-//         Satisfies<&Sleeping>,
-//     )>,
-//     mut cmd: Write<CommandBuffer>,
-//     dt: Read<DeltaTime>,
-// ) {
-//     world.native_query().without::<Static>().iter().for_each(
-//         |(e, (rb, pos, effector, sleeping))| {
-//             if !sleeping || effector.should_wake() {
-//                 *rb.vel += effector.net_velocity_change(**dt);
-//                 *pos += effector.translation();
-
-//                 *rb.ang_vel += effector.net_angular_velocity_change(**dt);
-//             }
-
-//             effector.set_mass(*rb.mass);
-//             effector.set_ang_mass(*rb.ang_mass);
-
-//             if sleeping && effector.should_wake() {
-//                 cmd.remove_one::<Sleeping>(e)
-//             }
-
-//             effector.clear()
-//         },
-//     )
-// }

@@ -1,4 +1,4 @@
-use std::mem;
+use std::{fmt::Display, mem};
 
 use glam::{vec2, Vec2, Vec3};
 use itertools::Itertools;
@@ -19,6 +19,16 @@ pub struct ContactSurface {
     depth: f32,
     b_surface: Vec<Vec3>,
     a_surface: Vec<Vec3>,
+}
+
+impl Display for ContactSurface {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ContactSurface")
+            .field("midpoint", &self.midpoint)
+            .field("normal", &self.normal)
+            .field("depth", &self.depth)
+            .finish()
+    }
 }
 
 impl ContactSurface {
@@ -60,6 +70,7 @@ impl ContactGenerator {
         contact_basis: Vec3,
         depth: f32,
     ) -> ContactSurface {
+        let normal = normal.normalize();
         let a_surface = &mut self.a_surface;
         let b_surface = &mut self.b_surface;
 
@@ -72,7 +83,7 @@ impl ContactGenerator {
         assert!(!a_surface.is_empty());
         assert!(!b_surface.is_empty());
 
-        let tan = if normal.dot(Vec3::X).abs() > 1.0 - TOLERANCE {
+        let tan = if normal.dot(Vec3::X).abs() == 1.0 {
             Vec3::Y * normal.dot(Vec3::X).signum()
         } else {
             normal.cross(Vec3::X).normalize()
@@ -210,27 +221,30 @@ impl ContactGenerator {
 
                 assert!(current_dot.is_finite());
                 assert!(prev_dot.is_finite());
-                tracing::info!(current_dot, prev_dot);
-                if current_dot <= 0.0 {
-                    if prev_dot > 0.0 {
+                // tracing::info!(current_dot, prev_dot);
+                if current_dot < TOLERANCE {
+                    if prev_dot > TOLERANCE {
                         output.push(intersect.unwrap())
                     }
                     output.push(current_point);
-                } else if prev_dot <= 0.0 {
+                } else if prev_dot < -TOLERANCE {
                     output.push(intersect.unwrap())
                 }
             }
 
-            tracing::info!(output = output.len());
+            // tracing::info!(output = output.len());
         }
 
-        let midpoint = output.iter().sum::<Vec2>() / output.len() as f32;
+        let mut midpoint = output.iter().sum::<Vec2>() / output.len() as f32;
 
-        assert!(
-            midpoint.is_finite(),
-            "{a_surface:?} {b_surface:?} {output:?}"
-        );
+        // assert!(
+        //     midpoint.is_finite(),
+        //     "{a_surface:?} {b_surface:?} {output:?}"
+        // );
 
+        if !midpoint.is_finite() {
+            midpoint = flatten(&contact_basis);
+        }
         ContactSurface {
             b_surface: b_surface.clone(),
             a_surface: a_surface.clone(),
@@ -249,6 +263,10 @@ fn clip_line_face(
 ) -> [Vec2; 2] {
     let [mut a, mut b] = line;
     for (e1, e2) in face.circular_tuple_windows() {
+        if a.distance(b) < TOLERANCE {
+            break;
+        }
+
         let clip_edge = (e2 - e1).perp().normalize() * winding;
 
         let intersection = clip_segment(clip_edge, e2, a, b);
@@ -304,6 +322,18 @@ impl DrawGizmos for ContactSurface {
             self.midpoint,
             DEFAULT_RADIUS,
             Color::cyan(),
+        ));
+
+        gizmos.draw(gizmos::Sphere::new(
+            self.midpoint - self.normal * self.depth * 0.5,
+            DEFAULT_RADIUS,
+            Color::red(),
+        ));
+
+        gizmos.draw(gizmos::Sphere::new(
+            self.midpoint + self.normal * self.depth * 0.5,
+            DEFAULT_RADIUS,
+            Color::red(),
         ));
 
         gizmos.draw(gizmos::Line::new(

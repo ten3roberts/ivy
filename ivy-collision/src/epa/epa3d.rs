@@ -1,4 +1,4 @@
-use super::Face;
+use super::PolytypeFace;
 use glam::Vec3;
 
 use crate::{
@@ -8,7 +8,7 @@ use crate::{
 };
 
 pub fn epa(simplex: Simplex, support_func: impl Fn(Vec3) -> SupportPoint) -> Intersection {
-    let _span = tracing::info_span!("epa").entered();
+    let _span = tracing::debug_span!("epa").entered();
     let midpoint = simplex.points().iter().map(|v| v.support).sum::<Vec3>() / 4.0;
 
     assert_eq!(simplex.points().len(), 4);
@@ -20,7 +20,7 @@ pub fn epa(simplex: Simplex, support_func: impl Fn(Vec3) -> SupportPoint) -> Int
             0, 2, 3, //
             1, 3, 2, //
         ],
-        Face::new,
+        PolytypeFace::new,
     );
 
     // for face in &polytype.faces {
@@ -43,7 +43,7 @@ pub fn epa(simplex: Simplex, support_func: impl Fn(Vec3) -> SupportPoint) -> Int
     let mut iterations = 0;
     let iteration_count = 64;
     loop {
-        tracing::info!(iterations);
+        tracing::debug!(iterations);
         let (_, min) = if let Some(val) = polytype.find_closest_face() {
             val
         } else {
@@ -59,7 +59,7 @@ pub fn epa(simplex: Simplex, support_func: impl Fn(Vec3) -> SupportPoint) -> Int
         assert!(min.normal.is_normalized());
         let d = new_support.support.dot(min.normal);
 
-        tracing::info!(?new_support, d, min.distance);
+        tracing::debug!(?new_support, d, min.distance);
         if (d - min.distance < TOLERANCE) {
             return Intersection {
                 points: polytype.contact_points(min),
@@ -79,7 +79,7 @@ pub fn epa(simplex: Simplex, support_func: impl Fn(Vec3) -> SupportPoint) -> Int
         //     };
         // }
 
-        polytype.add_point(new_support, Face::new);
+        polytype.add_point(new_support, PolytypeFace::new);
         iterations += 1;
     }
 }

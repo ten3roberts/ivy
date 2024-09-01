@@ -1,6 +1,8 @@
 use glam::Vec3;
 use ivy_core::math::Inverse;
 
+use crate::systems::round_to_zero;
+
 /// Manages the forces applied to an entity.
 /// Stored in the entity and is a middle hand for manipulating velocity and
 /// angular velocity through direct changes, forces, and impulses. It is
@@ -15,7 +17,7 @@ pub struct Effector {
     instant_dv: Vec3,
     instant_dw: Vec3,
     inv_mass: f32,
-    inv_ang_mass: f32,
+    inertia_tensor: f32,
     translation: Vec3,
     wake: bool,
 }
@@ -24,7 +26,7 @@ impl Effector {
     pub fn new(mass: f32, ang_mass: f32) -> Self {
         Self {
             inv_mass: mass.inv(),
-            inv_ang_mass: ang_mass.inv(),
+            inertia_tensor: ang_mass.inv(),
             dv: Vec3::ZERO,
             dw: Vec3::ZERO,
             instant_dv: Vec3::ZERO,
@@ -54,7 +56,7 @@ impl Effector {
     }
 
     pub fn set_ang_mass(&mut self, ang_mass: f32) {
-        self.inv_ang_mass = ang_mass.inv()
+        self.inertia_tensor = ang_mass.inv()
     }
 
     /// Clears all forces affecting the entity
@@ -66,17 +68,17 @@ impl Effector {
             instant_dw: Vec3::ZERO,
             translation: Vec3::ZERO,
             inv_mass: self.inv_mass,
-            inv_ang_mass: self.inv_ang_mass,
+            inertia_tensor: self.inertia_tensor,
             wake: false,
         }
     }
 
     pub fn apply_torque(&mut self, torque: Vec3) {
-        self.dw += torque * self.inv_ang_mass;
+        self.dw += torque * self.inertia_tensor;
     }
 
     pub fn apply_angular_impulse(&mut self, j: Vec3) {
-        self.instant_dw += j * self.inv_ang_mass
+        self.instant_dw += j * self.inertia_tensor
     }
 
     pub fn apply_angular_velocity_change(&mut self, dw: Vec3) {
@@ -112,9 +114,9 @@ impl Effector {
     }
 
     /// Applies an impulse at the specified position from center of mass
-    pub fn apply_impulse_at(&mut self, impulse: Vec3, at: Vec3, wake: bool) {
+    pub fn apply_impulse_at(&mut self, impulse: Vec3, point: Vec3, wake: bool) {
         self.apply_impulse(impulse, wake);
-        self.apply_angular_impulse(at.cross(impulse));
+        self.apply_angular_impulse(point.cross(impulse));
     }
 
     pub fn apply_velocity_change(&mut self, dv: Vec3, wake: bool) {
@@ -141,7 +143,7 @@ impl Effector {
     /// Returns the total net effect of torques, angular impulses, and angular
     /// velocity changes. Note: Effector should be cleared afterwards.
     pub fn net_angular_velocity_change(&self, dt: f32) -> Vec3 {
-        self.dw * dt + self.instant_dw
+        round_to_zero(self.dw * dt + self.instant_dw)
     }
 
     /// Get the effector's translation.

@@ -55,7 +55,7 @@ impl Simplex {
                     } else {
                         ab.cross(Vec3::Y)
                     };
-                    tracing::warn!(%new_dir, "degenerate edge");
+                    // tracing::warn!(%new_dir, "degenerate edge");
                     return SimplexExpansion::Direction(new_dir);
                 }
 
@@ -72,7 +72,7 @@ impl Simplex {
                     } else {
                         ab.cross(Vec3::Y)
                     };
-                    tracing::warn!(%new_dir, "degenerate edge");
+                    // tracing::warn!(%new_dir, "degenerate edge");
                     SimplexExpansion::Direction(new_dir)
                 }
             }
@@ -106,7 +106,7 @@ impl Simplex {
                     *self = Self::Triangle([a, c, b]);
                     SimplexExpansion::Direction(-abc)
                 } else {
-                    tracing::warn!("degenerate triangle");
+                    // tracing::warn!("degenerate triangle");
                     *self = Self::Line([a, b]);
                     SimplexExpansion::Degenerate
                 }
@@ -157,7 +157,7 @@ impl Simplex {
                 let acd_dot = acd.dot(a0);
                 let adb_dot = adb.dot(a0);
 
-                tracing::info!(%abc, abc_dot, acd_dot, adb_dot);
+                // tracing::info!(%abc, abc_dot, acd_dot, adb_dot);
 
                 if abc_dot > 0.0 {
                     *self = Self::Triangle([a, b, c]);

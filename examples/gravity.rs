@@ -168,11 +168,13 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
             .with_metallic_factor(0.0)
             .with_albedo(TextureDesc::srgba(Color::from_hsla(0.0, 0.7, 0.7, 1.0))),
     );
-    let cube_mesh = MeshDesc::Content(assets.load(&CubePrimitive));
 
+    let cube_mesh = MeshDesc::Content(assets.load(&CubePrimitive));
     let shader = assets.load(&PbrShaderDesc);
 
     let mut cube = |position: Vec3, rotation: Quat| {
+        let mesh = MeshDesc::Content(assets.load(&CapsulePrimitive::default()));
+
         Entity::builder()
             .mount(
                 TransformBundle::default()
@@ -181,18 +183,15 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
             )
             .mount(
                 RbBundle::default()
-                    .with_mass(5.0)
-                    .with_angular_mass(10.0)
-                    .with_restitution(0.0)
-                    .with_friction(0.9),
+                    .with_mass(50.0)
+                    .with_angular_mass(50.0)
+                    .with_restitution(1.0)
+                    .with_friction(0.6), // .with_angular_velocity(Vec3::Y),
             )
             .set(gravity_influence(), 1.0)
-            .set(
-                collider(),
-                Collider::cube_from_center(Vec3::ZERO, Vec3::ONE),
-            )
+            .set(collider(), Collider::capsule(1.0, 1.0))
             .mount(RenderObjectBundle::new(
-                cube_mesh.clone(),
+                mesh.clone(),
                 red_material.clone(),
                 shader.clone(),
             ))
@@ -201,17 +200,47 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
 
     // Twisted and offset
     cube(
-        vec3(0.0, 2.00, 0.0),
-        Quat::from_scaled_axis(vec3(0.0, 0.0, 0.0)),
+        vec3(0.0, 3.0, 0.0),
+        Quat::from_scaled_axis(vec3(0.1, 0.0, 0.1)),
     );
 
     Entity::builder()
-        .mount(TransformBundle::default().with_scale(vec3(10.0, 0.1, 10.0)))
+        .mount(
+            TransformBundle::default()
+                .with_scale(vec3(5.0, 1.0, 5.0))
+                .with_rotation(Quat::from_scaled_axis(Vec3::Z * 0.1)),
+        )
         .mount(
             RbBundle::default()
-                .with_mass(5.0)
-                .with_angular_mass(10.0)
-                .with_restitution(0.0)
+                .with_mass(1.0)
+                .with_angular_mass(1.0)
+                .with_restitution(0.2)
+                .with_friction(0.9),
+        )
+        .set(
+            collider(),
+            Collider::cube_from_center(Vec3::ZERO, Vec3::ONE),
+        )
+        .set(is_static(), ())
+        .mount(RenderObjectBundle::new(
+            cube_mesh.clone(),
+            material.clone(),
+            shader.clone(),
+        ))
+        .spawn(world);
+
+    Entity::builder()
+        .mount(
+            TransformBundle::default()
+                .with_position(vec3(-7.0, -5.0, 0.0))
+                .with_scale(vec3(10.0, 0.1, 10.0))
+                .with_rotation(Quat::from_scaled_axis(Vec3::Z * -0.5)),
+        )
+        .mount(
+            RbBundle::default()
+                .with_mass(1.0)
+                .with_angular_mass(1.0)
+                .with_restitution(0.1)
                 .with_friction(0.9),
         )
         .set(
@@ -229,7 +258,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
     Entity::builder()
         .mount(TransformBundle::default().with_rotation(Quat::from_euler(
             EulerRot::YXZ,
-            1.0,
+            -2.0,
             1.0,
             0.0,
         )))

@@ -1,6 +1,6 @@
 use crate::{
     util::{plane_ray, ray_distance, SupportPoint, MAX_ITERATIONS, TOLERANCE},
-    Intersection, ContactPoints, Face, Polytype, Ray, Simplex,
+    Intersection, ContactPoints, PolytypeFace, Polytype, Ray, Simplex,
 };
 
 use glam::Vec3;
@@ -11,7 +11,7 @@ pub fn epa_ray<F: Fn(Vec3) -> SupportPoint>(
     ray: &Ray,
 ) -> Intersection {
     let mut polytype =
-        Polytype::from_simplex(&simplex, |a, b| Face::new_ray(a, b, ray, Vec3::ZERO));
+        Polytype::from_simplex(&simplex, |a, b| PolytypeFace::new_ray(a, b, ray, Vec3::ZERO));
 
     let mut iterations = 0;
     loop {

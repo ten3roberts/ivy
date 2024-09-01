@@ -1,6 +1,8 @@
-mod aabb;
+mod bounding_box;
 mod collider;
 mod collision;
+pub mod components;
+pub mod contact;
 mod epa;
 mod gjk;
 mod primitives;
@@ -9,10 +11,9 @@ mod simplex;
 mod traits;
 mod tree;
 pub mod util;
-pub mod components;
-pub mod contact;
+pub mod plane;
 
-pub use aabb::*;
+pub use bounding_box::*;
 pub use collider::*;
 pub use collision::*;
 pub use epa::*;
