@@ -1,24 +1,19 @@
 use core::f32;
 use std::collections::BTreeMap;
 
-use crate::{
-    bundles::*,
-    collision::{calculate_impulse_response, ResolveObject},
-    components::effector,
-    Result,
-};
+use crate::{bundles::*, components::effector, response::resolve_collisions};
 use flax::{
     BoxedSystem, Component, Entity, EntityRef, FetchExt, Query, QueryBorrow, System, World,
 };
 use glam::{vec3, Mat4, Quat, Vec3};
-use ivy_collision::{
-    components::collision_tree, contact::ContactSurface, Collision, CollisionTree,
-};
+use ivy_collision::{components::collision_tree, Collision, CollisionTree};
 use ivy_core::{
-    angular_velocity, connection, engine, friction,
+    components::{
+        angular_velocity, connection, engine, gravity, gravity_influence, position, rotation,
+        sleeping, velocity, world_transform,
+    },
     gizmos::{Line, DEFAULT_THICKNESS},
-    gravity, gravity_influence, position, restitution, rotation, sleeping, velocity,
-    world_transform, Color, ColorExt,
+    Color, ColorExt,
 };
 
 pub fn integrate_velocity_system(dt: f32) -> BoxedSystem {
@@ -153,157 +148,6 @@ pub fn resolve_collisions_system(dt: f32) -> BoxedSystem {
         .boxed()
 }
 
-pub fn resolve_collisions(world: &World, collision_tree: &CollisionTree, dt: f32) -> Result<()> {
-    for collision in collision_tree.active_collisions() {
-        let a = world.entity(collision.a.entity)?;
-        let b = world.entity(collision.b.entity)?;
-
-        // Ignore triggers
-        if collision.a.is_trigger || collision.b.is_trigger {
-            return Ok(());
-        }
-        // Check for static collision
-        else if collision.a.state.is_static() {
-            resolve_static(&a, &b, &collision.contact, 1.0, dt)?;
-            continue;
-        } else if collision.b.state.is_static() {
-            resolve_static(&b, &a, &collision.contact, -1.0, dt)?;
-            continue;
-        } else if collision.a.state.is_static() && collision.b.state.is_static() {
-            tracing::warn!("static-static collision detected, ignoring");
-            continue;
-        }
-
-        assert_ne!(collision.a, collision.b);
-
-        // Trace up to the root of the rigid connection before solving
-        // collisions
-        let a = get_rigid_root(&world.entity(*collision.a).unwrap());
-        let b = get_rigid_root(&world.entity(*collision.b).unwrap());
-
-        // Ignore collisions between two immovable objects
-        // if !a_mass.is_normal() && !b_mass.is_normal() {
-        //     tracing::warn!("ignoring collision between two immovable objects");
-        //     return Ok(());
-        // }
-
-        // let mut a_query = world.try_query_one::<(RbQuery, &Position, &Effector)>(a)?;
-        // let (a, pos, eff) = a_query.get().unwrap();
-
-        // // Modify mass to include all children masses
-
-        let a_object = ResolveObject::from_entity(&a)?;
-        let b_object = ResolveObject::from_entity(&b)?;
-
-        let total_mass = a_object.mass + b_object.mass;
-
-        assert!(
-            total_mass > 0.0,
-            "mass of two colliding objects must not be both zero"
-        );
-
-        let impulse = calculate_impulse_response(
-            &a_object,
-            &b_object,
-            collision.contact.normal(),
-            collision.contact.midpoint(),
-        );
-
-        let dir = collision.contact.normal() * collision.contact.depth();
-
-        {
-            let effector = &mut *a.get_mut(effector())?;
-            effector.apply_impulse_at(impulse, collision.contact.midpoint() - a_object.pos, true);
-            effector.translate(-dir * (b_object.mass / total_mass));
-        }
-
-        {
-            let effector = &mut *b.get_mut(effector())?;
-            effector.apply_impulse_at(-impulse, collision.contact.midpoint() - b_object.pos, true);
-            effector.translate(dir * (a_object.mass / total_mass));
-        }
-    }
-
-    Ok(())
-}
-
-// Resolves collision against a static or immovable object
-fn resolve_static(
-    a: &EntityRef,
-    b: &EntityRef,
-    contact: &ContactSurface,
-    polarity: f32,
-    dt: f32,
-) -> Result<()> {
-    let query = &(
-        restitution().opt_or_default(),
-        friction().opt_or_default(),
-        position(),
-    );
-
-    let mut a = a.query(&query);
-    let a = a.get().unwrap();
-
-    let query = &(RbQuery::new(), position(), effector().as_mut());
-
-    let mut b = b.query(query);
-    let Some(b) = b.get() else { return Ok(()) };
-    let b_effector = b.2;
-
-    let dv = b_effector.net_velocity_change(dt);
-    let dw = b_effector.net_angular_velocity_change(dt);
-
-    let b = ResolveObject {
-        pos: *b.1,
-        vel: *b.0.vel + dv,
-        ang_vel: *b.0.ang_vel + dw,
-        resitution: *b.0.restitution,
-        mass: *b.0.mass,
-        ang_mass: *b.0.ang_mass,
-        friction: *b.0.friction,
-    };
-
-    let a = ResolveObject {
-        pos: *a.2,
-        resitution: *a.0,
-        friction: *a.1,
-        ..Default::default()
-    };
-
-    let normal = (contact.normal() * polarity).normalize();
-
-    // tracing::info!(polarity, "{contact:.1}");
-    let impulse = calculate_impulse_response(
-        &ResolveObject {
-            mass: f32::INFINITY,
-            ang_mass: f32::INFINITY,
-            ..a
-        },
-        &b,
-        normal,
-        contact.midpoint(),
-    );
-
-    // assert!(!impulse.is_nan());
-    // assert!(impulse.is_finite());
-
-    if !impulse.is_finite() {
-        tracing::info!("");
-    }
-
-    let impulse = round_to_zero(impulse);
-
-    // let dot = impulse.reject_from(normal);
-    // tracing::info!(?dot);
-
-    b_effector.apply_impulse_at(impulse * polarity, contact.midpoint() - b.pos, true);
-    // b_effector.apply_impulse(impulse * polarity, true);
-    b_effector.translate(normal * contact.depth() * polarity);
-    // effector.apply_force_at(b_f, contact.points[1] - b.pos);
-
-    Ok(())
-}
-
 pub fn gizmo_system(dt: f32) -> BoxedSystem {
     System::builder()
         .with_query(Query::new(ivy_core::components::gizmos()))
@@ -365,7 +209,7 @@ pub fn gizmo_system(dt: f32) -> BoxedSystem {
 
 /// Removes small unwanted floating point accumulation by cutting values toward zero
 pub(crate) fn round_to_zero(v: Vec3) -> Vec3 {
-    const THRESHOLD: f32 = 1e-3;
+    const THRESHOLD: f32 = 1e-4;
 
     vec3(
         if v.x.abs() < THRESHOLD { 0.0 } else { v.x },

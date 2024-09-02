@@ -8,15 +8,16 @@ use glam::{vec3, EulerRot, Mat4, Quat, Vec2, Vec3};
 use ivy_assets::{Asset, AssetCache, AsyncAssetKey};
 use ivy_core::{
     app::InitEvent,
-    async_commandbuffer, delta_time, engine, gizmos,
+    gizmos,
     layer::events::EventRegisterContext,
-    main_camera,
     palette::{Srgb, Srgba, WithAlpha},
     profiling::ProfilingLayer,
-    rotation,
     update_layer::{FixedTimeStep, PerTick, Plugin, ScheduledLayer},
-    velocity, world_transform, App, AsyncCommandBuffer, EngineLayer, EntityBuilderExt, Layer,
-    TransformBundle, DEG_90,
+    App, AsyncCommandBuffer, EngineLayer, EntityBuilderExt, Layer, DEG_90,
+};
+use ivy_engine::{
+    async_commandbuffer, delta_time, engine, main_camera, rotation, velocity, world_transform,
+    TransformBundle,
 };
 use ivy_gltf::{components::animator, Document};
 use ivy_graphics::texture::TextureDesc;
@@ -321,7 +322,7 @@ fn animate_system() -> BoxedSystem {
 
 fn point_light_gizmo_system() -> BoxedSystem {
     System::builder()
-        .with_query(Query::new(gizmos().source(engine())))
+        .with_query(Query::new(ivy_core::components::gizmos().source(engine())))
         .with_query(Query::new((world_transform(), light_data(), light_kind())))
         .build(
             |mut gizmos: QueryBorrow<flax::fetch::Source<Component<gizmos::Gizmos>, Entity>>,

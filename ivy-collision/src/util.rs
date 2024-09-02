@@ -1,12 +1,10 @@
 use std::fmt::{Debug, Display};
 
-use glam::{Mat4, Vec3};
-use rayon::iter::ParallelExtend;
+use glam::Vec3;
 
 use crate::{Ray, Shape};
 
-pub const TOLERANCE: f32 = 0.0001;
-pub const MAX_ITERATIONS: usize = 16;
+pub const TOLERANCE: f32 = 0.001;
 
 // Represents a point on the minkowski difference boundary which carries the
 // individual support points

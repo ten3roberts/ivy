@@ -33,10 +33,10 @@ impl PolytypeFace {
             .normalize();
 
         if !normal.is_finite() {
-            tracing::debug!("normal: {normal} {p1} {p2} {p3}");
+            tracing::warn!("normal: {normal} {p1} {p2} {p3}");
         }
 
-        assert!(normal.is_finite());
+        // assert!(normal.is_finite());
 
         // Distance to the origin of the minkowski difference
         let distance = normal.dot(p1.support);
@@ -202,7 +202,7 @@ impl Polytype {
         assert_eq!(self.faces.len(), 3);
     }
 
-    pub fn contact_points(&self, face: PolytypeFace) -> ContactPoints {
+    pub(crate) fn contact_points(&self, face: PolytypeFace) -> ContactPoints {
         let [p1, p2, p3] = [
             self[face.indices[0]],
             self[face.indices[1]],
@@ -225,7 +225,7 @@ impl Polytype {
 
     /// Constructs a polytype from a simplex.
     /// Currently only implemented for Triangle and Tetrahedron simplex
-    pub fn from_simplex<F: Fn(&[SupportPoint], [u16; 3]) -> PolytypeFace>(
+    pub(crate) fn from_simplex<F: Fn(&[SupportPoint], [u16; 3]) -> PolytypeFace>(
         simplex: &Simplex,
         face_func: F,
     ) -> Self {

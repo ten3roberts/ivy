@@ -114,11 +114,10 @@ serialize = [
 ]
 profile = [ "ivy-core/profile" ]
 
-[profile.dev.package.image]
-opt-level = 3
-
-[profile.dev.package.parking_lot]
-opt-level = 3
+[profile.dev.package]
+image = { opt-level = 3, debug = false, debug-assertions = false }
+png = { opt-level = 3, debug = false }
+parking_lot = { opt-level = 3, debug = false }
 
 [profile.release]
 debug = true

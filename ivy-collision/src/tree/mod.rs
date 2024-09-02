@@ -7,11 +7,10 @@ use flax::{
 };
 use glam::{Mat4, Vec3};
 use ivy_core::{
-    gizmos::{self, DrawGizmos, Gizmos, GizmosSection},
-    is_trigger, mass, velocity, world_transform,
+    components::{is_trigger, mass, velocity, world_transform},
+    gizmos::{DrawGizmos, Gizmos, GizmosSection},
 };
 use slotmap::{new_key_type, SlotMap};
-use smallvec::Array;
 
 use crate::{
     components::{self, collider, collider_offset, collision_tree, tree_index},

@@ -7,7 +7,10 @@ use ivy_core::{
     Color, ColorExt,
 };
 use ordered_float::Float;
-use palette::num::Signum;
+use palette::{
+    cast::into_uint_ref,
+    num::{Abs, Signum},
+};
 
 use crate::{util::TOLERANCE, Shape};
 
@@ -19,6 +22,7 @@ pub struct ContactSurface {
     depth: f32,
     b_surface: Vec<Vec3>,
     a_surface: Vec<Vec3>,
+    area: f32,
 }
 
 impl Display for ContactSurface {
@@ -47,6 +51,10 @@ impl ContactSurface {
     pub fn depth(&self) -> f32 {
         self.depth
     }
+
+    pub fn area(&self) -> f32 {
+        self.area
+    }
 }
 
 pub struct ContactGenerator {
@@ -55,7 +63,7 @@ pub struct ContactGenerator {
 }
 
 impl ContactGenerator {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             a_surface: Default::default(),
             b_surface: Default::default(),
@@ -70,6 +78,8 @@ impl ContactGenerator {
         contact_basis: Vec3,
         depth: f32,
     ) -> ContactSurface {
+        debug_assert!(contact_basis.is_finite());
+        let _span = tracing::info_span!("generate", ?normal).entered();
         let normal = normal.normalize();
         let a_surface = &mut self.a_surface;
         let b_surface = &mut self.b_surface;
@@ -83,6 +93,9 @@ impl ContactGenerator {
         assert!(!a_surface.is_empty());
         assert!(!b_surface.is_empty());
 
+        debug_assert!(a_surface.iter().all(|v| v.is_finite()));
+        debug_assert!(b_surface.iter().all(|v| v.is_finite()));
+
         let tan = if normal.dot(Vec3::X).abs() == 1.0 {
             Vec3::Y * normal.dot(Vec3::X).signum()
         } else {
@@ -91,6 +104,9 @@ impl ContactGenerator {
 
         assert!(tan.is_normalized());
 
+        const DISC_AREA: f32 = 0.4;
+        const LINE_WIDTH: f32 = 0.2;
+
         let bitan = tan.cross(normal).normalize();
 
         let flatten = |v: &Vec3| vec2(v.dot(tan), v.dot(bitan));
@@ -98,6 +114,7 @@ impl ContactGenerator {
         let to_world = |v: Vec2| v.x * tan + v.y * bitan + contact_basis.dot(normal) * normal;
 
         if a_surface.len() == 1 {
+            tracing::info!("point a");
             let p = to_world(flatten(&a_surface[0]));
 
             return ContactSurface {
@@ -107,6 +124,7 @@ impl ContactGenerator {
                 depth,
                 b_surface: b_surface.clone(),
                 a_surface: a_surface.clone(),
+                area: DISC_AREA,
             };
         }
 
@@ -120,10 +138,12 @@ impl ContactGenerator {
                 depth,
                 b_surface: b_surface.clone(),
                 a_surface: a_surface.clone(),
+                area: DISC_AREA,
             };
         }
 
         if let ([a1, a2], [b1, b2]) = (&a_surface[..], &b_surface[..]) {
+            tracing::info!(?a1, ?a2, ?b1, ?b2, "line-line");
             let a1 = flatten(a1);
             let a2 = flatten(a2);
             let mut b1 = flatten(b1);
@@ -159,6 +179,7 @@ impl ContactGenerator {
                     depth,
                     b_surface: b_surface.clone(),
                     a_surface: a_surface.clone(),
+                    area: (p1 - p2).abs() * LINE_WIDTH,
                 };
             }
 
@@ -170,10 +191,12 @@ impl ContactGenerator {
                 depth,
                 b_surface: b_surface.clone(),
                 a_surface: a_surface.clone(),
+                area: DISC_AREA,
             };
         }
 
         let line_case = |p1, p2, surface: &[Vec3], winding| {
+            tracing::info!(?p1, ?p2, ?surface, winding, "line surface");
             let [p1, p2] = clip_line_face(
                 [flatten(&p1), flatten(&p2)],
                 surface.iter().map(flatten),
@@ -182,6 +205,8 @@ impl ContactGenerator {
 
             let midpoint = to_world((p1 + p2) / 2.0);
 
+            tracing::info!(?p1, ?p2, ?midpoint);
+
             ContactSurface {
                 intersection: vec![to_world(p1), to_world(p2)],
                 midpoint,
@@ -189,6 +214,7 @@ impl ContactGenerator {
                 depth,
                 b_surface: b_surface.clone(),
                 a_surface: a_surface.clone(),
+                area: p1.distance(p2) * LINE_WIDTH,
             }
         };
 
@@ -200,6 +226,7 @@ impl ContactGenerator {
             return line_case(p1, p2, a_surface, -1.0);
         }
 
+        tracing::info!("face-face");
         let mut input = a_surface.iter().map(flatten).collect_vec();
         let mut output = Vec::new();
         mem::swap(&mut input, &mut output);
@@ -237,15 +264,16 @@ impl ContactGenerator {
 
         let mut midpoint = output.iter().sum::<Vec2>() / output.len() as f32;
 
-        // assert!(
-        //     midpoint.is_finite(),
-        //     "{a_surface:?} {b_surface:?} {output:?}"
-        // );
+        assert!(
+            midpoint.is_finite(),
+            "{a_surface:?} {b_surface:?} {output:?}"
+        );
 
         if !midpoint.is_finite() {
             midpoint = flatten(&contact_basis);
         }
         ContactSurface {
+            area: polygon_area(&output, midpoint),
             b_surface: b_surface.clone(),
             a_surface: a_surface.clone(),
             intersection: output.into_iter().map(to_world).collect_vec(),
@@ -253,6 +281,24 @@ impl ContactGenerator {
             normal,
             depth,
         }
+    }
+}
+
+// maybe an approximation could work instead :P
+fn polygon_area(points: &[Vec2], midpoint: Vec2) -> f32 {
+    let c = midpoint;
+    let area: f32 = points
+        .iter()
+        .circular_tuple_windows()
+        .map(|(a, b)| (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y)))
+        .sum();
+
+    area / 2.0
+}
+
+impl Default for ContactGenerator {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

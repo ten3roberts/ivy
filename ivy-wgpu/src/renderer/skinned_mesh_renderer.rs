@@ -12,7 +12,7 @@ use flax::{
 use glam::Mat4;
 use itertools::Itertools;
 use ivy_assets::{map::AssetMap, stored::Handle, Asset, AssetCache};
-use ivy_core::world_transform;
+use ivy_core::components::world_transform;
 use ivy_gltf::{
     animation::{player::Animator, skin::Skin},
     components::{animator, skin},

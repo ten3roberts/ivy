@@ -2,8 +2,7 @@ use super::PolytypeFace;
 use glam::Vec3;
 
 use crate::{
-    util::MAX_ITERATIONS,
-    ContactPoints, Intersection, Polytype, Simplex,
+    Intersection, Polytype, Simplex,
     {util::SupportPoint, util::TOLERANCE},
 };
 
@@ -60,7 +59,7 @@ pub fn epa(simplex: Simplex, support_func: impl Fn(Vec3) -> SupportPoint) -> Int
         let d = new_support.support.dot(min.normal);
 
         tracing::debug!(?new_support, d, min.distance);
-        if (d - min.distance < TOLERANCE) {
+        if d - min.distance < TOLERANCE {
             return Intersection {
                 points: polytype.contact_points(min),
                 depth: min.distance,

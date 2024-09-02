@@ -14,7 +14,7 @@ use image::{DynamicImage, ImageBuffer, RgbImage, RgbaImage};
 use itertools::Itertools;
 use ivy_assets::fs::AsyncAssetFromPath;
 use ivy_assets::AssetDesc;
-use ivy_core::TransformBundle;
+use ivy_core::components::TransformBundle;
 use ivy_graphics::mesh::MeshData;
 use ivy_profiling::profile_function;
 use ivy_profiling::profile_scope;
@@ -126,7 +126,7 @@ impl Document {
                     let image = async_std::task::spawn_blocking(|| load_image(image)).await?;
                     anyhow::Ok(assets.insert(image))
                 }
-                .instrument(tracing::info_span!("load_image", i))
+                .instrument(tracing::debug_span!("load_image", i))
             })
             .boxed()
             .buffered(4)

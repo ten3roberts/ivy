@@ -1,5 +1,4 @@
 use glam::Vec3;
-use ivy_core::math::Inverse;
 
 use crate::systems::round_to_zero;
 
@@ -25,8 +24,8 @@ pub struct Effector {
 impl Effector {
     pub fn new(mass: f32, ang_mass: f32) -> Self {
         Self {
-            inv_mass: mass.inv(),
-            inertia_tensor: ang_mass.inv(),
+            inv_mass: mass.recip(),
+            inertia_tensor: ang_mass.recip(),
             dv: Vec3::ZERO,
             dw: Vec3::ZERO,
             instant_dv: Vec3::ZERO,
@@ -52,11 +51,11 @@ impl Effector {
     }
 
     pub fn set_mass(&mut self, mass: f32) {
-        self.inv_mass = mass.inv();
+        self.inv_mass = mass.recip();
     }
 
     pub fn set_ang_mass(&mut self, ang_mass: f32) {
-        self.inertia_tensor = ang_mass.inv()
+        self.inertia_tensor = ang_mass.recip()
     }
 
     /// Clears all forces affecting the entity

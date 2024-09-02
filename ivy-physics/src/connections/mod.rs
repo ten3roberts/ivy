@@ -1,5 +1,5 @@
 use glam::{Mat4, Quat, Vec3};
-use ivy_core::{ConnectionKind, TransformQueryMutItem};
+use ivy_core::components::{ConnectionKind, TransformQueryMutItem};
 
 mod systems;
 pub use systems::*;
@@ -34,7 +34,8 @@ pub fn apply_connection_constraints(
     match kind {
         ConnectionKind::Rigid => {
             // The desired velocity
-            let vel = velocity_at_point(pos - parent_pos, parent_rb.angular_velocity) + parent_rb.velocity;
+            let vel = velocity_at_point(pos - parent_pos, parent_rb.angular_velocity)
+                + parent_rb.velocity;
 
             let total_mass = *rb.mass + parent_rb.mass;
 

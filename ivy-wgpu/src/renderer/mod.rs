@@ -11,7 +11,10 @@ use glam::{Mat4, Vec3};
 use itertools::Itertools;
 use ivy_assets::{stored::Store, Asset, AssetCache};
 use ivy_core::{
-    impl_for_tuples, main_camera, palette::Srgb, to_linear_vec3, world_transform, Bundle,
+    components::{main_camera, world_transform},
+    impl_for_tuples,
+    palette::Srgb,
+    to_linear_vec3, Bundle,
 };
 use ivy_wgpu_types::shader::TargetDesc;
 use wgpu::{

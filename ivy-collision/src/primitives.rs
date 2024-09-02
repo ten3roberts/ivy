@@ -206,6 +206,7 @@ impl Shape for Capsule {
 
     fn surface_contour(&self, dir: Vec3, points: &mut Vec<Vec3>) {
         assert!(dir.is_normalized());
+        const TOLERANCE: f32 = 0.01;
         if dir.dot(Vec3::Y).abs() < TOLERANCE {
             let extension = dir.reject_from_normalized(Vec3::Y).normalize_or_zero() * self.radius;
 

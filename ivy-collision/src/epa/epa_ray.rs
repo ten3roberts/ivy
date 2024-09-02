@@ -1,6 +1,6 @@
 use crate::{
-    util::{plane_ray, ray_distance, SupportPoint, MAX_ITERATIONS, TOLERANCE},
-    Intersection, ContactPoints, PolytypeFace, Polytype, Ray, Simplex,
+    util::{plane_ray, ray_distance, SupportPoint, TOLERANCE},
+    ContactPoints, Intersection, Polytype, PolytypeFace, Ray, Simplex,
 };
 
 use glam::Vec3;
@@ -10,10 +10,10 @@ pub fn epa_ray<F: Fn(Vec3) -> SupportPoint>(
     simplex: Simplex,
     ray: &Ray,
 ) -> Intersection {
-    let mut polytype =
-        Polytype::from_simplex(&simplex, |a, b| PolytypeFace::new_ray(a, b, ray, Vec3::ZERO));
+    let mut polytype = Polytype::from_simplex(&simplex, |a, b| {
+        PolytypeFace::new_ray(a, b, ray, Vec3::ZERO)
+    });
 
-    let mut iterations = 0;
     loop {
         // Find the face closest to the ray
         let (_index, max_face) = match polytype.find_furthest_face() {
@@ -42,9 +42,7 @@ pub fn epa_ray<F: Fn(Vec3) -> SupportPoint>(
         let p = support_func(dir);
         let support_distance = ray_distance(p, max_face.normal, ray);
 
-        if iterations >= MAX_ITERATIONS
-            || (support_distance.abs() - max_face.distance.abs()).abs() < TOLERANCE
-        {
+        if (support_distance.abs() - max_face.distance.abs()).abs() < TOLERANCE {
             let point = plane_ray(polytype[max_face.indices[0]].a, max_face.normal, ray);
 
             return Intersection {
@@ -61,7 +59,5 @@ pub fn epa_ray<F: Fn(Vec3) -> SupportPoint>(
             // polytype.add_decimate(p, dir, |a, b| Face::new_ray(a, b, ray));
             polytype.add_decimate(max_face, p, ray);
         }
-
-        iterations += 1;
     }
 }

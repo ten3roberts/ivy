@@ -176,7 +176,7 @@ impl Surface {
     }
 
     pub fn resize(&mut self, gpu: &Gpu, new_size: PhysicalSize<u32>) {
-        tracing::info_span!("resize", ?new_size);
+        tracing::debug_span!("resize", ?new_size);
         if new_size == self.size {
             tracing::info!(size=?new_size, "Duplicate resize message ignored");
             return;

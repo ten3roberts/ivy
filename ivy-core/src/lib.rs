@@ -38,7 +38,6 @@ mod extent;
 pub mod gizmos;
 pub mod layer;
 pub mod macros;
-pub mod math;
 mod systems;
 mod time;
 mod updatable;
@@ -48,7 +47,6 @@ use std::f32::consts::PI;
 
 pub use app::{driver, App, AppBuilder, AppEvent};
 pub use color::*;
-pub use components::*;
 pub use dir::*;
 pub use events::{EventSender, Events};
 pub use extensions::*;

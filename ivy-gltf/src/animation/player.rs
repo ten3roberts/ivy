@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use glam::{Mat4, Quat, Vec3};
 use itertools::Itertools;
 use ivy_assets::Asset;
-use ivy_core::TransformBundle;
+use ivy_core::components::TransformBundle;
 
 use super::{skin::Skin, Animation};
 

@@ -259,7 +259,7 @@ impl RenderGraph {
         assets: &AssetCache,
         external_resources: &ExternalResources,
     ) -> anyhow::Result<()> {
-        let _span = tracing::info_span!("RenderGraph::draw").entered();
+        let _span = tracing::debug_span!("RenderGraph::draw").entered();
 
         if self.order.is_none() {
             self.build()?;
@@ -274,7 +274,7 @@ impl RenderGraph {
 
         for &idx in order {
             let node = &mut self.nodes[idx];
-            let _span = tracing::info_span!("update", node=?node.label()).entered();
+            let _span = tracing::debug_span!("update", node=?node.label()).entered();
             node.update(NodeUpdateContext {
                 gpu,
                 resources: &self.resources,
@@ -288,7 +288,7 @@ impl RenderGraph {
 
         for &idx in order {
             let node = &mut self.nodes[idx];
-            let _span = tracing::info_span!("draw", node=?node.label()).entered();
+            let _span = tracing::debug_span!("draw", node=?node.label()).entered();
             node.draw(NodeExecutionContext {
                 gpu,
                 resources: &self.resources,

@@ -9,20 +9,19 @@ use ivy_assets::AssetCache;
 use ivy_collision::components::collider;
 use ivy_core::{
     app::InitEvent,
-    delta_time, engine,
     gizmos::{self, DEFAULT_RADIUS},
     layer::events::EventRegisterContext,
-    main_camera,
     palette::{Srgb, Srgba},
     profiling::ProfilingLayer,
-    rotation,
     update_layer::{FixedTimeStep, PerTick, Plugin, ScheduledLayer},
-    velocity, world_transform, App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer,
-    TransformBundle, DEG_180, DEG_45, DEG_90,
+    App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer, DEG_180, DEG_45,
 };
-use ivy_engine::{Collider, RbBundle};
+use ivy_engine::{
+    delta_time, engine, main_camera, rotation, velocity, world_transform, Collider, RbBundle,
+    TransformBundle,
+};
 use ivy_gltf::components::animator;
-use ivy_graphics::texture::{ColorChannel, MetallicRoughnessProcessor, TextureDesc};
+use ivy_graphics::texture::TextureDesc;
 use ivy_input::{
     components::input_state,
     layer::InputLayer,
@@ -43,7 +42,7 @@ use ivy_wgpu::{
     light::{LightData, LightKind},
     material_desc::{MaterialData, MaterialDesc},
     mesh_desc::MeshDesc,
-    primitives::{CapsulePrimitive, CubePrimitive, UvSpherePrimitive},
+    primitives::CapsulePrimitive,
     renderer::{EnvironmentData, RenderObjectBundle},
     rendergraph::{self, ExternalResources, RenderGraph},
     shader_library::{ModuleDesc, ShaderLibrary},
@@ -169,7 +168,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
         if simulate {
             position.z = position.z.signum() * 8.0;
 
-            velocity = Vec3::Z * -position.z.signum() * 0.5;
+            velocity = Vec3::Z * -position.z.signum() * 1.0;
         }
 
         Entity::builder()
@@ -183,7 +182,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
                     .with_velocity(velocity)
                     .with_mass(5.0)
                     .with_angular_mass(10.0)
-                    .with_restitution(0.01)
+                    .with_restitution(0.1)
                     .with_friction(0.7),
             )
             .set(

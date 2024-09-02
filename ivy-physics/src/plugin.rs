@@ -10,7 +10,7 @@ use ivy_collision::{
     register_system, update_system, BoundingBox, BvhNode, CollisionTree,
 };
 use ivy_core::{
-    engine, gravity,
+    components::{engine, gravity},
     update_layer::{FixedTimeStep, Plugin},
 };
 
@@ -69,6 +69,7 @@ impl Plugin<FixedTimeStep> for PhysicsPlugin {
             .with_system(integrate_angular_velocity_system(dt))
             .with_system(register_system())
             .with_system(update_system())
+            .with_system(apply_effectors_system(dt))
             .with_system(check_collisions_system())
             .with_system(resolve_collisions_system(dt));
 
