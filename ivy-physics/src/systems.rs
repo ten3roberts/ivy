@@ -209,7 +209,7 @@ pub fn gizmo_system(dt: f32) -> BoxedSystem {
 
 /// Removes small unwanted floating point accumulation by cutting values toward zero
 pub(crate) fn round_to_zero(v: Vec3) -> Vec3 {
-    const THRESHOLD: f32 = 1e-4;
+    const THRESHOLD: f32 = 1e-5;
 
     vec3(
         if v.x.abs() < THRESHOLD { 0.0 } else { v.x },

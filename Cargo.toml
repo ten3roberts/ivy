@@ -89,7 +89,8 @@ bytemuck.workspace = true
 
 [dev-dependencies]
 color-eyre = "0.6.1"
-
+rand.workspace = true
+rand_pcg.workspace = true
 anyhow.workspace = true
 atomic_refcell.workspace = true
 flax.workspace = true

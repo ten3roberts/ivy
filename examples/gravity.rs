@@ -17,8 +17,8 @@ use ivy_core::{
     App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer, DEG_45,
 };
 use ivy_engine::{
-    delta_time, engine, gravity_influence, main_camera, rotation, velocity, world_transform,
-    Collider, RbBundle, TransformBundle,
+    angular_velocity, delta_time, engine, friction, gravity_influence, main_camera, rotation,
+    scale, velocity, world_transform, Collider, RbBundle, TransformBundle,
 };
 use ivy_gltf::components::animator;
 use ivy_graphics::texture::TextureDesc;
@@ -33,8 +33,8 @@ use ivy_physics::PhysicsPlugin;
 use ivy_postprocessing::preconfigured::{PbrRenderGraph, PbrRenderGraphConfig, SkyboxConfig};
 use ivy_wgpu::{
     components::{
-        cast_shadow, environment_data, light_data, light_kind, main_window, projection_matrix,
-        shadow_pass, window,
+        cast_shadow, environment_data, light_data, light_kind, main_window, material,
+        projection_matrix, shadow_pass, window,
     },
     driver::{WindowHandle, WinitDriver},
     events::ResizedEvent,
@@ -50,6 +50,7 @@ use ivy_wgpu::{
     Gpu,
 };
 use ivy_wgpu_types::{PhysicalSize, Surface};
+use rand::{Rng, SeedableRng};
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
 use winit::{dpi::LogicalSize, window::WindowAttributes};
@@ -152,7 +153,7 @@ impl Plugin<PerTick> for GizmosPlugin {
 }
 
 fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
-    let material = MaterialDesc::Content(
+    let white_material = MaterialDesc::Content(
         MaterialData::new()
             .with_roughness_factor(1.0)
             .with_metallic_factor(0.0)
@@ -170,10 +171,16 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
     let shader = assets.load(&PbrShaderDesc);
     let shadow = assets.load(&ShadowShaderDesc);
 
-    let mut cube = |position: Vec3, rotation: Quat| {
-        let mesh = MeshDesc::Content(assets.load(&CapsulePrimitive::default()));
+    const RESTITUTION: f32 = 0.0;
+    const FRICTION: f32 = 0.9;
+    const MASS: f32 = 20.0;
+    const INERTIA_TENSOR: f32 = 50.0;
 
-        Entity::builder()
+    let cube = |position: Vec3, rotation: Quat| {
+        let mesh = MeshDesc::Content(assets.load(&CubePrimitive));
+
+        let mut builder = Entity::builder();
+        builder
             .mount(
                 TransformBundle::default()
                     .with_position(position)
@@ -181,81 +188,139 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
             )
             .mount(
                 RbBundle::default()
-                    .with_mass(50.0)
-                    .with_angular_mass(50.0)
-                    .with_restitution(0.1)
-                    .with_angular_velocity(vec3(0.0, 10.0, 0.0))
-                    .with_friction(0.8), // .with_angular_velocity(Vec3::Y),
+                    .with_mass(MASS)
+                    .with_angular_mass(INERTIA_TENSOR)
+                    .with_restitution(RESTITUTION)
+                    .with_friction(FRICTION),
             )
-            .set(gravity_influence(), 1.0)
+            .set(
+                collider(),
+                Collider::cube_from_center(Vec3::ZERO, Vec3::ONE),
+            )
+            .mount(RenderObjectBundle::new(
+                mesh.clone(),
+                white_material.clone(),
+                shader.clone(),
+            ))
+            .set(shadow_pass(), shadow.clone());
+
+        builder
+    };
+
+    let capsule = |position: Vec3, rotation: Quat| {
+        let mesh = MeshDesc::Content(assets.load(&CapsulePrimitive::default()));
+
+        let mut builder = Entity::builder();
+        builder
+            .mount(
+                TransformBundle::default()
+                    .with_position(position)
+                    .with_rotation(rotation),
+            )
+            .mount(
+                RbBundle::default()
+                    .with_mass(MASS)
+                    .with_angular_mass(INERTIA_TENSOR)
+                    .with_restitution(RESTITUTION)
+                    .with_friction(FRICTION),
+            )
             .set(collider(), Collider::capsule(1.0, 1.0))
             .mount(RenderObjectBundle::new(
                 mesh.clone(),
-                red_material.clone(),
+                white_material.clone(),
+                shader.clone(),
+            ))
+            .set(shadow_pass(), shadow.clone());
+
+        builder
+    };
+
+    let mut scenario_rolling_capsule = |world: &mut World| {
+        cube(
+            vec3(0.0, 2.0, 0.0),
+            Quat::from_scaled_axis(vec3(0.0, 0.0, 1.5)),
+        )
+        .set(material(), red_material.clone())
+        .set(friction(), 0.8)
+        .set(angular_velocity(), Vec3::Y * 20.0)
+        .set(gravity_influence(), 1.0)
+        .spawn(world);
+
+        Entity::builder()
+            .mount(
+                TransformBundle::default()
+                    .with_scale(vec3(5.0, 1.0, 5.0))
+                    .with_rotation(Quat::from_scaled_axis(Vec3::Z * 0.0)),
+            )
+            .mount(
+                RbBundle::default()
+                    .with_mass(1.0)
+                    .with_angular_mass(1.0)
+                    .with_restitution(1.0)
+                    .with_friction(1.0),
+            )
+            .set(
+                collider(),
+                Collider::cube_from_center(Vec3::ZERO, Vec3::ONE),
+            )
+            .set(is_static(), ())
+            .mount(RenderObjectBundle::new(
+                cube_mesh.clone(),
+                white_material.clone(),
+                shader.clone(),
+            ))
+            .set(shadow_pass(), shadow.clone())
+            .spawn(world);
+
+        Entity::builder()
+            .mount(
+                TransformBundle::default()
+                    .with_position(vec3(-7.0, -3.0, 0.0))
+                    .with_scale(vec3(20.0, 0.1, 20.0))
+                    .with_rotation(Quat::from_scaled_axis(Vec3::Z * -0.2)),
+            )
+            .mount(
+                RbBundle::default()
+                    .with_mass(1.0)
+                    .with_angular_mass(1.0)
+                    .with_restitution(0.1)
+                    .with_friction(0.5),
+            )
+            .set(
+                collider(),
+                Collider::cube_from_center(Vec3::ZERO, Vec3::ONE),
+            )
+            .set(is_static(), ())
+            .mount(RenderObjectBundle::new(
+                cube_mesh.clone(),
+                white_material.clone(),
                 shader.clone(),
             ))
             .set(shadow_pass(), shadow.clone())
             .spawn(world);
     };
 
-    // Twisted and offset
-    cube(
-        vec3(0.0, 3.0, 0.0),
-        Quat::from_scaled_axis(vec3(0.0, 0.0, 0.05)),
-    );
+    let scenario_sliding = |world: &mut World| {
+        cube(vec3(-15.0, 4.0, 1.0), Quat::from_scaled_axis(Vec3::Z * 0.5))
+            .set(velocity(), Vec3::X * 5.0)
+            .set(gravity_influence(), 1.0)
+            .set(material(), red_material.clone())
+            .spawn(world);
 
-    Entity::builder()
-        .mount(
-            TransformBundle::default()
-                .with_scale(vec3(5.0, 1.0, 5.0))
-                .with_rotation(Quat::from_scaled_axis(Vec3::Z * 0.1)),
-        )
-        .mount(
-            RbBundle::default()
-                .with_mass(1.0)
-                .with_angular_mass(1.0)
-                .with_restitution(1.0)
-                .with_friction(1.0),
-        )
-        .set(
-            collider(),
-            Collider::cube_from_center(Vec3::ZERO, Vec3::ONE),
-        )
-        .set(is_static(), ())
-        .mount(RenderObjectBundle::new(
-            cube_mesh.clone(),
-            material.clone(),
-            shader.clone(),
-        ))
-        .set(shadow_pass(), shadow.clone())
-        .spawn(world);
+        capsule(vec3(-15.0, 4.0, 5.0), Quat::from_scaled_axis(Vec3::Z * 0.5))
+            .set(velocity(), Vec3::X * 5.0)
+            .set(gravity_influence(), 1.0)
+            .set(material(), red_material.clone())
+            .spawn(world);
 
-    Entity::builder()
-        .mount(
-            TransformBundle::default()
-                .with_position(vec3(-7.0, -4.0, 0.0))
-                .with_scale(vec3(20.0, 0.1, 20.0))
-                .with_rotation(Quat::from_scaled_axis(Vec3::Z * -0.5)),
-        )
-        .mount(
-            RbBundle::default()
-                .with_mass(1.0)
-                .with_angular_mass(1.0)
-                .with_restitution(0.1)
-                .with_friction(0.9),
-        )
-        .set(
-            collider(),
-            Collider::cube_from_center(Vec3::ZERO, Vec3::ONE),
-        )
-        .set(is_static(), ())
-        .mount(RenderObjectBundle::new(
-            cube_mesh.clone(),
-            material.clone(),
-            shader.clone(),
-        ))
-        .set(shadow_pass(), shadow.clone())
-        .spawn(world);
+        cube(Vec3::ZERO, Quat::IDENTITY)
+            .set(scale(), vec3(20.0, 1.0, 20.0))
+            .set(is_static(), ())
+            .spawn(world);
+    };
+
+    // scenario_sliding(world);
+    scenario_rolling_capsule(world);
 
     Entity::builder()
         .mount(TransformBundle::default().with_rotation(Quat::from_euler(

@@ -269,9 +269,6 @@ impl ContactGenerator {
             "{a_surface:?} {b_surface:?} {output:?}"
         );
 
-        if !midpoint.is_finite() {
-            midpoint = flatten(&contact_basis);
-        }
         ContactSurface {
             area: polygon_area(&output, midpoint),
             b_surface: b_surface.clone(),
@@ -290,7 +287,7 @@ fn polygon_area(points: &[Vec2], midpoint: Vec2) -> f32 {
     let area: f32 = points
         .iter()
         .circular_tuple_windows()
-        .map(|(a, b)| (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y)))
+        .map(|(a, b)| (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y)).abs())
         .sum();
 
     area / 2.0

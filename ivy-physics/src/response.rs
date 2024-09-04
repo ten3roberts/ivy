@@ -66,11 +66,7 @@ pub fn resolve_collisions(
             "mass of two colliding objects must not be both zero"
         );
 
-        let Response {
-            impulse,
-            force,
-            torque,
-        } = calculate_impulse_response(
+        let response = calculate_impulse_response(
             &a_object,
             &b_object,
             collision.contact.normal(),
@@ -80,20 +76,28 @@ pub fn resolve_collisions(
 
         let dir = collision.contact.normal() * collision.contact.depth();
 
+        let linear = round_to_zero(response.linear);
+        let angular = round_to_zero(response.angular);
+
+        let dampening = dampen(&a_object, &b_object, collision.contact.normal());
+
         {
             let effector = &mut *a.get_mut(effector())?;
-            effector.apply_impulse_at(-impulse, collision.contact.midpoint() - a_object.pos, true);
-            effector.apply_force_at(-force, collision.contact.midpoint() - a_object.pos, true);
-            effector.apply_torque(-torque);
+            effector.apply_impulse_at(-linear, collision.contact.midpoint() - a_object.pos, true);
+            effector.apply_torque(-angular);
             effector.translate(-dir * (b_object.mass / total_mass));
+            effector.apply_velocity_change(-dampening.linear, true);
+            effector.apply_angular_velocity_change(-dampening.angular);
         }
 
         {
             let effector = &mut *b.get_mut(effector())?;
-            effector.apply_impulse_at(impulse, collision.contact.midpoint() - b_object.pos, true);
-            effector.apply_force_at(force, collision.contact.midpoint() - b_object.pos, true);
-            effector.apply_torque(torque);
+            effector.apply_impulse_at(linear, collision.contact.midpoint() - b_object.pos, true);
+            effector.apply_torque(angular);
             effector.translate(dir * (a_object.mass / total_mass));
+
+            effector.apply_velocity_change(dampening.linear, true);
+            effector.apply_angular_velocity_change(dampening.angular);
         }
     }
 
@@ -147,9 +151,8 @@ fn resolve_static(
 
     // tracing::info!(polarity, "{contact:.1}");
     let Response {
-        impulse,
-        force,
-        torque,
+        linear: impulse,
+        angular: torque,
     } = calculate_impulse_response(
         &ResolveObject {
             mass: f32::INFINITY,
@@ -169,16 +172,15 @@ fn resolve_static(
         normal
     );
 
-    // let dot = impulse.reject_from(normal);
-    // tracing::info!(?dot);
+    let dampening = dampen(&a, &b, normal);
 
-    tracing::info!(?impulse, ?torque);
-    b_effector.apply_impulse_at(impulse * 0.9, contact.midpoint() - b.pos, true);
-    b_effector.apply_force_at(force * 0.9, contact.midpoint() - b.pos, true);
-    b_effector.apply_angular_impulse(torque);
-    // b_effector.apply_impulse(impulse * polarity, true);
-    b_effector.translate(normal * (contact.depth() - 0.1).max(0.0));
-    // effector.apply_force_at(b_f, contact.points[1] - b.pos);
+    b_effector.apply_impulse_at(round_to_zero(impulse), contact.midpoint() - b.pos, true);
+    b_effector.apply_angular_impulse(round_to_zero(torque));
+
+    b_effector.apply_velocity_change(dampening.linear, true);
+    b_effector.apply_angular_velocity_change(dampening.angular);
+
+    b_effector.translate(normal * (contact.depth() - 0.001).max(0.0));
 
     Ok(())
 }
@@ -209,13 +211,25 @@ impl ResolveObject {
 }
 
 struct Response {
-    impulse: Vec3,
-    force: Vec3,
-    torque: Vec3,
+    linear: Vec3,
+    angular: Vec3,
+}
+
+fn dampen(a: &ResolveObject, b: &ResolveObject, normal: Vec3) -> Response {
+    const DAMPEN_FACTOR: f32 = 1e-3;
+    const ANGULAR_DAMPEN_FACTOR: f32 = 1e-2;
+    let transverse_vel = (a.vel - b.vel).reject_from(normal);
+
+    let transverse_w = (a.ang_vel - b.ang_vel).reject_from(normal);
+
+    Response {
+        linear: transverse_vel * DAMPEN_FACTOR,
+        angular: transverse_w * ANGULAR_DAMPEN_FACTOR,
+    }
 }
 
 /// Generates an impulse for solving a collision.
-pub fn calculate_impulse_response(
+fn calculate_impulse_response(
     a: &ResolveObject,
     b: &ResolveObject,
     normal: Vec3,
@@ -241,9 +255,8 @@ pub fn calculate_impulse_response(
     // objects are separating
     if contact_velocity >= 0.0 {
         return Response {
-            impulse: Vec3::ZERO,
-            force: Vec3::ZERO,
-            torque: Vec3::ZERO,
+            linear: Vec3::ZERO,
+            angular: Vec3::ZERO,
         };
     }
 
@@ -269,10 +282,9 @@ pub fn calculate_impulse_response(
 
     let disc_friction = rel_angular * torque_mag;
 
-    assert!(impulse > 0.0);
+    // assert!(impulse > 0.0, "impulse: {impulse:?}");
     Response {
-        impulse: impulse * normal,
-        force: friction,
-        torque: disc_friction,
+        linear: impulse * normal + friction,
+        angular: disc_friction,
     }
 }

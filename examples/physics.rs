@@ -182,7 +182,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
                     .with_velocity(velocity)
                     .with_mass(5.0)
                     .with_angular_mass(10.0)
-                    .with_restitution(0.1)
+                    .with_restitution(0.0)
                     .with_friction(0.7),
             )
             .set(

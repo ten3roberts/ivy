@@ -35,8 +35,6 @@ impl Simplex {
 
     /// Returns the next direction more likely to enclose origin
     pub(crate) fn next_dir(&mut self) -> SimplexExpansion {
-        let same_direction = |a: Vec3, b: Vec3| a.dot(b) > 0.0;
-
         match *self {
             Self::Point([a]) => SimplexExpansion::Direction(-a.support),
             Self::Line([a, b]) => {

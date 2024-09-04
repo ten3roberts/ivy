@@ -1513,6 +1513,8 @@ dependencies = [
  "ivy-wgpu",
  "ivy-wgpu-types",
  "parking_lot",
+ "rand",
+ "rand_pcg",
  "regex",
  "slotmap",
  "thiserror",
