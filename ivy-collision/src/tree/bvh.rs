@@ -1,6 +1,7 @@
 use std::{collections::HashSet, mem};
 
 use glam::Vec3;
+use ivy_assets::AssetDesc;
 use ivy_core::{
     gizmos::{Cube, GizmosSection, Sphere, DEFAULT_THICKNESS},
     Color, ColorExt,
@@ -12,7 +13,7 @@ use palette::{
 };
 use slotmap::{SecondaryMap, SlotMap};
 
-use crate::{BoundingBox, CollisionTreeNode, NodeIndex, NodeState, Nodes, ObjectData, ObjectIndex};
+use crate::{Body, BodyIndex, BoundingBox, CollisionTreeNode, NodeIndex, NodeState, Nodes};
 
 pub(crate) const MARGIN: f32 = 1.2;
 const NODE_CAPACITY: usize = 1;
@@ -21,7 +22,7 @@ const NODE_CAPACITY: usize = 1;
 pub struct BvhNode {
     current_bounds: BoundingBox,
     allocated_bounds: BoundingBox,
-    objects: Vec<ObjectIndex>,
+    objects: Vec<BodyIndex>,
     children: Option<[NodeIndex; 2]>,
     state: NodeState,
     dirty_bounds: bool,
@@ -71,8 +72,8 @@ impl BvhNode {
 
     fn from_objects(
         nodes: &mut Nodes<Self>,
-        objects: Vec<ObjectIndex>,
-        data: &mut SlotMap<ObjectIndex, ObjectData>,
+        objects: Vec<BodyIndex>,
+        data: &mut SlotMap<BodyIndex, Body>,
     ) -> (NodeIndex, u32) {
         let state = objects
             .iter()
@@ -108,7 +109,7 @@ impl BvhNode {
     fn try_split(
         index: NodeIndex,
         nodes: &mut Nodes<Self>,
-        data: &mut SlotMap<ObjectIndex, ObjectData>,
+        data: &mut SlotMap<BodyIndex, Body>,
     ) -> u32 {
         let node = &mut nodes[index];
         if node.objects.len() <= NODE_CAPACITY {
@@ -148,7 +149,7 @@ impl BvhNode {
         new_height
     }
 
-    pub fn calculate_bounds_incremental(&self, object: &ObjectData) -> BoundingBox {
+    pub fn calculate_bounds_incremental(&self, object: &Body) -> BoundingBox {
         self.current_bounds
             .merge(object.extended_bounds.rel_margin(if !object.is_movable() {
                 1.0
@@ -158,10 +159,7 @@ impl BvhNode {
     }
 
     /// Updates the bounds of the object
-    pub fn calculate_bounds(
-        objects: &[ObjectIndex],
-        data: &SlotMap<ObjectIndex, ObjectData>,
-    ) -> BoundingBox {
+    pub fn calculate_bounds(objects: &[BodyIndex], data: &SlotMap<BodyIndex, Body>) -> BoundingBox {
         let mut l = Vec3::new(f32::MAX, f32::MAX, f32::MAX);
         let mut r = Vec3::new(f32::MIN, f32::MIN, f32::MIN);
 
@@ -174,7 +172,7 @@ impl BvhNode {
         BoundingBox::from_corners(l, r)
     }
 
-    fn sort_by_axis(&mut self, axis: Axis, data: &SlotMap<ObjectIndex, ObjectData>) {
+    fn sort_by_axis(&mut self, axis: Axis, data: &SlotMap<BodyIndex, Body>) {
         let axis = axis.into();
 
         self.objects
@@ -224,8 +222,8 @@ impl BvhNode {
     pub fn check_collisions<'a>(
         index: NodeIndex,
         nodes: &Nodes<Self>,
-        data: &'a SlotMap<ObjectIndex, ObjectData>,
-        on_collision: &mut impl FnMut(&'a ObjectData, &'a ObjectData),
+        data: &'a SlotMap<BodyIndex, Body>,
+        on_collision: &mut impl FnMut(BodyIndex, &'a Body, BodyIndex, &'a Body),
     ) {
         let mut on_overlap = |_, a: &Self, _, b: &Self| {
             assert!(a.is_leaf());
@@ -237,7 +235,7 @@ impl BvhNode {
                     let b_obj = &data[b];
 
                     if a_obj.bounds.overlaps(b_obj.bounds) {
-                        on_collision(a_obj, b_obj);
+                        on_collision(a, a_obj, b, b_obj);
                     }
                 }
             }
@@ -260,7 +258,7 @@ impl BvhNode {
                     assert_ne!(a, b);
                     let b_obj = &data[b];
                     if a_obj.bounds.overlaps(b_obj.bounds) {
-                        on_collision(a_obj, b_obj);
+                        on_collision(a, a_obj, b, b_obj);
                     }
                 }
             }
@@ -268,7 +266,7 @@ impl BvhNode {
     }
 
     /// Merge a whole tree and fills `objects` with the objects in the tree
-    fn merge(index: NodeIndex, nodes: &mut Nodes<Self>, objects: &mut Vec<ObjectIndex>) {
+    fn merge(index: NodeIndex, nodes: &mut Nodes<Self>, objects: &mut Vec<BodyIndex>) {
         let node = &mut nodes[index];
 
         node.dirty_bounds = true;
@@ -286,8 +284,8 @@ impl BvhNode {
     fn insert(
         index: NodeIndex,
         nodes: &mut Nodes<Self>,
-        object: ObjectIndex,
-        data: &mut SlotMap<ObjectIndex, ObjectData>,
+        object: BodyIndex,
+        data: &mut SlotMap<BodyIndex, Body>,
     ) {
         let node = &mut nodes[index];
         let obj = &data[object];
@@ -347,7 +345,7 @@ impl BvhNode {
     pub fn rebalance(
         index: NodeIndex,
         nodes: &mut Nodes<Self>,
-        data: &mut SlotMap<ObjectIndex, ObjectData>,
+        data: &mut SlotMap<BodyIndex, Body>,
     ) -> u32 {
         if let Some([l, r]) = nodes[index].children {
             let l = Self::rebalance(l, nodes, data);
@@ -379,13 +377,14 @@ impl BvhNode {
     pub fn update_bounds(
         index: NodeIndex,
         nodes: &mut Nodes<Self>,
-        objects: &SlotMap<ObjectIndex, ObjectData>,
+        objects: &SlotMap<BodyIndex, Body>,
     ) -> BoundingBox {
         if let Some([l, r]) = nodes[index].children {
             let l = Self::update_bounds(l, nodes, objects);
             let r = Self::update_bounds(r, nodes, objects);
             let bounds = l.merge(r);
             nodes[index].current_bounds = bounds;
+            assert!(nodes[index].allocated_bounds.contains(bounds));
             bounds
         } else {
             let node = &mut nodes[index];
@@ -400,20 +399,20 @@ impl BvhNode {
 }
 
 impl CollisionTreeNode for BvhNode {
-    fn objects(&self) -> &[ObjectIndex] {
+    fn objects(&self) -> &[BodyIndex] {
         &self.objects
     }
 
     fn insert(
         index: NodeIndex,
         nodes: &mut Nodes<Self>,
-        object: ObjectIndex,
-        data: &mut SlotMap<ObjectIndex, ObjectData>,
+        object: BodyIndex,
+        data: &mut SlotMap<BodyIndex, Body>,
     ) {
         Self::insert(index, nodes, object, data);
     }
 
-    fn remove(&mut self, object: ObjectIndex) -> Option<ObjectIndex> {
+    fn remove(&mut self, object: BodyIndex) -> Option<BodyIndex> {
         let idx = self.objects.iter().position(|&val| val == object)?;
 
         self.dirty_bounds = true;
@@ -438,7 +437,7 @@ impl BvhNode {
         index: NodeIndex,
         nodes: &Nodes<BvhNode>,
         gizmos: &mut GizmosSection,
-        data: &SlotMap<ObjectIndex, ObjectData>,
+        data: &SlotMap<BodyIndex, Body>,
         overlapping: &mut HashSet<NodeIndex>,
         depth: usize,
     ) {
@@ -479,7 +478,7 @@ impl BvhNode {
     pub fn draw_primitives(
         &self,
         gizmos: &mut GizmosSection,
-        data: &SlotMap<ObjectIndex, ObjectData>,
+        data: &SlotMap<BodyIndex, Body>,
         color: Color,
     ) {
         // if !self.is_leaf() {

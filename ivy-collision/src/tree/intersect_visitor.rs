@@ -6,7 +6,7 @@ use slotmap::SlotMap;
 
 use crate::{
     components, contact::ContactSurface, query::TreeQuery, BoundingBox, CollisionTree,
-    CollisionTreeNode, Intersection, IntersectionGenerator, ObjectData, ObjectIndex, Shape,
+    CollisionTreeNode, Intersection, IntersectionGenerator, Body, BodyIndex, Shape,
     TransformedShape, Visitor,
 };
 
@@ -63,7 +63,7 @@ where
     fn accept(
         &self,
         node: &'a BvhNode,
-        data: &'a SlotMap<ObjectIndex, ObjectData>,
+        data: &'a SlotMap<BodyIndex, Body>,
     ) -> Option<Self::Output> {
         if node.bounds().contains(self.bounds) {
             Some(IntersectIterator {
@@ -86,8 +86,8 @@ where
 pub struct IntersectIterator<'a, C, Q> {
     bounds: BoundingBox,
     collider: &'a C,
-    objects: Iter<'a, ObjectIndex>,
-    data: &'a SlotMap<ObjectIndex, ObjectData>,
+    objects: Iter<'a, BodyIndex>,
+    data: &'a SlotMap<BodyIndex, Body>,
     transform: Mat4,
     world: &'a World,
     filter: &'a Q,

@@ -1,4 +1,7 @@
-use std::collections::HashSet;
+use std::{
+    collections::{btree_map::Entry, BTreeMap, HashSet},
+    path::Iter,
+};
 
 use flax::{
     components::is_static, entity_ids, fetch::Satisfied, sink::Sink, BoxedSystem, CommandBuffer,
@@ -6,15 +9,16 @@ use flax::{
     System, World,
 };
 use glam::{Mat4, Vec3};
+use itertools::Itertools;
 use ivy_core::{
     components::{is_trigger, mass, velocity, world_transform},
     gizmos::{DrawGizmos, Gizmos, GizmosSection},
 };
-use slotmap::{new_key_type, SlotMap};
+use slotmap::{new_key_type, Key, SecondaryMap, SlotMap};
 
 use crate::{
     components::{self, collider, collider_offset, collision_tree, tree_index},
-    BoundingBox, Collider, Collision, IntersectionGenerator, Shape, TransformedShape,
+    BoundingBox, Collider, Contact, IntersectionGenerator, Shape, TransformedShape,
 };
 
 mod binary_node;
@@ -35,8 +39,378 @@ use self::query::TreeQuery;
 
 pub type Nodes<N> = SlotMap<NodeIndex, N>;
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum IndexedRange<T> {
+    Min,
+    Exact(T),
+    Max,
+}
+
 new_key_type! {
-    pub struct ObjectIndex;
+    pub struct BodyIndex;
+    pub struct ContactIndex;
+}
+
+type ContactMap = SlotMap<ContactIndex, Contact>;
+type BodyMap = SlotMap<BodyIndex, Body>;
+
+pub struct ContactIter<'a> {
+    contacts: &'a ContactMap,
+    index: ContactIndex,
+}
+
+impl<'a> Iterator for ContactIter<'a> {
+    type Item = (ContactIndex, &'a Contact);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let index = self.index;
+        if index.is_null() {
+            return None;
+        }
+
+        let contact = &self.contacts[index];
+        self.index = contact.next_contact;
+        Some((index, contact))
+    }
+}
+
+pub struct Island {
+    // parent or self
+    parent: BodyIndex,
+    head_body: BodyIndex,
+    tail_body: BodyIndex,
+    // used to rebuild island graph components during split
+    head_contact: ContactIndex,
+    tail_contact: ContactIndex,
+}
+
+impl Island {
+    fn add_contact(&mut self, contacts: &mut ContactMap, contact_index: ContactIndex) {
+        let contact = &mut contacts[contact_index];
+        assert!(contact.island.is_null());
+        assert!(contact.next_contact.is_null());
+
+        contact.next_contact = self.head_contact;
+        if self.head_contact.is_null() {
+            self.tail_contact = contact_index;
+        }
+
+        if !self.head_contact.is_null() {
+            contacts[self.head_contact].prev_contact = contact_index;
+        }
+
+        self.head_contact = contact_index;
+    }
+
+    fn remove_contact(&mut self, contacts: &mut ContactMap, contact_index: ContactIndex) {
+        let contact = &mut contacts[contact_index];
+
+        // last
+        if contact.next_contact.is_null() {
+            assert_eq!(self.tail_contact, contact_index);
+            self.tail_contact = contact.prev_contact;
+        }
+
+        if contact_index == self.head_contact {
+            let next = contact.next_contact;
+            contact.next_contact = ContactIndex::null();
+            contact.island = BodyIndex::null();
+            assert!(contact.prev_contact.is_null());
+
+            self.head_contact = next;
+
+            let next = &mut contacts[next];
+            assert_eq!(next.prev_contact, contact_index);
+            next.prev_contact = ContactIndex::null();
+        } else {
+            let prev = contact.prev_contact;
+            assert!(!prev.is_null());
+            let next = contact.next_contact;
+
+            assert_eq!(contacts[prev].next_contact, contact_index);
+
+            contacts[prev].next_contact = next;
+            if !next.is_null() {
+                contacts[next].prev_contact = prev;
+            }
+        }
+    }
+
+    fn add_body(&mut self, bodies: &mut BodyMap, body_index: BodyIndex) {
+        let body = &mut bodies[body_index];
+        assert!(body.island.is_null());
+        assert!(body.next_body.is_null());
+
+        body.next_body = self.head_body;
+        bodies[self.head_body].prev_body = body_index;
+        if self.head_body.is_null() {
+            self.tail_body = body_index;
+        }
+
+        if !self.head_body.is_null() {
+            bodies[self.head_body].prev_body = body_index;
+        }
+
+        self.head_body = body_index;
+    }
+
+    fn remove_body(&mut self, bodies: &mut BodyMap, body_index: BodyIndex) {
+        let body = &mut bodies[body_index];
+        if body.next_body.is_null() {
+            assert_eq!(self.tail_body, body_index);
+            self.tail_body = body.prev_body;
+        }
+        if body_index == self.head_body {
+            let next = body.next_body;
+            body.next_body = BodyIndex::null();
+            body.island = BodyIndex::null();
+            assert!(body.prev_body.is_null());
+
+            self.head_body = next;
+
+            let next = &mut bodies[next];
+            assert_eq!(next.prev_body, body_index);
+            next.prev_body = BodyIndex::null();
+        } else {
+            let prev = body.prev_body;
+            assert!(!prev.is_null());
+            let next = body.next_body;
+
+            assert_eq!(bodies[prev].next_body, body_index);
+
+            bodies[prev].next_body = next;
+            if !next.is_null() {
+                bodies[next].prev_body = prev;
+            }
+        }
+    }
+
+    fn contacts<'a>(&self, contacts: &'a ContactMap) -> ContactIter<'a> {
+        ContactIter {
+            contacts,
+            index: self.head_contact,
+        }
+    }
+}
+
+pub(crate) struct Islands {
+    islands: SecondaryMap<BodyIndex, Island>,
+}
+
+impl Islands {
+    pub(crate) fn new() -> Self {
+        Self {
+            islands: Default::default(),
+        }
+    }
+
+    fn create_island(&mut self, body_index: BodyIndex) {
+        self.islands.insert(
+            body_index,
+            Island {
+                parent: body_index,
+                head_body: BodyIndex::null(),
+                head_contact: ContactIndex::null(),
+                tail_body: BodyIndex::null(),
+                tail_contact: ContactIndex::null(),
+            },
+        );
+    }
+
+    fn representative(&self, index: BodyIndex) -> BodyIndex {
+        let mut index = index;
+
+        loop {
+            let parent = self.islands[index].parent;
+            if parent == index {
+                break;
+            }
+
+            index = parent;
+        }
+
+        index
+    }
+
+    fn representative_compress(&mut self, index: BodyIndex) -> BodyIndex {
+        let mut index = index;
+
+        loop {
+            let node = &mut self.islands[index];
+            let parent = node.parent;
+
+            if parent == index {
+                break;
+            }
+
+            let next_parent = self.islands[parent].parent;
+            self.islands[index].parent = next_parent;
+
+            index = parent;
+        }
+
+        index
+    }
+
+    fn link(&mut self, contacts: &mut ContactMap, contact_index: ContactIndex) -> &mut Island {
+        let contact = &contacts[contact_index];
+        let a = contact.a.body;
+        let b = contact.b.body;
+
+        let a_rep = self.representative_compress(a);
+        let b_rep = self.representative_compress(b);
+
+        if a_rep == b_rep {
+            let island = &mut self.islands[a_rep];
+
+            island.add_contact(contacts, contact_index);
+            island
+        } else {
+            self.islands[b_rep].parent = a_rep;
+
+            let island = &mut self.islands[a_rep];
+
+            island.add_contact(contacts, contact_index);
+            island
+        }
+    }
+
+    // Unlinks a contact from it's island
+    //
+    // Does not split the island
+    fn unlink(&mut self, contacts: &mut ContactMap, contact_index: ContactIndex) {
+        let contact = &mut contacts[contact_index];
+
+        let island_index = contact.island;
+        let island = &mut self.islands[island_index];
+
+        island.remove_contact(contacts, contact_index);
+    }
+
+    /// merges all island bodies into the roots
+    fn merge_root_islands(&mut self, contacts: &mut ContactMap, bodies: &mut BodyMap) {
+        let keys = self.islands.keys().collect_vec();
+        for index in keys {
+            let parent_index = self.islands[index].parent;
+            if parent_index != index {
+                let [island, parent] = self
+                    .islands
+                    .get_disjoint_mut([index, parent_index])
+                    .unwrap();
+
+                let mut contact_index = island.head_contact;
+                while !contact_index.is_null() {
+                    let contact = &mut contacts[contact_index];
+                    contact.island = parent_index;
+
+                    let next = contact.next_contact;
+                    // reached end, attach parent list
+                    if next.is_null() {
+                        contact.next_contact = parent.head_contact;
+                        if !parent.head_contact.is_null() {
+                            assert!(contacts[parent.head_contact].prev_contact.is_null());
+                            contacts[parent.head_contact].prev_contact = contact_index;
+                        }
+                        parent.head_contact = contact_index;
+                    }
+                    contact_index = next;
+                }
+
+                let mut body_index = island.head_body;
+                while !body_index.is_null() {
+                    let body = &mut bodies[body_index];
+                    body.island = parent_index;
+
+                    let next = body.next_body;
+                    // reached end, attach parent list
+                    if next.is_null() {
+                        body.next_body = parent.head_body;
+                        if !parent.head_body.is_null() {
+                            assert!(bodies[parent.head_body].prev_body.is_null());
+                            bodies[parent.head_body].prev_body = body_index;
+                        }
+                        parent.head_body = body_index;
+                    }
+                    body_index = next;
+                }
+            }
+        }
+    }
+
+    fn split(
+        &mut self,
+        island: BodyIndex,
+        bodies: &mut BodyMap,
+        contacts: &mut ContactMap,
+        contact_map: BTreeMap<(BodyIndex, IndexedRange<BodyIndex>), ContactIndex>,
+    ) {
+        let island = &self.islands[island];
+
+        let mut body_index = island.head_body;
+
+        let mut all_bodies = Vec::new();
+        while !body_index.is_null() {
+            let body = &bodies[body_index];
+            all_bodies.push(body_index);
+            body_index = body.next_body;
+        }
+
+        let mut visited: SecondaryMap<BodyIndex, ()> = SecondaryMap::new();
+        for body_index in all_bodies {
+            // found in connection from another seed
+            if visited.contains_key(body_index) {
+                return;
+            }
+
+            let body = &mut bodies[body_index];
+
+            let mut stack = vec![body_index];
+
+            // we now know body *is* a seed/root of an island.
+            //
+            // It may be the same island we started on
+            let seed_index = body_index;
+            let mut seed_island = self
+                .islands
+                .insert(
+                    body_index,
+                    Island {
+                        parent: body_index,
+                        head_body: BodyIndex::null(),
+                        head_contact: ContactIndex::null(),
+                        tail_body: BodyIndex::null(),
+                        tail_contact: ContactIndex::null(),
+                    },
+                )
+                .unwrap();
+
+            while let Some(body_index) = stack.pop() {
+                visited.insert(body_index, ());
+                seed_island.add_body(bodies, body_index);
+
+                let body = &mut bodies[body_index];
+                body.island = seed_index;
+
+                let edges = contact_map
+                    .range((body_index, IndexedRange::Min)..(body_index, IndexedRange::Max));
+
+                for ((_, other_index), &contact_index) in edges {
+                    let &IndexedRange::Exact(other_index) = other_index else {
+                        panic!("");
+                    };
+
+                    if !visited.contains_key(other_index) {
+                        stack.push(other_index);
+                    }
+
+                    // connect contact to this island
+                    let contact = &mut contacts[contact_index];
+                    contact.island = seed_index;
+                    seed_island.add_contact(contacts, contact_index);
+                }
+            }
+        }
+    }
 }
 
 pub struct CollisionTree {
@@ -45,9 +419,14 @@ pub struct CollisionTree {
     /// Double buffer as insertions may cause new pops.
     root: NodeIndex,
 
-    object_data: SlotMap<ObjectIndex, ObjectData>,
-    active_collisions: Vec<Collision>,
+    body_data: SlotMap<BodyIndex, Body>,
+    active_collisions: Vec<Contact>,
     intersection_generator: IntersectionGenerator,
+
+    contacts: SlotMap<ContactIndex, Contact>,
+    contact_map: BTreeMap<(BodyIndex, IndexedRange<BodyIndex>), ContactIndex>,
+
+    islands: Islands,
 }
 
 impl CollisionTree {
@@ -59,9 +438,12 @@ impl CollisionTree {
         Self {
             nodes,
             root,
-            object_data: SlotMap::with_key(),
+            body_data: SlotMap::with_key(),
             active_collisions: Vec::new(),
             intersection_generator: Default::default(),
+            islands: Islands::new(),
+            contacts: Default::default(),
+            contact_map: Default::default(),
         }
     }
 
@@ -79,10 +461,14 @@ impl CollisionTree {
         &mut self.nodes
     }
 
-    fn insert_impl(&mut self, _: Entity, object: ObjectData) -> ObjectIndex {
-        let index = self.object_data.insert(object);
+    fn insert_impl(&mut self, _: Entity, mut body: Body) -> BodyIndex {
+        let index = self.body_data.insert_with_key(|index| {
+            self.islands.create_island(index);
+            body.island = index;
+            body
+        });
 
-        BvhNode::insert(self.root, &mut self.nodes, index, &mut self.object_data);
+        BvhNode::insert(self.root, &mut self.nodes, index, &mut self.body_data);
 
         index
     }
@@ -92,8 +478,33 @@ impl CollisionTree {
         let mut query = Query::new((entity_ids(), ObjectQuery::new())).without(tree_index());
 
         for (id, q) in query.borrow(world).iter() {
-            let obj: ObjectData = q.into_object_data();
-            let tree_index = self.insert_impl(id, obj);
+            let offset = *q.offset;
+            let transform = *q.transform * offset;
+
+            let bounds = q.collider.bounding_box(transform);
+            let extended_bounds = bounds.expand(*q.velocity * 0.1);
+
+            let body = Body {
+                id: q.id,
+                bounds,
+                extended_bounds,
+                transform,
+                is_trigger: q.is_trigger,
+                state: if q.is_static {
+                    NodeState::Static
+                } else {
+                    NodeState::Dynamic
+                },
+                movable: q.mass.map(|v| v.is_normal()).unwrap_or(false),
+                collider: q.collider.clone(),
+                containing_bounds: Default::default(),
+                node: NodeIndex::null(),
+                island: BodyIndex::null(),
+                next_body: BodyIndex::null(),
+                prev_body: BodyIndex::null(),
+            };
+
+            let tree_index = self.insert_impl(id, body);
 
             cmd.set(id, components::tree_index(), tree_index);
         }
@@ -106,7 +517,7 @@ impl CollisionTree {
 
         // Update object data
         for (&object_index, q) in query.borrow(world).iter() {
-            let object_data = &mut self.object_data[object_index];
+            let object_data = &mut self.body_data[object_index];
             object_data.transform = *q.transform;
             object_data.bounds = q.collider.bounding_box(*q.transform);
             object_data.extended_bounds = object_data.bounds.expand(q.velocity.abs() * 0.1);
@@ -124,12 +535,12 @@ impl CollisionTree {
         }
 
         for object in to_refit {
-            BvhNode::insert(self.root, &mut self.nodes, object, &mut self.object_data)
+            BvhNode::insert(self.root, &mut self.nodes, object, &mut self.body_data)
         }
 
-        BvhNode::update_bounds(self.root, &mut self.nodes, &self.object_data);
+        BvhNode::update_bounds(self.root, &mut self.nodes, &self.body_data);
 
-        BvhNode::rebalance(self.root, &mut self.nodes, &mut self.object_data);
+        BvhNode::rebalance(self.root, &mut self.nodes, &mut self.body_data);
 
         Ok(())
     }
@@ -139,34 +550,89 @@ impl CollisionTree {
 
         let mut intersecting_pairs = Vec::new();
 
-        BvhNode::check_collisions(self.root, &self.nodes, &self.object_data, &mut |a, b| {
-            intersecting_pairs.push((a, b));
-        });
+        BvhNode::check_collisions(
+            self.root,
+            &self.nodes,
+            &self.body_data,
+            &mut |a, a_obj, b, b_obj| {
+                intersecting_pairs.push((a, a_obj, b, b_obj));
+            },
+        );
 
-        for (a, b) in intersecting_pairs {
-            let contact = self.intersection_generator.intersect(
-                &TransformedShape::new(&a.collider, a.transform),
-                &TransformedShape::new(&b.collider, b.transform),
-            );
+        // self.islands.next_gen();
 
-            if let Some(contact) = contact {
-                self.active_collisions.push(Collision {
-                    a: EntityPayload {
-                        entity: a.id,
-                        is_trigger: false,
-                        state: a.state,
-                    },
-                    b: EntityPayload {
-                        entity: b.id,
-                        is_trigger: false,
-                        state: b.state,
-                    },
-                    contact,
-                })
-            }
+        let mut new_contacts = Vec::new();
+
+        for (a, a_obj, b, b_obj) in intersecting_pairs {
+            let Some(contact) = self.intersection_generator.intersect(
+                &TransformedShape::new(&a_obj.collider, a_obj.transform),
+                &TransformedShape::new(&b_obj.collider, b_obj.transform),
+            ) else {
+                continue;
+            };
+
+            match self.contact_map.entry((a, IndexedRange::Exact(b))) {
+                Entry::Vacant(slot) => {
+                    // new island
+                    let contact = Contact {
+                        a: EntityPayload {
+                            entity: a_obj.id,
+                            is_trigger: false,
+                            state: a_obj.state,
+                            body: a,
+                        },
+                        b: EntityPayload {
+                            entity: b_obj.id,
+                            is_trigger: false,
+                            state: b_obj.state,
+                            body: b,
+                        },
+                        contact,
+                        island: BodyIndex::null(),
+                        next_contact: ContactIndex::null(),
+                        prev_contact: ContactIndex::null(),
+                    };
+
+                    let id = self.contacts.insert(contact);
+                    self.islands.link(&mut self.contacts, id);
+
+                    slot.insert(id);
+                    new_contacts.push(id);
+
+                    self.contact_map.insert((b, IndexedRange::Exact(b)), id);
+                }
+                Entry::Occupied(v) => {
+                    let &contact_index = v.get();
+                    self.contacts[contact_index].contact = contact;
+                }
+            };
         }
 
         Ok(())
+    }
+
+    pub fn islands(&self) -> slotmap::secondary::Iter<BodyIndex, Island> {
+        self.islands.islands.iter()
+    }
+
+    pub fn island_contacts(&self, island: &Island) -> ContactIter {
+        island.contacts(&self.contacts)
+    }
+
+    pub fn solve_contacts(&self, world: &World, dt: f32) {
+        let mut visited = HashSet::new();
+
+        for (_, island) in &self.islands.islands {
+            let mut contact_index = island.head_contact;
+            while !contact_index.is_null() {
+                assert!(!visited.contains(&contact_index));
+
+                visited.insert(contact_index);
+                let contact = &self.contacts[contact_index];
+
+                contact_index = contact.next_contact;
+            }
+        }
     }
 
     /// Queries the tree with a given visitor. Traverses only the nodes that the
@@ -178,11 +644,11 @@ impl CollisionTree {
     }
 
     /// Get a reference to the collision tree's objects.
-    pub fn objects(&self) -> &SlotMap<ObjectIndex, ObjectData> {
-        &self.object_data
+    pub fn objects(&self) -> &SlotMap<BodyIndex, Body> {
+        &self.body_data
     }
 
-    pub fn active_collisions(&self) -> &[Collision] {
+    pub fn active_collisions(&self) -> &[Contact] {
         &self.active_collisions
     }
 }
@@ -281,7 +747,7 @@ pub fn collisions_tree_gizmos_system() -> BoxedSystem {
 ///
 /// Copied and retained from the ECS for easy access
 /// TODO: reduce size
-pub struct ObjectData {
+pub struct Body {
     pub id: Entity,
     pub collider: Collider,
     pub bounds: BoundingBox,
@@ -292,6 +758,11 @@ pub struct ObjectData {
     pub movable: bool,
     pub containing_bounds: BoundingBox,
     pub node: NodeIndex,
+
+    // island links
+    pub island: BodyIndex,
+    pub next_body: BodyIndex,
+    pub prev_body: BodyIndex,
 }
 
 #[derive(Fetch)]
@@ -321,45 +792,45 @@ impl ObjectQuery {
     }
 }
 
-impl ObjectData {
+impl Body {
     pub fn is_movable(&self) -> bool {
         self.state != NodeState::Static && self.movable
     }
 }
 
-impl ObjectQueryItem<'_> {
-    fn into_object_data(self) -> ObjectData {
-        let offset = *self.offset;
-        let transform = *self.transform * offset;
+// impl ObjectQueryItem<'_> {
+//     fn into_object_data(self) -> Body {
+//         let offset = *self.offset;
+//         let transform = *self.transform * offset;
 
-        let bounds = self.collider.bounding_box(transform);
-        let extended_bounds = bounds.expand(*self.velocity * 0.1);
+//         let bounds = self.collider.bounding_box(transform);
+//         let extended_bounds = bounds.expand(*self.velocity * 0.1);
 
-        ObjectData {
-            id: self.id,
-            bounds,
-            extended_bounds,
-            transform,
-            is_trigger: self.is_trigger,
-            state: if self.is_static {
-                NodeState::Static
-            } else {
-                NodeState::Dynamic
-            },
-            // state: if self.is_sleeping.is_some() {
-            //     NodeState::Sleeping
-            // } else if self.is_static.is_some() {
-            //     NodeState::Static
-            // } else {
-            //     NodeState::Dynamic
-            // },
-            movable: self.mass.map(|v| v.is_normal()).unwrap_or(false),
-            collider: self.collider.clone(),
-            containing_bounds: Default::default(),
-            node: NodeIndex::null(),
-        }
-    }
-}
+//         Body {
+//             id: self.id,
+//             bounds,
+//             extended_bounds,
+//             transform,
+//             is_trigger: self.is_trigger,
+//             state: if self.is_static {
+//                 NodeState::Static
+//             } else {
+//                 NodeState::Dynamic
+//             },
+//             // state: if self.is_sleeping.is_some() {
+//             //     NodeState::Sleeping
+//             // } else if self.is_static.is_some() {
+//             //     NodeState::Static
+//             // } else {
+//             //     NodeState::Dynamic
+//             // },
+//             movable: self.mass.map(|v| v.is_normal()).unwrap_or(false),
+//             collider: self.collider.clone(),
+//             containing_bounds: Default::default(),
+//             node: NodeIndex::null(),
+//         }
+//     }
+// }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum NodeState {
@@ -417,6 +888,7 @@ impl NodeState {
 /// Entity with additional contextual data
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct EntityPayload {
+    pub body: BodyIndex,
     pub entity: Entity,
     pub is_trigger: bool,
     pub state: NodeState,
@@ -436,7 +908,7 @@ impl DrawGizmos for CollisionTree {
             self.root,
             &self.nodes,
             gizmos,
-            &self.object_data,
+            &self.body_data,
             &mut HashSet::new(),
             0,
         );
@@ -448,11 +920,11 @@ impl DrawGizmos for CollisionTree {
 }
 
 pub struct DespawnedSubscriber {
-    tx: flume::Sender<ObjectIndex>,
+    tx: flume::Sender<BodyIndex>,
 }
 
 impl DespawnedSubscriber {
-    pub fn new(tx: flume::Sender<ObjectIndex>) -> Self {
+    pub fn new(tx: flume::Sender<BodyIndex>) -> Self {
         Self { tx }
     }
 }
@@ -463,7 +935,7 @@ impl flax::events::EventSubscriber for DespawnedSubscriber {
     fn on_modified(&self, _: &flax::events::EventData) {}
 
     fn on_removed(&self, storage: &flax::archetype::Storage, event: &flax::events::EventData) {
-        let values = storage.downcast_ref::<ObjectIndex>();
+        let values = storage.downcast_ref::<BodyIndex>();
         event.slots.iter().for_each(|slot| {
             self.tx.send(values[slot]).unwrap();
         });

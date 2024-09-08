@@ -1,6 +1,6 @@
 use slotmap::SlotMap;
 
-use crate::{ObjectData, ObjectIndex};
+use crate::{Body, BodyIndex};
 
 use super::BvhNode;
 
@@ -12,6 +12,6 @@ pub trait Visitor<'a> {
     fn accept(
         &self,
         node: &'a BvhNode,
-        data: &'a SlotMap<ObjectIndex, ObjectData>,
+        data: &'a SlotMap<BodyIndex, Body>,
     ) -> Option<Self::Output>;
 }

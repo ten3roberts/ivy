@@ -1,22 +1,22 @@
 use slotmap::SlotMap;
 
-use crate::{BoundingBox, Nodes, ObjectData, ObjectIndex};
+use crate::{Body, BodyIndex, BoundingBox, Nodes};
 
 use super::NodeIndex;
 
 pub trait CollisionTreeNode: 'static + Sized + Send + Sync {
     /// Returns the objects contained in the node
-    fn objects(&self) -> &[ObjectIndex];
+    fn objects(&self) -> &[BodyIndex];
 
     fn insert(
         index: NodeIndex,
         nodes: &mut Nodes<Self>,
-        object: ObjectIndex,
-        nodes: &mut SlotMap<ObjectIndex, ObjectData>,
+        object: BodyIndex,
+        nodes: &mut SlotMap<BodyIndex, Body>,
     );
 
     /// Removes an object entity from the node
-    fn remove(&mut self, object: ObjectIndex) -> Option<ObjectIndex>;
+    fn remove(&mut self, object: BodyIndex) -> Option<BodyIndex>;
 
     /// Returns the node bounds
     fn bounds(&self) -> BoundingBox;

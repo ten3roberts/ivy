@@ -10,7 +10,7 @@ use crate::{
     contact::{ContactGenerator, ContactSurface},
     epa, gjk,
     util::minkowski_diff,
-    EntityPayload, Shape,
+    BodyIndex, ContactIndex, EntityPayload, Shape,
 };
 
 /// Contains temporary state to accelerate contact generation
@@ -129,10 +129,15 @@ impl DrawGizmos for Intersection {
 
 /// Represents a collision between two entities.
 #[derive(Debug, Clone)]
-pub struct Collision {
+pub struct Contact {
     pub a: EntityPayload,
     pub b: EntityPayload,
     pub contact: ContactSurface,
+
+    // island links
+    pub island: BodyIndex,
+    pub next_contact: ContactIndex,
+    pub prev_contact: ContactIndex,
 }
 
 impl IntersectionGenerator {

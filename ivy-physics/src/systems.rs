@@ -1,12 +1,12 @@
 use core::f32;
 use std::collections::BTreeMap;
 
-use crate::{bundles::*, components::effector, response::resolve_collisions};
+use crate::{bundles::*, components::effector, response};
 use flax::{
     BoxedSystem, Component, Entity, EntityRef, FetchExt, Query, QueryBorrow, System, World,
 };
 use glam::{vec3, Mat4, Quat, Vec3};
-use ivy_collision::{components::collision_tree, Collision, CollisionTree};
+use ivy_collision::{components::collision_tree, CollisionTree, Contact, Island};
 use ivy_core::{
     components::{
         angular_velocity, connection, engine, gravity, gravity_influence, position, rotation,
@@ -60,8 +60,8 @@ pub fn get_rigid_root<'a>(entity: &EntityRef<'a>) -> EntityRef<'a> {
 
 #[derive(Debug, Clone)]
 pub struct CollisionState {
-    sleeping: BTreeMap<(Entity, Entity), Collision>,
-    active: BTreeMap<(Entity, Entity), Collision>,
+    sleeping: BTreeMap<(Entity, Entity), Contact>,
+    active: BTreeMap<(Entity, Entity), Contact>,
 }
 
 impl CollisionState {
@@ -72,7 +72,7 @@ impl CollisionState {
         }
     }
 
-    pub fn register(&mut self, col: Collision) {
+    pub fn register(&mut self, col: Contact) {
         let slot = if col.a.state.dormant() && col.b.state.dormant() {
             &mut self.sleeping
         } else {
@@ -98,7 +98,7 @@ impl CollisionState {
         self.active.keys().any(|v| v.0 == e)
     }
 
-    pub fn get(&self, e: Entity) -> impl Iterator<Item = &'_ Collision> {
+    pub fn get(&self, e: Entity) -> impl Iterator<Item = &'_ Contact> {
         self.active
             .iter()
             .skip_while(move |((a, _), _)| *a != e)
@@ -112,7 +112,7 @@ impl CollisionState {
             .map(|(_, v)| v)
     }
 
-    pub fn get_all(&self) -> impl Iterator<Item = (Entity, Entity, &Collision)> {
+    pub fn get_all(&self) -> impl Iterator<Item = (Entity, Entity, &Contact)> {
         self.active
             .iter()
             .chain(self.sleeping.iter())
@@ -140,8 +140,14 @@ pub fn resolve_collisions_system(dt: f32) -> BoxedSystem {
         .with_query(Query::new(collision_tree()))
         .build(
             move |world: &World, mut query: QueryBorrow<Component<CollisionTree>>| {
-                query.for_each(|collision_tree| {
-                    resolve_collisions(world, collision_tree, dt).unwrap();
+                query.try_for_each(|collision_tree| {
+                    for (_, island) in collision_tree.islands() {
+                        for (_, contact) in collision_tree.island_contacts(island) {
+                            response::resolve_contact(world, dt, contact)?;
+                        }
+                    }
+
+                    anyhow::Ok(())
                 })
             },
         )

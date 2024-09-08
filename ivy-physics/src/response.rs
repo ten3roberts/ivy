@@ -7,98 +7,90 @@ use flax::{error::MissingComponent, EntityRef};
 use flax::{FetchExt, World};
 use glam::Vec3;
 use ivy_collision::contact::ContactSurface;
-use ivy_collision::CollisionTree;
+use ivy_collision::Contact;
 use ivy_core::components::{
     angular_mass, angular_velocity, friction, mass, position, restitution, velocity,
     world_transform,
 };
 
-pub fn resolve_collisions(
-    world: &World,
-    collision_tree: &CollisionTree,
-    dt: f32,
-) -> anyhow::Result<()> {
-    for collision in collision_tree.active_collisions() {
-        let a = world.entity(collision.a.entity)?;
-        let b = world.entity(collision.b.entity)?;
+pub fn resolve_contact(world: &World, dt: f32, contact: &Contact) -> anyhow::Result<()> {
+    let a = world.entity(contact.a.entity)?;
+    let b = world.entity(contact.b.entity)?;
 
-        // Ignore triggers
-        if collision.a.is_trigger || collision.b.is_trigger {
-            return Ok(());
-        }
-        // Check for static collision
-        else if collision.a.state.is_static() {
-            resolve_static(&a, &b, &collision.contact, 1.0, dt)?;
-            continue;
-        } else if collision.b.state.is_static() {
-            resolve_static(&b, &a, &collision.contact, -1.0, dt)?;
-            continue;
-        } else if collision.a.state.is_static() && collision.b.state.is_static() {
-            tracing::warn!("static-static collision detected, ignoring");
-            continue;
-        }
+    // Ignore triggers
+    if contact.a.is_trigger || contact.b.is_trigger {
+        return Ok(());
+    }
+    // Check for static collision
+    else if contact.a.state.is_static() {
+        return resolve_static(&a, &b, &contact.contact, 1.0, dt);
+    } else if contact.b.state.is_static() {
+        return resolve_static(&b, &a, &contact.contact, -1.0, dt);
+    } else if contact.a.state.is_static() && contact.b.state.is_static() {
+        tracing::warn!("static-static collision detected, ignoring");
+        return Ok(());
+    }
 
-        assert_ne!(collision.a, collision.b);
+    assert_ne!(contact.a, contact.b);
 
-        // Trace up to the root of the rigid connection before solving
-        // collisions
-        let a = get_rigid_root(&world.entity(*collision.a).unwrap());
-        let b = get_rigid_root(&world.entity(*collision.b).unwrap());
+    // Trace up to the root of the rigid connection before solving
+    // collisions
+    let a = get_rigid_root(&world.entity(*contact.a).unwrap());
+    let b = get_rigid_root(&world.entity(*contact.b).unwrap());
 
-        // Ignore collisions between two immovable objects
-        // if !a_mass.is_normal() && !b_mass.is_normal() {
-        //     tracing::warn!("ignoring collision between two immovable objects");
-        //     return Ok(());
-        // }
+    // Ignore collisions between two immovable objects
+    // if !a_mass.is_normal() && !b_mass.is_normal() {
+    //     tracing::warn!("ignoring collision between two immovable objects");
+    //     return Ok(());
+    // }
 
-        // let mut a_query = world.try_query_one::<(RbQuery, &Position, &Effector)>(a)?;
-        // let (a, pos, eff) = a_query.get().unwrap();
+    // let mut a_query = world.try_query_one::<(RbQuery, &Position, &Effector)>(a)?;
+    // let (a, pos, eff) = a_query.get().unwrap();
 
-        // // Modify mass to include all children masses
+    // // Modify mass to include all children masses
 
-        let a_object = ResolveObject::from_entity(&a)?;
-        let b_object = ResolveObject::from_entity(&b)?;
+    let a_object = ResolveObject::from_entity(&a)?;
+    let b_object = ResolveObject::from_entity(&b)?;
 
-        let total_mass = a_object.mass + b_object.mass;
+    let total_mass = a_object.mass + b_object.mass;
 
-        assert!(
-            total_mass > 0.0,
-            "mass of two colliding objects must not be both zero"
-        );
+    assert!(
+        total_mass > 0.0,
+        "mass of two colliding objects must not be both zero"
+    );
 
-        let response = calculate_impulse_response(
-            &a_object,
-            &b_object,
-            collision.contact.normal(),
-            collision.contact.midpoint(),
-            collision.contact.area(),
-        );
+    let response = calculate_impulse_response(
+        &a_object,
+        &b_object,
+        contact.contact.normal(),
+        contact.contact.midpoint(),
+        contact.contact.area(),
+    );
 
-        let dir = collision.contact.normal() * collision.contact.depth();
+    let dir = contact.contact.normal() * contact.contact.depth();
 
-        let linear = round_to_zero(response.linear);
-        let angular = round_to_zero(response.angular);
+    let linear = round_to_zero(response.linear);
+    let angular = round_to_zero(response.angular);
 
-        let dampening = dampen(&a_object, &b_object, collision.contact.normal());
+    let dampening = dampen(&a_object, &b_object, contact.contact.normal());
 
-        {
-            let effector = &mut *a.get_mut(effector())?;
-            effector.apply_impulse_at(-linear, collision.contact.midpoint() - a_object.pos, true);
-            effector.apply_torque(-angular);
-            effector.translate(-dir * (b_object.mass / total_mass));
-            effector.apply_velocity_change(-dampening.linear, true);
-            effector.apply_angular_velocity_change(-dampening.angular);
-        }
+    {
+        let effector = &mut *a.get_mut(effector())?;
+        effector.apply_impulse_at(-linear, contact.contact.midpoint() - a_object.pos, true);
+        effector.apply_torque(-angular);
+        effector.translate(-dir * (b_object.mass / total_mass));
+        effector.apply_velocity_change(-dampening.linear, true);
+        effector.apply_angular_velocity_change(-dampening.angular);
+    }
 
-        {
-            let effector = &mut *b.get_mut(effector())?;
-            effector.apply_impulse_at(linear, collision.contact.midpoint() - b_object.pos, true);
-            effector.apply_torque(angular);
-            effector.translate(dir * (a_object.mass / total_mass));
+    {
+        let effector = &mut *b.get_mut(effector())?;
+        effector.apply_impulse_at(linear, contact.contact.midpoint() - b_object.pos, true);
+        effector.apply_torque(angular);
+        effector.translate(dir * (a_object.mass / total_mass));
 
-            effector.apply_velocity_change(dampening.linear, true);
-            effector.apply_angular_velocity_change(dampening.angular);
-        }
+        effector.apply_velocity_change(dampening.linear, true);
+        effector.apply_angular_velocity_change(dampening.angular);
     }
 
     Ok(())

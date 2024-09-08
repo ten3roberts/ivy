@@ -12,8 +12,8 @@ use crate::CollisionTreeNode;
 
 use super::BvhNode;
 use super::Nodes;
-use super::ObjectData;
-use super::ObjectIndex;
+use super::Body;
+use super::BodyIndex;
 
 new_key_type!(
     pub struct NodeIndex;
