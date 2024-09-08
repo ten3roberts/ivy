@@ -1,18 +1,19 @@
 use core::f32;
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, rc::Rc};
 
 use crate::{bundles::*, components::effector, response};
 use flax::{
-    BoxedSystem, Component, Entity, EntityRef, FetchExt, Query, QueryBorrow, System, World,
+    fetch::Source, BoxedSystem, Component, Entity, EntityRef, FetchExt, Query, QueryBorrow, System,
+    World,
 };
 use glam::{vec3, Mat4, Quat, Vec3};
 use ivy_collision::{components::collision_tree, CollisionTree, Contact, Island};
 use ivy_core::{
     components::{
-        angular_velocity, connection, engine, gravity, gravity_influence, position, rotation,
-        sleeping, velocity, world_transform,
+        angular_velocity, connection, engine, gizmos, gravity, gravity_influence, position,
+        rotation, sleeping, velocity, world_transform,
     },
-    gizmos::{Line, DEFAULT_THICKNESS},
+    gizmos::{Gizmos, Line, DEFAULT_RADIUS, DEFAULT_THICKNESS},
     Color, ColorExt,
 };
 
@@ -140,15 +141,62 @@ pub fn resolve_collisions_system(dt: f32) -> BoxedSystem {
         .with_query(Query::new(collision_tree()))
         .build(
             move |world: &World, mut query: QueryBorrow<Component<CollisionTree>>| {
-                query.try_for_each(|collision_tree| {
-                    for (_, island) in collision_tree.islands() {
-                        for (_, contact) in collision_tree.island_contacts(island) {
+                if let Some(tree) = query.first() {
+                    for (_, island) in tree.islands() {
+                        for (_, contact) in tree.island_contacts(island) {
                             response::resolve_contact(world, dt, contact)?;
                         }
                     }
+                }
+                anyhow::Ok(())
+            },
+        )
+        .boxed()
+}
 
-                    anyhow::Ok(())
-                })
+pub fn island_graph_gizmo_system() -> BoxedSystem {
+    System::builder()
+        .with_query(Query::new(gizmos().source(engine())))
+        .with_query(Query::new(collision_tree()))
+        .with_query(Query::new(world_transform()))
+        .build(
+            move |mut gizmos: QueryBorrow<Source<Component<Gizmos>, Entity>>,
+                  mut query: QueryBorrow<Component<CollisionTree>>,
+                  mut transforms: QueryBorrow<Component<Mat4>>| {
+                let mut gizmos = gizmos
+                    .first()
+                    .unwrap()
+                    .begin_section("island_graph_gizmo_system");
+
+                if let Some(tree) = query.first() {
+                    for (i, (_, island)) in tree.islands().enumerate() {
+                        let color = Color::from_hsla(i as f32 * 25.0, 0.7, 0.5, 1.0);
+
+                        for (_, contact) in tree.island_contacts(island) {
+                            let a = tree.body(contact.a.body);
+                            let b = tree.body(contact.b.body);
+
+                            let a_transform = transforms.get(a.id).copied().unwrap();
+                            let b_transform = transforms.get(b.id).copied().unwrap();
+
+                            let a_pos = a_transform.transform_point3(Vec3::ZERO);
+                            let b_pos = b_transform.transform_point3(Vec3::ZERO);
+
+                            gizmos.draw(ivy_core::gizmos::Sphere::new(
+                                a_pos,
+                                DEFAULT_RADIUS,
+                                color,
+                            ));
+                            gizmos.draw(ivy_core::gizmos::Sphere::new(
+                                b_pos,
+                                DEFAULT_RADIUS,
+                                color,
+                            ));
+
+                            gizmos.draw(Line::from_points(a_pos, b_pos, DEFAULT_THICKNESS, color))
+                        }
+                    }
+                }
             },
         )
         .boxed()
@@ -164,7 +212,7 @@ pub fn gizmo_system(dt: f32) -> BoxedSystem {
             effector(),
         )))
         .build(
-            move |mut gizmos: QueryBorrow<Component<ivy_core::gizmos::Gizmos>>,
+            move |mut gizmos: QueryBorrow<Component<Gizmos>>,
                   mut query: QueryBorrow<(
                 Component<Mat4>,
                 Component<Vec3>,

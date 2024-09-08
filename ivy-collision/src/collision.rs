@@ -138,6 +138,7 @@ pub struct Contact {
     pub island: BodyIndex,
     pub next_contact: ContactIndex,
     pub prev_contact: ContactIndex,
+    pub generation: u32,
 }
 
 impl IntersectionGenerator {

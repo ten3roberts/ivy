@@ -1,5 +1,5 @@
 use std::{
-    collections::{btree_map::Entry, BTreeMap, HashSet},
+    collections::{btree_map::Entry, BTreeMap, BTreeSet, HashSet},
     path::Iter,
 };
 
@@ -78,22 +78,17 @@ pub struct Island {
     // parent or self
     parent: BodyIndex,
     head_body: BodyIndex,
-    tail_body: BodyIndex,
     // used to rebuild island graph components during split
     head_contact: ContactIndex,
-    tail_contact: ContactIndex,
 }
 
 impl Island {
     fn add_contact(&mut self, contacts: &mut ContactMap, contact_index: ContactIndex) {
         let contact = &mut contacts[contact_index];
-        assert!(contact.island.is_null());
+        // assert!(contact.island.is_null());
         assert!(contact.next_contact.is_null());
 
         contact.next_contact = self.head_contact;
-        if self.head_contact.is_null() {
-            self.tail_contact = contact_index;
-        }
 
         if !self.head_contact.is_null() {
             contacts[self.head_contact].prev_contact = contact_index;
@@ -105,12 +100,6 @@ impl Island {
     fn remove_contact(&mut self, contacts: &mut ContactMap, contact_index: ContactIndex) {
         let contact = &mut contacts[contact_index];
 
-        // last
-        if contact.next_contact.is_null() {
-            assert_eq!(self.tail_contact, contact_index);
-            self.tail_contact = contact.prev_contact;
-        }
-
         if contact_index == self.head_contact {
             let next = contact.next_contact;
             contact.next_contact = ContactIndex::null();
@@ -119,9 +108,11 @@ impl Island {
 
             self.head_contact = next;
 
-            let next = &mut contacts[next];
-            assert_eq!(next.prev_contact, contact_index);
-            next.prev_contact = ContactIndex::null();
+            if !next.is_null() {
+                let next = &mut contacts[next];
+                assert_eq!(next.prev_contact, contact_index);
+                next.prev_contact = ContactIndex::null();
+            }
         } else {
             let prev = contact.prev_contact;
             assert!(!prev.is_null());
@@ -143,9 +134,6 @@ impl Island {
 
         body.next_body = self.head_body;
         bodies[self.head_body].prev_body = body_index;
-        if self.head_body.is_null() {
-            self.tail_body = body_index;
-        }
 
         if !self.head_body.is_null() {
             bodies[self.head_body].prev_body = body_index;
@@ -156,10 +144,6 @@ impl Island {
 
     fn remove_body(&mut self, bodies: &mut BodyMap, body_index: BodyIndex) {
         let body = &mut bodies[body_index];
-        if body.next_body.is_null() {
-            assert_eq!(self.tail_body, body_index);
-            self.tail_body = body.prev_body;
-        }
         if body_index == self.head_body {
             let next = body.next_body;
             body.next_body = BodyIndex::null();
@@ -211,8 +195,6 @@ impl Islands {
                 parent: body_index,
                 head_body: BodyIndex::null(),
                 head_contact: ContactIndex::null(),
-                tail_body: BodyIndex::null(),
-                tail_contact: ContactIndex::null(),
             },
         );
     }
@@ -253,7 +235,7 @@ impl Islands {
     }
 
     fn link(&mut self, contacts: &mut ContactMap, contact_index: ContactIndex) -> &mut Island {
-        let contact = &contacts[contact_index];
+        let contact = &mut contacts[contact_index];
         let a = contact.a.body;
         let b = contact.b.body;
 
@@ -261,11 +243,13 @@ impl Islands {
         let b_rep = self.representative_compress(b);
 
         if a_rep == b_rep {
+            contact.island = a_rep;
             let island = &mut self.islands[a_rep];
 
             island.add_contact(contacts, contact_index);
             island
         } else {
+            contact.island = a_rep;
             self.islands[b_rep].parent = a_rep;
 
             let island = &mut self.islands[a_rep];
@@ -289,61 +273,74 @@ impl Islands {
 
     /// merges all island bodies into the roots
     fn merge_root_islands(&mut self, contacts: &mut ContactMap, bodies: &mut BodyMap) {
+        let _span = tracing::info_span!("merge_root_islands").entered();
+
         let keys = self.islands.keys().collect_vec();
         for index in keys {
             let parent_index = self.islands[index].parent;
-            if parent_index != index {
-                let [island, parent] = self
-                    .islands
-                    .get_disjoint_mut([index, parent_index])
-                    .unwrap();
 
-                let mut contact_index = island.head_contact;
-                while !contact_index.is_null() {
-                    let contact = &mut contacts[contact_index];
-                    contact.island = parent_index;
-
-                    let next = contact.next_contact;
-                    // reached end, attach parent list
-                    if next.is_null() {
-                        contact.next_contact = parent.head_contact;
-                        if !parent.head_contact.is_null() {
-                            assert!(contacts[parent.head_contact].prev_contact.is_null());
-                            contacts[parent.head_contact].prev_contact = contact_index;
-                        }
-                        parent.head_contact = contact_index;
-                    }
-                    contact_index = next;
-                }
-
-                let mut body_index = island.head_body;
-                while !body_index.is_null() {
-                    let body = &mut bodies[body_index];
-                    body.island = parent_index;
-
-                    let next = body.next_body;
-                    // reached end, attach parent list
-                    if next.is_null() {
-                        body.next_body = parent.head_body;
-                        if !parent.head_body.is_null() {
-                            assert!(bodies[parent.head_body].prev_body.is_null());
-                            bodies[parent.head_body].prev_body = body_index;
-                        }
-                        parent.head_body = body_index;
-                    }
-                    body_index = next;
-                }
+            if parent_index == index {
+                continue;
             }
+
+            let [island, parent] = self
+                .islands
+                .get_disjoint_mut([index, parent_index])
+                .unwrap();
+
+            let mut contact_index = island.head_contact;
+            while !contact_index.is_null() {
+                let contact = &mut contacts[contact_index];
+                contact.island = parent_index;
+
+                let next = contact.next_contact;
+                // reached end, attach parent list
+                if next.is_null() {
+                    contact.next_contact = parent.head_contact;
+                    if !parent.head_contact.is_null() {
+                        assert!(contacts[parent.head_contact].prev_contact.is_null());
+                        contacts[parent.head_contact].prev_contact = contact_index;
+                    }
+
+                    parent.head_contact = island.head_contact;
+                }
+
+                contact_index = next;
+            }
+
+            let mut body_index = island.head_body;
+            while !body_index.is_null() {
+                let body = &mut bodies[body_index];
+                body.island = parent_index;
+
+                let next = body.next_body;
+                // reached end, attach parent list
+                if next.is_null() {
+                    body.next_body = parent.head_body;
+                    if !parent.head_body.is_null() {
+                        assert!(bodies[parent.head_body].prev_body.is_null());
+                        bodies[parent.head_body].prev_body = body_index;
+                    }
+
+                    parent.head_body = island.head_body;
+                }
+
+                body_index = next;
+            }
+
+            island.head_body = BodyIndex::null();
+            island.head_contact = ContactIndex::null();
         }
     }
 
-    fn split(
+    fn reconstruct(
         &mut self,
         island: BodyIndex,
         bodies: &mut BodyMap,
         contacts: &mut ContactMap,
-        contact_map: BTreeMap<(BodyIndex, IndexedRange<BodyIndex>), ContactIndex>,
+        contact_map: &BTreeMap<(BodyIndex, IndexedRange<BodyIndex>), ContactIndex>,
     ) {
+        assert!(!island.is_null());
         let island = &self.islands[island];
 
         let mut body_index = island.head_body;
@@ -378,8 +375,6 @@ impl Islands {
                         parent: body_index,
                         head_body: BodyIndex::null(),
                         head_contact: ContactIndex::null(),
-                        tail_body: BodyIndex::null(),
-                        tail_contact: ContactIndex::null(),
                     },
                 )
                 .unwrap();
@@ -427,6 +422,7 @@ pub struct CollisionTree {
     contact_map: BTreeMap<(BodyIndex, IndexedRange<BodyIndex>), ContactIndex>,
 
     islands: Islands,
+    generation: u32,
 }
 
 impl CollisionTree {
@@ -444,6 +440,7 @@ impl CollisionTree {
             islands: Islands::new(),
             contacts: Default::default(),
             contact_map: Default::default(),
+            generation: 0,
         }
     }
 
@@ -468,6 +465,10 @@ impl CollisionTree {
             body
         });
 
+        let root = &mut self.nodes[self.root];
+        root.allocated_bounds = root
+            .allocated_bounds
+            .merge(self.body_data[index].extended_bounds);
         BvhNode::insert(self.root, &mut self.nodes, index, &mut self.body_data);
 
         index
@@ -497,7 +498,6 @@ impl CollisionTree {
                 },
                 movable: q.mass.map(|v| v.is_normal()).unwrap_or(false),
                 collider: q.collider.clone(),
-                containing_bounds: Default::default(),
                 node: NodeIndex::null(),
                 island: BodyIndex::null(),
                 next_body: BodyIndex::null(),
@@ -506,6 +506,7 @@ impl CollisionTree {
 
             let tree_index = self.insert_impl(id, body);
 
+            BvhNode::update_bounds(self.root, &mut self.nodes, &self.body_data);
             cmd.set(id, components::tree_index(), tree_index);
         }
     }
@@ -522,8 +523,10 @@ impl CollisionTree {
             object_data.bounds = q.collider.bounding_box(*q.transform);
             object_data.extended_bounds = object_data.bounds.expand(q.velocity.abs() * 0.1);
 
-            if !object_data
-                .containing_bounds
+            let node = &self.nodes[object_data.node];
+
+            if !node
+                .allocated_bounds()
                 .contains(object_data.extended_bounds)
             {
                 self.nodes[object_data.node]
@@ -535,6 +538,11 @@ impl CollisionTree {
         }
 
         for object in to_refit {
+            let root = &mut self.nodes[self.root];
+            root.allocated_bounds = root
+                .allocated_bounds
+                .merge(self.body_data[object].extended_bounds);
+
             BvhNode::insert(self.root, &mut self.nodes, object, &mut self.body_data)
         }
 
@@ -561,7 +569,7 @@ impl CollisionTree {
 
         // self.islands.next_gen();
 
-        let mut new_contacts = Vec::new();
+        self.generation += 1;
 
         for (a, a_obj, b, b_obj) in intersecting_pairs {
             let Some(contact) = self.intersection_generator.intersect(
@@ -591,21 +599,67 @@ impl CollisionTree {
                         island: BodyIndex::null(),
                         next_contact: ContactIndex::null(),
                         prev_contact: ContactIndex::null(),
+                        generation: self.generation,
                     };
 
                     let id = self.contacts.insert(contact);
                     self.islands.link(&mut self.contacts, id);
 
                     slot.insert(id);
-                    new_contacts.push(id);
 
-                    self.contact_map.insert((b, IndexedRange::Exact(b)), id);
+                    self.contact_map.insert((b, IndexedRange::Exact(a)), id);
                 }
                 Entry::Occupied(v) => {
                     let &contact_index = v.get();
-                    self.contacts[contact_index].contact = contact;
+                    let v = &mut self.contacts[contact_index];
+                    v.contact = contact;
+                    v.generation = self.generation;
                 }
             };
+        }
+
+        self.islands
+            .merge_root_islands(&mut self.contacts, &mut self.body_data);
+
+        let mut to_split = BTreeSet::new();
+        let removed_contacts = self
+            .contacts
+            .iter()
+            .filter(|v| v.1.generation < self.generation)
+            .map(|v| v.0)
+            .collect_vec();
+
+        for contact in removed_contacts {
+            to_split.insert(self.contacts[contact].island);
+            self.islands.unlink(&mut self.contacts, contact);
+        }
+
+        self.contacts.retain(|index, contact| {
+            if contact.generation == self.generation {
+                return true;
+            }
+
+            let a = contact.a.body;
+            let b = contact.b.body;
+
+            self.contact_map
+                .remove(&(a, IndexedRange::Exact(b)))
+                .unwrap();
+
+            self.contact_map
+                .remove(&(b, IndexedRange::Exact(a)))
+                .unwrap();
+
+            false
+        });
+
+        for island in to_split {
+            self.islands.reconstruct(
+                island,
+                &mut self.body_data,
+                &mut self.contacts,
+                &self.contact_map,
+            );
         }
 
         Ok(())
@@ -650,6 +704,10 @@ impl CollisionTree {
 
     pub fn active_collisions(&self) -> &[Contact] {
         &self.active_collisions
+    }
+
+    pub fn body(&self, body: BodyIndex) -> &Body {
+        &self.body_data[body]
     }
 }
 
@@ -756,7 +814,6 @@ pub struct Body {
     pub is_trigger: bool,
     pub state: NodeState,
     pub movable: bool,
-    pub containing_bounds: BoundingBox,
     pub node: NodeIndex,
 
     // island links
@@ -878,9 +935,9 @@ impl NodeState {
 
     fn inflate_amount(&self) -> f32 {
         match self {
-            NodeState::Dynamic => MARGIN,
-            NodeState::Static => 1.0,
-            NodeState::Sleeping => 1.0,
+            NodeState::Dynamic => 0.0,
+            NodeState::Static => 0.0,
+            NodeState::Sleeping => 0.0,
         }
     }
 }

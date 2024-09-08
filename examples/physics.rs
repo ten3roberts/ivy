@@ -85,10 +85,13 @@ pub fn main() -> anyhow::Result<()> {
                 .with_plugin(CameraInputPlugin)
                 .with_plugin(GizmosPlugin),
         )
-        .with_layer(
-            ScheduledLayer::new(FixedTimeStep::new(0.02))
-                .with_plugin(PhysicsPlugin::new().with_gizmos(true)),
-        )
+        .with_layer(ScheduledLayer::new(FixedTimeStep::new(0.02)).with_plugin(
+            PhysicsPlugin::new().with_gizmos(ivy_physics::GizmoSettings {
+                bvh_tree: true,
+                island_graph: true,
+                rigidbody: true,
+            }),
+        ))
         .run()
     {
         tracing::error!("{err:?}");

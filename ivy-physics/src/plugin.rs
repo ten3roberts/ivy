@@ -1,6 +1,6 @@
 use crate::systems::{
     apply_effectors_system, gizmo_system, gravity_system, integrate_angular_velocity_system,
-    integrate_velocity_system, resolve_collisions_system,
+    integrate_velocity_system, island_graph_gizmo_system, resolve_collisions_system,
 };
 use flax::World;
 use glam::Vec3;
@@ -14,16 +14,23 @@ use ivy_core::{
     update_layer::{FixedTimeStep, Plugin},
 };
 
+#[derive(Default)]
+pub struct GizmoSettings {
+    pub bvh_tree: bool,
+    pub island_graph: bool,
+    pub rigidbody: bool,
+}
+
 pub struct PhysicsPlugin {
     gravity: Vec3,
-    enable_gizmos: bool,
+    gizmos: GizmoSettings,
 }
 
 impl PhysicsPlugin {
     pub fn new() -> Self {
         Self {
             gravity: Vec3::ZERO,
-            enable_gizmos: false,
+            gizmos: Default::default(),
         }
     }
 
@@ -34,8 +41,8 @@ impl PhysicsPlugin {
     }
 
     /// Enable physics gizmos
-    pub fn with_gizmos(mut self, enable_gizmos: bool) -> Self {
-        self.enable_gizmos = enable_gizmos;
+    pub fn with_gizmos(mut self, gizmos: GizmoSettings) -> Self {
+        self.gizmos = gizmos;
         self
     }
 }
@@ -73,16 +80,19 @@ impl Plugin<FixedTimeStep> for PhysicsPlugin {
             .with_system(check_collisions_system())
             .with_system(resolve_collisions_system(dt));
 
-        if self.enable_gizmos {
+        if self.gizmos.rigidbody {
             schedule.with_system(gizmo_system(dt));
         }
 
         schedule.with_system(apply_effectors_system(dt));
 
-        if self.enable_gizmos {
+        if self.gizmos.bvh_tree {
             schedule.with_system(collisions_tree_gizmos_system());
         }
 
+        if self.gizmos.island_graph {
+            schedule.with_system(island_graph_gizmo_system());
+        }
         Ok(())
     }
 }

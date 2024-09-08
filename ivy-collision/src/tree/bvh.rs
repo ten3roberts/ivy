@@ -21,7 +21,7 @@ const NODE_CAPACITY: usize = 1;
 #[derive(Debug, Clone)]
 pub struct BvhNode {
     current_bounds: BoundingBox,
-    allocated_bounds: BoundingBox,
+    pub(crate) allocated_bounds: BoundingBox,
     objects: Vec<BodyIndex>,
     children: Option<[NodeIndex; 2]>,
     state: NodeState,
@@ -81,7 +81,7 @@ impl BvhNode {
 
         let bounds = Self::calculate_bounds(&objects, data);
 
-        let outer_bounds = bounds.margin(state.inflate_amount());
+        let outer_bounds = bounds.rel_margin(state.inflate_amount());
         let node = Self {
             current_bounds: bounds,
             objects,
@@ -98,7 +98,6 @@ impl BvhNode {
         let node = &mut nodes[index];
         for &object in &node.objects {
             let data = &mut data[object];
-            data.containing_bounds = outer_bounds;
             data.node = index;
         }
 
@@ -281,7 +280,7 @@ impl BvhNode {
         }
     }
 
-    fn insert(
+    pub fn insert(
         index: NodeIndex,
         nodes: &mut Nodes<Self>,
         object: BodyIndex,
@@ -290,24 +289,22 @@ impl BvhNode {
         let node = &mut nodes[index];
         let obj = &data[object];
 
+        assert!(node.allocated_bounds.contains(obj.extended_bounds));
         // Refit bounds
         // NOTE: parents are refit at the end of the frame
-        node.current_bounds = node.calculate_bounds_incremental(obj);
-        node.allocated_bounds = node.current_bounds.margin(node.state.inflate_amount());
+        // node.allocated_bounds = node.current_bounds.margin(node.state.inflate_amount());
 
         node.state = node.state.merge(obj.state);
 
         // Internal node
         if let Some([left, right]) = node.children {
             assert!(node.objects.is_empty());
-            if nodes[left].allocated_bounds.contains(obj.bounds) {
+            if nodes[left].allocated_bounds.contains(obj.extended_bounds) {
                 Self::insert(left, nodes, object, data)
-            } else if nodes[right].allocated_bounds.contains(obj.bounds) {
+            } else if nodes[right].allocated_bounds.contains(obj.extended_bounds) {
                 Self::insert(right, nodes, object, data)
-            }
-            // Object did not fit in any child.
-            // Gather up both children and all descendants, and re-add all objects by splitting.
-            else {
+            } else {
+                // Object did not fit in any child. Gather up both children and all descendants, and re-add all objects by splitting.
                 let mut objects = vec![];
                 Self::merge(index, nodes, &mut objects);
                 objects.push(object);
@@ -317,7 +314,9 @@ impl BvhNode {
                 let node = &mut nodes[index];
 
                 node.current_bounds = Self::calculate_bounds(&objects, data);
-                node.allocated_bounds = node.current_bounds.margin(node.state.inflate_amount());
+                let old_allocation = node.allocated_bounds;
+                node.allocated_bounds = node.current_bounds.rel_margin(node.state.inflate_amount());
+                assert!(old_allocation.contains(node.allocated_bounds));
                 node.objects = objects;
                 Self::try_split(index, nodes, data);
 
@@ -325,7 +324,6 @@ impl BvhNode {
 
                 for &object in &node.objects {
                     let data = &mut data[object];
-                    data.containing_bounds = node.allocated_bounds;
                     data.node = index;
                 }
             }
@@ -333,7 +331,6 @@ impl BvhNode {
             node.objects.push(object);
             {
                 let data = &mut data[object];
-                data.containing_bounds = node.allocated_bounds;
                 data.node = index;
             }
 
@@ -358,7 +355,7 @@ impl BvhNode {
                 let node = &mut nodes[index];
 
                 let bounds = Self::calculate_bounds(&objects, data);
-                let outer_bounds = bounds.margin(node.state.inflate_amount());
+                let outer_bounds = bounds.rel_margin(node.state.inflate_amount());
 
                 let node = &mut nodes[index];
                 node.current_bounds = bounds;
@@ -380,36 +377,39 @@ impl BvhNode {
         objects: &SlotMap<BodyIndex, Body>,
     ) -> BoundingBox {
         if let Some([l, r]) = nodes[index].children {
+            let l_allocated = nodes[l].allocated_bounds;
+            let r_allocated = nodes[r].allocated_bounds;
+            let node = &nodes[index];
+            assert!(node.allocated_bounds.contains(l_allocated));
+            assert!(node.allocated_bounds.contains(r_allocated));
+
             let l = Self::update_bounds(l, nodes, objects);
             let r = Self::update_bounds(r, nodes, objects);
             let bounds = l.merge(r);
             nodes[index].current_bounds = bounds;
-            assert!(nodes[index].allocated_bounds.contains(bounds));
+            assert!(
+                nodes[index].allocated_bounds.contains(bounds),
+                "{:?} does not contain {:?}",
+                nodes[index].allocated_bounds,
+                bounds
+            );
             bounds
         } else {
             let node = &mut nodes[index];
-            // if mem::take(&mut node.dirty_bounds) {
             node.current_bounds = Self::calculate_bounds(&node.objects, objects);
+            assert!(node.allocated_bounds.contains(node.current_bounds));
             node.current_bounds
-            // } else {
-            //     node.bounds
-            // }
         }
+    }
+
+    pub fn allocated_bounds(&self) -> BoundingBox {
+        self.allocated_bounds
     }
 }
 
 impl CollisionTreeNode for BvhNode {
     fn objects(&self) -> &[BodyIndex] {
         &self.objects
-    }
-
-    fn insert(
-        index: NodeIndex,
-        nodes: &mut Nodes<Self>,
-        object: BodyIndex,
-        data: &mut SlotMap<BodyIndex, Body>,
-    ) {
-        Self::insert(index, nodes, object, data);
     }
 
     fn remove(&mut self, object: BodyIndex) -> Option<BodyIndex> {

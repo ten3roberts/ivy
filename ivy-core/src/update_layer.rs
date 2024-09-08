@@ -83,7 +83,7 @@ impl TimeStep for FixedTimeStep {
         self.acc += elapsed.as_secs_f64();
 
         if self.acc > self.delta_time {
-            schedule.execute_par(world)?;
+            schedule.execute_seq(world)?;
             self.acc -= self.delta_time;
             // break;
         }
