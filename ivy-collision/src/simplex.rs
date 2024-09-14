@@ -41,7 +41,7 @@ impl Simplex {
                 let ab = b.support - a.support;
                 let a0 = -a.support;
 
-                assert!(ab.length() > 0.0);
+                // assert!(ab.length() > 0.0);
 
                 // tracing::info!(?ab, dot=?ab.dot(a0));
 

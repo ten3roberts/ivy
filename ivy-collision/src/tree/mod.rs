@@ -4,14 +4,13 @@ use std::{
 };
 
 use flax::{
-    components::is_static, entity_ids, fetch::Satisfied, sink::Sink, BoxedSystem, CommandBuffer,
-    Component, Entity, EntityIds, Error, Fetch, FetchExt, Mutable, Opt, OptOr, Query, QueryBorrow,
-    System, World,
+    entity_ids, fetch::Satisfied, sink::Sink, BoxedSystem, CommandBuffer, Component, Entity,
+    EntityIds, Error, Fetch, FetchExt, Mutable, Opt, OptOr, Query, QueryBorrow, System, World,
 };
 use glam::{Mat4, Vec3};
 use itertools::Itertools;
 use ivy_core::{
-    components::{is_trigger, mass, velocity, world_transform},
+    components::{is_static, is_trigger, mass, velocity, world_transform},
     gizmos::{DrawGizmos, Gizmos, GizmosSection},
 };
 use slotmap::{new_key_type, Key, SecondaryMap, SlotMap};
@@ -273,8 +272,6 @@ impl Islands {
 
     /// merges all island bodies into the roots
     fn merge_root_islands(&mut self, contacts: &mut ContactMap, bodies: &mut BodyMap) {
-        let _span = tracing::info_span!("merge_root_islands").entered();
-
         let keys = self.islands.keys().collect_vec();
         for index in keys {
             let parent_index = self.islands[index].parent;
@@ -415,7 +412,6 @@ pub struct CollisionTree {
     root: NodeIndex,
 
     body_data: SlotMap<BodyIndex, Body>,
-    active_collisions: Vec<Contact>,
     intersection_generator: IntersectionGenerator,
 
     contacts: SlotMap<ContactIndex, Contact>,
@@ -435,7 +431,6 @@ impl CollisionTree {
             nodes,
             root,
             body_data: SlotMap::with_key(),
-            active_collisions: Vec::new(),
             intersection_generator: Default::default(),
             islands: Islands::new(),
             contacts: Default::default(),
@@ -485,6 +480,9 @@ impl CollisionTree {
             let bounds = q.collider.bounding_box(transform);
             let extended_bounds = bounds.expand(*q.velocity * 0.1);
 
+            if let Ok(v) = world.get(id, is_static()) {
+                tracing::info!(?v);
+            }
             let body = Body {
                 id: q.id,
                 bounds,
@@ -554,8 +552,6 @@ impl CollisionTree {
     }
 
     pub fn check_collisions(&mut self, _: &World) -> anyhow::Result<()> {
-        self.active_collisions.clear();
-
         let mut intersecting_pairs = Vec::new();
 
         BvhNode::check_collisions(
@@ -571,7 +567,13 @@ impl CollisionTree {
 
         self.generation += 1;
 
-        for (a, a_obj, b, b_obj) in intersecting_pairs {
+        for (mut a, mut a_obj, mut b, mut b_obj) in intersecting_pairs {
+            // ensure stable indexing and links
+            if a > b {
+                std::mem::swap(&mut a, &mut b);
+                std::mem::swap(&mut a_obj, &mut b_obj);
+            }
+
             let Some(contact) = self.intersection_generator.intersect(
                 &TransformedShape::new(&a_obj.collider, a_obj.transform),
                 &TransformedShape::new(&b_obj.collider, b_obj.transform),
@@ -595,7 +597,7 @@ impl CollisionTree {
                             state: b_obj.state,
                             body: b,
                         },
-                        contact,
+                        surface: contact,
                         island: BodyIndex::null(),
                         next_contact: ContactIndex::null(),
                         prev_contact: ContactIndex::null(),
@@ -612,7 +614,7 @@ impl CollisionTree {
                 Entry::Occupied(v) => {
                     let &contact_index = v.get();
                     let v = &mut self.contacts[contact_index];
-                    v.contact = contact;
+                    v.surface = contact;
                     v.generation = self.generation;
                 }
             };
@@ -673,6 +675,10 @@ impl CollisionTree {
         island.contacts(&self.contacts)
     }
 
+    pub fn contacts(&self) -> slotmap::basic::Iter<ContactIndex, Contact> {
+        self.contacts.iter()
+    }
+
     pub fn solve_contacts(&self, world: &World, dt: f32) {
         let mut visited = HashSet::new();
 
@@ -700,10 +706,6 @@ impl CollisionTree {
     /// Get a reference to the collision tree's objects.
     pub fn objects(&self) -> &SlotMap<BodyIndex, Body> {
         &self.body_data
-    }
-
-    pub fn active_collisions(&self) -> &[Contact] {
-        &self.active_collisions
     }
 
     pub fn body(&self, body: BodyIndex) -> &Body {
@@ -969,10 +971,6 @@ impl DrawGizmos for CollisionTree {
             &mut HashSet::new(),
             0,
         );
-
-        for collision in &self.active_collisions {
-            collision.contact.draw_primitives(gizmos);
-        }
     }
 }
 

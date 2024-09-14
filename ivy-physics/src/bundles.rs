@@ -1,8 +1,10 @@
 //! This module contains bundles and queries suitable for physics.
+use core::f32;
+
 use flax::{Component, EntityBuilder, Fetch, Mutable};
 use glam::Vec3;
 use ivy_core::{
-    components::{angular_mass, angular_velocity, friction, mass, restitution, velocity},
+    components::{inertia_tensor, angular_velocity, friction, mass, restitution, velocity},
     Bundle,
 };
 
@@ -25,7 +27,7 @@ impl RbQuery {
             vel: velocity(),
             ang_vel: angular_velocity(),
             mass: mass(),
-            ang_mass: angular_mass(),
+            ang_mass: inertia_tensor(),
             friction: friction(),
         }
     }
@@ -39,7 +41,7 @@ impl Default for RbQuery {
 
 #[derive(Default, Debug)]
 /// Bundle for all things neccessary for all things physics
-pub struct RbBundle {
+pub struct RigidBodyBundle {
     pub velocity: Vec3,
     pub mass: f32,
     pub angular_mass: f32,
@@ -48,7 +50,7 @@ pub struct RbBundle {
     pub friction: f32,
 }
 
-impl RbBundle {
+impl RigidBodyBundle {
     pub fn new(
         mass: f32,
         vel: Vec3,
@@ -104,12 +106,12 @@ impl RbBundle {
     }
 }
 
-impl Bundle for RbBundle {
+impl Bundle for RigidBodyBundle {
     fn mount(self, entity: &mut EntityBuilder) {
         entity
             .set(velocity(), self.velocity)
             .set(mass(), self.mass)
-            .set(angular_mass(), self.angular_mass)
+            .set(inertia_tensor(), self.angular_mass)
             .set(angular_velocity(), self.angular_velocity)
             .set(restitution(), self.restitution)
             .set(friction(), self.friction)
@@ -140,7 +142,7 @@ impl RbQueryMut {
             vel: velocity().as_mut(),
             ang_vel: angular_velocity().as_mut(),
             mass: mass().as_mut(),
-            ang_mass: angular_mass().as_mut(),
+            ang_mass: inertia_tensor().as_mut(),
             friction: friction().as_mut(),
         }
     }

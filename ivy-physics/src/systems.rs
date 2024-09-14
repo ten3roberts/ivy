@@ -148,12 +148,38 @@ pub fn resolve_collisions_system(dt: f32) -> BoxedSystem {
                         }
                     }
                 }
+
                 anyhow::Ok(())
             },
         )
         .boxed()
 }
 
+/// Resolves all pending collisions to be processed
+pub fn contact_gizmos_system() -> BoxedSystem {
+    System::builder()
+        .with_query(Query::new(gizmos().source(engine())))
+        .with_query(Query::new(collision_tree()))
+        .build(
+            move |mut gizmos: QueryBorrow<Source<Component<Gizmos>, Entity>>,
+                  mut query: QueryBorrow<Component<CollisionTree>>| {
+                let mut gizmos = gizmos
+                    .first()
+                    .unwrap()
+                    .begin_section("contact_gizmos_system");
+
+                if let Some(tree) = query.first() {
+                    for (_, island) in tree.islands() {
+                        for (_, contact) in tree.island_contacts(island) {
+                            gizmos.draw(&contact.surface);
+                        }
+                    }
+                }
+                anyhow::Ok(())
+            },
+        )
+        .boxed()
+}
 pub fn island_graph_gizmo_system() -> BoxedSystem {
     System::builder()
         .with_query(Query::new(gizmos().source(engine())))
@@ -262,14 +288,25 @@ pub fn gizmo_system(dt: f32) -> BoxedSystem {
 }
 
 /// Removes small unwanted floating point accumulation by cutting values toward zero
-pub(crate) fn round_to_zero(v: Vec3) -> Vec3 {
-    const THRESHOLD: f32 = 1e-5;
-
+pub(crate) fn round_to_zero(v: Vec3, threshold: f32) -> Vec3 {
     vec3(
-        if v.x.abs() < THRESHOLD { 0.0 } else { v.x },
-        if v.y.abs() < THRESHOLD { 0.0 } else { v.y },
-        if v.z.abs() < THRESHOLD { 0.0 } else { v.z },
+        if v.x.abs() < threshold { 0.0 } else { v.x },
+        if v.y.abs() < threshold { 0.0 } else { v.y },
+        if v.z.abs() < threshold { 0.0 } else { v.z },
     )
+}
+
+pub fn dampening_system(dt: f32) -> BoxedSystem {
+    System::builder()
+        .with_query(Query::new((RbQueryMut::new(),)))
+        .par_for_each(move |(rb,)| {
+            const LINEAR_DAMPEN: f32 = 0.0;
+            const ANGULAR_DAMPEN: f32 = 0.0;
+
+            *rb.vel = round_to_zero(*rb.vel * (1.0 / (1.0 + dt * LINEAR_DAMPEN)), 1e-3);
+            *rb.ang_vel = round_to_zero(*rb.ang_vel * (1.0 / (1.0 + dt * ANGULAR_DAMPEN)), 1e-3);
+        })
+        .boxed()
 }
 
 /// Applies effectors to their respective entities and clears the effects.
@@ -284,20 +321,16 @@ pub fn apply_effectors_system(dt: f32) -> BoxedSystem {
         .par_for_each(move |(rb, position, effector, is_sleeping)| {
             if !is_sleeping || effector.should_wake() {
                 // tracing::info!(%physics_state.dt, ?effector, "updating effector");
-                *rb.vel = round_to_zero(*rb.vel + effector.net_velocity_change(dt));
-                *position = round_to_zero(*position + effector.translation());
+                *rb.vel += effector.net_velocity_change(dt);
+                *position += effector.translation();
 
-                *rb.ang_vel = round_to_zero(*rb.ang_vel + effector.net_angular_velocity_change(dt));
+                *rb.ang_vel =
+                    round_to_zero(*rb.ang_vel + effector.net_angular_velocity_change(dt), 1e-3);
             }
 
+            effector.clear();
             effector.set_mass(*rb.mass);
             effector.set_ang_mass(*rb.ang_mass);
-
-            // if sleeping && effector.should_wake() {
-            //     cmd.remove_one::<Sleeping>(e)
-            // }
-
-            effector.clear()
         })
         .boxed()
 }

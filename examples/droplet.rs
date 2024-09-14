@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use flax::{
     component, BoxedSystem, Component, Entity, FetchExt, Mutable, Query, QueryBorrow,
     ScheduleBuilder, System, World,
@@ -10,7 +8,7 @@ use ivy_core::{
     app::InitEvent,
     gizmos,
     layer::events::EventRegisterContext,
-    palette::{Srgb, Srgba, WithAlpha},
+    palette::{Srgb, WithAlpha},
     profiling::ProfilingLayer,
     update_layer::{FixedTimeStep, PerTick, Plugin, ScheduledLayer},
     App, AsyncCommandBuffer, EngineLayer, EntityBuilderExt, Layer, DEG_90,
@@ -19,16 +17,11 @@ use ivy_engine::{
     async_commandbuffer, delta_time, engine, main_camera, rotation, velocity, world_transform,
     TransformBundle,
 };
+use ivy_game::free_camera::setup_camera;
 use ivy_gltf::{components::animator, Document};
-use ivy_graphics::texture::TextureDesc;
-use ivy_input::{
-    components::input_state,
-    layer::InputLayer,
-    types::{Key, NamedKey},
-    Action, BindingExt, CursorMovement, InputState, KeyBinding, MouseButtonBinding,
-};
+use ivy_input::layer::InputLayer;
 use ivy_physics::PhysicsPlugin;
-use ivy_postprocessing::preconfigured::{PbrRenderGraph, PbrRenderGraphConfig, SkyboxConfig};
+use ivy_postprocessing::preconfigured::{SurfacePbrPipeline, SurfacePbrPipelineDesc};
 use ivy_scene::{GltfNodeExt, NodeMountOptions};
 use ivy_wgpu::{
     components::{
@@ -38,16 +31,8 @@ use ivy_wgpu::{
     events::ResizedEvent,
     layer::GraphicsLayer,
     light::{LightData, LightKind},
-    material_desc::{MaterialData, MaterialDesc},
-    mesh_desc::MeshDesc,
-    primitives::CubePrimitive,
     renderer::EnvironmentData,
-    rendergraph::{self, ExternalResources, RenderGraph},
-    shader_library::{ModuleDesc, ShaderLibrary},
-    shaders::PbrShaderDesc,
-    Gpu,
 };
-use ivy_wgpu_types::{PhysicalSize, Surface};
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
 use winit::window::WindowAttributes;
@@ -75,7 +60,15 @@ pub fn main() -> anyhow::Result<()> {
         .with_layer(EngineLayer::new())
         .with_layer(ProfilingLayer::new())
         .with_layer(GraphicsLayer::new(|world, assets, gpu, surface| {
-            Ok(RenderGraphRenderer::new(world, assets, gpu, surface))
+            Ok(SurfacePbrPipeline::new(
+                world,
+                assets,
+                gpu,
+                surface,
+                SurfacePbrPipelineDesc {
+                    hdri: Some(Box::new("hdris/HDR_artificial_planet_close.hdr")),
+                },
+            ))
         }))
         .with_layer(InputLayer::new())
         .with_layer(LogicLayer)
@@ -165,55 +158,6 @@ async fn setup_objects(cmd: AsyncCommandBuffer, assets: AssetCache) -> anyhow::R
     Ok(())
 }
 
-fn setup_camera(world: &mut World) {
-    let mut move_action = Action::new(movement());
-    move_action.add(KeyBinding::new(Key::Character("w".into())).compose(Vec3::Z));
-    move_action.add(KeyBinding::new(Key::Character("a".into())).compose(-Vec3::X));
-    move_action.add(KeyBinding::new(Key::Character("s".into())).compose(-Vec3::Z));
-    move_action.add(KeyBinding::new(Key::Character("d".into())).compose(Vec3::X));
-
-    move_action.add(KeyBinding::new(Key::Character("c".into())).compose(-Vec3::Y));
-    move_action.add(KeyBinding::new(Key::Named(NamedKey::Control)).compose(-Vec3::Y));
-    move_action.add(KeyBinding::new(Key::Named(NamedKey::Space)).compose(Vec3::Y));
-
-    let mut rotate_action = Action::new(rotation_input());
-    rotate_action.add(CursorMovement::new().amplitude(Vec2::ONE * 0.001));
-
-    let mut pan_action = Action::new(pan_active());
-    pan_action
-        .add(KeyBinding::new(Key::Character("q".into())))
-        .add(MouseButtonBinding::new(
-            ivy_input::types::MouseButton::Right,
-        ));
-
-    Entity::builder()
-        .mount(TransformBundle::new(Vec3::Y, Quat::IDENTITY, Vec3::ONE))
-        .set(main_camera(), ())
-        .set_default(projection_matrix())
-        .set_default(velocity())
-        .set(
-            environment_data(),
-            EnvironmentData::new(
-                Srgb::new(0.2, 0.2, 0.3),
-                0.001,
-                if ENABLE_SKYBOX { 0.0 } else { 1.0 },
-            ),
-        )
-        .set(
-            input_state(),
-            InputState::new()
-                .with_action(move_action)
-                .with_action(rotate_action)
-                .with_action(pan_action),
-        )
-        .set_default(movement())
-        .set_default(rotation_input())
-        .set_default(euler_rotation())
-        .set_default(pan_active())
-        .set(camera_speed(), 5.0)
-        .spawn(world);
-}
-
 struct LogicLayer;
 
 impl Layer for LogicLayer {
@@ -247,7 +191,17 @@ impl Layer for LogicLayer {
             Ok(())
         });
 
-        setup_camera(world);
+        setup_camera()
+            .set(
+                environment_data(),
+                EnvironmentData::new(
+                    Srgb::new(0.2, 0.2, 0.3),
+                    0.001,
+                    if ENABLE_SKYBOX { 0.0 } else { 1.0 },
+                ),
+            )
+            .spawn(world);
+
         Ok(())
     }
 }
@@ -361,82 +315,4 @@ fn point_light_gizmo_system() -> BoxedSystem {
             },
         )
         .boxed()
-}
-
-struct RenderGraphRenderer {
-    render_graph: RenderGraph,
-    surface: Surface,
-    surface_texture: rendergraph::TextureHandle,
-    pbr: PbrRenderGraph,
-}
-
-impl RenderGraphRenderer {
-    pub fn new(world: &mut World, assets: &AssetCache, gpu: &Gpu, surface: Surface) -> Self {
-        let mut render_graph = RenderGraph::new();
-
-        let surface_texture = render_graph
-            .resources
-            .insert_texture(rendergraph::TextureDesc::External);
-
-        let shader_library = ShaderLibrary::new().with_module(ModuleDesc {
-            path: "./assets/shaders/pbr_base.wgsl",
-            source: &assets.load::<String>(&"shaders/pbr_base.wgsl".to_string()),
-        });
-
-        let shader_library = Arc::new(shader_library);
-
-        let pbr = PbrRenderGraphConfig {
-            shadow_map_config: Some(Default::default()),
-            msaa: Some(Default::default()),
-            bloom: Some(Default::default()),
-            skybox: Some(SkyboxConfig {
-                hdri: Box::new("hdris/HDR_artificial_planet_close.hdr"),
-                format: wgpu::TextureFormat::Rgba16Float,
-            }),
-            hdr_format: wgpu::TextureFormat::Rgba16Float,
-        }
-        .configure(
-            world,
-            gpu,
-            assets,
-            &mut render_graph,
-            shader_library.clone(),
-            surface_texture,
-        );
-
-        Self {
-            render_graph,
-            surface,
-            surface_texture,
-            pbr,
-        }
-    }
-}
-
-impl ivy_wgpu::layer::Renderer for RenderGraphRenderer {
-    fn draw(
-        &mut self,
-        world: &mut World,
-        assets: &AssetCache,
-        gpu: &Gpu,
-        queue: &wgpu::Queue,
-    ) -> anyhow::Result<()> {
-        let surface_texture = self.surface.get_current_texture()?;
-
-        let mut external_resources = ExternalResources::new();
-        external_resources.insert_texture(self.surface_texture, &surface_texture.texture);
-
-        self.render_graph
-            .draw(gpu, queue, world, assets, &external_resources)?;
-
-        surface_texture.present();
-
-        Ok(())
-    }
-
-    fn on_resize(&mut self, gpu: &Gpu, size: PhysicalSize<u32>) {
-        self.surface.resize(gpu, size);
-
-        self.pbr.set_size(&mut self.render_graph, size);
-    }
 }

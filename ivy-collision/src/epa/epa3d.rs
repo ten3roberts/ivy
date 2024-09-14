@@ -40,7 +40,6 @@ pub fn epa(simplex: Simplex, support_func: impl Fn(Vec3) -> SupportPoint) -> Int
     // };
 
     let mut iterations = 0;
-    let iteration_count = 64;
     loop {
         tracing::debug!(iterations);
         let (_, min) = if let Some(val) = polytype.find_closest_face() {
@@ -67,16 +66,6 @@ pub fn epa(simplex: Simplex, support_func: impl Fn(Vec3) -> SupportPoint) -> Int
                 polytype,
             };
         }
-
-        // if iterations >= iteration_count {
-        //     tracing::error!("reached max iterations");
-        //     return Intersection {
-        //         points: polytype.contact_points(min),
-        //         depth: min.distance,
-        //         normal: min.normal,
-        //         polytype,
-        //     };
-        // }
 
         polytype.add_point(new_support, PolytypeFace::new);
         iterations += 1;

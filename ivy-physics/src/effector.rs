@@ -1,7 +1,5 @@
 use glam::Vec3;
 
-use crate::systems::round_to_zero;
-
 /// Manages the forces applied to an entity.
 /// Stored in the entity and is a middle hand for manipulating velocity and
 /// angular velocity through direct changes, forces, and impulses. It is
@@ -142,7 +140,7 @@ impl Effector {
     /// Returns the total net effect of torques, angular impulses, and angular
     /// velocity changes. Note: Effector should be cleared afterwards.
     pub fn net_angular_velocity_change(&self, dt: f32) -> Vec3 {
-        round_to_zero(self.dw * dt + self.instant_dw)
+        self.dw * dt + self.instant_dw
     }
 
     /// Get the effector's translation.

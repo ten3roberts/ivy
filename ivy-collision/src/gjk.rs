@@ -36,7 +36,6 @@ pub fn gjk<A: Shape, B: Shape>(a: &A, b: &B) -> (bool, Simplex) {
 
         tracing::debug!(%dir);
 
-        assert!(dir.is_finite(), "{simplex:?}");
         let dir = dir.normalize();
 
         // Get the next simplex
@@ -58,7 +57,7 @@ pub fn gjk<A: Shape, B: Shape>(a: &A, b: &B) -> (bool, Simplex) {
         // assert!(simplex.is_unique(), "{simplex:?}");
         iteration_count += 1;
         if iteration_count > 1024 {
-            tracing::error!("max gjk iteration");
+            tracing::error!("max gjk iterations");
             return (false, simplex);
         }
     }

@@ -1,6 +1,7 @@
 use crate::systems::{
-    apply_effectors_system, gizmo_system, gravity_system, integrate_angular_velocity_system,
-    integrate_velocity_system, island_graph_gizmo_system, resolve_collisions_system,
+    apply_effectors_system, contact_gizmos_system, dampening_system, gizmo_system, gravity_system,
+    integrate_angular_velocity_system, integrate_velocity_system, island_graph_gizmo_system,
+    resolve_collisions_system,
 };
 use flax::World;
 use glam::Vec3;
@@ -17,6 +18,7 @@ use ivy_core::{
 #[derive(Default)]
 pub struct GizmoSettings {
     pub bvh_tree: bool,
+    pub contacts: bool,
     pub island_graph: bool,
     pub rigidbody: bool,
 }
@@ -75,19 +77,24 @@ impl Plugin<FixedTimeStep> for PhysicsPlugin {
             .with_system(integrate_velocity_system(dt))
             .with_system(integrate_angular_velocity_system(dt))
             .with_system(register_system())
-            .with_system(update_system())
-            .with_system(apply_effectors_system(dt))
-            .with_system(check_collisions_system())
-            .with_system(resolve_collisions_system(dt));
-
+            .with_system(update_system());
         if self.gizmos.rigidbody {
             schedule.with_system(gizmo_system(dt));
         }
 
+        schedule.with_system(dampening_system(dt));
         schedule.with_system(apply_effectors_system(dt));
+
+        schedule
+            .with_system(check_collisions_system())
+            .with_system(resolve_collisions_system(dt));
 
         if self.gizmos.bvh_tree {
             schedule.with_system(collisions_tree_gizmos_system());
+        }
+
+        if self.gizmos.contacts {
+            schedule.with_system(contact_gizmos_system());
         }
 
         if self.gizmos.island_graph {

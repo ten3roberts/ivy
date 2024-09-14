@@ -309,8 +309,6 @@ impl BvhNode {
                 Self::merge(index, nodes, &mut objects);
                 objects.push(object);
 
-                tracing::info!(count = objects.len(), "merged");
-
                 let node = &mut nodes[index];
 
                 node.current_bounds = Self::calculate_bounds(&objects, data);

@@ -132,7 +132,7 @@ impl DrawGizmos for Intersection {
 pub struct Contact {
     pub a: EntityPayload,
     pub b: EntityPayload,
-    pub contact: ContactSurface,
+    pub surface: ContactSurface,
 
     // island links
     pub island: BodyIndex,
@@ -158,7 +158,6 @@ impl IntersectionGenerator {
 
         let contact_info = epa(simplex, |dir| minkowski_diff(a, b, dir));
 
-        tracing::info!(?contact_info.points);
         let surface = self.contact_generator.generate(
             a,
             b,

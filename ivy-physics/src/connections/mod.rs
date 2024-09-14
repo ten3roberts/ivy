@@ -21,7 +21,7 @@ pub fn apply_connection_constraints(
     child_trans: TransformQueryMutItem,
     rb: RbQueryMutItem,
     parent: Mat4,
-    parent_rb: &mut RbBundle,
+    parent_rb: &mut RigidBodyBundle,
     effector: &mut Effector,
     parent_effector: &mut Effector,
 ) {

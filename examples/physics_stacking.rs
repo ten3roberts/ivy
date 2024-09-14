@@ -5,14 +5,17 @@ use ivy_collision::components::collider;
 use ivy_core::{
     app::InitEvent,
     layer::events::EventRegisterContext,
-    palette::{Srgb, Srgba},
+    palette::{
+        num::{Sqrt, Trigonometry},
+        Srgb, Srgba,
+    },
     profiling::ProfilingLayer,
     update_layer::{FixedTimeStep, PerTick, ScheduledLayer},
-    App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer,
+    App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer, DEG_45,
 };
 use ivy_engine::{
-    angular_velocity, friction, gravity_influence, is_static, main_camera, Collider,
-    RigidBodyBundle, TransformBundle,
+    angular_velocity, friction, gravity_influence, is_static, main_camera, restitution, scale,
+    velocity, Collider, RigidBodyBundle, TransformBundle,
 };
 use ivy_game::free_camera::{setup_camera, CameraInputPlugin};
 use ivy_graphics::texture::TextureDesc;
@@ -71,12 +74,12 @@ pub fn main() -> anyhow::Result<()> {
             ScheduledLayer::new(FixedTimeStep::new(0.02)).with_plugin(
                 PhysicsPlugin::new()
                     .with_gizmos(ivy_physics::GizmoSettings {
-                        bvh_tree: true,
+                        bvh_tree: false,
                         island_graph: true,
                         rigidbody: true,
                         contacts: true,
                     })
-                    .with_gravity(-Vec3::Y),
+                    .with_gravity(-Vec3::Y * 1.0),
             ),
         )
         .run()
@@ -107,9 +110,9 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
     let shader = assets.load(&PbrShaderDesc);
     let shadow = assets.load(&ShadowShaderDesc);
 
-    const RESTITUTION: f32 = 0.0;
-    const FRICTION: f32 = 0.8;
-    const MASS: f32 = 20.0;
+    const RESTITUTION: f32 = 1.0;
+    const FRICTION: f32 = 0.5;
+    const MASS: f32 = 50.0;
     const INERTIA_TENSOR: f32 = 10.0;
 
     let cube = |position: Vec3, rotation: Quat| {
@@ -143,100 +146,15 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
         builder
     };
 
-    let capsule = |position: Vec3, rotation: Quat| {
-        let mesh = MeshDesc::Content(assets.load(&CapsulePrimitive::default()));
-
-        let mut builder = Entity::builder();
-        builder
-            .mount(
-                TransformBundle::default()
-                    .with_position(position)
-                    .with_rotation(rotation),
-            )
-            .mount(
-                RigidBodyBundle::default()
-                    .with_mass(MASS)
-                    .with_angular_mass(INERTIA_TENSOR)
-                    .with_restitution(RESTITUTION)
-                    .with_friction(FRICTION),
-            )
-            .set(collider(), Collider::capsule(1.0, 1.0))
-            .mount(RenderObjectBundle::new(
-                mesh.clone(),
-                white_material.clone(),
-                shader.clone(),
-            ))
-            .set(shadow_pass(), shadow.clone());
-
-        builder
-    };
-
-    let scenario_rolling_capsule = |world: &mut World| {
-        capsule(
-            vec3(0.0, 2.0, 0.0),
-            Quat::from_scaled_axis(vec3(0.0, 0.0, 0.1)),
-        )
-        .set(material(), red_material.clone())
-        .set(friction(), 0.8)
-        .set(angular_velocity(), Vec3::Y * 20.0)
-        .set(gravity_influence(), 1.0)
+    cube(Vec3::ZERO, Quat::IDENTITY)
+        .set(scale(), vec3(10.0, 1.0, 10.0))
+        .set(is_static(), ())
         .spawn(world);
 
-        Entity::builder()
-            .mount(
-                TransformBundle::default()
-                    .with_scale(vec3(5.0, 1.0, 5.0))
-                    .with_rotation(Quat::from_scaled_axis(Vec3::Z * 0.1)),
-            )
-            .mount(
-                RigidBodyBundle::default()
-                    .with_mass(1.0)
-                    .with_angular_mass(1.0)
-                    .with_restitution(1.0)
-                    .with_friction(1.0),
-            )
-            .set(
-                collider(),
-                Collider::cube_from_center(Vec3::ZERO, Vec3::ONE),
-            )
-            .set(is_static(), ())
-            .mount(RenderObjectBundle::new(
-                cube_mesh.clone(),
-                white_material.clone(),
-                shader.clone(),
-            ))
-            .set(shadow_pass(), shadow.clone())
-            .spawn(world);
-
-        Entity::builder()
-            .mount(
-                TransformBundle::default()
-                    .with_position(vec3(-7.0, -3.0, 0.0))
-                    .with_scale(vec3(20.0, 0.1, 20.0))
-                    .with_rotation(Quat::from_scaled_axis(Vec3::Z * -0.2)),
-            )
-            .mount(
-                RigidBodyBundle::default()
-                    .with_mass(1.0)
-                    .with_angular_mass(1.0)
-                    .with_restitution(0.1)
-                    .with_friction(0.5),
-            )
-            .set(
-                collider(),
-                Collider::cube_from_center(Vec3::ZERO, Vec3::ONE),
-            )
-            .set(is_static(), ())
-            .mount(RenderObjectBundle::new(
-                cube_mesh.clone(),
-                white_material.clone(),
-                shader.clone(),
-            ))
-            .set(shadow_pass(), shadow.clone())
-            .spawn(world);
-    };
-
-    scenario_rolling_capsule(world);
+    cube(Vec3::Y * 8.0, Quat::from_scaled_axis(vec3(1.0, 0.0, 0.0)))
+        .set(gravity_influence(), 1.0)
+        .set(restitution(), 1.0)
+        .spawn(world);
 
     Entity::builder()
         .mount(TransformBundle::default().with_rotation(Quat::from_euler(

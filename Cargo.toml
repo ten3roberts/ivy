@@ -30,6 +30,7 @@ members = [
   "ivy-wgpu-types",
   "ivy-profiling",
   "ivy-graphics",
+  "ivy-game",
 ]
 
 [workspace.dependencies]
@@ -69,18 +70,19 @@ rayon = "1.0"
 ordered-float = "4.2"
 
 [dependencies]
+ivy-assets = { path = "./ivy-assets", version = "0.10" }
 ivy-collision = { path = "./ivy-collision", version = "0.10" }
 ivy-core = { path = "./ivy-core", version = "0.10" }
+ivy-game = { path = "./ivy-game", version = "0.1.0" }
+ivy-gltf = { path = "./ivy-gltf", version = "0.1.0" }
+ivy-graphics = { path = "./ivy-graphics", version = "0.1.0" }
 ivy-input = { path = "./ivy-input", version = "0.10" }
 ivy-physics = { path = "./ivy-physics", version = "0.10" }
 ivy-postprocessing = { path = "./ivy-postprocessing", version = "0.10" }
 ivy-random = { path = "./ivy-random", version = "0.10" }
-ivy-assets = { path = "./ivy-assets", version = "0.10" }
-ivy-wgpu = { path = "./ivy-wgpu", version = "0.10" }
-ivy-gltf = { path = "./ivy-gltf", version = "0.1.0" }
 ivy-scene = { path = "./ivy-scene", version = "0.1.0" }
+ivy-wgpu = { path = "./ivy-wgpu", version = "0.10" }
 ivy-wgpu-types = { path = "./ivy-wgpu-types", version = "0.1.0" }
-ivy-graphics = { path = "./ivy-graphics", version = "0.1.0" }
 
 regex = "1.0"
 flax.workspace = true

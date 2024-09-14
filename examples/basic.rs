@@ -7,6 +7,7 @@ use flax::{
 };
 use glam::{vec3, EulerRot, Mat4, Quat, Vec2, Vec3};
 use ivy_assets::{Asset, AssetCache};
+use ivy_collision::components::collider;
 use ivy_core::{
     app::InitEvent,
     gizmos,
@@ -14,11 +15,15 @@ use ivy_core::{
     palette::{Srgb, WithAlpha},
     profiling::ProfilingLayer,
     update_layer::{FixedTimeStep, PerTick, Plugin, ScheduledLayer},
-    App, EngineLayer, EntityBuilderExt, Layer,
+    App, EngineLayer, EntityBuilderExt, Layer, DEG_180,
 };
 use ivy_engine::{
-    async_commandbuffer, delta_time, engine, main_camera, rotation, velocity, world_transform,
-    TransformBundle,
+    async_commandbuffer, delta_time, engine, gravity_influence, is_static, main_camera, velocity,
+    world_transform, Collider, RigidBodyBundle, TransformBundle,
+};
+use ivy_game::free_camera::{
+    camera_movement, camera_speed, euler_rotation, pan_active, rotation_input, setup_camera,
+    CameraInputPlugin,
 };
 use ivy_gltf::{animation::player::Animator, components::animator, Document};
 use ivy_graphics::texture::TextureDesc;
@@ -28,15 +33,14 @@ use ivy_input::{
     types::{Key, NamedKey},
     Action, BindingExt, CursorMovement, InputState, KeyBinding, MouseButtonBinding,
 };
-use ivy_physics::PhysicsPlugin;
-use ivy_postprocessing::preconfigured::{PbrRenderGraph, PbrRenderGraphConfig, SkyboxConfig};
+use ivy_physics::{GizmoSettings, PhysicsPlugin};
+use ivy_postprocessing::preconfigured::{SurfacePbrPipeline, SurfacePbrPipelineDesc};
 use ivy_scene::{GltfNodeExt, NodeMountOptions};
 use ivy_wgpu::{
     components::{
-        cast_shadow, environment_data, light_data, light_kind, main_window, projection_matrix,
-        shadow_pass, window,
+        cast_shadow, environment_data, light_data, light_kind, projection_matrix, shadow_pass,
     },
-    driver::{WindowHandle, WinitDriver},
+    driver::WinitDriver,
     events::ResizedEvent,
     layer::GraphicsLayer,
     light::{LightData, LightKind},
@@ -77,7 +81,15 @@ pub fn main() -> anyhow::Result<()> {
         .with_layer(EngineLayer::new())
         .with_layer(ProfilingLayer::new())
         .with_layer(GraphicsLayer::new(|world, assets, gpu, surface| {
-            Ok(RenderGraphRenderer::new(world, assets, gpu, surface))
+            Ok(SurfacePbrPipeline::new(
+                world,
+                assets,
+                gpu,
+                surface,
+                SurfacePbrPipelineDesc {
+                    hdri: Some(Box::new("hdris/lauter_waterfall_4k.hdr")),
+                },
+            ))
         }))
         .with_layer(InputLayer::new())
         .with_layer(LogicLayer::new())
@@ -86,7 +98,18 @@ pub fn main() -> anyhow::Result<()> {
                 .with_plugin(CameraInputPlugin)
                 .with_plugin(GizmosPlugin),
         )
-        .with_layer(ScheduledLayer::new(FixedTimeStep::new(0.02)).with_plugin(PhysicsPlugin::new()))
+        .with_layer(
+            ScheduledLayer::new(FixedTimeStep::new(0.02)).with_plugin(
+                PhysicsPlugin::new()
+                    .with_gravity(-Vec3::Y * 9.81)
+                    .with_gizmos(GizmoSettings {
+                        bvh_tree: false,
+                        island_graph: false,
+                        rigidbody: true,
+                        contacts: true,
+                    }),
+            ),
+        )
         .run()
     {
         tracing::error!("{err:?}");
@@ -107,25 +130,6 @@ impl Plugin<PerTick> for AnimationPlugin {
         _: &PerTick,
     ) -> anyhow::Result<()> {
         schedule.with_system(animate_system());
-        Ok(())
-    }
-}
-
-pub struct CameraInputPlugin;
-
-impl Plugin<PerTick> for CameraInputPlugin {
-    fn install(
-        &self,
-        _: &mut World,
-        _: &AssetCache,
-        schedule: &mut ScheduleBuilder,
-        _: &PerTick,
-    ) -> anyhow::Result<()> {
-        schedule
-            .with_system(cursor_lock_system())
-            .with_system(camera_rotation_input_system())
-            .with_system(camera_movement_input_system());
-
         Ok(())
     }
 }
@@ -199,24 +203,21 @@ impl LogicLayer {
 
                 let plane_mesh = MeshDesc::content(assets.insert(generate_plane(8.0, Vec3::Y)));
 
+                let texture_group = "textures/BaseCollection/ConcreteTiles/Concrete007_2K-PNG";
                 let plane_material = MaterialDesc::content(
                     MaterialData::new()
                         .with_metallic_factor(0.0)
-                        .with_albedo(TextureDesc::path(
-                            "textures/BaseCollection/Sand/Ground054_1K-PNG_Color.png",
-                        ))
-                        .with_normal(TextureDesc::path(
-                            "textures/BaseCollection/Sand/Ground054_1K-PNG_NormalGL.png",
-                        ))
-                        .with_metallic_roughness(TextureDesc::path(
-                            "textures/BaseCollection/Sand/Ground054_1K-PNG_Roughness.png",
-                        ))
-                        .with_ambient_occlusion(TextureDesc::path(
-                            "textures/BaseCollection/Sand/Ground054_1K-PNG_AmbientOcclusion.png",
-                        ))
-                        .with_displacement(TextureDesc::path(
-                            "textures/BaseCollection/Sand/Ground054_1K-PNG_Displacement.png",
-                        )),
+                        .with_albedo(TextureDesc::path(format!("{texture_group}_Color.png")))
+                        .with_normal(TextureDesc::path(format!("{texture_group}_NormalGL.png")))
+                        .with_metallic_roughness(TextureDesc::path(format!(
+                            "{texture_group}_Roughness.png"
+                        )))
+                        .with_ambient_occlusion(TextureDesc::path(format!(
+                            "{texture_group}_AmbientOcclusion.png"
+                        )))
+                        .with_displacement(TextureDesc::path(format!(
+                            "{texture_group}_Displacement.png"
+                        ))),
                 );
 
                 cmd.lock().spawn(
@@ -231,6 +232,16 @@ impl LogicLayer {
                             material: plane_material.clone(),
                             shader: shader.clone(),
                         })
+                        .mount(
+                            RigidBodyBundle::default()
+                                .with_restitution(1.0)
+                                .with_friction(0.8),
+                        )
+                        .set(is_static(), ())
+                        .set(
+                            collider(),
+                            Collider::cube_from_center(Vec3::Y * -0.05, vec3(8.0, 0.1, 8.0)),
+                        )
                         .set(shadow_pass(), assets.load(&ShadowShaderDesc)),
                 );
 
@@ -260,6 +271,15 @@ impl LogicLayer {
                                     material: plastic_material.clone(),
                                     shader: shader.clone(),
                                 })
+                                .mount(
+                                    RigidBodyBundle::default()
+                                        .with_mass(10.0)
+                                        .with_angular_mass(50.0)
+                                        .with_friction(0.5)
+                                        .with_restitution(0.4),
+                                )
+                                .set(gravity_influence(), 1.0)
+                                .set(collider(), Collider::sphere(1.0))
                                 .set(shadow_pass(), assets.load(&ShadowShaderDesc)),
                         );
                     }
@@ -279,15 +299,27 @@ impl LogicLayer {
                         cmd.lock().spawn(
                             Entity::builder()
                                 .mount(TransformBundle::new(
-                                    vec3(0.0 + i as f32 * 2.0, 5.0, 5.0 + 4.0 * j as f32),
+                                    vec3(0.0 + i as f32 * 2.0, 2.0, 5.1 + 4.0 * j as f32),
                                     Quat::IDENTITY,
-                                    Vec3::ONE * 0.5,
+                                    Vec3::ONE,
                                 ))
                                 .mount(RenderObjectBundle {
                                     mesh: cube_mesh.clone(),
                                     material: plastic_material.clone(),
                                     shader: shader.clone(),
                                 })
+                                .mount(
+                                    RigidBodyBundle::default()
+                                        .with_mass(10.0)
+                                        .with_angular_mass(50.0)
+                                        .with_friction(0.8)
+                                        .with_restitution(0.0),
+                                )
+                                .set(gravity_influence(), 1.0)
+                                .set(
+                                    collider(),
+                                    Collider::cube_from_center(Vec3::ZERO, Vec3::ONE),
+                                )
                                 .set(shadow_pass(), assets.load(&ShadowShaderDesc)),
                         );
                     }
@@ -410,31 +442,7 @@ impl Layer for LogicLayer {
             Ok(())
         });
 
-        let mut move_action = Action::new(movement());
-        move_action.add(KeyBinding::new(Key::Character("w".into())).compose(Vec3::Z));
-        move_action.add(KeyBinding::new(Key::Character("a".into())).compose(-Vec3::X));
-        move_action.add(KeyBinding::new(Key::Character("s".into())).compose(-Vec3::Z));
-        move_action.add(KeyBinding::new(Key::Character("d".into())).compose(Vec3::X));
-
-        move_action.add(KeyBinding::new(Key::Character("c".into())).compose(-Vec3::Y));
-        move_action.add(KeyBinding::new(Key::Named(NamedKey::Control)).compose(-Vec3::Y));
-        move_action.add(KeyBinding::new(Key::Named(NamedKey::Space)).compose(Vec3::Y));
-
-        let mut rotate_action = Action::new(rotation_input());
-        rotate_action.add(CursorMovement::new().amplitude(Vec2::ONE * 0.001));
-
-        let mut pan_action = Action::new(pan_active());
-        pan_action
-            .add(KeyBinding::new(Key::Character("q".into())))
-            .add(MouseButtonBinding::new(
-                ivy_input::types::MouseButton::Right,
-            ));
-
-        Entity::builder()
-            .mount(TransformBundle::new(Vec3::Y, Quat::IDENTITY, Vec3::ONE))
-            .set(main_camera(), ())
-            .set_default(projection_matrix())
-            .set_default(velocity())
+        setup_camera()
             .set(
                 environment_data(),
                 EnvironmentData::new(
@@ -443,76 +451,10 @@ impl Layer for LogicLayer {
                     if ENABLE_SKYBOX { 0.0 } else { 1.0 },
                 ),
             )
-            .set(
-                input_state(),
-                InputState::new()
-                    .with_action(move_action)
-                    .with_action(rotate_action)
-                    .with_action(pan_action),
-            )
-            .set_default(movement())
-            .set_default(rotation_input())
-            .set_default(euler_rotation())
-            .set_default(pan_active())
-            .set(camera_speed(), 5.0)
             .spawn(world);
 
         Ok(())
     }
-}
-
-component! {
-    pan_active: f32,
-    rotation_input: Vec2,
-    euler_rotation: Vec3,
-    movement: Vec3,
-    camera_speed: f32,
-}
-
-fn cursor_lock_system() -> BoxedSystem {
-    System::builder()
-        .with_query(Query::new(pan_active()))
-        .with_query(Query::new(window().as_mut()).with(main_window()))
-        .build(
-            |mut query: QueryBorrow<Component<f32>>,
-             mut window: QueryBorrow<Mutable<WindowHandle>, _>| {
-                query.iter().for_each(|&pan_active| {
-                    if let Some(window) = window.first() {
-                        window.set_cursor_lock(pan_active > 0.0);
-                    }
-                });
-            },
-        )
-        .boxed()
-}
-
-fn camera_rotation_input_system() -> BoxedSystem {
-    System::builder()
-        .with_query(Query::new((
-            rotation().as_mut(),
-            euler_rotation().as_mut(),
-            rotation_input(),
-            pan_active(),
-        )))
-        .for_each(|(rotation, euler_rotation, rotation_input, &pan_active)| {
-            *euler_rotation += pan_active * vec3(rotation_input.y, rotation_input.x, 0.0);
-            *rotation = Quat::from_euler(EulerRot::YXZ, -euler_rotation.y, -euler_rotation.x, 0.0);
-        })
-        .boxed()
-}
-
-fn camera_movement_input_system() -> BoxedSystem {
-    System::builder()
-        .with_query(Query::new((
-            movement(),
-            rotation(),
-            camera_speed(),
-            velocity().as_mut(),
-        )))
-        .for_each(move |(&movement, rotation, &camera_speed, velocity)| {
-            *velocity = *rotation * (movement * vec3(1.0, 1.0, -1.0) * camera_speed);
-        })
-        .boxed()
 }
 
 fn animate_system() -> BoxedSystem {
@@ -570,82 +512,4 @@ fn point_light_gizmo_system() -> BoxedSystem {
             },
         )
         .boxed()
-}
-
-struct RenderGraphRenderer {
-    render_graph: RenderGraph,
-    surface: Surface,
-    surface_texture: rendergraph::TextureHandle,
-    pbr: PbrRenderGraph,
-}
-
-impl RenderGraphRenderer {
-    pub fn new(world: &mut World, assets: &AssetCache, gpu: &Gpu, surface: Surface) -> Self {
-        let mut render_graph = RenderGraph::new();
-
-        let surface_texture = render_graph
-            .resources
-            .insert_texture(rendergraph::TextureDesc::External);
-
-        let shader_library = ShaderLibrary::new().with_module(ModuleDesc {
-            path: "./assets/shaders/pbr_base.wgsl",
-            source: &assets.load::<String>(&"shaders/pbr_base.wgsl".to_string()),
-        });
-
-        let shader_library = Arc::new(shader_library);
-
-        let pbr = PbrRenderGraphConfig {
-            shadow_map_config: Some(Default::default()),
-            msaa: Some(Default::default()),
-            bloom: Some(Default::default()),
-            skybox: Some(SkyboxConfig {
-                hdri: Box::new("hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr"),
-                format: wgpu::TextureFormat::Rgba16Float,
-            }),
-            hdr_format: wgpu::TextureFormat::Rgba16Float,
-        }
-        .configure(
-            world,
-            gpu,
-            assets,
-            &mut render_graph,
-            shader_library.clone(),
-            surface_texture,
-        );
-
-        Self {
-            render_graph,
-            surface,
-            surface_texture,
-            pbr,
-        }
-    }
-}
-
-impl ivy_wgpu::layer::Renderer for RenderGraphRenderer {
-    fn draw(
-        &mut self,
-        world: &mut World,
-        assets: &AssetCache,
-        gpu: &Gpu,
-        queue: &wgpu::Queue,
-    ) -> anyhow::Result<()> {
-        let surface_texture = self.surface.get_current_texture()?;
-
-        let mut external_resources = ExternalResources::new();
-        external_resources.insert_texture(self.surface_texture, &surface_texture.texture);
-
-        self.render_graph
-            .draw(gpu, queue, world, assets, &external_resources)?;
-
-        surface_texture.present();
-
-        Ok(())
-    }
-
-    fn on_resize(&mut self, gpu: &Gpu, size: PhysicalSize<u32>) {
-        self.surface.resize(gpu, size);
-
-        self.pbr.set_size(&mut self.render_graph, size);
-    }
 }

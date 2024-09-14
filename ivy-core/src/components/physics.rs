@@ -10,7 +10,7 @@ flax::component! {
     pub angular_velocity: Vec3 => [ Debuggable ],
 
     pub mass: f32 => [ Debuggable ],
-    pub angular_mass: f32 => [ Debuggable ],
+    pub inertia_tensor: f32 => [ Debuggable ],
     pub gravity_influence: f32 => [ Debuggable ],
     /// The elasticity of the physics material. A high value means that object is
     /// hard and will bounce back. A value of zero means the energy is absorbed.

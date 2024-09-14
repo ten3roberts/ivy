@@ -16,7 +16,7 @@ use crate::{util::TOLERANCE, Shape};
 
 #[derive(Debug, Clone)]
 pub struct ContactSurface {
-    intersection: Vec<Vec3>,
+    points: Vec<Vec3>,
     midpoint: Vec3,
     normal: Vec3,
     depth: f32,
@@ -44,8 +44,8 @@ impl ContactSurface {
         self.normal
     }
 
-    pub fn intersection(&self) -> &[Vec3] {
-        &self.intersection
+    pub fn points(&self) -> &[Vec3] {
+        &self.points
     }
 
     pub fn depth(&self) -> f32 {
@@ -79,7 +79,7 @@ impl ContactGenerator {
         depth: f32,
     ) -> ContactSurface {
         debug_assert!(contact_basis.is_finite());
-        let _span = tracing::info_span!("generate", ?normal).entered();
+        let _span = tracing::debug_span!("generate", ?normal).entered();
         let normal = normal.normalize();
         let a_surface = &mut self.a_surface;
         let b_surface = &mut self.b_surface;
@@ -114,11 +114,10 @@ impl ContactGenerator {
         let to_world = |v: Vec2| v.x * tan + v.y * bitan + contact_basis.dot(normal) * normal;
 
         if a_surface.len() == 1 {
-            tracing::info!("point a");
             let p = to_world(flatten(&a_surface[0]));
 
             return ContactSurface {
-                intersection: vec![p],
+                points: vec![p],
                 midpoint: p,
                 normal,
                 depth,
@@ -132,7 +131,7 @@ impl ContactGenerator {
             let p = to_world(flatten(&b_surface[0]));
 
             return ContactSurface {
-                intersection: vec![p],
+                points: vec![p],
                 midpoint: p,
                 normal,
                 depth,
@@ -143,7 +142,6 @@ impl ContactGenerator {
         }
 
         if let ([a1, a2], [b1, b2]) = (&a_surface[..], &b_surface[..]) {
-            tracing::info!(?a1, ?a2, ?b1, ?b2, "line-line");
             let a1 = flatten(a1);
             let a2 = flatten(a2);
             let mut b1 = flatten(b1);
@@ -173,7 +171,7 @@ impl ContactGenerator {
                 let mid = (p1 + p2) / 2.0;
                 let midpoint = to_world(mid * a_dir + basis);
                 return ContactSurface {
-                    intersection: vec![midpoint],
+                    points: vec![midpoint],
                     midpoint,
                     normal,
                     depth,
@@ -185,7 +183,7 @@ impl ContactGenerator {
 
             let p = clip_segment((b2 - b1).perp(), b2, a1, a2).unwrap();
             return ContactSurface {
-                intersection: vec![to_world(p)],
+                points: vec![to_world(p)],
                 midpoint: to_world(p),
                 normal,
                 depth,
@@ -196,7 +194,6 @@ impl ContactGenerator {
         }
 
         let line_case = |p1, p2, surface: &[Vec3], winding| {
-            tracing::info!(?p1, ?p2, ?surface, winding, "line surface");
             let [p1, p2] = clip_line_face(
                 [flatten(&p1), flatten(&p2)],
                 surface.iter().map(flatten),
@@ -205,10 +202,8 @@ impl ContactGenerator {
 
             let midpoint = to_world((p1 + p2) / 2.0);
 
-            tracing::info!(?p1, ?p2, ?midpoint);
-
             ContactSurface {
-                intersection: vec![to_world(p1), to_world(p2)],
+                points: vec![to_world(p1), to_world(p2)],
                 midpoint,
                 normal,
                 depth,
@@ -226,7 +221,6 @@ impl ContactGenerator {
             return line_case(p1, p2, a_surface, -1.0);
         }
 
-        tracing::info!("face-face");
         let mut input = a_surface.iter().map(flatten).collect_vec();
         let mut output = Vec::new();
         mem::swap(&mut input, &mut output);
@@ -248,7 +242,6 @@ impl ContactGenerator {
 
                 assert!(current_dot.is_finite());
                 assert!(prev_dot.is_finite());
-                // tracing::info!(current_dot, prev_dot);
                 if current_dot < TOLERANCE {
                     if prev_dot > TOLERANCE {
                         output.push(intersect.unwrap())
@@ -258,8 +251,6 @@ impl ContactGenerator {
                     output.push(intersect.unwrap())
                 }
             }
-
-            // tracing::info!(output = output.len());
         }
 
         let mut midpoint = output.iter().sum::<Vec2>() / output.len() as f32;
@@ -273,7 +264,7 @@ impl ContactGenerator {
             area: polygon_area(&output, midpoint),
             b_surface: b_surface.clone(),
             a_surface: a_surface.clone(),
-            intersection: output.into_iter().map(to_world).collect_vec(),
+            points: output.into_iter().map(to_world).collect_vec(),
             midpoint: to_world(midpoint),
             normal,
             depth,
@@ -317,8 +308,6 @@ fn clip_line_face(
         let a_dot = (e2 - a).dot(clip_edge);
         let b_dot = (e2 - b).dot(clip_edge);
 
-        // tracing::info!(a_dot, b_dot, ?intersection);
-
         // if a is outside, clip
         if a_dot > 0.0 {
             a = intersection.unwrap();
@@ -357,7 +346,7 @@ fn clip_segment(normal: Vec2, point: Vec2, start: Vec2, end: Vec2) -> Option<Vec
 
 impl DrawGizmos for ContactSurface {
     fn draw_primitives(&self, gizmos: &mut GizmosSection) {
-        gizmos.draw(Polygon::new(self.intersection.iter().copied()).with_color(Color::blue()));
+        gizmos.draw(Polygon::new(self.points.iter().copied()).with_color(Color::blue()));
         gizmos.draw(Polygon::new(self.a_surface.iter().copied()).with_color(Color::green()));
         gizmos.draw(Polygon::new(self.b_surface.iter().copied()).with_color(Color::red()));
 
