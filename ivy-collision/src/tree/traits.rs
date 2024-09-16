@@ -1,6 +1,4 @@
-use slotmap::SlotMap;
-
-use crate::{Body, BodyIndex, BoundingBox, Nodes};
+use crate::{BodyIndex, BoundingBox};
 
 use super::NodeIndex;
 

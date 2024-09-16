@@ -2,12 +2,11 @@ use std::slice::Iter;
 
 use flax::{Entity, Fetch, World};
 use glam::{f32, Vec3};
-use ordered_float::OrderedFloat;
 use slotmap::SlotMap;
 
 use super::Ray;
 use crate::{
-    components::collider, BvhNode, CollisionTreeNode, Intersection, Body, BodyIndex, Visitor,
+    components::collider, Body, BodyIndex, BvhNode, CollisionTreeNode, Intersection, Visitor,
 };
 
 /// Represents a collider ray intersection.

@@ -1,17 +1,12 @@
-use std::{collections::HashSet, mem};
+use std::collections::HashSet;
 
 use glam::Vec3;
-use ivy_assets::AssetDesc;
 use ivy_core::{
     gizmos::{Cube, GizmosSection, Sphere, DEFAULT_THICKNESS},
     Color, ColorExt,
 };
 use ordered_float::OrderedFloat;
-use palette::{
-    named::{BLUE, GREEN, YELLOW},
-    Srgb, WithAlpha,
-};
-use slotmap::{SecondaryMap, SlotMap};
+use slotmap::SlotMap;
 
 use crate::{Body, BodyIndex, BoundingBox, CollisionTreeNode, NodeIndex, NodeState, Nodes};
 

@@ -1,137 +1,152 @@
 use core::f32;
-use std::arch::x86_64::_andn_u32;
 use std::f32::consts::PI;
 
-use crate::components::effector;
-use crate::systems::{get_rigid_root, round_to_zero};
-use crate::RbQuery;
 use flax::component::ComponentValue;
 use flax::{error::MissingComponent, EntityRef};
-use flax::{Component, FetchExt, World};
+use flax::{Component, World};
 use glam::Vec3;
 use ivy_collision::contact::ContactSurface;
 use ivy_collision::Contact;
 use ivy_core::components::{
-    angular_velocity, friction, inertia_tensor, is_static, mass, position, restitution, velocity,
+    angular_velocity, friction, inertia_tensor, is_static, mass, restitution, velocity,
     world_transform,
 };
-use ivy_core::palette::num::MinMax;
 
-pub fn resolve_contact(world: &World, dt: f32, contact: &Contact) -> anyhow::Result<()> {
-    let a = world.entity(contact.a.entity)?;
-    let b = world.entity(contact.b.entity)?;
+#[derive(Debug, Clone, Copy)]
+pub struct ResolverConfiguration {
+    allowed_penetration: f32,
+    correction_factor: f32,
+}
 
-    // Ignore triggers
-    if contact.a.is_trigger || contact.b.is_trigger {
-        return Ok(());
-    }
-
-    assert_ne!(contact.a, contact.b);
-
-    // Trace up to the root of the rigid connection before solving
-    // collisions
-    let a = get_rigid_root(&world.entity(*contact.a).unwrap());
-    let b = get_rigid_root(&world.entity(*contact.b).unwrap());
-
-    let mut a_body = ResolveBody::from_entity(&a)?;
-    let mut b_body = ResolveBody::from_entity(&b)?;
-
-    // Ignore collisions between two immovable objects
-    if a_body.inv_mass == 0.0 && b_body.inv_mass == 0.0 {
-        tracing::warn!("ignoring collision between two immovable objects");
-        return Ok(());
-    }
-
-    let inv_mass = a_body.inv_mass + b_body.inv_mass;
-    let restitution = a_body.restitution * b_body.restitution;
-    let u_coeff = a_body.friction * b_body.friction;
-
-    let surface = &contact.surface;
-    let normal = surface.normal();
-
-    assert!(normal.is_normalized());
-
-    let mut acc_impulse = 0.0;
-
-    for &point in surface.points() {
-        let to_a = point - a_body.pos;
-        let to_b = point - b_body.pos;
-
-        let inv_i = a_body.inverse_inertia_tensor * to_a.cross(normal).cross(to_a)
-            + b_body.inverse_inertia_tensor * to_b.cross(normal).cross(to_b);
-        let inertia = inv_mass + inv_i.dot(normal);
-
-        let a_pvel = a_body.vel + a_body.ang_vel.cross(to_a);
-        let b_pvel = b_body.vel + b_body.ang_vel.cross(to_b);
-
-        let contact_vel = (b_pvel - a_pvel).dot(normal);
-
-        let impulse = -(1.0 + restitution) * contact_vel / inertia;
-
-        let old_acc_impulse = acc_impulse;
-        acc_impulse = (acc_impulse + impulse).max(0.0);
-        let impulse = acc_impulse - old_acc_impulse;
-
-        // use impulse for as friction normal force
-        let impulse = impulse * normal;
-
-        // apply impulse to points
-        a_body.apply_impulse_at(-impulse, -to_a);
-        b_body.apply_impulse_at(impulse, -to_b);
-    }
-
-    apply_friction(
-        &mut a_body,
-        &mut b_body,
-        surface,
-        normal,
-        u_coeff,
-        acc_impulse,
-    );
-
-    let dampening = dampen(&a_body, &b_body, contact.surface.normal(), dt);
-    if a_body.mass.is_infinite() {
-        b_body.vel += dampening.linear;
-    } else if b_body.mass.is_infinite() {
-        a_body.vel -= dampening.linear;
-    } else {
-        a_body.vel -= dampening.linear * (b_body.mass * inv_mass);
-        b_body.vel += dampening.linear * (a_body.mass * inv_mass);
-    }
-
-    if a_body.inertia_tensor.is_infinite() {
-        b_body.ang_vel += dampening.angular;
-    } else if b_body.inertia_tensor.is_infinite() {
-        a_body.ang_vel -= dampening.angular;
-    } else {
-        a_body.ang_vel -= dampening.angular * (b_body.inertia_tensor * inv_mass);
-        b_body.ang_vel += dampening.angular * (a_body.inertia_tensor * inv_mass);
-    }
-
-    fn try_write<T: ComponentValue>(entity: &EntityRef, component: Component<T>, value: T) {
-        if let Ok(mut val) = entity.get_mut(component) {
-            *val = value;
+impl ResolverConfiguration {
+    pub fn new() -> Self {
+        Self {
+            allowed_penetration: 0.01,
+            correction_factor: 0.1,
         }
     }
+}
 
-    try_write(&a, velocity(), a_body.vel);
-    try_write(&a, angular_velocity(), a_body.ang_vel);
+impl Default for ResolverConfiguration {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
-    try_write(&b, velocity(), b_body.vel);
-    try_write(&b, angular_velocity(), b_body.ang_vel);
+pub struct Resolver {
+    configuration: ResolverConfiguration,
+    dt: f32,
+}
 
-    let dir = contact.surface.normal() * (contact.surface.depth() - 0.01).max(0.0) * 0.1;
-
-    if a_body.mass.is_infinite() {
-        *b.get_mut(position())? += dir;
-    } else if b_body.mass.is_infinite() {
-        *a.get_mut(position())? -= dir;
-    } else {
-        *a.get_mut(position())? -= dir * (b_body.mass * inv_mass);
-        *b.get_mut(position())? += dir * (a_body.mass * inv_mass);
+impl Resolver {
+    pub fn new(configuration: ResolverConfiguration, dt: f32) -> Self {
+        Self { configuration, dt }
     }
 
-    Ok(())
+    pub fn resolve_contact(&self, world: &World, contact: &Contact) -> flax::error::Result<()> {
+        let a = world.entity(contact.a.entity)?;
+        let b = world.entity(contact.b.entity)?;
+
+        // Ignore triggers
+        if contact.a.is_trigger || contact.b.is_trigger {
+            return Ok(());
+        }
+
+        assert_ne!(contact.a, contact.b);
+
+        let mut a_body = ResolveBody::from_entity(&a)?;
+        let mut b_body = ResolveBody::from_entity(&b)?;
+
+        // Ignore collisions between two immovable objects
+        if a_body.inv_mass == 0.0 && b_body.inv_mass == 0.0 {
+            tracing::warn!("ignoring collision between two immovable objects");
+            return Ok(());
+        }
+
+        let inv_mass = a_body.inv_mass + b_body.inv_mass;
+        let restitution = a_body.restitution * b_body.restitution;
+        let u_coeff = a_body.friction * b_body.friction;
+
+        let surface = &contact.surface;
+        let normal = surface.normal();
+
+        assert!(normal.is_normalized());
+
+        let mut acc_impulse = 0.0;
+
+        let v_bias = -self.configuration.correction_factor
+            * self.dt.recip()
+            * (contact.surface.depth() - self.configuration.allowed_penetration).max(0.0);
+
+        for &point in surface.points() {
+            let to_a = point - a_body.pos;
+            let to_b = point - b_body.pos;
+
+            let inv_i = a_body.inverse_inertia_tensor * to_a.cross(normal).cross(to_a)
+                + b_body.inverse_inertia_tensor * to_b.cross(normal).cross(to_b);
+            let inertia = inv_mass + inv_i.dot(normal);
+
+            let a_pvel = a_body.vel + a_body.ang_vel.cross(to_a);
+            let b_pvel = b_body.vel + b_body.ang_vel.cross(to_b);
+
+            let contact_vel = (b_pvel - a_pvel).dot(normal);
+
+            let impulse = -(1.0 + restitution) * (contact_vel + v_bias) / inertia;
+
+            let old_acc_impulse = acc_impulse;
+            acc_impulse = (acc_impulse + impulse).max(0.0);
+            let impulse = acc_impulse - old_acc_impulse;
+
+            // use impulse for as friction normal force
+            let impulse = impulse * normal;
+
+            // apply impulse to points
+            a_body.apply_impulse_at(-impulse, -to_a);
+            b_body.apply_impulse_at(impulse, -to_b);
+        }
+
+        apply_friction(
+            &mut a_body,
+            &mut b_body,
+            surface,
+            normal,
+            u_coeff,
+            acc_impulse,
+        );
+
+        let dampening = dampen(&a_body, &b_body, contact.surface.normal(), self.dt);
+        if a_body.mass.is_infinite() {
+            b_body.vel += dampening.linear;
+        } else if b_body.mass.is_infinite() {
+            a_body.vel -= dampening.linear;
+        } else {
+            a_body.vel -= dampening.linear * (b_body.mass * inv_mass);
+            b_body.vel += dampening.linear * (a_body.mass * inv_mass);
+        }
+
+        if a_body.inertia_tensor.is_infinite() {
+            b_body.ang_vel += dampening.angular;
+        } else if b_body.inertia_tensor.is_infinite() {
+            a_body.ang_vel -= dampening.angular;
+        } else {
+            a_body.ang_vel -= dampening.angular * (b_body.inertia_tensor * inv_mass);
+            b_body.ang_vel += dampening.angular * (a_body.inertia_tensor * inv_mass);
+        }
+
+        fn try_write<T: ComponentValue>(entity: &EntityRef, component: Component<T>, value: T) {
+            if let Ok(mut val) = entity.get_mut(component) {
+                *val = value;
+            }
+        }
+
+        try_write(&a, velocity(), a_body.vel);
+        try_write(&a, angular_velocity(), a_body.ang_vel);
+
+        try_write(&b, velocity(), b_body.vel);
+        try_write(&b, angular_velocity(), b_body.ang_vel);
+
+        Ok(())
+    }
 }
 
 fn apply_friction(
@@ -254,8 +269,8 @@ struct Dampening {
 }
 
 fn dampen(a: &ResolveBody, b: &ResolveBody, normal: Vec3, dt: f32) -> Dampening {
-    const DAMPEN_FACTOR: f32 = 0.01;
-    const ANGULAR_DAMPEN_FACTOR: f32 = 0.01;
+    const DAMPEN_FACTOR: f32 = 0.1;
+    const ANGULAR_DAMPEN_FACTOR: f32 = 0.1;
 
     let transverse_vel = (a.vel - b.vel).reject_from(normal);
 

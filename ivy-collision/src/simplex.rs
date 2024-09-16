@@ -1,9 +1,6 @@
 use std::ops::Index;
 
-use glam::{Vec3, Vec3Swizzles};
-use ordered_float::Float;
-use palette::{named::SIENNA, num::Abs};
-use rand::SeedableRng;
+use glam::Vec3;
 
 use crate::util::{project_plane, triple_prod, SupportPoint, TOLERANCE};
 

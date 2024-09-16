@@ -1,19 +1,10 @@
-use ivy_core::gizmos::GizmosSection;
-use ivy_core::Color;
-use ivy_core::ColorExt;
 use slotmap::new_key_type;
 use slotmap::Key;
-use slotmap::SlotMap;
-use std::collections::HashSet;
 use std::fmt::Debug;
-use std::ops::DerefMut;
 
 use crate::CollisionTreeNode;
 
-use super::BvhNode;
 use super::Nodes;
-use super::Body;
-use super::BodyIndex;
 
 new_key_type!(
     pub struct NodeIndex;

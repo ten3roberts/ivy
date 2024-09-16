@@ -5,17 +5,14 @@ use ivy_collision::components::collider;
 use ivy_core::{
     app::InitEvent,
     layer::events::EventRegisterContext,
-    palette::{
-        num::{Sqrt, Trigonometry},
-        Srgb, Srgba,
-    },
+    palette::{Srgb, Srgba},
     profiling::ProfilingLayer,
     update_layer::{FixedTimeStep, PerTick, ScheduledLayer},
-    App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer, DEG_45,
+    App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer,
 };
 use ivy_engine::{
-    angular_velocity, friction, gravity_influence, is_static, main_camera, restitution, scale,
-    velocity, Collider, RigidBodyBundle, TransformBundle,
+    gravity_influence, is_static, main_camera, restitution, rotation, scale, Collider,
+    RigidBodyBundle, TransformBundle,
 };
 use ivy_game::free_camera::{setup_camera, CameraInputPlugin};
 use ivy_graphics::texture::TextureDesc;
@@ -30,7 +27,7 @@ use ivy_wgpu::{
     light::{LightData, LightKind},
     material_desc::{MaterialData, MaterialDesc},
     mesh_desc::MeshDesc,
-    primitives::{CapsulePrimitive, CubePrimitive},
+    primitives::{CapsulePrimitive, CubePrimitive, UvSpherePrimitive},
     renderer::{EnvironmentData, RenderObjectBundle},
     shaders::{PbrShaderDesc, ShadowShaderDesc},
 };
@@ -64,7 +61,11 @@ pub fn main() -> anyhow::Result<()> {
                 assets,
                 gpu,
                 surface,
-                SurfacePbrPipelineDesc { hdri: None },
+                SurfacePbrPipelineDesc {
+                    hdri: Some(Box::new(
+                        "hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
+                    )),
+                },
             ))
         }))
         .with_layer(InputLayer::new())
@@ -75,11 +76,11 @@ pub fn main() -> anyhow::Result<()> {
                 PhysicsPlugin::new()
                     .with_gizmos(ivy_physics::GizmoSettings {
                         bvh_tree: false,
-                        island_graph: true,
+                        island_graph: false,
                         rigidbody: true,
-                        contacts: true,
+                        contacts: false,
                     })
-                    .with_gravity(-Vec3::Y * 1.0),
+                    .with_gravity(-Vec3::Y * 9.81),
             ),
         )
         .run()
@@ -101,30 +102,23 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
 
     let red_material = MaterialDesc::Content(
         MaterialData::new()
-            .with_roughness_factor(0.1)
+            .with_roughness_factor(1.0)
             .with_metallic_factor(0.0)
-            .with_albedo(TextureDesc::srgba(Color::from_hsla(0.0, 0.7, 0.7, 1.0))),
+            .with_albedo(TextureDesc::srgba(Color::from_hsla(1.0, 0.7, 0.7, 1.0))),
     );
 
-    let cube_mesh = MeshDesc::Content(assets.load(&CubePrimitive));
     let shader = assets.load(&PbrShaderDesc);
     let shadow = assets.load(&ShadowShaderDesc);
 
-    const RESTITUTION: f32 = 1.0;
+    const RESTITUTION: f32 = 0.4;
     const FRICTION: f32 = 0.5;
     const MASS: f32 = 50.0;
-    const INERTIA_TENSOR: f32 = 10.0;
+    const INERTIA_TENSOR: f32 = 200.0;
 
-    let cube = |position: Vec3, rotation: Quat| {
-        let mesh = MeshDesc::Content(assets.load(&CubePrimitive));
-
+    let body = || {
         let mut builder = Entity::builder();
         builder
-            .mount(
-                TransformBundle::default()
-                    .with_position(position)
-                    .with_rotation(rotation),
-            )
+            .mount(TransformBundle::default())
             .mount(
                 RigidBodyBundle::default()
                     .with_mass(MASS)
@@ -137,7 +131,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
                 Collider::cube_from_center(Vec3::ZERO, Vec3::ONE),
             )
             .mount(RenderObjectBundle::new(
-                mesh.clone(),
+                MeshDesc::Content(assets.load(&CubePrimitive)),
                 white_material.clone(),
                 shader.clone(),
             ))
@@ -146,15 +140,84 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
         builder
     };
 
-    cube(Vec3::ZERO, Quat::IDENTITY)
-        .set(scale(), vec3(10.0, 1.0, 10.0))
+    let cube = |pos: Vec3| {
+        let mut builder = body();
+        builder.set(ivy_core::components::position(), pos);
+        builder
+    };
+
+    let sphere = |pos: Vec3| {
+        let mut builder = body();
+        builder
+            .set(ivy_core::components::position(), pos)
+            .set(
+                mesh(),
+                MeshDesc::Content(assets.load(&UvSpherePrimitive::default())),
+            )
+            .set(collider(), Collider::sphere(1.0));
+        builder
+    };
+
+    let capsule = |pos: Vec3| {
+        let mut builder = body();
+        builder
+            .set(ivy_core::components::position(), pos)
+            .set(
+                mesh(),
+                MeshDesc::Content(assets.load(&CapsulePrimitive::default())),
+            )
+            .set(collider(), Collider::capsule(1.0, 1.0));
+        builder
+    };
+
+    cube(Vec3::ZERO)
+        .set(scale(), vec3(50.0, 1.0, 50.0))
         .set(is_static(), ())
         .spawn(world);
 
-    cube(Vec3::Y * 8.0, Quat::from_scaled_axis(vec3(1.0, 0.0, 0.0)))
+    cube(vec3(0.0, 20.0, 0.0))
+        .set(rotation(), Quat::from_scaled_axis(vec3(0.0, 0.0, 0.0)))
         .set(gravity_influence(), 1.0)
         .set(restitution(), 1.0)
+        .set(material(), red_material.clone())
         .spawn(world);
+
+    cube(vec3(5.0, 20.0, 0.0))
+        .set(rotation(), Quat::from_scaled_axis(vec3(1.0, 0.0, 0.0)))
+        .set(gravity_influence(), 1.0)
+        .set(restitution(), 1.0)
+        .set(material(), red_material.clone())
+        .spawn(world);
+
+    sphere(vec3(10.0, 20.0, 0.0))
+        .set(rotation(), Quat::from_scaled_axis(vec3(0.5, 0.0, 0.0)))
+        .set(gravity_influence(), 1.0)
+        .set(restitution(), 1.0)
+        .set(material(), red_material.clone())
+        .spawn(world);
+
+    capsule(vec3(-5.0, 20.0, 0.0))
+        .set(rotation(), Quat::from_scaled_axis(vec3(0.1, 0.0, 0.0)))
+        .set(gravity_influence(), 1.0)
+        .set(restitution(), 1.0)
+        .set(material(), red_material.clone())
+        .spawn(world);
+
+    capsule(vec3(-10.0, 20.0, 0.0))
+        .set(rotation(), Quat::from_scaled_axis(vec3(0.0, 0.0, 1.0)))
+        .set(gravity_influence(), 1.0)
+        .set(restitution(), 1.0)
+        .set(material(), red_material.clone())
+        .spawn(world);
+
+    for i in 0..3 {
+        cube(vec3(0.0, 2.1 + i as f32 * 2.0, -8.0))
+            .set(rotation(), Quat::from_scaled_axis(vec3(0.0, 0.0, 0.0)))
+            .set(gravity_influence(), 1.0)
+            .set(restitution(), 0.0)
+            .set(material(), red_material.clone())
+            .spawn(world);
+    }
 
     Entity::builder()
         .mount(TransformBundle::default().with_rotation(Quat::from_euler(
@@ -201,6 +264,11 @@ impl Layer for LogicLayer {
         });
 
         setup_camera()
+            .mount(TransformBundle::new(
+                vec3(0.0, 20.0, 20.0),
+                Quat::IDENTITY,
+                Vec3::ONE,
+            ))
             .set(
                 environment_data(),
                 EnvironmentData::new(

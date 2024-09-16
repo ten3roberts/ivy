@@ -31,7 +31,7 @@ impl Ray {
         &self,
         collider: &T,
         transform: &Mat4,
-        transform_inv: &Mat4,
+        _transform_inv: &Mat4,
         dir: Vec3,
     ) -> SupportPoint {
         let a = TransformedShape::new(collider, *transform).support(dir);

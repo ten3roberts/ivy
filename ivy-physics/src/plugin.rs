@@ -1,7 +1,11 @@
-use crate::systems::{
-    apply_effectors_system, contact_gizmos_system, dampening_system, gizmo_system, gravity_system,
-    integrate_angular_velocity_system, integrate_velocity_system, island_graph_gizmo_system,
-    resolve_collisions_system,
+use crate::{
+    components::resolver,
+    response::{Resolver, ResolverConfiguration},
+    systems::{
+        apply_effectors_system, contact_gizmos_system, dampening_system, gizmo_system,
+        gravity_system, integrate_angular_velocity_system, integrate_velocity_system,
+        island_graph_gizmo_system, resolve_collisions_system,
+    },
 };
 use flax::World;
 use glam::Vec3;
@@ -26,6 +30,7 @@ pub struct GizmoSettings {
 pub struct PhysicsPlugin {
     gravity: Vec3,
     gizmos: GizmoSettings,
+    resolver: ResolverConfiguration,
 }
 
 impl PhysicsPlugin {
@@ -33,6 +38,7 @@ impl PhysicsPlugin {
         Self {
             gravity: Vec3::ZERO,
             gizmos: Default::default(),
+            resolver: ResolverConfiguration::new(),
         }
     }
 
@@ -63,6 +69,8 @@ impl Plugin<FixedTimeStep> for PhysicsPlugin {
         schedule: &mut flax::ScheduleBuilder,
         time_step: &FixedTimeStep,
     ) -> anyhow::Result<()> {
+        let dt = time_step.delta_time() as f32;
+
         world.set(engine(), gravity(), self.gravity)?;
         world.set(
             engine(),
@@ -70,14 +78,15 @@ impl Plugin<FixedTimeStep> for PhysicsPlugin {
             CollisionTree::new(BvhNode::new(BoundingBox::new(Vec3::ONE * 1.0, Vec3::ZERO))),
         )?;
 
-        let dt = time_step.delta_time() as f32;
+        world.set(engine(), resolver(), Resolver::new(self.resolver, dt))?;
 
         schedule
-            .with_system(gravity_system())
             .with_system(integrate_velocity_system(dt))
             .with_system(integrate_angular_velocity_system(dt))
+            .with_system(gravity_system())
             .with_system(register_system())
             .with_system(update_system());
+
         if self.gizmos.rigidbody {
             schedule.with_system(gizmo_system(dt));
         }
@@ -87,7 +96,7 @@ impl Plugin<FixedTimeStep> for PhysicsPlugin {
 
         schedule
             .with_system(check_collisions_system())
-            .with_system(resolve_collisions_system(dt));
+            .with_system(resolve_collisions_system());
 
         if self.gizmos.bvh_tree {
             schedule.with_system(collisions_tree_gizmos_system());

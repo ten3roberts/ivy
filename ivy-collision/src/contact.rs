@@ -6,11 +6,6 @@ use ivy_core::{
     gizmos::{self, DrawGizmos, GizmosSection, Polygon, DEFAULT_RADIUS, DEFAULT_THICKNESS},
     Color, ColorExt,
 };
-use ordered_float::Float;
-use palette::{
-    cast::into_uint_ref,
-    num::{Abs, Signum},
-};
 
 use crate::{util::TOLERANCE, Shape};
 
@@ -253,7 +248,7 @@ impl ContactGenerator {
             }
         }
 
-        let mut midpoint = output.iter().sum::<Vec2>() / output.len() as f32;
+        let midpoint = output.iter().sum::<Vec2>() / output.len() as f32;
 
         assert!(
             midpoint.is_finite(),

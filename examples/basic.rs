@@ -1,11 +1,9 @@
-use std::sync::Arc;
-
 use anyhow::Context;
 use flax::{
-    component, BoxedSystem, Component, Entity, EntityBuilder, FetchExt, Mutable, Query,
-    QueryBorrow, ScheduleBuilder, System, World,
+    BoxedSystem, Component, Entity, EntityBuilder, FetchExt, Query, QueryBorrow, ScheduleBuilder,
+    System, World,
 };
-use glam::{vec3, EulerRot, Mat4, Quat, Vec2, Vec3};
+use glam::{vec3, EulerRot, Mat4, Quat, Vec3};
 use ivy_assets::{Asset, AssetCache};
 use ivy_collision::components::collider;
 use ivy_core::{
@@ -15,24 +13,16 @@ use ivy_core::{
     palette::{Srgb, WithAlpha},
     profiling::ProfilingLayer,
     update_layer::{FixedTimeStep, PerTick, Plugin, ScheduledLayer},
-    App, EngineLayer, EntityBuilderExt, Layer, DEG_180,
+    App, EngineLayer, EntityBuilderExt, Layer,
 };
 use ivy_engine::{
-    async_commandbuffer, delta_time, engine, gravity_influence, is_static, main_camera, velocity,
+    async_commandbuffer, delta_time, engine, gravity_influence, is_static, main_camera,
     world_transform, Collider, RigidBodyBundle, TransformBundle,
 };
-use ivy_game::free_camera::{
-    camera_movement, camera_speed, euler_rotation, pan_active, rotation_input, setup_camera,
-    CameraInputPlugin,
-};
+use ivy_game::free_camera::{setup_camera, CameraInputPlugin};
 use ivy_gltf::{animation::player::Animator, components::animator, Document};
 use ivy_graphics::texture::TextureDesc;
-use ivy_input::{
-    components::input_state,
-    layer::InputLayer,
-    types::{Key, NamedKey},
-    Action, BindingExt, CursorMovement, InputState, KeyBinding, MouseButtonBinding,
-};
+use ivy_input::layer::InputLayer;
 use ivy_physics::{GizmoSettings, PhysicsPlugin};
 use ivy_postprocessing::preconfigured::{SurfacePbrPipeline, SurfacePbrPipelineDesc};
 use ivy_scene::{GltfNodeExt, NodeMountOptions};
@@ -48,12 +38,8 @@ use ivy_wgpu::{
     mesh_desc::MeshDesc,
     primitives::{generate_plane, CubePrimitive, UvSpherePrimitive},
     renderer::{EnvironmentData, RenderObjectBundle},
-    rendergraph::{self, ExternalResources, RenderGraph},
-    shader_library::{ModuleDesc, ShaderLibrary},
     shaders::{PbrShaderDesc, ShadowShaderDesc},
-    Gpu,
 };
-use ivy_wgpu_types::{PhysicalSize, Surface};
 use tracing::Instrument;
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
@@ -301,7 +287,7 @@ impl LogicLayer {
                                 .mount(TransformBundle::new(
                                     vec3(0.0 + i as f32 * 2.0, 2.0, 5.1 + 4.0 * j as f32),
                                     Quat::IDENTITY,
-                                    Vec3::ONE,
+                                    Vec3::ONE * 0.5,
                                 ))
                                 .mount(RenderObjectBundle {
                                     mesh: cube_mesh.clone(),
@@ -310,10 +296,10 @@ impl LogicLayer {
                                 })
                                 .mount(
                                     RigidBodyBundle::default()
-                                        .with_mass(10.0)
+                                        .with_mass(20.0)
                                         .with_angular_mass(50.0)
                                         .with_friction(0.8)
-                                        .with_restitution(0.0),
+                                        .with_restitution(0.5),
                                 )
                                 .set(gravity_influence(), 1.0)
                                 .set(

@@ -1,13 +1,17 @@
 use core::f32;
-use std::{collections::BTreeMap, rc::Rc};
+use std::collections::BTreeMap;
 
-use crate::{bundles::*, components::effector, response};
+use crate::{
+    bundles::*,
+    components::{effector, resolver},
+    response::Resolver,
+};
 use flax::{
     fetch::Source, BoxedSystem, Component, Entity, EntityRef, FetchExt, Query, QueryBorrow, System,
     World,
 };
 use glam::{vec3, Mat4, Quat, Vec3};
-use ivy_collision::{components::collision_tree, CollisionTree, Contact, Island};
+use ivy_collision::{components::collision_tree, CollisionTree, Contact};
 use ivy_core::{
     components::{
         angular_velocity, connection, engine, gizmos, gravity, gravity_influence, position,
@@ -135,17 +139,18 @@ impl Default for CollisionState {
 }
 
 /// Resolves all pending collisions to be processed
-pub fn resolve_collisions_system(dt: f32) -> BoxedSystem {
+pub fn resolve_collisions_system() -> BoxedSystem {
     System::builder()
         .with_world()
-        .with_query(Query::new(collision_tree()))
+        .with_query(Query::new((collision_tree(), resolver())))
         .build(
-            move |world: &World, mut query: QueryBorrow<Component<CollisionTree>>| {
-                if let Some(tree) = query.first() {
-                    for (_, island) in tree.islands() {
-                        for (_, contact) in tree.island_contacts(island) {
-                            response::resolve_contact(world, dt, contact)?;
-                        }
+            move |world: &World, mut query: QueryBorrow<(Component<CollisionTree>, Component<Resolver>)>| {
+                if let Some((tree, resolver)) = query.first() {
+                    for (_, contact) in tree.contacts() {
+                        // for (_, island) in tree.islands() {
+                        //     for (_, contact) in tree.island_contacts(island) {
+                        resolver.resolve_contact(world, contact)?;
+                        // }
                     }
                 }
 
@@ -300,11 +305,11 @@ pub fn dampening_system(dt: f32) -> BoxedSystem {
     System::builder()
         .with_query(Query::new((RbQueryMut::new(),)))
         .par_for_each(move |(rb,)| {
-            const LINEAR_DAMPEN: f32 = 0.0;
-            const ANGULAR_DAMPEN: f32 = 0.0;
+            const LINEAR_DAMPEN: f32 = 0.1;
+            const ANGULAR_DAMPEN: f32 = 0.1;
 
-            *rb.vel = round_to_zero(*rb.vel * (1.0 / (1.0 + dt * LINEAR_DAMPEN)), 1e-3);
-            *rb.ang_vel = round_to_zero(*rb.ang_vel * (1.0 / (1.0 + dt * ANGULAR_DAMPEN)), 1e-3);
+            *rb.vel = round_to_zero(*rb.vel * (1.0 / (1.0 + dt * LINEAR_DAMPEN)), 1e-2);
+            *rb.ang_vel = round_to_zero(*rb.ang_vel * (1.0 / (1.0 + dt * ANGULAR_DAMPEN)), 1e-2);
         })
         .boxed()
 }
@@ -321,11 +326,11 @@ pub fn apply_effectors_system(dt: f32) -> BoxedSystem {
         .par_for_each(move |(rb, position, effector, is_sleeping)| {
             if !is_sleeping || effector.should_wake() {
                 // tracing::info!(%physics_state.dt, ?effector, "updating effector");
-                *rb.vel += effector.net_velocity_change(dt);
+                *rb.vel += round_to_zero(effector.net_velocity_change(dt), 1e-2);
                 *position += effector.translation();
 
                 *rb.ang_vel =
-                    round_to_zero(*rb.ang_vel + effector.net_angular_velocity_change(dt), 1e-3);
+                    round_to_zero(*rb.ang_vel + effector.net_angular_velocity_change(dt), 1e-2);
             }
 
             effector.clear();

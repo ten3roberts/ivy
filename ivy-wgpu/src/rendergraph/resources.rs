@@ -151,7 +151,7 @@ impl SubResource for Buffer {
         desc.size == other.size
     }
 
-    fn is_persistent(desc: &Self::Desc<'_>) -> bool {
+    fn is_persistent(_desc: &Self::Desc<'_>) -> bool {
         false
     }
 

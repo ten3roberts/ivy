@@ -6,7 +6,6 @@ use glam::{vec3, EulerRot, Quat, Vec2, Vec3};
 use ivy_assets::AssetCache;
 use ivy_core::{
     components::{main_camera, rotation, velocity, TransformBundle},
-    palette::Srgb,
     update_layer::{PerTick, Plugin},
     EntityBuilderExt, DEG_45,
 };
@@ -17,9 +16,8 @@ use ivy_input::{
     ScrollBinding,
 };
 use ivy_wgpu::{
-    components::{environment_data, main_window, projection_matrix, window},
+    components::{main_window, projection_matrix, window},
     driver::WindowHandle,
-    renderer::EnvironmentData,
 };
 
 flax::component! {

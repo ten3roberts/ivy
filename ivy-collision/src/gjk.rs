@@ -49,7 +49,7 @@ pub fn gjk<A: Shape, B: Shape>(a: &A, b: &B) -> (bool, Simplex) {
 
         // New point was not past the origin
         // No collision
-        if p.support.dot(dir) < 0.0 {
+        if p.support.dot(dir) < TOLERANCE {
             return (false, simplex);
         }
 
