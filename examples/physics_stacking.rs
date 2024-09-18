@@ -38,6 +38,8 @@ use winit::{dpi::LogicalSize, window::WindowAttributes};
 const ENABLE_SKYBOX: bool = true;
 
 pub fn main() -> anyhow::Result<()> {
+    color_backtrace::install();
+
     registry()
         .with(EnvFilter::from_default_env())
         .with(
@@ -76,9 +78,9 @@ pub fn main() -> anyhow::Result<()> {
                 PhysicsPlugin::new()
                     .with_gizmos(ivy_physics::GizmoSettings {
                         bvh_tree: false,
-                        island_graph: false,
+                        island_graph: true,
                         rigidbody: true,
-                        contacts: false,
+                        contacts: true,
                     })
                     .with_gravity(-Vec3::Y * 9.81),
             ),
@@ -175,43 +177,45 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
         .set(is_static(), ())
         .spawn(world);
 
-    cube(vec3(0.0, 20.0, 0.0))
+    let drop_height = 10.0;
+
+    cube(vec3(0.0, drop_height, 0.0))
         .set(rotation(), Quat::from_scaled_axis(vec3(0.0, 0.0, 0.0)))
         .set(gravity_influence(), 1.0)
         .set(restitution(), 1.0)
         .set(material(), red_material.clone())
         .spawn(world);
 
-    cube(vec3(5.0, 20.0, 0.0))
+    cube(vec3(5.0, drop_height, 0.0))
         .set(rotation(), Quat::from_scaled_axis(vec3(1.0, 0.0, 0.0)))
         .set(gravity_influence(), 1.0)
         .set(restitution(), 1.0)
         .set(material(), red_material.clone())
         .spawn(world);
 
-    sphere(vec3(10.0, 20.0, 0.0))
+    sphere(vec3(10.0, drop_height, 0.0))
         .set(rotation(), Quat::from_scaled_axis(vec3(0.5, 0.0, 0.0)))
         .set(gravity_influence(), 1.0)
         .set(restitution(), 1.0)
         .set(material(), red_material.clone())
         .spawn(world);
 
-    capsule(vec3(-5.0, 20.0, 0.0))
+    capsule(vec3(-5.0, drop_height, 0.0))
         .set(rotation(), Quat::from_scaled_axis(vec3(0.1, 0.0, 0.0)))
         .set(gravity_influence(), 1.0)
         .set(restitution(), 1.0)
         .set(material(), red_material.clone())
         .spawn(world);
 
-    capsule(vec3(-10.0, 20.0, 0.0))
+    capsule(vec3(-10.0, drop_height, 0.0))
         .set(rotation(), Quat::from_scaled_axis(vec3(0.0, 0.0, 1.0)))
         .set(gravity_influence(), 1.0)
         .set(restitution(), 1.0)
         .set(material(), red_material.clone())
         .spawn(world);
 
-    for i in 0..3 {
-        cube(vec3(0.0, 2.1 + i as f32 * 2.0, -8.0))
+    for i in 0..2 {
+        cube(vec3(0.0, 2.0 + i as f32 * 2.0, -8.0))
             .set(rotation(), Quat::from_scaled_axis(vec3(0.0, 0.0, 0.0)))
             .set(gravity_influence(), 1.0)
             .set(restitution(), 0.0)

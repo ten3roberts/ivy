@@ -185,6 +185,7 @@ pub fn contact_gizmos_system() -> BoxedSystem {
         )
         .boxed()
 }
+
 pub fn island_graph_gizmo_system() -> BoxedSystem {
     System::builder()
         .with_query(Query::new(gizmos().source(engine())))
@@ -200,8 +201,12 @@ pub fn island_graph_gizmo_system() -> BoxedSystem {
                     .begin_section("island_graph_gizmo_system");
 
                 if let Some(tree) = query.first() {
-                    for (i, (_, island)) in tree.islands().enumerate() {
-                        let color = Color::from_hsla(i as f32 * 25.0, 0.7, 0.5, 1.0);
+                    for (i, (island_index, island)) in tree.islands().enumerate() {
+                        if island.parent() != island_index {
+                            continue;
+                        }
+
+                        let color = Color::from_hsla(i as f32 * 60.0, 1.0, 0.5, 1.0);
 
                         for (_, contact) in tree.island_contacts(island) {
                             let a = tree.body(contact.a.body);
@@ -212,6 +217,13 @@ pub fn island_graph_gizmo_system() -> BoxedSystem {
 
                             let a_pos = a_transform.transform_point3(Vec3::ZERO);
                             let b_pos = b_transform.transform_point3(Vec3::ZERO);
+
+                            if contact.a.body == island_index {
+                                gizmos.draw(ivy_core::gizmos::Sphere::new(a_pos, 0.1, color));
+                            }
+                            if contact.b.body == island_index {
+                                gizmos.draw(ivy_core::gizmos::Sphere::new(b_pos, 0.1, color));
+                            }
 
                             gizmos.draw(ivy_core::gizmos::Sphere::new(
                                 a_pos,

@@ -21,6 +21,15 @@
       }
     }
   },
+  "debug physics_stacking": {
+    "cmd": "cargo build --example physics_stacking",
+    "components": {
+      "dap": {
+        "program": "./target/debug/examples/physics_stacking",
+        "adapter": "rust"
+      }
+    }
+  },
   "debug gravity": {
     "cmd": "cargo build --example gravity",
     "components": {

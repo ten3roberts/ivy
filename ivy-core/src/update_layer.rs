@@ -85,7 +85,6 @@ impl TimeStep for FixedTimeStep {
         if self.acc > self.delta_time {
             schedule.execute_seq(world)?;
             self.acc -= self.delta_time;
-            // break;
         }
 
         Ok(())

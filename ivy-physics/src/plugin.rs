@@ -109,6 +109,7 @@ impl Plugin<FixedTimeStep> for PhysicsPlugin {
         if self.gizmos.island_graph {
             schedule.with_system(island_graph_gizmo_system());
         }
+
         Ok(())
     }
 }

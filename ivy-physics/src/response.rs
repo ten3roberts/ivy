@@ -8,13 +8,14 @@ use glam::Vec3;
 use ivy_collision::contact::ContactSurface;
 use ivy_collision::Contact;
 use ivy_core::components::{
-    angular_velocity, friction, inertia_tensor, is_static, mass, restitution, velocity,
+    angular_velocity, friction, inertia_tensor, is_static, mass, position, restitution, velocity,
     world_transform,
 };
 
 #[derive(Debug, Clone, Copy)]
 pub struct ResolverConfiguration {
     allowed_penetration: f32,
+    accumulate_impulses: bool,
     correction_factor: f32,
 }
 
@@ -22,7 +23,8 @@ impl ResolverConfiguration {
     pub fn new() -> Self {
         Self {
             allowed_penetration: 0.01,
-            correction_factor: 0.1,
+            correction_factor: 0.2,
+            accumulate_impulses: true,
         }
     }
 }
@@ -78,6 +80,8 @@ impl Resolver {
             * self.dt.recip()
             * (contact.surface.depth() - self.configuration.allowed_penetration).max(0.0);
 
+        // for point in surface.points().iter().copied().chain([surface.midpoint()]) {
+        // for point in [surface.midpoint()] {
         for &point in surface.points() {
             let to_a = point - a_body.pos;
             let to_b = point - b_body.pos;
@@ -91,11 +95,15 @@ impl Resolver {
 
             let contact_vel = (b_pvel - a_pvel).dot(normal);
 
-            let impulse = -(1.0 + restitution) * (contact_vel + v_bias) / inertia;
+            let mut impulse = -(1.0 + restitution) * (contact_vel) / inertia;
 
-            let old_acc_impulse = acc_impulse;
-            acc_impulse = (acc_impulse + impulse).max(0.0);
-            let impulse = acc_impulse - old_acc_impulse;
+            if self.configuration.accumulate_impulses {
+                let old_acc_impulse = acc_impulse;
+                acc_impulse = (acc_impulse + impulse).max(0.0);
+                impulse = acc_impulse - old_acc_impulse;
+            } else {
+                impulse = impulse.max(0.0);
+            }
 
             // use impulse for as friction normal force
             let impulse = impulse * normal;
@@ -138,6 +146,9 @@ impl Resolver {
                 *val = value;
             }
         }
+
+        *a.get_mut(position()).unwrap() += v_bias * self.dt * a_body.inv_mass / inv_mass;
+        *b.get_mut(position()).unwrap() -= v_bias * self.dt * b_body.inv_mass / inv_mass;
 
         try_write(&a, velocity(), a_body.vel);
         try_write(&a, angular_velocity(), a_body.ang_vel);

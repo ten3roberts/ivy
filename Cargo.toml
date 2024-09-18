@@ -34,6 +34,7 @@ members = [
 ]
 
 [workspace.dependencies]
+color-backtrace = "0.6"
 rand_pcg = "0.3"
 naga_oil = "0.15"
 anyhow = { version = "1.0", features = ["backtrace"] }
@@ -91,6 +92,7 @@ bytemuck.workspace = true
 
 [dev-dependencies]
 color-eyre = "0.6.1"
+color-backtrace.workspace = true
 rand.workspace = true
 rand_pcg.workspace = true
 anyhow.workspace = true

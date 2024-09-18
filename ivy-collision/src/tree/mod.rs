@@ -1,7 +1,4 @@
-use std::{
-    collections::{btree_map::Entry, BTreeMap, BTreeSet, HashSet},
-    path::Iter,
-};
+use std::collections::{btree_map::Entry, BTreeMap, BTreeSet, HashSet};
 
 use flax::{
     entity_ids, fetch::Satisfied, sink::Sink, BoxedSystem, CommandBuffer, Component, Entity,
@@ -45,6 +42,16 @@ enum IndexedRange<T> {
     Max,
 }
 
+impl<T> IndexedRange<T> {
+    fn as_exact(&self) -> Option<&T> {
+        if let Self::Exact(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+}
+
 new_key_type! {
     pub struct BodyIndex;
     pub struct ContactIndex;
@@ -56,6 +63,7 @@ type BodyMap = SlotMap<BodyIndex, Body>;
 pub struct ContactIter<'a> {
     contacts: &'a ContactMap,
     index: ContactIndex,
+    head: ContactIndex,
 }
 
 impl<'a> Iterator for ContactIter<'a> {
@@ -69,10 +77,12 @@ impl<'a> Iterator for ContactIter<'a> {
 
         let contact = &self.contacts[index];
         self.index = contact.next_contact;
+        assert_ne!(self.index, self.head, "circular contact list");
         Some((index, contact))
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Island {
     // parent or self
     parent: BodyIndex,
@@ -85,9 +95,13 @@ impl Island {
     fn add_contact(&mut self, contacts: &mut ContactMap, contact_index: ContactIndex) {
         let contact = &mut contacts[contact_index];
         // assert!(contact.island.is_null());
-        assert!(contact.next_contact.is_null());
+        assert!(
+            contact.next_contact.is_null(),
+            "contact is already connected"
+        );
 
         contact.next_contact = self.head_contact;
+        contact.prev_contact = ContactIndex::null();
 
         if !self.head_contact.is_null() {
             contacts[self.head_contact].prev_contact = contact_index;
@@ -128,93 +142,68 @@ impl Island {
 
     fn add_body(&mut self, bodies: &mut BodyMap, body_index: BodyIndex) {
         let body = &mut bodies[body_index];
-        assert!(body.island.is_null());
         assert!(body.next_body.is_null());
 
         body.next_body = self.head_body;
-        bodies[self.head_body].prev_body = body_index;
 
         if !self.head_body.is_null() {
             bodies[self.head_body].prev_body = body_index;
         }
 
         self.head_body = body_index;
-    }
-
-    fn remove_body(&mut self, bodies: &mut BodyMap, body_index: BodyIndex) {
-        let body = &mut bodies[body_index];
-        if body_index == self.head_body {
-            let next = body.next_body;
-            body.next_body = BodyIndex::null();
-            body.island = BodyIndex::null();
-            assert!(body.prev_body.is_null());
-
-            self.head_body = next;
-
-            let next = &mut bodies[next];
-            assert_eq!(next.prev_body, body_index);
-            next.prev_body = BodyIndex::null();
-        } else {
-            let prev = body.prev_body;
-            assert!(!prev.is_null());
-            let next = body.next_body;
-
-            assert_eq!(bodies[prev].next_body, body_index);
-
-            bodies[prev].next_body = next;
-            if !next.is_null() {
-                bodies[next].prev_body = prev;
-            }
-        }
+        assert!(!self.head_body.is_null());
     }
 
     fn contacts<'a>(&self, contacts: &'a ContactMap) -> ContactIter<'a> {
         ContactIter {
+            head: self.head_contact,
             contacts,
             index: self.head_contact,
         }
     }
+
+    pub fn parent(&self) -> BodyIndex {
+        self.parent
+    }
+}
+
+#[derive(Default)]
+struct Scratch {
+    bodies: Vec<BodyIndex>,
+    visited_bodies: SecondaryMap<BodyIndex, ()>,
+    visited_contacts: SecondaryMap<ContactIndex, ()>,
 }
 
 pub(crate) struct Islands {
     islands: SecondaryMap<BodyIndex, Island>,
+    static_set: SecondaryMap<BodyIndex, ()>,
+    scratch: Scratch,
 }
 
 impl Islands {
     pub(crate) fn new() -> Self {
         Self {
             islands: Default::default(),
+            static_set: Default::default(),
+            scratch: Default::default(),
         }
     }
 
     fn create_island(&mut self, body_index: BodyIndex) {
-        self.islands.insert(
-            body_index,
-            Island {
-                parent: body_index,
-                head_body: BodyIndex::null(),
-                head_contact: ContactIndex::null(),
-            },
-        );
+        let island = Island {
+            parent: body_index,
+            head_body: BodyIndex::null(),
+            head_contact: ContactIndex::null(),
+        };
+
+        self.islands.insert(body_index, island);
     }
 
-    fn representative(&self, index: BodyIndex) -> BodyIndex {
+    fn representative_compress(&mut self, index: BodyIndex) -> Option<BodyIndex> {
         let mut index = index;
-
-        loop {
-            let parent = self.islands[index].parent;
-            if parent == index {
-                break;
-            }
-
-            index = parent;
+        if self.static_set.contains_key(index) {
+            return None;
         }
-
-        index
-    }
-
-    fn representative_compress(&mut self, index: BodyIndex) -> BodyIndex {
-        let mut index = index;
 
         loop {
             let node = &mut self.islands[index];
@@ -230,7 +219,7 @@ impl Islands {
             index = parent;
         }
 
-        index
+        Some(index)
     }
 
     fn link(&mut self, contacts: &mut ContactMap, contact_index: ContactIndex) -> &mut Island {
@@ -241,32 +230,50 @@ impl Islands {
         let a_rep = self.representative_compress(a);
         let b_rep = self.representative_compress(b);
 
-        if a_rep == b_rep {
-            contact.island = a_rep;
-            let island = &mut self.islands[a_rep];
+        match (a_rep, b_rep) {
+            (None, None) => {
+                panic!("static bodies can not collide");
+            }
+            (None, Some(b_rep)) => {
+                contact.island = b_rep;
+                let island = &mut self.islands[b_rep];
+                island.add_contact(contacts, contact_index);
+                island
+            }
+            (Some(a_rep), None) => {
+                contact.island = a_rep;
+                let island = &mut self.islands[a_rep];
+                island.add_contact(contacts, contact_index);
+                island
+            }
+            (Some(a_rep), Some(b_rep)) if a_rep == b_rep => {
+                contact.island = a_rep;
+                let island = &mut self.islands[a_rep];
 
-            island.add_contact(contacts, contact_index);
-            island
-        } else {
-            contact.island = a_rep;
-            self.islands[b_rep].parent = a_rep;
+                island.add_contact(contacts, contact_index);
+                island
+            }
+            (Some(a_rep), Some(b_rep)) => {
+                contact.island = a_rep;
+                self.islands[b_rep].parent = a_rep;
 
-            let island = &mut self.islands[a_rep];
+                let island = &mut self.islands[a_rep];
 
-            island.add_contact(contacts, contact_index);
-            island
+                island.add_contact(contacts, contact_index);
+                island
+            }
         }
     }
 
-    // Unlinks a contact from it's island
+    // Unlink a contact from it's island
     //
     // Does not split the island
     fn unlink(&mut self, contacts: &mut ContactMap, contact_index: ContactIndex) {
         let contact = &mut contacts[contact_index];
 
         let island_index = contact.island;
+        contact.island = BodyIndex::null();
         let island = &mut self.islands[island_index];
-
         island.remove_contact(contacts, contact_index);
     }
 
@@ -274,7 +281,9 @@ impl Islands {
     fn merge_root_islands(&mut self, contacts: &mut ContactMap, bodies: &mut BodyMap) {
         let keys = self.islands.keys().collect_vec();
         for index in keys {
-            let parent_index = self.islands[index].parent;
+            let Some(parent_index) = self.representative_compress(index) else {
+                continue;
+            };
 
             if parent_index == index {
                 continue;
@@ -320,6 +329,7 @@ impl Islands {
                     }
 
                     parent.head_body = island.head_body;
+                    assert!(!island.head_body.is_null());
                 }
 
                 body_index = next;
@@ -332,76 +342,92 @@ impl Islands {
 
     fn reconstruct(
         &mut self,
-        island: BodyIndex,
+        island_index: BodyIndex,
         bodies: &mut BodyMap,
         contacts: &mut ContactMap,
         contact_map: &BTreeMap<(BodyIndex, IndexedRange<BodyIndex>), ContactIndex>,
     ) {
-        assert!(!island.is_null());
-        let island = &self.islands[island];
+        let island = &self.islands[island_index];
 
         let mut body_index = island.head_body;
 
-        let mut all_bodies = Vec::new();
+        let all_bodies = &mut self.scratch.bodies;
+        all_bodies.clear();
         while !body_index.is_null() {
             let body = &bodies[body_index];
             all_bodies.push(body_index);
             body_index = body.next_body;
         }
 
-        let mut visited: SecondaryMap<BodyIndex, ()> = SecondaryMap::new();
-        for body_index in all_bodies {
+        assert!(!all_bodies.is_empty());
+        let visited = &mut self.scratch.visited_bodies;
+        visited.clear();
+
+        let visited_contacts = &mut self.scratch.visited_contacts;
+        visited_contacts.clear();
+
+        for &mut body_index in all_bodies {
             // found in connection from another seed
             if visited.contains_key(body_index) {
-                return;
+                continue;
             }
 
-            let body = &mut bodies[body_index];
+            let seed_index = body_index;
+
+            let seed_island = &mut self.islands[seed_index];
+            *seed_island = Island {
+                parent: body_index,
+                head_body: BodyIndex::null(),
+                head_contact: ContactIndex::null(),
+            };
 
             let mut stack = vec![body_index];
-
-            // we now know body *is* a seed/root of an island.
-            //
-            // It may be the same island we started on
-            let seed_index = body_index;
-            let mut seed_island = self
-                .islands
-                .insert(
-                    body_index,
-                    Island {
-                        parent: body_index,
-                        head_body: BodyIndex::null(),
-                        head_contact: ContactIndex::null(),
-                    },
-                )
-                .unwrap();
-
             while let Some(body_index) = stack.pop() {
                 visited.insert(body_index, ());
-                seed_island.add_body(bodies, body_index);
 
                 let body = &mut bodies[body_index];
                 body.island = seed_index;
+                body.next_body = BodyIndex::null();
+                body.prev_body = BodyIndex::null();
+
+                seed_island.add_body(bodies, body_index);
 
                 let edges = contact_map
                     .range((body_index, IndexedRange::Min)..(body_index, IndexedRange::Max));
 
                 for ((_, other_index), &contact_index) in edges {
-                    let &IndexedRange::Exact(other_index) = other_index else {
-                        panic!("");
-                    };
+                    let &other_index = other_index.as_exact().unwrap();
+
+                    if visited_contacts.contains_key(contact_index) {
+                        continue;
+                    }
+
+                    visited_contacts.insert(contact_index, ());
+
+                    // connect contact to this island
+                    let contact = &mut contacts[contact_index];
+
+                    contact.island = seed_index;
+                    contact.next_contact = ContactIndex::null();
+                    contact.prev_contact = ContactIndex::null();
+
+                    seed_island.add_contact(contacts, contact_index);
+
+                    // do not link static bodies to island
+                    if bodies[other_index].state.is_static() {
+                        continue;
+                    }
 
                     if !visited.contains_key(other_index) {
                         stack.push(other_index);
                     }
-
-                    // connect contact to this island
-                    let contact = &mut contacts[contact_index];
-                    contact.island = seed_index;
-                    seed_island.add_contact(contacts, contact_index);
                 }
             }
         }
+    }
+
+    fn add_body(&mut self, bodies: &mut SlotMap<BodyIndex, Body>, index: BodyIndex) {
+        self.islands[index].add_body(bodies, index)
     }
 }
 
@@ -453,12 +479,16 @@ impl CollisionTree {
         &mut self.nodes
     }
 
-    fn insert_impl(&mut self, _: Entity, mut body: Body) -> BodyIndex {
+    fn insert_body(&mut self, _: Entity, body: Body) -> BodyIndex {
         let index = self.body_data.insert_with_key(|index| {
             self.islands.create_island(index);
-            body.island = index;
+            if body.state.is_static() {
+                self.islands.static_set.insert(index, ());
+            }
             body
         });
+
+        self.islands.add_body(&mut self.body_data, index);
 
         let root = &mut self.nodes[self.root];
         root.allocated_bounds = root
@@ -480,9 +510,6 @@ impl CollisionTree {
             let bounds = q.collider.bounding_box(transform);
             let extended_bounds = bounds.expand(*q.velocity * 0.1);
 
-            if let Ok(v) = world.get(id, is_static()) {
-                tracing::info!(?v);
-            }
             let body = Body {
                 id: q.id,
                 bounds,
@@ -502,7 +529,7 @@ impl CollisionTree {
                 prev_body: BodyIndex::null(),
             };
 
-            let tree_index = self.insert_impl(id, body);
+            let tree_index = self.insert_body(id, body);
 
             BvhNode::update_bounds(self.root, &mut self.nodes, &self.body_data);
             cmd.set(id, components::tree_index(), tree_index);
@@ -608,6 +635,7 @@ impl CollisionTree {
                     self.islands.link(&mut self.contacts, id);
 
                     slot.insert(id);
+                    assert!(!self.contact_map.contains_key(&(b, IndexedRange::Exact(a))));
 
                     self.contact_map.insert((b, IndexedRange::Exact(a)), id);
                 }
@@ -616,6 +644,7 @@ impl CollisionTree {
                     let v = &mut self.contacts[contact_index];
                     v.surface = contact;
                     v.generation = self.generation;
+                    assert!(self.contact_map.contains_key(&(b, IndexedRange::Exact(a))));
                 }
             };
         }
@@ -627,20 +656,15 @@ impl CollisionTree {
         let removed_contacts = self
             .contacts
             .iter()
-            .filter(|v| v.1.generation < self.generation)
+            .filter(|v| v.1.generation != self.generation)
             .map(|v| v.0)
             .collect_vec();
 
         for contact in removed_contacts {
             to_split.insert(self.contacts[contact].island);
             self.islands.unlink(&mut self.contacts, contact);
-        }
 
-        self.contacts.retain(|index, contact| {
-            if contact.generation == self.generation {
-                return true;
-            }
-
+            let contact = self.contacts.remove(contact).unwrap();
             let a = contact.a.body;
             let b = contact.b.body;
 
@@ -651,13 +675,17 @@ impl CollisionTree {
             self.contact_map
                 .remove(&(b, IndexedRange::Exact(a)))
                 .unwrap();
-
-            false
-        });
+        }
 
         for island in to_split {
+            let rep = self
+                .islands
+                .representative_compress(island)
+                .expect("Static bodies are never present as islands");
+
+            assert_eq!(rep, island, "bodies shall only be stored in root islands");
             self.islands.reconstruct(
-                island,
+                rep,
                 &mut self.body_data,
                 &mut self.contacts,
                 &self.contact_map,
@@ -677,22 +705,6 @@ impl CollisionTree {
 
     pub fn contacts(&self) -> slotmap::basic::Iter<ContactIndex, Contact> {
         self.contacts.iter()
-    }
-
-    pub fn solve_contacts(&self, world: &World, dt: f32) {
-        let mut visited = HashSet::new();
-
-        for (_, island) in &self.islands.islands {
-            let mut contact_index = island.head_contact;
-            while !contact_index.is_null() {
-                assert!(!visited.contains(&contact_index));
-
-                visited.insert(contact_index);
-                let contact = &self.contacts[contact_index];
-
-                contact_index = contact.next_contact;
-            }
-        }
     }
 
     /// Queries the tree with a given visitor. Traverses only the nodes that the
