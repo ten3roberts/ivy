@@ -22,8 +22,8 @@ pub struct ResolverConfiguration {
 impl ResolverConfiguration {
     pub fn new() -> Self {
         Self {
-            allowed_penetration: 0.01,
-            correction_factor: 0.2,
+            allowed_penetration: 0.05,
+            correction_factor: 0.1,
             accumulate_impulses: true,
         }
     }
