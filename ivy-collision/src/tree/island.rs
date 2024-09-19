@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use itertools::Itertools;
+use rayon::str::CharIndices;
 use slotmap::{new_key_type, Key, SecondaryMap, SlotMap};
 
 use crate::Contact;
@@ -66,16 +67,16 @@ impl Island {
         let contact = &mut contacts[contact_index];
 
         if contact_index == self.head_contact {
-            let next = contact.next_contact;
+            let next_index = contact.next_contact;
             contact.next_contact = ContactIndex::null();
             contact.island = BodyIndex::null();
             assert!(contact.prev_contact.is_null());
 
-            self.head_contact = next;
+            self.head_contact = next_index;
 
-            if !next.is_null() {
-                let next = &mut contacts[next];
-                assert_eq!(next.prev_contact, contact_index);
+            if !next_index.is_null() {
+                let next = &mut contacts[next_index];
+                assert_eq!(next.prev_contact, contact_index, "next: {next_index:?}");
                 next.prev_contact = ContactIndex::null();
             }
         } else {
@@ -87,6 +88,7 @@ impl Island {
 
             contacts[prev].next_contact = next;
             if !next.is_null() {
+                assert_eq!(contacts[next].prev_contact, contact_index);
                 contacts[next].prev_contact = prev;
             }
         }
@@ -302,8 +304,17 @@ impl Islands {
     ) {
         let island = &self.islands[island_index];
 
-        let mut body_index = island.head_body;
+        let mut contact_index = island.head_contact;
+        let mut all_contacts = Vec::new();
 
+        while !contact_index.is_null() {
+            let contact = &mut contacts[contact_index];
+            contact.island = BodyIndex::null();
+            all_contacts.push(contact_index);
+            contact_index = contact.next_contact;
+        }
+
+        let mut body_index = island.head_body;
         let all_bodies = &mut self.scratch.bodies;
         all_bodies.clear();
         while !body_index.is_null() {
@@ -366,16 +377,22 @@ impl Islands {
 
                     seed_island.add_contact(contacts, contact_index);
 
-                    // do not link static bodies to island
-                    if bodies[other_index].state.is_static() {
-                        continue;
-                    }
-
-                    if !visited.contains_key(other_index) {
+                    if self.static_set.contains_key(other_index)
+                        && !visited.contains_key(other_index)
+                    {
                         stack.push(other_index);
                     }
                 }
             }
+        }
+
+        for contact_index in all_contacts {
+            assert_eq!(
+                contacts[contact_index].island,
+                BodyIndex::null(),
+                "contact_map: {:#?}",
+                contact_map.iter().collect_vec()
+            );
         }
     }
 

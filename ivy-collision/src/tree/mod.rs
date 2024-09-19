@@ -290,6 +290,8 @@ impl CollisionTree {
 
         for contact in removed_contacts {
             to_split.insert(self.contacts[contact].island);
+
+            tracing::info!(?contact, "unlinking");
             self.islands.unlink(&mut self.contacts, contact);
 
             let contact = self.contacts.remove(contact).unwrap();
