@@ -280,8 +280,8 @@ struct Dampening {
 }
 
 fn dampen(a: &ResolveBody, b: &ResolveBody, normal: Vec3, dt: f32) -> Dampening {
-    const DAMPEN_FACTOR: f32 = 0.1;
-    const ANGULAR_DAMPEN_FACTOR: f32 = 0.1;
+    const DAMPEN_FACTOR: f32 = 0.0;
+    const ANGULAR_DAMPEN_FACTOR: f32 = 0.0;
 
     let transverse_vel = (a.vel - b.vel).reject_from(normal);
 

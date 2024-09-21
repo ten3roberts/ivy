@@ -128,7 +128,7 @@ impl DrawGizmos for Intersection {
 }
 
 /// Represents a collision between two entities.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Contact {
     pub a: EntityPayload,
     pub b: EntityPayload,
@@ -139,6 +139,16 @@ pub struct Contact {
     pub next_contact: ContactIndex,
     pub prev_contact: ContactIndex,
     pub generation: u32,
+}
+
+impl std::fmt::Debug for Contact {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Contact")
+            .field("next_contact", &self.next_contact)
+            .field("prev_contact", &self.next_contact)
+            .field("island", &self.island)
+            .finish()
+    }
 }
 
 impl IntersectionGenerator {

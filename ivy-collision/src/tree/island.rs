@@ -1,4 +1,8 @@
-use std::collections::BTreeMap;
+use core::fmt;
+use std::{
+    collections::{BTreeMap, HashSet},
+    fmt::Formatter,
+};
 
 use itertools::Itertools;
 use rayon::str::CharIndices;
@@ -65,11 +69,11 @@ impl Island {
 
     fn remove_contact(&mut self, contacts: &mut ContactMap, contact_index: ContactIndex) {
         let contact = &mut contacts[contact_index];
+        contact.island = BodyIndex::null();
 
         if contact_index == self.head_contact {
             let next_index = contact.next_contact;
             contact.next_contact = ContactIndex::null();
-            contact.island = BodyIndex::null();
             assert!(contact.prev_contact.is_null());
 
             self.head_contact = next_index;
@@ -84,6 +88,7 @@ impl Island {
             assert!(!prev.is_null());
             let next = contact.next_contact;
 
+            assert_ne!(next, prev);
             assert_eq!(contacts[prev].next_contact, contact_index);
 
             contacts[prev].next_contact = next;
@@ -119,6 +124,14 @@ impl Island {
     pub fn parent(&self) -> BodyIndex {
         self.parent
     }
+
+    fn from_body(body_index: BodyIndex) -> Self {
+        Self {
+            parent: body_index,
+            head_body: BodyIndex::null(),
+            head_contact: ContactIndex::null(),
+        }
+    }
 }
 
 #[derive(Default)]
@@ -132,6 +145,18 @@ pub(crate) struct Islands {
     islands: SecondaryMap<BodyIndex, Island>,
     static_set: SecondaryMap<BodyIndex, ()>,
     scratch: Scratch,
+}
+
+impl std::fmt::Debug for Islands {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let mut s = f.debug_map();
+
+        for (k, v) in &self.islands {
+            s.entry(&format!("{k:?}"), &v);
+        }
+
+        s.finish()
+    }
 }
 
 impl Islands {
@@ -231,6 +256,54 @@ impl Islands {
         island.remove_contact(contacts, contact_index);
     }
 
+    pub fn verify_depth(&self) {
+        for (island_index, island) in &self.islands {
+            if !island.head_body.is_null() {
+                assert_eq!(island.parent, island_index);
+            }
+        }
+    }
+
+    pub fn verify(&self, bodies: &BodyMap, contacts: &ContactMap) {
+        let mut found = HashSet::new();
+        for (island_index, island) in &self.islands {
+            let mut prev = ContactIndex::null();
+            let mut contact_index = island.head_contact;
+
+            while !contact_index.is_null() {
+                assert!(!found.contains(&contact_index));
+                found.insert(contact_index);
+
+                let contact = &contacts[contact_index];
+                assert_eq!(contact.island, island_index);
+                assert_eq!(contact.prev_contact, prev);
+
+                prev = contact_index;
+                contact_index = contact.next_contact;
+            }
+
+            let mut body_index = island.head_body;
+            while !body_index.is_null() {
+                let body = &bodies[body_index];
+                let subisland = &self.islands[body_index];
+                assert_eq!(subisland.parent, island_index);
+                body_index = body.next_body;
+            }
+        }
+
+        for (k, v) in contacts {
+            let prev = v.prev_contact;
+            let next = v.next_contact;
+
+            assert!(prev.is_null() || contacts[prev].next_contact == k);
+            assert!(next.is_null() || contacts[next].prev_contact == k);
+        }
+
+        for contact in contacts.keys() {
+            assert!(found.contains(&contact), "contact {contact:?} missing");
+        }
+    }
+
     /// merges all island bodies into the roots
     pub fn merge_root_islands(&mut self, contacts: &mut ContactMap, bodies: &mut BodyMap) {
         let keys = self.islands.keys().collect_vec();
@@ -248,6 +321,8 @@ impl Islands {
                 .islands
                 .get_disjoint_mut([index, parent_index])
                 .unwrap();
+
+            island.parent = parent_index;
 
             let mut contact_index = island.head_contact;
             while !contact_index.is_null() {
@@ -268,10 +343,12 @@ impl Islands {
 
                 contact_index = next;
             }
+            island.head_contact = ContactIndex::null();
 
             let mut body_index = island.head_body;
             while !body_index.is_null() {
                 let body = &mut bodies[body_index];
+                assert_eq!(body.island, index);
                 body.island = parent_index;
 
                 let next = body.next_body;
@@ -291,7 +368,6 @@ impl Islands {
             }
 
             island.head_body = BodyIndex::null();
-            island.head_contact = ContactIndex::null();
         }
     }
 
@@ -302,35 +378,60 @@ impl Islands {
         contacts: &mut ContactMap,
         contact_map: &BTreeMap<(BodyIndex, IndexedRange<BodyIndex>), ContactIndex>,
     ) {
+        // let _span = tracing::info_span!("reconstruct", ?island_index).entered();
         let island = &self.islands[island_index];
 
-        let mut contact_index = island.head_contact;
         let mut all_contacts = Vec::new();
 
-        while !contact_index.is_null() {
-            let contact = &mut contacts[contact_index];
-            contact.island = BodyIndex::null();
-            all_contacts.push(contact_index);
-            contact_index = contact.next_contact;
+        // tracing::info!("{self:#?}");
+        // tracing::info!("{}", contacts.iter().map(|v| format!("{v:?}")).join("\n"));
+
+        {
+            let mut contact_index = island.head_contact;
+            while !contact_index.is_null() {
+                let contact = &mut contacts[contact_index];
+
+                let next = contact.next_contact;
+                contact.island = BodyIndex::null();
+                contact.next_contact = ContactIndex::null();
+                contact.prev_contact = ContactIndex::null();
+
+                all_contacts.push(contact_index);
+                contact_index = next;
+            }
         }
 
-        let mut body_index = island.head_body;
         let all_bodies = &mut self.scratch.bodies;
         all_bodies.clear();
-        while !body_index.is_null() {
-            let body = &bodies[body_index];
-            all_bodies.push(body_index);
-            body_index = body.next_body;
+        {
+            let mut body_index = island.head_body;
+            while !body_index.is_null() {
+                assert!(!self.static_set.contains_key(body_index));
+
+                let body = &mut bodies[body_index];
+                let next = body.next_body;
+
+                body.next_body = BodyIndex::null();
+                body.prev_body = BodyIndex::null();
+
+                self.islands[body_index] = Island::from_body(body_index);
+
+                all_bodies.push(body_index);
+                body_index = next;
+            }
         }
 
+        // tracing::info!(?all_bodies, ?all_contacts);
+
         assert!(!all_bodies.is_empty());
+
         let visited = &mut self.scratch.visited_bodies;
         visited.clear();
 
         let visited_contacts = &mut self.scratch.visited_contacts;
         visited_contacts.clear();
 
-        for &mut body_index in all_bodies {
+        for &body_index in all_bodies.iter() {
             // found in connection from another seed
             if visited.contains_key(body_index) {
                 continue;
@@ -339,21 +440,26 @@ impl Islands {
             let seed_index = body_index;
 
             let seed_island = &mut self.islands[seed_index];
-            *seed_island = Island {
-                parent: body_index,
-                head_body: BodyIndex::null(),
-                head_contact: ContactIndex::null(),
-            };
+            let _span = tracing::info_span!("seed", ?seed_index).entered();
 
             let mut stack = vec![body_index];
             while let Some(body_index) = stack.pop() {
+                assert!(all_bodies.contains(&body_index));
+                if visited.contains_key(body_index) {
+                    continue;
+                }
+
                 visited.insert(body_index, ());
+
+                let island = &mut self.islands[body_index];
+                island.parent = seed_index;
 
                 let body = &mut bodies[body_index];
                 body.island = seed_index;
                 body.next_body = BodyIndex::null();
                 body.prev_body = BodyIndex::null();
 
+                let seed_island = &mut self.islands[seed_index];
                 seed_island.add_body(bodies, body_index);
 
                 let edges = contact_map
@@ -361,6 +467,10 @@ impl Islands {
 
                 for ((_, other_index), &contact_index) in edges {
                     let &other_index = other_index.as_exact().unwrap();
+                    assert!(
+                        self.static_set.contains_key(other_index)
+                            || all_bodies.contains(&other_index)
+                    );
 
                     if visited_contacts.contains_key(contact_index) {
                         continue;
@@ -371,13 +481,18 @@ impl Islands {
                     // connect contact to this island
                     let contact = &mut contacts[contact_index];
 
+                    // tracing::info!(
+                    //     ?contact_index,
+                    //     ?contact,
+                    //     "{:?} {:?}",
+                    //     bodies[contact.a.body].state,
+                    //     bodies[contact.b.body].state
+                    // );
+                    assert_eq!(contact.island, BodyIndex::null());
                     contact.island = seed_index;
-                    contact.next_contact = ContactIndex::null();
-                    contact.prev_contact = ContactIndex::null();
-
                     seed_island.add_contact(contacts, contact_index);
 
-                    if self.static_set.contains_key(other_index)
+                    if !self.static_set.contains_key(other_index)
                         && !visited.contains_key(other_index)
                     {
                         stack.push(other_index);
@@ -387,10 +502,10 @@ impl Islands {
         }
 
         for contact_index in all_contacts {
-            assert_eq!(
+            assert_ne!(
                 contacts[contact_index].island,
                 BodyIndex::null(),
-                "contact_map: {:#?}",
+                "contact_map: {:?}",
                 contact_map.iter().collect_vec()
             );
         }
@@ -406,5 +521,9 @@ impl Islands {
 
     pub(crate) fn islands(&self) -> &SecondaryMap<BodyIndex, Island> {
         &self.islands
+    }
+
+    pub(crate) fn static_set(&self) -> &SecondaryMap<BodyIndex, ()> {
+        &self.static_set
     }
 }

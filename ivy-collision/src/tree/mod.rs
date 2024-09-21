@@ -107,9 +107,10 @@ impl CollisionTree {
         &mut self.nodes
     }
 
-    fn insert_body(&mut self, _: Entity, body: Body) -> BodyIndex {
+    fn insert_body(&mut self, _: Entity, mut body: Body) -> BodyIndex {
         let index = self.body_data.insert_with_key(|index| {
             self.islands.create_island(index);
+            body.island = index;
             if body.state.is_static() {
                 self.islands.mark_static(index);
             }
@@ -260,9 +261,10 @@ impl CollisionTree {
                     };
 
                     let id = self.contacts.insert(contact);
+                    slot.insert(id);
+
                     self.islands.link(&mut self.contacts, id);
 
-                    slot.insert(id);
                     assert!(!self.contact_map.contains_key(&(b, IndexedRange::Exact(a))));
 
                     self.contact_map.insert((b, IndexedRange::Exact(a)), id);
@@ -277,8 +279,12 @@ impl CollisionTree {
             };
         }
 
+        // self.islands.verify(&self.body_data, &self.contacts);
         self.islands
             .merge_root_islands(&mut self.contacts, &mut self.body_data);
+        self.islands.verify_depth();
+
+        self.islands.verify(&self.body_data, &self.contacts);
 
         let mut to_split = BTreeSet::new();
         let removed_contacts = self
@@ -307,20 +313,27 @@ impl CollisionTree {
                 .unwrap();
         }
 
-        for island in to_split {
-            let rep = self
-                .islands
-                .representative_compress(island)
-                .expect("Static bodies are never present as islands");
+        self.islands.verify(&self.body_data, &self.contacts);
 
-            assert_eq!(rep, island, "bodies shall only be stored in root islands");
+        for island in to_split {
+            self.islands.verify(&self.body_data, &self.contacts);
+            // let rep = self
+            //     .islands
+            //     .representative_compress(island)
+            //     .expect("Static bodies are never present as islands");
+
+            assert!(!self.islands.static_set().contains_key(island));
+
+            // assert_eq!(rep, island, "bodies shall only be stored in root islands");
             self.islands.reconstruct(
-                rep,
+                island,
                 &mut self.body_data,
                 &mut self.contacts,
                 &self.contact_map,
             );
+            self.islands.verify(&self.body_data, &self.contacts);
         }
+        self.islands.verify(&self.body_data, &self.contacts);
 
         Ok(())
     }
