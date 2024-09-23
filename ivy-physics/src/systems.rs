@@ -3,19 +3,19 @@ use std::collections::BTreeMap;
 
 use crate::{
     bundles::*,
-    components::{effector, resolver},
-    response::Resolver,
+    components::{effector, physics_state},
+    state::PhysicsState,
 };
 use flax::{
-    fetch::Source, BoxedSystem, Component, Entity, EntityRef, FetchExt, Query, QueryBorrow, System,
-    World,
+    fetch::Source, BoxedSystem, CommandBuffer, Component, Entity, EntityRef, FetchExt, Mutable,
+    Query, QueryBorrow, System, World,
 };
 use glam::{vec3, Mat4, Quat, Vec3};
-use ivy_collision::{components::collision_tree, CollisionTree, Contact};
+use ivy_collision::{body::BodyIndex, components::body_index, Contact};
 use ivy_core::{
     components::{
-        angular_velocity, connection, engine, gizmos, gravity, gravity_influence, position,
-        rotation, sleeping, velocity, world_transform,
+        angular_velocity, connection, engine, gizmos, gravity, gravity_influence, is_static,
+        position, rotation, sleeping, velocity, world_transform,
     },
     gizmos::{Gizmos, Line, DEFAULT_RADIUS, DEFAULT_THICKNESS},
     Color, ColorExt,
@@ -138,20 +138,73 @@ impl Default for CollisionState {
     }
 }
 
-/// Resolves all pending collisions to be processed
-pub fn resolve_collisions_system() -> BoxedSystem {
+pub fn register_bodies_system() -> BoxedSystem {
     System::builder()
         .with_world()
-        .with_query(Query::new((collision_tree(), resolver())))
+        .with_cmd_mut()
+        .with_query(Query::new(physics_state().as_mut()))
         .build(
-            move |world: &World, mut query: QueryBorrow<(Component<CollisionTree>, Component<Resolver>)>| {
-                if let Some((tree, resolver)) = query.first() {
-                    for (_, contact) in tree.contacts() {
-                        // for (_, island) in tree.islands() {
-                        //     for (_, contact) in tree.island_contacts(island) {
-                        resolver.resolve_contact(world, contact)?;
-                        // }
+            move |world: &World,
+                  cmd: &mut CommandBuffer,
+                  mut query: QueryBorrow<Mutable<PhysicsState>>| {
+                if let Some(state) = query.first() {
+                    state.register_bodies(world, cmd);
+                }
+
+                anyhow::Ok(())
+            },
+        )
+        .boxed()
+}
+
+pub fn update_bodies_system() -> BoxedSystem {
+    System::builder()
+        .with_query(Query::new(physics_state().as_mut()))
+        .with_query(Query::new((body_index(), world_transform(), velocity())))
+        .build(
+            move |mut state: QueryBorrow<Mutable<PhysicsState>>,
+                  mut query: QueryBorrow<(
+                Component<BodyIndex>,
+                Component<Mat4>,
+                Component<Vec3>,
+            )>| {
+                if let Some(state) = state.first() {
+                    state.update_bodies(query.iter().map(|(&a, &b, &c)| (a, b, c)));
+                }
+
+                anyhow::Ok(())
+            },
+        )
+        .boxed()
+}
+
+pub fn update_simulation_bodies_system() -> BoxedSystem {
+    System::builder()
+        .with_query(Query::new(physics_state().as_mut()))
+        .with_query(
+            Query::new((body_index(), position(), velocity(), angular_velocity()))
+                .without(is_static()),
+        )
+        .build(
+            move |mut state: QueryBorrow<Mutable<PhysicsState>>,
+                  mut query: QueryBorrow<
+                (
+                    Component<BodyIndex>,
+                    Component<Vec3>,
+                    Component<Vec3>,
+                    Component<Vec3>,
+                ),
+                _,
+            >| {
+                if let Some(state) = state.first() {
+                    for (&body_index, &pos, &vel, &ang_vel) in query.iter() {
+                        let body = state.simulation_body_mut(body_index);
+                        body.pos = pos;
+                        body.vel = vel;
+                        body.ang_vel = ang_vel;
                     }
+
+                    // state.update_bodies(query.iter().map(|(&a, &b, &c)| (a, b, c)));
                 }
 
                 anyhow::Ok(())
@@ -161,13 +214,64 @@ pub fn resolve_collisions_system() -> BoxedSystem {
 }
 
 /// Resolves all pending collisions to be processed
+pub fn generate_contacts_system() -> BoxedSystem {
+    System::builder()
+        .with_query(Query::new(physics_state().as_mut()))
+        .build(move |mut query: QueryBorrow<Mutable<PhysicsState>>| {
+            if let Some(state) = query.first() {
+                state.generate_contacts();
+            }
+
+            anyhow::Ok(())
+        })
+        .boxed()
+}
+
+/// Resolves all pending collisions to be processed
+pub fn solve_contacts_system() -> BoxedSystem {
+    System::builder()
+        .with_world()
+        .with_query(Query::new(physics_state().as_mut()))
+        .build(
+            move |world: &World, mut query: QueryBorrow<Mutable<PhysicsState>>| {
+                if let Some(state) = query.first() {
+                    state.solve_contacts(world);
+                }
+
+                anyhow::Ok(())
+            },
+        )
+        .boxed()
+}
+
+pub fn sync_simulation_bodies_system() -> BoxedSystem {
+    System::builder()
+        .with_query(Query::new(physics_state().as_mut()))
+        .with_query(Query::new((
+            position().as_mut(),
+            velocity().as_mut(),
+            angular_velocity().as_mut(),
+        )))
+        .build(
+            move |mut state: QueryBorrow<Mutable<PhysicsState>>,
+                  mut query: QueryBorrow<(Mutable<Vec3>, Mutable<Vec3>, Mutable<Vec3>), _>| {
+                if let Some(state) = state.first() {
+                    state.sync_simulation_bodies(&mut query);
+                }
+
+                anyhow::Ok(())
+            },
+        )
+        .boxed()
+}
+
 pub fn contact_gizmos_system() -> BoxedSystem {
     System::builder()
         .with_query(Query::new(gizmos().source(engine())))
-        .with_query(Query::new(collision_tree()))
+        .with_query(Query::new(physics_state()))
         .build(
             move |mut gizmos: QueryBorrow<Source<Component<Gizmos>, Entity>>,
-                  mut query: QueryBorrow<Component<CollisionTree>>| {
+                  mut query: QueryBorrow<Component<PhysicsState>>| {
                 let mut gizmos = gizmos
                     .first()
                     .unwrap()
@@ -189,55 +293,49 @@ pub fn contact_gizmos_system() -> BoxedSystem {
 pub fn island_graph_gizmo_system() -> BoxedSystem {
     System::builder()
         .with_query(Query::new(gizmos().source(engine())))
-        .with_query(Query::new(collision_tree()))
+        .with_query(Query::new(physics_state()))
         .with_query(Query::new(world_transform()))
         .build(
             move |mut gizmos: QueryBorrow<Source<Component<Gizmos>, Entity>>,
-                  mut query: QueryBorrow<Component<CollisionTree>>,
+                  mut query: QueryBorrow<Component<PhysicsState>>,
                   mut transforms: QueryBorrow<Component<Mat4>>| {
                 let mut gizmos = gizmos
                     .first()
                     .unwrap()
                     .begin_section("island_graph_gizmo_system");
 
-                if let Some(tree) = query.first() {
-                    for (i, (island_index, island)) in tree.islands().enumerate() {
-                        if island.parent() != island_index {
-                            continue;
+                let Some(state) = query.first() else {
+                    return;
+                };
+
+                for (i, (island_index, island)) in state.islands().enumerate() {
+                    if island.parent() != island_index {
+                        continue;
+                    }
+
+                    let color = Color::from_hsla(i as f32 * 60.0, 1.0, 0.5, 1.0);
+
+                    for (_, contact) in state.island_contacts(island) {
+                        let a = state.body(contact.a.body);
+                        let b = state.body(contact.b.body);
+
+                        let a_transform = transforms.get(a.id).copied().unwrap();
+                        let b_transform = transforms.get(b.id).copied().unwrap();
+
+                        let a_pos = a_transform.transform_point3(Vec3::ZERO);
+                        let b_pos = b_transform.transform_point3(Vec3::ZERO);
+
+                        if contact.a.body == island_index {
+                            gizmos.draw(ivy_core::gizmos::Sphere::new(a_pos, 0.1, color));
+                        }
+                        if contact.b.body == island_index {
+                            gizmos.draw(ivy_core::gizmos::Sphere::new(b_pos, 0.1, color));
                         }
 
-                        let color = Color::from_hsla(i as f32 * 60.0, 1.0, 0.5, 1.0);
+                        gizmos.draw(ivy_core::gizmos::Sphere::new(a_pos, DEFAULT_RADIUS, color));
+                        gizmos.draw(ivy_core::gizmos::Sphere::new(b_pos, DEFAULT_RADIUS, color));
 
-                        for (_, contact) in tree.island_contacts(island) {
-                            let a = tree.body(contact.a.body);
-                            let b = tree.body(contact.b.body);
-
-                            let a_transform = transforms.get(a.id).copied().unwrap();
-                            let b_transform = transforms.get(b.id).copied().unwrap();
-
-                            let a_pos = a_transform.transform_point3(Vec3::ZERO);
-                            let b_pos = b_transform.transform_point3(Vec3::ZERO);
-
-                            if contact.a.body == island_index {
-                                gizmos.draw(ivy_core::gizmos::Sphere::new(a_pos, 0.1, color));
-                            }
-                            if contact.b.body == island_index {
-                                gizmos.draw(ivy_core::gizmos::Sphere::new(b_pos, 0.1, color));
-                            }
-
-                            gizmos.draw(ivy_core::gizmos::Sphere::new(
-                                a_pos,
-                                DEFAULT_RADIUS,
-                                color,
-                            ));
-                            gizmos.draw(ivy_core::gizmos::Sphere::new(
-                                b_pos,
-                                DEFAULT_RADIUS,
-                                color,
-                            ));
-
-                            gizmos.draw(Line::from_points(a_pos, b_pos, DEFAULT_THICKNESS, color))
-                        }
+                        gizmos.draw(Line::from_points(a_pos, b_pos, DEFAULT_THICKNESS, color))
                     }
                 }
             },
@@ -317,11 +415,11 @@ pub fn dampening_system(dt: f32) -> BoxedSystem {
     System::builder()
         .with_query(Query::new((RbQueryMut::new(),)))
         .par_for_each(move |(rb,)| {
-            const LINEAR_DAMPEN: f32 = 0.1;
-            const ANGULAR_DAMPEN: f32 = 0.1;
+            // const LINEAR_DAMPEN: f32 = 0.1;
+            // const ANGULAR_DAMPEN: f32 = 0.1;
 
-            *rb.vel = round_to_zero(*rb.vel * (1.0 / (1.0 + dt * LINEAR_DAMPEN)), 1e-2);
-            *rb.ang_vel = round_to_zero(*rb.ang_vel * (1.0 / (1.0 + dt * ANGULAR_DAMPEN)), 1e-2);
+            // *rb.vel = round_to_zero(*rb.vel * (1.0 / (1.0 + dt * LINEAR_DAMPEN)), 1e-2);
+            // *rb.ang_vel = round_to_zero(*rb.ang_vel * (1.0 / (1.0 + dt * ANGULAR_DAMPEN)), 1e-2);
         })
         .boxed()
 }

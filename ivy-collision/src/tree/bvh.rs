@@ -8,7 +8,10 @@ use ivy_core::{
 use ordered_float::OrderedFloat;
 use slotmap::SlotMap;
 
-use crate::{Body, BodyIndex, BoundingBox, CollisionTreeNode, NodeIndex, NodeState, Nodes};
+use crate::{
+    body::{Body, BodyIndex},
+    BoundingBox, CollisionTreeNode, NodeIndex, NodeState, Nodes,
+};
 
 pub(crate) const MARGIN: f32 = 1.2;
 const NODE_CAPACITY: usize = 1;

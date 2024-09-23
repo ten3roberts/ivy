@@ -6,6 +6,23 @@ use crate::{Ray, Shape};
 
 pub const TOLERANCE: f32 = 0.001;
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum IndexedRange<T> {
+    Min,
+    Exact(T),
+    Max,
+}
+
+impl<T> IndexedRange<T> {
+    pub(crate) fn as_exact(&self) -> Option<&T> {
+        if let Self::Exact(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+}
+
 // Represents a point on the minkowski difference boundary which carries the
 // individual support points
 #[derive(Default, Clone, Copy)]

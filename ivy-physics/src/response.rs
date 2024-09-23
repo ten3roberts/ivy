@@ -3,8 +3,9 @@ use std::f32::consts::PI;
 
 use flax::component::ComponentValue;
 use flax::{error::MissingComponent, EntityRef};
-use flax::{Component, World};
+use flax::{Component, Entity, EntityIds, World};
 use glam::Vec3;
+use ivy_collision::body::BodyIndex;
 use ivy_collision::contact::ContactSurface;
 use ivy_collision::Contact;
 use ivy_core::components::{
@@ -13,13 +14,13 @@ use ivy_core::components::{
 };
 
 #[derive(Debug, Clone, Copy)]
-pub struct ResolverConfiguration {
+pub struct SolverConfiguration {
     allowed_penetration: f32,
     accumulate_impulses: bool,
     correction_factor: f32,
 }
 
-impl ResolverConfiguration {
+impl SolverConfiguration {
     pub fn new() -> Self {
         Self {
             allowed_penetration: 0.05,
@@ -29,35 +30,53 @@ impl ResolverConfiguration {
     }
 }
 
-impl Default for ResolverConfiguration {
+impl Default for SolverConfiguration {
     fn default() -> Self {
         Self::new()
     }
 }
 
-pub struct Resolver {
-    configuration: ResolverConfiguration,
+pub struct Solver {
+    configuration: SolverConfiguration,
+    bodies: slotmap::SecondaryMap<BodyIndex, SimulationBody>,
     dt: f32,
 }
 
-impl Resolver {
-    pub fn new(configuration: ResolverConfiguration, dt: f32) -> Self {
-        Self { configuration, dt }
+impl Solver {
+    pub fn new(configuration: SolverConfiguration, dt: f32) -> Self {
+        Self {
+            configuration,
+            dt,
+            bodies: Default::default(),
+        }
     }
 
-    pub fn resolve_contact(&self, world: &World, contact: &Contact) -> flax::error::Result<()> {
-        let a = world.entity(contact.a.entity)?;
-        let b = world.entity(contact.b.entity)?;
+    pub(crate) fn add_body(&mut self, index: BodyIndex, body: SimulationBody) {
+        self.bodies.insert(index, body);
+    }
 
-        // Ignore triggers
-        if contact.a.is_trigger || contact.b.is_trigger {
-            return Ok(());
-        }
+    pub(crate) fn remove_body(&mut self, index: BodyIndex) {
+        self.bodies.remove(index);
+    }
 
+    pub(crate) fn bodies(&self) -> &slotmap::SecondaryMap<BodyIndex, SimulationBody> {
+        &self.bodies
+    }
+
+    pub(crate) fn bodies_mut(&mut self) -> &mut slotmap::SecondaryMap<BodyIndex, SimulationBody> {
+        &mut self.bodies
+    }
+
+    pub fn solve_contact(&mut self, contact: &Contact) -> flax::error::Result<()> {
         assert_ne!(contact.a, contact.b);
 
-        let mut a_body = ResolveBody::from_entity(&a)?;
-        let mut b_body = ResolveBody::from_entity(&b)?;
+        let [a_body, b_body] = self
+            .bodies
+            .get_disjoint_mut([contact.a.body, contact.b.body])
+            .expect("bodies must be disjoint");
+
+        // let a = self.bodies[contact.a.body];
+        // let b = self.bodies[contact.b.body];
 
         // Ignore collisions between two immovable objects
         if a_body.inv_mass == 0.0 && b_body.inv_mass == 0.0 {
@@ -113,16 +132,9 @@ impl Resolver {
             b_body.apply_impulse_at(impulse, -to_b);
         }
 
-        apply_friction(
-            &mut a_body,
-            &mut b_body,
-            surface,
-            normal,
-            u_coeff,
-            acc_impulse,
-        );
+        apply_friction(a_body, b_body, surface, normal, u_coeff, acc_impulse);
 
-        let dampening = dampen(&a_body, &b_body, contact.surface.normal(), self.dt);
+        let dampening = dampen(a_body, b_body, contact.surface.normal(), self.dt);
         if a_body.mass.is_infinite() {
             b_body.vel += dampening.linear;
         } else if b_body.mass.is_infinite() {
@@ -147,22 +159,16 @@ impl Resolver {
             }
         }
 
-        *a.get_mut(position()).unwrap() += v_bias * self.dt * a_body.inv_mass / inv_mass;
-        *b.get_mut(position()).unwrap() -= v_bias * self.dt * b_body.inv_mass / inv_mass;
-
-        try_write(&a, velocity(), a_body.vel);
-        try_write(&a, angular_velocity(), a_body.ang_vel);
-
-        try_write(&b, velocity(), b_body.vel);
-        try_write(&b, angular_velocity(), b_body.ang_vel);
+        a_body.pos += v_bias * self.dt * a_body.inv_mass / inv_mass;
+        b_body.pos -= v_bias * self.dt * b_body.inv_mass / inv_mass;
 
         Ok(())
     }
 }
 
 fn apply_friction(
-    a_body: &mut ResolveBody,
-    b_body: &mut ResolveBody,
+    a_body: &mut SimulationBody,
+    b_body: &mut SimulationBody,
     surface: &ContactSurface,
     normal: Vec3,
     u_coeff: f32,
@@ -209,8 +215,9 @@ fn apply_friction(
     b_body.apply_angular_impulse(torque);
 }
 
-#[derive(Debug, Clone, Default)]
-pub(crate) struct ResolveBody {
+#[derive(Debug)]
+pub(crate) struct SimulationBody {
+    pub id: Entity,
     pub pos: Vec3,
     pub vel: Vec3,
     pub ang_vel: Vec3,
@@ -222,7 +229,7 @@ pub(crate) struct ResolveBody {
     pub friction: f32,
 }
 
-impl ResolveBody {
+impl SimulationBody {
     pub fn from_entity(entity: &EntityRef) -> Result<Self, MissingComponent> {
         let pos = entity.get(world_transform())?.transform_point3(Vec3::ZERO);
         let vel = entity.get_copy(velocity()).unwrap_or_default();
@@ -232,6 +239,7 @@ impl ResolveBody {
 
         if entity.has(is_static()) {
             let resolve_body = Self {
+                id: entity.id(),
                 pos,
                 vel,
                 ang_vel,
@@ -249,6 +257,7 @@ impl ResolveBody {
             let mass = entity.get_copy(mass())?;
 
             let resolve_body = Self {
+                id: entity.id(),
                 pos,
                 vel,
                 ang_vel,
@@ -279,9 +288,9 @@ struct Dampening {
     angular: Vec3,
 }
 
-fn dampen(a: &ResolveBody, b: &ResolveBody, normal: Vec3, dt: f32) -> Dampening {
-    const DAMPEN_FACTOR: f32 = 0.0;
-    const ANGULAR_DAMPEN_FACTOR: f32 = 0.0;
+fn dampen(a: &SimulationBody, b: &SimulationBody, normal: Vec3, dt: f32) -> Dampening {
+    const DAMPEN_FACTOR: f32 = 0.1;
+    const ANGULAR_DAMPEN_FACTOR: f32 = 0.1;
 
     let transverse_vel = (a.vel - b.vel).reject_from(normal);
 

@@ -19,6 +19,8 @@ ivy-assets = { path = "../ivy-assets", version = "0.10.0" }
 
 rayon = "1.5.2"
 smallvec = "1.8.0"
+itertools.workspace = true
+slotmap.workspace = true
 flax.workspace = true
 glam.workspace = true
 flume.workspace = true

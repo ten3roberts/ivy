@@ -28,12 +28,13 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(current) = self.stack.pop() {
             let node = self.tree.node(current).unwrap();
+            todo!()
             // If the visitor wants to visit this node, push all children to the
             // stack and visit the node
-            if let Some(output) = self.visitor.accept(node, self.tree.objects()) {
-                self.stack.extend(node.children().iter().cloned());
-                return Some(output);
-            }
+            // if let Some(output) = self.visitor.accept(node, self.tree.objects()) {
+            //     self.stack.extend(node.children().iter().cloned());
+            //     return Some(output);
+            // }
         }
 
         None

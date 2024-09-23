@@ -7,10 +7,11 @@ use ivy_core::{
 };
 
 use crate::{
+    body::{BodyIndex, ContactIndex},
     contact::{ContactGenerator, ContactSurface},
     epa, gjk,
     util::minkowski_diff,
-    BodyIndex, ContactIndex, EntityPayload, Shape,
+    EntityPayload, Shape,
 };
 
 /// Contains temporary state to accelerate contact generation

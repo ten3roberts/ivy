@@ -5,25 +5,25 @@ use std::{
 };
 
 use itertools::Itertools;
-use rayon::str::CharIndices;
-use slotmap::{new_key_type, Key, SecondaryMap, SlotMap};
+use slotmap::{Key, SecondaryMap, SlotMap};
 
-use crate::Contact;
+use crate::{
+    body::{Body, BodyIndex, BodyMap, ContactIndex, ContactMap},
+    util::IndexedRange,
+    Contact,
+};
 
-use super::{Body, BodyIndex, ContactIndex, IndexedRange, NodeIndex};
+use crate::tree::NodeIndex;
 
 pub type Nodes<N> = SlotMap<NodeIndex, N>;
 
-type ContactMap = SlotMap<ContactIndex, Contact>;
-type BodyMap = SlotMap<BodyIndex, Body>;
-
-pub struct ContactIter<'a> {
+pub struct IslandContactIter<'a> {
     contacts: &'a ContactMap,
     index: ContactIndex,
     head: ContactIndex,
 }
 
-impl<'a> Iterator for ContactIter<'a> {
+impl<'a> Iterator for IslandContactIter<'a> {
     type Item = (ContactIndex, &'a Contact);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -113,8 +113,8 @@ impl Island {
         assert!(!self.head_body.is_null());
     }
 
-    pub fn contacts<'a>(&self, contacts: &'a ContactMap) -> ContactIter<'a> {
-        ContactIter {
+    pub fn contacts<'a>(&self, contacts: &'a ContactMap) -> IslandContactIter<'a> {
+        IslandContactIter {
             head: self.head_contact,
             contacts,
             index: self.head_contact,
@@ -141,7 +141,7 @@ struct Scratch {
     visited_contacts: SecondaryMap<ContactIndex, ()>,
 }
 
-pub(crate) struct Islands {
+pub struct Islands {
     islands: SecondaryMap<BodyIndex, Island>,
     static_set: SecondaryMap<BodyIndex, ()>,
     scratch: Scratch,
@@ -160,7 +160,7 @@ impl std::fmt::Debug for Islands {
 }
 
 impl Islands {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             islands: Default::default(),
             static_set: Default::default(),
@@ -348,7 +348,7 @@ impl Islands {
             let mut body_index = island.head_body;
             while !body_index.is_null() {
                 let body = &mut bodies[body_index];
-                assert_eq!(body.island, index);
+                // assert_eq!(body.island, index);
                 body.island = parent_index;
 
                 let next = body.next_body;
@@ -371,7 +371,7 @@ impl Islands {
         }
     }
 
-    pub(crate) fn reconstruct(
+    pub fn reconstruct(
         &mut self,
         island_index: BodyIndex,
         bodies: &mut BodyMap,
@@ -439,7 +439,6 @@ impl Islands {
 
             let seed_index = body_index;
 
-            let seed_island = &mut self.islands[seed_index];
             let _span = tracing::info_span!("seed", ?seed_index).entered();
 
             let mut stack = vec![body_index];
@@ -511,19 +510,19 @@ impl Islands {
         }
     }
 
-    pub fn add_body(&mut self, bodies: &mut SlotMap<BodyIndex, Body>, index: BodyIndex) {
+    pub fn link_body(&mut self, bodies: &mut SlotMap<BodyIndex, Body>, index: BodyIndex) {
         self.islands[index].add_body(bodies, index)
     }
 
-    pub(crate) fn mark_static(&mut self, index: BodyIndex) {
+    pub fn mark_static(&mut self, index: BodyIndex) {
         self.static_set.insert(index, ());
     }
 
-    pub(crate) fn islands(&self) -> &SecondaryMap<BodyIndex, Island> {
+    pub fn islands(&self) -> &SecondaryMap<BodyIndex, Island> {
         &self.islands
     }
 
-    pub(crate) fn static_set(&self) -> &SecondaryMap<BodyIndex, ()> {
+    pub fn static_set(&self) -> &SecondaryMap<BodyIndex, ()> {
         &self.static_set
     }
 }

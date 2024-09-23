@@ -1,11 +1,10 @@
 use flax::component;
-use glam::Vec3;
-use ivy_collision::{BvhNode, CollisionTree};
 
-use crate::{response::Resolver, systems::CollisionState, Effector};
+use crate::{state::PhysicsState, systems::CollisionState, Effector};
 
 component! {
-    pub resolver: Resolver,
+    pub physics_state: PhysicsState,
+    // TODO: remove
     pub collision_state: CollisionState,
     pub effector: Effector,
 }

@@ -154,7 +154,7 @@ impl BoundingBox {
         }
     }
 
-    pub(crate) fn expand(&self, amount: Vec3) -> BoundingBox {
+    pub fn expand(&self, amount: Vec3) -> BoundingBox {
         BoundingBox {
             min: self.min - amount,
             max: self.max + amount,
@@ -253,7 +253,7 @@ impl Shape for BoundingBox {
     }
 
     fn surface_contour(&self, dir: Vec3, points: &mut Vec<Vec3>) {
-        const TOLERANCE: f32 = 1e-3;
+        const TOLERANCE: f32 = 1e-4;
 
         for face in self.faces() {
             if face.normal.dot(dir) > 1.0 - TOLERANCE {

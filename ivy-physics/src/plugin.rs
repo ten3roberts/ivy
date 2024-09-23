@@ -1,19 +1,16 @@
 use crate::{
-    components::resolver,
-    response::{Resolver, ResolverConfiguration},
+    components::physics_state,
+    state::{PhysicsState, PhysicsStateConfiguration},
     systems::{
-        apply_effectors_system, contact_gizmos_system, dampening_system, gizmo_system,
-        gravity_system, integrate_angular_velocity_system, integrate_velocity_system,
-        island_graph_gizmo_system, resolve_collisions_system,
+        apply_effectors_system, contact_gizmos_system, dampening_system, generate_contacts_system,
+        gizmo_system, gravity_system, integrate_angular_velocity_system, integrate_velocity_system,
+        island_graph_gizmo_system, register_bodies_system, solve_contacts_system,
+        sync_simulation_bodies_system, update_bodies_system, update_simulation_bodies_system,
     },
 };
 use flax::World;
 use glam::Vec3;
 use ivy_assets::AssetCache;
-use ivy_collision::{
-    check_collisions_system, collisions_tree_gizmos_system, components::collision_tree,
-    register_system, update_system, BoundingBox, BvhNode, CollisionTree,
-};
 use ivy_core::{
     components::{engine, gravity},
     update_layer::{FixedTimeStep, Plugin},
@@ -30,7 +27,7 @@ pub struct GizmoSettings {
 pub struct PhysicsPlugin {
     gravity: Vec3,
     gizmos: GizmoSettings,
-    resolver: ResolverConfiguration,
+    configuration: PhysicsStateConfiguration,
 }
 
 impl PhysicsPlugin {
@@ -38,7 +35,7 @@ impl PhysicsPlugin {
         Self {
             gravity: Vec3::ZERO,
             gizmos: Default::default(),
-            resolver: ResolverConfiguration::new(),
+            configuration: PhysicsStateConfiguration::default(),
         }
     }
 
@@ -74,32 +71,32 @@ impl Plugin<FixedTimeStep> for PhysicsPlugin {
         world.set(engine(), gravity(), self.gravity)?;
         world.set(
             engine(),
-            collision_tree(),
-            CollisionTree::new(BvhNode::new(BoundingBox::new(Vec3::ONE * 1.0, Vec3::ZERO))),
+            physics_state(),
+            PhysicsState::new(&self.configuration, dt),
         )?;
-
-        world.set(engine(), resolver(), Resolver::new(self.resolver, dt))?;
 
         schedule
             .with_system(integrate_velocity_system(dt))
             .with_system(integrate_angular_velocity_system(dt))
             .with_system(gravity_system())
-            .with_system(register_system())
-            .with_system(update_system());
+            .with_system(dampening_system(dt))
+            .with_system(apply_effectors_system(dt))
+            .with_system(register_bodies_system())
+            .with_system(update_bodies_system());
 
         if self.gizmos.rigidbody {
             schedule.with_system(gizmo_system(dt));
         }
 
-        schedule.with_system(dampening_system(dt));
-        schedule.with_system(apply_effectors_system(dt));
+        schedule.with_system(update_simulation_bodies_system());
 
         schedule
-            .with_system(check_collisions_system())
-            .with_system(resolve_collisions_system());
+            .with_system(generate_contacts_system())
+            .with_system(solve_contacts_system())
+            .with_system(sync_simulation_bodies_system());
 
         if self.gizmos.bvh_tree {
-            schedule.with_system(collisions_tree_gizmos_system());
+            // schedule.with_system(collisions_tree_gizmos_system());
         }
 
         if self.gizmos.contacts {

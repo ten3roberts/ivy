@@ -6,7 +6,9 @@ use slotmap::SlotMap;
 
 use super::Ray;
 use crate::{
-    components::collider, Body, BodyIndex, BvhNode, CollisionTreeNode, Intersection, Visitor,
+    body::{Body, BodyIndex},
+    components::collider,
+    BvhNode, CollisionTreeNode, Intersection, Visitor,
 };
 
 /// Represents a collider ray intersection.

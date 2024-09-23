@@ -1,7 +1,8 @@
-use crate::{BodyIndex, BoundingBox};
+use crate::{body::BodyIndex, BoundingBox};
 
 use super::NodeIndex;
 
+// TODO: remove
 pub trait CollisionTreeNode: 'static + Sized + Send + Sync {
     /// Returns the objects contained in the node
     fn objects(&self) -> &[BodyIndex];

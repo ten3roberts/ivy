@@ -5,8 +5,12 @@ use glam::Mat4;
 use slotmap::SlotMap;
 
 use crate::{
-    components, contact::ContactSurface, query::TreeQuery, Body, BodyIndex, BoundingBox,
-    CollisionTree, CollisionTreeNode, IntersectionGenerator, Shape, TransformedShape, Visitor,
+    body::{Body, BodyIndex},
+    components,
+    contact::ContactSurface,
+    query::TreeQuery,
+    BoundingBox, CollisionTree, CollisionTreeNode, IntersectionGenerator, Shape, TransformedShape,
+    Visitor,
 };
 
 use super::BvhNode;
