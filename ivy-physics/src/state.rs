@@ -17,8 +17,8 @@ use ivy_collision::{
     components::{body_index, collider, collider_offset},
     island::{Island, IslandContactIter, Islands},
     util::IndexedRange,
-    BvhNode, Collider, CollisionTree, Contact, EntityPayload, IntersectionGenerator, NodeIndex,
-    NodeState, Shape, TransformedShape,
+    BvhNode, Collider, CollisionTree, Contact, ContactPoint, EntityPayload, IntersectionGenerator,
+    NodeIndex, NodeState, Shape, TransformedShape,
 };
 use slotmap::{Key, SlotMap};
 
@@ -157,35 +157,75 @@ impl PhysicsState {
             let a_body = &self.bodies[a];
             let b_body = &self.bodies[b];
 
-            let Some(contact) = self.intersection_generator.intersect(
+            let Some(intersection) = self.intersection_generator.test_intersect(
                 &TransformedShape::new(&a_body.collider, a_body.transform),
                 &TransformedShape::new(&b_body.collider, b_body.transform),
             ) else {
                 continue;
             };
 
+            let global_anchors = match intersection.points {
+                ivy_collision::ContactPoints::Single([v]) => (v, v),
+                ivy_collision::ContactPoints::Double([a, b]) => (a, b),
+            };
+
+            let local_anchors = (
+                a_body
+                    .transform
+                    .inverse()
+                    .transform_point3(global_anchors.0),
+                b_body
+                    .transform
+                    .inverse()
+                    .transform_point3(global_anchors.1),
+            );
+
+            let contact_point = ContactPoint::new(
+                global_anchors,
+                local_anchors,
+                intersection.depth,
+                intersection.normal,
+            );
+
             match self.contact_map.entry((a, IndexedRange::Exact(b))) {
                 Entry::Vacant(slot) => {
                     // new island
-                    let contact = Contact {
-                        a: EntityPayload {
+                    let contact = Contact::new(
+                        EntityPayload {
                             entity: a_body.id,
                             is_trigger: false,
                             state: a_body.state,
                             body: a,
                         },
-                        b: EntityPayload {
+                        EntityPayload {
                             entity: b_body.id,
                             is_trigger: false,
                             state: b_body.state,
                             body: b,
                         },
-                        surface: contact,
-                        island: BodyIndex::null(),
-                        next_contact: ContactIndex::null(),
-                        prev_contact: ContactIndex::null(),
-                        generation: self.generation,
-                    };
+                        contact_point,
+                        self.generation,
+                    );
+
+                    // let contact = Contact {
+                    //     a: EntityPayload {
+                    //         entity: a_body.id,
+                    //         is_trigger: false,
+                    //         state: a_body.state,
+                    //         body: a,
+                    //     },
+                    //     b: EntityPayload {
+                    //         entity: b_body.id,
+                    //         is_trigger: false,
+                    //         state: b_body.state,
+                    //         body: b,
+                    //     },
+                    //     surface: contact,
+                    //     island: BodyIndex::null(),
+                    //     next_contact: ContactIndex::null(),
+                    //     prev_contact: ContactIndex::null(),
+                    //     generation: self.generation,
+                    // };
 
                     let id = self.contacts.insert(contact);
                     slot.insert(id);
@@ -199,8 +239,12 @@ impl PhysicsState {
                 Entry::Occupied(v) => {
                     let &contact_index = v.get();
                     let v = &mut self.contacts[contact_index];
-                    v.surface = contact;
+
+                    v.add_point(contact_point);
+                    v.remove_invalid_points(a_body.transform, b_body.transform);
+
                     v.generation = self.generation;
+
                     assert!(self.contact_map.contains_key(&(b, IndexedRange::Exact(a))));
                 }
             };
@@ -266,7 +310,12 @@ impl PhysicsState {
     }
 
     pub fn solve_contacts(&mut self, world: &World) {
+        let _span = tracing::info_span!("solve_contacts").entered();
         for (_, contact) in &self.contacts {
+            self.solver.apply_warmstart(contact);
+        }
+
+        for (_, contact) in &mut self.contacts {
             self.solver.solve_contact(contact).unwrap();
             self.dirty_bodies.extend([contact.a.body, contact.b.body]);
         }

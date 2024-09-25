@@ -4,7 +4,7 @@ use glam::Vec3;
 
 use crate::{Ray, Shape};
 
-pub const TOLERANCE: f32 = 0.001;
+pub const TOLERANCE: f32 = 0.000001;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum IndexedRange<T> {

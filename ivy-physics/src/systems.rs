@@ -46,8 +46,8 @@ pub fn gravity_system() -> BoxedSystem {
             effector().as_mut(),
             gravity_influence(),
         )))
-        .for_each(|(&state, effector, &gravity_influence)| {
-            effector.apply_acceleration(gravity_influence * state, true);
+        .for_each(|(&gravity, effector, &gravity_influence)| {
+            effector.apply_acceleration(gravity_influence * gravity, true);
         })
         .boxed()
 }
@@ -280,7 +280,7 @@ pub fn contact_gizmos_system() -> BoxedSystem {
                 if let Some(tree) = query.first() {
                     for (_, island) in tree.islands() {
                         for (_, contact) in tree.island_contacts(island) {
-                            gizmos.draw(&contact.surface);
+                            gizmos.draw(&contact);
                         }
                     }
                 }
@@ -415,11 +415,11 @@ pub fn dampening_system(dt: f32) -> BoxedSystem {
     System::builder()
         .with_query(Query::new((RbQueryMut::new(),)))
         .par_for_each(move |(rb,)| {
-            // const LINEAR_DAMPEN: f32 = 0.1;
-            // const ANGULAR_DAMPEN: f32 = 0.1;
+            const LINEAR_DAMPEN: f32 = 0.1;
+            const ANGULAR_DAMPEN: f32 = 0.1;
 
-            // *rb.vel = round_to_zero(*rb.vel * (1.0 / (1.0 + dt * LINEAR_DAMPEN)), 1e-2);
-            // *rb.ang_vel = round_to_zero(*rb.ang_vel * (1.0 / (1.0 + dt * ANGULAR_DAMPEN)), 1e-2);
+            *rb.vel = round_to_zero(*rb.vel * (1.0 / (1.0 + dt * LINEAR_DAMPEN)), 1e-2);
+            *rb.ang_vel = round_to_zero(*rb.ang_vel * (1.0 / (1.0 + dt * ANGULAR_DAMPEN)), 1e-2);
         })
         .boxed()
 }
@@ -436,11 +436,13 @@ pub fn apply_effectors_system(dt: f32) -> BoxedSystem {
         .par_for_each(move |(rb, position, effector, is_sleeping)| {
             if !is_sleeping || effector.should_wake() {
                 // tracing::info!(%physics_state.dt, ?effector, "updating effector");
-                *rb.vel += round_to_zero(effector.net_velocity_change(dt), 1e-2);
+                let net_dv = effector.net_velocity_change(dt);
+                tracing::info!(?rb.vel, ?net_dv);
+                *rb.vel += round_to_zero(net_dv, 1e-4);
                 *position += effector.translation();
 
                 *rb.ang_vel =
-                    round_to_zero(*rb.ang_vel + effector.net_angular_velocity_change(dt), 1e-2);
+                    round_to_zero(*rb.ang_vel + effector.net_angular_velocity_change(dt), 1e-4);
             }
 
             effector.clear();

@@ -112,9 +112,9 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
     let shader = assets.load(&PbrShaderDesc);
     let shadow = assets.load(&ShadowShaderDesc);
 
-    const RESTITUTION: f32 = 0.4;
+    const RESTITUTION: f32 = 0.0;
     const FRICTION: f32 = 0.5;
-    const MASS: f32 = 50.0;
+    const MASS: f32 = 100.0;
     const INERTIA_TENSOR: f32 = 200.0;
 
     let body = || {
@@ -180,7 +180,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
     let drop_height = 10.0;
 
     cube(vec3(0.0, drop_height, 0.0))
-        .set(rotation(), Quat::from_scaled_axis(vec3(0.0, 0.0, 0.0)))
+        .set(rotation(), Quat::from_scaled_axis(vec3(1.0, 1.0, 0.0)))
         .set(gravity_influence(), 1.0)
         .set(restitution(), 1.0)
         .set(material(), red_material.clone())
@@ -194,7 +194,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
         .spawn(world);
 
     sphere(vec3(10.0, drop_height, 0.0))
-        .set(rotation(), Quat::from_scaled_axis(vec3(0.5, 0.0, 0.0)))
+        .set(rotation(), Quat::from_scaled_axis(vec3(0.0, 0.0, 0.0)))
         .set(gravity_influence(), 1.0)
         .set(restitution(), 1.0)
         .set(material(), red_material.clone())
@@ -214,7 +214,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
         .set(material(), red_material.clone())
         .spawn(world);
 
-    for i in 0..2 {
+    for i in 0..3 {
         cube(vec3(0.0, 2.0 + i as f32 * 2.0, -8.0))
             .set(rotation(), Quat::from_scaled_axis(vec3(0.0, 0.0, 0.0)))
             .set(gravity_influence(), 1.0)

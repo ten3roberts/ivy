@@ -20,7 +20,7 @@ pub fn gjk<A: Shape, B: Shape>(a: &A, b: &B) -> (bool, Simplex) {
     let mut fallback_directions = [Vec3::X, Vec3::Y, Vec3::Z].into_iter().cycle();
 
     let mut iteration_count = 0;
-    let mut perturberance_rng = rand_pcg::Pcg32::seed_from_u64(42);
+    // let mut perturberance_rng = rand_pcg::Pcg32::seed_from_u64(42);
 
     loop {
         // while let Some(dir) = simplex.next_dir() {
@@ -39,13 +39,13 @@ pub fn gjk<A: Shape, B: Shape>(a: &A, b: &B) -> (bool, Simplex) {
         let dir = dir.normalize();
 
         // Get the next simplex
-        let mut p = minkowski_diff(a, b, dir);
-        let perturberance_strength = 0.0;
-        p.support += vec3(
-            perturberance_rng.gen(),
-            perturberance_rng.gen(),
-            perturberance_rng.gen(),
-        ) * perturberance_strength;
+        let p = minkowski_diff(a, b, dir);
+        // let perturberance_strength = 0.0;
+        // p.support += vec3(
+        //     perturberance_rng.gen(),
+        //     perturberance_rng.gen(),
+        //     perturberance_rng.gen(),
+        // ) * perturberance_strength;
 
         // New point was not past the origin
         // No collision
@@ -63,4 +63,33 @@ pub fn gjk<A: Shape, B: Shape>(a: &A, b: &B) -> (bool, Simplex) {
     }
 
     (true, simplex)
+}
+
+#[cfg(test)]
+mod test {
+    use glam::{Mat4, Quat, Vec3};
+
+    use crate::{BoundingBox, TransformedShape};
+
+    use super::gjk;
+
+    #[test]
+    fn text_box_box() {
+        let a = BoundingBox::new(Vec3::ONE, Vec3::ZERO);
+        let b = BoundingBox::new(Vec3::ONE, Vec3::ZERO);
+
+        for i in 0..=100 {
+            let a_pos = -Vec3::X + Vec3::X * (i as f32 * 0.01 + 0.1);
+            let a_rot = Quat::from_rotation_x((i % 10) as f32 * 0.1);
+            let b_pos = Vec3::X;
+
+            let (intersecting, result) = gjk(
+                &TransformedShape::new(a, Mat4::from_rotation_translation(a_rot, a_pos)),
+                &TransformedShape::new(b, Mat4::from_translation(b_pos)),
+            );
+
+            eprintln!("{i} {intersecting}");
+            // assert!(result.0);
+        }
+    }
 }

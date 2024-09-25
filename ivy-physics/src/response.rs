@@ -23,8 +23,8 @@ pub struct SolverConfiguration {
 impl SolverConfiguration {
     pub fn new() -> Self {
         Self {
-            allowed_penetration: 0.05,
-            correction_factor: 0.1,
+            allowed_penetration: 0.1,
+            correction_factor: 0.05,
             accumulate_impulses: true,
         }
     }
@@ -37,7 +37,7 @@ impl Default for SolverConfiguration {
 }
 
 pub struct Solver {
-    configuration: SolverConfiguration,
+    config: SolverConfiguration,
     bodies: slotmap::SecondaryMap<BodyIndex, SimulationBody>,
     dt: f32,
 }
@@ -45,7 +45,7 @@ pub struct Solver {
 impl Solver {
     pub fn new(configuration: SolverConfiguration, dt: f32) -> Self {
         Self {
-            configuration,
+            config: configuration,
             dt,
             bodies: Default::default(),
         }
@@ -67,7 +67,28 @@ impl Solver {
         &mut self.bodies
     }
 
-    pub fn solve_contact(&mut self, contact: &Contact) -> flax::error::Result<()> {
+    pub fn apply_warmstart(&mut self, contact: &Contact) {
+        assert_ne!(contact.a, contact.b);
+
+        let [a_body, b_body] = self
+            .bodies
+            .get_disjoint_mut([contact.a.body, contact.b.body])
+            .expect("bodies must be disjoint");
+
+        for point in contact.points() {
+            let to_a = point.pos() - a_body.pos;
+            let to_b = point.pos() - b_body.pos;
+
+            let impulse =
+                point.normal_impulse * point.normal() + point.tangent_impulse * point.tangent;
+
+            // // apply impulse to points
+            a_body.apply_impulse_at(-impulse, -to_a);
+            b_body.apply_impulse_at(impulse, -to_b);
+        }
+    }
+
+    pub fn solve_contact(&mut self, contact: &mut Contact) -> flax::error::Result<()> {
         assert_ne!(contact.a, contact.b);
 
         let [a_body, b_body] = self
@@ -86,24 +107,13 @@ impl Solver {
 
         let inv_mass = a_body.inv_mass + b_body.inv_mass;
         let restitution = a_body.restitution * b_body.restitution;
-        let u_coeff = a_body.friction * b_body.friction;
+        let u_coeff = (a_body.friction * b_body.friction).sqrt();
 
-        let surface = &contact.surface;
-        let normal = surface.normal();
+        for p in contact.points_mut() {
+            let normal = p.normal();
 
-        assert!(normal.is_normalized());
-
-        let mut acc_impulse = 0.0;
-
-        let v_bias = -self.configuration.correction_factor
-            * self.dt.recip()
-            * (contact.surface.depth() - self.configuration.allowed_penetration).max(0.0);
-
-        // for point in surface.points().iter().copied().chain([surface.midpoint()]) {
-        // for point in [surface.midpoint()] {
-        for &point in surface.points() {
-            let to_a = point - a_body.pos;
-            let to_b = point - b_body.pos;
+            let to_a = p.pos() - a_body.pos;
+            let to_b = p.pos() - b_body.pos;
 
             let inv_i = a_body.inverse_inertia_tensor * to_a.cross(normal).cross(to_a)
                 + b_body.inverse_inertia_tensor * to_b.cross(normal).cross(to_b);
@@ -114,105 +124,137 @@ impl Solver {
 
             let contact_vel = (b_pvel - a_pvel).dot(normal);
 
-            let mut impulse = -(1.0 + restitution) * (contact_vel) / inertia;
+            let v_bias = -self.config.correction_factor
+                * self.dt.recip()
+                * (p.depth() - self.config.allowed_penetration).max(0.0);
 
-            if self.configuration.accumulate_impulses {
-                let old_acc_impulse = acc_impulse;
-                acc_impulse = (acc_impulse + impulse).max(0.0);
-                impulse = acc_impulse - old_acc_impulse;
+            let mut normal_impulse = -(1.0 + restitution) * (contact_vel + v_bias) / inertia;
+
+            if self.config.accumulate_impulses {
+                let old_acc_impulse = p.normal_impulse;
+                p.normal_impulse = (p.normal_impulse + normal_impulse).max(0.0);
+                normal_impulse = p.normal_impulse - old_acc_impulse;
             } else {
-                impulse = impulse.max(0.0);
+                normal_impulse = normal_impulse.max(0.0);
             }
 
-            // use impulse for as friction normal force
-            let impulse = impulse * normal;
+            let (tangent, mut tan_impulse) = calculate_friction(
+                a_body,
+                b_body,
+                p.pos(),
+                normal,
+                u_coeff,
+                p.normal_impulse,
+                self.dt,
+            );
+
+            assert!(tan_impulse >= 0.0, "{tan_impulse} {normal_impulse}");
+            {
+                let max_tan_impulse = u_coeff * p.normal_impulse;
+                let old_tan_impulse = p.tangent_impulse;
+                p.tangent_impulse = (p.tangent_impulse + tan_impulse).clamp(0.0, max_tan_impulse);
+                tan_impulse = p.tangent_impulse - old_tan_impulse;
+            }
+
+            tracing::info!(?tan_impulse, ?normal_impulse, p.tangent_impulse);
+
+            p.tangent = tangent;
+
+            let impulse = normal_impulse * normal + tan_impulse * tangent;
 
             // apply impulse to points
             a_body.apply_impulse_at(-impulse, -to_a);
             b_body.apply_impulse_at(impulse, -to_b);
-        }
 
-        apply_friction(a_body, b_body, surface, normal, u_coeff, acc_impulse);
+            let translation = p.normal()
+                * (p.depth() - self.config.allowed_penetration)
+                    .clamp(0.0, self.config.correction_factor);
 
-        let dampening = dampen(a_body, b_body, contact.surface.normal(), self.dt);
-        if a_body.mass.is_infinite() {
-            b_body.vel += dampening.linear;
-        } else if b_body.mass.is_infinite() {
-            a_body.vel -= dampening.linear;
-        } else {
-            a_body.vel -= dampening.linear * (b_body.mass * inv_mass);
-            b_body.vel += dampening.linear * (a_body.mass * inv_mass);
-        }
+            // a_body.pos -= translation * a_body.inv_mass / inv_mass;
+            // b_body.pos += translation * b_body.inv_mass / inv_mass;
 
-        if a_body.inertia_tensor.is_infinite() {
-            b_body.ang_vel += dampening.angular;
-        } else if b_body.inertia_tensor.is_infinite() {
-            a_body.ang_vel -= dampening.angular;
-        } else {
-            a_body.ang_vel -= dampening.angular * (b_body.inertia_tensor * inv_mass);
-            b_body.ang_vel += dampening.angular * (a_body.inertia_tensor * inv_mass);
-        }
+            let dampening = dampen(a_body, b_body, p.normal(), self.dt);
+            if a_body.mass.is_infinite() {
+                b_body.vel += dampening.linear;
+            } else if b_body.mass.is_infinite() {
+                a_body.vel -= dampening.linear;
+            } else {
+                a_body.vel -= dampening.linear * (b_body.mass * inv_mass);
+                b_body.vel += dampening.linear * (a_body.mass * inv_mass);
+            }
 
-        fn try_write<T: ComponentValue>(entity: &EntityRef, component: Component<T>, value: T) {
-            if let Ok(mut val) = entity.get_mut(component) {
-                *val = value;
+            if a_body.inertia_tensor.is_infinite() {
+                b_body.ang_vel += dampening.angular;
+            } else if b_body.inertia_tensor.is_infinite() {
+                a_body.ang_vel -= dampening.angular;
+            } else {
+                a_body.ang_vel -= dampening.angular * (b_body.inertia_tensor * inv_mass);
+                b_body.ang_vel += dampening.angular * (a_body.inertia_tensor * inv_mass);
             }
         }
 
-        a_body.pos += v_bias * self.dt * a_body.inv_mass / inv_mass;
-        b_body.pos -= v_bias * self.dt * b_body.inv_mass / inv_mass;
+        let v_bias = -self.config.correction_factor
+            * self.dt.recip()
+            * (contact.depth() - self.config.allowed_penetration).max(0.0);
+
+        // let depth = contact.depth();
+        // a_body.pos += v_bias * self.dt * a_body.inv_mass / inv_mass;
+        // b_body.pos -= v_bias * self.dt * b_body.inv_mass / inv_mass;
 
         Ok(())
     }
 }
 
-fn apply_friction(
+fn calculate_friction(
     a_body: &mut SimulationBody,
     b_body: &mut SimulationBody,
-    surface: &ContactSurface,
+    // surface: &ContactSurface,
+    point: Vec3,
     normal: Vec3,
     u_coeff: f32,
     normal_force: f32,
-) {
-    let point = surface.midpoint();
+    dt: f32,
+) -> (Vec3, f32) {
     let to_a = point - a_body.pos;
     let to_b = point - b_body.pos;
 
     let a_pvel = a_body.vel + a_body.ang_vel.cross(to_a);
     let b_pvel = b_body.vel + b_body.ang_vel.cross(to_b);
 
+    let tangent_vel = (a_pvel - b_pvel).reject_from_normalized(normal);
+
+    let tangent = tangent_vel.normalize_or_zero();
+
     let inv_mass = a_body.inv_mass + b_body.inv_mass;
-    let inv_i = a_body.inverse_inertia_tensor * to_a.cross(normal).cross(to_a)
-        + b_body.inverse_inertia_tensor * to_b.cross(normal).cross(to_b);
-    let inertia = inv_mass + inv_i.dot(normal);
+    let a_rt = to_a.dot(tangent);
+    let b_rt = to_b.dot(tangent);
+
+    let inertia = inv_mass
+        + a_body.inverse_inertia_tensor * (to_a.dot(to_a) - a_rt * a_rt)
+        + b_body.inverse_inertia_tensor * (to_b.dot(to_b) - b_rt * b_rt);
 
     // apply friction and disc friction to the midpoint of the surface
     // DO NOT apply friction to individual contact points, as it interfers with disc friction
-    let friction_force = u_coeff * normal_force;
+    let friction_force = inertia * tangent_vel.length();
 
-    let friction_force =
-        friction_force.min(((a_pvel - b_pvel).reject_from(normal).length()) / inertia);
+    // let friction_force =
+    //     friction_force.min(((a_pvel - b_pvel).reject_from(normal).length() * dt) / inertia);
 
-    let tangent = normal
-        .cross(a_pvel - b_pvel)
-        .cross(normal)
-        .normalize_or_zero();
+    // let torque_mag = 2.0 / 3.0 * normal_force * u_coeff * (surface.area() / PI).sqrt();
 
-    let impulse = friction_force * tangent;
+    // let rel_angular = (a_body.ang_vel - b_body.ang_vel)
+    //     .project_onto(normal)
+    //     .normalize_or_zero();
 
-    let torque_mag = 2.0 / 3.0 * normal_force * u_coeff * (surface.area() / PI).sqrt();
+    // let torque = rel_angular * torque_mag;
 
-    let rel_angular = (a_body.ang_vel - b_body.ang_vel)
-        .project_onto(normal)
-        .normalize_or_zero();
+    // a_body.apply_impulse_at(-impulse, -to_a);
+    // b_body.apply_impulse_at(impulse, -to_b);
 
-    let torque = rel_angular * torque_mag;
-
-    a_body.apply_impulse_at(-impulse, -to_a);
-    b_body.apply_impulse_at(impulse, -to_b);
-
-    a_body.apply_angular_impulse(-torque);
-    b_body.apply_angular_impulse(torque);
+    // a_body.apply_angular_impulse(-torque);
+    // b_body.apply_angular_impulse(torque);
+    tracing::info!(?friction_force, ?tangent);
+    (tangent, friction_force)
 }
 
 #[derive(Debug)]
