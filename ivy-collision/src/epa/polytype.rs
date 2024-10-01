@@ -144,10 +144,8 @@ impl Polytype {
     ) {
         // remove faces that can see the point
         let mut edges = SmallVec::<[Edge; 16]>::new();
-        let points = &self.points;
 
         self.faces.retain(|face| {
-            let to_support = p.p - points[face.indices[0] as usize].p;
             if face.normal.dot(p.p) > face.normal.dot(self.points[face.indices[0] as usize].p) {
                 face.edges().iter().for_each(|edge| {
                     add_if_unique(&mut edges, *edge);

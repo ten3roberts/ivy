@@ -1,10 +1,7 @@
 use std::ops::Deref;
 
-use glam::{Mat4, Vec2, Vec3};
-use ordered_float::Float;
-use palette::num::{Abs, Signum};
-
-use crate::{util::TOLERANCE, Ray, RayIntersect, Shape};
+use crate::{Ray, RayIntersect, Shape};
+use glam::{Mat4, Vec3};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Cube {
@@ -59,34 +56,12 @@ impl Shape for Cube {
         self.half_extents.max_element()
     }
 
-    fn surface_contour(&self, dir: Vec3, points: &mut Vec<Vec3>) {
+    fn surface_contour(&self, _: Vec3, _: &mut Vec<Vec3>) {
         todo!()
     }
 
     fn center(&self) -> Vec3 {
         todo!()
-    }
-}
-
-impl RayIntersect for Cube {
-    // https://www.jcgt.org/published/0007/03/04/paper-lowres.pdf
-    fn check_intersect(&self, transform: &Mat4, ray: &Ray) -> bool {
-        let inv = transform.inverse();
-        let dir = inv.transform_vector3(ray.dir()).normalize();
-        let inv_dir = Vec3::new(1.0 / dir.x, 1.0 / dir.y, 1.0 / dir.z);
-
-        let origin = inv.transform_point3(ray.origin);
-
-        let t1 = (-self.half_extents - origin) * inv_dir;
-        let t2 = (self.half_extents - origin) * inv_dir;
-        let tmin = t1.min(t2);
-        let tmax = t1.max(t2);
-
-        if tmax.min_element() < 0.0 {
-            return false;
-        }
-
-        tmin.max_element() <= tmax.min_element()
     }
 }
 

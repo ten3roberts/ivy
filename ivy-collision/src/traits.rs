@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use glam::{Mat4, Vec3};
 
-use crate::{PersistentContact, BoundingBox, Contact, Ray};
+use crate::{BoundingBox, Contact, Ray};
 
 pub trait Shape: Debug {
     /// Returns the furtherst vertex in `dir`.

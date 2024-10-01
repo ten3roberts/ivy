@@ -1,6 +1,6 @@
 use smallvec::SmallVec;
 
-use crate::{CollisionTree, CollisionTreeNode, NodeIndex, Visitor};
+use crate::{CollisionTree, NodeIndex, Visitor};
 
 pub struct TreeQuery<'a, V> {
     visitor: V,

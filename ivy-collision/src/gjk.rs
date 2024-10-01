@@ -1,5 +1,4 @@
-use glam::{vec3, Vec3};
-use rand::{Rng, SeedableRng};
+use glam::Vec3;
 
 use crate::{
     util::{minkowski_diff, TOLERANCE},
@@ -83,7 +82,7 @@ mod test {
             let a_rot = Quat::from_rotation_x((i % 10) as f32 * 0.1);
             let b_pos = Vec3::X;
 
-            let (intersecting, result) = gjk(
+            let (intersecting, _) = gjk(
                 &TransformedShape::new(a, Mat4::from_rotation_translation(a_rot, a_pos)),
                 &TransformedShape::new(b, Mat4::from_translation(b_pos)),
             );

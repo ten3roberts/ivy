@@ -7,12 +7,12 @@ use crate::{
     state::PhysicsState,
 };
 use flax::{
-    component::{ComponentDesc, ComponentKey, ComponentValue},
+    component::{ComponentDesc, ComponentValue},
     events::EventSubscriber,
     fetch::Source,
     sink::Sink,
     BoxedSystem, CommandBuffer, Component, Entity, EntityRef, FetchExt, Mutable, Query,
-    QueryBorrow, RelationExt, System, World,
+    QueryBorrow, System, World,
 };
 use glam::{vec3, Mat4, Quat, Vec3};
 use ivy_collision::{body::BodyIndex, components::body_index, PersistentContact};
@@ -207,8 +207,8 @@ pub fn unregister_bodies_system(world: &mut World) -> BoxedSystem {
         .with_cmd_mut()
         .with_query(Query::new(physics_state().as_mut()))
         .build(
-            move |world: &World,
-                  cmd: &mut CommandBuffer,
+            move |_: &World,
+                  _: &mut CommandBuffer,
                   mut query: QueryBorrow<Mutable<PhysicsState>>| {
                 if let Some(state) = query.first() {
                     state.remove_bodies(rx.try_iter());
@@ -338,7 +338,7 @@ pub fn contact_gizmos_system() -> BoxedSystem {
                 if let Some(tree) = query.first() {
                     for (_, island) in tree.islands() {
                         for (_, contact) in tree.island_contacts(island) {
-                            gizmos.draw(&contact);
+                            gizmos.draw(contact);
                         }
                     }
                 }

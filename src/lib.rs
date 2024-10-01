@@ -25,12 +25,12 @@
 //!
 //! - `world` contains the ECS world with all entities and components.
 //! - `resources` is a typed storage accessed by handles. This is useful for
-//! storing textures, models, or singletons that are to be shared between layers
-//! and inside layers with dynamic borrow checking.
+//!     storing textures, models, or singletons that are to be shared between layers
+//!     and inside layers with dynamic borrow checking.
 //! - `events` facilitates a broadcasting channel in which events can be sent
-//! and listened to. Each layer can set up a receiver and iterate the sent events
-//! of a specific type. This is best used for low frequency data to avoid busy
-//! checking, like user input, state changes, or alike.
+//!     and listened to. Each layer can set up a receiver and iterate the sent events
+//!     of a specific type. This is best used for low frequency data to avoid busy
+//!     checking, like user input, state changes, or alike.
 //!
 //! See the documentation for [`ivy-core::Layer`]
 

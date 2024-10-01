@@ -262,14 +262,8 @@ impl PhysicsState {
 
         for island in to_split {
             self.islands.verify(&self.bodies, &self.contacts);
-            // let rep = self
-            //     .islands
-            //     .representative_compress(island)
-            //     .expect("Static bodies are never present as islands");
-
             assert!(!self.islands.static_set().contains_key(island));
 
-            // assert_eq!(rep, island, "bodies shall only be stored in root islands");
             self.islands.reconstruct(
                 island,
                 &mut self.bodies,

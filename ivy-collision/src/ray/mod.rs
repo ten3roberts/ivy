@@ -9,7 +9,7 @@ pub use cast::*;
 use ordered_float::OrderedFloat;
 
 use crate::{
-    epa, query::TreeQuery, util::SupportPoint, PersistentContact, CollisionTree, Contact, Shape, Simplex,
+    epa, query::TreeQuery, util::SupportPoint, CollisionTree, Contact, Shape, Simplex,
     TransformedShape,
 };
 

@@ -5,7 +5,8 @@ use crate::{
         apply_effectors_system, contact_gizmos_system, dampening_system, generate_contacts_system,
         gizmo_system, gravity_system, integrate_angular_velocity_system, integrate_velocity_system,
         island_graph_gizmo_system, register_bodies_system, solve_contacts_system,
-        sync_simulation_bodies_system, update_bodies_system, update_simulation_bodies_system,
+        sync_simulation_bodies_system, unregister_bodies_system, update_bodies_system,
+        update_simulation_bodies_system,
     },
 };
 use flax::World;
@@ -82,6 +83,7 @@ impl Plugin<FixedTimeStep> for PhysicsPlugin {
             .with_system(dampening_system(dt))
             .with_system(apply_effectors_system(dt))
             .with_system(register_bodies_system())
+            .with_system(unregister_bodies_system(world))
             .with_system(update_bodies_system());
 
         if self.gizmos.rigidbody {

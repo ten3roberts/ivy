@@ -3,12 +3,11 @@ use glam::Vec3;
 
 use crate::{
     util::{SupportPoint, TOLERANCE},
-    PersistentContact, Contact, Polytype, Simplex,
+    Contact, Polytype, Simplex,
 };
 
 pub fn epa(simplex: Simplex, support_func: impl Fn(Vec3) -> SupportPoint) -> Contact {
     let _span = tracing::debug_span!("epa").entered();
-    let midpoint = simplex.points().iter().map(|v| v.p).sum::<Vec3>() / 4.0;
 
     assert_eq!(simplex.points().len(), 4);
     let mut polytype = Polytype::new(
@@ -21,23 +20,6 @@ pub fn epa(simplex: Simplex, support_func: impl Fn(Vec3) -> SupportPoint) -> Con
         ],
         PolytypeFace::new,
     );
-
-    // for face in &polytype.faces {
-    //     let p1 = polytype.points[face.indices[0] as usize].support;
-    //     let p2 = polytype.points[face.indices[1] as usize].support;
-    //     let p3 = polytype.points[face.indices[2] as usize].support;
-
-    //     let face_midpoint = (p1 + p2 + p3) / 3.0;
-
-    //     assert!(face.normal.dot(face_midpoint - midpoint) > 0.0);
-    // }
-
-    // return Contact {
-    //     points: polytype.contact_points(polytype.faces[0]),
-    //     depth: 0.0,
-    //     normal: Default::default(),
-    //     polytype,
-    // };
 
     let mut iterations = 0;
     loop {

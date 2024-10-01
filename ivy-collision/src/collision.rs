@@ -8,9 +8,7 @@ use slotmap::Key;
 
 use crate::{
     body::{BodyIndex, ContactIndex},
-    contact::ContactGenerator,
     epa, gjk,
-    mpr::Mpr,
     util::minkowski_diff,
     EntityPayload, Shape,
 };

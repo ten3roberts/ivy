@@ -540,3 +540,9 @@ impl Islands {
         &self.to_remove
     }
 }
+
+impl Default for Islands {
+    fn default() -> Self {
+        Self::new()
+    }
+}

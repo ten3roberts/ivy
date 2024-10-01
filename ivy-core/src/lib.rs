@@ -39,7 +39,6 @@ pub mod gizmos;
 pub mod layer;
 pub mod macros;
 mod systems;
-mod time;
 mod updatable;
 pub mod update_layer;
 

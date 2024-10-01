@@ -1,6 +1,5 @@
 use crate::body::{Body, BodyIndex};
-use flax::{sink::Sink, CommandBuffer, Entity, Error, World};
-use ivy_core::gizmos::{DrawGizmos, GizmosSection};
+use flax::{sink::Sink, Entity, Error};
 use slotmap::SlotMap;
 
 use crate::components::body_index;
@@ -84,53 +83,7 @@ impl CollisionTree {
         index
     }
 
-    /// Registers new entities in the tree
-    pub fn register(&mut self, world: &World, cmd: &mut CommandBuffer) {
-        // let mut query = Query::new((entity_ids(), ObjectQuery::new())).without(tree_index());
-
-        // for (id, q) in query.borrow(world).iter() {
-        //     let offset = *q.offset;
-        //     let transform = *q.transform * offset;
-
-        //     let bounds = q.collider.bounding_box(transform);
-        //     let extended_bounds = bounds.expand(*q.velocity * 0.1);
-
-        //     let body = Body {
-        //         id: q.id,
-        //         bounds,
-        //         extended_bounds,
-        //         transform,
-        //         is_trigger: q.is_trigger,
-        //         state: if q.is_static {
-        //             NodeState::Static
-        //         } else {
-        //             NodeState::Dynamic
-        //         },
-        //         movable: q.mass.map(|v| v.is_normal()).unwrap_or(false),
-        //         collider: q.collider.clone(),
-        //         node: NodeIndex::null(),
-        //         island: BodyIndex::null(),
-        //         next_body: BodyIndex::null(),
-        //         prev_body: BodyIndex::null(),
-        //     };
-
-        //     let tree_index = self.insert_body(id, body);
-
-        //     BvhNode::update_bounds(self.root, &mut self.nodes, &self.body_data);
-        //     cmd.set(id, components::tree_index(), tree_index);
-        // }
-    }
-
     pub fn update(&mut self, body_index: BodyIndex, body: &Body) -> Result<(), Error> {
-        // let mut query = Query::new((tree_index(), ObjectQuery::new()));
-
-        // Update object data
-        // for (&object_index, q) in query.borrow(world).iter() {
-        // let object_data = &mut self.body_data[object_index];
-        // object_data.transform = *q.transform;
-        // object_data.bounds = q.collider.bounding_box(*q.transform);
-        // object_data.extended_bounds = object_data.bounds.expand(q.velocity.abs() * 0.1);
-
         let node = &self.nodes[body.node];
 
         if !node.allocated_bounds().contains(body.extended_bounds) {
@@ -168,122 +121,6 @@ impl CollisionTree {
             result.push((a, b));
         });
 
-        // self.islands.next_gen();
-
-        // self.generation += 1;
-
-        // for (mut a, mut a_obj, mut b, mut b_obj) in intersecting_pairs {
-        //     // ensure stable indexing and links
-        //     if a > b {
-        //         std::mem::swap(&mut a, &mut b);
-        //         std::mem::swap(&mut a_obj, &mut b_obj);
-        //     }
-
-        //     let Some(contact) = self.intersection_generator.intersect(
-        //         &TransformedShape::new(&a_obj.collider, a_obj.transform),
-        //         &TransformedShape::new(&b_obj.collider, b_obj.transform),
-        //     ) else {
-        //         continue;
-        //     };
-
-        //     match self.contact_map.entry((a, IndexedRange::Exact(b))) {
-        //         Entry::Vacant(slot) => {
-        //             // new island
-        //             let contact = Contact {
-        //                 a: EntityPayload {
-        //                     entity: a_obj.id,
-        //                     is_trigger: false,
-        //                     state: a_obj.state,
-        //                     body: a,
-        //                 },
-        //                 b: EntityPayload {
-        //                     entity: b_obj.id,
-        //                     is_trigger: false,
-        //                     state: b_obj.state,
-        //                     body: b,
-        //                 },
-        //                 surface: contact,
-        //                 island: BodyIndex::null(),
-        //                 next_contact: ContactIndex::null(),
-        //                 prev_contact: ContactIndex::null(),
-        //                 generation: self.generation,
-        //             };
-
-        //             let id = self.contacts.insert(contact);
-        //             slot.insert(id);
-
-        //             self.islands.link(&mut self.contacts, id);
-
-        //             assert!(!self.contact_map.contains_key(&(b, IndexedRange::Exact(a))));
-
-        //             self.contact_map.insert((b, IndexedRange::Exact(a)), id);
-        //         }
-        //         Entry::Occupied(v) => {
-        //             let &contact_index = v.get();
-        //             let v = &mut self.contacts[contact_index];
-        //             v.surface = contact;
-        //             v.generation = self.generation;
-        //             assert!(self.contact_map.contains_key(&(b, IndexedRange::Exact(a))));
-        //         }
-        //     };
-        // }
-
-        // // self.islands.verify(&self.body_data, &self.contacts);
-        // self.islands
-        //     .merge_root_islands(&mut self.contacts, &mut self.body_data);
-        // self.islands.verify_depth();
-
-        // self.islands.verify(&self.body_data, &self.contacts);
-
-        // let mut to_split = BTreeSet::new();
-        // let removed_contacts = self
-        //     .contacts
-        //     .iter()
-        //     .filter(|v| v.1.generation != self.generation)
-        //     .map(|v| v.0)
-        //     .collect_vec();
-
-        // for contact in removed_contacts {
-        //     to_split.insert(self.contacts[contact].island);
-
-        //     tracing::info!(?contact, "unlinking");
-        //     self.islands.unlink(&mut self.contacts, contact);
-
-        //     let contact = self.contacts.remove(contact).unwrap();
-        //     let a = contact.a.body;
-        //     let b = contact.b.body;
-
-        //     self.contact_map
-        //         .remove(&(a, IndexedRange::Exact(b)))
-        //         .unwrap();
-
-        //     self.contact_map
-        //         .remove(&(b, IndexedRange::Exact(a)))
-        //         .unwrap();
-        // }
-
-        // self.islands.verify(&self.body_data, &self.contacts);
-
-        // for island in to_split {
-        //     self.islands.verify(&self.body_data, &self.contacts);
-        //     // let rep = self
-        //     //     .islands
-        //     //     .representative_compress(island)
-        //     //     .expect("Static bodies are never present as islands");
-
-        //     assert!(!self.islands.static_set().contains_key(island));
-
-        //     // assert_eq!(rep, island, "bodies shall only be stored in root islands");
-        //     self.islands.reconstruct(
-        //         island,
-        //         &mut self.body_data,
-        //         &mut self.contacts,
-        //         &self.contact_map,
-        //     );
-        //     self.islands.verify(&self.body_data, &self.contacts);
-        // }
-        // self.islands.verify(&self.body_data, &self.contacts);
-
         Ok(())
     }
 
@@ -304,126 +141,11 @@ impl std::fmt::Debug for CollisionTree {
     }
 }
 
-// pub fn register_system() -> BoxedSystem {
-//     System::builder()
-//         .with_world()
-//         .with_cmd_mut()
-//         .with_query(Query::new(collision_tree().as_mut()))
-//         .build(
-//             |world: &World,
-//              cmd: &mut CommandBuffer,
-//              mut query: QueryBorrow<Mutable<CollisionTree>>| {
-//                 query.iter().for_each(|tree| {
-//                     tree.register(world, &mut *cmd);
-//                 })
-//             },
-//         )
-//         .boxed()
-// }
-
-// pub fn draw_system<N: CollisionTreeNode>(state: Component<CollisionTree<N>>) -> BoxedSystem {
-//     System::builder()
-//         .with_world()
-//         .with_cmd_mut()
-//         .with_query(Query::new(state.as_mut()))
-//         .build(
-//             |world: &World,
-//              cmd: &mut CommandBuffer,
-//              mut query: QueryBorrow<Mutable<CollisionTree<N>>>| {
-//                 query.iter().for_each(|tree| {
-//                     tree.register(world, &mut *cmd);
-//                 })
-//             },
-//         )
-//         .boxed()
-// }
-
-// pub fn update_system() -> BoxedSystem {
-//     System::builder()
-//         .with_world()
-//         .with_query(Query::new(collision_tree().as_mut()))
-//         .build(
-//             |world: &World, mut query: QueryBorrow<Mutable<CollisionTree>>| {
-//                 query.iter().try_for_each(|tree| {
-//                     tree.update(world)?;
-//                     anyhow::Ok(())
-//                 })
-//             },
-//         )
-//         .boxed()
-// }
-
-// pub fn check_collisions_system() -> BoxedSystem {
-//     System::builder()
-//         .with_world()
-//         .with_query(Query::new(collision_tree().as_mut()))
-//         .build(
-//             |world: &World, mut query: QueryBorrow<Mutable<CollisionTree>>| {
-//                 query
-//                     .iter()
-//                     .try_for_each(|tree| tree.check_collisions(world))
-//             },
-//         )
-//         .boxed()
-// }
-
-// pub fn collisions_tree_gizmos_system() -> BoxedSystem {
-//     System::builder()
-//         .with_query(Query::new(ivy_core::components::gizmos()))
-//         .with_query(Query::new(collision_tree()))
-//         .build(
-//             |mut gizmos_query: QueryBorrow<Component<Gizmos>>,
-//              mut query: QueryBorrow<Component<CollisionTree>>| {
-//                 let mut section = gizmos_query
-//                     .first()
-//                     .unwrap()
-//                     .begin_section("collisions_tree_gizmos_system");
-
-//                 query.iter().for_each(|tree| section.draw(tree))
-//             },
-//         )
-//         .boxed()
-// }
-
 impl Body {
     pub fn is_movable(&self) -> bool {
         self.state != NodeState::Static && self.movable
     }
 }
-
-// impl ObjectQueryItem<'_> {
-//     fn into_object_data(self) -> Body {
-//         let offset = *self.offset;
-//         let transform = *self.transform * offset;
-
-//         let bounds = self.collider.bounding_box(transform);
-//         let extended_bounds = bounds.expand(*self.velocity * 0.1);
-
-//         Body {
-//             id: self.id,
-//             bounds,
-//             extended_bounds,
-//             transform,
-//             is_trigger: self.is_trigger,
-//             state: if self.is_static {
-//                 NodeState::Static
-//             } else {
-//                 NodeState::Dynamic
-//             },
-//             // state: if self.is_sleeping.is_some() {
-//             //     NodeState::Sleeping
-//             // } else if self.is_static.is_some() {
-//             //     NodeState::Static
-//             // } else {
-//             //     NodeState::Dynamic
-//             // },
-//             movable: self.mass.map(|v| v.is_normal()).unwrap_or(false),
-//             collider: self.collider.clone(),
-//             containing_bounds: Default::default(),
-//             node: NodeIndex::null(),
-//         }
-//     }
-// }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum NodeState {

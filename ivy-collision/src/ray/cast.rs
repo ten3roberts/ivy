@@ -8,7 +8,7 @@ use super::Ray;
 use crate::{
     body::{Body, BodyIndex},
     components::collider,
-    PersistentContact, BvhNode, CollisionTreeNode, Contact, Visitor,
+    BvhNode, CollisionTreeNode, Contact, Visitor,
 };
 
 /// Represents a collider ray intersection.

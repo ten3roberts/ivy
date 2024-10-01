@@ -1,6 +1,4 @@
-use slotmap::SlotMap;
-
-use crate::body::{Body, BodyIndex, BodyMap};
+use crate::body::BodyMap;
 
 use super::BvhNode;
 

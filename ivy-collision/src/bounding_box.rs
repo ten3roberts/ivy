@@ -1,22 +1,10 @@
 use core::f32;
 
-use glam::{vec3, Vec3};
+use glam::{vec3, Mat4, Vec3};
 use ivy_core::gizmos::{Cube, DrawGizmos, GizmosSection};
 use ordered_float::NotNan;
-use palette::num::Abs;
 
-use crate::{plane::Plane, util::TOLERANCE, PolytypeFace, Ray, Shape};
-
-pub struct CubeFace {
-    normal: Vec3,
-    points: [Vec3; 4],
-}
-
-impl CubeFace {
-    pub fn new(normal: Vec3, points: [Vec3; 4]) -> Self {
-        Self { normal, points }
-    }
-}
+use crate::{plane::Plane, Ray, Shape};
 
 /// Represents an axis aligned bounding box
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
@@ -104,6 +92,26 @@ impl BoundingBox {
         let t2 = (extents - origin) * inv_dir;
         let tmin = t1.min(t2);
         let tmax = t1.max(t2);
+
+        tmin.max_element() <= tmax.min_element()
+    }
+
+    // https://www.jcgt.org/published/0007/03/04/paper-lowres.pdf
+    fn check_ray_transformed(&self, transform: &Mat4, ray: &Ray) -> bool {
+        let inv = transform.inverse();
+        let dir = inv.transform_vector3(ray.dir()).normalize();
+        let inv_dir = Vec3::new(1.0 / dir.x, 1.0 / dir.y, 1.0 / dir.z);
+
+        let origin = inv.transform_point3(ray.origin);
+
+        let t1 = (self.min - origin) * inv_dir;
+        let t2 = (self.max - origin) * inv_dir;
+        let tmin = t1.min(t2);
+        let tmax = t1.max(t2);
+
+        if tmax.min_element() < 0.0 {
+            return false;
+        }
 
         tmin.max_element() <= tmax.min_element()
     }
@@ -276,7 +284,6 @@ impl Shape for BoundingBox {
                 let midpoint = self.midpoint();
 
                 // sort points by the angle to ensure correct winding
-                let reference_point = points[0];
                 if points.len() == 4 {
                     points.sort_by_key(|&v| {
                         let v = (v - midpoint).normalize_or_zero();
@@ -298,13 +305,9 @@ impl Shape for BoundingBox {
             .into_iter()
             .filter(|&(a, b)| {
                 let mid = (a + b) / 2.0;
-                let facet_dir = mid.normalize();
                 let along = (b - a).normalize();
 
                 mid.dot(dir) > 0.0 && along.dot(dir).abs() < TOLERANCE
-                //     points.extend([a, b]);
-                //     return;
-                // }
             })
             .max_by_key(|v| ordered_float::OrderedFloat(((v.0 + v.1) / 2.0).dot(dir)))
         {
@@ -349,7 +352,6 @@ impl Shape for BoundingBox {
         let midpoint = self.midpoint();
 
         // sort points by the angle to ensure correct winding
-        let reference_point = points[0];
         if points.len() == 4 {
             points.sort_by_key(|&v| {
                 let v = (v - midpoint).normalize_or_zero();

@@ -289,10 +289,6 @@ impl SimulationBody {
         self.vel += impulse * self.inv_mass;
         self.ang_vel += impulse.cross(to_a) * self.inverse_inertia_tensor;
     }
-
-    fn apply_angular_impulse(&mut self, torque: Vec3) {
-        self.ang_vel += torque * self.inverse_inertia_tensor;
-    }
 }
 
 struct Dampening {
