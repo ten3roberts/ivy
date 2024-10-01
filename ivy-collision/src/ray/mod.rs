@@ -9,7 +9,7 @@ pub use cast::*;
 use ordered_float::OrderedFloat;
 
 use crate::{
-    epa, query::TreeQuery, util::SupportPoint, CollisionTree, Intersection, Shape, Simplex,
+    epa, query::TreeQuery, util::SupportPoint, PersistentContact, CollisionTree, Contact, Shape, Simplex,
     TransformedShape,
 };
 
@@ -37,19 +37,19 @@ impl Ray {
         let a = TransformedShape::new(collider, *transform).support(dir);
 
         SupportPoint {
-            support: a - self.origin,
+            p: a - self.origin,
             a,
             b: self.origin,
         }
     }
 
     /// Returns true if a shape intersects the ray
-    pub fn intersects<T: Shape>(&self, collider: &T, transform: &Mat4) -> Option<Intersection> {
+    pub fn intersects<T: Shape>(&self, collider: &T, transform: &Mat4) -> Option<Contact> {
         // Check if any point is behind ray
 
         let transform_inv = transform.inverse();
         let p = self.support(collider, transform, &transform_inv, -self.dir);
-        if p.support.dot(self.dir) < 0.0 {
+        if p.p.dot(self.dir) < 0.0 {
             return None;
         }
 
@@ -69,7 +69,7 @@ impl Ray {
 
             // New point was not past the origin
             // No collision
-            if p.support.dot(dir) < 0.0 || !dir.is_normalized() {
+            if p.p.dot(dir) < 0.0 || !dir.is_normalized() {
                 return None;
             }
 

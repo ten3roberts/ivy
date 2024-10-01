@@ -27,26 +27,34 @@ impl<T> IndexedRange<T> {
 // individual support points
 #[derive(Default, Clone, Copy)]
 pub struct SupportPoint {
-    pub support: Vec3,
+    pub p: Vec3,
     pub a: Vec3,
     pub b: Vec3,
 }
 
+impl std::ops::Deref for SupportPoint {
+    type Target = Vec3;
+
+    fn deref(&self) -> &Self::Target {
+        &self.p
+    }
+}
+
 impl Debug for SupportPoint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Debug::fmt(&self.support, f)
+        Debug::fmt(&self.p, f)
     }
 }
 
 impl PartialEq for SupportPoint {
     fn eq(&self, other: &Self) -> bool {
-        self.support == other.support
+        self.p == other.p
     }
 }
 
 impl Display for SupportPoint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(&self.support, f)
+        Display::fmt(&self.p, f)
     }
 }
 
@@ -54,14 +62,11 @@ impl Display for SupportPoint {
 /// transform, and a direction.
 #[inline]
 pub fn minkowski_diff<A: Shape, B: Shape>(a: &A, b: &B, dir: Vec3) -> SupportPoint {
+    assert!(dir.is_normalized());
     let a = a.support(dir);
     let b = b.support(-dir);
 
-    SupportPoint {
-        support: a - b,
-        a,
-        b,
-    }
+    SupportPoint { p: a - b, a, b }
 }
 
 /// Compute barycentric coordinates of p in relation to the triangle defined by (a, b, c).
@@ -223,5 +228,5 @@ pub fn check_triangle_intersect(points: &[Vec3], dir: Vec3) -> bool {
 
 // Calculates the heuristic distance of a face to a ray
 pub fn ray_distance(p: SupportPoint, normal: Vec3, ray: &Ray) -> f32 {
-    plane_intersect(p.support, normal, ray.dir()).dot(ray.dir()) * -normal.dot(ray.dir()).signum()
+    plane_intersect(p.p, normal, ray.dir()).dot(ray.dir()) * -normal.dot(ray.dir()).signum()
 }

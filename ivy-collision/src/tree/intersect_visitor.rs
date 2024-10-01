@@ -7,10 +7,9 @@ use slotmap::SlotMap;
 use crate::{
     body::{Body, BodyIndex},
     components,
-    contact::ContactSurface,
     query::TreeQuery,
-    BoundingBox, CollisionTree, CollisionTreeNode, IntersectionGenerator, Shape, TransformedShape,
-    Visitor,
+    BoundingBox, CollisionTree, CollisionTreeNode, Contact, IntersectionGenerator, Shape,
+    TransformedShape, Visitor,
 };
 
 use super::BvhNode;
@@ -48,7 +47,7 @@ where
         tree.query(self)
     }
     /// Returns the first intersection, by no order.
-    pub fn intersection(self, tree: &'a CollisionTree) -> Option<ContactSurface>
+    pub fn intersection(self, tree: &'a CollisionTree) -> Option<Contact>
     where
         Q: for<'x> Fetch<'x>,
     {
@@ -102,7 +101,7 @@ where
     C: Shape,
     Q: for<'x> Fetch<'x>,
 {
-    type Item = ContactSurface;
+    type Item = Contact;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -118,11 +117,11 @@ where
             let query = (components::collider(), self.filter);
 
             if let Some((collider, _)) = entity.query(&query).get() {
-                if let Some(intersection) = self.intersection_generator.intersect(
+                if let Some(contact) = self.intersection_generator.intersect(
                     &TransformedShape::new(&collider, data.transform),
                     &TransformedShape::new(&self.collider, self.transform),
                 ) {
-                    return Some(intersection);
+                    return Some(contact);
                 }
             };
         }

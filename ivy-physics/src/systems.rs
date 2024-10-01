@@ -7,11 +7,15 @@ use crate::{
     state::PhysicsState,
 };
 use flax::{
-    fetch::Source, BoxedSystem, CommandBuffer, Component, Entity, EntityRef, FetchExt, Mutable,
-    Query, QueryBorrow, System, World,
+    component::{ComponentDesc, ComponentKey, ComponentValue},
+    events::EventSubscriber,
+    fetch::Source,
+    sink::Sink,
+    BoxedSystem, CommandBuffer, Component, Entity, EntityRef, FetchExt, Mutable, Query,
+    QueryBorrow, RelationExt, System, World,
 };
 use glam::{vec3, Mat4, Quat, Vec3};
-use ivy_collision::{body::BodyIndex, components::body_index, Contact};
+use ivy_collision::{body::BodyIndex, components::body_index, PersistentContact};
 use ivy_core::{
     components::{
         angular_velocity, connection, engine, gizmos, gravity, gravity_influence, is_static,
@@ -65,8 +69,8 @@ pub fn get_rigid_root<'a>(entity: &EntityRef<'a>) -> EntityRef<'a> {
 
 #[derive(Debug, Clone)]
 pub struct CollisionState {
-    sleeping: BTreeMap<(Entity, Entity), Contact>,
-    active: BTreeMap<(Entity, Entity), Contact>,
+    sleeping: BTreeMap<(Entity, Entity), PersistentContact>,
+    active: BTreeMap<(Entity, Entity), PersistentContact>,
 }
 
 impl CollisionState {
@@ -77,7 +81,7 @@ impl CollisionState {
         }
     }
 
-    pub fn register(&mut self, col: Contact) {
+    pub fn register(&mut self, col: PersistentContact) {
         let slot = if col.a.state.dormant() && col.b.state.dormant() {
             &mut self.sleeping
         } else {
@@ -103,7 +107,7 @@ impl CollisionState {
         self.active.keys().any(|v| v.0 == e)
     }
 
-    pub fn get(&self, e: Entity) -> impl Iterator<Item = &'_ Contact> {
+    pub fn get(&self, e: Entity) -> impl Iterator<Item = &'_ PersistentContact> {
         self.active
             .iter()
             .skip_while(move |((a, _), _)| *a != e)
@@ -117,7 +121,7 @@ impl CollisionState {
             .map(|(_, v)| v)
     }
 
-    pub fn get_all(&self) -> impl Iterator<Item = (Entity, Entity, &Contact)> {
+    pub fn get_all(&self) -> impl Iterator<Item = (Entity, Entity, &PersistentContact)> {
         self.active
             .iter()
             .chain(self.sleeping.iter())
@@ -157,6 +161,64 @@ pub fn register_bodies_system() -> BoxedSystem {
         .boxed()
 }
 
+pub struct RemovedComponentSubscriber<T> {
+    tx: flume::Sender<(Entity, T)>,
+    component: Component<T>,
+}
+
+impl<T> RemovedComponentSubscriber<T> {
+    pub fn new(tx: flume::Sender<(Entity, T)>, component: Component<T>) -> Self {
+        Self { tx, component }
+    }
+}
+
+impl<T: ComponentValue + Copy> EventSubscriber for RemovedComponentSubscriber<T> {
+    fn on_added(&self, _: &flax::archetype::Storage, _: &flax::events::EventData) {}
+
+    fn on_modified(&self, _: &flax::events::EventData) {}
+
+    fn on_removed(&self, storage: &flax::archetype::Storage, event: &flax::events::EventData) {
+        let storage = storage.downcast_ref::<T>();
+        for (&id, slot) in event.ids.iter().zip(event.slots) {
+            self.tx.send((id, storage[slot])).ok();
+        }
+    }
+
+    fn matches_arch(&self, arch: &flax::archetype::Archetype) -> bool {
+        arch.has(self.component.key())
+    }
+
+    fn matches_component(&self, v: ComponentDesc) -> bool {
+        v.key() == self.component.key()
+    }
+
+    fn is_connected(&self) -> bool {
+        self.tx.is_connected()
+    }
+}
+
+pub fn unregister_bodies_system(world: &mut World) -> BoxedSystem {
+    let (tx, rx) = flume::unbounded();
+
+    world.subscribe(RemovedComponentSubscriber::new(tx, body_index()));
+
+    System::builder()
+        .with_world()
+        .with_cmd_mut()
+        .with_query(Query::new(physics_state().as_mut()))
+        .build(
+            move |world: &World,
+                  cmd: &mut CommandBuffer,
+                  mut query: QueryBorrow<Mutable<PhysicsState>>| {
+                if let Some(state) = query.first() {
+                    state.remove_bodies(rx.try_iter());
+                }
+
+                anyhow::Ok(())
+            },
+        )
+        .boxed()
+}
 pub fn update_bodies_system() -> BoxedSystem {
     System::builder()
         .with_query(Query::new(physics_state().as_mut()))
@@ -230,17 +292,14 @@ pub fn generate_contacts_system() -> BoxedSystem {
 /// Resolves all pending collisions to be processed
 pub fn solve_contacts_system() -> BoxedSystem {
     System::builder()
-        .with_world()
         .with_query(Query::new(physics_state().as_mut()))
-        .build(
-            move |world: &World, mut query: QueryBorrow<Mutable<PhysicsState>>| {
-                if let Some(state) = query.first() {
-                    state.solve_contacts(world);
-                }
+        .build(move |mut query: QueryBorrow<Mutable<PhysicsState>>| {
+            if let Some(state) = query.first() {
+                state.solve_contacts();
+            }
 
-                anyhow::Ok(())
-            },
-        )
+            anyhow::Ok(())
+        })
         .boxed()
 }
 
@@ -248,13 +307,12 @@ pub fn sync_simulation_bodies_system() -> BoxedSystem {
     System::builder()
         .with_query(Query::new(physics_state().as_mut()))
         .with_query(Query::new((
-            position().as_mut(),
             velocity().as_mut(),
             angular_velocity().as_mut(),
         )))
         .build(
             move |mut state: QueryBorrow<Mutable<PhysicsState>>,
-                  mut query: QueryBorrow<(Mutable<Vec3>, Mutable<Vec3>, Mutable<Vec3>), _>| {
+                  mut query: QueryBorrow<(Mutable<Vec3>, Mutable<Vec3>), _>| {
                 if let Some(state) = state.first() {
                     state.sync_simulation_bodies(&mut query);
                 }
@@ -437,7 +495,6 @@ pub fn apply_effectors_system(dt: f32) -> BoxedSystem {
             if !is_sleeping || effector.should_wake() {
                 // tracing::info!(%physics_state.dt, ?effector, "updating effector");
                 let net_dv = effector.net_velocity_change(dt);
-                tracing::info!(?rb.vel, ?net_dv);
                 *rb.vel += round_to_zero(net_dv, 1e-4);
                 *position += effector.translation();
 

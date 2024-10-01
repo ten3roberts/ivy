@@ -45,7 +45,7 @@ pub use ivy_random as random;
 pub use ivy_scene as scene;
 pub use ivy_wgpu;
 
-pub use ivy_collision::{Collider, CollisionTree, Cube, Intersection, RayIntersect, Sphere};
+pub use ivy_collision::{Collider, CollisionTree, Cube, PersistentContact, RayIntersect, Sphere};
 pub use ivy_core::{components::*, App, Extent, Layer};
 pub use ivy_input::InputState;
 pub use ivy_physics::RigidBodyBundle;

@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use glam::{Mat4, Vec3};
 
-use crate::{BoundingBox, Intersection, Ray};
+use crate::{PersistentContact, BoundingBox, Contact, Ray};
 
 pub trait Shape: Debug {
     /// Returns the furtherst vertex in `dir`.
@@ -13,6 +13,8 @@ pub trait Shape: Debug {
     fn max_radius(&self) -> f32;
 
     fn surface_contour(&self, dir: Vec3, points: &mut Vec<Vec3>);
+
+    fn center(&self) -> Vec3;
 
     /// Returns an axis aligned bounding box enclosing the shape at the current
     /// rotation and scale
@@ -41,12 +43,16 @@ where
         (*self).support(dir)
     }
 
-    fn surface_contour(&self, dir: Vec3, points: &mut Vec<Vec3>) {
-        (*self).surface_contour(dir, points)
+    fn center(&self) -> Vec3 {
+        (*self).center()
     }
 
     fn max_radius(&self) -> f32 {
         (*self).max_radius()
+    }
+
+    fn surface_contour(&self, dir: Vec3, points: &mut Vec<Vec3>) {
+        (*self).surface_contour(dir, points)
     }
 }
 
@@ -54,7 +60,7 @@ pub trait RayIntersect: Shape + Sized {
     // Returns true if the shape intersects the ray
     fn check_intersect(&self, transform: &Mat4, ray: &Ray) -> bool;
     // Returns the intersection point of a ray onto shape
-    fn intersect(&self, transform: &Mat4, ray: &Ray) -> Option<Intersection> {
+    fn intersect(&self, transform: &Mat4, ray: &Ray) -> Option<Contact> {
         ray.intersects(self, transform)
     }
 }
@@ -96,6 +102,14 @@ impl<T: Shape> Shape for TransformedShape<T> {
         self.transform.transform_point3(local_support)
     }
 
+    fn center(&self) -> Vec3 {
+        self.transform.transform_point3(self.shape.center())
+    }
+
+    fn max_radius(&self) -> f32 {
+        self.shape.max_radius()
+    }
+
     fn surface_contour(&self, dir: Vec3, points: &mut Vec<Vec3>) {
         self.shape.surface_contour(
             self.inv_transform.transform_vector3(dir).normalize(),
@@ -105,9 +119,5 @@ impl<T: Shape> Shape for TransformedShape<T> {
         for point in points {
             *point = self.transform.transform_point3(*point)
         }
-    }
-
-    fn max_radius(&self) -> f32 {
-        self.shape.max_radius()
     }
 }

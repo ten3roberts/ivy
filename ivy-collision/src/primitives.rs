@@ -62,6 +62,10 @@ impl Shape for Cube {
     fn surface_contour(&self, dir: Vec3, points: &mut Vec<Vec3>) {
         todo!()
     }
+
+    fn center(&self) -> Vec3 {
+        todo!()
+    }
 }
 
 impl RayIntersect for Cube {
@@ -146,6 +150,10 @@ impl Shape for Sphere {
     fn surface_contour(&self, dir: Vec3, points: &mut Vec<Vec3>) {
         points.push(self.radius * dir)
     }
+
+    fn center(&self) -> Vec3 {
+        Vec3::ZERO
+    }
 }
 
 impl RayIntersect for Sphere {
@@ -218,6 +226,10 @@ impl Shape for Capsule {
             let p = dir * self.radius + Vec3::Y * self.half_height * dir.y.signum();
             points.push(p);
         }
+    }
+
+    fn center(&self) -> Vec3 {
+        Vec3::ZERO
     }
 }
 

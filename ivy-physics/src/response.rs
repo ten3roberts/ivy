@@ -1,15 +1,12 @@
 use core::f32;
-use std::f32::consts::PI;
 
-use flax::component::ComponentValue;
+use flax::Entity;
 use flax::{error::MissingComponent, EntityRef};
-use flax::{Component, Entity, EntityIds, World};
 use glam::Vec3;
 use ivy_collision::body::BodyIndex;
-use ivy_collision::contact::ContactSurface;
-use ivy_collision::Contact;
+use ivy_collision::PersistentContact;
 use ivy_core::components::{
-    angular_velocity, friction, inertia_tensor, is_static, mass, position, restitution, velocity,
+    angular_velocity, friction, inertia_tensor, is_static, mass, restitution, velocity,
     world_transform,
 };
 
@@ -67,7 +64,7 @@ impl Solver {
         &mut self.bodies
     }
 
-    pub fn apply_warmstart(&mut self, contact: &Contact) {
+    pub fn apply_warmstart(&mut self, contact: &PersistentContact) {
         assert_ne!(contact.a, contact.b);
 
         let [a_body, b_body] = self
@@ -88,7 +85,7 @@ impl Solver {
         }
     }
 
-    pub fn solve_contact(&mut self, contact: &mut Contact) -> flax::error::Result<()> {
+    pub fn solve_contact(&mut self, contact: &mut PersistentContact) -> flax::error::Result<()> {
         assert_ne!(contact.a, contact.b);
 
         let [a_body, b_body] = self
@@ -138,25 +135,14 @@ impl Solver {
                 normal_impulse = normal_impulse.max(0.0);
             }
 
-            let (tangent, mut tan_impulse) = calculate_friction(
-                a_body,
-                b_body,
-                p.pos(),
-                normal,
-                u_coeff,
-                p.normal_impulse,
-                self.dt,
-            );
+            let (tangent, mut tan_impulse) = calculate_friction(a_body, b_body, p.pos(), normal);
 
-            assert!(tan_impulse >= 0.0, "{tan_impulse} {normal_impulse}");
             {
                 let max_tan_impulse = u_coeff * p.normal_impulse;
                 let old_tan_impulse = p.tangent_impulse;
                 p.tangent_impulse = (p.tangent_impulse + tan_impulse).clamp(0.0, max_tan_impulse);
                 tan_impulse = p.tangent_impulse - old_tan_impulse;
             }
-
-            tracing::info!(?tan_impulse, ?normal_impulse, p.tangent_impulse);
 
             p.tangent = tangent;
 
@@ -165,13 +151,6 @@ impl Solver {
             // apply impulse to points
             a_body.apply_impulse_at(-impulse, -to_a);
             b_body.apply_impulse_at(impulse, -to_b);
-
-            let translation = p.normal()
-                * (p.depth() - self.config.allowed_penetration)
-                    .clamp(0.0, self.config.correction_factor);
-
-            // a_body.pos -= translation * a_body.inv_mass / inv_mass;
-            // b_body.pos += translation * b_body.inv_mass / inv_mass;
 
             let dampening = dampen(a_body, b_body, p.normal(), self.dt);
             if a_body.mass.is_infinite() {
@@ -193,14 +172,6 @@ impl Solver {
             }
         }
 
-        let v_bias = -self.config.correction_factor
-            * self.dt.recip()
-            * (contact.depth() - self.config.allowed_penetration).max(0.0);
-
-        // let depth = contact.depth();
-        // a_body.pos += v_bias * self.dt * a_body.inv_mass / inv_mass;
-        // b_body.pos -= v_bias * self.dt * b_body.inv_mass / inv_mass;
-
         Ok(())
     }
 }
@@ -211,9 +182,6 @@ fn calculate_friction(
     // surface: &ContactSurface,
     point: Vec3,
     normal: Vec3,
-    u_coeff: f32,
-    normal_force: f32,
-    dt: f32,
 ) -> (Vec3, f32) {
     let to_a = point - a_body.pos;
     let to_b = point - b_body.pos;
@@ -222,6 +190,7 @@ fn calculate_friction(
     let b_pvel = b_body.vel + b_body.ang_vel.cross(to_b);
 
     let tangent_vel = (a_pvel - b_pvel).reject_from_normalized(normal);
+    assert!(normal.is_finite());
 
     let tangent = tangent_vel.normalize_or_zero();
 
@@ -236,6 +205,7 @@ fn calculate_friction(
     // apply friction and disc friction to the midpoint of the surface
     // DO NOT apply friction to individual contact points, as it interfers with disc friction
     let friction_force = inertia * tangent_vel.length();
+    assert!(inertia.is_finite());
 
     // let friction_force =
     //     friction_force.min(((a_pvel - b_pvel).reject_from(normal).length() * dt) / inertia);
@@ -253,7 +223,6 @@ fn calculate_friction(
 
     // a_body.apply_angular_impulse(-torque);
     // b_body.apply_angular_impulse(torque);
-    tracing::info!(?friction_force, ?tangent);
     (tangent, friction_force)
 }
 
@@ -316,6 +285,7 @@ impl SimulationBody {
     }
 
     fn apply_impulse_at(&mut self, impulse: Vec3, to_a: Vec3) {
+        assert!(to_a.is_finite());
         self.vel += impulse * self.inv_mass;
         self.ang_vel += impulse.cross(to_a) * self.inverse_inertia_tensor;
     }

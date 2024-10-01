@@ -1,19 +1,9 @@
 use crate::body::{Body, BodyIndex};
-use flax::{
-    entity_ids, fetch::Satisfied, sink::Sink, CommandBuffer, Component, Entity, EntityIds, Error,
-    Fetch, FetchExt, Opt, OptOr, World,
-};
-use glam::{Mat4, Vec3};
-use ivy_core::{
-    components::{angular_velocity, is_static, is_trigger, mass, velocity, world_transform},
-    gizmos::{DrawGizmos, GizmosSection},
-};
+use flax::{sink::Sink, CommandBuffer, Entity, Error, World};
+use ivy_core::gizmos::{DrawGizmos, GizmosSection};
 use slotmap::SlotMap;
 
-use crate::{
-    components::{body_index, collider, collider_offset},
-    Collider,
-};
+use crate::components::body_index;
 
 mod binary_node;
 mod bvh;
@@ -502,20 +492,6 @@ impl std::ops::Deref for EntityPayload {
 
     fn deref(&self) -> &Self::Target {
         &self.entity
-    }
-}
-
-impl DrawGizmos for CollisionTree {
-    fn draw_primitives(&self, gizmos: &mut GizmosSection) {
-        todo!()
-        // BvhNode::draw_gizmos_recursive(
-        //     self.root,
-        //     &self.nodes,
-        //     gizmos,
-        //     &self.body_data,
-        //     &mut HashSet::new(),
-        //     0,
-        // );
     }
 }
 

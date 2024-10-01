@@ -2,13 +2,13 @@ use super::PolytypeFace;
 use glam::Vec3;
 
 use crate::{
-    Intersection, Polytype, Simplex,
-    {util::SupportPoint, util::TOLERANCE},
+    util::{SupportPoint, TOLERANCE},
+    PersistentContact, Contact, Polytype, Simplex,
 };
 
-pub fn epa(simplex: Simplex, support_func: impl Fn(Vec3) -> SupportPoint) -> Intersection {
+pub fn epa(simplex: Simplex, support_func: impl Fn(Vec3) -> SupportPoint) -> Contact {
     let _span = tracing::debug_span!("epa").entered();
-    let midpoint = simplex.points().iter().map(|v| v.support).sum::<Vec3>() / 4.0;
+    let midpoint = simplex.points().iter().map(|v| v.p).sum::<Vec3>() / 4.0;
 
     assert_eq!(simplex.points().len(), 4);
     let mut polytype = Polytype::new(
@@ -42,28 +42,29 @@ pub fn epa(simplex: Simplex, support_func: impl Fn(Vec3) -> SupportPoint) -> Int
     let mut iterations = 0;
     loop {
         tracing::debug!(iterations);
-        let (_, min) = if let Some(val) = polytype.find_closest_face() {
+        let (_, min_face) = if let Some(val) = polytype.find_closest_face() {
             val
         } else {
             panic!("Empty polytype");
         };
         // // assert_eq!(min.normal.mag(), 1.0);
 
-        let new_support = support_func(min.normal);
+        let new_support = support_func(min_face.normal);
 
         // let support_dist = min.normal.dot(new_support.support);
 
         // if (support_dist - min.distance) > TOLERANCE {
-        assert!(min.normal.is_normalized());
-        let d = new_support.support.dot(min.normal);
+        assert!(min_face.normal.is_normalized());
+        let d = new_support.p.dot(min_face.normal);
 
-        tracing::debug!(?new_support, d, min.distance);
-        if d - min.distance < TOLERANCE {
-            return Intersection {
-                points: polytype.contact_points(min),
-                depth: min.distance,
-                normal: min.normal,
-                polytype,
+        tracing::debug!(?new_support, d, min_face.distance);
+        if d - min_face.distance < TOLERANCE {
+            let (point_a, point_b) = polytype.contact_points(min_face);
+            return Contact {
+                point_a,
+                point_b,
+                depth: min_face.distance,
+                normal: min_face.normal,
             };
         }
 

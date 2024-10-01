@@ -1,8 +1,6 @@
-use std::ops::Index;
-
 use glam::{Mat4, Vec3};
 use ivy_core::{
-    gizmos::{self, DrawGizmos, GizmosSection, Line, DEFAULT_RADIUS, DEFAULT_THICKNESS},
+    gizmos::{self, DrawGizmos, GizmosSection, DEFAULT_RADIUS, DEFAULT_THICKNESS},
     Color, ColorExt,
 };
 use ordered_float::OrderedFloat;
@@ -10,128 +8,39 @@ use slotmap::Key;
 
 use crate::{
     body::{BodyIndex, ContactIndex},
-    contact::{ContactGenerator, ContactSurface},
+    contact::ContactGenerator,
     epa, gjk,
+    mpr::Mpr,
     util::minkowski_diff,
     EntityPayload, Shape,
 };
 
-/// Contains temporary state to accelerate contact generation
-pub struct IntersectionGenerator {
-    contact_generator: ContactGenerator,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum ContactPoints {
-    Single([Vec3; 1]),
-    Double([Vec3; 2]),
-}
-
-impl ContactPoints {
-    pub fn single(p: Vec3) -> Self {
-        Self::Single([p])
-    }
-
-    pub fn double(a: Vec3, b: Vec3) -> Self {
-        Self::Double([a, b])
-    }
-
-    pub fn points(&self) -> &[Vec3] {
-        match self {
-            ContactPoints::Single(val) => val,
-            ContactPoints::Double(val) => val,
-        }
-    }
-
-    pub fn iter(&self) -> std::slice::Iter<Vec3> {
-        self.into_iter()
-    }
-
-    pub fn reverse(&self) -> Self {
-        match *self {
-            Self::Single(p) => Self::Single(p),
-            Self::Double([a, b]) => Self::Double([b, a]),
-        }
-    }
-}
-
-impl DrawGizmos for ContactPoints {
-    fn draw_primitives(&self, gizmos: &mut GizmosSection) {
-        for &p in self.iter() {
-            gizmos.draw(gizmos::Sphere {
-                origin: p,
-                color: Color::green(),
-                ..Default::default()
-            })
-        }
-    }
-}
-
-impl From<Vec3> for ContactPoints {
-    fn from(val: Vec3) -> Self {
-        Self::Single([val])
-    }
-}
-
-impl From<[Vec3; 1]> for ContactPoints {
-    fn from(val: [Vec3; 1]) -> Self {
-        Self::Single(val)
-    }
-}
-
-impl From<[Vec3; 2]> for ContactPoints {
-    fn from(val: [Vec3; 2]) -> Self {
-        Self::Double(val)
-    }
-}
-
-impl<'a> IntoIterator for &'a ContactPoints {
-    type Item = &'a Vec3;
-
-    type IntoIter = std::slice::Iter<'a, Vec3>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        match self {
-            ContactPoints::Single(val) => val.iter(),
-            ContactPoints::Double(val) => val.iter(),
-        }
-    }
-}
-
-impl Index<usize> for ContactPoints {
-    type Output = Vec3;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.points()[index]
-    }
-}
-
 #[derive(Debug, Clone)]
-pub struct Intersection {
+pub struct Contact {
     /// The closest points on the two colliders, respectively
-    pub points: ContactPoints,
+    pub point_a: Vec3,
+    pub point_b: Vec3,
     pub depth: f32,
     pub normal: Vec3,
-    pub polytype: epa::Polytype,
 }
 
-impl DrawGizmos for Intersection {
+impl DrawGizmos for Contact {
     fn draw_primitives(&self, gizmos: &mut GizmosSection) {
-        // gizmos.draw(self.points);
-
-        gizmos.draw(Line {
-            origin: self.points[0],
-            dir: self.normal * 0.2,
-            color: Color::blue(),
+        gizmos.draw(gizmos::Sphere {
+            origin: self.point_a,
+            color: Color::green(),
             ..Default::default()
         });
-
-        self.polytype.draw_primitives(gizmos);
+        gizmos.draw(gizmos::Sphere {
+            origin: self.point_b,
+            color: Color::green(),
+            ..Default::default()
+        });
     }
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct ContactPoint {
+pub struct PersistentContactPoint {
     pos: Vec3,
     global_anchors: (Vec3, Vec3),
     local_anchors: (Vec3, Vec3),
@@ -142,7 +51,7 @@ pub struct ContactPoint {
     normal: Vec3,
 }
 
-impl ContactPoint {
+impl PersistentContactPoint {
     pub fn new(
         global_anchors: (Vec3, Vec3),
         local_anchors: (Vec3, Vec3),
@@ -178,7 +87,7 @@ impl ContactPoint {
     }
 }
 
-impl DrawGizmos for ContactPoint {
+impl DrawGizmos for PersistentContactPoint {
     fn draw_primitives(&self, gizmos: &mut GizmosSection) {
         gizmos.draw(gizmos::Sphere::new(self.pos, DEFAULT_RADIUS, Color::blue()));
         gizmos.draw(gizmos::Line::new(
@@ -190,13 +99,13 @@ impl DrawGizmos for ContactPoint {
     }
 }
 
-/// Represents a collision between two entities.
+/// A stable intersection of 1..=4 points
 #[derive(Clone)]
-pub struct Contact {
+pub struct PersistentContact {
     pub a: EntityPayload,
     pub b: EntityPayload,
     // pub surface: ContactSurface,
-    pub points: Vec<ContactPoint>,
+    pub points: Vec<PersistentContactPoint>,
 
     // island links
     pub island: BodyIndex,
@@ -206,12 +115,12 @@ pub struct Contact {
 }
 
 const CONTACT_THRESHOLD: f32 = 0.1;
-impl Contact {
+impl PersistentContact {
     pub fn new(
         a: EntityPayload,
         b: EntityPayload,
         // surface: ContactSurface,
-        point: ContactPoint,
+        point: PersistentContactPoint,
         generation: u32,
     ) -> Self {
         Self {
@@ -226,10 +135,10 @@ impl Contact {
         }
     }
 
-    pub fn add_point(&mut self, point: ContactPoint) {
+    pub fn add_point(&mut self, point: PersistentContactPoint) {
         for cur_point in &mut self.points {
             if cur_point.pos.distance_squared(point.pos) < CONTACT_THRESHOLD * CONTACT_THRESHOLD {
-                *cur_point = ContactPoint {
+                *cur_point = PersistentContactPoint {
                     normal_impulse: cur_point.normal_impulse,
                     tangent_impulse: cur_point.tangent_impulse,
                     tangent: cur_point.tangent,
@@ -255,7 +164,7 @@ impl Contact {
         });
     }
 
-    fn assemble_point(&mut self, point: ContactPoint) {
+    fn assemble_point(&mut self, point: PersistentContactPoint) {
         let &p1 = self
             .points
             .iter()
@@ -336,11 +245,11 @@ impl Contact {
         self.points = vec![p1, p2, p3, p4];
     }
 
-    pub fn points(&self) -> &[ContactPoint] {
+    pub fn points(&self) -> &[PersistentContactPoint] {
         &self.points
     }
 
-    pub fn points_mut(&mut self) -> &mut Vec<ContactPoint> {
+    pub fn points_mut(&mut self) -> &mut Vec<PersistentContactPoint> {
         &mut self.points
     }
 
@@ -353,7 +262,7 @@ impl Contact {
     }
 }
 
-impl DrawGizmos for Contact {
+impl DrawGizmos for PersistentContact {
     fn draw_primitives(&self, gizmos: &mut GizmosSection) {
         for p in &self.points {
             p.draw_primitives(gizmos);
@@ -379,7 +288,7 @@ impl TriangleSide {
     }
 }
 
-impl std::fmt::Debug for Contact {
+impl std::fmt::Debug for PersistentContact {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Contact")
             .field("next_contact", &self.next_contact)
@@ -389,14 +298,15 @@ impl std::fmt::Debug for Contact {
     }
 }
 
+/// Contains temporary state to accelerate contact generation
+pub struct IntersectionGenerator {}
+
 impl IntersectionGenerator {
     pub fn new() -> Self {
-        Self {
-            contact_generator: ContactGenerator::new(),
-        }
+        Self {}
     }
 
-    pub fn test_intersect(&mut self, a: &impl Shape, b: &impl Shape) -> Option<Intersection> {
+    pub fn intersect(&mut self, a: &impl Shape, b: &impl Shape) -> Option<Contact> {
         let (intersect, simplex) = gjk(a, b);
 
         if !intersect {
@@ -406,28 +316,6 @@ impl IntersectionGenerator {
         let contact_info = epa(simplex, |dir| minkowski_diff(a, b, dir));
 
         Some(contact_info)
-    }
-
-    /// Returns the intersection of two shapes
-    pub fn intersect<A: Shape, B: Shape>(&mut self, a: &A, b: &B) -> Option<ContactSurface> {
-        let (intersect, simplex) = gjk(a, b);
-
-        if !intersect {
-            return None;
-        }
-
-        let contact_info = epa(simplex, |dir| minkowski_diff(a, b, dir));
-
-        let surface = self.contact_generator.generate(
-            a,
-            b,
-            contact_info.normal,
-            contact_info.points.points().iter().sum::<Vec3>()
-                / contact_info.points.points().len() as f32,
-            contact_info.depth,
-        );
-
-        Some(surface)
     }
 }
 

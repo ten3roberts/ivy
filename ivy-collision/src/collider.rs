@@ -56,6 +56,14 @@ impl Shape for Collider {
         }
     }
 
+    fn center(&self) -> Vec3 {
+        match self {
+            Collider::Cube(v) => v.center(),
+            Collider::Sphere(v) => v.center(),
+            Collider::Capsule(v) => v.center(),
+        }
+    }
+
     fn surface_contour(&self, dir: Vec3, points: &mut Vec<Vec3>) {
         match self {
             Collider::Cube(v) => v.surface_contour(dir, points),

@@ -8,7 +8,7 @@ use super::Ray;
 use crate::{
     body::{Body, BodyIndex},
     components::collider,
-    BvhNode, CollisionTreeNode, Intersection, Visitor,
+    PersistentContact, BvhNode, CollisionTreeNode, Contact, Visitor,
 };
 
 /// Represents a collider ray intersection.
@@ -16,11 +16,11 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct RayIntersection {
     pub id: Entity,
-    pub contact: Intersection,
+    pub contact: Contact,
 }
 
 impl RayIntersection {
-    pub fn new(entity: Entity, contact: Intersection) -> Self {
+    pub fn new(entity: Entity, contact: Contact) -> Self {
         Self {
             id: entity,
             contact,
@@ -29,7 +29,7 @@ impl RayIntersection {
 
     /// Returns the single ray contact point
     pub fn point(&self) -> Vec3 {
-        self.contact.points[0]
+        self.contact.point_a
     }
 
     /// Returns the single ray contact point
@@ -78,6 +78,7 @@ impl<'a, Q: 'a> Visitor<'a> for RayCaster<'a, Q> {
         })
     }
 }
+
 pub struct RayCastIterator<'a, Q> {
     ray: &'a Ray,
     world: &'a World,

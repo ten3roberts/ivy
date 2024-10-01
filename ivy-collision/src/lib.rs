@@ -14,6 +14,7 @@ mod simplex;
 mod traits;
 mod tree;
 pub mod util;
+pub mod mpr;
 
 pub use bounding_box::*;
 pub use collider::*;

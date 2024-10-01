@@ -107,7 +107,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
     let mut cube = |mut position: Vec3, rotation: Quat| {
         let mut velocity = Vec3::ZERO;
         if simulate {
-            position.z = position.z.signum() * 8.0;
+            position.z = position.z.signum() * 4.0;
 
             velocity = Vec3::Z * -position.z.signum() * 1.0;
         }

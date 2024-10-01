@@ -10,7 +10,7 @@ use slotmap::{Key, SecondaryMap, SlotMap};
 use crate::{
     body::{Body, BodyIndex, BodyMap, ContactIndex, ContactMap},
     util::IndexedRange,
-    Contact,
+    PersistentContact,
 };
 
 use crate::tree::NodeIndex;
@@ -24,7 +24,7 @@ pub struct IslandContactIter<'a> {
 }
 
 impl<'a> Iterator for IslandContactIter<'a> {
-    type Item = (ContactIndex, &'a Contact);
+    type Item = (ContactIndex, &'a PersistentContact);
 
     fn next(&mut self) -> Option<Self::Item> {
         let index = self.index;
@@ -145,6 +145,7 @@ pub struct Islands {
     islands: SecondaryMap<BodyIndex, Island>,
     static_set: SecondaryMap<BodyIndex, ()>,
     scratch: Scratch,
+    to_remove: HashSet<BodyIndex>,
 }
 
 impl std::fmt::Debug for Islands {
@@ -165,10 +166,15 @@ impl Islands {
             islands: Default::default(),
             static_set: Default::default(),
             scratch: Default::default(),
+            to_remove: Default::default(),
         }
     }
 
     pub fn create_island(&mut self, body_index: BodyIndex) {
+        assert!(
+            self.to_remove.is_empty(),
+            "removed bodies must be cleared before adding an entity"
+        );
         let island = Island {
             parent: body_index,
             head_body: BodyIndex::null(),
@@ -371,6 +377,9 @@ impl Islands {
         }
     }
 
+    // reconstructs a root island
+    // splits the island into smaller parts if necessary based on contraints
+    // removes and clear bodies marker for remove
     pub fn reconstruct(
         &mut self,
         island_index: BodyIndex,
@@ -383,9 +392,6 @@ impl Islands {
 
         let mut all_contacts = Vec::new();
 
-        // tracing::info!("{self:#?}");
-        // tracing::info!("{}", contacts.iter().map(|v| format!("{v:?}")).join("\n"));
-
         {
             let mut contact_index = island.head_contact;
             while !contact_index.is_null() {
@@ -396,7 +402,11 @@ impl Islands {
                 contact.next_contact = ContactIndex::null();
                 contact.prev_contact = ContactIndex::null();
 
-                all_contacts.push(contact_index);
+                if !(self.to_remove.contains(&contact.a.body)
+                    || self.to_remove.contains(&contact.b.body))
+                {
+                    all_contacts.push(contact_index);
+                }
                 contact_index = next;
             }
         }
@@ -416,12 +426,15 @@ impl Islands {
 
                 self.islands[body_index] = Island::from_body(body_index);
 
-                all_bodies.push(body_index);
+                if self.to_remove.contains(&body_index) {
+                    self.to_remove.remove(&body_index);
+                } else {
+                    all_bodies.push(body_index);
+                }
+
                 body_index = next;
             }
         }
-
-        // tracing::info!(?all_bodies, ?all_contacts);
 
         assert!(!all_bodies.is_empty());
 
@@ -480,13 +493,6 @@ impl Islands {
                     // connect contact to this island
                     let contact = &mut contacts[contact_index];
 
-                    // tracing::info!(
-                    //     ?contact_index,
-                    //     ?contact,
-                    //     "{:?} {:?}",
-                    //     bodies[contact.a.body].state,
-                    //     bodies[contact.b.body].state
-                    // );
                     assert_eq!(contact.island, BodyIndex::null());
                     contact.island = seed_index;
                     seed_island.add_contact(contacts, contact_index);
@@ -524,5 +530,13 @@ impl Islands {
 
     pub fn static_set(&self) -> &SecondaryMap<BodyIndex, ()> {
         &self.static_set
+    }
+
+    pub fn mark_for_remove(&mut self, index: BodyIndex) {
+        self.to_remove.insert(index);
+    }
+
+    pub fn to_remove(&self) -> &HashSet<BodyIndex> {
+        &self.to_remove
     }
 }

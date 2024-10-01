@@ -252,6 +252,10 @@ impl Shape for BoundingBox {
         vec3(x, y, z)
     }
 
+    fn center(&self) -> Vec3 {
+        self.midpoint()
+    }
+
     fn surface_contour(&self, dir: Vec3, points: &mut Vec<Vec3>) {
         const TOLERANCE: f32 = 1e-4;
 

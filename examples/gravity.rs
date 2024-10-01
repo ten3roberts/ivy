@@ -153,7 +153,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
     Entity::builder()
         .mount(
             TransformBundle::default()
-                .with_scale(vec3(5.0, 1.0, 5.0))
+                .with_scale(vec3(5.0, 0.1, 5.0))
                 .with_rotation(Quat::from_scaled_axis(Vec3::Z * 0.1)),
         )
         .mount(

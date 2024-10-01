@@ -33,10 +33,10 @@ impl Simplex {
     /// Returns the next direction more likely to enclose origin
     pub(crate) fn next_dir(&mut self) -> SimplexExpansion {
         match *self {
-            Self::Point([a]) => SimplexExpansion::Direction(-a.support),
+            Self::Point([a]) => SimplexExpansion::Direction(-a.p),
             Self::Line([a, b]) => {
-                let ab = b.support - a.support;
-                let a0 = -a.support;
+                let ab = b.p - a.p;
+                let a0 = -a.p;
 
                 // assert!(ab.length() > 0.0);
 
@@ -72,9 +72,9 @@ impl Simplex {
                 }
             }
             Simplex::Triangle([a, b, c]) => {
-                let ab = b.support - a.support;
-                let ac = c.support - a.support;
-                let a0 = -a.support;
+                let ab = b.p - a.p;
+                let ac = c.p - a.p;
+                let a0 = -a.p;
 
                 let abc = ab.cross(ac);
 
@@ -139,10 +139,10 @@ impl Simplex {
                 // }
             }
             Simplex::Tetrahedron([a, b, c, d]) => {
-                let ab = b.support - a.support;
-                let ac = c.support - a.support;
-                let ad = d.support - a.support;
-                let a0 = -a.support;
+                let ab = b.p - a.p;
+                let ac = c.p - a.p;
+                let ad = d.p - a.p;
+                let a0 = -a.p;
 
                 let abc = ab.cross(ac);
                 let acd = ac.cross(ad);
@@ -183,10 +183,10 @@ impl Simplex {
     #[inline]
     pub fn next_flat(&mut self, normal: Vec3) -> Option<Vec3> {
         match *self {
-            Self::Point([a]) => Some(project_plane(-a.support, normal)),
+            Self::Point([a]) => Some(project_plane(-a.p, normal)),
             Self::Line([a, b]) => {
-                let ab = b.support - a.support;
-                let a0 = -a.support;
+                let ab = b.p - a.p;
+                let a0 = -a.p;
 
                 // let perp = ab.cross(normal).normalized();
                 let perp = ab.cross(normal);
@@ -196,9 +196,9 @@ impl Simplex {
                 Some(perp)
             }
             Self::Triangle([a, b, c]) => {
-                let ab = b.support - a.support;
-                let ac = c.support - a.support;
-                let a0 = -a.support;
+                let ab = b.p - a.p;
+                let ac = c.p - a.p;
+                let a0 = -a.p;
 
                 let ab = project_plane(ab, normal);
                 let ac = project_plane(ac, normal);

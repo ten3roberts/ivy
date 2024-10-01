@@ -9,7 +9,7 @@ use std::ops::Index;
 
 use crate::{
     util::{barycentric_vector, ray_distance, SupportPoint},
-    ContactPoints, Ray, Simplex,
+    Ray, Simplex,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -28,9 +28,7 @@ impl PolytypeFace {
             points[indices[2] as usize],
         ];
 
-        let normal = (p2.support - p1.support)
-            .cross(p3.support - p1.support)
-            .normalize();
+        let normal = (p2.p - p1.p).cross(p3.p - p1.p).normalize();
 
         if !normal.is_finite() {
             tracing::warn!("normal: {normal} {p1} {p2} {p3}");
@@ -39,7 +37,7 @@ impl PolytypeFace {
         // assert!(normal.is_finite());
 
         // Distance to the origin of the minkowski difference
-        let distance = normal.dot(p1.support);
+        let distance = normal.dot(p1.p);
 
         // assert!(distance.is_finite());
         // Take care of handedness
@@ -70,12 +68,10 @@ impl PolytypeFace {
 
         let total_radial: Vec3 = [p1, p2]
             .iter()
-            .map(|p| p.support - reference_point)
+            .map(|p| p.p - reference_point)
             .fold(Vec3::ZERO, |acc, val| acc + val);
 
-        let normal = (p2.support - p1.support)
-            .cross(p3.support - p1.support)
-            .normalize();
+        let normal = (p2.p - p1.p).cross(p3.p - p1.p).normalize();
 
         let normal = normal * normal.dot(total_radial).signum();
 
@@ -151,12 +147,8 @@ impl Polytype {
         let points = &self.points;
 
         self.faces.retain(|face| {
-            let to_support = p.support - points[face.indices[0] as usize].support;
-            if face.normal.dot(p.support)
-                > face
-                    .normal
-                    .dot(self.points[face.indices[0] as usize].support)
-            {
+            let to_support = p.p - points[face.indices[0] as usize].p;
+            if face.normal.dot(p.p) > face.normal.dot(self.points[face.indices[0] as usize].p) {
                 face.edges().iter().for_each(|edge| {
                     add_if_unique(&mut edges, *edge);
                 });
@@ -193,7 +185,7 @@ impl Polytype {
                 points,
                 [face.indices[val.0], face.indices[val.1], n],
                 ray,
-                points[face.indices[val.2] as usize].support,
+                points[face.indices[val.2] as usize].p,
             )
         });
 
@@ -202,25 +194,20 @@ impl Polytype {
         assert_eq!(self.faces.len(), 3);
     }
 
-    pub(crate) fn contact_points(&self, face: PolytypeFace) -> ContactPoints {
+    pub(crate) fn contact_points(&self, face: PolytypeFace) -> (Vec3, Vec3) {
         let [p1, p2, p3] = [
             self[face.indices[0]],
             self[face.indices[1]],
             self[face.indices[2]],
         ];
 
-        let (u, v, w) = barycentric_vector(
-            face.normal * face.distance,
-            p1.support,
-            p2.support,
-            p3.support,
-        );
+        let (u, v, w) = barycentric_vector(face.normal * face.distance, p1.p, p2.p, p3.p);
 
         let contact_a = p1.a * u + p2.a * v + p3.a * w;
 
         let contact_b = p1.b * u + p2.b * v + p3.b * w;
 
-        ContactPoints::double(contact_a, contact_b)
+        (contact_a, contact_b)
     }
 
     /// Constructs a polytype from a simplex.
@@ -243,7 +230,7 @@ impl DrawGizmos for Polytype {
     fn draw_primitives(&self, gizmos: &mut GizmosSection) {
         for (i, point) in self.points.iter().enumerate() {
             gizmos.draw(gizmos::Sphere::new(
-                point.support,
+                point.p,
                 DEFAULT_RADIUS,
                 Color::from_hsla(i as f32 * 60.0, 1.0, 0.5, 1.0),
             ));
@@ -252,9 +239,9 @@ impl DrawGizmos for Polytype {
         for face in &self.faces {
             let color = Color::blue();
 
-            let p1 = self.points[face.indices[0] as usize].support;
-            let p2 = self.points[face.indices[1] as usize].support;
-            let p3 = self.points[face.indices[2] as usize].support;
+            let p1 = self.points[face.indices[0] as usize].p;
+            let p2 = self.points[face.indices[1] as usize].p;
+            let p3 = self.points[face.indices[2] as usize].p;
 
             let midpoint = (p1 + p2 + p3) / 3.0;
             gizmos.draw(Line::new(midpoint, face.normal * 0.2, 0.002, color));

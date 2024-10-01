@@ -2,9 +2,9 @@ use flax::Entity;
 use glam::Mat4;
 use slotmap::{new_key_type, SlotMap};
 
-use crate::{BoundingBox, Collider, Contact, NodeIndex, NodeState};
+use crate::{PersistentContact, BoundingBox, Collider, NodeIndex, NodeState};
 
-pub type ContactMap = SlotMap<ContactIndex, Contact>;
+pub type ContactMap = SlotMap<ContactIndex, PersistentContact>;
 pub type BodyMap = SlotMap<BodyIndex, Body>;
 
 new_key_type! {

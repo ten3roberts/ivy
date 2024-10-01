@@ -1,14 +1,12 @@
 use itertools::Itertools;
 use ivy_core::components::{
-    angular_velocity, friction, inertia_tensor, is_static, is_trigger, mass, restitution, velocity,
-    world_transform,
+    angular_velocity, is_static, is_trigger, mass, velocity, world_transform,
 };
 use std::collections::{btree_map::Entry, BTreeMap, BTreeSet, HashSet};
 
 use flax::{
-    entity_ids,
     fetch::{entity_refs, Satisfied},
-    CommandBuffer, Component, EntityIds, Fetch, FetchExt, Mutable, Opt, OptOr, Query, QueryBorrow,
+    CommandBuffer, Component, Entity, Fetch, FetchExt, Mutable, Opt, OptOr, Query, QueryBorrow,
     World,
 };
 use glam::{Mat4, Vec3};
@@ -17,8 +15,8 @@ use ivy_collision::{
     components::{body_index, collider, collider_offset},
     island::{Island, IslandContactIter, Islands},
     util::IndexedRange,
-    BvhNode, Collider, CollisionTree, Contact, ContactPoint, EntityPayload, IntersectionGenerator,
-    NodeIndex, NodeState, Shape, TransformedShape,
+    BvhNode, Collider, CollisionTree, EntityPayload, IntersectionGenerator, NodeIndex, NodeState,
+    PersistentContact, PersistentContactPoint, Shape, TransformedShape,
 };
 use slotmap::{Key, SlotMap};
 
@@ -37,9 +35,10 @@ pub struct PhysicsState {
     generation: u32,
     intersection_generator: IntersectionGenerator,
     contact_map: BTreeMap<(BodyIndex, IndexedRange<BodyIndex>), ContactIndex>,
-    contacts: SlotMap<ContactIndex, Contact>,
+    contacts: SlotMap<ContactIndex, PersistentContact>,
 
     dirty_bodies: HashSet<BodyIndex>,
+    removed_bodies: HashSet<BodyIndex>,
 }
 
 impl PhysicsState {
@@ -54,6 +53,7 @@ impl PhysicsState {
             contact_map: Default::default(),
             contacts: Default::default(),
             dirty_bodies: Default::default(),
+            removed_bodies: Default::default(),
         }
     }
 
@@ -65,7 +65,7 @@ impl PhysicsState {
         island.contacts(&self.contacts)
     }
 
-    pub fn contacts(&self) -> slotmap::basic::Iter<ContactIndex, Contact> {
+    pub fn contacts(&self) -> slotmap::basic::Iter<ContactIndex, PersistentContact> {
         self.contacts.iter()
     }
 
@@ -157,40 +157,29 @@ impl PhysicsState {
             let a_body = &self.bodies[a];
             let b_body = &self.bodies[b];
 
-            let Some(intersection) = self.intersection_generator.test_intersect(
+            let Some(contact) = self.intersection_generator.intersect(
                 &TransformedShape::new(&a_body.collider, a_body.transform),
                 &TransformedShape::new(&b_body.collider, b_body.transform),
             ) else {
                 continue;
             };
 
-            let global_anchors = match intersection.points {
-                ivy_collision::ContactPoints::Single([v]) => (v, v),
-                ivy_collision::ContactPoints::Double([a, b]) => (a, b),
-            };
-
             let local_anchors = (
-                a_body
-                    .transform
-                    .inverse()
-                    .transform_point3(global_anchors.0),
-                b_body
-                    .transform
-                    .inverse()
-                    .transform_point3(global_anchors.1),
+                a_body.transform.inverse().transform_point3(contact.point_a),
+                b_body.transform.inverse().transform_point3(contact.point_b),
             );
 
-            let contact_point = ContactPoint::new(
-                global_anchors,
+            let contact_point = PersistentContactPoint::new(
+                (contact.point_a, contact.point_b),
                 local_anchors,
-                intersection.depth,
-                intersection.normal,
+                contact.depth,
+                contact.normal,
             );
 
             match self.contact_map.entry((a, IndexedRange::Exact(b))) {
                 Entry::Vacant(slot) => {
                     // new island
-                    let contact = Contact::new(
+                    let contact = PersistentContact::new(
                         EntityPayload {
                             entity: a_body.id,
                             is_trigger: false,
@@ -206,26 +195,6 @@ impl PhysicsState {
                         contact_point,
                         self.generation,
                     );
-
-                    // let contact = Contact {
-                    //     a: EntityPayload {
-                    //         entity: a_body.id,
-                    //         is_trigger: false,
-                    //         state: a_body.state,
-                    //         body: a,
-                    //     },
-                    //     b: EntityPayload {
-                    //         entity: b_body.id,
-                    //         is_trigger: false,
-                    //         state: b_body.state,
-                    //         body: b,
-                    //     },
-                    //     surface: contact,
-                    //     island: BodyIndex::null(),
-                    //     next_contact: ContactIndex::null(),
-                    //     prev_contact: ContactIndex::null(),
-                    //     generation: self.generation,
-                    // };
 
                     let id = self.contacts.insert(contact);
                     slot.insert(id);
@@ -250,14 +219,19 @@ impl PhysicsState {
             };
         }
 
-        // self.islands.verify(&self.bodies, &self.contacts);
+        self.update_persistent_contacts();
+    }
+
+    fn update_persistent_contacts(&mut self) {
         self.islands
             .merge_root_islands(&mut self.contacts, &mut self.bodies);
+
         self.islands.verify_depth();
 
         self.islands.verify(&self.bodies, &self.contacts);
 
         let mut to_split = BTreeSet::new();
+        // NOTE: removed bodies will not be found in contacts and are removed here as well
         let removed_contacts = self
             .contacts
             .iter()
@@ -307,10 +281,17 @@ impl PhysicsState {
         }
 
         self.islands.verify(&self.bodies, &self.contacts);
+
+        assert!(self.islands.to_remove().is_empty());
+
+        for index in self.removed_bodies.drain() {
+            self.bodies.remove(index);
+            self.solver.remove_body(index);
+        }
     }
 
-    pub fn solve_contacts(&mut self, world: &World) {
-        let _span = tracing::info_span!("solve_contacts").entered();
+    pub fn solve_contacts(&mut self) {
+        assert!(self.removed_bodies.is_empty());
         for (_, contact) in &self.contacts {
             self.solver.apply_warmstart(contact);
         }
@@ -323,36 +304,23 @@ impl PhysicsState {
 
     pub fn sync_simulation_bodies(
         &mut self,
-        query: &mut QueryBorrow<(Mutable<Vec3>, Mutable<Vec3>, Mutable<Vec3>)>,
+        query: &mut QueryBorrow<(Mutable<Vec3>, Mutable<Vec3>)>,
     ) {
         for body_index in self.bodies.keys() {
             let body = &self.solver.bodies()[body_index];
-            let (pos, vel, ang_vel) = query.get(body.id).expect("simulation body ");
+            let (vel, ang_vel) = query.get(body.id).expect("simulation body ");
 
-            *pos = body.pos;
             *vel = body.vel;
             *ang_vel = body.ang_vel;
         }
 
         self.dirty_bodies.clear();
     }
-}
 
-#[derive(Fetch)]
-struct SimulationBodyQuery {
-    restitution: Component<f32>,
-    friction: Component<f32>,
-    inertia_tensor: Component<f32>,
-    mass: Component<f32>,
-}
-
-impl SimulationBodyQuery {
-    fn new() -> Self {
-        Self {
-            restitution: restitution(),
-            friction: friction(),
-            inertia_tensor: inertia_tensor(),
-            mass: mass(),
+    pub(crate) fn remove_bodies(&mut self, removed: impl Iterator<Item = (Entity, BodyIndex)>) {
+        for (_, index) in removed {
+            self.islands.mark_for_remove(index);
+            self.removed_bodies.insert(index);
         }
     }
 }
