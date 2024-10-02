@@ -124,12 +124,8 @@ impl CollisionTree {
         Ok(())
     }
 
-    /// Queries the tree with a given visitor. Traverses only the nodes that the
-    /// visitor accepts and returns an iterator for each node containing the
-    /// output of the visited node. Oftentimes, the output of the visitor is an
-    /// iterator, which means that a nested iterator can be returned.
-    pub fn query<V>(&self, visitor: V) -> TreeQuery<V> {
-        TreeQuery::new(visitor, self, self.root)
+    pub fn root(&self) -> NodeIndex {
+        self.root
     }
 }
 

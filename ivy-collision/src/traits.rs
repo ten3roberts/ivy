@@ -61,7 +61,7 @@ pub trait RayIntersect: Shape + Sized {
     fn check_intersect(&self, transform: &Mat4, ray: &Ray) -> bool;
     // Returns the intersection point of a ray onto shape
     fn intersect(&self, transform: &Mat4, ray: &Ray) -> Option<Contact> {
-        ray.intersects(self, transform)
+        ray.intersect(self, transform)
     }
 }
 

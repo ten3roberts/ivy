@@ -370,23 +370,58 @@ impl Binding<f32> for MouseButtonBinding {
     }
 }
 
-pub struct CursorMovement {
+pub struct CursorMoveBinding {
     value: Vec2,
 }
 
-impl CursorMovement {
+impl CursorMoveBinding {
     pub fn new() -> Self {
         Self { value: Vec2::ZERO }
     }
 }
 
-impl Default for CursorMovement {
+impl Default for CursorMoveBinding {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Binding<Vec2> for CursorMovement {
+impl Binding<Vec2> for CursorMoveBinding {
+    type Input = InputEvent;
+
+    fn apply(&mut self, input: &Self::Input) {
+        match input {
+            &InputEvent::CursorDelta(delta) => self.value += delta,
+            _ => panic!("Invalid input event"),
+        }
+    }
+
+    fn read(&mut self) -> Vec2 {
+        mem::take(&mut self.value)
+    }
+
+    fn binding(&self) -> InputKind {
+        InputKind::CursorDelta
+    }
+}
+
+pub struct CursorPositionBinding {
+    value: Vec2,
+}
+
+impl CursorPositionBinding {
+    pub fn new() -> Self {
+        Self { value: Vec2::ZERO }
+    }
+}
+
+impl Default for CursorPositionBinding {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Binding<Vec2> for CursorPositionBinding {
     type Input = InputEvent;
 
     fn apply(&mut self, input: &Self::Input) {

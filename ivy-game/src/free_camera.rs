@@ -12,7 +12,7 @@ use ivy_core::{
 use ivy_input::{
     components::input_state,
     types::{Key, NamedKey},
-    Action, Axis2D, BindingExt, CursorMovement, InputState, KeyBinding, MouseButtonBinding,
+    Action, Axis2D, BindingExt, CursorMoveBinding, InputState, KeyBinding, MouseButtonBinding,
     ScrollBinding,
 };
 use ivy_wgpu::{
@@ -64,7 +64,7 @@ pub fn setup_camera() -> flax::EntityBuilder {
     move_action.add(KeyBinding::new(Key::Named(NamedKey::Space)).compose(Vec3::Y));
 
     let mut rotate_action = Action::new(rotation_input());
-    rotate_action.add(CursorMovement::new().amplitude(Vec2::ONE * 0.001));
+    rotate_action.add(CursorMoveBinding::new().amplitude(Vec2::ONE * 0.001));
 
     let mut pan_action = Action::new(pan_active());
     pan_action

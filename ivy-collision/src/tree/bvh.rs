@@ -226,9 +226,9 @@ impl BvhNode {
             assert!(a.is_leaf());
             assert!(b.is_leaf());
 
-            for &a in a.objects() {
+            for &a in a.bodies() {
                 let a_obj = &data[a];
-                for &b in b.objects() {
+                for &b in b.bodies() {
                     let b_obj = &data[b];
 
                     if a_obj.bounds.overlaps(b_obj.bounds) {
@@ -401,10 +401,17 @@ impl BvhNode {
     pub fn allocated_bounds(&self) -> BoundingBox {
         self.allocated_bounds
     }
+
+    pub fn children(&self) -> &[NodeIndex] {
+        self.children
+            .as_ref()
+            .map(|v| v.as_slice())
+            .unwrap_or_default()
+    }
 }
 
 impl CollisionTreeNode for BvhNode {
-    fn objects(&self) -> &[BodyIndex] {
+    fn bodies(&self) -> &[BodyIndex] {
         &self.objects
     }
 
@@ -495,7 +502,7 @@ impl BvhNode {
             line_radius: DEFAULT_THICKNESS,
         });
 
-        for &object in self.objects() {
+        for &object in self.bodies() {
             let data = &data[object];
 
             gizmos.draw(Sphere {

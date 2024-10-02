@@ -5,7 +5,7 @@ use super::NodeIndex;
 // TODO: remove
 pub trait CollisionTreeNode: 'static + Sized + Send + Sync {
     /// Returns the objects contained in the node
-    fn objects(&self) -> &[BodyIndex];
+    fn bodies(&self) -> &[BodyIndex];
 
     /// Removes an object entity from the node
     fn remove(&mut self, object: BodyIndex) -> Option<BodyIndex>;

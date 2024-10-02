@@ -2,7 +2,7 @@ use crate::body::BodyMap;
 
 use super::BvhNode;
 
-pub trait Visitor<'a> {
+pub trait TreeVisitor<'a> {
     /// The visitor for the accepted node
     type Output;
     /// Acceptance function to visit this node. Returns Some<Output> if the node

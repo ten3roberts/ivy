@@ -19,7 +19,7 @@ use winit::{
 };
 
 use crate::{
-    components::{main_window, window},
+    components::{main_window, window, window_cursor_position, window_size},
     events::{ApplicationReady, RedrawEvent, ResizedEvent},
 };
 
@@ -91,6 +91,8 @@ impl<'a> ApplicationHandler for WinitEventHandler<'a> {
                 },
             )
             .set_default(main_window())
+            .set_default(window_size())
+            .set_default(window_cursor_position())
             .spawn(&mut self.app.world);
 
         self.scale_factor = window.scale_factor();
@@ -160,6 +162,11 @@ impl<'a> WinitEventHandler<'a> {
                 token: _,
             } => todo!(),
             WindowEvent::Resized(size) => {
+                let logical_size = size.to_logical(self.scale_factor);
+
+                let window = self.app.world().entity(window_id).unwrap();
+                *window.get_mut(window_size()).unwrap() = logical_size;
+
                 self.app.emit(ResizedEvent {
                     physical_size: size,
                 })?;
@@ -191,12 +198,10 @@ impl<'a> WinitEventHandler<'a> {
                     position: vec2(logical_pos.x, logical_pos.y),
                 })?;
 
-                let window = &mut *self
-                    .app
-                    .world
-                    .get_mut(window_id, crate::components::window())
-                    .unwrap();
+                let window = self.app.world().entity(window_id).unwrap();
 
+                *window.get_mut(window_cursor_position()).unwrap() = logical_pos;
+                let window = &mut *window.get_mut(crate::components::window()).unwrap();
                 window.cursor_lock.cursor_moved(&window.window, position);
             }
             WindowEvent::CursorEntered { device_id: _ } => {

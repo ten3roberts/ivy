@@ -13,7 +13,7 @@ use crate::{
     TransformedShape,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Ray {
     pub(crate) origin: Vec3,
     pub(crate) dir: Vec3,
@@ -44,7 +44,7 @@ impl Ray {
     }
 
     /// Returns true if a shape intersects the ray
-    pub fn intersects<T: Shape>(&self, collider: &T, transform: &Mat4) -> Option<Contact> {
+    pub fn intersect<T: Shape>(&self, collider: &T, transform: &Mat4) -> Option<Contact> {
         // Check if any point is behind ray
 
         let transform_inv = transform.inverse();
@@ -61,7 +61,13 @@ impl Ray {
 
         let mut simplex = Simplex::Point([a]);
 
+        let mut iterations = 0;
         while let Some(dir) = simplex.next_flat(self.dir) {
+            if iterations > 1000 {
+                tracing::error!("max iterations reached");
+                return None;
+            }
+            iterations += 1;
             let dir = dir.normalize();
 
             // Get the next simplex
@@ -90,49 +96,6 @@ impl Ray {
             simplex,
             self,
         ))
-    }
-
-    /// Cast the ray into the world and returns the closest intersection
-    pub fn cast_one<W>(&self, world: &World, tree: &CollisionTree) -> Option<RayIntersection> {
-        tree.query(RayCaster::new(self, world, &()))
-            .flatten()
-            .min_by_key(|v| OrderedFloat(v.distance()))
-    }
-
-    pub fn cast<'a, Q>(
-        &'a self,
-        world: &'a World,
-        tree: &'a CollisionTree,
-        filter: &'a Q,
-    ) -> TreeQuery<'a, RayCaster<'a, Q>> {
-        tree.query(RayCaster::new(self, world, filter))
-    }
-    /// Cast the ray into the world and returns the closest intersection
-    pub fn cast_one_with<'a, Q, T>(
-        &'a self,
-        world: &'a World,
-        tree: &'a T,
-        filter: &'a Q,
-    ) -> Option<RayIntersection>
-    where
-        T: Deref<Target = CollisionTree>,
-        Q: for<'x> Fetch<'x>,
-    {
-        tree.query(RayCaster::<Q>::new(self, world, filter))
-            .flatten()
-            .min_by_key(|v| OrderedFloat(v.distance()))
-    }
-
-    pub fn cast_with<'a, Q, T>(
-        &'a self,
-        world: &'a World,
-        tree: &'a T,
-        filter: &'a Q,
-    ) -> TreeQuery<'a, RayCaster<'a, Q>>
-    where
-        T: Deref<Target = CollisionTree>,
-    {
-        tree.query(RayCaster::new(self, world, filter))
     }
 
     /// Get a reference to the ray's origin.

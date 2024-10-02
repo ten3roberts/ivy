@@ -1,32 +1,23 @@
 use std::slice::Iter;
 
-use flax::{Entity, Fetch, World};
+use flax::Entity;
 use glam::{f32, Vec3};
 use slotmap::SlotMap;
 
 use super::Ray;
 use crate::{
     body::{Body, BodyIndex},
-    components::collider,
-    BvhNode, CollisionTreeNode, Contact, Visitor,
+    BvhNode, CollisionTreeNode, Contact, TreeVisitor,
 };
 
-/// Represents a collider ray intersection.
-/// Data about the ray is not saved.
 #[derive(Debug, Clone)]
 pub struct RayIntersection {
+    pub body: BodyIndex,
     pub id: Entity,
     pub contact: Contact,
 }
 
 impl RayIntersection {
-    pub fn new(entity: Entity, contact: Contact) -> Self {
-        Self {
-            id: entity,
-            contact,
-        }
-    }
-
     /// Returns the single ray contact point
     pub fn point(&self) -> Vec3 {
         self.contact.point_a
@@ -44,76 +35,62 @@ impl RayIntersection {
 }
 
 /// Visitor for casting a ray into the collision pruning tree
-pub struct RayCaster<'a, Q> {
-    ray: &'a Ray,
-    world: &'a World,
-    filter: &'a Q,
+pub struct RayCaster {
+    ray: Ray,
 }
 
-impl<'a, Q> RayCaster<'a, Q> {
-    pub fn new(ray: &'a Ray, world: &'a World, filter: &'a Q) -> Self {
-        Self { ray, world, filter }
+impl RayCaster {
+    pub fn new(ray: Ray) -> Self {
+        Self { ray }
     }
 }
 
-impl<'a, Q: 'a> Visitor<'a> for RayCaster<'a, Q> {
-    type Output = RayCastIterator<'a, Q>;
+impl<'a> TreeVisitor<'a> for RayCaster {
+    type Output = RayCastIterator<'a>;
 
     fn accept(
         &self,
         node: &'a BvhNode,
         data: &'a SlotMap<BodyIndex, Body>,
     ) -> Option<Self::Output> {
-        if !node.bounds().check_ray(self.ray) {
+        if !node.bounds().check_ray(&self.ray) {
             return None;
         }
 
-        let objects = node.objects().iter();
+        let bodies = node.bodies().iter();
         Some(RayCastIterator {
             ray: self.ray,
-            world: self.world,
             data,
-            objects,
-            filter: self.filter,
+            bodies,
         })
     }
 }
 
-pub struct RayCastIterator<'a, Q> {
-    ray: &'a Ray,
-    world: &'a World,
-    objects: Iter<'a, BodyIndex>,
+pub struct RayCastIterator<'a> {
+    ray: Ray,
+    bodies: Iter<'a, BodyIndex>,
     data: &'a SlotMap<BodyIndex, Body>,
-    filter: &'a Q,
 }
 
-/// Requires collider
-impl<'a, Q: for<'x> Fetch<'x>> Iterator for RayCastIterator<'a, Q> {
+impl<'a> Iterator for RayCastIterator<'a> {
     type Item = RayIntersection;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            let &object = self.objects.next()?;
-            let data = &self.data[object];
+            let &body_index = self.bodies.next()?;
+            let data = &self.data[body_index];
 
-            if !data.bounds.check_ray(self.ray) {
+            if !data.bounds.check_ray(&self.ray) {
                 continue;
             }
 
-            let query = &(collider(), self.filter);
-
-            let entity = self.world.entity(data.id).unwrap();
-
-            if let Some((collider, _)) = entity.query(query).get() {
-                // TODO
-                // if q.visible.is_hidden() {
-                //     continue;
-                // }
-
-                if let Some(contact) = self.ray.intersects(collider, &data.transform) {
-                    return Some(RayIntersection::new(data.id, contact));
-                }
-            };
+            if let Some(contact) = self.ray.intersect(&data.collider, &data.transform) {
+                return Some(RayIntersection {
+                    body: body_index,
+                    id: data.id,
+                    contact,
+                });
+            }
         }
     }
 }

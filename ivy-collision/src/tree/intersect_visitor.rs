@@ -6,10 +6,8 @@ use slotmap::SlotMap;
 
 use crate::{
     body::{Body, BodyIndex},
-    components,
-    query::TreeQuery,
-    BoundingBox, CollisionTree, CollisionTreeNode, Contact, IntersectionGenerator, Shape,
-    TransformedShape, Visitor,
+    components, BoundingBox, CollisionTreeNode, Contact, IntersectionGenerator, Shape,
+    TransformedShape, TreeVisitor,
 };
 
 use super::BvhNode;
@@ -17,50 +15,22 @@ use super::BvhNode;
 /// Performs intersection testing for a provided temporary collider.
 ///
 /// Use with [crate::CollisionTree::query].
-pub struct IntersectVisitor<'a, C, Q> {
+pub struct IntersectVisitor<'a, C> {
     bounds: BoundingBox,
     collider: &'a C,
-    transform: Mat4,
-    world: &'a World,
-    filter: &'a Q,
 }
 
-impl<'a, C, Q> IntersectVisitor<'a, C, Q>
-where
-    C: Shape,
-{
-    pub fn new(world: &'a World, collider: &'a C, transform: Mat4, filter: &'a Q) -> Self
-    where
-        Q: 'a + for<'x> Fetch<'x>,
-    {
+impl<'a, C: Shape> IntersectVisitor<'a, C> {
+    pub fn new(collider: &'a C) -> Self {
         Self {
-            bounds: collider.bounding_box(transform),
+            bounds: collider.bounding_box(Mat4::IDENTITY),
             collider,
-            transform,
-            world,
-            filter,
         }
     }
-
-    /// Returns all intersections
-    pub fn intersections(self, tree: &'a CollisionTree) -> TreeQuery<Self> {
-        tree.query(self)
-    }
-    /// Returns the first intersection, by no order.
-    pub fn intersection(self, tree: &'a CollisionTree) -> Option<Contact>
-    where
-        Q: for<'x> Fetch<'x>,
-    {
-        tree.query(self).flatten().next()
-    }
 }
 
-impl<'a, C, Q> Visitor<'a> for IntersectVisitor<'a, C, Q>
-where
-    C: Shape,
-    Q: 'a,
-{
-    type Output = IntersectIterator<'a, C, Q>;
+impl<'a, C: Shape> TreeVisitor<'a> for IntersectVisitor<'a, C> {
+    type Output = IntersectIterator<'a, C>;
 
     fn accept(
         &self,
@@ -70,12 +40,9 @@ where
         if node.bounds().contains(self.bounds) {
             Some(IntersectIterator {
                 collider: self.collider,
-                transform: self.transform,
                 data,
-                objects: node.objects().iter(),
+                objects: node.bodies().iter(),
                 bounds: self.bounds,
-                world: self.world,
-                filter: self.filter,
                 intersection_generator: Default::default(),
             })
         } else {
@@ -85,22 +52,15 @@ where
 }
 
 /// Iterator for object intersection
-pub struct IntersectIterator<'a, C, Q> {
+pub struct IntersectIterator<'a, C> {
     bounds: BoundingBox,
     collider: &'a C,
     objects: Iter<'a, BodyIndex>,
     data: &'a SlotMap<BodyIndex, Body>,
-    transform: Mat4,
-    world: &'a World,
-    filter: &'a Q,
     intersection_generator: IntersectionGenerator,
 }
 
-impl<'a, C, Q> Iterator for IntersectIterator<'a, C, Q>
-where
-    C: Shape,
-    Q: for<'x> Fetch<'x>,
-{
+impl<'a, C: Shape> Iterator for IntersectIterator<'a, C> {
     type Item = Contact;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -112,18 +72,12 @@ where
                 continue;
             }
 
-            let entity = self.world.entity(data.id).expect("Invalid entity in tree");
-
-            let query = (components::collider(), self.filter);
-
-            if let Some((collider, _)) = entity.query(&query).get() {
-                if let Some(contact) = self.intersection_generator.intersect(
-                    &TransformedShape::new(&collider, data.transform),
-                    &TransformedShape::new(&self.collider, self.transform),
-                ) {
-                    return Some(contact);
-                }
-            };
+            if let Some(contact) = self.intersection_generator.intersect(
+                &TransformedShape::new(&data.collider, data.transform),
+                &self.collider,
+            ) {
+                return Some(contact);
+            }
         }
     }
 }

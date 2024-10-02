@@ -14,9 +14,10 @@ use ivy_collision::{
     body::{Body, BodyIndex, ContactIndex},
     components::{body_index, collider, collider_offset},
     island::{Island, IslandContactIter, Islands},
+    query::TreeQuery,
     util::IndexedRange,
     BvhNode, Collider, CollisionTree, EntityPayload, IntersectionGenerator, NodeIndex, NodeState,
-    PersistentContact, PersistentContactPoint, Shape, TransformedShape,
+    PersistentContact, PersistentContactPoint, Shape, TransformedShape, TreeVisitor,
 };
 use slotmap::{Key, SlotMap};
 
@@ -55,6 +56,10 @@ impl PhysicsState {
             dirty_bodies: Default::default(),
             removed_bodies: Default::default(),
         }
+    }
+
+    pub fn query<'a, V: TreeVisitor<'a>>(&'a self, visitor: V) -> TreeQuery<V> {
+        TreeQuery::new(visitor, &self.tree, self.tree.root(), &self.bodies)
     }
 
     pub fn islands(&self) -> slotmap::secondary::Iter<BodyIndex, Island> {
