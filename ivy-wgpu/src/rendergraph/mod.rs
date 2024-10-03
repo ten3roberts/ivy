@@ -1,6 +1,7 @@
 mod resources;
 use flax::World;
 use ivy_assets::AssetCache;
+use ivy_core::profiling::{profile_function, profile_scope};
 pub use resources::*;
 use slotmap::SecondaryMap;
 
@@ -259,7 +260,7 @@ impl RenderGraph {
         assets: &AssetCache,
         external_resources: &ExternalResources,
     ) -> anyhow::Result<()> {
-        let _span = tracing::debug_span!("RenderGraph::draw").entered();
+        profile_function!();
 
         if self.order.is_none() {
             self.build()?;
@@ -274,7 +275,8 @@ impl RenderGraph {
 
         for &idx in order {
             let node = &mut self.nodes[idx];
-            let _span = tracing::debug_span!("update", node=?node.label()).entered();
+            profile_scope!("update_node", node.label());
+
             node.update(NodeUpdateContext {
                 gpu,
                 resources: &self.resources,
@@ -288,7 +290,8 @@ impl RenderGraph {
 
         for &idx in order {
             let node = &mut self.nodes[idx];
-            let _span = tracing::debug_span!("draw", node=?node.label()).entered();
+            profile_scope!("render_node", node.label());
+
             node.draw(NodeExecutionContext {
                 gpu,
                 resources: &self.resources,

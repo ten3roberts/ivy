@@ -3,7 +3,6 @@ use ivy_core::{
     gizmos::{self, DrawGizmos, GizmosSection, Line, DEFAULT_RADIUS},
     Color, ColorExt,
 };
-use ordered_float::OrderedFloat;
 use smallvec::{Array, SmallVec};
 use std::ops::Index;
 
@@ -123,7 +122,8 @@ impl Polytype {
         self.faces
             .iter()
             .enumerate()
-            .max_by_key(|val| OrderedFloat(val.1.distance))
+            .filter(|v| v.1.normal.is_finite())
+            .min_by_key(|v| ordered_float::NotNan::new(v.1.distance).unwrap())
             .map(|(a, b)| (a as u16, *b))
     }
 

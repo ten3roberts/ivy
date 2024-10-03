@@ -27,20 +27,7 @@ pub fn epa_ray<F: Fn(Vec3) -> SupportPoint>(
         };
 
         // Search in the normal of the face pointing against the ray
-
         let dir = max_face.normal * -max_face.normal.dot(ray.dir()).signum();
-
-        // let mid = project_plane(
-        //     (polytype[face.indices[0]].pos
-        //         + polytype[face.indices[1]].pos
-        //         + polytype[face.indices[2]].pos)
-        //         / 3.0,
-        //     ray.dir(),
-        // );
-
-        // let (closest_edge, edge_dist) = face.closest_edge(&polytype.points, ray);
-
-        // let search_dir = (dir + mid.normalized()).normalized();
 
         let p = support_func(dir);
         let support_distance = ray_distance(p, max_face.normal, ray);

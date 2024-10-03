@@ -5,6 +5,7 @@ use std::sync::Arc;
 use flax::World;
 use image::DynamicImage;
 use ivy_assets::{AssetCache, AsyncAssetKey};
+use ivy_core::profiling::profile_scope;
 use ivy_wgpu::{
     rendergraph::{self, ExternalResources, RenderGraph},
     shader_library::{ModuleDesc, ShaderLibrary},
@@ -46,9 +47,9 @@ impl SurfacePbrPipeline {
         let shader_library = Arc::new(shader_library);
 
         let pbr = PbrRenderGraphConfig {
-            shadow_map_config: Some(Default::default()),
+            shadow_map_config: None,
             msaa: Some(Default::default()),
-            bloom: Some(Default::default()),
+            bloom: None,
             skybox: desc.hdri.map(|v| SkyboxConfig {
                 hdri: v,
                 format: wgpu::TextureFormat::Rgba16Float,
@@ -89,7 +90,10 @@ impl ivy_wgpu::layer::Renderer for SurfacePbrPipeline {
         self.render_graph
             .draw(gpu, queue, world, assets, &external_resources)?;
 
-        surface_texture.present();
+        {
+            profile_scope!("present");
+            surface_texture.present();
+        }
 
         Ok(())
     }

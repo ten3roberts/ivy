@@ -72,9 +72,10 @@ pub fn main() -> anyhow::Result<()> {
                 gpu,
                 surface,
                 SurfacePbrPipelineDesc {
-                    hdri: Some(Box::new(
-                        "hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
-                    )),
+                    hdri: None,
+                    // hdri: Some(Box::new(
+                    //     "hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
+                    // )),
                 },
             ))
         }))
@@ -198,26 +199,26 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
         .set(material(), red_material.clone())
         .spawn(world);
 
-    cube(vec3(5.0, drop_height, 0.0))
-        .set(rotation(), Quat::from_scaled_axis(vec3(1.0, 0.0, 0.0)))
-        .set(gravity_influence(), 1.0)
-        .set(restitution(), 1.0)
-        .set(material(), red_material.clone())
-        .spawn(world);
+    // cube(vec3(5.0, drop_height, 0.0))
+    //     .set(rotation(), Quat::from_scaled_axis(vec3(1.0, 0.0, 0.0)))
+    //     .set(gravity_influence(), 1.0)
+    //     .set(restitution(), 1.0)
+    //     .set(material(), red_material.clone())
+    //     .spawn(world);
 
-    sphere(vec3(10.0, drop_height, 0.0))
-        .set(rotation(), Quat::from_scaled_axis(vec3(0.0, 0.0, 0.0)))
-        .set(gravity_influence(), 1.0)
-        .set(restitution(), 1.0)
-        .set(material(), red_material.clone())
-        .spawn(world);
+    // sphere(vec3(10.0, drop_height, 0.0))
+    //     .set(rotation(), Quat::from_scaled_axis(vec3(0.0, 0.0, 0.0)))
+    //     .set(gravity_influence(), 1.0)
+    //     .set(restitution(), 1.0)
+    //     .set(material(), red_material.clone())
+    //     .spawn(world);
 
-    capsule(vec3(-5.0, drop_height, 0.0))
-        .set(rotation(), Quat::from_scaled_axis(vec3(0.1, 0.0, 0.0)))
-        .set(gravity_influence(), 1.0)
-        .set(restitution(), 1.0)
-        .set(material(), red_material.clone())
-        .spawn(world);
+    // capsule(vec3(-5.0, drop_height, 0.0))
+    //     .set(rotation(), Quat::from_scaled_axis(vec3(0.1, 0.0, 0.0)))
+    //     .set(gravity_influence(), 1.0)
+    //     .set(restitution(), 1.0)
+    //     .set(material(), red_material.clone())
+    //     .spawn(world);
 
     capsule(vec3(-10.0, drop_height, 0.0))
         .set(rotation(), Quat::from_scaled_axis(vec3(0.0, 0.0, 1.0)))
@@ -226,14 +227,14 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
         .set(material(), red_material.clone())
         .spawn(world);
 
-    for i in 0..3 {
-        cube(vec3(0.0, 2.0 + i as f32 * 2.0, -8.0))
-            .set(rotation(), Quat::from_scaled_axis(vec3(0.0, 0.0, 0.0)))
-            .set(gravity_influence(), 1.0)
-            .set(restitution(), 0.0)
-            .set(material(), red_material.clone())
-            .spawn(world);
-    }
+    // for i in 0..3 {
+    //     cube(vec3(0.0, 2.0 + i as f32 * 2.0, -8.0))
+    //         .set(rotation(), Quat::from_scaled_axis(vec3(0.0, 0.0, 0.0)))
+    //         .set(gravity_influence(), 1.0)
+    //         .set(restitution(), 0.0)
+    //         .set(material(), red_material.clone())
+    //         .spawn(world);
+    // }
 
     Entity::builder()
         .mount(TransformBundle::default().with_rotation(Quat::from_euler(
