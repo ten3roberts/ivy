@@ -3,7 +3,11 @@ use flax::{
     fetch::{entity_refs, EntityRefs},
     BoxedSystem, CommandBuffer, Dfs, EntityRef, Query, QueryBorrow, System, World,
 };
-use ivy_core::{connection, world_transform, Color, ColorExt, Gizmos};
+use ivy_core::{
+    components::{connection, world_transform},
+    gizmos::{Gizmos, Line},
+    Color, ColorExt,
+};
 
 use super::*;
 
@@ -157,15 +161,12 @@ pub fn draw_connections(world: &World, gizmos: &mut Gizmos) -> Result<()> {
                     } => Color::red(),
                 };
 
-                gizmos
-                    .begin_section("draw_connections")
-                    .draw(ivy_core::Line {
-                        origin: parent_pos,
-                        dir: (pos - parent_pos),
-                        radius: 0.02,
-                        corner_radius: 1.0,
-                        color,
-                    });
+                gizmos.begin_section("draw_connections").draw(Line {
+                    origin: parent_pos,
+                    dir: (pos - parent_pos),
+                    radius: 0.02,
+                    color,
+                });
             }
 
             pos

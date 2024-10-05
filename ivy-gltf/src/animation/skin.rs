@@ -4,7 +4,7 @@ use glam::{Mat4, Quat};
 use gltf::{buffer, Document};
 use itertools::Itertools;
 use ivy_assets::{Asset, AssetCache};
-use ivy_core::TransformBundle;
+use ivy_core::components::TransformBundle;
 
 use super::{Animation, Channel, KeyFrameValues};
 

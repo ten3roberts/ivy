@@ -1,5 +1,6 @@
 use dashmap::DashMap;
 use glam::Vec3;
+use itertools::Itertools;
 
 use crate::{Color, ColorExt};
 
@@ -7,17 +8,25 @@ mod traits;
 pub use traits::*;
 
 /// A default radius that looks good for small gizmos
-pub const DEFAULT_RADIUS: f32 = 0.01;
+pub const DEFAULT_RADIUS: f32 = 0.04;
+pub const DEFAULT_THICKNESS: f32 = 0.02;
 
-#[records::record]
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Sphere {
-    origin: Vec3,
-    radius: f32,
-    color: Color,
+    pub origin: Vec3,
+    pub radius: f32,
+    pub color: Color,
 }
 
 impl Sphere {
+    pub fn new(origin: Vec3, radius: f32, color: Color) -> Self {
+        Self {
+            origin,
+            radius,
+            color,
+        }
+    }
+
     /// Set the color
     pub fn with_color(mut self, color: Color) -> Self {
         self.color = color;
@@ -45,24 +54,30 @@ impl DrawGizmos for Sphere {
     }
 }
 
-#[records::record]
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Line {
-    origin: Vec3,
-    dir: Vec3,
-    radius: f32,
-    corner_radius: f32,
-    color: Color,
+    pub origin: Vec3,
+    pub dir: Vec3,
+    pub radius: f32,
+    pub color: Color,
 }
 
 impl Line {
-    pub fn from_points(a: Vec3, b: Vec3, radius: f32, corner_radius: f32) -> Self {
+    pub fn new(origin: Vec3, dir: Vec3, radius: f32, color: Color) -> Self {
         Self {
-            origin: a,
-            dir: (b - a),
+            origin,
+            dir,
             radius,
-            corner_radius,
-            color: Color::blue(),
+            color,
+        }
+    }
+
+    pub fn from_points(start: Vec3, end: Vec3, radius: f32, color: Color) -> Self {
+        Self {
+            origin: start,
+            dir: (end - start),
+            radius,
+            color,
         }
     }
 
@@ -80,7 +95,7 @@ impl DrawGizmos for Line {
             color: self.color,
             dir: self.dir,
             radius: self.radius,
-            corner_radius: self.corner_radius,
+            corner_radius: 1.0,
         })
     }
 }
@@ -91,20 +106,17 @@ impl Default for Line {
             origin: Default::default(),
             radius: DEFAULT_RADIUS,
             dir: Vec3::Z,
-            corner_radius: 1.0,
             color: Color::blue(),
         }
     }
 }
 
-#[records::record]
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Cube {
-    origin: Vec3,
-    half_extents: Vec3,
-    line_radius: f32,
-    corner_radius: f32,
-    color: Color,
+    pub min: Vec3,
+    pub max: Vec3,
+    pub line_radius: f32,
+    pub color: Color,
 }
 
 impl Cube {
@@ -118,10 +130,9 @@ impl Cube {
 impl Default for Cube {
     fn default() -> Self {
         Self {
-            origin: Default::default(),
-            line_radius: DEFAULT_RADIUS,
-            half_extents: Vec3::ONE,
-            corner_radius: 1.0,
+            min: Vec3::ZERO,
+            max: Vec3::ZERO,
+            line_radius: 0.02,
             color: Color::green(),
         }
     }
@@ -146,16 +157,19 @@ impl DrawGizmos for Cube {
             (-Vec3::X, Vec3::Z),
         ];
 
+        let midpoint = (self.max + self.min) / 2.0;
+        let extent = (self.max - self.min) / 2.0;
+
         let lines = sides.iter().map(|side| {
-            let mid = self.origin + (side.0 + side.1) * self.half_extents;
-            let dir =
-                side.0.cross(side.1).normalize() * (self.half_extents + self.line_radius) * 2.0;
+            let mid = midpoint + (side.0 + side.1) * extent;
+            let dir = side.0.cross(side.1).normalize() * (extent + self.line_radius) * 2.0;
+
             let pos = mid - dir * 0.5;
 
             GizmoPrimitive::Line {
                 origin: pos,
                 dir,
-                corner_radius: self.corner_radius,
+                corner_radius: 1.0,
                 color: self.color,
                 radius: self.line_radius,
             }
@@ -165,13 +179,59 @@ impl DrawGizmos for Cube {
     }
 }
 
-#[records::record]
+pub struct Polygon<I> {
+    pub points: I,
+    pub color: Color,
+}
+
+impl<I> Polygon<I>
+where
+    I: IntoIterator<Item = Vec3>,
+{
+    pub fn new(points: I) -> Self {
+        Self {
+            points,
+            color: Color::green(),
+        }
+    }
+
+    /// Set the color
+    pub fn with_color(mut self, color: Color) -> Self {
+        self.color = color;
+        self
+    }
+}
+
+impl<I> DrawGizmos for Polygon<I>
+where
+    for<'x> I: Clone + IntoIterator<Item = Vec3>,
+    for<'x> <I as IntoIterator>::IntoIter: Clone + ExactSizeIterator,
+{
+    fn draw_primitives(&self, gizmos: &mut GizmosSection) {
+        for (p1, p2) in self.points.clone().into_iter().circular_tuple_windows() {
+            gizmos.draw(Line::from_points(p1, p2, DEFAULT_THICKNESS, self.color));
+            gizmos.draw(Sphere::new(p1, DEFAULT_RADIUS, self.color));
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Triangle {
     origin: Vec3,
     points: [Vec3; 3],
     radius: f32,
     corner_radius: f32,
+}
+
+impl Triangle {
+    pub fn new(origin: Vec3, points: [Vec3; 3], radius: f32, corner_radius: f32) -> Self {
+        Self {
+            origin,
+            points,
+            radius,
+            corner_radius,
+        }
+    }
 }
 
 impl Default for Triangle {

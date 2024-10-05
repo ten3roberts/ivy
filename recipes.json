@@ -12,6 +12,33 @@
       }
     }
   },
+  "debug physics": {
+    "cmd": "cargo build --example physics",
+    "components": {
+      "dap": {
+        "program": "./target/debug/examples/physics",
+        "adapter": "rust"
+      }
+    }
+  },
+  "debug physics_stacking": {
+    "cmd": "cargo build --example physics_stacking",
+    "components": {
+      "dap": {
+        "program": "./target/debug/examples/physics_stacking",
+        "adapter": "rust"
+      }
+    }
+  },
+  "debug gravity": {
+    "cmd": "cargo build --example gravity",
+    "components": {
+      "dap": {
+        "program": "./target/debug/examples/gravity",
+        "adapter": "rust"
+      }
+    }
+  },
   "build-vulkan": "cargo build --example vulkan",
   "run-wgpu": {
     "cmd": "cargo run --example wgpu",

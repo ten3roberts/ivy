@@ -19,22 +19,22 @@ ivy-random = { path = "../ivy-random", version = "0.10.0" }
 ivy-profiling = { path = "../ivy-profiling" }
 
 anyhow.workspace = true
-flume.workspace = true
-tracing.workspace = true
-palette.workspace = true
-glam.workspace = true
-serde = { workspace = true, optional = true }
-flax.workspace = true
-thiserror.workspace = true
-parking_lot.workspace = true
+dashmap.workspace = true
 downcast-rs = "1.2.0"
-records = "0.2.0"
 ezy = { version = "0.1.1", features = ["glam"] }
-rand.workspace = true
-rand_distr.workspace = true
+flax.workspace = true
+flume.workspace = true
+glam.workspace = true
+itertools.workspace = true
+palette.workspace = true
+parking_lot.workspace = true
 puffin = { workspace = true, optional = true }
 puffin_http = { workspace = true, optional = true }
-dashmap.workspace = true
+rand.workspace = true
+rand_distr.workspace = true
+serde = { workspace = true, optional = true }
+thiserror.workspace = true
+tracing.workspace = true
 
 [features]
 profile = [ "ivy-profiling/profile_with_puffin", "puffin", "puffin_http" ]

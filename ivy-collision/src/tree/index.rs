@@ -1,9 +1,6 @@
-use ivy_core::DrawGizmos;
-use ivy_core::GizmosSection;
 use slotmap::new_key_type;
 use slotmap::Key;
 use std::fmt::Debug;
-use std::ops::DerefMut;
 
 use crate::CollisionTreeNode;
 
@@ -30,20 +27,6 @@ impl NodeIndex {
     /// `a.is_null() && b.is_null()` implies `a == b`.
     pub fn is_null(&self) -> bool {
         Key::is_null(self)
-    }
-}
-
-impl NodeIndex {
-    pub fn draw_gizmos_recursive<N: CollisionTreeNode + DrawGizmos>(
-        self,
-        nodes: &Nodes<N>,
-        mut gizmos: &mut GizmosSection,
-    ) {
-        nodes[self].draw_primitives(gizmos.deref_mut());
-
-        for val in nodes[self].children() {
-            val.draw_gizmos_recursive(nodes, gizmos)
-        }
     }
 }
 

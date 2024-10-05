@@ -2,7 +2,10 @@ use anyhow::Context;
 use flax::{BoxedSystem, FetchExt, Query, System, World};
 use glam::Mat4;
 
-use crate::{position, rotation, scale, world_transform, AsyncCommandBuffer};
+use crate::{
+    components::{position, rotation, scale, world_transform},
+    AsyncCommandBuffer,
+};
 
 // TODO: child/parent
 

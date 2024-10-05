@@ -1,27 +1,28 @@
 use smallvec::SmallVec;
 
-use crate::{CollisionTree, CollisionTreeNode, NodeIndex, Visitor};
+use crate::{body::BodyMap, CollisionTree, NodeIndex, TreeVisitor};
 
-pub struct TreeQuery<'a, N, V> {
+pub struct TreeQuery<'a, V> {
     visitor: V,
-    tree: &'a CollisionTree<N>,
+    tree: &'a CollisionTree,
     stack: SmallVec<[NodeIndex; 16]>,
+    bodies: &'a BodyMap,
 }
 
-impl<'a, N, V> TreeQuery<'a, N, V> {
-    pub fn new(visitor: V, tree: &'a CollisionTree<N>, root: NodeIndex) -> Self {
+impl<'a, V> TreeQuery<'a, V> {
+    pub fn new(visitor: V, tree: &'a CollisionTree, root: NodeIndex, bodies: &'a BodyMap) -> Self {
         Self {
             visitor,
             tree,
             stack: SmallVec::from_slice(&[root]),
+            bodies,
         }
     }
 }
 
-impl<'a, N, V> Iterator for TreeQuery<'a, N, V>
+impl<'a, V> Iterator for TreeQuery<'a, V>
 where
-    N: CollisionTreeNode,
-    V: Visitor<'a, N>,
+    V: TreeVisitor<'a>,
     V::Output: 'a,
 {
     type Item = V::Output;
@@ -29,9 +30,10 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(current) = self.stack.pop() {
             let node = self.tree.node(current).unwrap();
+
             // If the visitor wants to visit this node, push all children to the
             // stack and visit the node
-            if let Some(output) = self.visitor.accept(node, self.tree.objects()) {
+            if let Some(output) = self.visitor.accept(node, self.bodies) {
                 self.stack.extend(node.children().iter().cloned());
                 return Some(output);
             }

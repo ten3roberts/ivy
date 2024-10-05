@@ -1,110 +1,60 @@
+use core::f32;
 use std::collections::BTreeMap;
 
 use crate::{
     bundles::*,
-    collision::{resolve_collision, ResolveObject},
-    components::{collision_state, effector, gravity_state, physics_state, PhysicsState},
-    Result,
+    components::{effector, physics_state},
+    state::PhysicsState,
 };
 use flax::{
-    BoxedSystem, Component, Entity, EntityRef, FetchExt, Mutable, Query, QueryBorrow, System, World,
+    component::{ComponentDesc, ComponentValue},
+    events::EventSubscriber,
+    fetch::Source,
+    sink::Sink,
+    BoxedSystem, CommandBuffer, Component, Entity, EntityRef, FetchExt, Mutable, Query,
+    QueryBorrow, System, World,
 };
-use flume::Receiver;
-use glam::Quat;
+use glam::{vec3, Mat4, Quat, Vec3};
+use ivy_collision::{body::BodyIndex, components::body_index, PersistentContact};
 use ivy_core::{
-    angular_velocity, connection, engine, friction, gravity_influence, position, restitution,
-    rotation, sleeping, velocity,
+    components::{
+        angular_velocity, connection, engine, gizmos, gravity, gravity_influence, is_static,
+        position, rotation, sleeping, velocity, world_transform,
+    },
+    gizmos::{Gizmos, Line, DEFAULT_RADIUS, DEFAULT_THICKNESS},
+    Color, ColorExt,
 };
-use ivy_collision::{Collision, Contact};
 
-pub fn integrate_velocity() -> BoxedSystem {
+pub fn integrate_velocity_system(dt: f32) -> BoxedSystem {
     System::builder()
-        .with_query(
-            Query::new((
-                physics_state().source(engine()),
-                position().as_mut(),
-                velocity(),
-            ))
-            .without(sleeping()),
-        )
-        .for_each(|(state, pos, vel)| {
-            *pos += *vel * state.dt;
+        .with_query(Query::new((position().as_mut(), velocity())).without(sleeping()))
+        .for_each(move |(pos, vel)| {
+            *pos += *vel * dt;
         })
         .boxed()
 }
 
-pub fn integrate_angular_velocity() -> BoxedSystem {
+pub fn integrate_angular_velocity_system(dt: f32) -> BoxedSystem {
     System::builder()
-        .with_query(
-            Query::new((
-                physics_state().source(engine()),
-                rotation().as_mut(),
-                angular_velocity(),
-            ))
-            .without(sleeping()),
-        )
-        .for_each(|(state, rot, &w)| {
-            *rot *= Quat::from_axis_angle(w / w.length(), w.length() * state.dt);
+        .with_query(Query::new((rotation().as_mut(), angular_velocity())).without(sleeping()))
+        .for_each(move |(rot, &w)| {
+            *rot = Quat::from_axis_angle(w.normalize_or_zero(), w.length() * dt) * *rot
         })
         .boxed()
 }
 
-// pub fn integrate_velocity(world: &World, dt: Read<DeltaTime>, mut cmd: Write<CommandBuffer>) {
-//     world
-//         .native_query()
-//         .without::<Static>()
-//         .without::<Sleeping>()
-//         .iter()
-//         .for_each(|(e, (pos, rot, w, vel, f))| {
-//             *pos += Position(**vel * **dt);
-//             let mag = w.length();
-//             if mag > 0.2 {
-//                 let w = Quat::from_axis_angle(w.0 / mag, mag * **dt);
-//                 *rot = Rotation(w * rot.0);
-//             } else if vel.length_squared() < 0.01 && !f.should_wake() {
-//                 cmd.insert_one(e, Sleeping)
-//             }
-//         });
-// }
-
-pub fn gravity() -> BoxedSystem {
+pub fn gravity_system() -> BoxedSystem {
     System::builder()
         .with_query(Query::new((
-            gravity_state(),
+            gravity().source(engine()),
             effector().as_mut(),
             gravity_influence(),
         )))
-        .for_each(|(state, effector, &gravity_influence)| {
-            effector.apply_acceleration(gravity_influence * state.gravity, true);
+        .for_each(|(&gravity, effector, &gravity_influence)| {
+            effector.apply_acceleration(gravity_influence * gravity, true);
         })
         .boxed()
 }
-// pub fn gravity(
-//     world: SubWorld<(&GravityInfluence, &Mass, &mut Effector)>,
-//     gravity: Read<Gravity>,
-//     collisions: DefaultResource<CollisionState>,
-// ) {
-//     if gravity.length_squared() < TOLERANCE {
-//         return;
-//     }
-
-//     world
-//         .native_query()
-//         .without::<Static>()
-//         .without::<Sleeping>()
-//         .par_for_each(BATCH_SIZE, |(e, (influence, mass, effector))| mut {
-//             let supported = collisions.has_collision(e);
-//             effector.apply_force(**gravity * **influence * **mass, !supported)
-//         })
-// }
-
-// pub fn wrap_around_system(world: SubWorld<&mut Position>) {
-//     world.native_query().iter().for_each(|(_, pos)| {
-//         if pos.y < -100.0 {
-//             pos.y = 100.0
-//         }
-//     });
-// }
 
 pub fn get_rigid_root<'a>(entity: &EntityRef<'a>) -> EntityRef<'a> {
     let mut entity = *entity;
@@ -119,8 +69,8 @@ pub fn get_rigid_root<'a>(entity: &EntityRef<'a>) -> EntityRef<'a> {
 
 #[derive(Debug, Clone)]
 pub struct CollisionState {
-    sleeping: BTreeMap<(Entity, Entity), Collision>,
-    active: BTreeMap<(Entity, Entity), Collision>,
+    sleeping: BTreeMap<(Entity, Entity), PersistentContact>,
+    active: BTreeMap<(Entity, Entity), PersistentContact>,
 }
 
 impl CollisionState {
@@ -131,7 +81,7 @@ impl CollisionState {
         }
     }
 
-    pub fn register(&mut self, col: Collision) {
+    pub fn register(&mut self, col: PersistentContact) {
         let slot = if col.a.state.dormant() && col.b.state.dormant() {
             &mut self.sleeping
         } else {
@@ -157,7 +107,7 @@ impl CollisionState {
         self.active.keys().any(|v| v.0 == e)
     }
 
-    pub fn get(&self, e: Entity) -> impl Iterator<Item = &'_ Collision> {
+    pub fn get(&self, e: Entity) -> impl Iterator<Item = &'_ PersistentContact> {
         self.active
             .iter()
             .skip_while(move |((a, _), _)| *a != e)
@@ -171,7 +121,7 @@ impl CollisionState {
             .map(|(_, v)| v)
     }
 
-    pub fn get_all(&self) -> impl Iterator<Item = (Entity, Entity, &Collision)> {
+    pub fn get_all(&self) -> impl Iterator<Item = (Entity, Entity, &PersistentContact)> {
         self.active
             .iter()
             .chain(self.sleeping.iter())
@@ -192,214 +142,369 @@ impl Default for CollisionState {
     }
 }
 
-/// Resolves all pending collisions to be processed
-pub fn resolve_collisions_system(collisions: Receiver<Collision>) -> BoxedSystem {
+pub fn register_bodies_system() -> BoxedSystem {
     System::builder()
         .with_world()
-        .with_query(Query::new((collision_state().as_mut(), physics_state())))
+        .with_cmd_mut()
+        .with_query(Query::new(physics_state().as_mut()))
         .build(
-            move |world:&World, mut query: QueryBorrow<(Mutable<CollisionState>, Component<PhysicsState>)>| {
-                query.for_each(|(collision_state, physics_state)| {
-                    resolve_collisions(world, collision_state, collisions.try_iter(), physics_state.dt).unwrap();
-                })
+            move |world: &World,
+                  cmd: &mut CommandBuffer,
+                  mut query: QueryBorrow<Mutable<PhysicsState>>| {
+                if let Some(state) = query.first() {
+                    state.register_bodies(world, cmd);
+                }
+
+                anyhow::Ok(())
             },
         )
         .boxed()
 }
 
-pub fn resolve_collisions(
-    world: &World,
-    state: &mut CollisionState,
-    collisions: impl Iterator<Item = Collision>,
-    dt: f32,
-) -> Result<()> {
-    state.next_frame();
-
-    for collision in collisions {
-        tracing::info!(?collision, "resolve collision");
-        state.register(collision.clone());
-
-        let a = world.entity(collision.a.entity)?;
-        let b = world.entity(collision.b.entity)?;
-
-        // Ignore triggers
-        if collision.a.is_trigger || collision.b.is_trigger {
-            return Ok(());
-        }
-        // Check for static collision
-        else if collision.a.state.is_static() {
-            resolve_static(&a, &b, collision.contact, dt)?;
-            continue;
-        } else if collision.b.state.is_static() {
-            resolve_static(
-                &b,
-                &a,
-                Contact {
-                    points: collision.contact.points.reverse(),
-                    depth: collision.contact.depth,
-                    normal: -collision.contact.normal,
-                },
-                dt,
-            )?;
-            continue;
-        } else if collision.a.state.is_static() && collision.b.state.is_static() {
-            tracing::warn!("static-static collision detected, ignoring");
-            continue;
-        }
-
-        assert_ne!(collision.a, collision.b);
-
-        // Trace up to the root of the rigid connection before solving
-        // collisions
-        tracing::info!("get rigid roots");
-        let a = get_rigid_root(&world.entity(*collision.a).unwrap());
-        let b = get_rigid_root(&world.entity(*collision.b).unwrap());
-
-        tracing::info!(%a, %b, "found roots");
-        // Ignore collisions between two immovable objects
-        // if !a_mass.is_normal() && !b_mass.is_normal() {
-        //     tracing::warn!("ignoring collision between two immovable objects");
-        //     return Ok(());
-        // }
-
-        // let mut a_query = world.try_query_one::<(RbQuery, &Position, &Effector)>(a)?;
-        // let (a, pos, eff) = a_query.get().unwrap();
-
-        // // Modify mass to include all children masses
-
-        let a_object = ResolveObject::from_entity(&a)?;
-        let b_object = ResolveObject::from_entity(&b)?;
-
-        let total_mass = a_object.mass + b_object.mass;
-
-        let impulse = resolve_collision(&collision.contact, &a_object, &b_object);
-
-        let dir = collision.contact.normal * collision.contact.depth;
-
-        {
-            let effector = &mut *a.get_mut(effector())?;
-            effector.apply_impulse_at(impulse, collision.contact.points[0] - a_object.pos, true);
-            effector.translate(-dir * (a_object.mass / total_mass));
-        }
-
-        {
-            let effector = &mut *b.get_mut(effector())?;
-            effector.apply_impulse_at(-impulse, collision.contact.points[1] - b_object.pos, true);
-            effector.translate(dir * (b_object.mass / total_mass));
-        }
-    }
-
-    Ok(())
+pub struct RemovedComponentSubscriber<T> {
+    tx: flume::Sender<(Entity, T)>,
+    component: Component<T>,
 }
 
-// Resolves collision against a static or immovable object
-fn resolve_static(a: &EntityRef, b: &EntityRef, contact: Contact, dt: f32) -> Result<()> {
-    let query = &(
-        restitution().opt_or_default(),
-        friction().opt_or_default(),
-        position(),
-    );
+impl<T> RemovedComponentSubscriber<T> {
+    pub fn new(tx: flume::Sender<(Entity, T)>, component: Component<T>) -> Self {
+        Self { tx, component }
+    }
+}
 
-    let mut a = a.query(&query);
-    let a = a.get().unwrap();
+impl<T: ComponentValue + Copy> EventSubscriber for RemovedComponentSubscriber<T> {
+    fn on_added(&self, _: &flax::archetype::Storage, _: &flax::events::EventData) {}
 
-    let query = &(RbQuery::new(), position(), effector().as_mut());
+    fn on_modified(&self, _: &flax::events::EventData) {}
 
-    let mut b = b.query(query);
-    let Some(b) = b.get() else { return Ok(()) };
-    let b_effector = b.2;
-
-    let b = ResolveObject {
-        pos: *b.1,
-        vel: *b.0.vel + b_effector.net_velocity_change(dt),
-        ang_vel: *b.0.ang_vel,
-        resitution: *b.0.restitution,
-        mass: *b.0.mass,
-        ang_mass: *b.0.ang_mass,
-        friction: *b.0.friction,
-    };
-
-    let a = ResolveObject {
-        pos: *a.2,
-        resitution: *a.0,
-        friction: *a.1,
-        ..Default::default()
-    };
-
-    // let mut b_query = world.try_query_one::<(RbQuery, &Position, &mut Effector)>(b)?;
-
-    if !b.mass.is_normal() {
-        return Ok(());
+    fn on_removed(&self, storage: &flax::archetype::Storage, event: &flax::events::EventData) {
+        let storage = storage.downcast_ref::<T>();
+        for (&id, slot) in event.ids.iter().zip(event.slots) {
+            self.tx.send((id, storage[slot])).ok();
+        }
     }
 
-    let impulse = resolve_collision(&contact, &a, &b);
+    fn matches_arch(&self, arch: &flax::archetype::Archetype) -> bool {
+        arch.has(self.component.key())
+    }
 
-    b_effector.apply_impulse_at(-impulse, contact.points[1] - b.pos, false);
-    // effector.apply_force_at(b_f, contact.points[1] - b.pos);
+    fn matches_component(&self, v: ComponentDesc) -> bool {
+        v.key() == self.component.key()
+    }
 
-    b_effector.translate(contact.normal * contact.depth);
+    fn is_connected(&self) -> bool {
+        self.tx.is_connected()
+    }
+}
 
-    Ok(())
+pub fn unregister_bodies_system(world: &mut World) -> BoxedSystem {
+    let (tx, rx) = flume::unbounded();
+
+    world.subscribe(RemovedComponentSubscriber::new(tx, body_index()));
+
+    System::builder()
+        .with_world()
+        .with_cmd_mut()
+        .with_query(Query::new(physics_state().as_mut()))
+        .build(
+            move |_: &World,
+                  _: &mut CommandBuffer,
+                  mut query: QueryBorrow<Mutable<PhysicsState>>| {
+                if let Some(state) = query.first() {
+                    state.remove_bodies(rx.try_iter());
+                }
+
+                anyhow::Ok(())
+            },
+        )
+        .boxed()
+}
+pub fn update_bodies_system() -> BoxedSystem {
+    System::builder()
+        .with_query(Query::new(physics_state().as_mut()))
+        .with_query(Query::new((body_index(), world_transform(), velocity())))
+        .build(
+            move |mut state: QueryBorrow<Mutable<PhysicsState>>,
+                  mut query: QueryBorrow<(
+                Component<BodyIndex>,
+                Component<Mat4>,
+                Component<Vec3>,
+            )>| {
+                if let Some(state) = state.first() {
+                    state.update_bodies(query.iter().map(|(&a, &b, &c)| (a, b, c)));
+                }
+
+                anyhow::Ok(())
+            },
+        )
+        .boxed()
+}
+
+pub fn update_simulation_bodies_system() -> BoxedSystem {
+    System::builder()
+        .with_query(Query::new(physics_state().as_mut()))
+        .with_query(
+            Query::new((body_index(), position(), velocity(), angular_velocity()))
+                .without(is_static()),
+        )
+        .build(
+            move |mut state: QueryBorrow<Mutable<PhysicsState>>,
+                  mut query: QueryBorrow<
+                (
+                    Component<BodyIndex>,
+                    Component<Vec3>,
+                    Component<Vec3>,
+                    Component<Vec3>,
+                ),
+                _,
+            >| {
+                if let Some(state) = state.first() {
+                    for (&body_index, &pos, &vel, &ang_vel) in query.iter() {
+                        let body = state.simulation_body_mut(body_index);
+                        body.pos = pos;
+                        body.vel = vel;
+                        body.ang_vel = ang_vel;
+                    }
+
+                    // state.update_bodies(query.iter().map(|(&a, &b, &c)| (a, b, c)));
+                }
+
+                anyhow::Ok(())
+            },
+        )
+        .boxed()
+}
+
+/// Resolves all pending collisions to be processed
+pub fn generate_contacts_system() -> BoxedSystem {
+    System::builder()
+        .with_query(Query::new(physics_state().as_mut()))
+        .build(move |mut query: QueryBorrow<Mutable<PhysicsState>>| {
+            if let Some(state) = query.first() {
+                state.generate_contacts();
+            }
+
+            anyhow::Ok(())
+        })
+        .boxed()
+}
+
+/// Resolves all pending collisions to be processed
+pub fn solve_contacts_system() -> BoxedSystem {
+    System::builder()
+        .with_query(Query::new(physics_state().as_mut()))
+        .build(move |mut query: QueryBorrow<Mutable<PhysicsState>>| {
+            if let Some(state) = query.first() {
+                state.solve_contacts();
+            }
+
+            anyhow::Ok(())
+        })
+        .boxed()
+}
+
+pub fn sync_simulation_bodies_system() -> BoxedSystem {
+    System::builder()
+        .with_query(Query::new(physics_state().as_mut()))
+        .with_query(Query::new((
+            velocity().as_mut(),
+            angular_velocity().as_mut(),
+        )))
+        .build(
+            move |mut state: QueryBorrow<Mutable<PhysicsState>>,
+                  mut query: QueryBorrow<(Mutable<Vec3>, Mutable<Vec3>), _>| {
+                if let Some(state) = state.first() {
+                    state.sync_simulation_bodies(&mut query);
+                }
+
+                anyhow::Ok(())
+            },
+        )
+        .boxed()
+}
+
+pub fn contact_gizmos_system() -> BoxedSystem {
+    System::builder()
+        .with_query(Query::new(gizmos().source(engine())))
+        .with_query(Query::new(physics_state()))
+        .build(
+            move |mut gizmos: QueryBorrow<Source<Component<Gizmos>, Entity>>,
+                  mut query: QueryBorrow<Component<PhysicsState>>| {
+                let mut gizmos = gizmos
+                    .first()
+                    .unwrap()
+                    .begin_section("contact_gizmos_system");
+
+                if let Some(tree) = query.first() {
+                    for (_, island) in tree.islands() {
+                        for (_, contact) in tree.island_contacts(island) {
+                            gizmos.draw(contact);
+                        }
+                    }
+                }
+                anyhow::Ok(())
+            },
+        )
+        .boxed()
+}
+
+pub fn island_graph_gizmo_system() -> BoxedSystem {
+    System::builder()
+        .with_query(Query::new(gizmos().source(engine())))
+        .with_query(Query::new(physics_state()))
+        .with_query(Query::new(world_transform()))
+        .build(
+            move |mut gizmos: QueryBorrow<Source<Component<Gizmos>, Entity>>,
+                  mut query: QueryBorrow<Component<PhysicsState>>,
+                  mut transforms: QueryBorrow<Component<Mat4>>| {
+                let mut gizmos = gizmos
+                    .first()
+                    .unwrap()
+                    .begin_section("island_graph_gizmo_system");
+
+                let Some(state) = query.first() else {
+                    return;
+                };
+
+                for (i, (island_index, island)) in state.islands().enumerate() {
+                    if island.parent() != island_index {
+                        continue;
+                    }
+
+                    let color = Color::from_hsla(i as f32 * 60.0, 1.0, 0.5, 1.0);
+
+                    for (_, contact) in state.island_contacts(island) {
+                        let a = state.body(contact.a.body);
+                        let b = state.body(contact.b.body);
+
+                        let a_transform = transforms.get(a.id).copied().unwrap();
+                        let b_transform = transforms.get(b.id).copied().unwrap();
+
+                        let a_pos = a_transform.transform_point3(Vec3::ZERO);
+                        let b_pos = b_transform.transform_point3(Vec3::ZERO);
+
+                        if contact.a.body == island_index {
+                            gizmos.draw(ivy_core::gizmos::Sphere::new(a_pos, 0.1, color));
+                        }
+                        if contact.b.body == island_index {
+                            gizmos.draw(ivy_core::gizmos::Sphere::new(b_pos, 0.1, color));
+                        }
+
+                        gizmos.draw(ivy_core::gizmos::Sphere::new(a_pos, DEFAULT_RADIUS, color));
+                        gizmos.draw(ivy_core::gizmos::Sphere::new(b_pos, DEFAULT_RADIUS, color));
+
+                        gizmos.draw(Line::from_points(a_pos, b_pos, DEFAULT_THICKNESS, color))
+                    }
+                }
+            },
+        )
+        .boxed()
+}
+
+pub fn gizmo_system(dt: f32) -> BoxedSystem {
+    System::builder()
+        .with_query(Query::new(ivy_core::components::gizmos()))
+        .with_query(Query::new((
+            world_transform(),
+            velocity(),
+            angular_velocity(),
+            effector(),
+        )))
+        .build(
+            move |mut gizmos: QueryBorrow<Component<Gizmos>>,
+                  mut query: QueryBorrow<(
+                Component<Mat4>,
+                Component<Vec3>,
+                Component<Vec3>,
+                Component<crate::Effector>,
+            )>| {
+                let mut gizmos = gizmos
+                    .get(engine())?
+                    .begin_section("effectors_gizmo_system");
+
+                for (transform, &velocity, &w, effector) in query.iter() {
+                    let origin = transform.transform_point3(Vec3::ZERO);
+
+                    let dv = effector.net_velocity_change(dt);
+                    gizmos.draw(Line::new(origin, dv, DEFAULT_THICKNESS, Color::red()));
+                    gizmos.draw(Line::new(
+                        origin,
+                        transform.transform_vector3(Vec3::Z),
+                        DEFAULT_THICKNESS,
+                        Color::blue(),
+                    ));
+                    gizmos.draw(Line::new(
+                        origin,
+                        transform.transform_vector3(Vec3::X),
+                        DEFAULT_THICKNESS,
+                        Color::red(),
+                    ));
+                    gizmos.draw(Line::new(
+                        origin,
+                        transform.transform_vector3(Vec3::Y),
+                        DEFAULT_THICKNESS,
+                        Color::green(),
+                    ));
+                    gizmos.draw(Line::new(
+                        origin,
+                        velocity,
+                        DEFAULT_THICKNESS,
+                        Color::cyan(),
+                    ));
+                    gizmos.draw(Line::new(origin, w, DEFAULT_THICKNESS, Color::purple()));
+                }
+
+                anyhow::Ok(())
+            },
+        )
+        .boxed()
+}
+
+/// Removes small unwanted floating point accumulation by cutting values toward zero
+pub(crate) fn round_to_zero(v: Vec3, threshold: f32) -> Vec3 {
+    vec3(
+        if v.x.abs() < threshold { 0.0 } else { v.x },
+        if v.y.abs() < threshold { 0.0 } else { v.y },
+        if v.z.abs() < threshold { 0.0 } else { v.z },
+    )
+}
+
+pub fn dampening_system(dt: f32) -> BoxedSystem {
+    System::builder()
+        .with_query(Query::new((RbQueryMut::new(),)))
+        .par_for_each(move |(rb,)| {
+            const LINEAR_DAMPEN: f32 = 0.1;
+            const ANGULAR_DAMPEN: f32 = 0.1;
+
+            *rb.vel = round_to_zero(*rb.vel * (1.0 / (1.0 + dt * LINEAR_DAMPEN)), 1e-2);
+            *rb.ang_vel = round_to_zero(*rb.ang_vel * (1.0 / (1.0 + dt * ANGULAR_DAMPEN)), 1e-2);
+        })
+        .boxed()
 }
 
 /// Applies effectors to their respective entities and clears the effects.
-pub fn apply_effectors() -> BoxedSystem {
+pub fn apply_effectors_system(dt: f32) -> BoxedSystem {
     System::builder()
         .with_query(Query::new((
-            physics_state().source(engine()),
             RbQueryMut::new(),
             position().as_mut(),
             effector().as_mut(),
             sleeping().satisfied(),
         )))
-        .for_each(|(physics_state, rb, position, effector, is_sleeping)| {
+        .par_for_each(move |(rb, position, effector, is_sleeping)| {
             if !is_sleeping || effector.should_wake() {
                 // tracing::info!(%physics_state.dt, ?effector, "updating effector");
-                *rb.vel += effector.net_velocity_change(physics_state.dt);
+                let net_dv = effector.net_velocity_change(dt);
+                *rb.vel += round_to_zero(net_dv, 1e-4);
                 *position += effector.translation();
 
-                *rb.ang_vel += effector.net_angular_velocity_change(physics_state.dt);
+                *rb.ang_vel =
+                    round_to_zero(*rb.ang_vel + effector.net_angular_velocity_change(dt), 1e-4);
             }
 
+            effector.clear();
             effector.set_mass(*rb.mass);
             effector.set_ang_mass(*rb.ang_mass);
-
-            // if sleeping && effector.should_wake() {
-            //     cmd.remove_one::<Sleeping>(e)
-            // }
-
-            effector.clear()
         })
         .boxed()
 }
-
-// pub fn apply_effectors(
-//     world: SubWorld<(
-//         RbQueryMut,
-//         &mut Position,
-//         &mut Effector,
-//         Satisfies<&Sleeping>,
-//     )>,
-//     mut cmd: Write<CommandBuffer>,
-//     dt: Read<DeltaTime>,
-// ) {
-//     world.native_query().without::<Static>().iter().for_each(
-//         |(e, (rb, pos, effector, sleeping))| {
-//             if !sleeping || effector.should_wake() {
-//                 *rb.vel += effector.net_velocity_change(**dt);
-//                 *pos += effector.translation();
-
-//                 *rb.ang_vel += effector.net_angular_velocity_change(**dt);
-//             }
-
-//             effector.set_mass(*rb.mass);
-//             effector.set_ang_mass(*rb.ang_mass);
-
-//             if sleeping && effector.should_wake() {
-//                 cmd.remove_one::<Sleeping>(e)
-//             }
-
-//             effector.clear()
-//         },
-//     )
-// }

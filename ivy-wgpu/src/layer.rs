@@ -78,11 +78,6 @@ impl GraphicsLayer {
                 .draw(world, assets, &state.gpu, &state.gpu.queue)?;
         }
 
-        // if let Some(renderer) = &mut self.renderer {
-        //     renderer.update(world, assets);
-        //     renderer.draw(assets)?;
-        // }
-
         Ok(())
     }
 
@@ -90,11 +85,6 @@ impl GraphicsLayer {
         if let Some(state) = &mut self.rendering_state {
             state.renderer.on_resize(&state.gpu, physical_size);
         }
-        // if let Some(renderer) = &mut self.renderer {
-        //     renderer.resize(physical_size);
-        // } else {
-        //     tracing::warn!("renderer not initialized");
-        // }
 
         Ok(())
     }

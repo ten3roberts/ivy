@@ -5,14 +5,20 @@ use crate::{app::TickEvent, Layer};
 pub struct ProfilingLayer {
     #[allow(dead_code)]
     #[cfg(feature = "profile")]
-    puffin_server: puffin_http::Server,
+    puffin_server: Option<puffin_http::Server>,
 }
 
 impl ProfilingLayer {
     #[cfg(feature = "profile")]
     pub fn new() -> Self {
         let server_addr = format!("127.0.0.1:{}", puffin_http::DEFAULT_PORT);
-        let puffin_server = puffin_http::Server::new(&server_addr).unwrap();
+        let puffin_server = match puffin_http::Server::new(&server_addr) {
+            Ok(v) => Some(v),
+            Err(_) => {
+                tracing::warn!("Failed to bind puffin server");
+                None
+            }
+        };
         tracing::info!("Profiling enabled. Broadcasting on {server_addr}");
         puffin::set_scopes_on(true);
 

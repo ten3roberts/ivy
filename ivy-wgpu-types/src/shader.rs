@@ -120,6 +120,7 @@ impl Shader {
                     alpha_to_coverage_enabled: false, // 4.
                 },
                 multiview: None,
+                cache: None,
             });
 
         Self { pipeline }

@@ -2,19 +2,18 @@ use std::ops::Deref;
 
 use flax::{Fetch, World};
 use glam::{Mat4, Vec3};
-use ivy_core::{DrawGizmos, GizmosSection, Line};
+use ivy_core::gizmos::{DrawGizmos, GizmosSection, Line};
 
 mod cast;
 pub use cast::*;
+use ordered_float::OrderedFloat;
 
 use crate::{
-    epa,
-    query::TreeQuery,
-    util::{support, SupportPoint},
-    CollisionPrimitive, CollisionTree, CollisionTreeNode, Contact, Simplex,
+    epa, query::TreeQuery, util::SupportPoint, CollisionTree, Contact, Shape, Simplex,
+    TransformedShape,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Ray {
     pub(crate) origin: Vec3,
     pub(crate) dir: Vec3,
@@ -28,33 +27,29 @@ impl Ray {
         }
     }
 
-    pub fn support<T: CollisionPrimitive>(
+    pub fn support<T: Shape>(
         &self,
         collider: &T,
         transform: &Mat4,
-        transform_inv: &Mat4,
+        _transform_inv: &Mat4,
         dir: Vec3,
     ) -> SupportPoint {
-        let a = support(transform, transform_inv, collider, dir);
+        let a = TransformedShape::new(collider, *transform).support(dir);
 
         SupportPoint {
-            support: a - self.origin,
+            p: a - self.origin,
             a,
             b: self.origin,
         }
     }
 
     /// Returns true if a shape intersects the ray
-    pub fn intersects<T: CollisionPrimitive>(
-        &self,
-        collider: &T,
-        transform: &Mat4,
-    ) -> Option<Contact> {
+    pub fn intersect<T: Shape>(&self, collider: &T, transform: &Mat4) -> Option<Contact> {
         // Check if any point is behind ray
 
         let transform_inv = transform.inverse();
         let p = self.support(collider, transform, &transform_inv, -self.dir);
-        if p.support.dot(self.dir) < 0.0 {
+        if p.p.dot(self.dir) < 0.0 {
             return None;
         }
 
@@ -66,7 +61,13 @@ impl Ray {
 
         let mut simplex = Simplex::Point([a]);
 
+        let mut iterations = 0;
         while let Some(dir) = simplex.next_flat(self.dir) {
+            if iterations > 1000 {
+                tracing::error!("max iterations reached");
+                return None;
+            }
+            iterations += 1;
             let dir = dir.normalize();
 
             // Get the next simplex
@@ -74,7 +75,7 @@ impl Ray {
 
             // New point was not past the origin
             // No collision
-            if p.support.dot(dir) < 0.0 || !dir.is_normalized() {
+            if p.p.dot(dir) < 0.0 || !dir.is_normalized() {
                 return None;
             }
 
@@ -95,55 +96,6 @@ impl Ray {
             simplex,
             self,
         ))
-    }
-
-    /// Cast the ray into the world and returns the closest intersection
-    pub fn cast_one<W, N>(&self, world: &World, tree: &CollisionTree<N>) -> Option<RayIntersection>
-    where
-        N: 'static + CollisionTreeNode,
-    {
-        tree.query(RayCaster::new(self, world, &())).flatten().min()
-    }
-
-    pub fn cast<'a, N, Q>(
-        &'a self,
-        world: &'a World,
-        tree: &'a CollisionTree<N>,
-        filter: &'a Q,
-    ) -> TreeQuery<'a, N, RayCaster<'a, Q>>
-    where
-        N: CollisionTreeNode,
-    {
-        tree.query(RayCaster::new(self, world, filter))
-    }
-    /// Cast the ray into the world and returns the closest intersection
-    pub fn cast_one_with<'a, Q, T, N>(
-        &'a self,
-        world: &'a World,
-        tree: &'a T,
-        filter: &'a Q,
-    ) -> Option<RayIntersection>
-    where
-        T: Deref<Target = CollisionTree<N>>,
-        N: 'static + CollisionTreeNode,
-        Q: for<'x> Fetch<'x>,
-    {
-        tree.query(RayCaster::<Q>::new(self, world, filter))
-            .flatten()
-            .min()
-    }
-
-    pub fn cast_with<'a, Q, T, N>(
-        &'a self,
-        world: &'a World,
-        tree: &'a T,
-        filter: &'a Q,
-    ) -> TreeQuery<'a, N, RayCaster<'a, Q>>
-    where
-        T: Deref<Target = CollisionTree<N>>,
-        N: 'static + CollisionTreeNode,
-    {
-        tree.query(RayCaster::new(self, world, filter))
     }
 
     /// Get a reference to the ray's origin.

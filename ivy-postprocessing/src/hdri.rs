@@ -1,7 +1,8 @@
 //! Image based lighting for environment lighting
 
-use std::any::type_name;
+use std::{any::type_name, mem};
 
+use futures::{stream::BoxStream, FutureExt, StreamExt};
 use glam::{Mat4, Vec3};
 use image::DynamicImage;
 use itertools::Itertools;
@@ -487,20 +488,26 @@ impl HdriProcessor {
 
 pub struct HdriProcessorNode {
     processor: HdriProcessor,
-    source: Option<Asset<DynamicImage>>,
     skybox: SkyboxTextures,
+    incoming: futures::stream::Fuse<BoxStream<'static, Asset<DynamicImage>>>,
+    source: Option<Asset<DynamicImage>>,
+    process_hdri: bool,
+    process_brdf_lookup: bool,
 }
 
 impl HdriProcessorNode {
     pub fn new(
         processor: HdriProcessor,
-        source: Asset<DynamicImage>,
+        source: BoxStream<'static, Asset<DynamicImage>>,
         skybox: SkyboxTextures,
     ) -> Self {
         Self {
             processor,
-            source: Some(source),
+            incoming: source.fuse(),
             skybox,
+            process_brdf_lookup: true,
+            source: None,
+            process_hdri: true,
         }
     }
 }
@@ -510,33 +517,50 @@ impl Node for HdriProcessorNode {
         type_name::<Self>()
     }
 
+    fn update(&mut self, _ctx: ivy_wgpu::rendergraph::NodeUpdateContext) -> anyhow::Result<()> {
+        if let Some(source) = self.incoming.next().now_or_never().flatten() {
+            self.process_hdri = true;
+            self.source = Some(source);
+        }
+
+        Ok(())
+    }
+
     fn draw(&mut self, ctx: ivy_wgpu::rendergraph::NodeExecutionContext) -> anyhow::Result<()> {
-        if let Some(source) = self.source.take() {
-            let environment_map = ctx.get_texture(self.skybox.environment_map);
-            self.processor
-                .process_hdri(ctx.gpu, ctx.encoder, &source, environment_map);
+        if let Some(source) = &self.source {
+            if mem::take(&mut self.process_hdri) {
+                let environment_map = ctx.get_texture(self.skybox.environment_map);
+                tracing::info!(
+                    "processing hdri {:?} {:?}",
+                    environment_map.size(),
+                    self.skybox.environment_map
+                );
+                self.processor
+                    .process_hdri(ctx.gpu, ctx.encoder, source, environment_map);
 
-            self.processor.process_diffuse_irradiance(
-                ctx.gpu,
-                ctx.encoder,
-                environment_map,
-                ctx.get_texture(self.skybox.irradiance_map),
-            );
+                self.processor.process_diffuse_irradiance(
+                    ctx.gpu,
+                    ctx.encoder,
+                    environment_map,
+                    ctx.get_texture(self.skybox.irradiance_map),
+                );
 
-            self.processor.process_specular_ibl(
-                ctx.gpu,
-                ctx.encoder,
-                environment_map,
-                ctx.get_texture(self.skybox.specular_map),
-            );
+                self.processor.process_specular_ibl(
+                    ctx.gpu,
+                    ctx.encoder,
+                    environment_map,
+                    ctx.get_texture(self.skybox.specular_map),
+                );
+            }
+        }
 
+        if mem::take(&mut self.process_brdf_lookup) {
             self.processor.process_brdf_lookup(
                 ctx.gpu,
                 ctx.encoder,
                 ctx.get_texture(self.skybox.integrated_brdf),
             );
         }
-
         Ok(())
     }
 
@@ -557,6 +581,12 @@ impl Node for HdriProcessorNode {
                 TextureUsages::RENDER_ATTACHMENT,
             ),
         ]
+    }
+
+    fn on_resource_changed(&mut self, _resource: ivy_wgpu::rendergraph::ResourceHandle) {
+        tracing::info!("reprocessing");
+        self.process_hdri = true;
+        self.process_brdf_lookup = true;
     }
 }
 

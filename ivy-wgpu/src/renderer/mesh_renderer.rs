@@ -11,7 +11,7 @@ use flax::{
 use glam::Mat4;
 use itertools::Itertools;
 use ivy_assets::{map::AssetMap, stored::Handle, Asset, AssetCache};
-use ivy_core::{profiling::profile_function, world_transform};
+use ivy_core::{profiling::profile_function, components::world_transform};
 use ivy_gltf::components::skin;
 use ivy_wgpu_types::shader::Culling;
 use slab::Slab;

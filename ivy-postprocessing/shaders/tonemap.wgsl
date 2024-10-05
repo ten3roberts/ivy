@@ -91,7 +91,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var color = textureSample(source_texture, default_sampler, in.uv).rgb;
     var yxy = convert_rgb_yxy(color);
 
-    let lum = 0.1;
+    let lum = 0.05;
     let lp = yxy.x / (9.6 * lum + 0.0001);
     yxy.x = reinhard_2(lp);
 

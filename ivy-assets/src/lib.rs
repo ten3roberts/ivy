@@ -3,10 +3,12 @@ use std::{
     borrow::Borrow,
     collections::HashMap,
     fmt::{Debug, Display},
+    future::Future,
     hash::Hash,
     ops::Deref,
     path::Path,
     sync::Arc,
+    task::Poll,
     time::Instant,
 };
 
@@ -20,14 +22,13 @@ pub mod service;
 pub mod stored;
 use fs::{AssetFromPath, AsyncAssetFromPath};
 use futures::{
-    future::{BoxFuture, WeakShared},
-    Future, FutureExt,
+    future::{BoxFuture, Shared, WeakShared},
+    FutureExt, TryFutureExt,
 };
 pub use handle::Asset;
 use image::DynamicImage;
 use parking_lot::{RwLock, RwLockReadGuard};
 use service::Service;
-use tracing::Instrument;
 
 use self::{cell::AssetCell, handle::WeakHandle};
 
@@ -135,7 +136,7 @@ impl AssetCache {
         }
     }
 
-    pub async fn try_load_async<K, V>(&self, desc: &K) -> Result<Asset<V>, SharedError<K::Error>>
+    pub fn try_load_async<K, V>(&self, desc: &K) -> AssetLoadFuture<V, K::Error>
     where
         K: ?Sized + AsyncAssetDesc<V>,
         V: 'static + Send + Sync,
@@ -143,17 +144,18 @@ impl AssetCache {
         // ivy_profiling::profile_function!(format!("{desc:?}"));
 
         if let Some(handle) = self.get_async(desc) {
-            return Ok(handle);
+            return AssetLoadFuture {
+                inner: Ok(Ok(handle)),
+            };
         }
 
         {
-            let pending = self.inner.pending_keys.get(&TypeId::of::<K::Stored>());
+            let pending = self.inner.pending_keys.get(&TypeId::of::<(K::Stored, V)>());
             if let Some(pending) = pending {
                 let pending = pending.downcast_ref::<PendingKeyMap<K, V>>().unwrap();
 
                 if let Some(fut) = pending.get(desc).and_then(|v| WeakShared::upgrade(&v)) {
-                    let value = fut.await;
-                    return value;
+                    return AssetLoadFuture { inner: Err(fut) };
                 }
             }
         }
@@ -170,7 +172,6 @@ impl AssetCache {
             let value = desc
                 .borrow()
                 .create(&assets)
-                .instrument(tracing::info_span!("load_asset", desc =%desc_debug))
                 .await
                 .map_err(|v| SharedError(Arc::new(v)))?;
 
@@ -194,14 +195,16 @@ impl AssetCache {
             let mut pending = self
                 .inner
                 .pending_keys
-                .entry(TypeId::of::<K::Stored>())
+                .entry(TypeId::of::<(K::Stored, V)>())
                 .or_insert_with(|| Box::new(PendingKeyMap::<K, V>::new()));
 
             let pending = pending.downcast_mut::<PendingKeyMap<K, V>>().unwrap();
             pending.insert(stored, fut.downgrade().unwrap());
         }
 
-        fut.await
+        async_std::task::spawn(fut.clone());
+
+        AssetLoadFuture { inner: Err(fut) }
     }
 
     pub async fn load_async<V>(&self, key: &(impl AsyncAssetDesc<V> + ?Sized)) -> Asset<V>
@@ -324,6 +327,30 @@ where
     }
 }
 
+pub trait AsyncAssetKey<V>: 'static + Send + Sync {
+    fn load_async(&self, assets: &AssetCache) -> AssetLoadFuture<V, anyhow::Error>;
+}
+
+impl<T, V> AsyncAssetKey<V> for T
+where
+    T: AsyncAssetDesc<V>,
+    T::Error: Debug + Display,
+    V: 'static + Send + Sync,
+{
+    fn load_async(&self, assets: &AssetCache) -> AssetLoadFuture<V, anyhow::Error> {
+        let fut = assets.try_load_async(self);
+        let inner = match fut.inner {
+            Ok(v) => Ok(v.map_err(|v| SharedError(Arc::new(anyhow::Error::from(v))))),
+            Err(fut) => Err(fut
+                .map_err(|v| SharedError(Arc::new(anyhow::Error::from(v))))
+                .boxed()
+                .shared()),
+        };
+
+        AssetLoadFuture { inner }
+    }
+}
+
 /// A key or descriptor which can be used to load an asset.
 ///
 /// This trait is implemented for `Path`, `str` and `String` by default to load assets from the
@@ -367,6 +394,38 @@ impl AsyncAssetFromPath for DynamicImage {
         Ok(assets.insert(image))
     }
 }
+
+type SharedLoadFuture<T, E> = Shared<BoxFuture<'static, Result<Asset<T>, SharedError<E>>>>;
+
+pub struct AssetLoadFuture<T, E> {
+    inner: Result<Result<Asset<T>, SharedError<E>>, SharedLoadFuture<T, E>>,
+}
+
+impl<T, E> AssetLoadFuture<T, E> {
+    /// Returns the value if loaded
+    /// Can be called multiple times until loaded
+    pub fn try_get(&self) -> Option<Result<Asset<T>, SharedError<E>>> {
+        match &self.inner {
+            Ok(v) => Some(v.clone()),
+            Err(v) => v.peek().cloned(),
+        }
+    }
+}
+
+impl<T, E> Future for AssetLoadFuture<T, E> {
+    type Output = Result<Asset<T>, SharedError<E>>;
+
+    fn poll(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
+        match &mut self.inner {
+            Ok(v) => Poll::Ready(v.clone()),
+            Err(v) => v.poll_unpin(cx),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::{convert::Infallible, path::Path};

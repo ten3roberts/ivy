@@ -132,17 +132,6 @@ impl<T: Event> EventSender<T> for MpscSender<T> {
     }
 }
 
-#[cfg(feature = "crossbeam-channel")]
-impl<T: Event> EventSender<T> for crossbeam_channel::Sender<T> {
-    fn send(&self, event: T) -> bool {
-        let _ = self.send(event);
-    }
-
-    fn is_disconnected(&self) -> bool {
-        self.is_disconnected
-    }
-}
-
 impl<T: Event> EventSender<T> for flume::Sender<T> {
     fn send(&self, event: T) {
         let _ = self.send(event);

@@ -1,49 +1,72 @@
-use glam::{Mat4, Vec3};
+use std::fmt::{Debug, Display};
 
-use crate::{CollisionPrimitive, Ray};
+use glam::Vec3;
 
-pub const TOLERANCE: f32 = 0.001;
-pub const MAX_ITERATIONS: usize = 10;
+use crate::{Ray, Shape};
+
+pub const TOLERANCE: f32 = 0.000001;
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum IndexedRange<T> {
+    Min,
+    Exact(T),
+    Max,
+}
+
+impl<T> IndexedRange<T> {
+    pub(crate) fn as_exact(&self) -> Option<&T> {
+        if let Self::Exact(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+}
 
 // Represents a point on the minkowski difference boundary which carries the
 // individual support points
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Default, Clone, Copy)]
 pub struct SupportPoint {
-    pub support: Vec3,
+    pub p: Vec3,
     pub a: Vec3,
     pub b: Vec3,
+}
+
+impl std::ops::Deref for SupportPoint {
+    type Target = Vec3;
+
+    fn deref(&self) -> &Self::Target {
+        &self.p
+    }
+}
+
+impl Debug for SupportPoint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(&self.p, f)
+    }
+}
+
+impl PartialEq for SupportPoint {
+    fn eq(&self, other: &Self) -> bool {
+        self.p == other.p
+    }
+}
+
+impl Display for SupportPoint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.p, f)
+    }
 }
 
 /// Returns a point on the minkowski difference given from two colliders, their
 /// transform, and a direction.
 #[inline]
-pub fn minkowski_diff<A: CollisionPrimitive, B: CollisionPrimitive>(
-    a_transform: &Mat4,
-    b_transform: &Mat4,
-    a_transform_inv: &Mat4,
-    b_transform_inv: &Mat4,
-    a_coll: &A,
-    b_coll: &B,
-    dir: Vec3,
-) -> SupportPoint {
-    let a = support(a_transform, a_transform_inv, a_coll, dir);
-    let b = support(b_transform, b_transform_inv, b_coll, -dir);
+pub fn minkowski_diff<A: Shape, B: Shape>(a: &A, b: &B, dir: Vec3) -> SupportPoint {
+    assert!(dir.is_normalized());
+    let a = a.support(dir);
+    let b = b.support(-dir);
 
-    SupportPoint {
-        support: a - b,
-        a,
-        b,
-    }
-}
-
-#[inline]
-pub fn support<T: CollisionPrimitive>(
-    transform: &Mat4,
-    transform_inv: &Mat4,
-    coll: &T,
-    dir: Vec3,
-) -> Vec3 {
-    transform.transform_point3(coll.support(transform_inv.transform_vector3(dir).normalize()))
+    SupportPoint { p: a - b, a, b }
 }
 
 /// Compute barycentric coordinates of p in relation to the triangle defined by (a, b, c).
@@ -205,5 +228,5 @@ pub fn check_triangle_intersect(points: &[Vec3], dir: Vec3) -> bool {
 
 // Calculates the heuristic distance of a face to a ray
 pub fn ray_distance(p: SupportPoint, normal: Vec3, ray: &Ray) -> f32 {
-    plane_intersect(p.support, normal, ray.dir()).dot(ray.dir()) * -normal.dot(ray.dir()).signum()
+    plane_intersect(p.p, normal, ray.dir()).dot(ray.dir()) * -normal.dot(ray.dir()).signum()
 }

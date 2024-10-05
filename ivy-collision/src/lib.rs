@@ -1,17 +1,22 @@
-mod aabb;
+pub mod body;
+mod bounding_box;
 mod collider;
 mod collision;
+pub mod components;
+pub mod contact;
 mod epa;
 mod gjk;
+pub mod island;
+pub mod plane;
 mod primitives;
 mod ray;
 mod simplex;
 mod traits;
 mod tree;
 pub mod util;
-pub mod components;
+pub mod mpr;
 
-pub use aabb::*;
+pub use bounding_box::*;
 pub use collider::*;
 pub use collision::*;
 pub use epa::*;

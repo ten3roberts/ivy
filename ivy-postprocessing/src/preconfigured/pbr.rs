@@ -1,8 +1,9 @@
-use std::{mem::size_of, sync::Arc};
+use std::{future::ready, mem::size_of, sync::Arc};
 
 use flax::World;
+use futures::{stream, StreamExt};
 use image::DynamicImage;
-use ivy_assets::{Asset, AssetCache, DynAssetDesc};
+use ivy_assets::{AssetCache, AsyncAssetKey};
 use ivy_wgpu::{
     components::forward_pass,
     renderer::{
@@ -33,10 +34,12 @@ pub struct PbrRenderGraphConfig {
     pub msaa: Option<MsaaConfig>,
     pub bloom: Option<BloomConfig>,
     pub skybox: Option<SkyboxConfig>,
+    pub hdr_format: TextureFormat,
 }
 
 pub struct SkyboxConfig {
-    pub hdri: Box<dyn DynAssetDesc<DynamicImage>>,
+    pub hdri: Box<dyn AsyncAssetKey<DynamicImage>>,
+    pub format: TextureFormat,
 }
 
 #[derive(Debug, Clone)]
@@ -49,8 +52,8 @@ pub struct ShadowMapConfig {
 impl Default for ShadowMapConfig {
     fn default() -> Self {
         Self {
-            resolution: 1024,
-            max_cascades: 4,
+            resolution: 512,
+            max_cascades: 2,
             max_shadows: 4,
         }
     }
@@ -108,7 +111,7 @@ impl PbrRenderGraphConfig {
             depth_or_array_layers: 1,
         };
 
-        let hdr_format = TextureFormat::Rgba16Float;
+        let hdr_format = self.hdr_format;
 
         let final_color = render_graph.resources.insert_texture(ManagedTextureDesc {
             label: "final_color".into(),
@@ -221,10 +224,8 @@ impl PbrRenderGraphConfig {
 
         let skybox_textures = match self.skybox {
             Some(v) => {
-                let image: Asset<DynamicImage> = v.hdri.load(assets);
-
                 const MAX_REFLECTION_LOD: u32 = 8;
-                let hdri_processor = HdriProcessor::new(gpu, hdr_format, MAX_REFLECTION_LOD);
+                let hdri_processor = HdriProcessor::new(gpu, v.format, MAX_REFLECTION_LOD);
 
                 let environment_map = render_graph.resources.insert_texture(ManagedTextureDesc {
                     label: "hdr_cubemap".into(),
@@ -257,8 +258,8 @@ impl PbrRenderGraphConfig {
                 let specular_map = render_graph.resources.insert_texture(ManagedTextureDesc {
                     label: "hdr_cubemap".into(),
                     extent: Extent3d {
-                        width: 512,
-                        height: 512,
+                        width: 1024,
+                        height: 1024,
                         depth_or_array_layers: 6,
                     },
                     mip_level_count: MAX_REFLECTION_LOD,
@@ -289,7 +290,26 @@ impl PbrRenderGraphConfig {
                     integrated_brdf,
                 );
 
-                render_graph.add_node(HdriProcessorNode::new(hdri_processor, image, skybox));
+                let hdri = v.hdri;
+                let assets = assets.clone();
+                render_graph.add_node(HdriProcessorNode::new(
+                    hdri_processor,
+                    stream::once(async move {
+                        match hdri.load_async(&assets).await {
+                            Ok(v) => Some(v),
+                            Err(err) => {
+                                tracing::error!(
+                                    "{:?}",
+                                    anyhow::Error::from(err).context("Failed to load hdri")
+                                );
+                                None
+                            }
+                        }
+                    })
+                    .filter_map(ready)
+                    .boxed(),
+                    skybox,
+                ));
                 Some(skybox)
             }
             None => None,

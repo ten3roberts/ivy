@@ -15,7 +15,10 @@ use crate::{
 use flax::{entity_ids, FetchExt, Query, World};
 use glam::{vec2, vec3, Mat4, Vec2, Vec3, Vec4Swizzles};
 use itertools::Itertools;
-use ivy_core::{main_camera, world_transform, WorldExt};
+use ivy_core::{
+    components::{main_camera, world_transform},
+    WorldExt,
+};
 use ordered_float::OrderedFloat;
 use wgpu::{
     BindGroup, BindGroupLayout, Buffer, BufferDescriptor, BufferUsages, Operations,
@@ -185,7 +188,7 @@ impl Node for ShadowMapNode {
                 let direction = rot * -Vec3::Z;
 
                 for frustrum in &frustrums {
-                    let snapping = 2.0;
+                    let snapping = 1.0;
                     let center = (frustrum.center / snapping).ceil() * snapping;
 
                     let radius = frustrum
@@ -196,7 +199,7 @@ impl Node for ShadowMapNode {
                         .unwrap_or_default()
                         .sqrt();
 
-                    let radius = (radius / snapping).ceil() * snapping;
+                    let radius = (radius / snapping).ceil() * snapping + snapping;
 
                     let view =
                         Mat4::look_at_rh(center + direction.normalize() * radius, center, Vec3::Y);
@@ -325,6 +328,10 @@ impl Node for ShadowMapNode {
             Dependency::texture(self.shadow_maps, TextureUsages::RENDER_ATTACHMENT),
             Dependency::buffer(self.shadow_camera_buffer, BufferUsages::COPY_DST),
         ]
+    }
+
+    fn on_resource_changed(&mut self, _resource: crate::rendergraph::ResourceHandle) {
+        self.bind_groups = None;
     }
 }
 

@@ -1,10 +1,10 @@
 use flax::Debuggable;
-use glam::{Mat4};
+use glam::Mat4;
 
-use crate::{Collider, ObjectIndex};
+use crate::{body::BodyIndex, Collider};
 
 flax::component! {
     pub collider: Collider => [ Debuggable ],
     pub collider_offset: Mat4 => [ Debuggable ],
-    pub tree_index: ObjectIndex => [ Debuggable ],
+    pub body_index: BodyIndex => [ Debuggable ],
 }

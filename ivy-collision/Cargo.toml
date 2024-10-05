@@ -12,6 +12,9 @@ readme = "../README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+ivy-core = { path = "../ivy-core", version = "0.10.0" }
+ivy-assets = { path = "../ivy-assets", version = "0.10.0" }
+
 anyhow.workspace = true
 arrayvec = "0.7.2"
 derive-for = "1.2.2"
@@ -20,10 +23,11 @@ ezy = { version = "0.1.1", features = ["glam"] }
 flax.workspace = true
 flume.workspace = true
 glam.workspace = true
-ivy-core = { path = "../ivy-core", version = "0.10.0" }
-ivy-assets = { path = "../ivy-assets", version = "0.10.0" }
+itertools.workspace = true
 ordered-float = "3.0.0"
 palette.workspace = true
+rand.workspace = true
+rand_pcg.workspace = true
 rayon = "1.5.2"
 slotmap.workspace = true
 smallvec = "1.8.0"

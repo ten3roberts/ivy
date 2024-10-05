@@ -1,0 +1,16 @@
+[package]
+name = "ivy-game"
+version = "0.1.0"
+edition = "2021"
+license-file.workspace = true
+
+[dependencies]
+ivy-core = { path = "../ivy-core" }
+ivy-input = { path = "../ivy-input" }
+ivy-assets = { path = "../ivy-assets" }
+ivy-wgpu = { path = "../ivy-wgpu" }
+
+flax.workspace = true
+glam.workspace = true
+anyhow.workspace = true
+tracing.workspace = true

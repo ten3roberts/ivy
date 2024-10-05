@@ -30,10 +30,13 @@ members = [
   "ivy-wgpu-types",
   "ivy-profiling",
   "ivy-graphics",
+  "ivy-game",
 ]
 
 [workspace.dependencies]
-naga_oil = "0.14"
+color-backtrace = "0.6"
+rand_pcg = "0.3"
+naga_oil = "0.15"
 anyhow = { version = "1.0", features = ["backtrace"] }
 async-std = { version = "1.0"}
 atomic_refcell = "0.1"
@@ -62,24 +65,25 @@ thiserror = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "parking_lot"] }
 tracing-tree = "0.4"
-wgpu = "0.20.1"
+wgpu = "22.1.0"
 winit = "0.30"
 rayon = "1.0"
 ordered-float = "4.2"
 
 [dependencies]
+ivy-assets = { path = "./ivy-assets", version = "0.10" }
 ivy-collision = { path = "./ivy-collision", version = "0.10" }
 ivy-core = { path = "./ivy-core", version = "0.10" }
+ivy-game = { path = "./ivy-game", version = "0.1.0" }
+ivy-gltf = { path = "./ivy-gltf", version = "0.1.0" }
+ivy-graphics = { path = "./ivy-graphics", version = "0.1.0" }
 ivy-input = { path = "./ivy-input", version = "0.10" }
 ivy-physics = { path = "./ivy-physics", version = "0.10" }
 ivy-postprocessing = { path = "./ivy-postprocessing", version = "0.10" }
 ivy-random = { path = "./ivy-random", version = "0.10" }
-ivy-assets = { path = "./ivy-assets", version = "0.10" }
-ivy-wgpu = { path = "./ivy-wgpu", version = "0.10" }
-ivy-gltf = { path = "./ivy-gltf", version = "0.1.0" }
 ivy-scene = { path = "./ivy-scene", version = "0.1.0" }
+ivy-wgpu = { path = "./ivy-wgpu", version = "0.10" }
 ivy-wgpu-types = { path = "./ivy-wgpu-types", version = "0.1.0" }
-ivy-graphics = { path = "./ivy-graphics", version = "0.1.0" }
 
 regex = "1.0"
 flax.workspace = true
@@ -88,7 +92,9 @@ bytemuck.workspace = true
 
 [dev-dependencies]
 color-eyre = "0.6.1"
-
+color-backtrace.workspace = true
+rand.workspace = true
+rand_pcg.workspace = true
 anyhow.workspace = true
 atomic_refcell.workspace = true
 flax.workspace = true
@@ -113,11 +119,10 @@ serialize = [
 ]
 profile = [ "ivy-core/profile" ]
 
-[profile.dev.package.image]
-opt-level = 3
-
-[profile.dev.package.parking_lot]
-opt-level = 3
+[profile.dev.package]
+image = { opt-level = 3, debug = false, debug-assertions = false }
+png = { opt-level = 3, debug = false }
+parking_lot = { opt-level = 3, debug = false }
 
 [profile.release]
 debug = true

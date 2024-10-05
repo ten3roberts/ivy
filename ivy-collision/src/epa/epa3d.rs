@@ -1,62 +1,56 @@
-use super::Face;
+use super::PolytypeFace;
 use glam::Vec3;
 
 use crate::{
-    util::MAX_ITERATIONS,
-    Contact, ContactPoints, Polytype, Simplex,
-    {util::SupportPoint, util::TOLERANCE},
+    util::{SupportPoint, TOLERANCE},
+    Contact, Polytype, Simplex,
 };
 
-pub fn epa<F: Fn(Vec3) -> SupportPoint>(support_func: F, simplex: Simplex) -> Contact {
+pub fn epa(simplex: Simplex, support_func: impl Fn(Vec3) -> SupportPoint) -> Contact {
+    let _span = tracing::debug_span!("epa").entered();
+
     assert_eq!(simplex.points().len(), 4);
     let mut polytype = Polytype::new(
         simplex.points(),
-        &[0, 1, 2, 0, 3, 1, 0, 2, 3, 1, 3, 2],
-        Face::new,
+        &[
+            0, 1, 2, //
+            0, 3, 1, //
+            0, 2, 3, //
+            1, 3, 2, //
+        ],
+        PolytypeFace::new,
     );
 
     let mut iterations = 0;
     loop {
-        let (_, min) = match polytype.find_closest_face() {
-            Some(val) => val,
-            None => {
-                // eprintln!("The two shapes are the same");
-                let p = support_func(Vec3::X);
-                return Contact {
-                    points: ContactPoints::double(p.a, p.b),
-                    depth: p.support.length(),
-                    normal: p.support.normalize(),
-                };
-                // let p = support(a_transform, a_transform_inv, a_coll, Vec3::unit_x());
-                // return Intersection {
-                //     points: [
-                //         a_transform.extract_translation(),
-                //         b_transform.extract_translation(),
-                //     ],
-                //     depth: p.mag(),
-                //     normal: p.normalized(),
-                // };
-            }
+        tracing::debug!(iterations);
+        let (_, min_face) = if let Some(val) = polytype.find_closest_face() {
+            val
+        } else {
+            panic!("Empty polytype");
         };
+        // // assert_eq!(min.normal.mag(), 1.0);
 
-        // assert_eq!(min.normal.mag(), 1.0);
+        let new_support = support_func(min_face.normal);
 
-        let p = support_func(min.normal);
+        // let support_dist = min.normal.dot(new_support.support);
 
-        let support_dist = min.normal.dot(p.support);
+        // if (support_dist - min.distance) > TOLERANCE {
+        assert!(min_face.normal.is_normalized());
+        let d = new_support.p.dot(min_face.normal);
 
-        if iterations < MAX_ITERATIONS && (support_dist - min.distance).abs() > TOLERANCE {
-            polytype.add(p, Face::new);
-        }
-        // Support is further than the current closest normal
-        else {
+        tracing::debug!(?new_support, d, min_face.distance);
+        if d - min_face.distance < TOLERANCE {
+            let (point_a, point_b) = polytype.contact_points(min_face);
             return Contact {
-                points: polytype.contact_points(min),
-                depth: min.distance,
-                normal: min.normal,
+                point_a,
+                point_b,
+                depth: min_face.distance,
+                normal: min_face.normal,
             };
         }
 
+        polytype.add_point(new_support, PolytypeFace::new);
         iterations += 1;
     }
 }

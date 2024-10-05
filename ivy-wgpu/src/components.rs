@@ -1,6 +1,8 @@
 use flax::{component, Debuggable};
 use glam::Mat4;
 use ivy_assets::Asset;
+use ivy_wgpu_types::PhysicalSize;
+use winit::dpi::{LogicalPosition, LogicalSize};
 
 use crate::{
     driver::WindowHandle,
@@ -24,6 +26,10 @@ component! {
     pub main_window: (),
 
     pub window: WindowHandle,
+
+    pub window_cursor_position: LogicalPosition<f32>,
+    pub window_size: LogicalSize<f32>,
+
 
     pub light_data: LightData,
     pub light_kind:LightKind,

@@ -2,7 +2,13 @@ use std::ops::Index;
 
 use glam::Vec3;
 
-use crate::util::{project_plane, triple_prod, SupportPoint};
+use crate::util::{project_plane, triple_prod, SupportPoint, TOLERANCE};
+
+pub(crate) enum SimplexExpansion {
+    Direction(Vec3),
+    Degenerate,
+    Enveloped,
+}
 
 #[derive(Debug)]
 pub enum Simplex {
@@ -13,74 +19,162 @@ pub enum Simplex {
 }
 
 impl Simplex {
-    // Returns the next simplex that better encloses the origin.
-    // Returns None if the origin is enclosed in the tetrahedron.
-    #[inline]
-    pub fn next_dir(&mut self) -> Option<Vec3> {
-        match *self {
-            Self::Point([a]) => Some(-a.support),
-            Self::Line([a, b]) => {
-                let ab = b.support - a.support;
-                let a0 = -a.support;
+    pub fn is_unique(&self) -> bool {
+        match self {
+            Simplex::Point(_) => true,
+            Simplex::Line([a, b]) => a != b,
+            Simplex::Triangle([a, b, c]) => a != b && a != c && b != c,
+            Simplex::Tetrahedron([a, b, c, d]) => {
+                a != b && a != c && a != d && b != c && b != d && c != d
+            }
+        }
+    }
 
-                if ab.dot(a0) > 0.0 {
-                    Some(triple_prod(ab, a0, ab))
-                } else {
+    /// Returns the next direction more likely to enclose origin
+    pub(crate) fn next_dir(&mut self) -> SimplexExpansion {
+        match *self {
+            Self::Point([a]) => SimplexExpansion::Direction(-a.p),
+            Self::Line([a, b]) => {
+                let ab = b.p - a.p;
+                let a0 = -a.p;
+
+                // assert!(ab.length() > 0.0);
+
+                // tracing::info!(?ab, dot=?ab.dot(a0));
+
+                if ab.normalize().dot(a0.normalize()) > 1.0 - TOLERANCE {
+                    // Degenerate, pick new direction
+                    *self = Self::Point([b]);
+                    let new_dir = if ab.normalize().dot(Vec3::X).abs() < 1.0 - TOLERANCE {
+                        ab.cross(Vec3::X)
+                    } else {
+                        ab.cross(Vec3::Y)
+                    };
+                    // tracing::warn!(%new_dir, "degenerate edge");
+                    return SimplexExpansion::Direction(new_dir);
+                }
+
+                if ab.dot(a0) > TOLERANCE {
+                    SimplexExpansion::Direction(triple_prod(ab, a0, ab))
+                } else if ab.dot(a0) < -TOLERANCE {
                     *self = Self::Point([a]);
-                    Some(a0)
+                    SimplexExpansion::Direction(a0)
+                } else {
+                    // Degenerate, pick new direction
+                    *self = Self::Point([b]);
+                    let new_dir = if ab.normalize().dot(Vec3::X).abs() < 1.0 - TOLERANCE {
+                        ab.cross(Vec3::X)
+                    } else {
+                        ab.cross(Vec3::Y)
+                    };
+                    // tracing::warn!(%new_dir, "degenerate edge");
+                    SimplexExpansion::Direction(new_dir)
                 }
             }
             Simplex::Triangle([a, b, c]) => {
-                let ab = b.support - a.support;
-                let ac = c.support - a.support;
-                let a0 = -a.support;
+                let ab = b.p - a.p;
+                let ac = c.p - a.p;
+                let a0 = -a.p;
 
                 let abc = ab.cross(ac);
 
-                // Outside ac face
                 if abc.cross(ac).dot(a0) > 0.0 {
-                    // Outside but along ac
+                    // outside ac
                     if ac.dot(a0) > 0.0 {
                         *self = Self::Line([a, c]);
-                        Some(ac.cross(a0).cross(ac))
-                    }
-                    // Behind a
-                    else {
+                        SimplexExpansion::Direction(ac.cross(a0).cross(ac))
+                    } else if ac.dot(a0) < 0.0 {
                         *self = Self::Line([a, b]);
                         self.next_dir()
+                    } else {
+                        panic!("");
                     }
                 } else if ab.cross(abc).dot(a0) > 0.0 {
+                    // outside ab
                     *self = Self::Line([a, b]);
                     self.next_dir()
                 } else if abc.dot(a0) > 0.0 {
-                    Some(abc)
-                } else {
+                    // inside ac, ab, above triangle
+                    SimplexExpansion::Direction(abc)
+                } else if abc.dot(a0) < 0.0 {
+                    // below triangle
                     *self = Self::Triangle([a, c, b]);
-                    Some(-abc)
+                    SimplexExpansion::Direction(-abc)
+                } else {
+                    // tracing::warn!("degenerate triangle");
+                    *self = Self::Line([a, b]);
+                    SimplexExpansion::Degenerate
                 }
+
+                // // Outside ac face
+                // if abc.cross(ac).dot(a0) > TOLERANCE {
+                //     // Outside but along ac
+                //     if ac.dot(a0) >= TOLERANCE {
+                //         *self = Self::Line([a, c]);
+                //         SimplexExpansion::Direction(ac.cross(a0).cross(ac))
+                //     }
+                //     // Behind a
+                //     else if ac.dot(a0) < -TOLERANCE {
+                //         *self = Self::Line([a, b]);
+                //         self.next_dir()
+                //     } else {
+                //         SimplexExpansion::Degenerate
+                //     }
+                // } else if ab.cross(abc).dot(a0) > TOLERANCE {
+                //     *self = Self::Line([a, b]);
+                //     self.next_dir()
+                // } else if abc.dot(a0) > TOLERANCE {
+                //     tracing::info!(dot = abc.dot(a0), "above triangle");
+                //     SimplexExpansion::Direction(abc)
+                // } else if abc.dot(a0) < TOLERANCE {
+                //     tracing::info!(dot = abc.dot(a0), "below triangle");
+                //     *self = Self::Triangle([a, c, b]);
+                //     SimplexExpansion::Direction(-abc)
+                // } else {
+                //     *self = Self::Line([a, b]);
+                //     // let next_dir = ab.cross(ac).normalize();
+                //     tracing::warn!("degenerate");
+                //     // assert!(next_dir.is_finite());
+                //     SimplexExpansion::Degenerate
+                // }
             }
             Simplex::Tetrahedron([a, b, c, d]) => {
-                let ab = b.support - a.support;
-                let ac = c.support - a.support;
-                let ad = d.support - a.support;
-                let a0 = -a.support;
+                let ab = b.p - a.p;
+                let ac = c.p - a.p;
+                let ad = d.p - a.p;
+                let a0 = -a.p;
 
                 let abc = ab.cross(ac);
                 let acd = ac.cross(ad);
                 let adb = ad.cross(ab);
 
-                if abc.dot(a0) > 0.0 {
+                let abc_dot = abc.dot(a0);
+                let acd_dot = acd.dot(a0);
+                let adb_dot = adb.dot(a0);
+
+                // tracing::info!(%abc, abc_dot, acd_dot, adb_dot);
+
+                if abc_dot > 0.0 {
                     *self = Self::Triangle([a, b, c]);
                     self.next_dir()
-                } else if acd.dot(a0) > 0.0 {
+                } else if abc_dot == 0.0 {
+                    *self = Self::Line([a, d]);
+                    SimplexExpansion::Degenerate
+                } else if acd_dot > 0.0 {
                     *self = Self::Triangle([a, c, d]);
                     self.next_dir()
-                } else if adb.dot(a0) > 0.0 {
+                } else if acd_dot == 0.0 {
+                    *self = Self::Line([a, b]);
+                    SimplexExpansion::Degenerate
+                } else if adb_dot > 0.0 {
                     *self = Self::Triangle([a, d, b]);
                     self.next_dir()
+                } else if adb_dot == 0.0 {
+                    *self = Self::Line([a, c]);
+                    SimplexExpansion::Degenerate
                 } else {
                     // Collision occurred
-                    None
+                    SimplexExpansion::Enveloped
                 }
             }
         }
@@ -89,10 +183,10 @@ impl Simplex {
     #[inline]
     pub fn next_flat(&mut self, normal: Vec3) -> Option<Vec3> {
         match *self {
-            Self::Point([a]) => Some(project_plane(-a.support, normal)),
+            Self::Point([a]) => Some(project_plane(-a.p, normal)),
             Self::Line([a, b]) => {
-                let ab = b.support - a.support;
-                let a0 = -a.support;
+                let ab = b.p - a.p;
+                let a0 = -a.p;
 
                 // let perp = ab.cross(normal).normalized();
                 let perp = ab.cross(normal);
@@ -102,9 +196,9 @@ impl Simplex {
                 Some(perp)
             }
             Self::Triangle([a, b, c]) => {
-                let ab = b.support - a.support;
-                let ac = c.support - a.support;
-                let a0 = -a.support;
+                let ab = b.p - a.p;
+                let ac = c.p - a.p;
+                let a0 = -a.p;
 
                 let ab = project_plane(ab, normal);
                 let ac = project_plane(ac, normal);

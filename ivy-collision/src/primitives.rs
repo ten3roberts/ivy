@@ -1,8 +1,7 @@
 use std::ops::Deref;
 
+use crate::{Ray, RayIntersect, Shape};
 use glam::{Mat4, Vec3};
-
-use crate::{CollisionPrimitive, Ray, RayIntersect};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Cube {
@@ -31,7 +30,7 @@ impl Deref for Cube {
     }
 }
 
-impl CollisionPrimitive for Cube {
+impl Shape for Cube {
     fn support(&self, dir: Vec3) -> Vec3 {
         let x = if dir.x > 0.0 {
             self.half_extents.x
@@ -53,33 +52,16 @@ impl CollisionPrimitive for Cube {
     }
 
     fn max_radius(&self) -> f32 {
-        self.half_extents.length()
+        // TODO: incorrect, radius is not the best in general
+        self.half_extents.max_element()
     }
 
-    fn dyn_clone(&self) -> Box<dyn CollisionPrimitive + Send + Sync> {
-        Box::new(*self)
+    fn surface_contour(&self, _: Vec3, _: &mut Vec<Vec3>) {
+        todo!()
     }
-}
 
-impl RayIntersect for Cube {
-    // https://www.jcgt.org/published/0007/03/04/paper-lowres.pdf
-    fn check_intersect(&self, transform: &Mat4, ray: &Ray) -> bool {
-        let inv = transform.inverse();
-        let dir = inv.transform_vector3(ray.dir()).normalize();
-        let inv_dir = Vec3::new(1.0 / dir.x, 1.0 / dir.y, 1.0 / dir.z);
-
-        let origin = inv.transform_point3(ray.origin);
-
-        let t1 = (-self.half_extents - origin) * inv_dir;
-        let t2 = (self.half_extents - origin) * inv_dir;
-        let tmin = t1.min(t2);
-        let tmax = t1.max(t2);
-
-        if tmax.min_element() < 0.0 {
-            return false;
-        }
-
-        tmin.max_element() <= tmax.min_element()
+    fn center(&self) -> Vec3 {
+        todo!()
     }
 }
 
@@ -103,7 +85,7 @@ impl Sphere {
 
     /// Creates a bounding sphere fully enclosign a primitive
     #[inline]
-    pub fn enclose<T: CollisionPrimitive>(collider: &T, scale: Vec3) -> Self {
+    pub fn enclose<T: Shape>(collider: &T, scale: Vec3) -> Self {
         Self {
             radius: collider.max_radius() * scale.min_element(),
         }
@@ -131,7 +113,7 @@ impl Sphere {
     }
 }
 
-impl CollisionPrimitive for Sphere {
+impl Shape for Sphere {
     fn support(&self, dir: Vec3) -> Vec3 {
         self.radius * dir
     }
@@ -140,8 +122,12 @@ impl CollisionPrimitive for Sphere {
         self.radius
     }
 
-    fn dyn_clone(&self) -> Box<dyn CollisionPrimitive + Send + Sync> {
-        Box::new(*self)
+    fn surface_contour(&self, dir: Vec3, points: &mut Vec<Vec3>) {
+        points.push(self.radius * dir)
+    }
+
+    fn center(&self) -> Vec3 {
+        Vec3::ZERO
     }
 }
 
@@ -184,19 +170,41 @@ impl Capsule {
     }
 }
 
-impl CollisionPrimitive for Capsule {
+impl Shape for Capsule {
     fn support(&self, dir: Vec3) -> Vec3 {
-        let mut result = Vec3::ZERO;
-        result.y = dir.y.signum() * self.half_height;
-        result + dir * self.radius
+        assert!(dir.is_normalized());
+
+        dir.y.signum() * self.half_height * Vec3::Y + dir * self.radius
+
+        // let mut result = Vec3::ZERO;
+        // Vec3::Y * dir.y.signum() * self.half_height
+        //     + dir.reject_from_normalized(Vec3::Y).normalize_or_zero() * self.radius
+        // result.y = dir.y.signum() * self.half_height;
+        // result + dir * self.radius
     }
 
     fn max_radius(&self) -> f32 {
         self.half_height + self.radius
     }
 
-    fn dyn_clone(&self) -> Box<dyn CollisionPrimitive + Send + Sync> {
-        Box::new(*self)
+    fn surface_contour(&self, dir: Vec3, points: &mut Vec<Vec3>) {
+        assert!(dir.is_normalized());
+        const TOLERANCE: f32 = 0.01;
+        if dir.dot(Vec3::Y).abs() < TOLERANCE {
+            let extension = dir.reject_from_normalized(Vec3::Y).normalize_or_zero() * self.radius;
+
+            points.extend([
+                extension + Vec3::Y * self.half_height,
+                extension - Vec3::Y * self.half_height,
+            ])
+        } else {
+            let p = dir * self.radius + Vec3::Y * self.half_height * dir.y.signum();
+            points.push(p);
+        }
+    }
+
+    fn center(&self) -> Vec3 {
+        Vec3::ZERO
     }
 }
 

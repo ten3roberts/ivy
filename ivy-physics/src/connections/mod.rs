@@ -1,10 +1,10 @@
 use glam::{Mat4, Quat, Vec3};
-use ivy_core::{ConnectionKind, TransformQueryMutItem};
+use ivy_core::components::{ConnectionKind, TransformQueryMutItem};
 
 mod systems;
 pub use systems::*;
 
-use crate::{bundles::*, util::point_vel, Effector};
+use crate::{bundles::*, util::velocity_at_point, Effector};
 
 /// Updates a connection that has no rigidbody
 pub fn update_fixed(_: Vec3, offset_rot: Quat, parent: Mat4, child: &mut TransformQueryMutItem) {
@@ -21,7 +21,7 @@ pub fn apply_connection_constraints(
     child_trans: TransformQueryMutItem,
     rb: RbQueryMutItem,
     parent: Mat4,
-    parent_rb: &mut RbBundle,
+    parent_rb: &mut RigidBodyBundle,
     effector: &mut Effector,
     parent_effector: &mut Effector,
 ) {
@@ -34,13 +34,14 @@ pub fn apply_connection_constraints(
     match kind {
         ConnectionKind::Rigid => {
             // The desired velocity
-            let vel = point_vel(pos - parent_pos, parent_rb.ang_vel) + parent_rb.vel;
+            let vel = velocity_at_point(pos - parent_pos, parent_rb.angular_velocity)
+                + parent_rb.velocity;
 
             let total_mass = *rb.mass + parent_rb.mass;
 
             let vel_diff = vel - *rb.vel;
 
-            *rb.ang_vel = parent_rb.ang_vel;
+            *rb.ang_vel = parent_rb.angular_velocity;
             // *child_trans.rot = parent_trans.rot * **offset_rot;
 
             let child_inf = *rb.mass / total_mass;
@@ -62,7 +63,7 @@ pub fn apply_connection_constraints(
             effector.apply_force(force, true);
             parent_effector.apply_force(-force, true);
 
-            *rb.ang_vel = parent_rb.ang_vel;
+            *rb.ang_vel = parent_rb.angular_velocity;
             *child_trans.rotation = parent_rot * offset_rot;
         }
     }

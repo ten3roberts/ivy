@@ -177,7 +177,7 @@ fn pbr_luminance(in: PbrLuminance, light: Light) -> vec3<f32> {
     let ndotl = max(dot(in.tangent_normal, l), 0f);
 
     let num = ndf * g * f;
-    let denom = 4f * max(dot(in.tangent_normal, in.tangent_camera_dir), 0f) * ndotl + 0.0001;
+    let denom = max(4f * max(dot(in.tangent_normal, in.tangent_camera_dir), 0f) * ndotl, 0.0001);
 
     let specular = num / denom;
 
@@ -190,7 +190,7 @@ fn pbr_luminance(in: PbrLuminance, light: Light) -> vec3<f32> {
 
 /// Calculate surface color from all incoming light
 fn brdf_forward(in: PbrLuminance) -> vec3<f32> {
-    var luminance = vec3(0.0) * in.albedo.rgb;
+    var luminance = vec3(0.0);
 
     var f0 = vec3(0.04);
 

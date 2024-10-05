@@ -5,7 +5,7 @@ use wgpu::{Backends, Features, SurfaceConfiguration, SurfaceError, SurfaceTextur
 use winit::{dpi::PhysicalSize, window::Window};
 
 fn device_features() -> wgpu::Features {
-    Features::TEXTURE_FORMAT_16BIT_NORM
+    Features::TEXTURE_FORMAT_16BIT_NORM | Features::POLYGON_MODE_LINE
 }
 
 /// Represents the basic graphics state, such as the device and queue.
@@ -62,6 +62,7 @@ impl Gpu {
                         wgpu::Limits::default()
                     },
                     label: None,
+                    ..Default::default()
                 },
                 None, // Trace path
             )
@@ -113,6 +114,7 @@ impl Gpu {
                         wgpu::Limits::default()
                     },
                     label: None,
+                    ..Default::default()
                 },
                 None, // Trace path
             )
@@ -174,7 +176,7 @@ impl Surface {
     }
 
     pub fn resize(&mut self, gpu: &Gpu, new_size: PhysicalSize<u32>) {
-        tracing::info_span!("resize", ?new_size);
+        tracing::debug_span!("resize", ?new_size);
         if new_size == self.size {
             tracing::info!(size=?new_size, "Duplicate resize message ignored");
             return;

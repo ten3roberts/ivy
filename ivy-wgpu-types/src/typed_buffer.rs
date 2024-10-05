@@ -118,9 +118,10 @@ where
     pub fn write(&self, queue: &Queue, offset: usize, data: &[T]) {
         assert!(
             self.len() >= offset + data.len(),
-            "write {}:{} out of bounds",
+            "write {}:{} out of bounds. {}",
             offset,
-            data.len()
+            data.len(),
+            self.label,
         );
 
         let offset = offset as u64 * mem::size_of::<T>() as u64;

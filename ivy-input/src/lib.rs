@@ -149,7 +149,7 @@ pub struct Decompose<B, Axis> {
     axis: Axis,
 }
 
-impl<B: Binding<Vec2>> Binding<f32> for Decompose<B, Axis2> {
+impl<B: Binding<Vec2>> Binding<f32> for Decompose<B, Axis2D> {
     type Input = B::Input;
 
     fn apply(&mut self, input: &Self::Input) {
@@ -158,8 +158,8 @@ impl<B: Binding<Vec2>> Binding<f32> for Decompose<B, Axis2> {
 
     fn read(&mut self) -> f32 {
         match self.axis {
-            Axis2::X => self.binding.read().x,
-            Axis2::Y => self.binding.read().y,
+            Axis2D::X => self.binding.read().x,
+            Axis2D::Y => self.binding.read().y,
         }
     }
 
@@ -199,7 +199,7 @@ impl<B, Axis> Compose<B, Axis> {
     }
 }
 
-impl<B: Binding<f32>> Binding<Vec2> for Compose<B, Axis2> {
+impl<B: Binding<f32>> Binding<Vec2> for Compose<B, Axis2D> {
     type Input = B::Input;
 
     fn apply(&mut self, input: &Self::Input) {
@@ -208,8 +208,8 @@ impl<B: Binding<f32>> Binding<Vec2> for Compose<B, Axis2> {
 
     fn read(&mut self) -> Vec2 {
         match self.axis {
-            Axis2::X => Vec2::new(self.binding.read(), 0.0),
-            Axis2::Y => Vec2::new(0.0, self.binding.read()),
+            Axis2D::X => Vec2::new(self.binding.read(), 0.0),
+            Axis2D::Y => Vec2::new(0.0, self.binding.read()),
         }
     }
 
@@ -297,6 +297,7 @@ pub enum InputKind {
     MouseButton(MouseButton),
     CursorMoved,
     CursorDelta,
+    Scroll,
 }
 
 pub struct KeyBinding {
@@ -369,23 +370,23 @@ impl Binding<f32> for MouseButtonBinding {
     }
 }
 
-pub struct CursorMovement {
+pub struct CursorMoveBinding {
     value: Vec2,
 }
 
-impl CursorMovement {
+impl CursorMoveBinding {
     pub fn new() -> Self {
         Self { value: Vec2::ZERO }
     }
 }
 
-impl Default for CursorMovement {
+impl Default for CursorMoveBinding {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Binding<Vec2> for CursorMovement {
+impl Binding<Vec2> for CursorMoveBinding {
     type Input = InputEvent;
 
     fn apply(&mut self, input: &Self::Input) {
@@ -404,7 +405,77 @@ impl Binding<Vec2> for CursorMovement {
     }
 }
 
-pub enum Axis2 {
+pub struct CursorPositionBinding {
+    value: Vec2,
+}
+
+impl CursorPositionBinding {
+    pub fn new() -> Self {
+        Self { value: Vec2::ZERO }
+    }
+}
+
+impl Default for CursorPositionBinding {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Binding<Vec2> for CursorPositionBinding {
+    type Input = InputEvent;
+
+    fn apply(&mut self, input: &Self::Input) {
+        match input {
+            &InputEvent::CursorDelta(delta) => self.value += delta,
+            _ => panic!("Invalid input event"),
+        }
+    }
+
+    fn read(&mut self) -> Vec2 {
+        mem::take(&mut self.value)
+    }
+
+    fn binding(&self) -> InputKind {
+        InputKind::CursorDelta
+    }
+}
+
+pub struct ScrollBinding {
+    value: Vec2,
+}
+
+impl ScrollBinding {
+    pub fn new() -> Self {
+        Self { value: Vec2::ZERO }
+    }
+}
+
+impl Default for ScrollBinding {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Binding<Vec2> for ScrollBinding {
+    type Input = InputEvent;
+
+    fn apply(&mut self, input: &Self::Input) {
+        match input {
+            &InputEvent::Scroll(delta) => self.value += delta,
+            _ => panic!("Invalid input event"),
+        }
+    }
+
+    fn read(&mut self) -> Vec2 {
+        mem::take(&mut self.value)
+    }
+
+    fn binding(&self) -> InputKind {
+        InputKind::Scroll
+    }
+}
+
+pub enum Axis2D {
     X,
     Y,
 }

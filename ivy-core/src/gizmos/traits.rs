@@ -1,10 +1,18 @@
 use glam::Vec3;
 
-use crate::{GizmosSection, Line, Sphere, DEFAULT_RADIUS};
+use crate::{Color, ColorExt};
+
+use super::{GizmosSection, Line, Sphere, DEFAULT_RADIUS};
 
 pub trait DrawGizmos {
     /// Draw a set of gizmos using the current section
     fn draw_primitives(&self, gizmos: &mut GizmosSection);
+}
+
+impl<T: DrawGizmos> DrawGizmos for &T {
+    fn draw_primitives(&self, gizmos: &mut GizmosSection) {
+        (*self).draw_primitives(gizmos)
+    }
 }
 
 impl DrawGizmos for Vec3 {
@@ -24,7 +32,12 @@ impl DrawGizmos for [Vec3; 1] {
 
 impl DrawGizmos for [Vec3; 2] {
     fn draw_primitives(&self, gizmos: &mut GizmosSection) {
-        gizmos.draw(Line::from_points(self[0], self[1], DEFAULT_RADIUS, 1.0))
+        gizmos.draw(Line::from_points(
+            self[0],
+            self[1],
+            DEFAULT_RADIUS,
+            Color::blue(),
+        ))
     }
 }
 

@@ -1,7 +1,10 @@
 use anyhow::Context;
 use bytemuck::Zeroable;
 use glam::{Mat4, Vec3, Vec4};
-use ivy_core::{engine, gizmos, ColorExt};
+use ivy_core::{
+    components::{self, engine},
+    ColorExt,
+};
 use ivy_graphics::mesh::MeshData;
 use ivy_wgpu_types::{
     shader::{ShaderDesc, TargetDesc},
@@ -90,7 +93,7 @@ impl Node for GizmosRendererNode {
     fn update(&mut self, ctx: NodeUpdateContext) -> anyhow::Result<()> {
         let gizmos = ctx
             .world
-            .get(engine(), gizmos())
+            .get(engine(), components::gizmos())
             .context("Missing gizmos")?;
 
         if let Some(camera_data) = get_main_camera_data(ctx.world) {
@@ -102,7 +105,7 @@ impl Node for GizmosRendererNode {
         for section in gizmos.sections() {
             for primitive in section.primitives() {
                 match primitive {
-                    ivy_core::GizmoPrimitive::Sphere {
+                    ivy_core::gizmos::GizmoPrimitive::Sphere {
                         origin,
                         color,
                         radius,
@@ -115,7 +118,7 @@ impl Node for GizmosRendererNode {
                             corner_radius: 1.0,
                         });
                     }
-                    ivy_core::GizmoPrimitive::Line {
+                    ivy_core::gizmos::GizmoPrimitive::Line {
                         origin,
                         color,
                         dir,
@@ -220,6 +223,8 @@ impl Node for GizmosRendererNode {
     fn write_dependencies(&self) -> Vec<crate::rendergraph::Dependency> {
         vec![]
     }
+
+    fn on_resource_changed(&mut self, _resource: crate::rendergraph::ResourceHandle) {}
 }
 
 #[repr(C)]

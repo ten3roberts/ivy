@@ -11,7 +11,10 @@ use glam::{Mat4, Vec3};
 use itertools::Itertools;
 use ivy_assets::{stored::Store, Asset, AssetCache};
 use ivy_core::{
-    impl_for_tuples, main_camera, palette::Srgb, to_linear_vec3, world_transform, Bundle,
+    components::{main_camera, world_transform},
+    impl_for_tuples,
+    palette::Srgb,
+    to_linear_vec3, Bundle,
 };
 use ivy_wgpu_types::shader::TargetDesc;
 use wgpu::{
@@ -51,6 +54,10 @@ impl Node for MsaaResolve {
         type_name::<Self>()
     }
 
+    fn update(&mut self, _ctx: crate::rendergraph::NodeUpdateContext) -> anyhow::Result<()> {
+        Ok(())
+    }
+
     fn draw(&mut self, ctx: crate::rendergraph::NodeExecutionContext) -> anyhow::Result<()> {
         let final_color = ctx
             .get_texture(self.final_color)
@@ -77,6 +84,8 @@ impl Node for MsaaResolve {
         Ok(())
     }
 
+    fn on_resource_changed(&mut self, _resource: crate::rendergraph::ResourceHandle) {}
+
     fn read_dependencies(&self) -> Vec<Dependency> {
         vec![Dependency::texture(
             self.final_color,
@@ -89,10 +98,6 @@ impl Node for MsaaResolve {
             self.resolve_target,
             TextureUsages::RENDER_ATTACHMENT,
         )]
-    }
-
-    fn update(&mut self, _ctx: crate::rendergraph::NodeUpdateContext) -> anyhow::Result<()> {
-        Ok(())
     }
 }
 

@@ -38,23 +38,19 @@ mod extent;
 pub mod gizmos;
 pub mod layer;
 pub mod macros;
-pub mod math;
 mod systems;
-mod time;
 mod updatable;
+pub mod update_layer;
 
 use std::f32::consts::PI;
 
 pub use app::{driver, App, AppBuilder, AppEvent};
 pub use color::*;
-pub use components::*;
 pub use dir::*;
 pub use events::{EventSender, Events};
 pub use extensions::*;
 pub use extent::*;
-pub use gizmos::*;
 pub use layer::*;
-pub use time::*;
 
 /// 45 degrees in radians
 pub const DEG_45: f32 = PI / 4.0;

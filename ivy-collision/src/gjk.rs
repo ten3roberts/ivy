@@ -1,65 +1,94 @@
-use glam::{Mat4, Vec3};
+use glam::Vec3;
 
 use crate::{
-    util::{minkowski_diff, MAX_ITERATIONS, TOLERANCE},
-    CollisionPrimitive, Simplex,
+    util::{minkowski_diff, TOLERANCE},
+    Shape, Simplex,
 };
 
 /// Performs a gjk intersection test.
 /// Returns true if the shapes intersect.
-pub fn gjk<A: CollisionPrimitive, B: CollisionPrimitive>(
-    a_transform: &Mat4,
-    b_transform: &Mat4,
-    a_transform_inv: &Mat4,
-    b_transform_inv: &Mat4,
-    a_coll: &A,
-    b_coll: &B,
-) -> (bool, Simplex) {
+pub fn gjk<A: Shape, B: Shape>(a: &A, b: &B) -> (bool, Simplex) {
+    let _span = tracing::debug_span!("gjk").entered();
     // Get first support function in direction of separation
     // let dir = (a_pos - b_pos).normalized();
     let dir = Vec3::X;
-    let a = minkowski_diff(
-        a_transform,
-        b_transform,
-        a_transform_inv,
-        b_transform_inv,
-        a_coll,
-        b_coll,
-        dir,
-    );
+    let p1 = minkowski_diff(a, b, dir);
 
-    let mut simplex = Simplex::Point([a]);
+    let mut simplex = Simplex::Point([p1]);
 
-    let mut iterations = 0;
-    while let Some(dir) = simplex.next_dir() {
+    let mut fallback_directions = [Vec3::X, Vec3::Y, Vec3::Z].into_iter().cycle();
+
+    let mut iteration_count = 0;
+    // let mut perturberance_rng = rand_pcg::Pcg32::seed_from_u64(42);
+
+    loop {
+        // while let Some(dir) = simplex.next_dir() {
+
+        let dir = match simplex.next_dir() {
+            crate::SimplexExpansion::Direction(v) => v,
+            crate::SimplexExpansion::Degenerate => {
+                tracing::debug!("picking new direction");
+                fallback_directions.next().unwrap()
+            }
+            crate::SimplexExpansion::Enveloped => break,
+        };
+
+        tracing::debug!(%dir);
+
         let dir = dir.normalize();
 
-        // Objects are inside of each other completely
-        if dir.length_squared() - 1.0 > TOLERANCE {
-            return (false, simplex);
-        }
-
         // Get the next simplex
-        let p = minkowski_diff(
-            a_transform,
-            b_transform,
-            a_transform_inv,
-            b_transform_inv,
-            a_coll,
-            b_coll,
-            dir,
-        );
+        let p = minkowski_diff(a, b, dir);
+        // let perturberance_strength = 0.0;
+        // p.support += vec3(
+        //     perturberance_rng.gen(),
+        //     perturberance_rng.gen(),
+        //     perturberance_rng.gen(),
+        // ) * perturberance_strength;
 
         // New point was not past the origin
         // No collision
-        if iterations > MAX_ITERATIONS || p.support.dot(dir) <= 0.0 {
+        if p.p.dot(dir) < TOLERANCE {
             return (false, simplex);
         }
 
         simplex.push(p);
-        iterations += 1;
+        // assert!(simplex.is_unique(), "{simplex:?}");
+        iteration_count += 1;
+        if iteration_count > 1024 {
+            tracing::error!("max gjk iterations");
+            return (false, simplex);
+        }
     }
 
-    // Collision found
     (true, simplex)
+}
+
+#[cfg(test)]
+mod test {
+    use glam::{Mat4, Quat, Vec3};
+
+    use crate::{BoundingBox, TransformedShape};
+
+    use super::gjk;
+
+    #[test]
+    fn text_box_box() {
+        let a = BoundingBox::new(Vec3::ONE, Vec3::ZERO);
+        let b = BoundingBox::new(Vec3::ONE, Vec3::ZERO);
+
+        for i in 0..=100 {
+            let a_pos = -Vec3::X + Vec3::X * (i as f32 * 0.01 + 0.1);
+            let a_rot = Quat::from_rotation_x((i % 10) as f32 * 0.1);
+            let b_pos = Vec3::X;
+
+            let (intersecting, _) = gjk(
+                &TransformedShape::new(a, Mat4::from_rotation_translation(a_rot, a_pos)),
+                &TransformedShape::new(b, Mat4::from_translation(b_pos)),
+            );
+
+            eprintln!("{i} {intersecting}");
+            // assert!(result.0);
+        }
+    }
 }

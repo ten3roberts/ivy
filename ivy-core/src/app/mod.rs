@@ -10,7 +10,7 @@ pub use event::*;
 use flax::World;
 
 use crate::{
-    engine, gizmos,
+    components::{self, engine},
     layer::events::{Event, EventRegistry},
     Events, Layer, LayerDyn,
 };
@@ -40,7 +40,9 @@ impl App {
         asset_cache.register_service(FileSystemMapService::new("./assets"));
 
         let mut world = World::new();
-        world.set(engine(), gizmos(), Default::default()).unwrap();
+        world
+            .set(engine(), components::gizmos(), Default::default())
+            .unwrap();
 
         #[allow(deprecated)]
         Self {
