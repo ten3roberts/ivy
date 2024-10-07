@@ -1,13 +1,10 @@
-use flax::{
-    component, components::child_of, fetch::entity_refs, BoxedSystem, Entity, FetchExt, Query,
-    System, World,
-};
+use flax::{component, fetch::entity_refs, BoxedSystem, Entity, FetchExt, Query, System, World};
 use glam::{vec2, vec3, vec4, EulerRot, Mat4, Quat, Vec2, Vec3, Vec4Swizzles};
 use ivy_assets::AssetCache;
-use ivy_collision::{components::collider, Ray, RayCaster};
+use ivy_collision::components::collider;
 use ivy_core::{
     app::InitEvent,
-    gizmos::{Line, Sphere, DEFAULT_RADIUS, DEFAULT_THICKNESS},
+    gizmos::{Line, Sphere},
     layer::events::EventRegisterContext,
     palette::{Srgb, Srgba},
     profiling::ProfilingLayer,
@@ -15,16 +12,18 @@ use ivy_core::{
     App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer,
 };
 use ivy_engine::{
-    engine, gizmos, gravity_influence, is_static, main_camera, restitution, rotation, scale,
+    angular_velocity, engine, gizmos, is_static, main_camera, position, rotation, scale, velocity,
     world_transform, Collider, RigidBodyBundle, TransformBundle,
 };
 use ivy_game::free_camera::{setup_camera, CameraInputPlugin};
 use ivy_graphics::texture::TextureDesc;
 use ivy_input::{
-    components::input_state, layer::InputLayer, Action, CursorMoveBinding, InputState,
-    MouseButtonBinding,
+    components::input_state, layer::InputLayer, Action, InputState, MouseButtonBinding,
 };
-use ivy_physics::{components::physics_state, PhysicsPlugin};
+use ivy_physics::{
+    components::{collider_shape, physics_state, rigid_body_type},
+    ColliderBundle, PhysicsPlugin,
+};
 use ivy_postprocessing::preconfigured::{SurfacePbrPipeline, SurfacePbrPipelineDesc};
 use ivy_wgpu::{
     components::*,
@@ -38,9 +37,9 @@ use ivy_wgpu::{
     renderer::{EnvironmentData, RenderObjectBundle},
     shaders::{PbrShaderDesc, ShadowShaderDesc},
 };
+use rapier3d::prelude::{QueryFilter, RigidBodyType, SharedShape};
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
-use wgpu::naga::RayQueryFunction;
 use winit::{dpi::LogicalSize, window::WindowAttributes};
 
 const ENABLE_SKYBOX: bool = true;
@@ -72,10 +71,10 @@ pub fn main() -> anyhow::Result<()> {
                 gpu,
                 surface,
                 SurfacePbrPipelineDesc {
-                    hdri: None,
-                    // hdri: Some(Box::new(
-                    //     "hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
-                    // )),
+                    // hdri: None,
+                    hdri: Some(Box::new(
+                        "hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
+                    )),
                 },
             ))
         }))
@@ -125,25 +124,18 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
     let shader = assets.load(&PbrShaderDesc);
     let shadow = assets.load(&ShadowShaderDesc);
 
-    const RESTITUTION: f32 = 0.0;
-    const FRICTION: f32 = 0.5;
-    const MASS: f32 = 100.0;
-    const INERTIA_TENSOR: f32 = 200.0;
+    const RESTITUTION: f32 = 0.1;
+    const FRICTION: f32 = 0.8;
 
     let body = || {
         let mut builder = Entity::builder();
         builder
             .mount(TransformBundle::default())
+            .mount(RigidBodyBundle::new(RigidBodyType::Dynamic))
             .mount(
-                RigidBodyBundle::default()
-                    .with_mass(MASS)
-                    .with_angular_mass(INERTIA_TENSOR)
+                ColliderBundle::new(SharedShape::cuboid(1.0, 1.0, 1.0))
                     .with_restitution(RESTITUTION)
                     .with_friction(FRICTION),
-            )
-            .set(
-                collider(),
-                Collider::cube_from_center(Vec3::ZERO, Vec3::ONE),
             )
             .mount(RenderObjectBundle::new(
                 MeshDesc::Content(assets.load(&CubePrimitive)),
@@ -155,13 +147,16 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
         builder
     };
 
-    let cube = |pos: Vec3| {
+    let cube = |pos: Vec3, size: Vec3| {
         let mut builder = body();
-        builder.set(ivy_core::components::position(), pos);
+        builder.set(ivy_core::components::position(), pos).set(
+            collider_shape(),
+            SharedShape::cuboid(size.x, size.y, size.z),
+        );
         builder
     };
 
-    let sphere = |pos: Vec3| {
+    let sphere = |pos: Vec3, size: f32| {
         let mut builder = body();
         builder
             .set(ivy_core::components::position(), pos)
@@ -169,6 +164,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
                 mesh(),
                 MeshDesc::Content(assets.load(&UvSpherePrimitive::default())),
             )
+            .set(collider_shape(), SharedShape::ball(size))
             .set(collider(), Collider::sphere(1.0));
         builder
     };
@@ -181,60 +177,52 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
                 mesh(),
                 MeshDesc::Content(assets.load(&CapsulePrimitive::default())),
             )
-            .set(collider(), Collider::capsule(1.0, 1.0));
+            .set(collider_shape(), SharedShape::capsule_y(1.0, 1.0));
         builder
     };
 
-    cube(Vec3::ZERO)
-        .set(scale(), vec3(50.0, 1.0, 50.0))
+    cube(Vec3::ZERO, vec3(100.0, 1.0, 100.0))
+        .set(rigid_body_type(), RigidBodyType::Fixed)
+        .set(scale(), vec3(100.0, 1.0, 100.0))
         .set(is_static(), ())
         .spawn(world);
 
     let drop_height = 10.0;
 
-    cube(vec3(0.0, drop_height, 0.0))
+    cube(vec3(0.0, drop_height, 0.0), Vec3::ONE)
         .set(rotation(), Quat::from_scaled_axis(vec3(1.0, 1.0, 0.0)))
-        .set(gravity_influence(), 1.0)
-        .set(restitution(), 1.0)
         .set(material(), red_material.clone())
         .spawn(world);
 
-    // cube(vec3(5.0, drop_height, 0.0))
-    //     .set(rotation(), Quat::from_scaled_axis(vec3(1.0, 0.0, 0.0)))
-    //     .set(gravity_influence(), 1.0)
-    //     .set(restitution(), 1.0)
-    //     .set(material(), red_material.clone())
-    //     .spawn(world);
+    cube(vec3(5.0, drop_height, 0.0), Vec3::ONE)
+        .set(rotation(), Quat::from_scaled_axis(vec3(1.0, 0.0, 0.0)))
+        .set(material(), red_material.clone())
+        .spawn(world);
 
-    // sphere(vec3(10.0, drop_height, 0.0))
-    //     .set(rotation(), Quat::from_scaled_axis(vec3(0.0, 0.0, 0.0)))
-    //     .set(gravity_influence(), 1.0)
-    //     .set(restitution(), 1.0)
-    //     .set(material(), red_material.clone())
-    //     .spawn(world);
+    sphere(vec3(10.0, drop_height, 0.0), 1.0)
+        .set(rotation(), Quat::from_scaled_axis(vec3(0.0, 0.0, 0.0)))
+        .set(material(), red_material.clone())
+        .spawn(world);
 
-    // capsule(vec3(-5.0, drop_height, 0.0))
-    //     .set(rotation(), Quat::from_scaled_axis(vec3(0.1, 0.0, 0.0)))
-    //     .set(gravity_influence(), 1.0)
-    //     .set(restitution(), 1.0)
-    //     .set(material(), red_material.clone())
-    //     .spawn(world);
+    capsule(vec3(-5.0, drop_height, 0.0))
+        .set(rotation(), Quat::from_scaled_axis(vec3(0.1, 0.0, 0.0)))
+        .set(material(), red_material.clone())
+        .spawn(world);
 
     capsule(vec3(-10.0, drop_height, 0.0))
         .set(rotation(), Quat::from_scaled_axis(vec3(0.0, 0.0, 1.0)))
-        .set(gravity_influence(), 1.0)
-        .set(restitution(), 1.0)
         .set(material(), red_material.clone())
         .spawn(world);
 
-    // for i in 0..3 {
-    //     cube(vec3(0.0, 2.0 + i as f32 * 2.0, -8.0))
-    //         .set(rotation(), Quat::from_scaled_axis(vec3(0.0, 0.0, 0.0)))
-    //         .set(gravity_influence(), 1.0)
-    //         .set(restitution(), 0.0)
-    //         .set(material(), red_material.clone())
-    //         .spawn(world);
-    // }
+    for i in 0..4 {
+        cube(
+            vec3(0.0 + i as f32 * 0.0, 2.0 + i as f32 * 2.0, -8.0),
+            Vec3::ONE,
+        )
+        .set(rotation(), Quat::from_scaled_axis(vec3(0.0, 0.0, 0.0)))
+        .set(material(), red_material.clone())
+        .spawn(world);
+    }
 
     Entity::builder()
         .mount(TransformBundle::default().with_rotation(Quat::from_euler(
@@ -300,9 +288,14 @@ impl Layer for LogicLayer {
     }
 }
 
+pub struct PickingState {
+    picked_object: Option<(Entity, Vec3, f32)>,
+}
+
 component! {
     pick_ray_action: f32,
     mouse_position: Vec2,
+    picking_state: PickingState,
 }
 
 pub struct RayPickingPlugin;
@@ -324,6 +317,12 @@ impl Plugin<PerTick> for RayPickingPlugin {
                 InputState::new().with_action(left_click_action),
             )
             .set_default(pick_ray_action())
+            .set(
+                picking_state(),
+                PickingState {
+                    picked_object: None,
+                },
+            )
             .spawn(world);
 
         schedule.with_system(pick_ray_system(input_listener));
@@ -337,29 +336,23 @@ pub fn pick_ray_system(input_listener: Entity) -> BoxedSystem {
         .with_query(Query::new((
             (physics_state(), gizmos()).source(engine()),
             (main_window(), window_size(), window_cursor_position()).source(()),
-            pick_ray_action().source(input_listener),
-            (
-                entity_refs(),
-                main_camera(),
-                world_transform(),
-                projection_matrix(),
-            ),
+            (entity_refs(), pick_ray_action(), picking_state().as_mut()),
+            (main_camera(), world_transform(), projection_matrix()).source(()),
         )))
         .try_for_each(
             |(
                 (physics_state, gizmos),
                 (_, window_size, cursor_pos),
-                pick_ray_activation,
-                (entity, _, camera_transform, camera_projection),
+                (entity, pick_ray_activation, state),
+                (_, camera_transform, camera_projection),
             )| {
                 let world = entity.world();
                 let mut gizmos = gizmos.begin_section("pick_ray_system");
 
                 if *pick_ray_activation < 1.0 {
+                    state.picked_object = None;
                     return Ok(());
                 }
-
-                let _span = tracing::info_span!("pick").entered();
 
                 let mouse_position =
                     vec2(cursor_pos.x, cursor_pos.y) / vec2(window_size.width, window_size.height);
@@ -377,20 +370,31 @@ pub fn pick_ray_system(input_listener: Entity) -> BoxedSystem {
 
                 let origin = camera_transform.transform_point3(Vec3::ZERO);
 
-                // gizmos.draw(Line::new(
-                //     origin - camera_transform.transform_vector3(Vec3::Y) * 0.01,
-                //     world_ray,
-                //     0.001,
-                //     Color::red(),
-                // ));
+                if let Some((id, anchor, distance)) = state.picked_object {
+                    let new_pos = world_ray * distance - anchor + origin;
 
-                let result = physics_state.query(RayCaster::new(Ray::new(origin, world_ray)));
+                    let picked_entity = entity.world().entity(id)?;
 
-                for v in result.into_iter().flatten() {
-                    // tracing::info!(?v);
-                    let entity = world.entity(v.id)?;
+                    picked_entity.update_dedup(position(), new_pos);
+                    picked_entity.update_dedup(velocity(), Default::default());
+                    picked_entity.update_dedup(angular_velocity(), Default::default());
 
-                    let point = v.point();
+                    return Ok(());
+                }
+
+                let ray = rapier3d::prelude::Ray::new(origin.into(), world_ray.into());
+                let result = physics_state.cast_ray(&ray, 1e3, true, QueryFilter::exclude_fixed());
+
+                if let Some((id, _, intersection)) = result {
+                    let entity = world.entity(id)?;
+
+                    let point = ray.point_at(intersection.time_of_impact).into();
+
+                    let pos = entity.get_copy(position()).unwrap_or_default();
+                    let anchor = point - pos;
+                    let distance = intersection.time_of_impact;
+
+                    state.picked_object = Some((id, anchor, distance));
 
                     gizmos.draw(Sphere::new(
                         entity

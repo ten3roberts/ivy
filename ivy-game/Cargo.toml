@@ -9,6 +9,7 @@ ivy-core = { path = "../ivy-core" }
 ivy-input = { path = "../ivy-input" }
 ivy-assets = { path = "../ivy-assets" }
 ivy-wgpu = { path = "../ivy-wgpu" }
+ivy-physics = { path = "../ivy-physics" }
 
 flax.workspace = true
 glam.workspace = true

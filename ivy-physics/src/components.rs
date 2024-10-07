@@ -1,10 +1,26 @@
-use flax::component;
+use flax::{component, Debuggable};
+use glam::Vec3;
+use rapier3d::prelude::{ColliderHandle, RigidBodyHandle, RigidBodyType, SharedShape};
 
-use crate::{state::PhysicsState, systems::CollisionState, Effector};
+use crate::{state::PhysicsState, Effector};
 
 component! {
     pub physics_state: PhysicsState,
-    // TODO: remove
-    pub collision_state: CollisionState,
     pub effector: Effector,
+    pub rb_handle: RigidBodyHandle,
+
+    pub collider_handle: ColliderHandle,
+
+    pub rigid_body_type: RigidBodyType,
+    pub collider_shape: SharedShape,
+    // density of a collider, used to calculate mass
+    pub density: f32 => [ Debuggable ],
+    /// The elasticity of the physics material
+    pub restitution: f32 => [ Debuggable ],
+    /// Coefficient of friction
+    pub friction: f32 => [ Debuggable ],
+
+    pub center_of_mass: Vec3 => [ Debuggable ],
+
+    pub can_sleep: (),
 }
