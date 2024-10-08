@@ -194,15 +194,21 @@ impl<'a> WinitEventHandler<'a> {
                 position,
             } => {
                 let logical_pos = position.to_logical(1.0);
+                let window_entity = self.app.world().entity(window_id).unwrap();
+
+                let size;
+                {
+                    *window_entity.get_mut(window_cursor_position()).unwrap() = logical_pos;
+                    size = window_entity.get_copy(window_size()).unwrap();
+                    let window = &mut *window_entity.get_mut(crate::components::window()).unwrap();
+                    window.cursor_lock.cursor_moved(&window.window, position);
+                }
+
                 self.app.emit(CursorMoved {
-                    position: vec2(logical_pos.x, logical_pos.y),
+                    absolute_position: logical_pos,
+                    normalized_position: vec2(logical_pos.x, logical_pos.y)
+                        / vec2(size.width, size.height),
                 })?;
-
-                let window = self.app.world().entity(window_id).unwrap();
-
-                *window.get_mut(window_cursor_position()).unwrap() = logical_pos;
-                let window = &mut *window.get_mut(crate::components::window()).unwrap();
-                window.cursor_lock.cursor_moved(&window.window, position);
             }
             WindowEvent::CursorEntered { device_id: _ } => {
                 self.app.emit(CursorEntered)?;

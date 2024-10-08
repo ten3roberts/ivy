@@ -1,10 +1,14 @@
-use flax::{component, fetch::entity_refs, BoxedSystem, Entity, FetchExt, Query, System, World};
+use flax::{
+    component,
+    fetch::{entity_refs, EntityRefs, Source},
+    BoxedSystem, CommandBuffer, Component, Entity, Fetch, FetchExt, Mutable, Query, QueryBorrow,
+    System, World,
+};
 use glam::{vec2, vec3, vec4, EulerRot, Mat4, Quat, Vec2, Vec3, Vec4Swizzles};
 use ivy_assets::AssetCache;
 use ivy_collision::components::collider;
 use ivy_core::{
     app::InitEvent,
-    gizmos::{Line, Sphere},
     layer::events::EventRegisterContext,
     palette::{Srgb, Srgba},
     profiling::ProfilingLayer,
@@ -12,16 +16,18 @@ use ivy_core::{
     App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer,
 };
 use ivy_engine::{
-    angular_velocity, engine, gizmos, is_static, main_camera, position, rotation, scale, velocity,
-    world_transform, Collider, RigidBodyBundle, TransformBundle,
+    engine, is_static, main_camera, position, rotation, scale, world_transform, Collider,
+    RigidBodyBundle, TransformBundle,
 };
 use ivy_game::free_camera::{setup_camera, CameraInputPlugin};
 use ivy_graphics::texture::TextureDesc;
 use ivy_input::{
-    components::input_state, layer::InputLayer, Action, InputState, MouseButtonBinding,
+    components::input_state, layer::InputLayer, Action, CursorPositionBinding, InputState,
+    MouseButtonBinding,
 };
 use ivy_physics::{
-    components::{collider_shape, physics_state, rigid_body_type},
+    components::{collider_shape, impulse_joint, physics_state, rigid_body_type},
+    state::PhysicsState,
     ColliderBundle, PhysicsPlugin,
 };
 use ivy_postprocessing::preconfigured::{SurfacePbrPipeline, SurfacePbrPipelineDesc};
@@ -37,7 +43,10 @@ use ivy_wgpu::{
     renderer::{EnvironmentData, RenderObjectBundle},
     shaders::{PbrShaderDesc, ShadowShaderDesc},
 };
-use rapier3d::prelude::{QueryFilter, RigidBodyType, SharedShape};
+use rapier3d::{
+    math::Isometry,
+    prelude::{FixedJointBuilder, QueryFilter, RigidBodyType, SharedShape},
+};
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
 use winit::{dpi::LogicalSize, window::WindowAttributes};
@@ -290,11 +299,90 @@ impl Layer for LogicLayer {
 
 pub struct PickingState {
     picked_object: Option<(Entity, Vec3, f32)>,
+    manipulator: Entity,
+}
+
+impl PickingState {
+    pub fn update(
+        &mut self,
+        world: &World,
+        cmd: &mut CommandBuffer,
+        physics_state: &PhysicsState,
+        origin: Vec3,
+        ray_dir: Vec3,
+    ) -> anyhow::Result<()> {
+        if self.picked_object.is_some() {
+            self.move_manipulator(world, origin, ray_dir)
+        } else {
+            self.start_manipulating(world, cmd, physics_state, origin, ray_dir)
+        }
+    }
+
+    pub fn move_manipulator(
+        &mut self,
+        world: &World,
+        origin: Vec3,
+        ray_dir: Vec3,
+    ) -> anyhow::Result<()> {
+        if let Some((_, _, distance)) = self.picked_object {
+            let new_pos = ray_dir * distance + origin;
+
+            let manipulator = world.entity(self.manipulator)?;
+
+            manipulator.update_dedup(position(), new_pos);
+        }
+
+        Ok(())
+    }
+
+    pub fn start_manipulating(
+        &mut self,
+        world: &World,
+        cmd: &mut CommandBuffer,
+        physics_state: &PhysicsState,
+        origin: Vec3,
+        ray_dir: Vec3,
+    ) -> anyhow::Result<()> {
+        let ray = rapier3d::prelude::Ray::new(origin.into(), ray_dir.into());
+        let result = physics_state.cast_ray(&ray, 1e3, true, QueryFilter::exclude_fixed());
+
+        if let Some((id, _, intersection)) = result {
+            let entity = world.entity(id)?;
+
+            let point: Vec3 = ray.point_at(intersection.time_of_impact).into();
+
+            let pos = entity.get_copy(position()).unwrap_or_default();
+            let rotation = entity.get_copy(rotation()).unwrap_or_default();
+            let anchor = point - pos;
+            let distance = intersection.time_of_impact;
+
+            self.stop_manipulating(cmd);
+
+            let joint = FixedJointBuilder::new()
+                .local_frame2(Isometry::new(
+                    (rotation.inverse() * anchor).into(),
+                    rotation.inverse().to_scaled_axis().into(),
+                ))
+                .build();
+
+            cmd.set(self.manipulator, impulse_joint(id), joint.into());
+
+            self.picked_object = Some((id, anchor, distance));
+        }
+
+        Ok(())
+    }
+
+    pub fn stop_manipulating(&mut self, cmd: &mut CommandBuffer) {
+        if let Some((id, _, _)) = self.picked_object.take() {
+            cmd.remove(self.manipulator, impulse_joint(id));
+        }
+    }
 }
 
 component! {
     pick_ray_action: f32,
-    mouse_position: Vec2,
+    cursor_position_action: Vec2,
     picking_state: PickingState,
 }
 
@@ -311,101 +399,111 @@ impl Plugin<PerTick> for RayPickingPlugin {
         let mut left_click_action = Action::new(pick_ray_action());
         left_click_action.add(MouseButtonBinding::new(winit::event::MouseButton::Left));
 
-        let input_listener = Entity::builder()
+        let mut cursor_position = Action::new(cursor_position_action());
+        cursor_position.add(CursorPositionBinding::new(true));
+
+        let manipulator = Entity::builder()
+            .mount(TransformBundle::default())
+            .mount(RigidBodyBundle::new(RigidBodyType::Dynamic).with_can_sleep(false))
+            .spawn(world);
+
+        Entity::builder()
             .set(
                 input_state(),
-                InputState::new().with_action(left_click_action),
+                InputState::new()
+                    .with_action(left_click_action)
+                    .with_action(cursor_position),
             )
             .set_default(pick_ray_action())
+            .set_default(cursor_position_action())
             .set(
                 picking_state(),
                 PickingState {
                     picked_object: None,
+                    manipulator,
                 },
             )
             .spawn(world);
 
-        schedule.with_system(pick_ray_system(input_listener));
+        schedule.with_system(pick_ray_system());
 
         Ok(())
     }
 }
 
-pub fn pick_ray_system(input_listener: Entity) -> BoxedSystem {
+#[derive(Fetch)]
+pub struct CameraQuery {
+    transform: Component<Mat4>,
+    projection: Component<Mat4>,
+}
+
+impl CameraQuery {
+    pub fn new() -> Self {
+        Self {
+            transform: world_transform(),
+            projection: projection_matrix(),
+        }
+    }
+}
+
+impl Default for CameraQuery {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+pub fn pick_ray_system() -> BoxedSystem {
     System::builder()
+        .with_cmd_mut()
         .with_query(Query::new((
-            (physics_state(), gizmos()).source(engine()),
-            (main_window(), window_size(), window_cursor_position()).source(()),
-            (entity_refs(), pick_ray_action(), picking_state().as_mut()),
-            (main_camera(), world_transform(), projection_matrix()).source(()),
+            physics_state().source(engine()),
+            (main_camera(), CameraQuery::new()).source(()),
+            (
+                entity_refs(),
+                pick_ray_action(),
+                cursor_position_action(),
+                picking_state().as_mut(),
+            ),
         )))
-        .try_for_each(
-            |(
-                (physics_state, gizmos),
-                (_, window_size, cursor_pos),
-                (entity, pick_ray_activation, state),
-                (_, camera_transform, camera_projection),
-            )| {
-                let world = entity.world();
-                let mut gizmos = gizmos.begin_section("pick_ray_system");
+        .build(
+            |cmd: &mut CommandBuffer,
+             mut query: QueryBorrow<
+                '_,
+                (
+                    Source<Component<PhysicsState>, Entity>,
+                    Source<(Component<()>, CameraQuery), ()>,
+                    (
+                        EntityRefs,
+                        Component<f32>,
+                        Component<Vec2>,
+                        Mutable<PickingState>,
+                    ),
+                ),
+            >| {
+                for (
+                    physics_state,
+                    (_, camera),
+                    (entity, pick_ray_activation, cursor_pos, state),
+                ) in query.iter()
+                {
+                    let world = entity.world();
 
-                if *pick_ray_activation < 1.0 {
-                    state.picked_object = None;
-                    return Ok(());
-                }
+                    if *pick_ray_activation < 1.0 {
+                        state.stop_manipulating(cmd);
+                        return Ok(());
+                    }
 
-                let mouse_position =
-                    vec2(cursor_pos.x, cursor_pos.y) / vec2(window_size.width, window_size.height);
+                    let cursor_pos = vec2(cursor_pos.x * 2.0 - 1.0, -(cursor_pos.y * 2.0 - 1.0));
 
-                let mouse_position = vec2(
-                    mouse_position.x * 2.0 - 1.0,
-                    -(mouse_position.y * 2.0 - 1.0),
-                );
+                    let ray_eye =
+                        camera.projection.inverse() * vec4(cursor_pos.x, cursor_pos.y, 1.0, 1.0);
+                    let ray_eye = vec4(ray_eye.x, ray_eye.y, -1.0, 0.0);
 
-                let ray_eye = camera_projection.inverse()
-                    * vec4(mouse_position.x, mouse_position.y, 1.0, 1.0);
-                let ray_eye = vec4(ray_eye.x, ray_eye.y, -1.0, 0.0);
+                    let world_ray = (*camera.transform * ray_eye).xyz().normalize();
 
-                let world_ray = (*camera_transform * ray_eye).xyz().normalize();
+                    let origin = camera.transform.transform_point3(Vec3::ZERO);
 
-                let origin = camera_transform.transform_point3(Vec3::ZERO);
-
-                if let Some((id, anchor, distance)) = state.picked_object {
-                    let new_pos = world_ray * distance - anchor + origin;
-
-                    let picked_entity = entity.world().entity(id)?;
-
-                    picked_entity.update_dedup(position(), new_pos);
-                    picked_entity.update_dedup(velocity(), Default::default());
-                    picked_entity.update_dedup(angular_velocity(), Default::default());
-
-                    return Ok(());
-                }
-
-                let ray = rapier3d::prelude::Ray::new(origin.into(), world_ray.into());
-                let result = physics_state.cast_ray(&ray, 1e3, true, QueryFilter::exclude_fixed());
-
-                if let Some((id, _, intersection)) = result {
-                    let entity = world.entity(id)?;
-
-                    let point = ray.point_at(intersection.time_of_impact).into();
-
-                    let pos = entity.get_copy(position()).unwrap_or_default();
-                    let anchor = point - pos;
-                    let distance = intersection.time_of_impact;
-
-                    state.picked_object = Some((id, anchor, distance));
-
-                    gizmos.draw(Sphere::new(
-                        entity
-                            .get_copy(world_transform())
-                            .unwrap_or_default()
-                            .transform_point3(Vec3::ZERO),
-                        0.1,
-                        Color::cyan(),
-                    ));
-
-                    gizmos.draw(Sphere::new(point, 0.1, Color::cyan()));
+                    state.update(world, cmd, physics_state, origin, world_ray)?;
                 }
 
                 anyhow::Ok(())

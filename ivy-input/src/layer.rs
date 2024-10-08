@@ -61,7 +61,7 @@ impl Layer for InputLayer {
         });
 
         events.subscribe(|this, world, _, event: &CursorMoved| {
-            this.handle_event(world, &InputEvent::CursorMoved(event.position));
+            this.handle_event(world, &InputEvent::CursorMoved(*event));
 
             Ok(())
         });

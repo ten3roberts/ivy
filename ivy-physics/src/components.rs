@@ -1,6 +1,8 @@
 use flax::{component, Debuggable};
 use glam::Vec3;
-use rapier3d::prelude::{ColliderHandle, RigidBodyHandle, RigidBodyType, SharedShape};
+use rapier3d::prelude::{
+    ColliderHandle, GenericJoint, ImpulseJointHandle, RigidBodyHandle, RigidBodyType, SharedShape,
+};
 
 use crate::{state::PhysicsState, Effector};
 
@@ -23,4 +25,11 @@ component! {
     pub center_of_mass: Vec3 => [ Debuggable ],
 
     pub can_sleep: (),
+}
+
+// Joints
+component! {
+    /// impulse based joint from the current entity to the target
+    pub impulse_joint(target): GenericJoint,
+    pub impulse_joint_handle(target): ImpulseJointHandle,
 }

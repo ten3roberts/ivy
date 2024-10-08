@@ -4,16 +4,15 @@ use crate::{
     components::*,
     state::{BodyDynamicsQuery, BodyDynamicsQueryMut, PhysicsState},
 };
+use anyhow::Context;
 use flax::{
-    component::{ComponentDesc, ComponentValue},
     components::child_of,
     entity_ids,
     events::EventSubscriber,
     fetch::{Copied, Satisfied},
     filter::ChangeFilter,
-    sink::Sink,
-    BoxedSystem, CommandBuffer, Component, Entity, EntityIds, FetchExt, Mutable, Query,
-    QueryBorrow, System, World,
+    BoxedSystem, CommandBuffer, Component, EntityIds, FetchExt, Mutable, Query, QueryBorrow,
+    RelationExt, System, World,
 };
 use glam::{Mat4, Vec3};
 use ivy_core::{
@@ -22,6 +21,7 @@ use ivy_core::{
         world_transform,
     },
     gizmos::{Gizmos, Line, DEFAULT_THICKNESS},
+    subscribers::{RemovedComponentSubscriber, RemovedRelationSubscriber},
     Color, ColorExt,
 };
 use rapier3d::prelude::{
@@ -106,42 +106,6 @@ pub fn register_colliders_system() -> BoxedSystem {
         .boxed()
 }
 
-pub struct RemovedComponentSubscriber<T> {
-    tx: flume::Sender<(Entity, T)>,
-    component: Component<T>,
-}
-
-impl<T> RemovedComponentSubscriber<T> {
-    pub fn new(tx: flume::Sender<(Entity, T)>, component: Component<T>) -> Self {
-        Self { tx, component }
-    }
-}
-
-impl<T: ComponentValue + Copy> EventSubscriber for RemovedComponentSubscriber<T> {
-    fn on_added(&self, _: &flax::archetype::Storage, _: &flax::events::EventData) {}
-
-    fn on_modified(&self, _: &flax::events::EventData) {}
-
-    fn on_removed(&self, storage: &flax::archetype::Storage, event: &flax::events::EventData) {
-        let storage = storage.downcast_ref::<T>();
-        for (&id, slot) in event.ids.iter().zip(event.slots) {
-            self.tx.send((id, storage[slot])).ok();
-        }
-    }
-
-    fn matches_arch(&self, arch: &flax::archetype::Archetype) -> bool {
-        arch.has(self.component.key())
-    }
-
-    fn matches_component(&self, v: ComponentDesc) -> bool {
-        v.key() == self.component.key()
-    }
-
-    fn is_connected(&self) -> bool {
-        self.tx.is_connected()
-    }
-}
-
 pub fn unregister_bodies_system(world: &mut World) -> BoxedSystem {
     let (tx, rx) = flume::unbounded();
 
@@ -158,6 +122,64 @@ pub fn unregister_bodies_system(world: &mut World) -> BoxedSystem {
                 if let Some(state) = query.first() {
                     for (id, rb_handle) in rx.try_iter() {
                         state.remove_body(id, rb_handle);
+                    }
+                }
+
+                anyhow::Ok(())
+            },
+        )
+        .boxed()
+}
+
+pub fn attach_joints_system(world: &mut World) -> BoxedSystem {
+    let (tx, rx) = flume::unbounded();
+
+    world.subscribe(
+        tx.filter_event_kind(flax::events::EventKind::Added)
+            .filter_relations([impulse_joint.as_relation().id()]),
+    );
+
+    let (removed_tx, removed_rx) = flume::unbounded();
+    world.subscribe(RemovedRelationSubscriber::new(
+        removed_tx,
+        impulse_joint.as_relation(),
+    ));
+
+    System::builder()
+        .with_world()
+        .with_cmd_mut()
+        .with_query(Query::new(physics_state().as_mut()))
+        .build(
+            move |world: &World,
+                  cmd: &mut CommandBuffer,
+                  mut state: QueryBorrow<Mutable<PhysicsState>>| {
+                if let Some(state) = state.first() {
+                    for (id, component, _) in removed_rx.try_iter() {
+                        let target = component.key().target().expect("joint target is present");
+                        let handle = *world.get(id, impulse_joint_handle(target))?;
+
+                        tracing::info!(?handle, "removed joint");
+                        state.detach_joint(handle);
+                        cmd.remove(id, impulse_joint_handle(target));
+                    }
+
+                    for added in rx.try_iter() {
+                        let body1 = *world
+                            .get(added.id, rb_handle())
+                            .context("Missing rigidbody for joint source")?;
+
+                        let target = added.key.target().expect("joint target is present");
+                        let body2 = *world
+                            .get(target, rb_handle())
+                            .context("Missing rigidbody for joint target")?;
+
+                        let data = world
+                            .get(added.id, impulse_joint(target))
+                            .context("Missing joint data between entity pairs")?;
+
+                        let handle = state.attach_joint(body1, body2, *data);
+                        tracing::info!(?body1, ?body2, ?handle, "attaching");
+                        cmd.set(added.id, impulse_joint_handle(target), handle);
                     }
                 }
 

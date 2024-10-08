@@ -1,7 +1,6 @@
 use flax::{component, Debuggable};
 use glam::Mat4;
 use ivy_assets::Asset;
-use ivy_wgpu_types::PhysicalSize;
 use winit::dpi::{LogicalPosition, LogicalSize};
 
 use crate::{

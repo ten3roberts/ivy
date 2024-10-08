@@ -2,9 +2,9 @@ use crate::{
     components::physics_state,
     state::{PhysicsState, PhysicsStateConfiguration},
     systems::{
-        apply_effectors_system, gizmo_system, physics_step_system, register_bodies_system,
-        register_colliders_system, sync_simulation_bodies_system, unregister_bodies_system,
-        update_bodies_system,
+        apply_effectors_system, attach_joints_system, gizmo_system, physics_step_system,
+        register_bodies_system, register_colliders_system, sync_simulation_bodies_system,
+        unregister_bodies_system, update_bodies_system,
     },
 };
 use flax::World;
@@ -78,17 +78,20 @@ impl Plugin<FixedTimeStep> for PhysicsPlugin {
             .with_system(register_bodies_system())
             .flush()
             .with_system(register_colliders_system())
+            .with_system(attach_joints_system(world))
             .flush()
             .with_system(apply_effectors_system(dt))
-            .with_system(unregister_bodies_system(world))
+            .with_system(unregister_bodies_system(world));
+
+        // rapier barrier
+        schedule
             .with_system(update_bodies_system())
-            .with_system(physics_step_system());
+            .with_system(physics_step_system())
+            .with_system(sync_simulation_bodies_system());
 
         if self.gizmos.rigidbody {
             schedule.with_system(gizmo_system(dt));
         }
-
-        schedule.with_system(sync_simulation_bodies_system());
 
         if self.gizmos.bvh_tree {
             // schedule.with_system(collisions_tree_gizmos_system());

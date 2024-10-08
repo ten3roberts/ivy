@@ -38,6 +38,7 @@ mod extent;
 pub mod gizmos;
 pub mod layer;
 pub mod macros;
+pub mod subscribers;
 mod systems;
 mod updatable;
 pub mod update_layer;

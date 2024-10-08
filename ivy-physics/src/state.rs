@@ -3,9 +3,10 @@ use ivy_core::components::{
 };
 use nalgebra::Isometry3;
 use rapier3d::prelude::{
-    CCDSolver, ColliderHandle, ColliderSet, DefaultBroadPhase, ImpulseJointSet,
-    IntegrationParameters, IslandManager, MultibodyJointSet, NarrowPhase, PhysicsPipeline,
-    QueryFilter, QueryPipeline, Ray, RayIntersection, RigidBody, RigidBodyHandle, RigidBodySet,
+    CCDSolver, ColliderHandle, ColliderSet, DefaultBroadPhase, GenericJoint, GenericJointBuilder,
+    ImpulseJointHandle, ImpulseJointSet, IntegrationParameters, IslandManager, MultibodyJointSet,
+    NarrowPhase, PhysicsPipeline, QueryFilter, QueryPipeline, Ray, RayIntersection, RigidBody,
+    RigidBodyHandle, RigidBodySet, SpringJointBuilder,
 };
 
 use flax::{
@@ -93,6 +94,21 @@ impl PhysicsState {
             .insert_with_parent(collider, rb, &mut self.bodies)
     }
 
+    /// Attach a joint connecting two bodies
+    pub fn attach_joint(
+        &mut self,
+        body1: RigidBodyHandle,
+        body2: RigidBodyHandle,
+        joint: impl Into<GenericJoint>,
+    ) -> ImpulseJointHandle {
+        let joint = joint.into();
+        self.joint_set.insert(body1, body2, joint, true)
+    }
+
+    pub fn detach_joint(&mut self, joint: ImpulseJointHandle) {
+        self.joint_set.remove(joint, true);
+    }
+
     pub fn cast_ray(
         &self,
         ray: &Ray,
@@ -167,7 +183,6 @@ impl PhysicsState {
         I: Iterator<Item = (RigidBodyHandle, BodyDynamicsQueryItem<'x>)>,
     {
         for (rb_handle, v) in data {
-            tracing::info!(?rb_handle, ?v.vel);
             let rb = &mut self.bodies[rb_handle];
 
             rb.set_position(
@@ -202,6 +217,12 @@ pub struct BodyDynamicsQueryMut {
     pub ang_vel: Mutable<Vec3>,
 }
 
+impl Default for BodyDynamicsQueryMut {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BodyDynamicsQueryMut {
     pub fn new() -> Self {
         Self {
@@ -229,6 +250,12 @@ impl BodyDynamicsQuery {
             vel: velocity(),
             ang_vel: angular_velocity(),
         }
+    }
+}
+
+impl Default for BodyDynamicsQuery {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
