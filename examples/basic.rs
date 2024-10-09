@@ -17,7 +17,7 @@ use ivy_core::{
 };
 use ivy_engine::{
     async_commandbuffer, delta_time, engine, gravity_influence, is_static, main_camera,
-    world_transform, Collider, RigidBodyBundle, TransformBundle,
+    world_transform, Collider, TransformBundle,
 };
 use ivy_game::free_camera::{setup_camera, CameraInputPlugin};
 use ivy_gltf::{animation::player::Animator, components::animator, Document};
@@ -73,7 +73,8 @@ pub fn main() -> anyhow::Result<()> {
                 gpu,
                 surface,
                 SurfacePbrPipelineDesc {
-                    hdri: Some(Box::new("hdris/lauter_waterfall_4k.hdr")),
+                    hdri: None,
+                    // hdri: Some(Box::new("hdris/lauter_waterfall_4k.hdr")),
                 },
             ))
         }))
@@ -218,11 +219,6 @@ impl LogicLayer {
                             material: plane_material.clone(),
                             shader: shader.clone(),
                         })
-                        .mount(
-                            RigidBodyBundle::default()
-                                .with_restitution(1.0)
-                                .with_friction(0.8),
-                        )
                         .set(is_static(), ())
                         .set(
                             collider(),
@@ -257,13 +253,6 @@ impl LogicLayer {
                                     material: plastic_material.clone(),
                                     shader: shader.clone(),
                                 })
-                                .mount(
-                                    RigidBodyBundle::default()
-                                        .with_mass(10.0)
-                                        .with_angular_mass(50.0)
-                                        .with_friction(0.5)
-                                        .with_restitution(0.4),
-                                )
                                 .set(gravity_influence(), 1.0)
                                 .set(collider(), Collider::sphere(1.0))
                                 .set(shadow_pass(), assets.load(&ShadowShaderDesc)),
@@ -294,13 +283,6 @@ impl LogicLayer {
                                     material: plastic_material.clone(),
                                     shader: shader.clone(),
                                 })
-                                .mount(
-                                    RigidBodyBundle::default()
-                                        .with_mass(20.0)
-                                        .with_angular_mass(50.0)
-                                        .with_friction(0.8)
-                                        .with_restitution(0.5),
-                                )
                                 .set(gravity_influence(), 1.0)
                                 .set(
                                     collider(),
@@ -371,35 +353,35 @@ impl LogicLayer {
             .mount(
                 TransformBundle::default()
                     .with_position(Vec3::Y * 5.0)
-                    .with_rotation(Quat::from_euler(EulerRot::YXZ, 0.5, 1.0, 0.0)),
+                    .with_rotation(Quat::from_euler(EulerRot::YXZ, 0.5, -1.0, 0.0)),
             )
             .set(light_data(), LightData::new(Srgb::new(1.0, 1.0, 1.0), 1.0))
             .set(light_kind(), LightKind::Directional)
             .set_default(cast_shadow())
             .spawn(world);
 
-        Entity::builder()
-            .mount(
-                TransformBundle::default()
-                    .with_position(Vec3::Y * 5.0)
-                    .with_rotation(Quat::from_euler(EulerRot::YXZ, 2.0, 0.5, 0.0)),
-            )
-            .set(light_data(), LightData::new(Srgb::new(1.0, 1.0, 1.0), 1.0))
-            .set(light_kind(), LightKind::Directional)
-            .set_default(cast_shadow())
-            .spawn(world);
+        // Entity::builder()
+        //     .mount(
+        //         TransformBundle::default()
+        //             .with_position(Vec3::Y * 5.0)
+        //             .with_rotation(Quat::from_euler(EulerRot::YXZ, 2.0, 0.5, 0.0)),
+        //     )
+        //     .set(light_data(), LightData::new(Srgb::new(1.0, 1.0, 1.0), 1.0))
+        //     .set(light_kind(), LightKind::Directional)
+        //     .set_default(cast_shadow())
+        //     .spawn(world);
 
-        Entity::builder()
-            .mount(TransformBundle::default().with_position(vec3(0.0, 2.0, 0.0)))
-            .set(light_data(), LightData::new(Srgb::new(1.0, 0.0, 0.0), 25.0))
-            .set(light_kind(), LightKind::Point)
-            .spawn(world);
+        // Entity::builder()
+        //     .mount(TransformBundle::default().with_position(vec3(0.0, 2.0, 0.0)))
+        //     .set(light_data(), LightData::new(Srgb::new(1.0, 0.0, 0.0), 25.0))
+        //     .set(light_kind(), LightKind::Point)
+        //     .spawn(world);
 
-        Entity::builder()
-            .mount(TransformBundle::default().with_position(vec3(2.0, 2.0, 5.0)))
-            .set(light_data(), LightData::new(Srgb::new(0.0, 0.0, 1.0), 25.0))
-            .set(light_kind(), LightKind::Point)
-            .spawn(world);
+        // Entity::builder()
+        //     .mount(TransformBundle::default().with_position(vec3(2.0, 2.0, 5.0)))
+        //     .set(light_data(), LightData::new(Srgb::new(0.0, 0.0, 1.0), 25.0))
+        //     .set(light_kind(), LightKind::Point)
+        //     .spawn(world);
         Ok(())
     }
 }
@@ -483,7 +465,7 @@ fn point_light_gizmo_system() -> BoxedSystem {
                         )),
                         LightKind::Directional => {
                             let pos = transform.transform_point3(Vec3::ZERO);
-                            let dir = transform.transform_vector3(Vec3::Z);
+                            let dir = transform.transform_vector3(-Vec3::Z);
 
                             gizmos.draw(gizmos::Sphere::new(pos, 0.1, light.color.with_alpha(1.0)));
 

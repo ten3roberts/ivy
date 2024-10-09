@@ -44,6 +44,7 @@ struct ShadowCamera {
     viewproj: mat4x4<f32>,
     texel_size: vec2<f32>,
     depth: f32,
+    _padding: f32,
 }
 
 struct Light {
@@ -133,24 +134,21 @@ fn pbr_luminance(in: PbrLuminance, light: Light) -> vec3<f32> {
         l = normalize(to_light);
         attenuation = 1f / dist_sqr;
     } else if light.kind == LIGHT_DIRECTIONAL {
-        l = in.tbn * -light.direction;
+        l = -in.tbn * light.direction;
         attenuation = 1f;
     }
 
     var in_light = 1f;
     var c = vec3(0f);
     if light.shadow_index != U32_MAX {
-        // let in_view = globals.view * vec4(in.world_pos, 1.0);
-        // let bias = max(0.05 * (1.0 - dot(vec3(0f, 0f, 1f), l)), 0.005);
-        // let bias = 0.001;
         let bias = 0.0;
 
-        var cascade_index = 0u;
-        for (var i = 0u; i < light.shadow_cascades - 1; i++) {
-            if in.view_pos.z < shadow_cameras[light.shadow_index + i].depth {
-                cascade_index = i + 1;
-            }
-        }
+        var cascade_index = 1u;
+        // for (var i = 0u; i < light.shadow_cascades - 1; i++) {
+        //     if in.view_pos.z < shadow_cameras[light.shadow_index + i].depth {
+        //         cascade_index = i + 1;
+        //     }
+        // }
 
         let shadow_camera = shadow_cameras[light.shadow_index + cascade_index];
         let light_space_clip = shadow_camera.viewproj * vec4(in.world_pos, 1.0);

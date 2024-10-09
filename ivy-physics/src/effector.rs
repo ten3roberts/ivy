@@ -1,4 +1,7 @@
-use glam::Vec3;
+use glam::{Mat3, Vec3};
+use ivy_core::gizmos::DEFAULT_RADIUS;
+use nalgebra::{Matrix3, Vector, Vector3};
+use rapier3d::{parry::utils::SdpMatrix3, prelude::RigidBody};
 
 /// Manages the forces applied to an entity.
 /// Stored in the entity and is a middle hand for manipulating velocity and
@@ -7,30 +10,36 @@ use glam::Vec3;
 /// and non requirement of knowing the dt.
 ///
 /// It is also possible to create a dummy effector to "record" physics effects.
-#[derive(Default, Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Effector {
     dv: Vec3,
-    dw: Vec3,
+    // working with a sdp is easier in nalgebra types
+    dw: Vector3<f32>,
     instant_dv: Vec3,
-    instant_dw: Vec3,
-    inv_mass: f32,
-    inertia_tensor: f32,
+    instant_dw: Vector3<f32>,
+    inv_mass: Vec3,
+    inertia_tensor_sqrt: SdpMatrix3<f32>,
     translation: Vec3,
     wake: bool,
 }
 
 impl Effector {
-    pub fn new(mass: f32, ang_mass: f32) -> Self {
+    pub fn new() -> Self {
         Self {
-            inv_mass: mass.recip(),
-            inertia_tensor: ang_mass.recip(),
+            inv_mass: Vec3::ZERO,
             dv: Vec3::ZERO,
-            dw: Vec3::ZERO,
+            dw: Vector3::new(0.0, 0.0, 0.0),
             instant_dv: Vec3::ZERO,
-            instant_dw: Vec3::ZERO,
+            instant_dw: Default::default(),
             translation: Vec3::ZERO,
             wake: false,
+            inertia_tensor_sqrt: SdpMatrix3::from_sdp_matrix(Matrix3::identity()),
         }
+    }
+
+    pub fn update_props(&mut self, rb: &RigidBody) {
+        self.inertia_tensor_sqrt = rb.mass_properties().effective_world_inv_inertia_sqrt;
+        self.inv_mass = rb.mass_properties().effective_inv_mass.into();
     }
 
     pub fn should_wake(&self) -> bool {
@@ -48,45 +57,36 @@ impl Effector {
         self.instant_dw += other.instant_dw;
     }
 
-    pub fn set_mass(&mut self, mass: f32) {
-        self.inv_mass = mass.recip();
-    }
-
-    pub fn set_ang_mass(&mut self, ang_mass: f32) {
-        self.inertia_tensor = ang_mass.recip()
-    }
-
     /// Clears all forces affecting the entity
     pub fn clear(&mut self) {
         *self = Self {
             dv: Vec3::ZERO,
-            dw: Vec3::ZERO,
+            dw: Default::default(),
             instant_dv: Vec3::ZERO,
-            instant_dw: Vec3::ZERO,
+            instant_dw: Default::default(),
             translation: Vec3::ZERO,
             inv_mass: self.inv_mass,
-            inertia_tensor: self.inertia_tensor,
+            inertia_tensor_sqrt: self.inertia_tensor_sqrt,
             wake: false,
         }
     }
 
     pub fn apply_torque(&mut self, torque: Vec3) {
-        self.dw += torque * self.inertia_tensor;
+        self.dw += self.inertia_tensor_sqrt * (self.inertia_tensor_sqrt * Vector::from(torque));
     }
 
     pub fn apply_angular_impulse(&mut self, j: Vec3) {
-        self.instant_dw += j * self.inertia_tensor
+        self.instant_dw += self.inertia_tensor_sqrt * (self.inertia_tensor_sqrt * Vector::from(j));
     }
 
     pub fn apply_angular_velocity_change(&mut self, dw: Vec3) {
-        self.instant_dw += dw
+        self.instant_dw += Vector3::from(dw);
     }
 
     pub fn apply_angular_acceleration(&mut self, dw: Vec3) {
-        self.dw += dw
+        self.dw += Vector3::from(dw);
     }
 
-    /// Applies a continuos force using mass
     pub fn apply_force(&mut self, f: Vec3, wake: bool) {
         self.dv += f * self.inv_mass;
         self.wake = self.wake || wake;
@@ -140,7 +140,7 @@ impl Effector {
     /// Returns the total net effect of torques, angular impulses, and angular
     /// velocity changes. Note: Effector should be cleared afterwards.
     pub fn net_angular_velocity_change(&self, dt: f32) -> Vec3 {
-        self.dw * dt + self.instant_dw
+        (self.dw * dt + self.instant_dw).into()
     }
 
     /// Get the effector's translation.

@@ -83,7 +83,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     out.pos = globals.viewproj * world_position;
     out.tex_coord = in.tex_coord;
     out.world_pos = world_position.xyz;
-    out.view_pos = (globals.view * world_position).xyz;
+    out.view_pos = (globals.view * vec4(world_position.xyz, 1.0)).xyz;
 
     out.normal = normal;
     out.tangent = tangent;
