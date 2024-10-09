@@ -47,7 +47,7 @@ impl SurfacePbrPipeline {
         let shader_library = Arc::new(shader_library);
 
         let pbr = PbrRenderGraphConfig {
-            shadow_map_config: None,
+            shadow_map_config: Some(Default::default()),
             msaa: Some(Default::default()),
             bloom: None,
             skybox: desc.hdri.map(|v| SkyboxConfig {

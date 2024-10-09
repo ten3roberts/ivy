@@ -96,7 +96,7 @@ impl LightManager {
             let color = (to_linear_vec3(data.color) * data.intensity).extend(1.0);
 
             let position = transform.transform_point3(Vec3::ZERO);
-            let direction = transform.transform_vector3(Vec3::Z).normalize();
+            let direction = transform.transform_vector3(-Vec3::Z).normalize();
 
             let shadow_data = shadow_data.copied().unwrap_or(LightShadowData {
                 index: u32::MAX,

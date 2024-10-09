@@ -80,10 +80,10 @@ pub fn main() -> anyhow::Result<()> {
                 gpu,
                 surface,
                 SurfacePbrPipelineDesc {
-                    // hdri: None,
-                    hdri: Some(Box::new(
-                        "hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
-                    )),
+                    hdri: None,
+                    // hdri: Some(Box::new(
+                    //     "hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
+                    // )),
                 },
             ))
         }))
@@ -236,8 +236,8 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
     Entity::builder()
         .mount(TransformBundle::default().with_rotation(Quat::from_euler(
             EulerRot::YXZ,
-            -2.0,
-            1.0,
+            -1.5,
+            -0.2,
             0.0,
         )))
         .set(light_data(), LightData::new(Srgb::new(1.0, 1.0, 1.0), 1.0))
@@ -271,7 +271,7 @@ impl Layer for LogicLayer {
             {
                 let aspect =
                     resized.physical_size.width as f32 / resized.physical_size.height as f32;
-                *main_camera = Mat4::perspective_rh(1.0, aspect, 0.01, 1000.0);
+                *main_camera = Mat4::perspective_rh(1.0, aspect, 0.1, 100.0);
             }
 
             Ok(())
