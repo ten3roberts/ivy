@@ -52,8 +52,8 @@ pub struct ShadowMapConfig {
 impl Default for ShadowMapConfig {
     fn default() -> Self {
         Self {
-            resolution: 512,
-            max_cascades: 2,
+            resolution: 2048,
+            max_cascades: 4,
             max_shadows: 4,
         }
     }

@@ -237,7 +237,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
         .mount(TransformBundle::default().with_rotation(Quat::from_euler(
             EulerRot::YXZ,
             -2.0,
-            1.0,
+            -1.0,
             0.0,
         )))
         .set(light_data(), LightData::new(Srgb::new(1.0, 1.0, 1.0), 1.0))

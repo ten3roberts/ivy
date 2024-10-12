@@ -36,7 +36,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     out.pos = globals.viewproj * world_position;
     out.normal = (object.world_matrix * vec4(in.normal, 0.0)).xyz;
 
-    out.pos.z = clamp(out.pos.z, 0f, out.pos.w);
+    // out.pos.z = clamp(out.pos.z, 0f, out.pos.w);
     return out;
 }
 

@@ -16,7 +16,7 @@ use flax::{entity_ids, FetchExt, Query, World};
 use glam::{vec2, vec3, Mat4, Vec2, Vec3, Vec4Swizzles};
 use itertools::Itertools;
 use ivy_core::{
-    components::{main_camera, world_transform},
+    components::{engine, gizmos, main_camera, world_transform},
     WorldExt,
 };
 use ordered_float::OrderedFloat;
@@ -169,53 +169,69 @@ impl Node for ShadowMapNode {
             })
             .collect_vec();
 
-        for (id, &transform, &kind) in Query::new((entity_ids(), world_transform(), light_kind()))
-            .with(cast_shadow())
-            .borrow(ctx.world)
-            .iter()
         {
-            let (_, rot, _) = transform.to_scale_rotation_translation();
+            let gizmos = ctx.world.get(engine(), gizmos()).unwrap();
+            let mut gizmos = gizmos.begin_section("shadowmapping");
 
-            to_add.push((
-                id,
-                LightShadowData {
-                    index: self.lights.len() as _,
-                    cascade_count: self.max_cascades as _,
-                },
-            ));
+            for (id, &transform, &kind) in
+                Query::new((entity_ids(), world_transform(), light_kind()))
+                    .with(cast_shadow())
+                    .borrow(ctx.world)
+                    .iter()
+            {
+                let (_, rot, _) = transform.to_scale_rotation_translation();
 
-            if kind.is_directional() {
-                let direction = rot * -Vec3::Z;
+                to_add.push((
+                    id,
+                    LightShadowData {
+                        index: self.lights.len() as _,
+                        cascade_count: self.max_cascades as _,
+                    },
+                ));
 
-                for frustrum in &frustrums {
-                    let snapping = 1.0;
-                    let center = (frustrum.center / snapping).ceil() * snapping;
+                if kind.is_directional() {
+                    let light_forward = rot * -Vec3::Z;
 
-                    let radius = frustrum
-                        .corners
-                        .iter()
-                        .map(|v| v.distance_squared(center))
-                        .max_by_key(|&v| OrderedFloat(v))
-                        .unwrap_or_default()
-                        .sqrt();
+                    for frustrum in &frustrums {
+                        let snapping = 0.1;
+                        let center = (frustrum.center / snapping).ceil() * snapping;
 
-                    let radius = (radius / snapping).ceil() * snapping + snapping;
+                        for corner in &frustrum.corners[4..] {
+                            gizmos.draw(corner);
+                        }
+                        gizmos.draw(center);
+                        let radius = frustrum
+                            .corners
+                            .iter()
+                            .map(|v| v.distance(center))
+                            .max_by_key(|&v| OrderedFloat(v))
+                            .unwrap();
 
-                    let view =
-                        Mat4::look_at_rh(center + direction.normalize() * radius, center, Vec3::Y);
+                        let radius = (radius / snapping).ceil() * snapping + snapping;
 
-                    let proj =
-                        Mat4::orthographic_rh(-radius, radius, -radius, radius, 0.1, radius * 2.0);
-                    self.lights.push(LightShadowCamera {
-                        viewproj: proj * view,
-                        texel_size,
-                        depth: frustrum.split_distance,
-                        _padding: Default::default(),
-                    });
-                }
-            } else {
-                todo!()
-            };
+                        let light_camera_pos = center - light_forward * radius;
+                        let view = Mat4::from_rotation_translation(rot, light_camera_pos);
+
+                        let proj = Mat4::orthographic_rh(
+                            -radius,
+                            radius,
+                            -radius,
+                            radius,
+                            0.1,
+                            radius * 2.0,
+                        );
+
+                        self.lights.push(LightShadowCamera {
+                            viewproj: proj * view.inverse(),
+                            texel_size,
+                            depth: frustrum.split_distance,
+                            _padding: Default::default(),
+                        });
+                    }
+                } else {
+                    todo!()
+                };
+            }
         }
 
         ctx.world.append_all(light_shadow_data(), to_add)?;
@@ -376,7 +392,6 @@ impl Frustrum {
         let center = corners.iter().sum::<Vec3>() / corners.len() as f32;
 
         let depth = -(near + split_distance * clip_range);
-        // tracing::info!(depth, ?corners);
         Self {
             corners,
             center,

@@ -65,9 +65,7 @@ impl LightManager {
                 mag_filter: wgpu::FilterMode::Nearest,
                 min_filter: wgpu::FilterMode::Nearest,
                 mipmap_filter: wgpu::FilterMode::Nearest,
-                compare: Some(wgpu::CompareFunction::Less),
-                anisotropy_clamp: 1,
-                border_color: None,
+                compare: Some(wgpu::CompareFunction::LessEqual),
                 ..Default::default()
             });
 
@@ -96,7 +94,7 @@ impl LightManager {
             let color = (to_linear_vec3(data.color) * data.intensity).extend(1.0);
 
             let position = transform.transform_point3(Vec3::ZERO);
-            let direction = transform.transform_vector3(Vec3::Z).normalize();
+            let direction = transform.transform_vector3(-Vec3::Z).normalize();
 
             let shadow_data = shadow_data.copied().unwrap_or(LightShadowData {
                 index: u32::MAX,
