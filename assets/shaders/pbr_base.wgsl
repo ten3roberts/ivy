@@ -133,7 +133,7 @@ fn pbr_luminance(in: PbrLuminance, light: Light) -> vec3<f32> {
         l = normalize(to_light);
         attenuation = 1f / dist_sqr;
     } else if light.kind == LIGHT_DIRECTIONAL {
-        l = -in.tbn * light.direction;
+        l = in.tbn * -light.direction;
         attenuation = 1f;
     }
 

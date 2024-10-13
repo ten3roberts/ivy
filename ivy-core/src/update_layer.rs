@@ -43,7 +43,7 @@ pub struct PerTick;
 
 impl TimeStep for PerTick {
     fn step(&mut self, world: &mut World, schedule: &mut Schedule) -> anyhow::Result<()> {
-        schedule.execute_par(world)
+        schedule.execute_seq(world)
     }
 }
 
