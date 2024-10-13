@@ -11,7 +11,7 @@ use flax::{
 use glam::Mat4;
 use itertools::Itertools;
 use ivy_assets::{map::AssetMap, stored::Handle, Asset, AssetCache};
-use ivy_core::{profiling::profile_function, components::world_transform};
+use ivy_core::{components::world_transform, profiling::profile_function};
 use ivy_gltf::components::skin;
 use ivy_wgpu_types::shader::Culling;
 use slab::Slab;
@@ -106,6 +106,8 @@ impl ObjectDataQuery {
     }
 }
 
+pub type ShaderFactory = Box<dyn FnMut(ShaderDesc) -> ShaderDesc>;
+
 pub struct MeshRenderer {
     id: Entity,
     /// All the objects registered
@@ -133,6 +135,7 @@ pub struct MeshRenderer {
     mesh_buffer: MeshBuffer,
     shader_pass: Component<Asset<ShaderPassDesc>>,
     shader_library: Arc<ShaderLibrary>,
+    shader_factory: ShaderFactory,
 }
 
 impl MeshRenderer {
@@ -174,7 +177,17 @@ impl MeshRenderer {
             object_query: Query::new((object_index(id), ObjectDataQuery::new().modified())),
             mesh_buffer: MeshBuffer::new(gpu, "mesh_buffer", 4),
             shader_pass,
+            shader_factory: Box::new(|v| v),
         }
+    }
+
+    /// Set the shader factory
+    pub fn with_shader_factory(
+        mut self,
+        shader_factory: impl 'static + FnMut(ShaderDesc) -> ShaderDesc,
+    ) -> Self {
+        self.shader_factory = Box::new(shader_factory);
+        self
     }
 
     fn resize_object_buffer(&mut self, gpu: &Gpu, capacity: usize) {
@@ -264,27 +277,25 @@ impl MeshRenderer {
                         tracing::info!(layouts = layouts.len(), "creating shader");
                         let module = self.shader_library.process(gpu, (&*key.shader).into())?;
 
+                        let vertex_layouts = &[Vertex::layout()];
+                        let bind_group_layouts = layouts
+                            .iter()
+                            .copied()
+                            .chain([&self.bind_group_layout, material.layout()])
+                            .collect_vec();
+
+                        let shader_desc = ShaderDesc::new(key.shader.label(), &module, target)
+                            .with_vertex_layouts(vertex_layouts)
+                            .with_bind_group_layouts(&bind_group_layouts)
+                            .with_culling_mode(Culling {
+                                cull_mode: key.shader.cull_mode,
+                                front_face: wgpu::FrontFace::Ccw,
+                            });
+
                         slot.insert(
-                            store.shaders.insert(Shader::new(
-                                gpu,
-                                &ShaderDesc {
-                                    label: key.shader.label(),
-                                    module: &module,
-                                    target,
-                                    vertex_layouts: &[Vertex::layout()],
-                                    layouts: &layouts
-                                        .iter()
-                                        .copied()
-                                        .chain([&self.bind_group_layout, material.layout()])
-                                        .collect_vec(),
-                                    vertex_entry_point: "vs_main",
-                                    fragment_entry_point: "fs_main",
-                                    culling: Culling {
-                                        cull_mode: key.shader.cull_mode,
-                                        front_face: wgpu::FrontFace::Ccw,
-                                    },
-                                },
-                            )),
+                            store
+                                .shaders
+                                .insert(Shader::new(gpu, &(self.shader_factory)(shader_desc))),
                         )
                         .clone()
                     }

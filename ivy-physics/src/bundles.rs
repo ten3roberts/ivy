@@ -1,72 +1,57 @@
 //! This module contains bundles and queries suitable for physics.
 use core::f32;
 
-use flax::{Component, EntityBuilder, Fetch, Mutable};
+use flax::EntityBuilder;
 use glam::Vec3;
-use ivy_core::{
-    components::{inertia_tensor, angular_velocity, friction, mass, restitution, velocity},
-    Bundle,
+use ivy_core::Bundle;
+use rapier3d::prelude::{RigidBodyType, SharedShape};
+
+use crate::{
+    components::{
+        angular_velocity, can_sleep, collider_shape, density, effector, friction, inertia_tensor,
+        mass, restitution, rigid_body_type, velocity,
+    },
+    Effector,
 };
 
-use crate::components::effector;
-
-#[derive(Fetch)]
-pub struct RbQuery {
-    pub restitution: Component<f32>,
-    pub vel: Component<Vec3>,
-    pub ang_vel: Component<Vec3>,
-    pub mass: Component<f32>,
-    pub ang_mass: Component<f32>,
-    pub friction: Component<f32>,
-}
-
-impl RbQuery {
-    pub fn new() -> Self {
-        Self {
-            restitution: restitution(),
-            vel: velocity(),
-            ang_vel: angular_velocity(),
-            mass: mass(),
-            ang_mass: inertia_tensor(),
-            friction: friction(),
-        }
-    }
-}
-
-impl Default for RbQuery {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[derive(Default, Debug)]
-/// Bundle for all things neccessary for all things physics
+#[derive(Debug)]
+/// Bundle for a rigidbody without collider
 pub struct RigidBodyBundle {
-    pub velocity: Vec3,
+    pub body_type: RigidBodyType,
+    pub can_sleep: bool,
     pub mass: f32,
     pub angular_mass: f32,
+
+    pub velocity: Vec3,
     pub angular_velocity: Vec3,
-    pub restitution: f32,
-    pub friction: f32,
 }
 
 impl RigidBodyBundle {
-    pub fn new(
-        mass: f32,
-        vel: Vec3,
-        ang_vel: Vec3,
-        ang_mass: f32,
-        resitution: f32,
-        friction: f32,
-    ) -> Self {
+    pub fn new(body_type: RigidBodyType) -> Self {
         Self {
-            velocity: vel,
-            mass,
-            angular_velocity: ang_vel,
-            angular_mass: ang_mass,
-            restitution: resitution,
-            friction,
+            body_type,
+            velocity: Vec3::ZERO,
+            mass: 0.0,
+            angular_velocity: Vec3::ZERO,
+            angular_mass: 0.0,
+            can_sleep: true,
         }
+    }
+
+    pub fn dynamic() -> Self {
+        Self::new(RigidBodyType::Dynamic)
+    }
+
+    pub fn kinematic_position() -> Self {
+        Self::new(RigidBodyType::KinematicPositionBased)
+    }
+
+    pub fn kinematic_velocity() -> Self {
+        Self::new(RigidBodyType::KinematicVelocityBased)
+    }
+
+    pub fn fixed() -> Self {
+        Self::new(RigidBodyType::Fixed)
     }
 
     /// Set the mass
@@ -93,6 +78,46 @@ impl RigidBodyBundle {
         self
     }
 
+    /// Set the can sleep
+    pub fn with_can_sleep(mut self, can_sleep: bool) -> Self {
+        self.can_sleep = can_sleep;
+        self
+    }
+}
+
+impl Bundle for RigidBodyBundle {
+    fn mount(self, entity: &mut EntityBuilder) {
+        entity
+            .set(rigid_body_type(), self.body_type)
+            .set(velocity(), self.velocity)
+            .set(mass(), self.mass)
+            .set(inertia_tensor(), self.angular_mass)
+            .set(angular_velocity(), self.angular_velocity)
+            .set(effector(), Effector::new());
+
+        if self.can_sleep {
+            entity.set(can_sleep(), ());
+        }
+    }
+}
+
+pub struct ColliderBundle {
+    shape: SharedShape,
+    density: f32,
+    friction: f32,
+    restitution: f32,
+}
+
+impl ColliderBundle {
+    pub fn new(shape: SharedShape) -> Self {
+        Self {
+            shape,
+            density: 1.0,
+            friction: 0.0,
+            restitution: 0.0,
+        }
+    }
+
     /// Set the restitution
     pub fn with_restitution(mut self, restitution: f32) -> Self {
         self.restitution = restitution;
@@ -104,46 +129,20 @@ impl RigidBodyBundle {
         self.friction = friction;
         self
     }
+
+    /// Set the density
+    pub fn with_density(mut self, density: f32) -> Self {
+        self.density = density;
+        self
+    }
 }
 
-impl Bundle for RigidBodyBundle {
+impl Bundle for ColliderBundle {
     fn mount(self, entity: &mut EntityBuilder) {
         entity
-            .set(velocity(), self.velocity)
-            .set(mass(), self.mass)
-            .set(inertia_tensor(), self.angular_mass)
-            .set(angular_velocity(), self.angular_velocity)
+            .set(collider_shape(), self.shape)
+            .set(density(), self.density)
             .set(restitution(), self.restitution)
-            .set(friction(), self.friction)
-            .set(effector(), Default::default());
-    }
-}
-
-#[derive(Fetch)]
-pub struct RbQueryMut {
-    pub resitution: Mutable<f32>,
-    pub vel: Mutable<Vec3>,
-    pub ang_vel: Mutable<Vec3>,
-    pub mass: Mutable<f32>,
-    pub ang_mass: Mutable<f32>,
-    pub friction: Mutable<f32>,
-}
-
-impl Default for RbQueryMut {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl RbQueryMut {
-    pub fn new() -> Self {
-        Self {
-            resitution: restitution().as_mut(),
-            vel: velocity().as_mut(),
-            ang_vel: angular_velocity().as_mut(),
-            mass: mass().as_mut(),
-            ang_mass: inertia_tensor().as_mut(),
-            friction: friction().as_mut(),
-        }
+            .set(friction(), self.friction);
     }
 }

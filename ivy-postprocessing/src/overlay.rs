@@ -74,23 +74,19 @@ impl Node for OverlayNode {
         let shader = self.shader.get_or_insert_with(|| {
             Shader::new(
                 ctx.gpu,
-                &ShaderDesc {
-                    label: "overlay",
-                    module: &ctx.gpu.device.create_shader_module(ShaderModuleDescriptor {
+                &ShaderDesc::new(
+                    "overlay",
+                    &ctx.gpu.device.create_shader_module(ShaderModuleDescriptor {
                         label: Some("overlay"),
                         source: ShaderSource::Wgsl(include_str!("../shaders/overlay.wgsl").into()),
                     }),
-                    target: &TargetDesc {
+                    &TargetDesc {
                         formats: &[output.format()],
                         depth_format: None,
                         sample_count: 1,
                     },
-                    vertex_layouts: &[],
-                    layouts: &[&self.layout],
-                    fragment_entry_point: "fs_main",
-                    vertex_entry_point: "vs_main",
-                    culling: Default::default(),
-                },
+                )
+                .with_bind_group_layouts(&[&self.layout]),
             )
         });
 

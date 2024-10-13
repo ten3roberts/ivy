@@ -56,48 +56,40 @@ impl BloomNode {
 
         let downsample_shader = Shader::new(
             gpu,
-            &ShaderDesc {
-                label: "bloom_downsample",
-                module: &gpu.device.create_shader_module(ShaderModuleDescriptor {
-                    label: Some("blolm_downsample"),
+            &ShaderDesc::new(
+                "bloom_downsample",
+                &gpu.device.create_shader_module(ShaderModuleDescriptor {
+                    label: Some("bloom_downsample"),
                     source: ShaderSource::Wgsl(
                         include_str!("../shaders/bloom_downsample.wgsl").into(),
                     ),
                 }),
-                target: &TargetDesc {
+                &TargetDesc {
                     formats: &[TextureFormat::Rgba16Float],
                     depth_format: None,
                     sample_count: 1,
                 },
-                vertex_layouts: &[],
-                layouts: &[&layout],
-                fragment_entry_point: "fs_main",
-                vertex_entry_point: "vs_main",
-                culling: Default::default(),
-            },
+            )
+            .with_bind_group_layouts(&[&layout]),
         );
 
         let upsample_shader = Shader::new(
             gpu,
-            &ShaderDesc {
-                label: "bloom_upsample",
-                module: &gpu.device.create_shader_module(ShaderModuleDescriptor {
+            &ShaderDesc::new(
+                "bloom_upsample",
+                &gpu.device.create_shader_module(ShaderModuleDescriptor {
                     label: Some("bloom_upsample"),
                     source: ShaderSource::Wgsl(
                         include_str!("../shaders/bloom_upsample.wgsl").into(),
                     ),
                 }),
-                target: &TargetDesc {
+                &TargetDesc {
                     formats: &[TextureFormat::Rgba16Float],
                     depth_format: None,
                     sample_count: 1,
                 },
-                vertex_layouts: &[],
-                layouts: &[&layout],
-                fragment_entry_point: "fs_main",
-                vertex_entry_point: "vs_main",
-                culling: Default::default(),
-            },
+            )
+            .with_bind_group_layouts(&[&layout]),
         );
 
         let mix_layout = BindGroupLayoutBuilder::new("bloom_mix")
@@ -108,23 +100,19 @@ impl BloomNode {
 
         let mix_shader = Shader::new(
             gpu,
-            &ShaderDesc {
-                label: "bloom_mix",
-                module: &gpu.device.create_shader_module(ShaderModuleDescriptor {
+            &ShaderDesc::new(
+                "bloom_mix",
+                &gpu.device.create_shader_module(ShaderModuleDescriptor {
                     label: Some("bloom_mix"),
                     source: ShaderSource::Wgsl(include_str!("../shaders/bloom_mix.wgsl").into()),
                 }),
-                target: &TargetDesc {
+                &TargetDesc {
                     formats: &[TextureFormat::Rgba16Float],
                     depth_format: None,
                     sample_count: 1,
                 },
-                vertex_layouts: &[],
-                layouts: &[&mix_layout],
-                fragment_entry_point: "fs_main",
-                vertex_entry_point: "vs_main",
-                culling: Default::default(),
-            },
+            )
+            .with_bind_group_layouts(&[&layout]),
         );
         let sampler = gpu.device.create_sampler(&SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::ClampToEdge,

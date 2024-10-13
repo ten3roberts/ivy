@@ -7,9 +7,9 @@ mod vector;
 use std::{collections::HashMap, mem, ops::Mul};
 
 use flax::{component::ComponentValue, Component, EntityRef};
-use glam::{Vec2, Vec3};
+use glam::{vec2, Vec2, Vec3};
 
-use types::{InputEvent, KeyboardInput, MouseInput};
+use types::{InputEvent, InputKind, KeyboardInput, MouseInput};
 use winit::{
     event::MouseButton,
     keyboard::{Key, SmolStr},
@@ -291,15 +291,6 @@ impl<B: Binding<T>, T: Send + Sync + Copy + Mul<Output = T>> Binding<T> for Ampl
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum InputKind {
-    Key(Key),
-    MouseButton(MouseButton),
-    CursorMoved,
-    CursorDelta,
-    Scroll,
-}
-
 pub struct KeyBinding {
     pressed: bool,
     key: Key<SmolStr>,
@@ -407,17 +398,15 @@ impl Binding<Vec2> for CursorMoveBinding {
 
 pub struct CursorPositionBinding {
     value: Vec2,
+    normalized: bool,
 }
 
 impl CursorPositionBinding {
-    pub fn new() -> Self {
-        Self { value: Vec2::ZERO }
-    }
-}
-
-impl Default for CursorPositionBinding {
-    fn default() -> Self {
-        Self::new()
+    pub fn new(normalized: bool) -> Self {
+        Self {
+            value: Vec2::ZERO,
+            normalized,
+        }
     }
 }
 
@@ -426,17 +415,20 @@ impl Binding<Vec2> for CursorPositionBinding {
 
     fn apply(&mut self, input: &Self::Input) {
         match input {
-            &InputEvent::CursorDelta(delta) => self.value += delta,
+            InputEvent::CursorMoved(v) if self.normalized => self.value = v.normalized_position,
+            InputEvent::CursorMoved(v) => {
+                self.value = vec2(v.absolute_position.x, v.absolute_position.y)
+            }
             _ => panic!("Invalid input event"),
         }
     }
 
     fn read(&mut self) -> Vec2 {
-        mem::take(&mut self.value)
+        self.value
     }
 
     fn binding(&self) -> InputKind {
-        InputKind::CursorDelta
+        InputKind::CursorMoved
     }
 }
 

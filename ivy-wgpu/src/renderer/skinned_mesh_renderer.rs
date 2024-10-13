@@ -19,7 +19,7 @@ use ivy_gltf::{
 };
 use ivy_wgpu_types::shader::{Culling, TargetDesc};
 use slab::Slab;
-use wgpu::{BindGroup, BindGroupLayout, BufferUsages, RenderPass, ShaderStages};
+use wgpu::{BindGroup, BindGroupLayout, BufferUsages, DepthBiasState, RenderPass, ShaderStages};
 
 use crate::{
     components::{material, mesh, mesh_primitive},
@@ -35,7 +35,7 @@ use crate::{
     Gpu,
 };
 
-use super::{CameraRenderer, ObjectData};
+use super::{mesh_renderer::ShaderFactory, CameraRenderer, ObjectData};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BatchKey {
@@ -159,6 +159,7 @@ pub struct SkinnedMeshRenderer {
 
     shader_pass: Component<Asset<ShaderPassDesc>>,
     shader_library: Arc<ShaderLibrary>,
+    shader_factory: ShaderFactory,
 }
 
 impl SkinnedMeshRenderer {
@@ -200,7 +201,17 @@ impl SkinnedMeshRenderer {
             )),
             mesh_buffer: MeshBuffer::new(gpu, "mesh_buffer", 4),
             shader_pass,
+            shader_factory: Box::new(|v| v),
         }
+    }
+
+    /// Set the shader factory
+    pub fn with_shader_factory(
+        mut self,
+        shader_factory: impl 'static + FnMut(ShaderDesc) -> ShaderDesc,
+    ) -> Self {
+        self.shader_factory = Box::new(shader_factory);
+        self
     }
 
     fn resize_object_buffer(&mut self, gpu: &Gpu, capacity: usize) {
@@ -287,27 +298,30 @@ impl SkinnedMeshRenderer {
                         tracing::info!(layouts = layouts.len(), "creating shader");
                         let module = self.shader_library.process(gpu, (&*key.shader).into())?;
 
+                        let vertex_layouts = &[SkinnedVertex::layout()];
+                        let bind_group_layouts = layouts
+                            .iter()
+                            .copied()
+                            .chain([&self.bind_group_layout, material.layout()])
+                            .collect_vec();
+
+                        let shader_desc = ShaderDesc::new(key.shader.label(), &module, target)
+                            .with_vertex_layouts(vertex_layouts)
+                            .with_bind_group_layouts(&bind_group_layouts)
+                            .with_culling_mode(Culling {
+                                cull_mode: key.shader.cull_mode,
+                                front_face: wgpu::FrontFace::Ccw,
+                            })
+                            .with_depth_bias(DepthBiasState {
+                                constant: 0,
+                                slope_scale: -2.0,
+                                clamp: 0.0,
+                            });
+
                         slot.insert(
-                            store.shaders.insert(Shader::new(
-                                gpu,
-                                &ShaderDesc {
-                                    label: key.shader.label(),
-                                    module: &module,
-                                    target,
-                                    vertex_layouts: &[SkinnedVertex::layout()],
-                                    layouts: &layouts
-                                        .iter()
-                                        .copied()
-                                        .chain([&self.bind_group_layout, material.layout()])
-                                        .collect_vec(),
-                                    vertex_entry_point: "vs_main",
-                                    fragment_entry_point: "fs_main",
-                                    culling: Culling {
-                                        cull_mode: key.shader.cull_mode,
-                                        front_face: wgpu::FrontFace::Ccw,
-                                    },
-                                },
-                            )),
+                            store
+                                .shaders
+                                .insert(Shader::new(gpu, &(self.shader_factory)(shader_desc))),
                         )
                         .clone()
                     }

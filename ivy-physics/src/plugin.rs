@@ -1,27 +1,22 @@
 use crate::{
-    components::physics_state,
+    components::{gravity, physics_state},
     state::{PhysicsState, PhysicsStateConfiguration},
     systems::{
-        apply_effectors_system, contact_gizmos_system, dampening_system, generate_contacts_system,
-        gizmo_system, gravity_system, integrate_angular_velocity_system, integrate_velocity_system,
-        island_graph_gizmo_system, register_bodies_system, solve_contacts_system,
-        sync_simulation_bodies_system, unregister_bodies_system, update_bodies_system,
-        update_simulation_bodies_system,
+        apply_effectors_system, attach_joints_system, gizmo_system, physics_step_system,
+        register_bodies_system, register_colliders_system, sync_simulation_bodies_system,
+        unregister_bodies_system, update_bodies_system,
     },
 };
 use flax::World;
 use glam::Vec3;
 use ivy_assets::AssetCache;
 use ivy_core::{
-    components::{engine, gravity},
+    components::engine,
     update_layer::{FixedTimeStep, Plugin},
 };
 
 #[derive(Default)]
 pub struct GizmoSettings {
-    pub bvh_tree: bool,
-    pub contacts: bool,
-    pub island_graph: bool,
     pub rigidbody: bool,
 }
 
@@ -77,36 +72,22 @@ impl Plugin<FixedTimeStep> for PhysicsPlugin {
         )?;
 
         schedule
-            .with_system(integrate_velocity_system(dt))
-            .with_system(integrate_angular_velocity_system(dt))
-            .with_system(gravity_system())
-            .with_system(dampening_system(dt))
-            .with_system(apply_effectors_system(dt))
             .with_system(register_bodies_system())
-            .with_system(unregister_bodies_system(world))
-            .with_system(update_bodies_system());
+            .flush()
+            .with_system(register_colliders_system())
+            .with_system(attach_joints_system(world))
+            .flush()
+            .with_system(apply_effectors_system(dt))
+            .with_system(unregister_bodies_system(world));
+
+        // rapier barrier
+        schedule
+            .with_system(update_bodies_system())
+            .with_system(physics_step_system())
+            .with_system(sync_simulation_bodies_system());
 
         if self.gizmos.rigidbody {
             schedule.with_system(gizmo_system(dt));
-        }
-
-        schedule.with_system(update_simulation_bodies_system());
-
-        schedule
-            .with_system(generate_contacts_system())
-            .with_system(solve_contacts_system())
-            .with_system(sync_simulation_bodies_system());
-
-        if self.gizmos.bvh_tree {
-            // schedule.with_system(collisions_tree_gizmos_system());
-        }
-
-        if self.gizmos.contacts {
-            schedule.with_system(contact_gizmos_system());
-        }
-
-        if self.gizmos.island_graph {
-            schedule.with_system(island_graph_gizmo_system());
         }
 
         Ok(())

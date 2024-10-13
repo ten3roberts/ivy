@@ -2,10 +2,6 @@ use std::time::Duration;
 
 use flax::{Component, Debuggable, EntityBuilder, Fetch, Mutable};
 use glam::{Mat4, Quat, Vec2, Vec3};
-mod connections;
-mod physics;
-pub use connections::*;
-pub use physics::*;
 
 use crate::{gizmos::Gizmos, AsyncCommandBuffer, Bundle, Color};
 

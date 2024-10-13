@@ -19,9 +19,10 @@ use ivy_core::{
     components::{main_camera, world_transform},
     WorldExt,
 };
+use ivy_wgpu_types::shader::ShaderDesc;
 use ordered_float::OrderedFloat;
 use wgpu::{
-    BindGroup, BindGroupLayout, Buffer, BufferDescriptor, BufferUsages, Operations,
+    BindGroup, BindGroupLayout, Buffer, BufferDescriptor, BufferUsages, DepthBiasState, Operations,
     RenderPassDescriptor, ShaderStages, TextureUsages, TextureViewDescriptor, TextureViewDimension,
 };
 
@@ -71,9 +72,19 @@ impl ShadowMapNode {
             .bind_uniform_buffer(ShaderStages::VERTEX)
             .build(gpu);
 
+        fn shader_factory(desc: ShaderDesc) -> ShaderDesc {
+            desc.with_depth_bias(DepthBiasState {
+                constant: 0,
+                slope_scale: 0.0,
+                clamp: 0.0,
+            })
+        }
+
         let renderer = (
-            MeshRenderer::new(world, gpu, shadow_pass(), shader_library.clone()),
-            SkinnedMeshRenderer::new(world, gpu, shadow_pass(), shader_library),
+            MeshRenderer::new(world, gpu, shadow_pass(), shader_library.clone())
+                .with_shader_factory(shader_factory),
+            SkinnedMeshRenderer::new(world, gpu, shadow_pass(), shader_library)
+                .with_shader_factory(shader_factory),
         );
 
         let align = gpu.device.limits().min_uniform_buffer_offset_alignment as u64;
@@ -185,29 +196,29 @@ impl Node for ShadowMapNode {
             ));
 
             if kind.is_directional() {
-                let direction = rot * -Vec3::Z;
+                let light_forward = rot * -Vec3::Z;
 
                 for frustrum in &frustrums {
-                    let snapping = 1.0;
+                    let snapping = 0.1;
                     let center = (frustrum.center / snapping).ceil() * snapping;
 
                     let radius = frustrum
                         .corners
                         .iter()
-                        .map(|v| v.distance_squared(center))
+                        .map(|v| v.distance(center))
                         .max_by_key(|&v| OrderedFloat(v))
-                        .unwrap_or_default()
-                        .sqrt();
+                        .unwrap();
 
                     let radius = (radius / snapping).ceil() * snapping + snapping;
 
-                    let view =
-                        Mat4::look_at_rh(center + direction.normalize() * radius, center, Vec3::Y);
+                    let light_camera_pos = center - light_forward * radius;
+                    let view = Mat4::from_rotation_translation(rot, light_camera_pos);
 
                     let proj =
                         Mat4::orthographic_rh(-radius, radius, -radius, radius, 0.1, radius * 2.0);
+
                     self.lights.push(LightShadowCamera {
-                        viewproj: proj * view,
+                        viewproj: proj * view.inverse(),
                         texel_size,
                         depth: frustrum.split_distance,
                         _padding: Default::default(),
@@ -376,7 +387,6 @@ impl Frustrum {
         let center = corners.iter().sum::<Vec3>() / corners.len() as f32;
 
         let depth = -(near + split_distance * clip_range);
-        // tracing::info!(depth, ?corners);
         Self {
             corners,
             center,

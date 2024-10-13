@@ -14,20 +14,21 @@ readme = "../README.md"
 [dependencies]
 ivy-core = { path = "../ivy-core", version = "0.10.0" }
 ivy-random = { path = "../ivy-random", version = "0.10.0" }
-ivy-collision = { path = "../ivy-collision", version = "0.10.0" }
 ivy-assets = { path = "../ivy-assets", version = "0.10.0" }
 
-rayon = "1.5.2"
-smallvec = "1.8.0"
-itertools.workspace = true
-slotmap.workspace = true
-flax.workspace = true
-glam.workspace = true
-flume.workspace = true
 anyhow.workspace = true
-tracing.workspace = true
-thiserror.workspace = true
+flax.workspace = true
+flume.workspace = true
+glam.workspace = true
+itertools.workspace = true
+nalgebra.workspace = true
+rapier3d.workspace = true
+rayon = "1.5.2"
 serde = { workspace = true, optional = true }
+slotmap.workspace = true
+smallvec = "1.8.0"
+thiserror.workspace = true
+tracing.workspace = true
 
 [features]
 default = []

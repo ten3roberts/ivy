@@ -78,19 +78,15 @@ impl CameraRenderer for SkyboxRenderer {
         let shader = self.shader.get_or_insert_with(|| {
             Shader::new(
                 ctx.gpu,
-                &ShaderDesc {
-                    label: "skybox_shader",
-                    module: &ctx.gpu.device.create_shader_module(ShaderModuleDescriptor {
+                &ShaderDesc::new(
+                    "skybox_shader",
+                    &ctx.gpu.device.create_shader_module(ShaderModuleDescriptor {
                         label: Some("skybox"),
                         source: ShaderSource::Wgsl(include_str!("../shaders/skybox.wgsl").into()),
                     }),
-                    target: &ctx.target_desc,
-                    vertex_layouts: &[],
-                    layouts: &[ctx.layouts[0], &self.bind_group_layout],
-                    fragment_entry_point: "fs_main",
-                    vertex_entry_point: "vs_main",
-                    culling: Default::default(),
-                },
+                    &ctx.target_desc,
+                )
+                .with_bind_group_layouts(&[ctx.layouts[0], &self.bind_group_layout]),
             )
         });
 
