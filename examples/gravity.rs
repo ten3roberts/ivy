@@ -9,13 +9,14 @@ use ivy_core::{
     update_layer::{FixedTimeStep, PerTick, ScheduledLayer},
     App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer,
 };
-use ivy_engine::{
-    angular_velocity, gravity_influence, is_static, main_camera, RigidBodyBundle, TransformBundle,
-};
+use ivy_engine::{is_static, main_camera, RigidBodyBundle, TransformBundle};
 use ivy_game::free_camera::{setup_camera, CameraInputPlugin};
 use ivy_graphics::texture::TextureDesc;
 use ivy_input::layer::InputLayer;
-use ivy_physics::{components::friction, ColliderBundle, PhysicsPlugin};
+use ivy_physics::{
+    components::{angular_velocity, friction, gravity_influence},
+    ColliderBundle, PhysicsPlugin,
+};
 use ivy_postprocessing::preconfigured::{SurfacePbrPipeline, SurfacePbrPipelineDesc};
 use ivy_wgpu::{
     components::*,

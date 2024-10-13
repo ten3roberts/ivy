@@ -140,12 +140,6 @@ fn pbr_luminance(in: PbrLuminance, light: Light) -> vec3<f32> {
     var in_light = 1f;
     var c = vec3(0f);
     if light.shadow_index != U32_MAX {
-
-        var bias_matrix: mat4x4<f32>;
-        bias_matrix[0] = vec4(0.5, 0, 0, 0);
-        bias_matrix[1] = vec4(0, 0.5, 0, 0);
-        bias_matrix[2] = vec4(0, 0, 0.5, 0);
-        bias_matrix[3] = vec4(0.5, 0.5, 0.5, 1.0);
         var cascade_index = 0u;
         for (var i = 0u; i < light.shadow_cascades - 1; i++) {
             if in.view_pos.z < shadow_cameras[light.shadow_index + i].depth {
@@ -157,7 +151,7 @@ fn pbr_luminance(in: PbrLuminance, light: Light) -> vec3<f32> {
         let light_space_clip = shadow_camera.viewproj * vec4(in.world_pos, 1.0);
         let light_space_pos = light_space_clip.xyz / light_space_clip.w;
 
-        var light_space_uv = light_space_pos.xy * vec2(0.5, -0.5) + vec2(0.5, 0.5);
+        var light_space_uv = vec2(light_space_pos.x, -light_space_pos.y) * 0.5 + 0.5;
         let current_depth = light_space_pos.z;
 
         in_light = shadow_pcf(light_space_uv, light.shadow_index + cascade_index, current_depth, shadow_camera.texel_size);

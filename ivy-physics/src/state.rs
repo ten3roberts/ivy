@@ -1,4 +1,4 @@
-use ivy_core::components::{angular_velocity, position, rotation, velocity};
+use ivy_core::components::{position, rotation};
 use nalgebra::Isometry3;
 use rapier3d::prelude::{
     CCDSolver, ColliderHandle, ColliderSet, DefaultBroadPhase, GenericJoint, ImpulseJointHandle,
@@ -9,6 +9,8 @@ use rapier3d::prelude::{
 
 use flax::{Component, Entity, Fetch, Mutable, QueryBorrow};
 use glam::{Quat, Vec3};
+
+use crate::components::{angular_velocity, velocity};
 
 #[derive(Default)]
 pub struct PhysicsStateConfiguration {}

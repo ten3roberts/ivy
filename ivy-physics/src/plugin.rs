@@ -1,5 +1,5 @@
 use crate::{
-    components::physics_state,
+    components::{gravity, physics_state},
     state::{PhysicsState, PhysicsStateConfiguration},
     systems::{
         apply_effectors_system, attach_joints_system, gizmo_system, physics_step_system,
@@ -11,7 +11,7 @@ use flax::World;
 use glam::Vec3;
 use ivy_assets::AssetCache;
 use ivy_core::{
-    components::{engine, gravity},
+    components::engine,
     update_layer::{FixedTimeStep, Plugin},
 };
 

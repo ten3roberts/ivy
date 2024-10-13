@@ -15,8 +15,8 @@ use ivy_core::{
     App, EngineLayer, EntityBuilderExt, Layer,
 };
 use ivy_engine::{
-    async_commandbuffer, delta_time, engine, gravity_influence, main_camera, world_transform,
-    RigidBodyBundle, TransformBundle,
+    async_commandbuffer, delta_time, engine, main_camera, world_transform, RigidBodyBundle,
+    TransformBundle,
 };
 use ivy_game::{
     free_camera::{setup_camera, CameraInputPlugin},
@@ -25,7 +25,7 @@ use ivy_game::{
 use ivy_gltf::{animation::player::Animator, components::animator, Document};
 use ivy_graphics::texture::TextureDesc;
 use ivy_input::layer::InputLayer;
-use ivy_physics::{ColliderBundle, GizmoSettings, PhysicsPlugin};
+use ivy_physics::{components::gravity_influence, ColliderBundle, GizmoSettings, PhysicsPlugin};
 use ivy_postprocessing::preconfigured::{SurfacePbrPipeline, SurfacePbrPipelineDesc};
 use ivy_scene::{GltfNodeExt, NodeMountOptions};
 use ivy_wgpu::{

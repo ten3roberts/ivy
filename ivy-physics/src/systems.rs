@@ -6,20 +6,13 @@ use crate::{
 };
 use anyhow::Context;
 use flax::{
-    components::child_of,
-    entity_ids,
-    events::EventSubscriber,
-    fetch::{Copied, Satisfied},
-    filter::ChangeFilter,
+    components::child_of, entity_ids, events::EventSubscriber, fetch::Copied, filter::ChangeFilter,
     BoxedSystem, CommandBuffer, Component, EntityIds, FetchExt, Mutable, Query, QueryBorrow,
     RelationExt, System, World,
 };
 use glam::{Mat4, Vec3};
 use ivy_core::{
-    components::{
-        angular_velocity, engine, gravity, inertia_tensor, main_camera, mass, position, sleeping,
-        velocity, world_transform,
-    },
+    components::{engine, main_camera, position, world_transform},
     gizmos::{Gizmos, Line, DEFAULT_THICKNESS},
     subscribers::{RemovedComponentSubscriber, RemovedRelationSubscriber},
     Color, ColorExt,
@@ -36,6 +29,7 @@ pub fn register_bodies_system() -> BoxedSystem {
             entity_ids(),
             rigid_body_type().modified(),
             can_sleep().satisfied(),
+            gravity_influence().opt_or(1.0),
         )))
         .build(
             move |cmd: &mut CommandBuffer,
@@ -45,15 +39,17 @@ pub fn register_bodies_system() -> BoxedSystem {
                 (
                     EntityIds,
                     ChangeFilter<RigidBodyType>,
-                    Satisfied<Component<()>>,
+                    _,
+                    _,
                 ),
             >| {
                 if let Some(state) = query.first() {
-                    for (id, &body_type, can_sleep) in bodies.iter() {
+                    for (id, &body_type, can_sleep, &gravity) in bodies.iter() {
                         let rb = state.add_body(
                             id,
                             RigidBodyBuilder::new(body_type)
                                 .can_sleep(can_sleep)
+                                .gravity_scale(gravity)
                                 .build(),
                         );
                         cmd.set(id, rb_handle(), rb);

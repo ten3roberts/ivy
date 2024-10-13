@@ -5,7 +5,7 @@ use flax::{
 use glam::{vec3, EulerRot, Quat, Vec2, Vec3};
 use ivy_assets::AssetCache;
 use ivy_core::{
-    components::{angular_velocity, main_camera, rotation, velocity, TransformBundle},
+    components::{main_camera, rotation, TransformBundle},
     update_layer::{PerTick, Plugin},
     EntityBuilderExt, DEG_45,
 };
@@ -15,7 +15,11 @@ use ivy_input::{
     Action, Axis2D, BindingExt, CursorMoveBinding, InputState, KeyBinding, MouseButtonBinding,
     ScrollBinding,
 };
-use ivy_physics::{rapier3d::prelude::RigidBodyType, RigidBodyBundle};
+use ivy_physics::{
+    components::{angular_velocity, velocity},
+    rapier3d::prelude::RigidBodyType,
+    RigidBodyBundle,
+};
 use ivy_wgpu::{
     components::{main_window, projection_matrix, window},
     driver::WindowHandle,

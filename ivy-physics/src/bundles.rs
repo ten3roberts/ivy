@@ -3,15 +3,13 @@ use core::f32;
 
 use flax::EntityBuilder;
 use glam::Vec3;
-use ivy_core::{
-    components::{angular_velocity, inertia_tensor, mass, velocity},
-    Bundle,
-};
+use ivy_core::Bundle;
 use rapier3d::prelude::{RigidBodyType, SharedShape};
 
 use crate::{
     components::{
-        can_sleep, collider_shape, density, effector, friction, restitution, rigid_body_type,
+        angular_velocity, can_sleep, collider_shape, density, effector, friction, inertia_tensor,
+        mass, restitution, rigid_body_type, velocity,
     },
     Effector,
 };
