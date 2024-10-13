@@ -16,12 +16,13 @@ use flax::{entity_ids, FetchExt, Query, World};
 use glam::{vec2, vec3, Mat4, Vec2, Vec3, Vec4Swizzles};
 use itertools::Itertools;
 use ivy_core::{
-    components::{engine, gizmos, main_camera, world_transform},
+    components::{main_camera, world_transform},
     WorldExt,
 };
+use ivy_wgpu_types::shader::ShaderDesc;
 use ordered_float::OrderedFloat;
 use wgpu::{
-    BindGroup, BindGroupLayout, Buffer, BufferDescriptor, BufferUsages, Operations,
+    BindGroup, BindGroupLayout, Buffer, BufferDescriptor, BufferUsages, DepthBiasState, Operations,
     RenderPassDescriptor, ShaderStages, TextureUsages, TextureViewDescriptor, TextureViewDimension,
 };
 
@@ -71,9 +72,19 @@ impl ShadowMapNode {
             .bind_uniform_buffer(ShaderStages::VERTEX)
             .build(gpu);
 
+        fn shader_factory(desc: ShaderDesc) -> ShaderDesc {
+            desc.with_depth_bias(DepthBiasState {
+                constant: 0,
+                slope_scale: 0.0,
+                clamp: 0.0,
+            })
+        }
+
         let renderer = (
-            MeshRenderer::new(world, gpu, shadow_pass(), shader_library.clone()),
-            SkinnedMeshRenderer::new(world, gpu, shadow_pass(), shader_library),
+            MeshRenderer::new(world, gpu, shadow_pass(), shader_library.clone())
+                .with_shader_factory(shader_factory),
+            SkinnedMeshRenderer::new(world, gpu, shadow_pass(), shader_library)
+                .with_shader_factory(shader_factory),
         );
 
         let align = gpu.device.limits().min_uniform_buffer_offset_alignment as u64;
@@ -169,69 +180,53 @@ impl Node for ShadowMapNode {
             })
             .collect_vec();
 
+        for (id, &transform, &kind) in Query::new((entity_ids(), world_transform(), light_kind()))
+            .with(cast_shadow())
+            .borrow(ctx.world)
+            .iter()
         {
-            let gizmos = ctx.world.get(engine(), gizmos()).unwrap();
-            let mut gizmos = gizmos.begin_section("shadowmapping");
+            let (_, rot, _) = transform.to_scale_rotation_translation();
 
-            for (id, &transform, &kind) in
-                Query::new((entity_ids(), world_transform(), light_kind()))
-                    .with(cast_shadow())
-                    .borrow(ctx.world)
-                    .iter()
-            {
-                let (_, rot, _) = transform.to_scale_rotation_translation();
+            to_add.push((
+                id,
+                LightShadowData {
+                    index: self.lights.len() as _,
+                    cascade_count: self.max_cascades as _,
+                },
+            ));
 
-                to_add.push((
-                    id,
-                    LightShadowData {
-                        index: self.lights.len() as _,
-                        cascade_count: self.max_cascades as _,
-                    },
-                ));
+            if kind.is_directional() {
+                let light_forward = rot * -Vec3::Z;
 
-                if kind.is_directional() {
-                    let light_forward = rot * -Vec3::Z;
+                for frustrum in &frustrums {
+                    let snapping = 0.1;
+                    let center = (frustrum.center / snapping).ceil() * snapping;
 
-                    for frustrum in &frustrums {
-                        let snapping = 0.1;
-                        let center = (frustrum.center / snapping).ceil() * snapping;
+                    let radius = frustrum
+                        .corners
+                        .iter()
+                        .map(|v| v.distance(center))
+                        .max_by_key(|&v| OrderedFloat(v))
+                        .unwrap();
 
-                        for corner in &frustrum.corners[4..] {
-                            gizmos.draw(corner);
-                        }
-                        gizmos.draw(center);
-                        let radius = frustrum
-                            .corners
-                            .iter()
-                            .map(|v| v.distance(center))
-                            .max_by_key(|&v| OrderedFloat(v))
-                            .unwrap();
+                    let radius = (radius / snapping).ceil() * snapping + snapping;
 
-                        let radius = (radius / snapping).ceil() * snapping + snapping;
+                    let light_camera_pos = center - light_forward * radius;
+                    let view = Mat4::from_rotation_translation(rot, light_camera_pos);
 
-                        let light_camera_pos = center - light_forward * radius;
-                        let view = Mat4::from_rotation_translation(rot, light_camera_pos);
+                    let proj =
+                        Mat4::orthographic_rh(-radius, radius, -radius, radius, 0.1, radius * 2.0);
 
-                        let proj = Mat4::orthographic_rh(
-                            -radius,
-                            radius,
-                            -radius,
-                            radius,
-                            0.1,
-                            radius * 2.0,
-                        );
-
-                        self.lights.push(LightShadowCamera {
-                            viewproj: proj * view.inverse(),
-                            texel_size,
-                            depth: frustrum.split_distance,
-                            _padding: Default::default(),
-                        });
-                    }
-                } else {
-                    todo!()
-                };
-            }
+                    self.lights.push(LightShadowCamera {
+                        viewproj: proj * view.inverse(),
+                        texel_size,
+                        depth: frustrum.split_distance,
+                        _padding: Default::default(),
+                    });
+                }
+            } else {
+                todo!()
+            };
         }
 
         ctx.world.append_all(light_shadow_data(), to_add)?;

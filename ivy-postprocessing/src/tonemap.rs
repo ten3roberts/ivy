@@ -63,23 +63,19 @@ impl Node for TonemapNode {
         let shader = self.shader.get_or_insert_with(|| {
             Shader::new(
                 ctx.gpu,
-                &ShaderDesc {
-                    label: "tonemap",
-                    module: &ctx.gpu.device.create_shader_module(ShaderModuleDescriptor {
+                &ShaderDesc::new(
+                    "tonemap",
+                    &ctx.gpu.device.create_shader_module(ShaderModuleDescriptor {
                         label: Some("tonemap"),
                         source: ShaderSource::Wgsl(include_str!("../shaders/tonemap.wgsl").into()),
                     }),
-                    target: &TargetDesc {
+                    &TargetDesc {
                         formats: &[output.format()],
                         depth_format: None,
                         sample_count: 1,
                     },
-                    vertex_layouts: &[],
-                    layouts: &[&self.layout],
-                    fragment_entry_point: "fs_main",
-                    vertex_entry_point: "vs_main",
-                    culling: Default::default(),
-                },
+                )
+                .with_bind_group_layouts(&[&self.layout]),
             )
         });
 

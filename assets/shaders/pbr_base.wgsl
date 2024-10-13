@@ -44,7 +44,6 @@ struct ShadowCamera {
     viewproj: mat4x4<f32>,
     texel_size: vec2<f32>,
     depth: f32,
-    _padding: f32,
 }
 
 struct Light {
@@ -161,7 +160,7 @@ fn pbr_luminance(in: PbrLuminance, light: Light) -> vec3<f32> {
         var light_space_uv = light_space_pos.xy * vec2(0.5, -0.5) + vec2(0.5, 0.5);
         let current_depth = light_space_pos.z;
 
-        in_light = textureSampleCompare(shadow_maps, shadow_sampler, light_space_uv, light.shadow_index + cascade_index, current_depth);
+        in_light = shadow_pcf(light_space_uv, light.shadow_index + cascade_index, current_depth, shadow_camera.texel_size);
     }
 
     let h = normalize(in.tangent_camera_dir + l);

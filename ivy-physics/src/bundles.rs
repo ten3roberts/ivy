@@ -40,6 +40,22 @@ impl RigidBodyBundle {
         }
     }
 
+    pub fn dynamic() -> Self {
+        Self::new(RigidBodyType::Dynamic)
+    }
+
+    pub fn kinematic_position() -> Self {
+        Self::new(RigidBodyType::KinematicPositionBased)
+    }
+
+    pub fn kinematic_velocity() -> Self {
+        Self::new(RigidBodyType::KinematicVelocityBased)
+    }
+
+    pub fn fixed() -> Self {
+        Self::new(RigidBodyType::Fixed)
+    }
+
     /// Set the mass
     pub fn with_mass(mut self, mass: f32) -> Self {
         self.mass = mass;

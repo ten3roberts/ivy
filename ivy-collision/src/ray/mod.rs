@@ -1,17 +1,10 @@
-use std::ops::Deref;
-
-use flax::{Fetch, World};
 use glam::{Mat4, Vec3};
 use ivy_core::gizmos::{DrawGizmos, GizmosSection, Line};
 
 mod cast;
 pub use cast::*;
-use ordered_float::OrderedFloat;
 
-use crate::{
-    epa, query::TreeQuery, util::SupportPoint, CollisionTree, Contact, Shape, Simplex,
-    TransformedShape,
-};
+use crate::{epa, util::SupportPoint, Contact, Shape, Simplex, TransformedShape};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Ray {

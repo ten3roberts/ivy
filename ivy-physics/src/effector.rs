@@ -1,5 +1,4 @@
-use glam::{Mat3, Vec3};
-use ivy_core::gizmos::DEFAULT_RADIUS;
+use glam::Vec3;
 use nalgebra::{Matrix3, Vector, Vector3};
 use rapier3d::{parry::utils::SdpMatrix3, prelude::RigidBody};
 

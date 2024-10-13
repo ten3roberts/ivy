@@ -4,7 +4,6 @@ use crate::{
 };
 
 use glam::Vec3;
-use rayon::iter;
 
 pub fn epa_ray<F: Fn(Vec3) -> SupportPoint>(
     support_func: F,

@@ -37,7 +37,7 @@ pub struct PhysicsState {
 }
 
 impl PhysicsState {
-    pub fn new(configuration: &PhysicsStateConfiguration, dt: f32) -> Self {
+    pub fn new(_: &PhysicsStateConfiguration, dt: f32) -> Self {
         Self {
             dt,
             bodies: RigidBodySet::new(),
@@ -54,12 +54,16 @@ impl PhysicsState {
         }
     }
 
+    pub fn set_gravity(&mut self, gravity: Vec3) {
+        self.gravity = gravity;
+    }
+
     pub fn add_body(&mut self, id: Entity, mut rb: RigidBody) -> RigidBodyHandle {
         rb.user_data = id.as_bits() as u128;
         self.bodies.insert(rb)
     }
 
-    pub fn remove_body(&mut self, id: Entity, rb_handle: RigidBodyHandle) {
+    pub fn remove_body(&mut self, rb_handle: RigidBodyHandle) {
         self.bodies.remove(
             rb_handle,
             &mut self.island_manager,
@@ -154,6 +158,7 @@ impl PhysicsState {
             },
         )
     }
+
     pub fn step(&mut self) {
         let params = IntegrationParameters {
             dt: self.dt,

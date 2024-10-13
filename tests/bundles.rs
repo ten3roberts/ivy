@@ -1,7 +1,7 @@
 use flax::{components::name, Entity};
-use glam::vec3;
+use glam::Vec3;
 use ivy_core::EntityBuilderExt;
-use ivy_engine::{restitution, App, RigidBodyBundle};
+use ivy_engine::{position, App, TransformBundle};
 
 #[test]
 fn bundles() {
@@ -10,15 +10,10 @@ fn bundles() {
     let world = app.world_mut();
 
     let entity = Entity::builder()
-        .mount(RigidBodyBundle {
-            velocity: vec3(1.0, 0.0, 0.0),
-            mass: 5.0,
-            angular_mass: 2.0,
-            ..Default::default()
-        })
+        .mount(TransformBundle::default())
         .set(name(), "My Entity".into())
         .spawn(world);
 
     // Get the `Resitution` component
-    assert_eq!(*world.get(entity, restitution()).unwrap(), 0.0,);
+    assert_eq!(*world.get(entity, position()).unwrap(), Vec3::ZERO);
 }

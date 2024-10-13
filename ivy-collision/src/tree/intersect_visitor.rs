@@ -1,13 +1,12 @@
 use std::slice::Iter;
 
-use flax::{Fetch, World};
 use glam::Mat4;
 use slotmap::SlotMap;
 
 use crate::{
     body::{Body, BodyIndex},
-    components, BoundingBox, CollisionTreeNode, Contact, IntersectionGenerator, Shape,
-    TransformedShape, TreeVisitor,
+    BoundingBox, CollisionTreeNode, Contact, IntersectionGenerator, Shape, TransformedShape,
+    TreeVisitor,
 };
 
 use super::BvhNode;

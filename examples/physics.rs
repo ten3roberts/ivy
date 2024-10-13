@@ -3,7 +3,6 @@ use flax::{
 };
 use glam::{vec3, EulerRot, Mat4, Quat, Vec3};
 use ivy_assets::AssetCache;
-use ivy_collision::components::collider;
 use ivy_core::{
     app::InitEvent,
     gizmos::{self, DEFAULT_RADIUS},
@@ -14,13 +13,13 @@ use ivy_core::{
     App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer, DEG_180, DEG_45,
 };
 use ivy_engine::{
-    delta_time, engine, main_camera, world_transform, Collider, RigidBodyBundle, TransformBundle,
+    delta_time, engine, main_camera, world_transform, RigidBodyBundle, TransformBundle,
 };
 use ivy_game::free_camera::{setup_camera, CameraInputPlugin};
 use ivy_gltf::components::animator;
 use ivy_graphics::texture::TextureDesc;
 use ivy_input::layer::InputLayer;
-use ivy_physics::PhysicsPlugin;
+use ivy_physics::{ColliderBundle, PhysicsPlugin};
 use ivy_postprocessing::preconfigured::{SurfacePbrPipeline, SurfacePbrPipelineDesc};
 use ivy_wgpu::{
     components::{cast_shadow, environment_data, light_data, light_kind, projection_matrix},
@@ -74,12 +73,7 @@ pub fn main() -> anyhow::Result<()> {
         .with_layer(LogicLayer)
         .with_layer(ScheduledLayer::new(PerTick).with_plugin(CameraInputPlugin))
         .with_layer(ScheduledLayer::new(FixedTimeStep::new(0.02)).with_plugin(
-            PhysicsPlugin::new().with_gizmos(ivy_physics::GizmoSettings {
-                bvh_tree: false,
-                island_graph: true,
-                rigidbody: true,
-                contacts: true,
-            }),
+            PhysicsPlugin::new().with_gizmos(ivy_physics::GizmoSettings { rigidbody: true }),
         ))
         .run()
     {
@@ -118,18 +112,11 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
                     .with_position(position + Vec3::Z)
                     .with_rotation(rotation),
             )
+            .mount(RigidBodyBundle::dynamic().with_velocity(velocity))
             .mount(
-                RigidBodyBundle::default()
-                    .with_velocity(velocity)
-                    .with_mass(5.0)
-                    .with_angular_mass(10.0)
-                    .with_restitution(0.1)
-                    .with_friction(0.7),
-            )
-            .set(
-                collider(),
-                // Collider::cube_from_center(Vec3::ZERO, Vec3::ONE),
-                Collider::capsule(1.0, 1.0),
+                ColliderBundle::new(rapier3d::prelude::SharedShape::capsule_y(1.0, 1.0))
+                    .with_friction(0.7)
+                    .with_restitution(0.1),
             )
             .mount(RenderObjectBundle::new(
                 cube_mesh.clone(),
@@ -245,45 +232,4 @@ impl Layer for LogicLayer {
 
         Ok(())
     }
-}
-
-fn animate_system() -> BoxedSystem {
-    System::builder()
-        .with_query(Query::new((
-            animator().as_mut(),
-            delta_time()
-                .source(engine())
-                .expect("delta_time must be present"),
-        )))
-        .par_for_each(move |(animator, dt)| {
-            animator.step(dt.as_secs_f32());
-        })
-        .boxed()
-}
-
-fn gizmos_system() -> BoxedSystem {
-    System::builder()
-        .with_query(Query::new(ivy_core::components::gizmos().source(engine())))
-        .with_query(Query::new(world_transform()))
-        .build(
-            |mut gizmos: QueryBorrow<Source<Component<gizmos::Gizmos>, Entity>>,
-             mut query: QueryBorrow<Component<Mat4>>| {
-                let mut gizmos = gizmos.first().unwrap().begin_section("gizmos_system");
-
-                gizmos.draw(gizmos::Sphere::new(
-                    Vec3::ZERO,
-                    DEFAULT_RADIUS,
-                    Color::red(),
-                ));
-
-                for transform in query.iter() {
-                    gizmos.draw(gizmos::Sphere::new(
-                        transform.transform_point3(Vec3::ZERO),
-                        DEFAULT_RADIUS,
-                        Color::red(),
-                    ));
-                }
-            },
-        )
-        .boxed()
 }

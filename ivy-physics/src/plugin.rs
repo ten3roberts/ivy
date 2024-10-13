@@ -17,9 +17,6 @@ use ivy_core::{
 
 #[derive(Default)]
 pub struct GizmoSettings {
-    pub bvh_tree: bool,
-    pub contacts: bool,
-    pub island_graph: bool,
     pub rigidbody: bool,
 }
 
@@ -91,10 +88,6 @@ impl Plugin<FixedTimeStep> for PhysicsPlugin {
 
         if self.gizmos.rigidbody {
             schedule.with_system(gizmo_system(dt));
-        }
-
-        if self.gizmos.bvh_tree {
-            // schedule.with_system(collisions_tree_gizmos_system());
         }
 
         Ok(())

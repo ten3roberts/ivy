@@ -177,26 +177,21 @@ impl Node for GizmosRendererNode {
         };
 
         let shader = self.shader.get_or_insert_with(|| {
+            let shader_module = ctx
+                .gpu
+                .device
+                .create_shader_module(wgpu::ShaderModuleDescriptor {
+                    label: Some("gizmos"),
+                    source: wgpu::ShaderSource::Wgsl(
+                        include_str!("../../shaders/gizmos.wgsl").into(),
+                    ),
+                });
+
             Shader::new(
                 ctx.gpu,
-                &ShaderDesc {
-                    label: "gizmos",
-                    module: &ctx
-                        .gpu
-                        .device
-                        .create_shader_module(wgpu::ShaderModuleDescriptor {
-                            label: Some("gizmos"),
-                            source: wgpu::ShaderSource::Wgsl(
-                                include_str!("../../shaders/gizmos.wgsl").into(),
-                            ),
-                        }),
-                    target: &target,
-                    vertex_layouts: &[Vertex::layout()],
-                    layouts: &[&self.layout],
-                    vertex_entry_point: "vs_main",
-                    fragment_entry_point: "fs_main",
-                    culling: Default::default(),
-                },
+                &ShaderDesc::new("gizmos", &shader_module, &target)
+                    .with_vertex_layouts(&[Vertex::layout()])
+                    .with_bind_group_layouts(&[&self.layout]),
             )
         });
 

@@ -69,7 +69,7 @@ wgpu = "22.1.0"
 winit = "0.30"
 rayon = "1.0"
 ordered-float = "4.2"
-rapier3d = { version = "0.22", features = ["simd-stable"] }
+rapier3d = { version = "0.22", features = ["simd-stable", "parallel"] }
 nalgebra = { version = "0.33", features = ["convert-glam028"] }
 
 [dependencies]

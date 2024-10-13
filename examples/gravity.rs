@@ -1,7 +1,6 @@
 use flax::{Entity, Query, World};
 use glam::{vec3, EulerRot, Mat4, Quat, Vec3};
 use ivy_assets::AssetCache;
-use ivy_collision::components::collider;
 use ivy_core::{
     app::InitEvent,
     layer::events::EventRegisterContext,
@@ -11,13 +10,12 @@ use ivy_core::{
     App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer,
 };
 use ivy_engine::{
-    angular_velocity, friction, gravity_influence, is_static, main_camera, Collider,
-    RigidBodyBundle, TransformBundle,
+    angular_velocity, gravity_influence, is_static, main_camera, RigidBodyBundle, TransformBundle,
 };
 use ivy_game::free_camera::{setup_camera, CameraInputPlugin};
 use ivy_graphics::texture::TextureDesc;
 use ivy_input::layer::InputLayer;
-use ivy_physics::PhysicsPlugin;
+use ivy_physics::{components::friction, ColliderBundle, PhysicsPlugin};
 use ivy_postprocessing::preconfigured::{SurfacePbrPipeline, SurfacePbrPipelineDesc};
 use ivy_wgpu::{
     components::*,
@@ -70,12 +68,7 @@ pub fn main() -> anyhow::Result<()> {
         .with_layer(
             ScheduledLayer::new(FixedTimeStep::new(0.02)).with_plugin(
                 PhysicsPlugin::new()
-                    .with_gizmos(ivy_physics::GizmoSettings {
-                        bvh_tree: true,
-                        island_graph: true,
-                        rigidbody: true,
-                        contacts: true,
-                    })
+                    .with_gizmos(ivy_physics::GizmoSettings { rigidbody: true })
                     .with_gravity(-Vec3::Y),
             ),
         )
@@ -123,13 +116,15 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
                     .with_rotation(rotation),
             )
             .mount(
-                RigidBodyBundle::default()
+                RigidBodyBundle::dynamic()
                     .with_mass(MASS)
-                    .with_angular_mass(INERTIA_TENSOR)
-                    .with_restitution(RESTITUTION)
-                    .with_friction(FRICTION),
+                    .with_angular_mass(INERTIA_TENSOR),
             )
-            .set(collider(), Collider::capsule(1.0, 1.0))
+            .mount(
+                ColliderBundle::new(rapier3d::prelude::SharedShape::capsule_y(1.0, 1.0))
+                    .with_friction(FRICTION)
+                    .with_restitution(RESTITUTION),
+            )
             .mount(RenderObjectBundle::new(
                 mesh.clone(),
                 white_material.clone(),
@@ -156,16 +151,11 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
                 .with_scale(vec3(5.0, 0.1, 5.0))
                 .with_rotation(Quat::from_scaled_axis(Vec3::Z * 0.1)),
         )
+        .mount(RigidBodyBundle::dynamic().with_mass(1.0))
         .mount(
-            RigidBodyBundle::default()
-                .with_mass(1.0)
-                .with_angular_mass(1.0)
-                .with_restitution(1.0)
-                .with_friction(1.0),
-        )
-        .set(
-            collider(),
-            Collider::cube_from_center(Vec3::ZERO, Vec3::ONE),
+            ColliderBundle::new(rapier3d::prelude::SharedShape::cuboid(1.0, 1.0, 1.0))
+                .with_friction(FRICTION)
+                .with_restitution(RESTITUTION),
         )
         .set(is_static(), ())
         .mount(RenderObjectBundle::new(
@@ -183,16 +173,11 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
                 .with_scale(vec3(20.0, 0.1, 20.0))
                 .with_rotation(Quat::from_scaled_axis(Vec3::Z * -0.2)),
         )
+        .mount(RigidBodyBundle::dynamic().with_mass(1.0))
         .mount(
-            RigidBodyBundle::default()
-                .with_mass(1.0)
-                .with_angular_mass(1.0)
-                .with_restitution(0.1)
-                .with_friction(0.5),
-        )
-        .set(
-            collider(),
-            Collider::cube_from_center(Vec3::ZERO, Vec3::ONE),
+            ColliderBundle::new(rapier3d::prelude::SharedShape::cuboid(1.0, 1.0, 1.0))
+                .with_friction(FRICTION)
+                .with_restitution(RESTITUTION),
         )
         .set(is_static(), ())
         .mount(RenderObjectBundle::new(

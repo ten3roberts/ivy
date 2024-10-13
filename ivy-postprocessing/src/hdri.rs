@@ -181,29 +181,26 @@ impl HdriProcessor {
 
         let shader = Shader::new(
             gpu,
-            &ShaderDesc {
-                label: "hdri_project",
-                module: &gpu.device.create_shader_module(ShaderModuleDescriptor {
+            &ShaderDesc::new(
+                "hdri_project",
+                &gpu.device.create_shader_module(ShaderModuleDescriptor {
                     label: Some("equirect_project"),
                     source: ShaderSource::Wgsl(
                         include_str!("../shaders/equirect_project.wgsl").into(),
                     ),
                 }),
-                target: &TargetDesc {
+                &TargetDesc {
                     formats: &[self.format],
                     depth_format: None,
                     sample_count: 1,
                 },
-                vertex_layouts: &[VertexBufferLayout {
-                    array_stride: 12,
-                    step_mode: VertexStepMode::Vertex,
-                    attributes: &vertex_attr_array![0 => Float32x3],
-                }],
-                layouts: &[&bind_group_layout],
-                fragment_entry_point: "fs_main",
-                vertex_entry_point: "vs_main",
-                culling: Default::default(),
-            },
+            )
+            .with_vertex_layouts(&[VertexBufferLayout {
+                array_stride: 12,
+                step_mode: VertexStepMode::Vertex,
+                attributes: &vertex_attr_array![0 => Float32x3],
+            }])
+            .with_bind_group_layouts(&[&bind_group_layout]),
         );
 
         let vb = cube_vertices(gpu);
@@ -285,25 +282,21 @@ impl HdriProcessor {
 
         let shader = Shader::new(
             gpu,
-            &ShaderDesc {
-                label: "diffuse_irradiance",
-                module: &gpu.device.create_shader_module(ShaderModuleDescriptor {
+            &ShaderDesc::new(
+                "diffuse_irradiance",
+                &gpu.device.create_shader_module(ShaderModuleDescriptor {
                     label: Some("diffuse_irradiance"),
                     source: ShaderSource::Wgsl(
                         include_str!("../shaders/diffuse_irradiance.wgsl").into(),
                     ),
                 }),
-                target: &TargetDesc {
+                &TargetDesc {
                     formats: &[self.format],
                     depth_format: None,
                     sample_count: 1,
                 },
-                vertex_layouts: &[],
-                layouts: &[&bind_group_layout],
-                fragment_entry_point: "fs_main",
-                vertex_entry_point: "vs_main",
-                culling: Default::default(),
-            },
+            )
+            .with_bind_group_layouts(&[&bind_group_layout]),
         );
 
         for (side, bind_group) in bind_groups.iter().enumerate() {
@@ -383,23 +376,19 @@ impl HdriProcessor {
 
         let shader = Shader::new(
             gpu,
-            &ShaderDesc {
-                label: "specular_ibl",
-                module: &gpu.device.create_shader_module(ShaderModuleDescriptor {
+            &ShaderDesc::new(
+                "specular_ibl",
+                &gpu.device.create_shader_module(ShaderModuleDescriptor {
                     label: Some("specular_ibl"),
                     source: ShaderSource::Wgsl(include_str!("../shaders/specular_ibl.wgsl").into()),
                 }),
-                target: &TargetDesc {
+                &TargetDesc {
                     formats: &[self.format],
                     depth_format: None,
                     sample_count: 1,
                 },
-                vertex_layouts: &[],
-                layouts: &[&bind_group_layout],
-                fragment_entry_point: "fs_main",
-                vertex_entry_point: "vs_main",
-                culling: Default::default(),
-            },
+            )
+            .with_bind_group_layouts(&[&bind_group_layout]),
         );
 
         for mip_level in 0..self.roughness_levels {
@@ -439,23 +428,18 @@ impl HdriProcessor {
     pub fn process_brdf_lookup(&self, gpu: &Gpu, encoder: &mut CommandEncoder, dest: &Texture) {
         let shader = Shader::new(
             gpu,
-            &ShaderDesc {
-                label: "brdf_lookup",
-                module: &gpu.device.create_shader_module(ShaderModuleDescriptor {
+            &ShaderDesc::new(
+                "brdf_lookup",
+                &gpu.device.create_shader_module(ShaderModuleDescriptor {
                     label: Some("brdf_lookup"),
                     source: ShaderSource::Wgsl(include_str!("../shaders/brdf_lookup.wgsl").into()),
                 }),
-                vertex_layouts: &[],
-                layouts: &[],
-                target: &TargetDesc {
+                &TargetDesc {
                     formats: &[self.format],
                     depth_format: None,
                     sample_count: 1,
                 },
-                fragment_entry_point: "fs_main",
-                vertex_entry_point: "vs_main",
-                culling: Default::default(),
-            },
+            ),
         );
 
         let view = dest.create_view(&TextureViewDescriptor {

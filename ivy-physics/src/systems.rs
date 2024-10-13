@@ -17,8 +17,8 @@ use flax::{
 use glam::{Mat4, Vec3};
 use ivy_core::{
     components::{
-        angular_velocity, engine, inertia_tensor, mass, position, sleeping, velocity,
-        world_transform,
+        angular_velocity, engine, gravity, inertia_tensor, main_camera, mass, position, sleeping,
+        velocity, world_transform,
     },
     gizmos::{Gizmos, Line, DEFAULT_THICKNESS},
     subscribers::{RemovedComponentSubscriber, RemovedRelationSubscriber},
@@ -120,8 +120,8 @@ pub fn unregister_bodies_system(world: &mut World) -> BoxedSystem {
                   _: &mut CommandBuffer,
                   mut query: QueryBorrow<Mutable<PhysicsState>>| {
                 if let Some(state) = query.first() {
-                    for (id, rb_handle) in rx.try_iter() {
-                        state.remove_body(id, rb_handle);
+                    for (_, rb_handle) in rx.try_iter() {
+                        state.remove_body(rb_handle);
                     }
                 }
 
@@ -158,7 +158,6 @@ pub fn attach_joints_system(world: &mut World) -> BoxedSystem {
                         let target = component.key().target().expect("joint target is present");
                         let handle = *world.get(id, impulse_joint_handle(target))?;
 
-                        tracing::info!(?handle, "removed joint");
                         state.detach_joint(handle);
                         cmd.remove(id, impulse_joint_handle(target));
                     }
@@ -178,7 +177,7 @@ pub fn attach_joints_system(world: &mut World) -> BoxedSystem {
                             .context("Missing joint data between entity pairs")?;
 
                         let handle = state.attach_joint(body1, body2, *data);
-                        tracing::info!(?body1, ?body2, ?handle, "attaching");
+
                         cmd.set(added.id, impulse_joint_handle(target), handle);
                     }
                 }
@@ -212,8 +211,14 @@ pub fn update_bodies_system() -> BoxedSystem {
 
 pub fn physics_step_system() -> BoxedSystem {
     System::builder()
-        .with_query(Query::new(physics_state().as_mut()))
-        .for_each(|v| v.step())
+        .with_query(Query::new((
+            physics_state().as_mut(),
+            gravity().source(engine()),
+        )))
+        .for_each(|(v, gravity)| {
+            v.set_gravity(*gravity);
+            v.step();
+        })
         .boxed()
 }
 
@@ -237,20 +242,26 @@ pub fn sync_simulation_bodies_system() -> BoxedSystem {
 pub fn gizmo_system(dt: f32) -> BoxedSystem {
     System::builder()
         .with_query(Query::new(ivy_core::components::gizmos()))
-        .with_query(Query::new((
-            world_transform(),
-            velocity(),
-            angular_velocity(),
-            effector(),
-        )))
+        .with_query(
+            Query::new((
+                world_transform(),
+                velocity(),
+                angular_velocity(),
+                effector(),
+            ))
+            .without(main_camera()),
+        )
         .build(
             move |mut gizmos: QueryBorrow<Component<Gizmos>>,
-                  mut query: QueryBorrow<(
-                Component<Mat4>,
-                Component<Vec3>,
-                Component<Vec3>,
-                Component<crate::Effector>,
-            )>| {
+                  mut query: QueryBorrow<
+                (
+                    Component<Mat4>,
+                    Component<Vec3>,
+                    Component<Vec3>,
+                    Component<crate::Effector>,
+                ),
+                _,
+            >| {
                 let mut gizmos = gizmos
                     .get(engine())?
                     .begin_section("effectors_gizmo_system");
@@ -321,9 +332,6 @@ pub fn configure_effectors_system() -> BoxedSystem {
                 }
             },
         )
-        // .par_for_each(|(effector, (&mass, &ang_mass, &com))| {
-        //     effector.update_props(mass.recip() * Vec3::ONE, ang_mass, com);
-        // })
         .boxed()
 }
 

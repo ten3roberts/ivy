@@ -17,7 +17,7 @@ use ivy_engine::{
     async_commandbuffer, delta_time, engine, main_camera, rotation, velocity, world_transform,
     TransformBundle,
 };
-use ivy_game::free_camera::setup_camera;
+use ivy_game::free_camera::{setup_camera, CameraInputPlugin};
 use ivy_gltf::{components::animator, Document};
 use ivy_input::layer::InputLayer;
 use ivy_physics::PhysicsPlugin;
@@ -72,67 +72,13 @@ pub fn main() -> anyhow::Result<()> {
         }))
         .with_layer(InputLayer::new())
         .with_layer(LogicLayer)
-        .with_layer(
-            ScheduledLayer::new(PerTick)
-                .with_plugin(CameraInputPlugin)
-                .with_plugin(GizmosPlugin),
-        )
+        .with_layer(ScheduledLayer::new(PerTick).with_plugin(CameraInputPlugin))
         .with_layer(ScheduledLayer::new(FixedTimeStep::new(0.02)).with_plugin(PhysicsPlugin::new()))
         .run()
     {
         tracing::error!("{err:?}");
         Err(err)
     } else {
-        Ok(())
-    }
-}
-
-pub struct AnimationPlugin;
-
-impl Plugin<PerTick> for AnimationPlugin {
-    fn install(
-        &self,
-        _: &mut World,
-        _: &AssetCache,
-        schedule: &mut ScheduleBuilder,
-        _: &PerTick,
-    ) -> anyhow::Result<()> {
-        schedule.with_system(animate_system());
-        Ok(())
-    }
-}
-
-pub struct CameraInputPlugin;
-
-impl Plugin<PerTick> for CameraInputPlugin {
-    fn install(
-        &self,
-        _: &mut World,
-        _: &AssetCache,
-        schedule: &mut ScheduleBuilder,
-        _: &PerTick,
-    ) -> anyhow::Result<()> {
-        schedule
-            .with_system(cursor_lock_system())
-            .with_system(camera_rotation_input_system())
-            .with_system(camera_movement_input_system());
-
-        Ok(())
-    }
-}
-
-pub struct GizmosPlugin;
-
-impl Plugin<PerTick> for GizmosPlugin {
-    fn install(
-        &self,
-        _: &mut World,
-        _: &AssetCache,
-        schedule: &mut ScheduleBuilder,
-        _: &PerTick,
-    ) -> anyhow::Result<()> {
-        schedule.with_system(point_light_gizmo_system());
-
         Ok(())
     }
 }
@@ -195,7 +141,7 @@ impl Layer for LogicLayer {
             .set(
                 environment_data(),
                 EnvironmentData::new(
-                    Srgb::new(0.2, 0.2, 0.3),
+                    Srgb::new(0.0, 0.0, 0.0),
                     0.001,
                     if ENABLE_SKYBOX { 0.0 } else { 1.0 },
                 ),
@@ -204,74 +150,6 @@ impl Layer for LogicLayer {
 
         Ok(())
     }
-}
-
-component! {
-    pan_active: f32,
-    rotation_input: Vec2,
-    euler_rotation: Vec3,
-    movement: Vec3,
-    camera_speed: f32,
-}
-
-fn cursor_lock_system() -> BoxedSystem {
-    System::builder()
-        .with_query(Query::new(pan_active()))
-        .with_query(Query::new(window().as_mut()).with(main_window()))
-        .build(
-            |mut query: QueryBorrow<Component<f32>>,
-             mut window: QueryBorrow<Mutable<WindowHandle>, _>| {
-                query.iter().for_each(|&pan_active| {
-                    if let Some(window) = window.first() {
-                        window.set_cursor_lock(pan_active > 0.0);
-                    }
-                });
-            },
-        )
-        .boxed()
-}
-
-fn camera_rotation_input_system() -> BoxedSystem {
-    System::builder()
-        .with_query(Query::new((
-            rotation().as_mut(),
-            euler_rotation().as_mut(),
-            rotation_input(),
-            pan_active(),
-        )))
-        .for_each(|(rotation, euler_rotation, rotation_input, &pan_active)| {
-            *euler_rotation += pan_active * vec3(rotation_input.y, rotation_input.x, 0.0);
-            *rotation = Quat::from_euler(EulerRot::YXZ, -euler_rotation.y, -euler_rotation.x, 0.0);
-        })
-        .boxed()
-}
-
-fn camera_movement_input_system() -> BoxedSystem {
-    System::builder()
-        .with_query(Query::new((
-            movement(),
-            rotation(),
-            camera_speed(),
-            velocity().as_mut(),
-        )))
-        .for_each(move |(&movement, rotation, &camera_speed, velocity)| {
-            *velocity = *rotation * (movement * vec3(1.0, 1.0, -1.0) * camera_speed);
-        })
-        .boxed()
-}
-
-fn animate_system() -> BoxedSystem {
-    System::builder()
-        .with_query(Query::new((
-            animator().as_mut(),
-            delta_time()
-                .source(engine())
-                .expect("delta_time must be present"),
-        )))
-        .par_for_each(move |(animator, dt)| {
-            animator.step(dt.as_secs_f32());
-        })
-        .boxed()
 }
 
 fn point_light_gizmo_system() -> BoxedSystem {
