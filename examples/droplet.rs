@@ -1,36 +1,26 @@
-use flax::{
-    component, BoxedSystem, Component, Entity, FetchExt, Mutable, Query, QueryBorrow,
-    ScheduleBuilder, System, World,
-};
-use glam::{vec3, EulerRot, Mat4, Quat, Vec2, Vec3};
+use flax::{Entity, Query, World};
+use glam::{Mat4, Quat, Vec3};
 use ivy_assets::{Asset, AssetCache, AsyncAssetKey};
 use ivy_core::{
     app::InitEvent,
-    gizmos,
     layer::events::EventRegisterContext,
-    palette::{Srgb, WithAlpha},
+    palette::Srgb,
     profiling::ProfilingLayer,
-    update_layer::{FixedTimeStep, PerTick, Plugin, ScheduledLayer},
+    update_layer::{FixedTimeStep, PerTick, ScheduledLayer},
     App, AsyncCommandBuffer, EngineLayer, EntityBuilderExt, Layer, DEG_90,
 };
-use ivy_engine::{
-    async_commandbuffer, delta_time, engine, main_camera, rotation, velocity, world_transform,
-    TransformBundle,
-};
+use ivy_engine::{async_commandbuffer, engine, main_camera, TransformBundle};
 use ivy_game::free_camera::{setup_camera, CameraInputPlugin};
-use ivy_gltf::{components::animator, Document};
+use ivy_gltf::Document;
 use ivy_input::layer::InputLayer;
 use ivy_physics::PhysicsPlugin;
 use ivy_postprocessing::preconfigured::{SurfacePbrPipeline, SurfacePbrPipelineDesc};
 use ivy_scene::{GltfNodeExt, NodeMountOptions};
 use ivy_wgpu::{
-    components::{
-        environment_data, light_data, light_kind, main_window, projection_matrix, window,
-    },
-    driver::{WindowHandle, WinitDriver},
+    components::{environment_data, projection_matrix},
+    driver::WinitDriver,
     events::ResizedEvent,
     layer::GraphicsLayer,
-    light::{LightData, LightKind},
     renderer::EnvironmentData,
 };
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
@@ -150,47 +140,4 @@ impl Layer for LogicLayer {
 
         Ok(())
     }
-}
-
-fn point_light_gizmo_system() -> BoxedSystem {
-    System::builder()
-        .with_query(Query::new(ivy_core::components::gizmos().source(engine())))
-        .with_query(Query::new((world_transform(), light_data(), light_kind())))
-        .build(
-            |mut gizmos: QueryBorrow<flax::fetch::Source<Component<gizmos::Gizmos>, Entity>>,
-             mut query: QueryBorrow<(
-                Component<Mat4>,
-                Component<LightData>,
-                Component<LightKind>,
-            )>| {
-                let mut gizmos = gizmos
-                    .first()
-                    .unwrap()
-                    .begin_section("point_light_gizmo_system");
-
-                query
-                    .iter()
-                    .for_each(|(transform, light, kind)| match kind {
-                        LightKind::Point => gizmos.draw(gizmos::Sphere::new(
-                            transform.transform_point3(Vec3::ZERO),
-                            0.1,
-                            light.color.with_alpha(1.0),
-                        )),
-                        LightKind::Directional => {
-                            let pos = transform.transform_point3(Vec3::ZERO);
-                            let dir = transform.transform_vector3(Vec3::Z);
-
-                            gizmos.draw(gizmos::Sphere::new(pos, 0.1, light.color.with_alpha(1.0)));
-
-                            gizmos.draw(gizmos::Line::new(
-                                pos,
-                                dir,
-                                0.02,
-                                light.color.with_alpha(1.0),
-                            ))
-                        }
-                    });
-            },
-        )
-        .boxed()
 }

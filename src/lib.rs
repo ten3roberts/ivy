@@ -35,7 +35,6 @@
 //! See the documentation for [`ivy-core::Layer`]
 
 /// Rexports
-pub use ivy_collision as collision;
 pub use ivy_core as base;
 pub use ivy_gltf;
 pub use ivy_input as input;
@@ -45,7 +44,6 @@ pub use ivy_random as random;
 pub use ivy_scene as scene;
 pub use ivy_wgpu;
 
-pub use ivy_collision::{Collider, CollisionTree, Cube, PersistentContact, RayIntersect, Sphere};
 pub use ivy_core::{components::*, App, Extent, Layer};
 pub use ivy_input::InputState;
 pub use ivy_physics::RigidBodyBundle;

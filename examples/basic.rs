@@ -5,7 +5,6 @@ use flax::{
 };
 use glam::{vec3, EulerRot, Mat4, Quat, Vec3};
 use ivy_assets::{Asset, AssetCache};
-use ivy_collision::components::collider;
 use ivy_core::{
     app::InitEvent,
     gizmos,
@@ -17,7 +16,7 @@ use ivy_core::{
 };
 use ivy_engine::{
     async_commandbuffer, delta_time, engine, gravity_influence, main_camera, world_transform,
-    Collider, RigidBodyBundle, TransformBundle,
+    RigidBodyBundle, TransformBundle,
 };
 use ivy_game::{
     free_camera::{setup_camera, CameraInputPlugin},
@@ -86,15 +85,16 @@ pub fn main() -> anyhow::Result<()> {
         .with_layer(
             ScheduledLayer::new(PerTick)
                 .with_plugin(CameraInputPlugin)
-                .with_plugin(GizmosPlugin)
-                .with_plugin(RayPickingPlugin),
+                .with_plugin(GizmosPlugin),
         )
         .with_layer(
-            ScheduledLayer::new(FixedTimeStep::new(0.02)).with_plugin(
-                PhysicsPlugin::new()
-                    .with_gravity(-Vec3::Y * 9.81)
-                    .with_gizmos(GizmoSettings { rigidbody: true }),
-            ),
+            ScheduledLayer::new(FixedTimeStep::new(0.02))
+                .with_plugin(
+                    PhysicsPlugin::new()
+                        .with_gravity(-Vec3::Y * 9.81)
+                        .with_gizmos(GizmoSettings { rigidbody: true }),
+                )
+                .with_plugin(RayPickingPlugin),
         )
         .run()
     {
@@ -273,7 +273,6 @@ impl LogicLayer {
                                         .with_friction(FRICTION),
                                 )
                                 .set(gravity_influence(), 1.0)
-                                .set(collider(), Collider::sphere(1.0))
                                 .set(shadow_pass(), assets.load(&ShadowShaderDesc)),
                         );
                     }

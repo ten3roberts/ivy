@@ -147,3 +147,9 @@ impl Effector {
         self.translation
     }
 }
+
+impl Default for Effector {
+    fn default() -> Self {
+        Self::new()
+    }
+}

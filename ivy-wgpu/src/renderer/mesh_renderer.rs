@@ -1,6 +1,5 @@
 use std::{
     collections::{hash_map::Entry, HashMap},
-    convert::identity,
     sync::{Arc, Weak},
 };
 
@@ -16,7 +15,7 @@ use ivy_core::{components::world_transform, profiling::profile_function};
 use ivy_gltf::components::skin;
 use ivy_wgpu_types::shader::Culling;
 use slab::Slab;
-use wgpu::{BindGroup, BindGroupLayout, BufferUsages, DepthBiasState, RenderPass, ShaderStages};
+use wgpu::{BindGroup, BindGroupLayout, BufferUsages, RenderPass, ShaderStages};
 
 use crate::{
     components::{material, mesh, mesh_primitive},

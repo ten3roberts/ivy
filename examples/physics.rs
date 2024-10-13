@@ -1,22 +1,16 @@
-use flax::{
-    fetch::Source, BoxedSystem, Component, Entity, FetchExt, Query, QueryBorrow, System, World,
-};
+use flax::{Entity, Query, World};
 use glam::{vec3, EulerRot, Mat4, Quat, Vec3};
 use ivy_assets::AssetCache;
 use ivy_core::{
     app::InitEvent,
-    gizmos::{self, DEFAULT_RADIUS},
     layer::events::EventRegisterContext,
     palette::{Srgb, Srgba},
     profiling::ProfilingLayer,
     update_layer::{FixedTimeStep, PerTick, ScheduledLayer},
-    App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer, DEG_180, DEG_45,
+    App, EngineLayer, EntityBuilderExt, Layer, DEG_180, DEG_45,
 };
-use ivy_engine::{
-    delta_time, engine, main_camera, world_transform, RigidBodyBundle, TransformBundle,
-};
+use ivy_engine::{main_camera, RigidBodyBundle, TransformBundle};
 use ivy_game::free_camera::{setup_camera, CameraInputPlugin};
-use ivy_gltf::components::animator;
 use ivy_graphics::texture::TextureDesc;
 use ivy_input::layer::InputLayer;
 use ivy_physics::{ColliderBundle, PhysicsPlugin};

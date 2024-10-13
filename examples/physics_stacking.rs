@@ -1,7 +1,6 @@
 use flax::{Entity, Query, World};
 use glam::{vec3, EulerRot, Mat4, Quat, Vec3};
 use ivy_assets::AssetCache;
-use ivy_collision::components::collider;
 use ivy_core::{
     app::InitEvent,
     layer::events::EventRegisterContext,
@@ -10,9 +9,7 @@ use ivy_core::{
     update_layer::{FixedTimeStep, PerTick, ScheduledLayer},
     App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer,
 };
-use ivy_engine::{
-    is_static, main_camera, rotation, scale, Collider, RigidBodyBundle, TransformBundle,
-};
+use ivy_engine::{is_static, main_camera, rotation, scale, RigidBodyBundle, TransformBundle};
 use ivy_game::{
     free_camera::{setup_camera, CameraInputPlugin},
     ray_picker::RayPickingPlugin,
@@ -156,8 +153,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
                 mesh(),
                 MeshDesc::Content(assets.load(&UvSpherePrimitive::default())),
             )
-            .set(collider_shape(), SharedShape::ball(size))
-            .set(collider(), Collider::sphere(1.0));
+            .set(collider_shape(), SharedShape::ball(size));
         builder
     };
 

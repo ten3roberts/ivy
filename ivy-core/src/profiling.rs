@@ -1,6 +1,6 @@
 pub use ivy_profiling::*;
 
-use crate::{app::TickEvent, Layer};
+use crate::Layer;
 
 pub struct ProfilingLayer {
     #[allow(dead_code)]
@@ -36,16 +36,19 @@ impl Layer for ProfilingLayer {
         &mut self,
         _: &mut flax::World,
         _: &ivy_assets::AssetCache,
-        mut events: crate::layer::events::EventRegisterContext<Self>,
+        _events: crate::layer::events::EventRegisterContext<Self>,
     ) -> anyhow::Result<()>
     where
         Self: Sized,
     {
         #[cfg(feature = "profile")]
-        events.subscribe(|_, _, _, _: &TickEvent| {
-            puffin::GlobalProfiler::lock().new_frame();
-            Ok(())
-        });
+        {
+            let mut _events = _events;
+            _events.subscribe(|_, _, _, _: &crate::app::TickEvent| {
+                puffin::GlobalProfiler::lock().new_frame();
+                Ok(())
+            });
+        }
 
         Ok(())
     }

@@ -597,12 +597,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "convert_case"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6245d59a3e82a7fc217c5828a6692dbc6dfb63a0c8c90495621f7b9d79704a0e"
-
-[[package]]
 name = "core-foundation"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -743,25 +737,6 @@ name = "data-encoding"
 version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e8566979429cf69b49a5c740c60791108e86440e8be149bbea4fe54d2c32d6e2"
-
-[[package]]
-name = "derive-for"
-version = "1.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a9891f7ca4633797965866d68b6c30c822f05f9834c2d77ef0ac1f9cb9a371e6"
-
-[[package]]
-name = "derive_more"
-version = "0.99.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f33878137e4dafd7fa914ad4e259e18a4e8e532b9617a2d0150262bf53abfce"
-dependencies = [
- "convert_case",
- "proc-macro2",
- "quote",
- "rustc_version",
- "syn 2.0.77",
-]
 
 [[package]]
 name = "dispatch"
@@ -1421,31 +1396,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ivy-collision"
-version = "0.10.3"
-dependencies = [
- "anyhow",
- "arrayvec",
- "derive-for",
- "derive_more",
- "ezy",
- "flax",
- "flume",
- "glam 0.28.0",
- "itertools 0.13.0",
- "ivy-assets",
- "ivy-core",
- "ordered-float 3.9.2",
- "palette",
- "rand",
- "rand_pcg",
- "rayon",
- "slotmap",
- "smallvec",
- "tracing",
-]
-
-[[package]]
 name = "ivy-core"
 version = "0.10.3"
 dependencies = [
@@ -1487,7 +1437,6 @@ dependencies = [
  "glam 0.28.0",
  "image",
  "ivy-assets",
- "ivy-collision",
  "ivy-core",
  "ivy-game",
  "ivy-gltf",
@@ -1544,7 +1493,7 @@ dependencies = [
  "ivy-core",
  "ivy-graphics",
  "ivy-profiling",
- "ordered-float 4.2.2",
+ "ordered-float",
  "tracing",
 ]
 
@@ -1563,7 +1512,7 @@ dependencies = [
  "ivy-core",
  "ivy-profiling",
  "mikktspace",
- "ordered-float 4.2.2",
+ "ordered-float",
  "tracing",
 ]
 
@@ -1592,7 +1541,6 @@ dependencies = [
  "glam 0.28.0",
  "itertools 0.13.0",
  "ivy-assets",
- "ivy-collision",
  "ivy-core",
  "ivy-random",
  "nalgebra 0.33.0",
@@ -1675,7 +1623,7 @@ dependencies = [
  "ivy-wgpu-types",
  "mikktspace",
  "naga_oil",
- "ordered-float 4.2.2",
+ "ordered-float",
  "parking_lot",
  "puffin",
  "puffin_http",
@@ -2447,15 +2395,6 @@ dependencies = [
 
 [[package]]
 name = "ordered-float"
-version = "3.9.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1e1c390732d15f1d48471625cd92d154e66db2c56645e29a9cd26f4699f72dc"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
-name = "ordered-float"
 version = "4.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a91171844676f8c7990ce64959210cd2eaef32c2612c50f9fae9f8aaa6065a6"
@@ -2553,7 +2492,7 @@ dependencies = [
  "nalgebra 0.33.0",
  "num-derive",
  "num-traits",
- "ordered-float 4.2.2",
+ "ordered-float",
  "rstar",
  "rustc-hash 2.0.0",
  "simba 0.9.0",
@@ -2862,7 +2801,7 @@ dependencies = [
  "nalgebra 0.33.0",
  "num-derive",
  "num-traits",
- "ordered-float 4.2.2",
+ "ordered-float",
  "parry3d",
  "rayon",
  "rustc-hash 2.0.0",
@@ -3007,15 +2946,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "583034fd73374156e66797ed8e5b0d5690409c9226b22d87cb7f19821c05d152"
 
 [[package]]
-name = "rustc_version"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cfcb3a22ef46e85b45de6ee7e79d063319ebb6594faafcf1c225ea92ab6e9b92"
-dependencies = [
- "semver",
-]
-
-[[package]]
 name = "rustix"
 version = "0.38.36"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3076,12 +3006,6 @@ dependencies = [
  "smithay-client-toolkit",
  "tiny-skia",
 ]
-
-[[package]]
-name = "semver"
-version = "1.0.23"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61697e0a1c7e512e84a621326239844a24d8207b4669b41bc18b32ea5cbf988b"
 
 [[package]]
 name = "serde"

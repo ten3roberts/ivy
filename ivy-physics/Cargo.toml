@@ -14,7 +14,6 @@ readme = "../README.md"
 [dependencies]
 ivy-core = { path = "../ivy-core", version = "0.10.0" }
 ivy-random = { path = "../ivy-random", version = "0.10.0" }
-ivy-collision = { path = "../ivy-collision", version = "0.10.0" }
 ivy-assets = { path = "../ivy-assets", version = "0.10.0" }
 
 anyhow.workspace = true

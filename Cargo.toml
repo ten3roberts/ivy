@@ -21,7 +21,6 @@ members = [
   "ivy-input",
   "ivy-postprocessing",
   "ivy-physics",
-  "ivy-collision",
   "ivy-random",
   "ivy-assets",
   "ivy-wgpu",
@@ -74,7 +73,6 @@ nalgebra = { version = "0.33", features = ["convert-glam028"] }
 
 [dependencies]
 ivy-assets = { path = "./ivy-assets", version = "0.10" }
-ivy-collision = { path = "./ivy-collision", version = "0.10" }
 ivy-core = { path = "./ivy-core", version = "0.10" }
 ivy-game = { path = "./ivy-game", version = "0.1.0" }
 ivy-gltf = { path = "./ivy-gltf", version = "0.1.0" }

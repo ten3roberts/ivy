@@ -1,22 +1,14 @@
-use ivy_core::components::{
-    angular_velocity, is_static, is_trigger, mass, position, rotation, velocity, world_transform,
-};
+use ivy_core::components::{angular_velocity, position, rotation, velocity};
 use nalgebra::Isometry3;
 use rapier3d::prelude::{
-    CCDSolver, ColliderHandle, ColliderSet, DefaultBroadPhase, GenericJoint, GenericJointBuilder,
-    ImpulseJointHandle, ImpulseJointSet, IntegrationParameters, IslandManager, MultibodyJointSet,
-    NarrowPhase, PhysicsPipeline, QueryFilter, QueryPipeline, Ray, RayIntersection, RigidBody,
-    RigidBodyHandle, RigidBodySet, SpringJointBuilder,
+    CCDSolver, ColliderHandle, ColliderSet, DefaultBroadPhase, GenericJoint, ImpulseJointHandle,
+    ImpulseJointSet, IntegrationParameters, IslandManager, MultibodyJointSet, NarrowPhase,
+    PhysicsPipeline, QueryFilter, QueryPipeline, Ray, RayIntersection, RigidBody, RigidBodyHandle,
+    RigidBodySet,
 };
 
-use flax::{
-    fetch::Satisfied, Component, Entity, Fetch, FetchExt, Mutable, Opt, OptOr, QueryBorrow,
-};
-use glam::{Mat4, Quat, Vec3};
-use ivy_collision::{
-    components::{collider, collider_offset},
-    Collider,
-};
+use flax::{Component, Entity, Fetch, Mutable, QueryBorrow};
+use glam::{Quat, Vec3};
 
 #[derive(Default)]
 pub struct PhysicsStateConfiguration {}
@@ -259,39 +251,6 @@ impl BodyDynamicsQuery {
 }
 
 impl Default for BodyDynamicsQuery {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[derive(Fetch)]
-struct ObjectQuery {
-    pub transform: Component<Mat4>,
-    pub mass: Opt<Component<f32>>,
-    pub collider: Component<Collider>,
-    pub offset: OptOr<Component<Mat4>, Mat4>,
-    pub is_static: Satisfied<Component<()>>,
-    pub is_trigger: Satisfied<Component<()>>,
-    pub velocity: Component<Vec3>,
-    pub angular_velocity: Component<Vec3>,
-}
-
-impl ObjectQuery {
-    fn new() -> Self {
-        Self {
-            transform: world_transform(),
-            mass: mass().opt(),
-            collider: collider(),
-            offset: collider_offset().opt_or_default(),
-            is_static: is_static().satisfied(),
-            velocity: velocity(),
-            angular_velocity: angular_velocity(),
-            is_trigger: is_trigger().satisfied(),
-        }
-    }
-}
-
-impl Default for ObjectQuery {
     fn default() -> Self {
         Self::new()
     }
