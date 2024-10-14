@@ -4,11 +4,7 @@ use flax::{
 };
 use ivy_core::{app::TickEvent, Layer};
 
-use crate::{
-    components::input_state,
-    types::{CursorMoved, KeyboardInput, MouseInput, MouseMotion, ScrollMotion},
-    InputEvent, InputState,
-};
+use crate::{components::input_state, InputEvent, InputState};
 
 pub struct InputLayer {
     query: Query<(EntityRefs, Mutable<InputState>)>,
@@ -50,31 +46,8 @@ impl Layer for InputLayer {
     where
         Self: Sized,
     {
-        events.subscribe(|this, world, _, event: &KeyboardInput| -> Result<_, _> {
-            this.handle_event(world, &InputEvent::Key(event.clone()));
-            Ok(())
-        });
-
-        events.subscribe(|this, world, _, event: &MouseInput| -> Result<_, _> {
-            this.handle_event(world, &InputEvent::MouseButton(event.clone()));
-            Ok(())
-        });
-
-        events.subscribe(|this, world, _, event: &CursorMoved| {
-            this.handle_event(world, &InputEvent::CursorMoved(*event));
-
-            Ok(())
-        });
-
-        events.subscribe(|this, world, _, event: &MouseMotion| {
-            this.handle_event(world, &InputEvent::CursorDelta(event.delta));
-
-            Ok(())
-        });
-
-        events.subscribe(|this, world, _, event: &ScrollMotion| {
-            this.handle_event(world, &InputEvent::Scroll(event.delta));
-
+        events.subscribe(|this, world, _, event: &InputEvent| -> Result<_, _> {
+            this.handle_event(world, event);
             Ok(())
         });
 

@@ -7,9 +7,7 @@ use std::{
 use flax::{components::name, Entity};
 use glam::{vec2, Vec2};
 use ivy_core::{driver::Driver, App};
-use ivy_input::types::{
-    CursorEntered, CursorLeft, CursorMoved, KeyboardInput, MouseInput, MouseMotion, ScrollMotion,
-};
+use ivy_input::types::{CursorMoved, InputEvent, KeyboardInput, MouseInput, ScrollMotion};
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalPosition,
@@ -179,11 +177,11 @@ impl<'a> WinitEventHandler<'a> {
             WindowEvent::HoveredFileCancelled => todo!(),
             WindowEvent::Focused(_focus) => {}
             WindowEvent::KeyboardInput { event, .. } => {
-                self.app.emit(KeyboardInput {
+                self.app.emit(InputEvent::Keyboard(KeyboardInput {
                     modifiers: self.modifiers,
                     key: event.logical_key,
                     state: event.state,
-                })?;
+                }))?;
             }
             WindowEvent::ModifiersChanged(mods) => {
                 self.modifiers = mods.state();
@@ -204,21 +202,21 @@ impl<'a> WinitEventHandler<'a> {
                     window.cursor_lock.cursor_moved(&window.window, position);
                 }
 
-                self.app.emit(CursorMoved {
+                self.app.emit(InputEvent::CursorMoved(CursorMoved {
                     absolute_position: logical_pos,
                     normalized_position: vec2(logical_pos.x, logical_pos.y)
                         / vec2(size.width, size.height),
-                })?;
+                }))?;
             }
             WindowEvent::CursorEntered { device_id: _ } => {
-                self.app.emit(CursorEntered)?;
+                self.app.emit(InputEvent::CursorEntered)?;
             }
             WindowEvent::CursorLeft { device_id: _ } => {
                 self.last_cursor_pos = None;
-                self.app.emit(CursorLeft)?;
+                self.app.emit(InputEvent::CursorLeft)?;
             }
             WindowEvent::MouseWheel { delta, .. } => {
-                self.app.emit(ScrollMotion {
+                self.app.emit(InputEvent::Scroll(ScrollMotion {
                     delta: match delta {
                         winit::event::MouseScrollDelta::LineDelta(x, y) => vec2(x, y) * 4.0,
                         winit::event::MouseScrollDelta::PixelDelta(v) => {
@@ -226,13 +224,15 @@ impl<'a> WinitEventHandler<'a> {
                             vec2(v.x, v.y)
                         }
                     },
-                })?;
+                }))?;
             }
-            WindowEvent::MouseInput { state, button, .. } => self.app.emit(MouseInput {
-                modifiers: self.modifiers,
-                button,
-                state,
-            })?,
+            WindowEvent::MouseInput { state, button, .. } => {
+                self.app.emit(InputEvent::MouseButton(MouseInput {
+                    modifiers: self.modifiers,
+                    button,
+                    state,
+                }))?
+            }
             WindowEvent::PinchGesture {
                 device_id: _,
                 delta: _,
@@ -292,9 +292,8 @@ impl<'a> WinitEventHandler<'a> {
             winit::event::DeviceEvent::Added => {}
             winit::event::DeviceEvent::Removed => {}
             winit::event::DeviceEvent::MouseMotion { delta } => {
-                self.app.emit(MouseMotion {
-                    delta: vec2(delta.0 as _, delta.1 as _),
-                })?;
+                self.app
+                    .emit(InputEvent::CursorDelta(vec2(delta.0 as _, delta.1 as _)))?;
             }
             winit::event::DeviceEvent::MouseWheel { delta: _ } => {}
             winit::event::DeviceEvent::Motion { axis: _, value: _ } => {}

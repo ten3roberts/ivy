@@ -7,6 +7,20 @@ pub use winit::{
 };
 
 #[derive(Debug, Clone)]
+pub enum InputEvent {
+    Keyboard(KeyboardInput),
+    Scroll(ScrollMotion),
+    MouseButton(MouseInput),
+    CursorMoved(CursorMoved),
+    CursorDelta(Vec2),
+    CursorLeft,
+    CursorEntered,
+    Focus(bool),
+}
+
+impl Event for InputEvent {}
+
+#[derive(Debug, Clone)]
 pub struct KeyboardInput {
     pub modifiers: ModifiersState,
     pub key: Key,
@@ -43,15 +57,9 @@ pub enum InputKind {
     CursorMoved,
     CursorDelta,
     Scroll,
-}
-
-#[derive(Debug, Clone)]
-pub enum InputEvent {
-    Key(KeyboardInput),
-    MouseButton(MouseInput),
-    CursorMoved(CursorMoved),
-    CursorDelta(Vec2),
-    Scroll(Vec2),
+    CursorLeft,
+    CursorEntered,
+    Focus,
 }
 
 #[derive(Debug, Clone)]
@@ -59,23 +67,17 @@ pub struct CursorLeft;
 #[derive(Debug, Clone)]
 pub struct CursorEntered;
 
-impl Event for KeyboardInput {}
-impl Event for MouseInput {}
-impl Event for CursorMoved {}
-impl Event for MouseMotion {}
-impl Event for ScrollMotion {}
-
-impl Event for CursorLeft {}
-impl Event for CursorEntered {}
-
 impl InputEvent {
     pub(crate) fn to_kind(&self) -> InputKind {
         match self {
-            InputEvent::Key(v) => InputKind::Key(v.key.clone()),
+            InputEvent::Keyboard(v) => InputKind::Key(v.key.clone()),
             InputEvent::MouseButton(v) => InputKind::MouseButton(v.button),
             InputEvent::CursorMoved(_) => InputKind::CursorMoved,
             InputEvent::CursorDelta(_) => InputKind::CursorDelta,
             InputEvent::Scroll(_) => InputKind::Scroll,
+            InputEvent::CursorLeft => InputKind::CursorLeft,
+            InputEvent::CursorEntered => InputKind::CursorEntered,
+            InputEvent::Focus(_) => InputKind::Focus,
         }
     }
 }

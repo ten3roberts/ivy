@@ -310,7 +310,7 @@ impl Binding<f32> for KeyBinding {
 
     fn apply(&mut self, input: &Self::Input) {
         match input {
-            InputEvent::Key(KeyboardInput { key, state, .. }) if key == &self.key => {
+            InputEvent::Keyboard(KeyboardInput { key, state, .. }) if key == &self.key => {
                 self.pressed = state.is_pressed();
             }
             _ => panic!("Invalid input event"),
@@ -453,7 +453,7 @@ impl Binding<Vec2> for ScrollBinding {
 
     fn apply(&mut self, input: &Self::Input) {
         match input {
-            &InputEvent::Scroll(delta) => self.value += delta,
+            InputEvent::Scroll(delta) => self.value += delta.delta,
             _ => panic!("Invalid input event"),
         }
     }
@@ -555,7 +555,7 @@ mod test {
             .add(KeyBinding::new(Key::Character("A".into())))
             .add(KeyBinding::new(Key::Character("B".into())));
 
-        activation.apply(&InputEvent::Key(KeyboardInput {
+        activation.apply(&InputEvent::Keyboard(KeyboardInput {
             key: Key::Character("A".into()),
             state: ElementState::Pressed,
             modifiers: Default::default(),
@@ -563,7 +563,7 @@ mod test {
 
         assert_eq!(activation.get_stimulus(), 1.0);
 
-        activation.apply(&InputEvent::Key(KeyboardInput {
+        activation.apply(&InputEvent::Keyboard(KeyboardInput {
             key: Key::Character("B".into()),
             state: ElementState::Pressed,
             modifiers: Default::default(),
@@ -571,14 +571,14 @@ mod test {
 
         assert_eq!(activation.get_stimulus(), 1.0);
 
-        activation.apply(&InputEvent::Key(KeyboardInput {
+        activation.apply(&InputEvent::Keyboard(KeyboardInput {
             key: Key::Character("A".into()),
             state: ElementState::Released,
             modifiers: Default::default(),
         }));
 
         assert_eq!(activation.get_stimulus(), 1.0);
-        activation.apply(&InputEvent::Key(KeyboardInput {
+        activation.apply(&InputEvent::Keyboard(KeyboardInput {
             key: Key::Character("B".into()),
             state: ElementState::Released,
             modifiers: Default::default(),
