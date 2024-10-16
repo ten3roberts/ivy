@@ -231,7 +231,7 @@ impl Layer for LogicLayer {
         _: &AssetCache,
         mut events: EventRegisterContext<Self>,
     ) -> anyhow::Result<()> {
-        events.subscribe(|_, world, assets, InitEvent| {
+        events.subscribe(|_, world, assets, _: &InitEvent| {
             setup_objects(world, assets.clone())?;
 
             Ok(())

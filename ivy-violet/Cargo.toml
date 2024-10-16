@@ -1,0 +1,18 @@
+[package]
+name = "ivy-violet"
+version = "0.1.0"
+edition = "2021"
+license-file.workspace = true
+
+[dependencies]
+ivy-input = { path = "../ivy-input/" }
+ivy-core = { path = "../ivy-core/" }
+ivy-wgpu = { path = "../ivy-wgpu/" }
+ivy-assets = { path = "../ivy-assets/" }
+
+anyhow.workspace = true
+flax.workspace = true
+flume.workspace = true
+tracing.workspace = true
+violet.workspace = true
+parking_lot.workspace = true

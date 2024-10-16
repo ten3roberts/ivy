@@ -42,6 +42,7 @@ pub use ivy_physics as physics;
 pub use ivy_postprocessing as postprocessing;
 pub use ivy_random as random;
 pub use ivy_scene as scene;
+pub use ivy_violet;
 pub use ivy_wgpu;
 
 pub use ivy_core::{components::*, App, Extent, Layer};

@@ -29,7 +29,7 @@ pub struct PhysicsPlugin {
 impl PhysicsPlugin {
     pub fn new() -> Self {
         Self {
-            gravity: Vec3::ZERO,
+            gravity: -Vec3::Y * 9.81,
             gizmos: Default::default(),
             configuration: PhysicsStateConfiguration::default(),
         }

@@ -15,6 +15,7 @@ readme = "./README.md"
 license-file = "./LICENSE"
 
 [workspace]
+exclude = ["violet"]
 members = [
   "ivy-core",
   "ivy-profiling",
@@ -29,7 +30,7 @@ members = [
   "ivy-wgpu-types",
   "ivy-profiling",
   "ivy-graphics",
-  "ivy-game",
+  "ivy-game", "ivy-violet",
 ]
 
 [workspace.dependencies]
@@ -70,6 +71,7 @@ rayon = "1.0"
 ordered-float = "4.2"
 rapier3d = { version = "0.22", features = ["simd-stable", "parallel"] }
 nalgebra = { version = "0.33", features = ["convert-glam028"] }
+violet = { path = "./violet", version = "*" }
 
 [dependencies]
 ivy-assets = { path = "./ivy-assets", version = "0.10" }
@@ -82,6 +84,7 @@ ivy-physics = { path = "./ivy-physics", version = "0.10" }
 ivy-postprocessing = { path = "./ivy-postprocessing", version = "0.10" }
 ivy-random = { path = "./ivy-random", version = "0.10" }
 ivy-scene = { path = "./ivy-scene", version = "0.1.0" }
+ivy-violet = { path = "./ivy-violet", version = "*" }
 ivy-wgpu = { path = "./ivy-wgpu", version = "0.10" }
 ivy-wgpu-types = { path = "./ivy-wgpu-types", version = "0.1.0" }
 
@@ -91,6 +94,7 @@ image.workspace = true
 bytemuck.workspace = true
 
 [dev-dependencies]
+violet.workspace = true
 color-eyre = "0.6.1"
 color-backtrace.workspace = true
 rand.workspace = true
@@ -130,3 +134,6 @@ debug = true
 
 [profile.dev.package.rapier3d]
 opt-level = 3
+
+[patch.crates-io]
+flax = { git = "https://github.com/ten3roberts/flax" }
