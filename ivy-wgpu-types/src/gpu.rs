@@ -11,6 +11,7 @@ fn device_features() -> wgpu::Features {
 /// Represents the basic graphics state, such as the device and queue.
 #[derive(Debug, Clone)]
 pub struct Gpu {
+    pub adapter: Arc<wgpu::Adapter>,
     pub device: Arc<wgpu::Device>,
     pub queue: Arc<wgpu::Queue>,
 }
@@ -18,13 +19,6 @@ pub struct Gpu {
 impl Service for Gpu {}
 
 impl Gpu {
-    /// Creates a new Gpu instaence from an aready existing device and queue.
-    ///
-    /// This is used to embed Violet within an already existing wgpu application.
-    pub fn from_device(device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>) -> Self {
-        Self { device, queue }
-    }
-
     /// Creates a new Gpu instance with a surface.
     pub async fn headless() -> Self {
         #[cfg(not(target_arch = "wasm32"))]
@@ -70,6 +64,7 @@ impl Gpu {
             .unwrap();
 
         Self {
+            adapter: Arc::new(adapter),
             device: Arc::new(device),
             queue: Arc::new(queue),
         }
@@ -145,6 +140,7 @@ impl Gpu {
 
         (
             Self {
+                adapter: Arc::new(adapter),
                 device: Arc::new(device),
                 queue: Arc::new(queue),
             },
@@ -155,11 +151,8 @@ impl Gpu {
             },
         )
     }
-
-    // pub fn surface_caps(&self) -> &SurfaceCapabilities {
-    //     &self.surface_caps
-    // }
 }
+
 pub struct Surface {
     size: PhysicalSize<u32>,
     surface: wgpu::Surface<'static>,

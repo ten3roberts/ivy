@@ -6,6 +6,7 @@ use flax::World;
 use image::DynamicImage;
 use ivy_assets::{AssetCache, AsyncAssetKey};
 use ivy_core::profiling::profile_scope;
+use ivy_violet::SharedUiInstance;
 use ivy_wgpu::{
     rendergraph::{self, ExternalResources, RenderGraph},
     shader_library::{ModuleDesc, ShaderLibrary},
@@ -16,6 +17,8 @@ use pbr::{PbrRenderGraph, PbrRenderGraphConfig, SkyboxConfig};
 
 pub struct SurfacePbrPipelineDesc {
     pub hdri: Option<Box<dyn AsyncAssetKey<DynamicImage>>>,
+    /// Render Ui if configured
+    pub ui_instance: Option<SharedUiInstance>,
 }
 
 pub struct SurfacePbrPipeline {
@@ -62,6 +65,7 @@ impl SurfacePbrPipeline {
             assets,
             &mut render_graph,
             shader_library.clone(),
+            desc.ui_instance,
             surface_texture,
         );
 

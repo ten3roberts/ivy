@@ -10,9 +10,11 @@ ivy-core = { path = "../ivy-core/" }
 ivy-wgpu = { path = "../ivy-wgpu/" }
 ivy-assets = { path = "../ivy-assets/" }
 
+winit.workspace = true
 anyhow.workspace = true
 flax.workspace = true
 flume.workspace = true
 tracing.workspace = true
 violet.workspace = true
 parking_lot.workspace = true
+wgpu.workspace = true

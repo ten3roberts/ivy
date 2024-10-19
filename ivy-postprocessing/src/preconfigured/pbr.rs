@@ -4,6 +4,7 @@ use flax::World;
 use futures::{stream, StreamExt};
 use image::DynamicImage;
 use ivy_assets::{AssetCache, AsyncAssetKey};
+use ivy_violet::{SharedUiInstance, UiRenderNode};
 use ivy_wgpu::{
     components::forward_pass,
     renderer::{
@@ -103,6 +104,7 @@ impl PbrRenderGraphConfig {
         assets: &AssetCache,
         render_graph: &mut RenderGraph,
         shader_library: Arc<ShaderLibrary>,
+        ui_instance: Option<SharedUiInstance>,
         destination: TextureHandle,
     ) -> PbrRenderGraph {
         let extent = Extent3d {
@@ -382,6 +384,10 @@ impl PbrRenderGraphConfig {
             destination,
             resolved_depth_texture,
         ));
+
+        if let Some(ui) = ui_instance {
+            render_graph.add_node(UiRenderNode::new(gpu, ui, destination))
+        }
 
         PbrRenderGraph { screensized }
     }

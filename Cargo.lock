@@ -1817,6 +1817,7 @@ dependencies = [
  "itertools 0.13.0",
  "ivy-assets",
  "ivy-core",
+ "ivy-violet",
  "ivy-wgpu",
  "once_cell",
  "tracing",
@@ -1865,6 +1866,8 @@ dependencies = [
  "parking_lot",
  "tracing",
  "violet",
+ "wgpu",
+ "winit",
 ]
 
 [[package]]
