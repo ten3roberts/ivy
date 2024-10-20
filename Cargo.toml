@@ -112,6 +112,7 @@ tracing-subscriber.workspace = true
 tracing-tree = "0.4.0"
 tracing.workspace = true
 wgpu.workspace = true
+itertools.workspace = true
 winit.workspace = true
 async-std.workspace = true
 rapier3d.workspace = true

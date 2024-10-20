@@ -1,4 +1,4 @@
-use std::{cell::RefCell, ops::Deref, rc::Rc};
+use std::{cell::RefCell, mem, ops::Deref, rc::Rc};
 
 use anyhow::Context;
 use flax::World;
@@ -49,7 +49,6 @@ impl UILayer {
         event: &InputEvent,
     ) -> anyhow::Result<()> {
         profile_function!();
-        tracing::info!(?event, "ui input");
         let instance = &mut *self.instance.deref().borrow_mut();
 
         // todo: modifiers changed
@@ -168,13 +167,17 @@ impl Node for UiRenderNode {
 
         let instance = &mut *self.instance.deref().borrow_mut();
 
+        if mem::take(&mut instance.needs_update) {
+            instance.update();
+        }
+
         let root = instance.frame.world_mut().entity(instance.root)?;
 
         let size = root
             .get_copy(rect())
             .context("missing size for canvas")?
             .size();
-        tracing::info!(?size, "ui size");
+
         self.ctx.globals.projview = Mat4::orthographic_lh(0.0, size.x, size.y, 0.0, 0.0, 1000.0);
         self.ctx
             .globals_buffer

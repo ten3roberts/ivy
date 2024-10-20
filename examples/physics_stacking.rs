@@ -71,6 +71,7 @@ pub fn main() -> anyhow::Result<()> {
                     hdri: Some(Box::new(
                         "hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
                     )),
+                    ui_instance: None,
                 },
             ))
         }))

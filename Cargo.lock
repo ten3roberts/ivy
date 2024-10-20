@@ -1684,6 +1684,7 @@ dependencies = [
  "futures",
  "glam 0.28.0",
  "image",
+ "itertools 0.13.0",
  "ivy-assets",
  "ivy-core",
  "ivy-game",
