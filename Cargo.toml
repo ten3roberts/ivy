@@ -30,7 +30,8 @@ members = [
   "ivy-wgpu-types",
   "ivy-profiling",
   "ivy-graphics",
-  "ivy-game", "ivy-violet",
+  "ivy-game",
+  "ivy-ui",
 ]
 
 [workspace.dependencies]
@@ -84,7 +85,7 @@ ivy-physics = { path = "./ivy-physics", version = "0.10" }
 ivy-postprocessing = { path = "./ivy-postprocessing", version = "0.10" }
 ivy-random = { path = "./ivy-random", version = "0.10" }
 ivy-scene = { path = "./ivy-scene", version = "0.1.0" }
-ivy-violet = { path = "./ivy-violet", version = "*" }
+ivy-ui = { path = "./ivy-ui", version = "*" }
 ivy-wgpu = { path = "./ivy-wgpu", version = "0.10" }
 ivy-wgpu-types = { path = "./ivy-wgpu-types", version = "0.1.0" }
 

@@ -1,5 +1,5 @@
 [package]
-name = "ivy-violet"
+name = "ivy-ui"
 version = "0.1.0"
 edition = "2021"
 license-file.workspace = true

@@ -14,7 +14,7 @@ use ivy_core::{
     App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer,
 };
 use ivy_engine::{
-    is_static, ivy_violet::UILayer, main_camera, rotation, scale, RigidBodyBundle, TransformBundle,
+    is_static, ivy_ui::UILayer, main_camera, rotation, scale, RigidBodyBundle, TransformBundle,
 };
 use ivy_game::{
     free_camera::{camera_speed, setup_camera, CameraInputPlugin},

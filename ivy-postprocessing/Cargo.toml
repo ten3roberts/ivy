@@ -13,7 +13,7 @@ readme = "../README.md"
 
 [dependencies]
 ivy-core = { path = "../ivy-core", version = "0.10.0" }
-ivy-violet = { path = "../ivy-violet", version = "*" }
+ivy-ui = { path = "../ivy-ui", version = "*" }
 ivy-assets = { path = "../ivy-assets", version = "0.10.0" }
 ivy-wgpu = { path = "../ivy-wgpu/" }
 

@@ -1695,7 +1695,7 @@ dependencies = [
  "ivy-postprocessing",
  "ivy-random",
  "ivy-scene",
- "ivy-violet",
+ "ivy-ui",
  "ivy-wgpu",
  "ivy-wgpu-types",
  "parking_lot",
@@ -1818,7 +1818,7 @@ dependencies = [
  "itertools 0.13.0",
  "ivy-assets",
  "ivy-core",
- "ivy-violet",
+ "ivy-ui",
  "ivy-wgpu",
  "once_cell",
  "tracing",
@@ -1854,7 +1854,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ivy-violet"
+name = "ivy-ui"
 version = "0.1.0"
 dependencies = [
  "anyhow",

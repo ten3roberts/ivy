@@ -6,7 +6,7 @@ use flax::World;
 use image::DynamicImage;
 use ivy_assets::{AssetCache, AsyncAssetKey};
 use ivy_core::profiling::profile_scope;
-use ivy_violet::SharedUiInstance;
+use ivy_ui::SharedUiInstance;
 use ivy_wgpu::{
     rendergraph::{self, ExternalResources, RenderGraph},
     shader_library::{ModuleDesc, ShaderLibrary},
