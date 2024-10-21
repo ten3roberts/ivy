@@ -12,7 +12,7 @@ use flax::World;
 use crate::{
     components::{self, engine},
     layer::events::{Event, EventRegistry},
-    Events, Layer, LayerDyn,
+    Layer, LayerDyn,
 };
 
 use ivy_assets::{service::FileSystemMapService, AssetCache};
@@ -28,8 +28,6 @@ pub struct App {
 
     pub assets: AssetCache,
     pub world: World,
-    #[deprecated(note = "Use ECS instead")]
-    pub events: Events,
 
     running: bool,
 }
@@ -51,7 +49,6 @@ impl App {
             event_registry: Default::default(),
             world,
             assets: asset_cache,
-            events: Events::new(),
             running: false,
         }
     }
@@ -105,12 +102,6 @@ impl App {
         &mut self.world
     }
 
-    /// Get a mutable reference to the app's events.
-    pub fn events_mut(&mut self) -> &mut Events {
-        #[allow(deprecated)]
-        &mut self.events
-    }
-
     /// Get a mutable reference to the app's asset_cache.
     pub fn asset_cache_mut(&mut self) -> &mut AssetCache {
         &mut self.assets
@@ -125,12 +116,6 @@ impl App {
     pub fn emit<T: Event>(&mut self, event: T) -> anyhow::Result<()> {
         self.event_registry
             .emit(&mut self.layers, &mut self.world, &mut self.assets, &event)
-    }
-
-    /// Get a reference to the app's events.
-    pub fn events(&self) -> &Events {
-        #[allow(deprecated)]
-        &self.events
     }
 
     /// Get a reference to the app's asset_cache.

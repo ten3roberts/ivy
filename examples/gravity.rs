@@ -60,7 +60,10 @@ pub fn main() -> anyhow::Result<()> {
                 assets,
                 gpu,
                 surface,
-                SurfacePbrPipelineDesc { hdri: None },
+                SurfacePbrPipelineDesc {
+                    hdri: None,
+                    ui_instance: None,
+                },
             ))
         }))
         .with_layer(InputLayer::new())

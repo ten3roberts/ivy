@@ -1,4 +1,3 @@
-use bytemuck::cast;
 use flax::{
     fetch::Copied, BoxedSystem, Component, Entity, FetchExt, Query, QueryBorrow, System, World,
 };
@@ -14,7 +13,8 @@ use ivy_core::{
     App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer,
 };
 use ivy_engine::{
-    is_static, ivy_ui::UILayer, main_camera, rotation, scale, RigidBodyBundle, TransformBundle,
+    is_static, ivy_ui::layer::UiLayer, main_camera, rotation, scale, RigidBodyBundle,
+    TransformBundle,
 };
 use ivy_game::{
     free_camera::{camera_speed, setup_camera, CameraInputPlugin},
@@ -44,7 +44,7 @@ use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt
 use tracing_tree::HierarchicalLayer;
 use violet::{
     core::{layout::Alignment, state::State, style::SizeExt, to_owned, widget::*, Widget},
-    futures_signals::signal::{Mutable, SignalExt},
+    futures_signals::signal::Mutable,
     palette::Srgba,
 };
 use winit::{dpi::LogicalSize, window::WindowAttributes};
@@ -70,7 +70,7 @@ pub fn main() -> anyhow::Result<()> {
         .init();
 
     let ui_state = Mutable::new(UiState::default());
-    let ui_layer = UILayer::new(ui_app(ui_state.clone()));
+    let ui_layer = UiLayer::new(ui_app(ui_state.clone()));
     let ui_instance = ui_layer.instance().clone();
 
     if let Err(err) = App::builder()
@@ -95,8 +95,8 @@ pub fn main() -> anyhow::Result<()> {
                 },
             ))
         }))
-        .with_layer(InputLayer::new())
         .with_layer(ui_layer)
+        .with_layer(InputLayer::new())
         .with_layer(LogicLayer)
         .with_layer(
             ScheduledLayer::new(PerTick)

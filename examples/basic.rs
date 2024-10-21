@@ -77,6 +77,7 @@ pub fn main() -> anyhow::Result<()> {
                 surface,
                 SurfacePbrPipelineDesc {
                     hdri: Some(Box::new("hdris/lauter_waterfall_4k.hdr")),
+                    ui_instance: None,
                 },
             ))
         }))

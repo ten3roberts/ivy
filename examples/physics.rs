@@ -60,6 +60,7 @@ pub fn main() -> anyhow::Result<()> {
                 surface,
                 SurfacePbrPipelineDesc {
                     hdri: Some(Box::new("hdris/HDR_artificial_planet_close.hdr")),
+                    ui_instance: None,
                 },
             ))
         }))

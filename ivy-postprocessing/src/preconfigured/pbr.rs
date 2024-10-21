@@ -4,7 +4,7 @@ use flax::World;
 use futures::{stream, StreamExt};
 use image::DynamicImage;
 use ivy_assets::{AssetCache, AsyncAssetKey};
-use ivy_ui::{SharedUiInstance, UiRenderNode};
+use ivy_ui::{node::UiRenderNode, SharedUiInstance};
 use ivy_wgpu::{
     components::forward_pass,
     renderer::{

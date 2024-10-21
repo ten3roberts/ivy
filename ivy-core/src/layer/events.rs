@@ -11,7 +11,7 @@ use ivy_profiling::{profile_function, profile_scope};
 use crate::{Layer, LayerDyn};
 
 type EventCallback<T> =
-    Box<dyn Fn(&mut dyn LayerDyn, &mut World, &mut AssetCache, &T) -> anyhow::Result<()>>;
+    Box<dyn Fn(&mut dyn LayerDyn, &mut World, &mut AssetCache, &T) -> anyhow::Result<bool>>;
 
 pub struct EventDispatcher<T> {
     listeners: Vec<(usize, EventCallback<T>)>,
@@ -34,7 +34,11 @@ impl<T> EventDispatcher<T> {
         for (layer_index, func) in &self.listeners {
             let layer = &mut layers[*layer_index];
             profile_scope!("dispatch_layer", layer.label());
-            func(layer.as_mut(), world, assets, event)?;
+            let handled = func(layer.as_mut(), world, assets, event)?;
+
+            if handled {
+                break;
+            }
         }
 
         Ok(())
@@ -43,7 +47,7 @@ impl<T> EventDispatcher<T> {
     pub fn register<L: Layer>(
         &mut self,
         layer_index: usize,
-        callback: impl 'static + Fn(&mut L, &mut World, &mut AssetCache, &T) -> anyhow::Result<()>,
+        callback: impl 'static + Fn(&mut L, &mut World, &mut AssetCache, &T) -> anyhow::Result<bool>,
     ) {
         self.listeners.push((
             layer_index,
@@ -128,6 +132,20 @@ impl<'a, L: Layer> EventRegisterContext<'a, L> {
     pub fn subscribe<T: Event>(
         &mut self,
         callback: impl 'static + Fn(&mut L, &mut World, &mut AssetCache, &T) -> anyhow::Result<()>,
+    ) {
+        self.registry.get_or_insert::<T>().register(
+            self.index,
+            move |layer, world, assets, value| {
+                callback(layer, world, assets, value)?;
+                Ok(false)
+            },
+        );
+    }
+
+    /// Allows intercepting and controlling the control flow of an event
+    pub fn intercept<T: Event>(
+        &mut self,
+        callback: impl 'static + Fn(&mut L, &mut World, &mut AssetCache, &T) -> anyhow::Result<bool>,
     ) {
         self.registry
             .get_or_insert::<T>()
