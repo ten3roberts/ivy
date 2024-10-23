@@ -41,8 +41,12 @@ impl UiLayer {
                 &mut instance.frame,
                 keyboard_input.key.clone(),
                 keyboard_input.state,
-                None,
+                keyboard_input.text.clone(),
             ),
+            InputEvent::ModifiersChanged(modifiers) => {
+                instance.input_state.on_modifiers_change(modifiers.state());
+                instance.input_state.focused().is_some()
+            }
             InputEvent::Scroll(scroll_motion) => instance
                 .input_state
                 .on_scroll(&mut instance.frame, scroll_motion.delta),
@@ -107,8 +111,7 @@ impl Layer for UiLayer {
         events.subscribe(|this, world, assets, _: &ApplicationReady| this.on_ready(world, assets));
 
         events.intercept(|this, world, assets, event: &InputEvent| {
-            tracing::info!(?event);
-            dbg!(this.on_input_event(world, assets, event))
+            this.on_input_event(world, assets, event)
         });
 
         events.subscribe(|this, world, assets, _: &TickEvent| this.on_tick(world, assets));

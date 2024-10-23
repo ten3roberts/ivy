@@ -1,6 +1,6 @@
 use glam::Vec2;
 use ivy_core::layer::events::Event;
-use winit::dpi::LogicalPosition;
+use winit::{dpi::LogicalPosition, event::Modifiers, keyboard::SmolStr};
 pub use winit::{
     event::{ElementState, MouseButton},
     keyboard::{Key, ModifiersState, NamedKey},
@@ -9,6 +9,7 @@ pub use winit::{
 #[derive(Debug, Clone)]
 pub enum InputEvent {
     Keyboard(KeyboardInput),
+    ModifiersChanged(Modifiers),
     Scroll(ScrollMotion),
     MouseButton(MouseInput),
     CursorMoved(CursorMoved),
@@ -25,6 +26,7 @@ pub struct KeyboardInput {
     pub modifiers: ModifiersState,
     pub key: Key,
     pub state: ElementState,
+    pub text: Option<SmolStr>,
 }
 
 #[derive(Debug, Clone)]
@@ -54,6 +56,7 @@ pub struct CursorMoved {
 pub enum InputKind {
     Key(Key),
     MouseButton(MouseButton),
+    Modifiers,
     CursorMoved,
     CursorDelta,
     Scroll,
@@ -72,6 +75,7 @@ impl InputEvent {
         match self {
             InputEvent::Keyboard(v) => InputKind::Key(v.key.clone()),
             InputEvent::MouseButton(v) => InputKind::MouseButton(v.button),
+            InputEvent::ModifiersChanged(_) => InputKind::Modifiers,
             InputEvent::CursorMoved(_) => InputKind::CursorMoved,
             InputEvent::CursorDelta(_) => InputKind::CursorDelta,
             InputEvent::Scroll(_) => InputKind::Scroll,

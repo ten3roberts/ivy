@@ -559,6 +559,7 @@ mod test {
             key: Key::Character("A".into()),
             state: ElementState::Pressed,
             modifiers: Default::default(),
+            text: Default::default(),
         }));
 
         assert_eq!(activation.get_stimulus(), 1.0);
@@ -567,6 +568,7 @@ mod test {
             key: Key::Character("B".into()),
             state: ElementState::Pressed,
             modifiers: Default::default(),
+            text: Default::default(),
         }));
 
         assert_eq!(activation.get_stimulus(), 1.0);
@@ -575,6 +577,7 @@ mod test {
             key: Key::Character("A".into()),
             state: ElementState::Released,
             modifiers: Default::default(),
+            text: Default::default(),
         }));
 
         assert_eq!(activation.get_stimulus(), 1.0);
@@ -582,6 +585,7 @@ mod test {
             key: Key::Character("B".into()),
             state: ElementState::Released,
             modifiers: Default::default(),
+            text: Default::default(),
         }));
 
         assert_eq!(activation.get_stimulus(), 0.0);

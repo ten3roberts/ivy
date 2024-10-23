@@ -181,10 +181,12 @@ impl<'a> WinitEventHandler<'a> {
                     modifiers: self.modifiers,
                     key: event.logical_key,
                     state: event.state,
+                    text: event.text,
                 }))?;
             }
             WindowEvent::ModifiersChanged(mods) => {
                 self.modifiers = mods.state();
+                self.app.emit(InputEvent::ModifiersChanged(mods))?;
             }
             WindowEvent::Ime(_) => {}
             WindowEvent::CursorMoved {

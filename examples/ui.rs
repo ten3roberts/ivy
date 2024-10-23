@@ -1,9 +1,10 @@
+use color_eyre::owo_colors::OwoColorize;
 use flax::{
     fetch::Copied, BoxedSystem, Component, Entity, FetchExt, Query, QueryBorrow, System, World,
 };
 use glam::{vec3, EulerRot, Mat4, Quat, Vec2, Vec3};
 use itertools::Itertools;
-use ivy_assets::AssetCache;
+use ivy_assets::{AssetCache, StoredKey};
 use ivy_core::{
     app::InitEvent,
     layer::events::EventRegisterContext,
@@ -76,7 +77,7 @@ pub fn main() -> anyhow::Result<()> {
     if let Err(err) = App::builder()
         .with_driver(WinitDriver::new(
             WindowAttributes::default()
-                .with_inner_size(LogicalSize::new(800, 600))
+                .with_inner_size(LogicalSize::new(1920, 1080))
                 .with_title("Ivy UI"),
         ))
         .with_layer(EngineLayer::new())
@@ -120,7 +121,9 @@ pub fn main() -> anyhow::Result<()> {
 }
 
 pub fn ui_app(state: Mutable<UiState>) -> impl Widget {
-    let test = card(SignalWidget(state.signal_ref(|v| {
+    let input = Mutable::new("This is some text".to_string());
+
+    let test = card(SignalWidget(state.signal_ref(move |v| {
         col((
             label(format!("camera speed: {:.1}", v.camera_speed)),
             label(format!("entity count: {}", v.entity_count)),
@@ -139,7 +142,7 @@ pub fn ui_app(state: Mutable<UiState>) -> impl Widget {
         .collect_vec());
 
     Stack::new((
-        Stack::new(card(test))
+        Stack::new(card(col((test, TextInput::new(input.clone())))))
             .with_maximize(Vec2::ONE)
             .with_horizontal_alignment(Alignment::Start),
         Stack::new(card(radio_buttons))
