@@ -15,6 +15,12 @@ impl AppBuilder {
         }
     }
 
+    /// Set the name
+    pub fn with_name(mut self, name: impl Into<String>) -> Self {
+        self.app.name = name.into();
+        self
+    }
+
     pub fn build(self) -> App {
         self.app
     }

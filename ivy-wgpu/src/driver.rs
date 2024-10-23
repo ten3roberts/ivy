@@ -135,8 +135,11 @@ impl<'a> ApplicationHandler for WinitEventHandler<'a> {
             let handle = self.app.world.get(w, window()).unwrap();
             let report = self.stats.report();
             handle.window.set_title(&format!(
-                "Ivy - {:>4.1?} {:>4.1?} {:>4.1?}",
-                report.min_frame_time, report.average_frame_time, report.max_frame_time,
+                "{} - {:>4.1?} {:>4.1?} {:>4.1?}",
+                self.app.name(),
+                report.min_frame_time,
+                report.average_frame_time,
+                report.max_frame_time,
             ))
         }
 

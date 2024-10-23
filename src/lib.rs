@@ -34,9 +34,12 @@
 //!
 //! See the documentation for [`ivy-core::Layer`]
 
+pub use ivy_assets;
 /// Rexports
-pub use ivy_core as base;
+pub use ivy_core;
+pub use ivy_game;
 pub use ivy_gltf;
+pub use ivy_graphics;
 pub use ivy_input as input;
 pub use ivy_physics as physics;
 pub use ivy_postprocessing as postprocessing;

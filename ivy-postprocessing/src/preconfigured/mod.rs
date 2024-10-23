@@ -44,7 +44,7 @@ impl SurfacePbrPipeline {
 
         let shader_library = ShaderLibrary::new().with_module(ModuleDesc {
             path: "./assets/shaders/pbr_base.wgsl",
-            source: &assets.load::<String>(&"shaders/pbr_base.wgsl".to_string()),
+            source: include_str!("../../../assets/shaders/pbr_base.wgsl"),
         });
 
         let shader_library = Arc::new(shader_library);

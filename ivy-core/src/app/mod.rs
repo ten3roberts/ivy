@@ -89,7 +89,7 @@ impl App {
     }
 
     /// Return a reference to the application's name.
-    pub fn name(&self) -> &String {
+    pub fn name(&self) -> &str {
         &self.name
     }
 
