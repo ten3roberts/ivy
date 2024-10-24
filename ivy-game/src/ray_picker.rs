@@ -129,13 +129,13 @@ impl Plugin<FixedTimeStep> for RayPickingPlugin {
         schedule: &mut flax::ScheduleBuilder,
         step: &FixedTimeStep,
     ) -> anyhow::Result<()> {
-        let mut left_click_action = Action::new(pick_ray_action());
+        let mut left_click_action = Action::new();
         left_click_action.add(MouseButtonBinding::new(MouseButton::Left));
 
-        let mut cursor_position = Action::new(cursor_position_action());
+        let mut cursor_position = Action::new();
         cursor_position.add(CursorPositionBinding::new(true));
 
-        let mut ray_distance_action = Action::new(ray_distance_modifier());
+        let mut ray_distance_action = Action::new();
         ray_distance_action.add(KeyBinding::new(Key::Named(NamedKey::ArrowUp)));
         ray_distance_action.add(KeyBinding::new(Key::Named(NamedKey::ArrowDown)).amplitude(-1.0));
 
@@ -148,9 +148,9 @@ impl Plugin<FixedTimeStep> for RayPickingPlugin {
             .set(
                 input_state(),
                 InputState::new()
-                    .with_action(left_click_action)
-                    .with_action(cursor_position)
-                    .with_action(ray_distance_action),
+                    .with_action(pick_ray_action(), left_click_action)
+                    .with_action(cursor_position_action(), cursor_position)
+                    .with_action(ray_distance_modifier(), ray_distance_action),
             )
             .set_default(pick_ray_action())
             .set_default(cursor_position_action())

@@ -55,10 +55,10 @@ impl Plugin<PerTick> for CameraInputPlugin {
 }
 
 pub fn setup_camera() -> flax::EntityBuilder {
-    let mut speed_action = Action::new(camera_speed_delta());
+    let mut speed_action = Action::new();
     speed_action.add(ScrollBinding::new().decompose(Axis2D::Y));
 
-    let mut move_action = Action::new(camera_movement());
+    let mut move_action = Action::new();
     move_action.add(KeyBinding::new(Key::Character("w".into())).compose(Vec3::Z));
     move_action.add(KeyBinding::new(Key::Character("a".into())).compose(-Vec3::X));
     move_action.add(KeyBinding::new(Key::Character("s".into())).compose(-Vec3::Z));
@@ -68,10 +68,10 @@ pub fn setup_camera() -> flax::EntityBuilder {
     move_action.add(KeyBinding::new(Key::Named(NamedKey::Control)).compose(-Vec3::Y));
     move_action.add(KeyBinding::new(Key::Named(NamedKey::Space)).compose(Vec3::Y));
 
-    let mut rotate_action = Action::new(rotation_input());
+    let mut rotate_action = Action::new();
     rotate_action.add(CursorMoveBinding::new().amplitude(Vec2::ONE * 0.001));
 
-    let mut pan_action = Action::new(pan_active());
+    let mut pan_action = Action::new();
     pan_action
         .add(KeyBinding::new(Key::Character("q".into())))
         .add(MouseButtonBinding::new(
@@ -93,10 +93,10 @@ pub fn setup_camera() -> flax::EntityBuilder {
         .set(
             input_state(),
             InputState::new()
-                .with_action(move_action)
-                .with_action(rotate_action)
-                .with_action(pan_action)
-                .with_action(speed_action),
+                .with_action(camera_movement(), move_action)
+                .with_action(rotation_input(), rotate_action)
+                .with_action(pan_active(), pan_action)
+                .with_action(camera_speed_delta(), speed_action),
         )
         .set_default(camera_movement())
         .set_default(rotation_input())
@@ -133,7 +133,8 @@ fn camera_speed_input_system() -> BoxedSystem {
         )))
         .for_each(|(speed, &delta)| {
             let change = 2_f32.powf(delta * 0.05);
-            *speed = (*speed * change).clamp(0.1, 1000.0);
+            // *speed = (*speed * change).clamp(0.1, 1000.0);
+            *speed = 0.0;
             tracing::info!("camera speed: {speed} {delta}");
         })
         .boxed()

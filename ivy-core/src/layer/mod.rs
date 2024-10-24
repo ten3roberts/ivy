@@ -22,8 +22,7 @@ use self::events::{EventRegisterContext, EventRegistry};
 //     }
 // }
 
-/// A layer represents an ordered abstraction of execution logic. Layers are ordered and run in
-/// order.
+/// A layer controls it's own event handling and update logic
 pub trait Layer: 'static {
     /// Description of the layer to add
     fn register(

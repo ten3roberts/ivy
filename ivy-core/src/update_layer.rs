@@ -10,6 +10,9 @@ use crate::{
     Layer,
 };
 
+/// A plugin is added to a layer and allows logic to be added using the ECS
+///
+/// For full control of events and update frequency, use [crate::layer::Layer].
 pub trait Plugin<T: TimeStep> {
     fn install(
         &self,

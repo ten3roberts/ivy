@@ -26,17 +26,20 @@ impl InputState {
         }
     }
 
-    pub fn with_action(mut self, activation: impl Into<ActionKind>) -> Self {
-        self.activations.push(activation.into());
+    pub fn with_action<T>(mut self, target: Component<T>, action: Action<T>) -> Self
+    where
+        (Component<T>, Action<T>): Into<ActionKind>,
+    {
+        self.activations.push((target, action).into());
         self
     }
 
     pub fn apply(&mut self, event: &InputEvent) {
         for activation in self.activations.iter_mut() {
             match activation {
-                ActionKind::Scalar(mapping) => mapping.apply(event),
-                ActionKind::Vector2(mapping) => mapping.apply(event),
-                ActionKind::Vector3(mapping) => mapping.apply(event),
+                ActionKind::Scalar(_, mapping) => mapping.apply(event),
+                ActionKind::Vector2(_, mapping) => mapping.apply(event),
+                ActionKind::Vector3(_, mapping) => mapping.apply(event),
             }
         }
     }
@@ -44,14 +47,14 @@ impl InputState {
     pub fn update(&mut self, entity: &EntityRef) -> anyhow::Result<()> {
         for activation in &mut self.activations {
             match activation {
-                ActionKind::Scalar(m) => {
-                    m.update(entity)?;
+                ActionKind::Scalar(target, m) => {
+                    m.update(*target, entity)?;
                 }
-                ActionKind::Vector2(m) => {
-                    m.update(entity)?;
+                ActionKind::Vector2(target, m) => {
+                    m.update(*target, entity)?;
                 }
-                ActionKind::Vector3(m) => {
-                    m.update(entity)?;
+                ActionKind::Vector3(target, m) => {
+                    m.update(*target, entity)?;
                 }
             }
         }
@@ -67,43 +70,49 @@ impl Default for InputState {
 }
 
 pub enum ActionKind {
-    Scalar(Action<f32>),
-    Vector2(Action<Vec2>),
-    Vector3(Action<Vec3>),
+    Scalar(Component<f32>, Action<f32>),
+    Vector2(Component<Vec2>, Action<Vec2>),
+    Vector3(Component<Vec3>, Action<Vec3>),
 }
 
-impl From<Action<f32>> for ActionKind {
-    fn from(v: Action<f32>) -> Self {
-        Self::Scalar(v)
+impl From<(Component<f32>, Action<f32>)> for ActionKind {
+    fn from(v: (Component<f32>, Action<f32>)) -> Self {
+        Self::Scalar(v.0, v.1)
     }
 }
 
-impl From<Action<Vec2>> for ActionKind {
-    fn from(v: Action<Vec2>) -> Self {
-        Self::Vector2(v)
+impl From<(Component<Vec2>, Action<Vec2>)> for ActionKind {
+    fn from(v: (Component<Vec2>, Action<Vec2>)) -> Self {
+        Self::Vector2(v.0, v.1)
     }
 }
 
-impl From<Action<Vec3>> for ActionKind {
-    fn from(v: Action<Vec3>) -> Self {
-        Self::Vector3(v)
+impl From<(Component<Vec3>, Action<Vec3>)> for ActionKind {
+    fn from(v: (Component<Vec3>, Action<Vec3>)) -> Self {
+        Self::Vector3(v.0, v.1)
     }
 }
 
 pub struct Action<T> {
-    target: Component<T>,
     bindings: HashMap<InputKind, Box<dyn Binding<T, Input = InputEvent>>>,
 }
 
 impl<T: ComponentValue + Stimulus> Action<T> {
-    pub fn new(target: Component<T>) -> Self {
+    pub fn new() -> Self {
         Self {
             bindings: HashMap::new(),
-            target,
         }
     }
 
     pub fn add(&mut self, action: impl 'static + Binding<T, Input = InputEvent>) -> &mut Self {
+        self.bindings.insert(
+            action.binding(),
+            Box::new(action) as Box<dyn Binding<T, Input = InputEvent>>,
+        );
+        self
+    }
+
+    pub fn with_binding(mut self, action: impl 'static + Binding<T, Input = InputEvent>) -> Self {
         self.bindings.insert(
             action.binding(),
             Box::new(action) as Box<dyn Binding<T, Input = InputEvent>>,
@@ -123,16 +132,26 @@ impl<T: ComponentValue + Stimulus> Action<T> {
             .fold(T::ZERO, |acc, binding| acc.combine(&binding.read()))
     }
 
-    fn update(&mut self, entity: &EntityRef) -> Result<(), error::MissingTargetError>
+    fn update(
+        &mut self,
+        target: Component<T>,
+        entity: &EntityRef,
+    ) -> Result<(), error::MissingTargetError>
     where
         T: PartialEq,
     {
         entity
-            .update_dedup(self.target, self.get_stimulus())
+            .update_dedup(target, self.get_stimulus())
             .ok_or_else(|| error::MissingTargetError {
-                target: self.target.desc(),
+                target: target.desc(),
                 entity: entity.id(),
             })
+    }
+}
+
+impl<T: ComponentValue + Stimulus> Default for Action<T> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -546,14 +565,9 @@ mod test {
 
     #[test]
     fn input_state() {
-        flax::component! {
-            target: f32,
-        }
-        let mut activation = Action::new(target());
-
-        activation
-            .add(KeyBinding::new(Key::Character("A".into())))
-            .add(KeyBinding::new(Key::Character("B".into())));
+        let mut activation = Action::new()
+            .with_binding(KeyBinding::new(Key::Character("A".into())))
+            .with_binding(KeyBinding::new(Key::Character("B".into())));
 
         activation.apply(&InputEvent::Keyboard(KeyboardInput {
             key: Key::Character("A".into()),
