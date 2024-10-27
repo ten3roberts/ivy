@@ -34,9 +34,9 @@ flax::component! {
     pub camera_speed_delta: f32,
 }
 
-pub struct CameraInputPlugin;
+pub struct FreeCameraPlugin;
 
-impl Plugin<PerTick> for CameraInputPlugin {
+impl Plugin<PerTick> for FreeCameraPlugin {
     fn install(
         &self,
         _: &mut World,
@@ -133,8 +133,7 @@ fn camera_speed_input_system() -> BoxedSystem {
         )))
         .for_each(|(speed, &delta)| {
             let change = 2_f32.powf(delta * 0.05);
-            // *speed = (*speed * change).clamp(0.1, 1000.0);
-            *speed = 0.0;
+            *speed = (*speed * change).clamp(0.1, 1000.0);
             tracing::info!("camera speed: {speed} {delta}");
         })
         .boxed()

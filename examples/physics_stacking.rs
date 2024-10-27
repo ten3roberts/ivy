@@ -11,7 +11,7 @@ use ivy_core::{
 };
 use ivy_engine::{is_static, main_camera, rotation, scale, RigidBodyBundle, TransformBundle};
 use ivy_game::{
-    free_camera::{setup_camera, CameraInputPlugin},
+    free_camera::{setup_camera, FreeCameraPlugin},
     ray_picker::RayPickingPlugin,
 };
 use ivy_graphics::texture::TextureDesc;
@@ -77,7 +77,7 @@ pub fn main() -> anyhow::Result<()> {
         }))
         .with_layer(InputLayer::new())
         .with_layer(LogicLayer)
-        .with_layer(ScheduledLayer::new(PerTick).with_plugin(CameraInputPlugin))
+        .with_layer(ScheduledLayer::new(PerTick).with_plugin(FreeCameraPlugin))
         .with_layer(
             ScheduledLayer::new(FixedTimeStep::new(0.02))
                 .with_plugin(

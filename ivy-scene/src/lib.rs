@@ -1,10 +1,11 @@
 use flax::{components::child_of, Entity, EntityBuilder};
-use ivy_assets::AssetCache;
+use ivy_assets::{Asset, AssetCache};
 use ivy_core::EntityBuilderExt;
 use ivy_gltf::GltfNode;
 use ivy_wgpu::{
     components::{mesh_primitive, shadow_pass},
     renderer::RenderObjectBundle,
+    shader::ShaderPassDesc,
     shaders::{PbrShaderDesc, ShadowShaderDesc, SkinnedPbrShaderDesc, SkinnedShadowShaderDesc},
 };
 
@@ -20,6 +21,14 @@ pub trait GltfNodeExt {
         entity: &'a mut EntityBuilder,
         opts: NodeMountOptions,
     ) -> &'a mut EntityBuilder;
+
+    fn mount_with_shaders<'a>(
+        &self,
+        shader: &Asset<ShaderPassDesc>,
+        shadow_shader: &Asset<ShaderPassDesc>,
+        entity: &'a mut EntityBuilder,
+        opts: NodeMountOptions,
+    ) -> &'a mut EntityBuilder;
 }
 
 impl GltfNodeExt for GltfNode {
@@ -29,12 +38,10 @@ impl GltfNodeExt for GltfNode {
         entity: &'a mut EntityBuilder,
         opts: NodeMountOptions,
     ) -> &'a mut EntityBuilder {
-        let skin = self.skin();
-
         let shader;
         let shadow_shader;
 
-        match skin {
+        match self.skin() {
             Some(_) => {
                 shader = assets.load(&SkinnedPbrShaderDesc);
                 shadow_shader = assets.load(&SkinnedShadowShaderDesc);
@@ -44,6 +51,18 @@ impl GltfNodeExt for GltfNode {
                 shadow_shader = assets.load(&ShadowShaderDesc);
             }
         }
+
+        self.mount_with_shaders(&shader, &shadow_shader, entity, opts)
+    }
+
+    fn mount_with_shaders<'a>(
+        &self,
+        shader: &Asset<ShaderPassDesc>,
+        shadow_shader: &Asset<ShaderPassDesc>,
+        entity: &'a mut EntityBuilder,
+        opts: NodeMountOptions,
+    ) -> &'a mut EntityBuilder {
+        let skin = self.skin();
 
         if let Some(mesh) = self.mesh() {
             for primitive in mesh.primitives() {
@@ -74,7 +93,10 @@ impl GltfNodeExt for GltfNode {
         entity.mount(self.transform());
 
         for child in self.children() {
-            entity.attach(child_of, child.mount(assets, &mut Entity::builder(), opts));
+            entity.attach(
+                child_of,
+                child.mount_with_shaders(shader, shadow_shader, &mut Entity::builder(), opts),
+            );
         }
 
         entity

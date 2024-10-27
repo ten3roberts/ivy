@@ -11,6 +11,8 @@ flax::component! {
     pub rotation: Quat => [ Debuggable ],
     pub scale: Vec3 => [ Debuggable ],
 
+    pub parent_transform: Mat4,
+
     /// Computed world space transform based on [`position`], [`rotation`], and [`scale`].
     pub world_transform: Mat4 => [ Debuggable ],
 
@@ -133,7 +135,8 @@ impl Bundle for TransformBundle {
             .set(position(), self.pos)
             .set(rotation(), self.rotation)
             .set(scale(), self.scale)
-            .set(world_transform(), Default::default());
+            .set(world_transform(), Default::default())
+            .set(parent_transform(), Default::default());
     }
 }
 

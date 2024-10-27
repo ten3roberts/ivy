@@ -3,6 +3,7 @@ use std::borrow::Cow;
 use wgpu::Face;
 
 /// Describes a shader
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ShaderPassDesc {
     pub path: String,
     pub label: String,

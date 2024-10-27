@@ -10,7 +10,7 @@ use ivy_core::{
     App, EngineLayer, EntityBuilderExt, Layer, DEG_180, DEG_45,
 };
 use ivy_engine::{main_camera, RigidBodyBundle, TransformBundle};
-use ivy_game::free_camera::{setup_camera, CameraInputPlugin};
+use ivy_game::free_camera::{setup_camera, FreeCameraPlugin};
 use ivy_graphics::texture::TextureDesc;
 use ivy_input::layer::InputLayer;
 use ivy_physics::{ColliderBundle, PhysicsPlugin};
@@ -66,7 +66,7 @@ pub fn main() -> anyhow::Result<()> {
         }))
         .with_layer(InputLayer::new())
         .with_layer(LogicLayer)
-        .with_layer(ScheduledLayer::new(PerTick).with_plugin(CameraInputPlugin))
+        .with_layer(ScheduledLayer::new(PerTick).with_plugin(FreeCameraPlugin))
         .with_layer(ScheduledLayer::new(FixedTimeStep::new(0.02)).with_plugin(
             PhysicsPlugin::new().with_gizmos(ivy_physics::GizmoSettings { rigidbody: true }),
         ))

@@ -7,7 +7,7 @@ use crate::{
 use anyhow::Context;
 use flax::{
     components::child_of, entity_ids, events::EventSubscriber, fetch::Copied, filter::ChangeFilter,
-    BoxedSystem, CommandBuffer, Component, EntityIds, FetchExt, Mutable, Query, QueryBorrow,
+    BoxedSystem, CommandBuffer, Component, EntityIds, FetchExt, Mutable, Opt, Query, QueryBorrow,
     RelationExt, System, World,
 };
 use glam::{Mat4, Vec3};
@@ -18,9 +18,10 @@ use ivy_core::{
     Color, ColorExt,
 };
 use rapier3d::prelude::{
-    ColliderBuilder, RigidBodyBuilder, RigidBodyHandle, RigidBodyType, SharedShape,
+    ColliderBuilder, LockedAxes, RigidBodyBuilder, RigidBodyHandle, RigidBodyType, SharedShape,
 };
 
+#[allow(clippy::type_complexity)]
 pub fn register_bodies_system() -> BoxedSystem {
     System::builder()
         .with_cmd_mut()
@@ -28,6 +29,7 @@ pub fn register_bodies_system() -> BoxedSystem {
         .with_query(Query::new((
             entity_ids(),
             rigid_body_type().modified(),
+            locked_axes().opt(),
             can_sleep().satisfied(),
             gravity_influence().opt_or(1.0),
         )))
@@ -39,16 +41,18 @@ pub fn register_bodies_system() -> BoxedSystem {
                 (
                     EntityIds,
                     ChangeFilter<RigidBodyType>,
+                    Opt<Component<LockedAxes>>,
                     _,
                     _,
                 ),
             >| {
                 if let Some(state) = query.first() {
-                    for (id, &body_type, can_sleep, &gravity) in bodies.iter() {
+                    for (id, &body_type, locked_axes, can_sleep, &gravity) in bodies.iter() {
                         let rb = state.add_body(
                             id,
                             RigidBodyBuilder::new(body_type)
                                 .can_sleep(can_sleep)
+                                .locked_axes(locked_axes.copied().unwrap_or(LockedAxes::empty()))
                                 .gravity_scale(gravity)
                                 .build(),
                         );
@@ -235,6 +239,7 @@ pub fn sync_simulation_bodies_system() -> BoxedSystem {
         .boxed()
 }
 
+#[allow(clippy::type_complexity)]
 pub fn gizmo_system(dt: f32) -> BoxedSystem {
     System::builder()
         .with_query(Query::new(ivy_core::components::gizmos()))
@@ -300,6 +305,7 @@ pub fn gizmo_system(dt: f32) -> BoxedSystem {
         .boxed()
 }
 
+#[allow(clippy::type_complexity)]
 pub fn configure_effectors_system() -> BoxedSystem {
     System::builder()
         .with_query(Query::new(physics_state()))

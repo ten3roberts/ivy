@@ -97,6 +97,8 @@ impl PbrRenderGraph {
 }
 
 impl PbrRenderGraphConfig {
+    #[allow(clippy::too_many_arguments)]
+    // TODO: fix arguments count
     pub fn configure(
         self,
         world: &mut World,

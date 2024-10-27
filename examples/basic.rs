@@ -19,7 +19,7 @@ use ivy_engine::{
     TransformBundle,
 };
 use ivy_game::{
-    free_camera::{setup_camera, CameraInputPlugin},
+    free_camera::{setup_camera, FreeCameraPlugin},
     ray_picker::RayPickingPlugin,
 };
 use ivy_gltf::{animation::player::Animator, components::animator, Document};
@@ -85,7 +85,7 @@ pub fn main() -> anyhow::Result<()> {
         .with_layer(LogicLayer::new())
         .with_layer(
             ScheduledLayer::new(PerTick)
-                .with_plugin(CameraInputPlugin)
+                .with_plugin(FreeCameraPlugin)
                 .with_plugin(GizmosPlugin),
         )
         .with_layer(

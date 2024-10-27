@@ -553,6 +553,47 @@ pub trait BindingExt<V> {
             amplitude,
         }
     }
+
+    fn rising_edge(self) -> RisingEdge<Self>
+    where
+        Self: Sized,
+    {
+        RisingEdge {
+            binding: self,
+            prev_value: 0.0,
+        }
+    }
+}
+
+pub struct RisingEdge<T> {
+    binding: T,
+    prev_value: f32,
+}
+
+impl<T> Binding<f32> for RisingEdge<T>
+where
+    T: Binding<f32>,
+{
+    type Input = T::Input;
+
+    fn apply(&mut self, input: &Self::Input) {
+        self.binding.apply(input);
+    }
+
+    fn read(&mut self) -> f32 {
+        let value = self.binding.read();
+        if self.prev_value == 0.0 {
+            self.prev_value = value;
+            return value;
+        }
+        self.prev_value = value;
+
+        0.0
+    }
+
+    fn binding(&self) -> InputKind {
+        self.binding.binding()
+    }
 }
 
 impl<T, V> BindingExt<V> for T where T: Binding<V> {}

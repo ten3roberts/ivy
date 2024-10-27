@@ -1,10 +1,9 @@
-use color_eyre::owo_colors::OwoColorize;
 use flax::{
     fetch::Copied, BoxedSystem, Component, Entity, FetchExt, Query, QueryBorrow, System, World,
 };
 use glam::{vec3, EulerRot, Mat4, Quat, Vec2, Vec3};
 use itertools::Itertools;
-use ivy_assets::{AssetCache, StoredKey};
+use ivy_assets::AssetCache;
 use ivy_core::{
     app::InitEvent,
     layer::events::EventRegisterContext,
@@ -18,7 +17,7 @@ use ivy_engine::{
     TransformBundle,
 };
 use ivy_game::{
-    free_camera::{camera_speed, setup_camera, CameraInputPlugin},
+    free_camera::{camera_speed, setup_camera, FreeCameraPlugin},
     ray_picker::RayPickingPlugin,
 };
 use ivy_graphics::texture::TextureDesc;
@@ -101,7 +100,7 @@ pub fn main() -> anyhow::Result<()> {
         .with_layer(LogicLayer)
         .with_layer(
             ScheduledLayer::new(PerTick)
-                .with_plugin(CameraInputPlugin)
+                .with_plugin(FreeCameraPlugin)
                 .with_plugin(UiStatePlugin {
                     state: ui_state.clone(),
                 }),

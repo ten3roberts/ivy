@@ -1,7 +1,8 @@
 use flax::{component, Debuggable};
 use glam::Vec3;
 use rapier3d::prelude::{
-    ColliderHandle, GenericJoint, ImpulseJointHandle, RigidBodyHandle, RigidBodyType, SharedShape,
+    ColliderHandle, GenericJoint, ImpulseJointHandle, LockedAxes, RigidBodyHandle, RigidBodyType,
+    SharedShape,
 };
 
 use crate::{state::PhysicsState, Effector};
@@ -14,6 +15,7 @@ component! {
     pub collider_handle: ColliderHandle,
 
     pub rigid_body_type: RigidBodyType,
+    pub locked_axes: LockedAxes,
     pub collider_shape: SharedShape,
     // density of a collider, used to calculate mass
     pub density: f32 => [ Debuggable ],

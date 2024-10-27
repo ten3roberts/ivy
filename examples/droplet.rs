@@ -10,7 +10,7 @@ use ivy_core::{
     App, AsyncCommandBuffer, EngineLayer, EntityBuilderExt, Layer, DEG_90,
 };
 use ivy_engine::{async_commandbuffer, engine, main_camera, TransformBundle};
-use ivy_game::free_camera::{setup_camera, CameraInputPlugin};
+use ivy_game::free_camera::{setup_camera, FreeCameraPlugin};
 use ivy_gltf::Document;
 use ivy_input::layer::InputLayer;
 use ivy_physics::PhysicsPlugin;
@@ -63,7 +63,7 @@ pub fn main() -> anyhow::Result<()> {
         }))
         .with_layer(InputLayer::new())
         .with_layer(LogicLayer)
-        .with_layer(ScheduledLayer::new(PerTick).with_plugin(CameraInputPlugin))
+        .with_layer(ScheduledLayer::new(PerTick).with_plugin(FreeCameraPlugin))
         .with_layer(ScheduledLayer::new(FixedTimeStep::new(0.02)).with_plugin(PhysicsPlugin::new()))
         .run()
     {
