@@ -6,7 +6,7 @@ use naga_oil::compose::{Composer, ShaderDefValue};
 use parking_lot::Mutex;
 use wgpu::{ShaderModule, ShaderModuleDescriptor, ShaderSource};
 
-use crate::shader::ShaderPassDesc;
+use crate::shader::ShaderPass;
 
 pub struct ModuleDesc<'a> {
     pub path: &'a str,
@@ -20,8 +20,8 @@ pub struct ShaderModuleDesc<'a> {
     pub shader_defs: HashMap<String, ShaderDefValue>,
 }
 
-impl<'a> From<&'a ShaderPassDesc> for ShaderModuleDesc<'a> {
-    fn from(value: &'a ShaderPassDesc) -> Self {
+impl<'a> From<&'a ShaderPass> for ShaderModuleDesc<'a> {
+    fn from(value: &'a ShaderPass) -> Self {
         Self {
             path: &value.path,
             source: &value.source,

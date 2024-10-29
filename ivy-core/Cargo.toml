@@ -39,4 +39,4 @@ tracing.workspace = true
 [features]
 profile = [ "ivy-profiling/profile_with_puffin", "puffin", "puffin_http" ]
 default = []
-serialize = ["serde", "glam/serde", "palette/serializing"]
+serde = ["dep:serde", "glam/serde", "palette/serializing"]

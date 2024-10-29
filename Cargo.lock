@@ -159,6 +159,9 @@ name = "arrayvec"
 version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "as-raw-xcb-connection"
@@ -365,6 +368,9 @@ name = "bit-vec"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2c54ff287cfc0a34f38a6b832ea1bd8e448a330b3e40a50859e6488bee07f22"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "bitflags"
@@ -377,6 +383,9 @@ name = "bitflags"
 version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b048fb63fd8b5923fc5aa7b340d8e156aec7ec02f0c78fa8a6ddc2613f6f71de"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "bitvec"
@@ -989,7 +998,7 @@ dependencies = [
 [[package]]
 name = "flax"
 version = "0.7.1"
-source = "git+https://github.com/ten3roberts/flax#c6a012ea6df6a8a53a1f3e0914f5aacfe121e7ea"
+source = "git+https://github.com/ten3roberts/flax#339d5ae04ea6a8a44edc86915f5101dda2e1cee3"
 dependencies = [
  "anyhow",
  "atomic_refcell",
@@ -1009,7 +1018,7 @@ dependencies = [
 [[package]]
 name = "flax-derive"
 version = "0.7.1"
-source = "git+https://github.com/ten3roberts/flax#c6a012ea6df6a8a53a1f3e0914f5aacfe121e7ea"
+source = "git+https://github.com/ten3roberts/flax#339d5ae04ea6a8a44edc86915f5101dda2e1cee3"
 dependencies = [
  "heck",
  "itertools 0.13.0",
@@ -1636,6 +1645,8 @@ dependencies = [
  "image",
  "ivy-profiling",
  "parking_lot",
+ "serde",
+ "serde_json",
  "slotmap",
  "thiserror",
  "tracing",
@@ -1896,6 +1907,7 @@ dependencies = [
  "puffin",
  "puffin_http",
  "rayon",
+ "serde",
  "slab",
  "slotmap",
  "tracing",
@@ -2253,6 +2265,7 @@ dependencies = [
  "num-complex 0.4.6",
  "num-rational 0.4.2",
  "num-traits",
+ "serde",
  "simba 0.9.0",
  "typenum",
 ]
@@ -2371,6 +2384,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "73f88a1307638156682bada9d7604135552957b7818057dcef22705b4d509495"
 dependencies = [
  "num-traits",
+ "serde",
 ]
 
 [[package]]
@@ -2784,6 +2798,7 @@ dependencies = [
  "ordered-float",
  "rstar",
  "rustc-hash 2.0.0",
+ "serde",
  "simba 0.9.0",
  "slab",
  "smallvec",
@@ -3106,6 +3121,7 @@ dependencies = [
  "parry3d",
  "rayon",
  "rustc-hash 2.0.0",
+ "serde",
  "simba 0.9.0",
  "thiserror",
  "vec_map",
@@ -4272,6 +4288,7 @@ dependencies = [
  "parking_lot",
  "profiling",
  "raw-window-handle",
+ "serde",
  "smallvec",
  "static_assertions",
  "wasm-bindgen",
@@ -4301,6 +4318,7 @@ dependencies = [
  "profiling",
  "raw-window-handle",
  "rustc-hash 1.1.0",
+ "serde",
  "smallvec",
  "thiserror",
  "wgpu-hal",
@@ -4360,6 +4378,7 @@ checksum = "bc9d91f0e2c4b51434dfa6db77846f2793149d8e73f800fa2e41f52b8eac3c5d"
 dependencies = [
  "bitflags 2.6.0",
  "js-sys",
+ "serde",
  "web-sys",
 ]
 

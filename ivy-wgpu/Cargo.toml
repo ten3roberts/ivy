@@ -36,6 +36,10 @@ slotmap.workspace = true
 mikktspace.workspace = true
 rayon.workspace = true
 ordered-float.workspace = true
+serde = { workspace = true, optional = true }
 
 [dev-dependencies]
 tracing-subscriber.workspace = true
+
+[features]
+serde = [ "dep:serde", "wgpu/serde" ]

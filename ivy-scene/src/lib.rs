@@ -1,18 +1,16 @@
-use flax::{components::child_of, Entity, EntityBuilder};
+use flax::{components::child_of, Component, Entity, EntityBuilder};
 use ivy_assets::{Asset, AssetCache};
 use ivy_core::EntityBuilderExt;
 use ivy_gltf::GltfNode;
 use ivy_wgpu::{
-    components::{mesh_primitive, shadow_pass},
+    components::{forward_pass, mesh_primitive, shadow_pass},
     renderer::RenderObjectBundle,
-    shader::ShaderPassDesc,
+    shader::ShaderPass,
     shaders::{PbrShaderDesc, ShadowShaderDesc, SkinnedPbrShaderDesc, SkinnedShadowShaderDesc},
 };
 
 #[derive(Debug, Clone, Copy)]
-pub struct NodeMountOptions {
-    pub cast_shadow: bool,
-}
+pub struct NodeMountOptions {}
 
 pub trait GltfNodeExt {
     fn mount<'a>(
@@ -24,9 +22,8 @@ pub trait GltfNodeExt {
 
     fn mount_with_shaders<'a>(
         &self,
-        shader: &Asset<ShaderPassDesc>,
-        shadow_shader: &Asset<ShaderPassDesc>,
         entity: &'a mut EntityBuilder,
+        shaders: &[(Component<Asset<ShaderPass>>, Asset<ShaderPass>)],
         opts: NodeMountOptions,
     ) -> &'a mut EntityBuilder;
 }
@@ -52,14 +49,17 @@ impl GltfNodeExt for GltfNode {
             }
         }
 
-        self.mount_with_shaders(&shader, &shadow_shader, entity, opts)
+        self.mount_with_shaders(
+            entity,
+            &[(forward_pass(), shader), (shadow_pass(), shadow_shader)],
+            opts,
+        )
     }
 
     fn mount_with_shaders<'a>(
         &self,
-        shader: &Asset<ShaderPassDesc>,
-        shadow_shader: &Asset<ShaderPassDesc>,
         entity: &'a mut EntityBuilder,
+        shaders: &[(Component<Asset<ShaderPass>>, Asset<ShaderPass>)],
         opts: NodeMountOptions,
     ) -> &'a mut EntityBuilder {
         let skin = self.skin();
@@ -70,15 +70,7 @@ impl GltfNodeExt for GltfNode {
 
                 let mut child = Entity::builder();
 
-                child.mount(RenderObjectBundle::new(
-                    primitive.into(),
-                    material,
-                    shader.clone(),
-                ));
-
-                if opts.cast_shadow {
-                    child.set(shadow_pass(), shadow_shader.clone());
-                }
+                child.mount(RenderObjectBundle::new(primitive.into(), material, shaders));
 
                 entity.attach(mesh_primitive, child);
             }
@@ -95,7 +87,7 @@ impl GltfNodeExt for GltfNode {
         for child in self.children() {
             entity.attach(
                 child_of,
-                child.mount_with_shaders(shader, shadow_shader, &mut Entity::builder(), opts),
+                child.mount_with_shaders(&mut Entity::builder(), shaders, opts),
             );
         }
 

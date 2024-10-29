@@ -80,7 +80,8 @@ impl Default for TransformQuery {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct TransformBundle {
     pub pos: Vec3,
     pub rotation: Quat,

@@ -130,7 +130,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
             .mount(RenderObjectBundle::new(
                 MeshDesc::Content(assets.load(&CubePrimitive)),
                 red_material.clone(),
-                shader.clone(),
+                &[(forward_pass(), shader.clone())],
             ))
             .set(shadow_pass(), shadow.clone());
 

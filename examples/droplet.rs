@@ -1,6 +1,6 @@
 use flax::{Entity, Query, World};
 use glam::{Mat4, Quat, Vec3};
-use ivy_assets::{Asset, AssetCache, AsyncAssetKey};
+use ivy_assets::{Asset, AssetCache, DynAsyncAssetDesc};
 use ivy_core::{
     app::InitEvent,
     layer::events::EventRegisterContext,
@@ -80,11 +80,7 @@ async fn setup_objects(cmd: AsyncCommandBuffer, assets: AssetCache) -> anyhow::R
     document
         .node(0)
         .unwrap()
-        .mount(
-            &assets,
-            &mut Entity::builder(),
-            NodeMountOptions { cast_shadow: true },
-        )
+        .mount(&assets, &mut Entity::builder(), NodeMountOptions {})
         .mount(
             TransformBundle::default()
                 .with_position(-Vec3::Z)

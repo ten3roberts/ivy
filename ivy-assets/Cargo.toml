@@ -20,3 +20,8 @@ thiserror.workspace = true
 anyhow.workspace = true
 futures.workspace = true
 async-std.workspace = true
+serde = { workspace =  true, optional = true }
+serde_json = { workspace =  true, optional =  true }
+
+[features]
+serde = [ "dep:serde", "serde_json" ]

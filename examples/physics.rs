@@ -16,7 +16,9 @@ use ivy_input::layer::InputLayer;
 use ivy_physics::{ColliderBundle, PhysicsPlugin};
 use ivy_postprocessing::preconfigured::{SurfacePbrPipeline, SurfacePbrPipelineDesc};
 use ivy_wgpu::{
-    components::{cast_shadow, environment_data, light_data, light_kind, projection_matrix},
+    components::{
+        cast_shadow, environment_data, forward_pass, light_data, light_kind, projection_matrix,
+    },
     driver::WinitDriver,
     events::ResizedEvent,
     layer::GraphicsLayer,
@@ -116,7 +118,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
             .mount(RenderObjectBundle::new(
                 cube_mesh.clone(),
                 material.clone(),
-                shader.clone(),
+                &[(forward_pass(), shader.clone())],
             ))
             .spawn(world);
     };

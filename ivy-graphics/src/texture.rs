@@ -1,5 +1,5 @@
 use image::{DynamicImage, ImageBuffer};
-use ivy_assets::{Asset, AssetDesc, AsyncAssetDesc, AsyncAssetKey, DynAssetDesc};
+use ivy_assets::{Asset, AssetDesc, AsyncAssetDesc, DynAsyncAssetDesc, DynAssetDesc};
 use ivy_core::palette::Srgba;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

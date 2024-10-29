@@ -14,7 +14,8 @@ use crate::{
     Effector,
 };
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 /// Bundle for a rigidbody without collider
 pub struct RigidBodyBundle {
     pub body_type: RigidBodyType,
@@ -110,6 +111,8 @@ impl Bundle for RigidBodyBundle {
     }
 }
 
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ColliderBundle {
     shape: SharedShape,
     density: f32,

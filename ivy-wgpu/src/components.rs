@@ -9,7 +9,7 @@ use crate::{
     material_desc::MaterialDesc,
     mesh_desc::MeshDesc,
     renderer::{shadowmapping::LightShadowData, EnvironmentData},
-    shader::ShaderPassDesc,
+    shader::ShaderPass,
 };
 
 component! {
@@ -17,8 +17,8 @@ component! {
 
     pub mesh: MeshDesc,
     pub material: MaterialDesc,
-    pub forward_pass: Asset<ShaderPassDesc>,
-    pub shadow_pass: Asset<ShaderPassDesc>,
+    pub forward_pass: Asset<ShaderPass>,
+    pub shadow_pass: Asset<ShaderPass>,
 
     pub mesh_primitive(entity): (),
 

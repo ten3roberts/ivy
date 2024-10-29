@@ -18,6 +18,8 @@ pub mod cell;
 pub mod fs;
 mod handle;
 pub mod map;
+#[cfg(feature = "serde")]
+pub mod serde;
 pub mod service;
 pub mod stored;
 use fs::{AssetFromPath, AsyncAssetFromPath};
@@ -327,11 +329,11 @@ where
     }
 }
 
-pub trait AsyncAssetKey<V>: 'static + Send + Sync {
+pub trait DynAsyncAssetDesc<V>: 'static + Send + Sync {
     fn load_async(&self, assets: &AssetCache) -> AssetLoadFuture<V, anyhow::Error>;
 }
 
-impl<T, V> AsyncAssetKey<V> for T
+impl<T, V> DynAsyncAssetDesc<V> for T
 where
     T: AsyncAssetDesc<V>,
     T::Error: Debug + Display,

@@ -1,17 +1,19 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, collections::BTreeMap};
 
+use flax::Component;
 use wgpu::Face;
 
 /// Describes a shader
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ShaderPassDesc {
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct ShaderPass {
     pub path: String,
     pub label: String,
     pub source: Cow<'static, str>,
     pub cull_mode: Option<Face>,
 }
 
-impl ShaderPassDesc {
+impl ShaderPass {
     pub fn new(
         path: impl Into<String>,
         label: impl Into<String>,

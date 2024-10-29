@@ -3,7 +3,7 @@ use std::{future::ready, mem::size_of, sync::Arc};
 use flax::World;
 use futures::{stream, StreamExt};
 use image::DynamicImage;
-use ivy_assets::{AssetCache, AsyncAssetKey};
+use ivy_assets::{AssetCache, DynAsyncAssetDesc};
 use ivy_ui::{node::UiRenderNode, SharedUiInstance};
 use ivy_wgpu::{
     components::forward_pass,
@@ -39,7 +39,7 @@ pub struct PbrRenderGraphConfig {
 }
 
 pub struct SkyboxConfig {
-    pub hdri: Box<dyn AsyncAssetKey<DynamicImage>>,
+    pub hdri: Box<dyn DynAsyncAssetDesc<DynamicImage>>,
     pub format: TextureFormat,
 }
 

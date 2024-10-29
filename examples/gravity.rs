@@ -132,7 +132,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
             .mount(RenderObjectBundle::new(
                 mesh.clone(),
                 white_material.clone(),
-                shader.clone(),
+                &[(forward_pass(), shader.clone())],
             ))
             .set(shadow_pass(), shadow.clone());
 
@@ -165,7 +165,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
         .mount(RenderObjectBundle::new(
             cube_mesh.clone(),
             white_material.clone(),
-            shader.clone(),
+            &[(forward_pass(), shader.clone())],
         ))
         .set(shadow_pass(), shadow.clone())
         .spawn(world);
@@ -187,7 +187,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
         .mount(RenderObjectBundle::new(
             cube_mesh.clone(),
             white_material.clone(),
-            shader.clone(),
+            &[(forward_pass(), shader.clone())],
         ))
         .set(shadow_pass(), shadow.clone())
         .spawn(world);

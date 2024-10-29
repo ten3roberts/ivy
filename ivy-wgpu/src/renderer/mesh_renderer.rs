@@ -25,7 +25,7 @@ use crate::{
     mesh_buffer::{MeshBuffer, MeshHandle},
     mesh_desc::MeshDesc,
     renderer::RendererStore,
-    shader::ShaderPassDesc,
+    shader::ShaderPass,
     shader_library::ShaderLibrary,
     types::{shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, Shader, TypedBuffer},
     Gpu,
@@ -35,7 +35,7 @@ use super::{CameraRenderer, ObjectData, TargetDesc};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BatchKey {
-    pub shader: Asset<ShaderPassDesc>,
+    pub shader: Asset<ShaderPass>,
     pub material: MaterialDesc,
     pub mesh: MeshDesc,
 }
@@ -121,7 +121,7 @@ pub struct MeshRenderer {
     bind_group: BindGroup,
 
     pub meshes: HashMap<MeshDesc, Weak<MeshHandle>>,
-    pub shaders: AssetMap<ShaderPassDesc, Handle<Shader>>,
+    pub shaders: AssetMap<ShaderPass, Handle<Shader>>,
     pub materials: HashMap<MaterialDesc, Asset<PbrMaterial>>,
 
     batches: Slab<Batch>,
@@ -133,7 +133,7 @@ pub struct MeshRenderer {
     )>,
 
     mesh_buffer: MeshBuffer,
-    shader_pass: Component<Asset<ShaderPassDesc>>,
+    shader_pass: Component<Asset<ShaderPass>>,
     shader_library: Arc<ShaderLibrary>,
     shader_factory: ShaderFactory,
 }
@@ -142,7 +142,7 @@ impl MeshRenderer {
     pub fn new(
         world: &mut World,
         gpu: &Gpu,
-        shader_pass: Component<Asset<ShaderPassDesc>>,
+        shader_pass: Component<Asset<ShaderPass>>,
         shader_library: Arc<ShaderLibrary>,
     ) -> Self {
         let id = world.spawn();

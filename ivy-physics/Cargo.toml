@@ -32,4 +32,4 @@ tracing.workspace = true
 
 [features]
 default = []
-serialize = ["serde", "glam/serde"]
+serde = ["dep:serde", "glam/serde", "rapier3d/serde-serialize"]

@@ -29,7 +29,7 @@ use crate::{
     mesh_buffer::{MeshBuffer, MeshHandle},
     mesh_desc::MeshDesc,
     renderer::RendererStore,
-    shader::ShaderPassDesc,
+    shader::ShaderPass,
     shader_library::ShaderLibrary,
     types::{shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, Shader, TypedBuffer},
     Gpu,
@@ -40,7 +40,7 @@ use super::{mesh_renderer::ShaderFactory, CameraRenderer, ObjectData};
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BatchKey {
     pub skin: Asset<Skin>,
-    pub shader: Asset<crate::shader::ShaderPassDesc>,
+    pub shader: Asset<crate::shader::ShaderPass>,
     pub material: MaterialDesc,
     pub mesh: MeshDesc,
 }
@@ -147,7 +147,7 @@ pub struct SkinnedMeshRenderer {
     bind_group_layout: BindGroupLayout,
 
     pub meshes: HashMap<MeshDesc, Weak<MeshHandle<SkinnedVertex>>>,
-    pub shaders: AssetMap<crate::shader::ShaderPassDesc, Handle<Shader>>,
+    pub shaders: AssetMap<crate::shader::ShaderPass, Handle<Shader>>,
     pub materials: HashMap<MaterialDesc, Asset<PbrMaterial>>,
 
     batches: Slab<Batch>,
@@ -157,7 +157,7 @@ pub struct SkinnedMeshRenderer {
 
     mesh_buffer: MeshBuffer<SkinnedVertex>,
 
-    shader_pass: Component<Asset<ShaderPassDesc>>,
+    shader_pass: Component<Asset<ShaderPass>>,
     shader_library: Arc<ShaderLibrary>,
     shader_factory: ShaderFactory,
 }
@@ -166,7 +166,7 @@ impl SkinnedMeshRenderer {
     pub fn new(
         world: &mut World,
         gpu: &Gpu,
-        shader_pass: Component<Asset<ShaderPassDesc>>,
+        shader_pass: Component<Asset<ShaderPass>>,
         shader_library: Arc<ShaderLibrary>,
     ) -> Self {
         let id = world.spawn();

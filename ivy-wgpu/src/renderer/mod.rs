@@ -6,7 +6,7 @@ pub mod skinned_mesh_renderer;
 
 use std::any::type_name;
 
-use flax::{fetch::entity_refs, EntityRef, Query, World};
+use flax::{fetch::entity_refs, Component, EntityRef, Query, World};
 use glam::{Mat4, Vec3};
 use itertools::Itertools;
 use ivy_assets::{stored::Store, Asset, AssetCache};
@@ -29,6 +29,7 @@ use crate::{
     material_desc::MaterialDesc,
     mesh_desc::MeshDesc,
     rendergraph::{Dependency, Node, TextureHandle},
+    shader::ShaderPass,
     types::{BindGroupBuilder, BindGroupLayoutBuilder, Shader, TypedBuffer},
     Gpu,
 };
@@ -547,32 +548,33 @@ impl CameraShaderData {
     }
 }
 
-pub struct RenderObjectBundle {
+pub struct RenderObjectBundle<'a> {
     pub mesh: MeshDesc,
     pub material: MaterialDesc,
-    pub shader: Asset<crate::shader::ShaderPassDesc>,
+    pub shaders: &'a [(Component<Asset<ShaderPass>>, Asset<ShaderPass>)],
 }
 
-impl RenderObjectBundle {
+impl<'a> RenderObjectBundle<'a> {
     pub fn new(
         mesh: MeshDesc,
         material: MaterialDesc,
-        shader: Asset<crate::shader::ShaderPassDesc>,
+        shaders: &'a [(Component<Asset<ShaderPass>>, Asset<ShaderPass>)],
     ) -> Self {
         Self {
             mesh,
             material,
-            shader,
+            shaders,
         }
     }
 }
 
-impl Bundle for RenderObjectBundle {
+impl Bundle for RenderObjectBundle<'_> {
     fn mount(self, entity: &mut flax::EntityBuilder) {
-        entity
-            .set(mesh(), self.mesh)
-            .set(material(), self.material)
-            .set(forward_pass(), self.shader);
+        entity.set(mesh(), self.mesh).set(material(), self.material);
+
+        for (pass, shader) in self.shaders {
+            entity.set(*pass, shader.clone());
+        }
     }
 }
 

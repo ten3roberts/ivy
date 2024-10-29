@@ -30,7 +30,8 @@ use ivy_postprocessing::preconfigured::{SurfacePbrPipeline, SurfacePbrPipelineDe
 use ivy_scene::{GltfNodeExt, NodeMountOptions};
 use ivy_wgpu::{
     components::{
-        cast_shadow, environment_data, light_data, light_kind, projection_matrix, shadow_pass,
+        cast_shadow, environment_data, forward_pass, light_data, light_kind, projection_matrix,
+        shadow_pass,
     },
     driver::WinitDriver,
     events::ResizedEvent,
@@ -180,7 +181,7 @@ impl LogicLayer {
                                 .mount(RenderObjectBundle {
                                     mesh: sphere_mesh.clone(),
                                     material: material.into(),
-                                    shader: shader.clone(),
+                                    shaders: &[(forward_pass(), shader.clone())],
                                 })
                                 .mount(RigidBodyBundle::dynamic())
                                 .mount(
@@ -228,7 +229,7 @@ impl LogicLayer {
                         .mount(RenderObjectBundle {
                             mesh: plane_mesh.clone(),
                             material: plane_material.clone(),
-                            shader: shader.clone(),
+                            shaders: &[(forward_pass(), shader.clone())],
                         })
                         .mount(RigidBodyBundle::fixed())
                         .mount(
@@ -264,7 +265,7 @@ impl LogicLayer {
                                 .mount(RenderObjectBundle {
                                     mesh: sphere_mesh.clone(),
                                     material: plastic_material.clone(),
-                                    shader: shader.clone(),
+                                    shaders: &[(forward_pass(), shader.clone())],
                                 })
                                 .mount(RigidBodyBundle::new(RigidBodyType::Dynamic))
                                 .mount(
@@ -300,7 +301,7 @@ impl LogicLayer {
                                 .mount(RenderObjectBundle {
                                     mesh: cube_mesh.clone(),
                                     material: plastic_material.clone(),
-                                    shader: shader.clone(),
+                                    shaders: &[(forward_pass(), shader.clone())],
                                 })
                                 .set(gravity_influence(), 1.0)
                                 .mount(RigidBodyBundle::dynamic())
@@ -326,11 +327,7 @@ impl LogicLayer {
                 let animation = skin.animations()[0].clone();
 
                 let root: EntityBuilder = node
-                    .mount(
-                        &assets,
-                        &mut Entity::builder(),
-                        NodeMountOptions { cast_shadow: true },
-                    )
+                    .mount(&assets, &mut Entity::builder(), NodeMountOptions {})
                     .mount(TransformBundle::new(
                         vec3(0.0, 0.0, 2.0),
                         Quat::IDENTITY,
@@ -348,11 +345,7 @@ impl LogicLayer {
                     .unwrap();
 
                 let root: EntityBuilder = node
-                    .mount(
-                        &assets,
-                        &mut Entity::builder(),
-                        NodeMountOptions { cast_shadow: true },
-                    )
+                    .mount(&assets, &mut Entity::builder(), NodeMountOptions {})
                     .mount(TransformBundle::new(
                         vec3(0.0, 1.0, -2.0),
                         Quat::IDENTITY,

@@ -4,6 +4,7 @@ use flax::{
     component::ComponentValue, entity_ids, CommandBuffer, Component, Entity, EntityBuilder,
     EntityRef, Query, World,
 };
+use ivy_assets::Asset;
 use parking_lot::{Mutex, MutexGuard};
 
 pub trait WorldExt {
