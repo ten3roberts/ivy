@@ -11,7 +11,7 @@ use wgpu::{
 };
 
 use crate::{
-    components::{light_data, light_kind, light_shadow_data},
+    components::{light_params, light_kind, light_shadow_data},
     rendergraph::{BufferHandle, NodeUpdateContext, TextureHandle},
 };
 
@@ -84,7 +84,7 @@ impl LightManager {
 
         let light_data = Query::new((
             world_transform(),
-            light_data(),
+            light_params(),
             light_kind(),
             light_shadow_data().opt(),
         ))

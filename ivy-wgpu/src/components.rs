@@ -5,7 +5,7 @@ use winit::dpi::{LogicalPosition, LogicalSize};
 
 use crate::{
     driver::WindowHandle,
-    light::{LightData, LightKind},
+    light::{LightKind, LightParams},
     material_desc::MaterialDesc,
     mesh_desc::MeshDesc,
     renderer::{shadowmapping::LightShadowData, EnvironmentData},
@@ -30,7 +30,7 @@ component! {
     pub window_size: LogicalSize<f32>,
 
 
-    pub light_data: LightData,
+    pub light_params: LightParams,
     pub light_kind:LightKind,
     pub cast_shadow: (),
 
