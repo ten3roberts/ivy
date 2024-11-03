@@ -17,12 +17,12 @@ use ivy_physics::{ColliderBundle, PhysicsPlugin};
 use ivy_postprocessing::preconfigured::{SurfacePbrPipeline, SurfacePbrPipelineDesc};
 use ivy_wgpu::{
     components::{
-        cast_shadow, environment_data, forward_pass, light_data, light_kind, projection_matrix,
+        cast_shadow, environment_data, forward_pass, light_kind, light_params, projection_matrix,
     },
     driver::WinitDriver,
     events::ResizedEvent,
     layer::GraphicsLayer,
-    light::{LightData, LightKind},
+    light::{LightKind, LightParams},
     material_desc::{MaterialData, MaterialDesc},
     mesh_desc::MeshDesc,
     primitives::CapsulePrimitive,
@@ -178,7 +178,10 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
             1.0,
             0.0,
         )))
-        .set(light_data(), LightData::new(Srgb::new(1.0, 1.0, 1.0), 0.4))
+        .set(
+            light_params(),
+            LightParams::new(Srgb::new(1.0, 1.0, 1.0), 0.4),
+        )
         .set(light_kind(), LightKind::Directional)
         .set_default(cast_shadow())
         .spawn(world);

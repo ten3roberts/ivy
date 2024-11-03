@@ -5,7 +5,8 @@ use wgpu::{
     TextureFormat, VertexBufferLayout,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Culling {
     pub cull_mode: Option<Face>,
     pub front_face: FrontFace,

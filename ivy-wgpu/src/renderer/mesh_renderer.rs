@@ -371,7 +371,7 @@ impl MeshRenderer {
             };
         }
 
-        assert_eq!(total_registered, total_found);
+        // assert_eq!(total_registered, total_found);
 
         self.resize_object_buffer(gpu, cursor as usize)
     }

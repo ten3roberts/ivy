@@ -13,6 +13,10 @@ readme = "../README.md"
 
 [dependencies]
 ivy-core = { path = "../ivy-core", version = "0.10.0" }
+
+# TODO: move MeshData to ivy-gltf
+ivy-graphics = { path = "../ivy-graphics", version = "*" }
+ivy-gltf = { path = "../ivy-gltf", version = "*" }
 ivy-random = { path = "../ivy-random", version = "0.10.0" }
 ivy-assets = { path = "../ivy-assets", version = "0.10.0" }
 

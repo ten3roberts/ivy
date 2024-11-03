@@ -1,5 +1,5 @@
 use dashmap::DashMap;
-use glam::Vec3;
+use glam::{Mat4, Vec3};
 use itertools::Itertools;
 
 use crate::{Color, ColorExt};
@@ -117,12 +117,29 @@ pub struct Cube {
     pub max: Vec3,
     pub line_radius: f32,
     pub color: Color,
+    pub transform: Mat4,
 }
 
 impl Cube {
+    pub fn new(min: Vec3, max: Vec3, line_radius: f32, color: Color) -> Self {
+        Self {
+            min,
+            max,
+            line_radius,
+            color,
+            transform: Mat4::IDENTITY,
+        }
+    }
+
     /// Set the color
     pub fn with_color(mut self, color: Color) -> Self {
         self.color = color;
+        self
+    }
+
+    /// Set the transform
+    pub fn with_transform(mut self, transform: Mat4) -> Self {
+        self.transform = transform;
         self
     }
 }
@@ -134,6 +151,7 @@ impl Default for Cube {
             max: Vec3::ZERO,
             line_radius: 0.02,
             color: Color::green(),
+            transform: Mat4::IDENTITY,
         }
     }
 }
@@ -160,22 +178,29 @@ impl DrawGizmos for Cube {
         let midpoint = (self.max + self.min) / 2.0;
         let extent = (self.max - self.min) / 2.0;
 
-        let lines = sides.iter().map(|side| {
+        for side in sides.iter() {
             let mid = midpoint + (side.0 + side.1) * extent;
             let dir = side.0.cross(side.1).normalize() * (extent + self.line_radius) * 2.0;
 
-            let pos = mid - dir * 0.5;
+            let start = mid - dir * 0.5;
 
-            GizmoPrimitive::Line {
-                origin: pos,
-                dir,
-                corner_radius: 1.0,
-                color: self.color,
-                radius: self.line_radius,
-            }
-        });
+            let end = start + dir;
 
-        gizmos.extend(lines)
+            Line::from_points(
+                self.transform.transform_point3(start),
+                self.transform.transform_point3(end),
+                self.line_radius,
+                self.color,
+            )
+            .draw_primitives(gizmos);
+            // GizmoPrimitive::Line {
+            //     origin: pos,
+            //     dir,
+            //     corner_radius: 1.0,
+            //     color: self.color,
+            //     radius: self.line_radius,
+            // }
+        }
     }
 }
 

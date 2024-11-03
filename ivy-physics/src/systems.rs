@@ -119,8 +119,10 @@ pub fn unregister_bodies_system(world: &mut World) -> BoxedSystem {
             move |_: &World,
                   _: &mut CommandBuffer,
                   mut query: QueryBorrow<Mutable<PhysicsState>>| {
+                tracing::info!("unregist e");
                 if let Some(state) = query.first() {
                     for (_, rb_handle) in rx.try_iter() {
+                        tracing::info!("removing rb");
                         state.remove_body(rb_handle);
                     }
                 }
@@ -131,6 +133,30 @@ pub fn unregister_bodies_system(world: &mut World) -> BoxedSystem {
         .boxed()
 }
 
+pub fn unregister_colliders_system(world: &mut World) -> BoxedSystem {
+    let (tx, rx) = flume::unbounded();
+
+    world.subscribe(RemovedComponentSubscriber::new(tx, collider_handle()));
+
+    System::builder()
+        .with_world()
+        .with_cmd_mut()
+        .with_query(Query::new(physics_state().as_mut()))
+        .build(
+            move |_: &World,
+                  _: &mut CommandBuffer,
+                  mut query: QueryBorrow<Mutable<PhysicsState>>| {
+                if let Some(state) = query.first() {
+                    for (_, handle) in rx.try_iter() {
+                        state.remvoe_collider(handle);
+                    }
+                }
+
+                anyhow::Ok(())
+            },
+        )
+        .boxed()
+}
 pub fn attach_joints_system(world: &mut World) -> BoxedSystem {
     let (tx, rx) = flume::unbounded();
 

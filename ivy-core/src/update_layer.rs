@@ -1,4 +1,8 @@
-use std::{fmt::Display, time::Instant};
+use std::{
+    fmt::Display,
+    ops::{Deref, DerefMut},
+    time::Instant,
+};
 
 use anyhow::Context;
 use flax::{Schedule, ScheduleBuilder, World};
@@ -10,38 +14,39 @@ use crate::{
     Layer,
 };
 
+pub enum TimeStepKind {
+    PerTick,
+    FixedTimeStep,
+}
+
 /// A plugin is added to a layer and allows logic to be added using the ECS
 ///
 /// For full control of events and update frequency, use [crate::layer::Layer].
-pub trait Plugin<T: TimeStep> {
+pub trait Plugin {
     fn install(
         &self,
         world: &mut World,
         assets: &AssetCache,
-        schedule: &mut ScheduleBuilder,
-        time_step: &T,
+        schedules: &mut ScheduleSetBuilder,
     ) -> anyhow::Result<()>;
 }
 
-impl<T: TimeStep, U> Plugin<T> for Box<U>
-where
-    U: Plugin<T>,
-{
+impl<U: Plugin> Plugin for Box<U> {
     fn install(
         &self,
         world: &mut World,
         assets: &AssetCache,
-        schedule: &mut ScheduleBuilder,
-        time_step: &T,
+        schedules: &mut ScheduleSetBuilder,
     ) -> Result<(), anyhow::Error> {
-        (**self).install(world, assets, schedule, time_step)
+        (**self).install(world, assets, schedules)
     }
 }
 
-pub trait TimeStep: 'static + Display {
+pub trait TimeStep: 'static + Display + Copy {
     fn step(&mut self, world: &mut World, schedule: &mut Schedule) -> anyhow::Result<()>;
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct PerTick;
 
 impl TimeStep for PerTick {
@@ -56,6 +61,7 @@ impl Display for PerTick {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct FixedTimeStep {
     delta_time: f64,
     current_time: Instant,
@@ -102,53 +108,158 @@ impl Display for FixedTimeStep {
             .finish()
     }
 }
-/// Executes a schedule using the provided time step
-pub struct ScheduledLayer<T> {
+
+pub struct TimeStepSchedule<T> {
+    schedule: Schedule,
     time_step: T,
-    schedule: Option<Schedule>,
-    plugins: Vec<Box<dyn Plugin<T>>>,
 }
 
-impl<T: TimeStep> ScheduledLayer<T> {
-    pub fn new(interval: T) -> Self {
+impl<T: TimeStep> TimeStepSchedule<T> {
+    fn step(&mut self, world: &mut World) -> anyhow::Result<()> {
+        self.time_step.step(world, &mut self.schedule)
+    }
+}
+
+pub struct TimeStepScheduleBuilder<T> {
+    schedule: ScheduleBuilder,
+    time_step: T,
+}
+
+impl<T> Deref for TimeStepScheduleBuilder<T> {
+    type Target = ScheduleBuilder;
+
+    fn deref(&self) -> &Self::Target {
+        &self.schedule
+    }
+}
+
+impl<T> DerefMut for TimeStepScheduleBuilder<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.schedule
+    }
+}
+
+impl<T: TimeStep> TimeStepScheduleBuilder<T> {
+    pub fn new(time_step: T) -> Self {
         Self {
-            schedule: None,
-            time_step: interval,
+            schedule: Schedule::builder(),
+            time_step,
+        }
+    }
+
+    fn build(&mut self) -> TimeStepSchedule<T> {
+        TimeStepSchedule {
+            schedule: self.schedule.build(),
+            time_step: self.time_step,
+        }
+    }
+
+    pub fn time_step(&self) -> &T {
+        &self.time_step
+    }
+}
+
+pub struct ScheduleSetBuilder {
+    per_tick: TimeStepScheduleBuilder<PerTick>,
+    fixed: TimeStepScheduleBuilder<FixedTimeStep>,
+}
+
+impl ScheduleSetBuilder {
+    pub fn new(fixed_timestep: FixedTimeStep) -> Self {
+        Self {
+            per_tick: TimeStepScheduleBuilder::new(PerTick),
+            fixed: TimeStepScheduleBuilder::new(fixed_timestep),
+        }
+    }
+
+    pub fn build(&mut self) -> ScheduleSet {
+        ScheduleSet {
+            per_tick: self.per_tick.build(),
+            fixed_timestep: self.fixed.build(),
+        }
+    }
+
+    pub fn fixed_mut(&mut self) -> &mut TimeStepScheduleBuilder<FixedTimeStep> {
+        &mut self.fixed
+    }
+
+    pub fn per_tick_mut(&mut self) -> &mut TimeStepScheduleBuilder<PerTick> {
+        &mut self.per_tick
+    }
+}
+
+pub struct ScheduleSet {
+    per_tick: TimeStepSchedule<PerTick>,
+    fixed_timestep: TimeStepSchedule<FixedTimeStep>,
+}
+
+impl ScheduleSet {
+    pub fn per_tick_mut(&mut self) -> &mut TimeStepSchedule<PerTick> {
+        &mut self.per_tick
+    }
+
+    pub fn fixed_timestep_mut(&mut self) -> &mut TimeStepSchedule<FixedTimeStep> {
+        &mut self.fixed_timestep
+    }
+}
+
+/// Executes a schedule using the provided time step
+pub struct ScheduledLayer {
+    builder: ScheduleSetBuilder,
+    schedules: Option<ScheduleSet>,
+    plugins: Vec<Box<dyn Plugin>>,
+}
+
+impl ScheduledLayer {
+    pub fn new(fixed_timestep: FixedTimeStep) -> Self {
+        Self {
+            builder: ScheduleSetBuilder::new(fixed_timestep),
+            schedules: None,
             plugins: Vec::new(),
         }
     }
 
-    pub fn with_plugin(mut self, plugin: impl 'static + Plugin<T>) -> Self {
+    pub fn with_plugin(mut self, plugin: impl 'static + Plugin) -> Self {
         self.plugins.push(Box::new(plugin));
         self
     }
 
     pub fn register(&mut self, world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
-        assert!(self.schedule.is_none());
+        assert!(self.schedules.is_none());
 
-        let mut schedule = Schedule::builder();
         for plugin in &self.plugins {
-            plugin.install(world, assets, &mut schedule, &self.time_step)?;
+            plugin.install(world, assets, &mut self.builder)?;
         }
 
-        self.schedule = Some(schedule.build());
+        self.schedules = Some(self.builder.build());
+
         Ok(())
     }
 
     pub fn tick(&mut self, world: &mut World) -> anyhow::Result<()> {
-        let Some(schedule) = &mut self.schedule else {
+        let Some(schedules) = &mut self.schedules else {
             return Ok(());
         };
 
-        self.time_step
-            .step(world, schedule)
-            .with_context(|| format!("Failed to execute schedule {}", self.time_step))?;
+        schedules.fixed_timestep.step(world).with_context(|| {
+            format!(
+                "Failed to execute schedule {}",
+                schedules.fixed_timestep.time_step
+            )
+        })?;
+
+        schedules.per_tick.step(world).with_context(|| {
+            format!(
+                "Failed to execute schedule {}",
+                schedules.per_tick.time_step
+            )
+        })?;
 
         Ok(())
     }
 }
 
-impl<T: TimeStep> Layer for ScheduledLayer<T> {
+impl Layer for ScheduledLayer {
     fn register(
         &mut self,
         _: &mut World,

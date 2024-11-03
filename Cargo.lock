@@ -998,7 +998,7 @@ dependencies = [
 [[package]]
 name = "flax"
 version = "0.7.1"
-source = "git+https://github.com/ten3roberts/flax#339d5ae04ea6a8a44edc86915f5101dda2e1cee3"
+source = "git+https://github.com/ten3roberts/flax#08e9d6c5023de07e03914892a53fd1a0655ab024"
 dependencies = [
  "anyhow",
  "atomic_refcell",
@@ -1018,7 +1018,7 @@ dependencies = [
 [[package]]
 name = "flax-derive"
 version = "0.7.1"
-source = "git+https://github.com/ten3roberts/flax#339d5ae04ea6a8a44edc86915f5101dda2e1cee3"
+source = "git+https://github.com/ten3roberts/flax#08e9d6c5023de07e03914892a53fd1a0655ab024"
 dependencies = [
  "heck",
  "itertools 0.13.0",
@@ -1802,6 +1802,8 @@ dependencies = [
  "itertools 0.13.0",
  "ivy-assets",
  "ivy-core",
+ "ivy-gltf",
+ "ivy-graphics",
  "ivy-random",
  "nalgebra 0.33.0",
  "rapier3d",
@@ -1933,6 +1935,7 @@ dependencies = [
  "ivy-core",
  "puffin",
  "puffin_http",
+ "serde",
  "slab",
  "tracing",
  "tracing-subscriber",

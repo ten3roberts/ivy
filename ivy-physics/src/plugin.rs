@@ -4,7 +4,7 @@ use crate::{
     systems::{
         apply_effectors_system, attach_joints_system, gizmo_system, physics_step_system,
         register_bodies_system, register_colliders_system, sync_simulation_bodies_system,
-        unregister_bodies_system, update_bodies_system,
+        unregister_bodies_system, unregister_colliders_system, update_bodies_system,
     },
 };
 use flax::World;
@@ -12,7 +12,7 @@ use glam::Vec3;
 use ivy_assets::AssetCache;
 use ivy_core::{
     components::engine,
-    update_layer::{FixedTimeStep, Plugin},
+    update_layer::{Plugin, ScheduleSetBuilder},
 };
 
 #[derive(Default)]
@@ -54,15 +54,14 @@ impl Default for PhysicsPlugin {
     }
 }
 
-impl Plugin<FixedTimeStep> for PhysicsPlugin {
+impl Plugin for PhysicsPlugin {
     fn install(
         &self,
         world: &mut World,
         _: &AssetCache,
-        schedule: &mut flax::ScheduleBuilder,
-        time_step: &FixedTimeStep,
+        schedules: &mut ScheduleSetBuilder,
     ) -> anyhow::Result<()> {
-        let dt = time_step.delta_time() as f32;
+        let dt = schedules.fixed_mut().time_step().delta_time() as f32;
 
         world.set(engine(), gravity(), self.gravity)?;
         world.set(
@@ -71,14 +70,16 @@ impl Plugin<FixedTimeStep> for PhysicsPlugin {
             PhysicsState::new(&self.configuration, dt),
         )?;
 
+        let schedule = &mut *schedules.fixed_mut();
         schedule
+            .with_system(unregister_bodies_system(world))
+            .with_system(unregister_colliders_system(world))
             .with_system(register_bodies_system())
             .flush()
             .with_system(register_colliders_system())
             .with_system(attach_joints_system(world))
             .flush()
-            .with_system(apply_effectors_system(dt))
-            .with_system(unregister_bodies_system(world));
+            .with_system(apply_effectors_system(dt));
 
         // rapier barrier
         schedule

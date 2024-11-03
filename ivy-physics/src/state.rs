@@ -1,16 +1,33 @@
 use ivy_core::components::{position, rotation};
 use nalgebra::Isometry3;
 use rapier3d::prelude::{
-    CCDSolver, ColliderHandle, ColliderSet, DefaultBroadPhase, GenericJoint, ImpulseJointHandle,
-    ImpulseJointSet, IntegrationParameters, IslandManager, MultibodyJointSet, NarrowPhase,
-    PhysicsPipeline, QueryFilter, QueryPipeline, Ray, RayIntersection, RigidBody, RigidBodyHandle,
-    RigidBodySet,
+    CCDSolver, Collider, ColliderHandle, ColliderSet, DefaultBroadPhase, GenericJoint,
+    ImpulseJointHandle, ImpulseJointSet, IntegrationParameters, IslandManager, MultibodyJointSet,
+    NarrowPhase, PhysicsPipeline, QueryFilter, QueryPipeline, Ray, RayIntersection, RigidBody,
+    RigidBodyHandle, RigidBodySet,
 };
 
 use flax::{Component, Entity, Fetch, Mutable, QueryBorrow};
 use glam::{Quat, Vec3};
 
 use crate::components::{angular_velocity, velocity};
+
+#[derive(Debug, Clone)]
+pub struct RaycastHit {
+    pub id: Entity,
+    pub collider: ColliderHandle,
+    pub intersection: RayIntersection,
+}
+
+impl RaycastHit {
+    pub fn new(id: Entity, collider: ColliderHandle, intersection: RayIntersection) -> Self {
+        Self {
+            id,
+            collider,
+            intersection,
+        }
+    }
+}
 
 #[derive(Default)]
 pub struct PhysicsStateConfiguration {}
@@ -76,6 +93,15 @@ impl PhysicsState {
         &mut self.bodies[handle]
     }
 
+    pub fn collider(&self, handle: ColliderHandle) -> &Collider {
+        &self.collider_set[handle]
+    }
+
+    pub fn remvoe_collider(&mut self, handle: ColliderHandle) {
+        self.collider_set
+            .remove(handle, &mut self.island_manager, &mut self.bodies, true);
+    }
+
     pub fn attached_rigidbody(&self, collider: ColliderHandle) -> Option<Entity> {
         let handle = self.collider_set.get(collider)?.parent()?;
         Some(Entity::try_from_bits(self.rigidbody(handle).user_data as _).unwrap())
@@ -113,7 +139,7 @@ impl PhysicsState {
         max_dist: f32,
         solid: bool,
         filter: QueryFilter,
-    ) -> Option<(Entity, ColliderHandle, RayIntersection)> {
+    ) -> Option<RaycastHit> {
         self.query_pipeline
             .cast_ray_and_get_normal(
                 &self.bodies,
@@ -126,7 +152,7 @@ impl PhysicsState {
             .map(|(handle, v)| {
                 let id = Entity::try_from_bits(self.collider_set[handle].user_data as u64)
                     .expect("user_data is valid entity");
-                (id, handle, v)
+                RaycastHit::new(id, handle, v)
             })
     }
 
@@ -136,7 +162,7 @@ impl PhysicsState {
         max_dist: f32,
         solid: bool,
         filter: QueryFilter,
-        mut callback: impl FnMut(Entity, ColliderHandle, RayIntersection) -> bool,
+        mut callback: impl FnMut(RaycastHit) -> bool,
     ) {
         self.query_pipeline.intersections_with_ray(
             &self.bodies,
@@ -148,7 +174,7 @@ impl PhysicsState {
             |handle, intersect| {
                 let id = Entity::try_from_bits(self.collider_set[handle].user_data as u64)
                     .expect("user_data is valid entity");
-                callback(id, handle, intersect)
+                callback(RaycastHit::new(id, handle, intersect))
             },
         )
     }

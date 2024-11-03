@@ -74,8 +74,8 @@ impl ShadowMapNode {
 
         fn shader_factory(desc: ShaderDesc) -> ShaderDesc {
             desc.with_depth_bias(DepthBiasState {
-                constant: 0,
-                slope_scale: 0.0,
+                constant: 2,
+                slope_scale: 2.0,
                 clamp: 0.0,
             })
         }

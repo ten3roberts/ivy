@@ -24,6 +24,7 @@ itertools.workspace = true
 futures.workspace = true
 slab.workspace = true
 gltf.workspace = true
+serde = { workspace = true, optional = true }
 
 [dev-dependencies]
 tracing-subscriber.workspace = true

@@ -1,12 +1,9 @@
-use flax::{
-    BoxedSystem, Component, Entity, FetchExt, Mutable, Query, QueryBorrow, ScheduleBuilder, System,
-    World,
-};
+use flax::{BoxedSystem, Component, Entity, FetchExt, Mutable, Query, QueryBorrow, System, World};
 use glam::{vec3, EulerRot, Quat, Vec2, Vec3};
 use ivy_assets::AssetCache;
 use ivy_core::{
     components::{main_camera, rotation, TransformBundle},
-    update_layer::{PerTick, Plugin},
+    update_layer::{Plugin, ScheduleSetBuilder},
     EntityBuilderExt, DEG_45,
 };
 use ivy_input::{
@@ -36,15 +33,15 @@ flax::component! {
 
 pub struct FreeCameraPlugin;
 
-impl Plugin<PerTick> for FreeCameraPlugin {
+impl Plugin for FreeCameraPlugin {
     fn install(
         &self,
         _: &mut World,
         _: &AssetCache,
-        schedule: &mut ScheduleBuilder,
-        _: &PerTick,
+        schedules: &mut ScheduleSetBuilder,
     ) -> anyhow::Result<()> {
-        schedule
+        schedules
+            .per_tick_mut()
             .with_system(cursor_lock_system())
             .with_system(camera_speed_input_system())
             .with_system(camera_rotation_input_system())

@@ -1,15 +1,18 @@
 use flax::{
     component,
     fetch::{entity_refs, EntityRefs, Source},
-    BoxedSystem, CommandBuffer, Component, Entity, Fetch, FetchExt, Mutable, Query, QueryBorrow,
-    System, World,
+    system, BoxedSystem, CommandBuffer, Component, Entity, Fetch, FetchExt, Mutable, Query,
+    QueryBorrow, System, World,
 };
 use glam::{vec2, vec4, Mat4, Vec2, Vec3, Vec4Swizzles};
 use ivy_assets::AssetCache;
 use ivy_core::{
-    components::{engine, main_camera, position, rotation, world_transform, TransformBundle},
-    update_layer::{FixedTimeStep, Plugin},
-    EntityBuilderExt,
+    components::{
+        engine, gizmos, main_camera, position, rotation, world_transform, TransformBundle,
+    },
+    gizmos::{Gizmos, Sphere},
+    update_layer::{Plugin, ScheduleSetBuilder},
+    Color, ColorExt, EntityBuilderExt,
 };
 use ivy_input::{
     components::input_state,
@@ -78,15 +81,15 @@ impl PickingState {
         let ray = rapier3d::prelude::Ray::new(origin.into(), ray_dir.into());
         let result = physics_state.cast_ray(&ray, 1e3, true, QueryFilter::exclude_fixed());
 
-        if let Some((id, _, intersection)) = result {
-            let entity = world.entity(id)?;
+        if let Some(hit) = result {
+            let entity = world.entity(hit.id)?;
 
-            let point: Vec3 = ray.point_at(intersection.time_of_impact).into();
+            let point: Vec3 = ray.point_at(hit.intersection.time_of_impact).into();
 
             let pos = entity.get_copy(position()).unwrap_or_default();
             let rotation = entity.get_copy(rotation()).unwrap_or_default();
             let anchor = point - pos;
-            let distance = intersection.time_of_impact;
+            let distance = hit.intersection.time_of_impact;
 
             self.stop_manipulating(cmd);
 
@@ -97,9 +100,9 @@ impl PickingState {
                 ))
                 .build();
 
-            cmd.set(self.manipulator, impulse_joint(id), joint.into());
+            cmd.set(self.manipulator, impulse_joint(hit.id), joint.into());
 
-            self.picked_object = Some((id, anchor, distance));
+            self.picked_object = Some((hit.id, anchor, distance));
         }
 
         Ok(())
@@ -108,6 +111,26 @@ impl PickingState {
     pub fn stop_manipulating(&mut self, cmd: &mut CommandBuffer) {
         if let Some((id, _, _)) = self.picked_object.take() {
             cmd.remove(self.manipulator, impulse_joint(id));
+        }
+    }
+
+    #[system(with_world, with_query(Query::new(gizmos().as_mut())))]
+    pub fn draw_gizmos(
+        self: &mut PickingState,
+        world: &World,
+        gizmos: &mut QueryBorrow<Mutable<Gizmos>>,
+    ) {
+        let gizmos = gizmos.first().unwrap();
+        let mut gizmos = gizmos.begin_section("PickingState::gizmos");
+
+        if self.picked_object.is_some() {
+            let manipulator = world.entity(self.manipulator).unwrap();
+
+            gizmos.draw(Sphere::new(
+                manipulator.get_copy(position()).unwrap(),
+                0.1,
+                Color::red(),
+            ));
         }
     }
 }
@@ -121,13 +144,12 @@ component! {
 
 pub struct RayPickingPlugin;
 
-impl Plugin<FixedTimeStep> for RayPickingPlugin {
+impl Plugin for RayPickingPlugin {
     fn install(
         &self,
         world: &mut World,
         _: &AssetCache,
-        schedule: &mut flax::ScheduleBuilder,
-        step: &FixedTimeStep,
+        schedules: &mut ScheduleSetBuilder,
     ) -> anyhow::Result<()> {
         let mut left_click_action = Action::new();
         left_click_action.add(MouseButtonBinding::new(MouseButton::Left));
@@ -164,9 +186,12 @@ impl Plugin<FixedTimeStep> for RayPickingPlugin {
             )
             .spawn(world);
 
-        schedule
+        let dt = schedules.fixed_mut().time_step().delta_time() as _;
+        schedules
+            .fixed_mut()
             .with_system(pick_ray_system())
-            .with_system(ray_distance_system(step.delta_time() as _));
+            .with_system(ray_distance_system(dt))
+            .with_system(PickingState::draw_gizmos_system());
 
         Ok(())
     }

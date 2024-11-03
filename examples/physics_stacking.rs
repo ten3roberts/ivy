@@ -26,7 +26,7 @@ use ivy_wgpu::{
     driver::WinitDriver,
     events::ResizedEvent,
     layer::GraphicsLayer,
-    light::{LightData, LightKind},
+    light::{LightKind, LightParams},
     material_desc::{MaterialData, MaterialDesc},
     mesh_desc::MeshDesc,
     primitives::{CapsulePrimitive, CubePrimitive, UvSpherePrimitive},
@@ -67,7 +67,6 @@ pub fn main() -> anyhow::Result<()> {
                 gpu,
                 surface,
                 SurfacePbrPipelineDesc {
-                    // hdri: None,
                     hdri: Some(Box::new(
                         "hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
                     )),
@@ -80,11 +79,7 @@ pub fn main() -> anyhow::Result<()> {
         .with_layer(ScheduledLayer::new(PerTick).with_plugin(FreeCameraPlugin))
         .with_layer(
             ScheduledLayer::new(FixedTimeStep::new(0.02))
-                .with_plugin(
-                    PhysicsPlugin::new()
-                        // .with_gizmos(ivy_physics::GizmoSettings { rigidbody: true })
-                        .with_gravity(-Vec3::Y * 9.81),
-                )
+                .with_plugin(PhysicsPlugin::new().with_gravity(-Vec3::Y * 9.81))
                 .with_plugin(RayPickingPlugin),
         )
         .run()
@@ -215,7 +210,10 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
             -1.0,
             0.0,
         )))
-        .set(light_data(), LightData::new(Srgb::new(1.0, 1.0, 1.0), 1.0))
+        .set(
+            light_params(),
+            LightParams::new(Srgb::new(1.0, 1.0, 1.0), 1.0),
+        )
         .set(light_kind(), LightKind::Directional)
         .set_default(cast_shadow())
         .spawn(world);
