@@ -81,7 +81,6 @@ impl GltfNodeExt for GltfNode {
             entity.set(ivy_gltf::components::skin(), skin);
         }
 
-        tracing::info!(determinant = self.transform_matrix().determinant());
         entity.mount(self.transform());
 
         for child in self.children() {

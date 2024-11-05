@@ -106,6 +106,14 @@ impl ObjectDataQuery {
     }
 }
 
+impl From<ObjectDataQueryItem<'_>> for ObjectData {
+    fn from(value: ObjectDataQueryItem) -> Self {
+        Self {
+            transform: value.transform,
+        }
+    }
+}
+
 pub type ShaderFactory = Box<dyn FnMut(ShaderDesc) -> ShaderDesc>;
 
 pub struct MeshRenderer {
@@ -219,18 +227,24 @@ impl MeshRenderer {
             mesh().cloned(),
             material().cloned(),
             self.shader_pass.cloned(),
+            ObjectDataQuery::new(),
         ))
         .without(object_index(self.id));
 
         let mut needs_reallocation = false;
-        for (entity, mesh, material, shader) in &mut query.borrow(world) {
-            if entity
+        let mut dirty = false;
+        for (entity, mesh, material, shader, object_data) in &mut query.borrow(world) {
+            let skin = entity
                 .query(&skin().traverse(mesh_primitive))
                 .get()
-                .is_some()
-            {
+                .is_some();
+
+            if skin {
                 continue;
             }
+
+            dirty = true;
+
             let id = entity.id();
             let key = BatchKey {
                 mesh,
@@ -260,16 +274,20 @@ impl MeshRenderer {
                         }
                     }
                     Entry::Vacant(v) => {
+                        tracing::info!("loading mesh");
                         let handle = load_mesh(v.key());
                         v.insert(Arc::downgrade(&handle));
                         handle
                     }
                 };
 
-                let material: Asset<PbrMaterial> = assets.try_load(&key.material).unwrap_or_else(|e| {
+                let material: Asset<PbrMaterial> =
+                    tracing::info_span!("load_material").in_scope(|| {
+                        assets.try_load(&key.material).unwrap_or_else(|e| {
                     tracing::error!(?key.material, "{:?}", e.context("Failed to load material"));
                     assets.load(&MaterialDesc::content(MaterialData::new()))
-                });
+                })
+                    });
 
                 let shader = match self.shaders.entry(&key.shader) {
                     slotmap::secondary::Entry::Occupied(slot) => slot.get().clone(),
@@ -312,22 +330,31 @@ impl MeshRenderer {
                 }
             };
 
-            cmd.set(id, object_index(self.id), usize::MAX).set(
+            let batch = &mut self.batches[batch_id];
+
+            let index = batch.first_instance + batch.instance_count;
+            cmd.set(id, object_index(self.id), index as usize).set(
                 id,
                 self::batch_id(self.id),
                 batch_id,
             );
 
-            let batch = &mut self.batches[batch_id];
-
             needs_reallocation |= batch.register();
+
+            if !needs_reallocation {
+                self.object_data[index as usize] = object_data.into();
+            }
+        }
+
+        if dirty {
+            cmd.apply(world).unwrap();
         }
 
         if needs_reallocation {
             tracing::info!("reallocating object buffer");
-            cmd.apply(world).unwrap();
-            // TODO: only update positions for new objects
             self.reallocate_object_buffer(world, gpu);
+        } else if dirty {
+            self.object_buffer.write(&gpu.queue, 0, &self.object_data);
         }
 
         Ok(())
@@ -347,6 +374,8 @@ impl MeshRenderer {
 
             batch.first_instance = cursor;
             batch.instance_capacity = cap;
+
+            tracing::info!(batch.first_instance, batch.instance_capacity, cursor);
             cursor += cap;
         }
 
@@ -359,6 +388,7 @@ impl MeshRenderer {
         let mut total_found = 0;
 
         self.object_data.resize(cursor as _, Zeroable::zeroed());
+        tracing::info!("resized object data to {cursor}");
         for (batch_id, object_index, item) in &mut query.borrow(world) {
             let batch = &mut self.batches[*batch_id];
             let index = batch.first_instance + batch.instance_count;
@@ -366,18 +396,20 @@ impl MeshRenderer {
             batch.instance_count += 1;
             total_found += 1;
             assert!(total_found <= total_registered);
-            self.object_data[index as usize] = ObjectData {
-                transform: item.transform,
-            };
+            self.object_data[index as usize] = item.into();
         }
 
-        // assert_eq!(total_registered, total_found);
+        assert!(
+            total_registered >= total_found,
+            "{total_registered} > {total_found}"
+        );
 
         self.resize_object_buffer(gpu, cursor as usize)
     }
 
     fn update_object_data(&mut self, world: &World, gpu: &Gpu) {
         for (&object_index, item) in &mut self.object_query.borrow(world) {
+            assert!(object_index != usize::MAX);
             self.object_data[object_index] = ObjectData {
                 transform: item.transform,
             };

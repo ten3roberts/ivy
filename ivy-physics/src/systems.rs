@@ -119,7 +119,6 @@ pub fn unregister_bodies_system(world: &mut World) -> BoxedSystem {
             move |_: &World,
                   _: &mut CommandBuffer,
                   mut query: QueryBorrow<Mutable<PhysicsState>>| {
-                tracing::info!("unregist e");
                 if let Some(state) = query.first() {
                     for (_, rb_handle) in rx.try_iter() {
                         tracing::info!("removing rb");
