@@ -156,6 +156,7 @@ pub fn unregister_colliders_system(world: &mut World) -> BoxedSystem {
         )
         .boxed()
 }
+
 pub fn attach_joints_system(world: &mut World) -> BoxedSystem {
     let (tx, rx) = flume::unbounded();
 

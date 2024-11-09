@@ -4,6 +4,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use atomic_refcell::AtomicRefCell;
 use flax::{components::name, Entity};
 use glam::{vec2, Vec2};
 use ivy_core::{driver::Driver, App};
@@ -204,7 +205,10 @@ impl<'a> WinitEventHandler<'a> {
                     *window_entity.get_mut(window_cursor_position()).unwrap() = logical_pos;
                     size = window_entity.get_copy(window_size()).unwrap();
                     let window = &mut *window_entity.get_mut(crate::components::window()).unwrap();
-                    window.cursor_lock.cursor_moved(&window.window, position);
+                    window
+                        .cursor_lock
+                        .borrow_mut()
+                        .cursor_moved(&window.window, position);
                 }
 
                 self.app.emit(InputEvent::CursorMoved(CursorMoved {
@@ -343,9 +347,10 @@ impl CursorLock {
     }
 }
 
+#[derive(Clone)]
 pub struct WindowHandle {
     window: Arc<Window>,
-    cursor_lock: CursorLock,
+    cursor_lock: Arc<AtomicRefCell<CursorLock>>,
 }
 
 impl WindowHandle {
@@ -354,7 +359,9 @@ impl WindowHandle {
     }
 
     pub fn set_cursor_lock(&mut self, lock: bool) {
-        self.cursor_lock.set_cursor_lock(&self.window, lock)
+        self.cursor_lock
+            .borrow_mut()
+            .set_cursor_lock(&self.window, lock)
     }
 }
 

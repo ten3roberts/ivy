@@ -23,7 +23,7 @@ use ivy_wgpu::{
 };
 
 flax::component! {
-    pub pan_active: f32,
+    pub pan_active: i32,
     pub rotation_input: Vec2,
     pub euler_rotation: Vec3,
     pub camera_movement: Vec3,
@@ -55,15 +55,43 @@ pub fn setup_camera() -> flax::EntityBuilder {
     let mut speed_action = Action::new();
     speed_action.add(ScrollBinding::new().decompose(Axis2D::Y));
 
-    let mut move_action = Action::new();
-    move_action.add(KeyBinding::new(Key::Character("w".into())).compose(Vec3::Z));
-    move_action.add(KeyBinding::new(Key::Character("a".into())).compose(-Vec3::X));
-    move_action.add(KeyBinding::new(Key::Character("s".into())).compose(-Vec3::Z));
-    move_action.add(KeyBinding::new(Key::Character("d".into())).compose(Vec3::X));
+    let mut move_action = Action::<Vec3>::new();
+    move_action.add(
+        KeyBinding::new(Key::Character("w".into()))
+            .analog()
+            .compose(Vec3::Z),
+    );
+    move_action.add(
+        KeyBinding::new(Key::Character("a".into()))
+            .analog()
+            .compose(-Vec3::X),
+    );
+    move_action.add(
+        KeyBinding::new(Key::Character("s".into()))
+            .analog()
+            .compose(-Vec3::Z),
+    );
+    move_action.add(
+        KeyBinding::new(Key::Character("d".into()))
+            .analog()
+            .compose(Vec3::X),
+    );
 
-    move_action.add(KeyBinding::new(Key::Character("c".into())).compose(-Vec3::Y));
-    move_action.add(KeyBinding::new(Key::Named(NamedKey::Control)).compose(-Vec3::Y));
-    move_action.add(KeyBinding::new(Key::Named(NamedKey::Space)).compose(Vec3::Y));
+    move_action.add(
+        KeyBinding::new(Key::Character("c".into()))
+            .analog()
+            .compose(-Vec3::Y),
+    );
+    move_action.add(
+        KeyBinding::new(Key::Named(NamedKey::Control))
+            .analog()
+            .compose(-Vec3::Y),
+    );
+    move_action.add(
+        KeyBinding::new(Key::Named(NamedKey::Space))
+            .analog()
+            .compose(Vec3::Y),
+    );
 
     let mut rotate_action = Action::new();
     rotate_action.add(CursorMoveBinding::new().amplitude(Vec2::ONE * 0.001));
@@ -110,11 +138,11 @@ fn cursor_lock_system() -> BoxedSystem {
         .with_query(Query::new(pan_active()))
         .with_query(Query::new(window().as_mut()).with(main_window()))
         .build(
-            |mut query: QueryBorrow<Component<f32>>,
+            |mut query: QueryBorrow<Component<i32>>,
              mut window: QueryBorrow<Mutable<WindowHandle>, _>| {
                 query.iter().for_each(|&pan_active| {
                     if let Some(window) = window.first() {
-                        window.set_cursor_lock(pan_active > 0.0);
+                        window.set_cursor_lock(pan_active > 0);
                     }
                 });
             },
@@ -145,7 +173,7 @@ fn camera_rotation_input_system() -> BoxedSystem {
             pan_active(),
         )))
         .for_each(|(rotation, euler_rotation, rotation_input, &pan_active)| {
-            *euler_rotation += pan_active * vec3(rotation_input.y, rotation_input.x, 0.0);
+            *euler_rotation += pan_active as f32 * vec3(rotation_input.y, rotation_input.x, 0.0);
             *rotation = Quat::from_euler(EulerRot::YXZ, -euler_rotation.y, -euler_rotation.x, 0.0);
         })
         .boxed()

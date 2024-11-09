@@ -998,7 +998,7 @@ dependencies = [
 [[package]]
 name = "flax"
 version = "0.7.1"
-source = "git+https://github.com/ten3roberts/flax#08e9d6c5023de07e03914892a53fd1a0655ab024"
+source = "git+https://github.com/ten3roberts/flax#e92527c5d6d5ff7ab251c7c2e2297cef05bfc98e"
 dependencies = [
  "anyhow",
  "atomic_refcell",
@@ -1018,7 +1018,7 @@ dependencies = [
 [[package]]
 name = "flax-derive"
 version = "0.7.1"
-source = "git+https://github.com/ten3roberts/flax#08e9d6c5023de07e03914892a53fd1a0655ab024"
+source = "git+https://github.com/ten3roberts/flax#e92527c5d6d5ff7ab251c7c2e2297cef05bfc98e"
 dependencies = [
  "heck",
  "itertools 0.13.0",
@@ -1674,6 +1674,7 @@ dependencies = [
  "rand",
  "rand_distr",
  "serde",
+ "slab",
  "thiserror",
  "tracing",
 ]
@@ -1888,6 +1889,7 @@ version = "0.10.0"
 dependencies = [
  "anyhow",
  "async-std",
+ "atomic_refcell",
  "bytemuck",
  "flax",
  "flume",

@@ -1,9 +1,12 @@
-use flax::{components::child_of, Component, Entity, EntityBuilder};
+use flax::{
+    components::{child_of, name},
+    Component, Entity, EntityBuilder,
+};
 use ivy_assets::{Asset, AssetCache};
 use ivy_core::EntityBuilderExt;
 use ivy_gltf::GltfNode;
 use ivy_wgpu::{
-    components::{forward_pass, mesh_primitive, shadow_pass},
+    components::{forward_pass, shadow_pass},
     renderer::RenderObjectBundle,
     shader::ShaderPass,
     shaders::{PbrShaderDesc, ShadowShaderDesc, SkinnedPbrShaderDesc, SkinnedShadowShaderDesc},
@@ -70,9 +73,11 @@ impl GltfNodeExt for GltfNode {
 
                 let mut child = Entity::builder();
 
-                child.mount(RenderObjectBundle::new(primitive.into(), material, shaders));
+                child
+                    .mount(RenderObjectBundle::new(primitive.into(), material, shaders))
+                    .set_opt(name(), mesh.name().map(ToOwned::to_owned));
 
-                entity.attach(mesh_primitive, child);
+                entity.attach(child_of, child);
             }
         }
 

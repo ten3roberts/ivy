@@ -36,7 +36,7 @@ use ivy_wgpu::{
     driver::WinitDriver,
     events::ResizedEvent,
     layer::GraphicsLayer,
-    light::{LightData, LightKind},
+    light::{LightParams, LightKind},
     material_desc::{MaterialData, MaterialDesc},
     mesh_desc::MeshDesc,
     primitives::{generate_plane, CubePrimitive, UvSpherePrimitive},
@@ -377,20 +377,20 @@ impl LogicLayer {
                     .with_position(Vec3::Y * 5.0)
                     .with_rotation(Quat::from_euler(EulerRot::YXZ, 0.5, -1.0, 0.0)),
             )
-            .set(light_data(), LightData::new(Srgb::new(1.0, 1.0, 1.0), 1.0))
+            .set(light_data(), LightParams::new(Srgb::new(1.0, 1.0, 1.0), 1.0))
             .set(light_kind(), LightKind::Directional)
             .set_default(cast_shadow())
             .spawn(world);
 
         Entity::builder()
             .mount(TransformBundle::default().with_position(vec3(0.0, 2.0, 0.0)))
-            .set(light_data(), LightData::new(Srgb::new(1.0, 0.0, 0.0), 25.0))
+            .set(light_data(), LightParams::new(Srgb::new(1.0, 0.0, 0.0), 25.0))
             .set(light_kind(), LightKind::Point)
             .spawn(world);
 
         Entity::builder()
             .mount(TransformBundle::default().with_position(vec3(2.0, 2.0, 5.0)))
-            .set(light_data(), LightData::new(Srgb::new(0.0, 0.0, 1.0), 25.0))
+            .set(light_data(), LightParams::new(Srgb::new(0.0, 0.0, 1.0), 25.0))
             .set(light_kind(), LightKind::Point)
             .spawn(world);
         Ok(())
@@ -458,7 +458,7 @@ fn point_light_gizmo_system() -> BoxedSystem {
             |mut gizmos: QueryBorrow<flax::fetch::Source<Component<gizmos::Gizmos>, Entity>>,
              mut query: QueryBorrow<(
                 Component<Mat4>,
-                Component<LightData>,
+                Component<LightParams>,
                 Component<LightKind>,
             )>| {
                 let mut gizmos = gizmos

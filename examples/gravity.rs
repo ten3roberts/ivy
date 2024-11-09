@@ -23,7 +23,7 @@ use ivy_wgpu::{
     driver::WinitDriver,
     events::ResizedEvent,
     layer::GraphicsLayer,
-    light::{LightData, LightKind},
+    light::{LightParams, LightKind},
     material_desc::{MaterialData, MaterialDesc},
     mesh_desc::MeshDesc,
     primitives::{CapsulePrimitive, CubePrimitive},
@@ -199,7 +199,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
             1.0,
             0.0,
         )))
-        .set(light_data(), LightData::new(Srgb::new(1.0, 1.0, 1.0), 1.0))
+        .set(light_data(), LightParams::new(Srgb::new(1.0, 1.0, 1.0), 1.0))
         .set(light_kind(), LightKind::Directional)
         .set_default(cast_shadow())
         .spawn(world);

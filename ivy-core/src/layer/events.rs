@@ -7,17 +7,37 @@ use downcast_rs::{impl_downcast, Downcast};
 use flax::World;
 use ivy_assets::AssetCache;
 use ivy_profiling::{profile_function, profile_scope};
+use slab::Slab;
 
 use crate::{Layer, LayerDyn};
 
 type EventCallback<T> =
     Box<dyn Fn(&mut dyn LayerDyn, &mut World, &mut AssetCache, &T) -> anyhow::Result<bool>>;
 
-pub struct EventDispatcher<T> {
-    listeners: Vec<(usize, EventCallback<T>)>,
+type EventCallbackDyn =
+    Box<dyn Fn(&mut dyn LayerDyn, &mut World, &mut AssetCache, &dyn Event) -> anyhow::Result<bool>>;
+
+pub struct Callbacks {
+    callbacks: Slab<EventCallbackDyn>,
 }
 
-impl<T> EventDispatcher<T> {
+impl Callbacks {
+    fn new() -> Self {
+        Self {
+            callbacks: Default::default(),
+        }
+    }
+
+    fn register_callback(&mut self, callback: EventCallbackDyn) -> usize {
+        self.callbacks.insert(callback)
+    }
+}
+
+pub struct EventDispatcher {
+    listeners: Vec<(usize, usize)>,
+}
+
+impl EventDispatcher {
     pub fn new() -> Self {
         Self {
             listeners: Vec::new(),
@@ -29,66 +49,73 @@ impl<T> EventDispatcher<T> {
         layers: &mut [Box<dyn LayerDyn>],
         world: &mut World,
         assets: &mut AssetCache,
-        event: &T,
-    ) -> anyhow::Result<()> {
+        registry: &Callbacks,
+        event: &dyn Event,
+    ) -> anyhow::Result<bool> {
         for (layer_index, func) in &self.listeners {
             let layer = &mut layers[*layer_index];
             profile_scope!("dispatch_layer", layer.label());
-            let handled = func(layer.as_mut(), world, assets, event)?;
+            let handled = registry.callbacks[*func](layer.as_mut(), world, assets, event)?;
 
             if handled {
-                break;
+                return Ok(handled);
             }
         }
 
-        Ok(())
+        Ok(false)
     }
 
-    pub fn register<L: Layer>(
-        &mut self,
-        layer_index: usize,
-        callback: impl 'static + Fn(&mut L, &mut World, &mut AssetCache, &T) -> anyhow::Result<bool>,
-    ) {
-        self.listeners.push((
-            layer_index,
-            Box::new(move |layer, world, assets, event| {
-                let layer = layer.downcast_mut::<L>().expect("Failed to downcast layer");
-
-                callback(layer, world, assets, event)
-            }),
-        ));
+    pub fn register(&mut self, layer_index: usize, callback: usize) {
+        self.listeners.push((layer_index, callback));
+        self.listeners.sort_by_key(|v| v.0);
     }
 }
 
-impl<T> Default for EventDispatcher<T> {
+impl Default for EventDispatcher {
     fn default() -> Self {
         Self::new()
     }
 }
 
 pub struct EventRegistry {
-    dispatchers: HashMap<std::any::TypeId, Box<dyn Any>>,
+    dispatchers: HashMap<TypeId, EventDispatcher>,
+    callbacks: Callbacks,
+    // layer, callback
+    global_listeners: EventDispatcher,
 }
 
 impl EventRegistry {
     pub fn new() -> Self {
         Self {
             dispatchers: HashMap::new(),
+            callbacks: Callbacks::new(),
+            global_listeners: EventDispatcher::new(),
         }
     }
 
-    pub fn get<T: 'static>(&self) -> Option<&EventDispatcher<T>> {
-        self.dispatchers
-            .get(&std::any::TypeId::of::<T>())
-            .map(|dispatcher| dispatcher.downcast_ref::<EventDispatcher<T>>().unwrap())
+    pub fn get<T: 'static>(&self) -> Option<&EventDispatcher> {
+        self.dispatchers.get(&TypeId::of::<T>())
     }
 
-    pub fn get_or_insert<T: Event>(&mut self) -> &mut EventDispatcher<T> {
+    pub fn get_or_insert<T: Event>(&mut self) -> &mut EventDispatcher {
         self.dispatchers
             .entry(TypeId::of::<T>())
-            .or_insert_with(|| Box::new(EventDispatcher::<T>::new()))
-            .downcast_mut::<EventDispatcher<T>>()
-            .unwrap()
+            .or_insert_with(|| {
+                let mut dispatcher = EventDispatcher::new();
+                for &(layer, callback) in &self.global_listeners.listeners {
+                    dispatcher.register(layer, callback);
+                }
+
+                dispatcher
+            })
+    }
+
+    fn register_global(&mut self, layer_index: usize, callback: usize) {
+        for (_, dispatcher) in &mut self.dispatchers {
+            dispatcher.register(layer_index, callback)
+        }
+
+        self.global_listeners.register(layer_index, callback);
     }
 
     pub fn emit<T: Event>(
@@ -99,11 +126,33 @@ impl EventRegistry {
         event: &T,
     ) -> anyhow::Result<()> {
         profile_function!(std::any::type_name::<T>());
-        if let Some(dispatcher) = self.get::<T>() {
-            dispatcher.dispatch(layers, world, assets, event)?;
+
+        if let Some(dispatcher) = self.dispatchers.get(&TypeId::of::<T>()) {
+            dispatcher.dispatch(layers, world, assets, &self.callbacks, event)?;
+        } else {
+            self.global_listeners
+                .dispatch(layers, world, assets, &self.callbacks, event)?;
         }
 
         Ok(())
+    }
+
+    pub fn emit_dyn(
+        &self,
+        layers: &mut [Box<dyn LayerDyn>],
+        world: &mut World,
+        assets: &mut AssetCache,
+        event: &dyn Event,
+    ) -> anyhow::Result<bool> {
+        profile_function!(event.type_name());
+
+        let ty = event.type_id();
+        if let Some(dispatcher) = self.dispatchers.get(&ty) {
+            dispatcher.dispatch(layers, world, assets, &self.callbacks, event)
+        } else {
+            self.global_listeners
+                .dispatch(layers, world, assets, &self.callbacks, event)
+        }
     }
 }
 
@@ -133,13 +182,17 @@ impl<'a, L: Layer> EventRegisterContext<'a, L> {
         &mut self,
         callback: impl 'static + Fn(&mut L, &mut World, &mut AssetCache, &T) -> anyhow::Result<()>,
     ) {
-        self.registry.get_or_insert::<T>().register(
-            self.index,
+        let callback = self.registry.callbacks.register_callback(Box::new(
             move |layer, world, assets, value| {
-                callback(layer, world, assets, value)?;
+                let layer = layer.downcast_mut::<L>().unwrap();
+                callback(layer, world, assets, value.downcast_ref().unwrap())?;
                 Ok(false)
             },
-        );
+        ));
+
+        self.registry
+            .get_or_insert::<T>()
+            .register(self.index, callback);
     }
 
     /// Allows intercepting and controlling the control flow of an event
@@ -147,11 +200,39 @@ impl<'a, L: Layer> EventRegisterContext<'a, L> {
         &mut self,
         callback: impl 'static + Fn(&mut L, &mut World, &mut AssetCache, &T) -> anyhow::Result<bool>,
     ) {
+        let callback = self.registry.callbacks.register_callback(Box::new(
+            move |layer, world, assets, value| {
+                let layer = layer.downcast_mut::<L>().unwrap();
+                callback(layer, world, assets, value.downcast_ref().unwrap())
+            },
+        ));
+
         self.registry
             .get_or_insert::<T>()
             .register(self.index, callback);
     }
+
+    /// Register an event callback for all event types
+    pub fn subscribe_global(
+        &mut self,
+        callback: impl 'static
+            + Fn(&mut L, &mut World, &mut AssetCache, &dyn Event) -> anyhow::Result<bool>,
+    ) {
+        let callback = self.registry.callbacks.register_callback(Box::new(
+            move |layer, world, assets, value| {
+                let layer = layer.downcast_mut::<L>().unwrap();
+                callback(layer, world, assets, value)
+            },
+        ));
+
+        self.registry.register_global(self.index, callback);
+    }
 }
 
-pub trait Event: 'static + std::fmt::Debug + Downcast {}
+pub trait Event: 'static + std::fmt::Debug + Downcast {
+    fn type_name(&self) -> &'static str {
+        std::any::type_name::<Self>()
+    }
+}
+
 impl_downcast!(Event);

@@ -1,10 +1,11 @@
 #![allow(non_snake_case)]
-use crate::components::{async_commandbuffer, engine};
+use crate::components::{async_commandbuffer, engine, gizmos};
+use crate::gizmos::Gizmos;
 use crate::systems::update_transform_system;
 use crate::AsyncCommandBuffer;
 use crate::{app::TickEvent, systems::apply_async_commandbuffers};
 use downcast_rs::{impl_downcast, Downcast};
-use flax::{Schedule, World};
+use flax::{Entity, Schedule, World};
 use ivy_assets::AssetCache;
 
 pub mod events;
@@ -93,7 +94,10 @@ impl Layer for EngineLayer {
         _: &AssetCache,
         mut events: EventRegisterContext<Self>,
     ) -> anyhow::Result<()> {
-        world.set(engine(), async_commandbuffer(), self.cmd.clone())?;
+        Entity::builder()
+            .set(async_commandbuffer(), self.cmd.clone())
+            .set(gizmos(), Gizmos::new())
+            .append_to(world, engine())?;
 
         events.subscribe(|this, world, _, _: &TickEvent| {
             this.schedule.execute_par(world)?;

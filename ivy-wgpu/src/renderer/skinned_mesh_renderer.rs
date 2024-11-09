@@ -5,6 +5,7 @@ use std::{
 
 use bytemuck::Zeroable;
 use flax::{
+    components::child_of,
     entity_ids,
     fetch::{Copied, Source, Traverse},
     CommandBuffer, Component, Entity, Fetch, FetchExt, Query, World,
@@ -22,7 +23,7 @@ use slab::Slab;
 use wgpu::{BindGroup, BindGroupLayout, BufferUsages, DepthBiasState, RenderPass, ShaderStages};
 
 use crate::{
-    components::{material, mesh, mesh_primitive},
+    components::{material, mesh},
     material::PbrMaterial,
     material_desc::{MaterialData, MaterialDesc},
     mesh::{SkinnedVertex, VertexDesc},
@@ -197,7 +198,7 @@ impl SkinnedMeshRenderer {
             object_query: Query::new((
                 object_index(id),
                 batch_id(id),
-                ObjectDataQuery::new().traverse(mesh_primitive),
+                ObjectDataQuery::new().traverse(child_of),
             )),
             mesh_buffer: MeshBuffer::new(gpu, "mesh_buffer", 4),
             shader_pass,
@@ -239,7 +240,7 @@ impl SkinnedMeshRenderer {
             mesh().cloned(),
             material().cloned(),
             self.shader_pass.cloned(),
-            skin().cloned().traverse(mesh_primitive),
+            skin().cloned().traverse(child_of),
         ))
         .without(object_index(self.id));
 
@@ -396,7 +397,7 @@ impl SkinnedMeshRenderer {
         let mut query = Query::new((
             batch_id(self.id),
             object_index(self.id).as_mut(),
-            ObjectDataQuery::new().traverse(mesh_primitive),
+            ObjectDataQuery::new().traverse(child_of),
         ));
 
         let mut total_found = 0;

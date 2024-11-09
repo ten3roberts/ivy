@@ -136,10 +136,10 @@ impl PickingState {
 }
 
 component! {
-    pick_ray_action: f32,
+    pick_ray_action: i32,
     cursor_position_action: Vec2,
     picking_state: PickingState,
-    ray_distance_modifier: f32,
+    ray_distance_modifier: i32,
 }
 
 pub struct RayPickingPlugin;
@@ -159,7 +159,7 @@ impl Plugin for RayPickingPlugin {
 
         let mut ray_distance_action = Action::new();
         ray_distance_action.add(KeyBinding::new(Key::Named(NamedKey::ArrowUp)));
-        ray_distance_action.add(KeyBinding::new(Key::Named(NamedKey::ArrowDown)).amplitude(-1.0));
+        ray_distance_action.add(KeyBinding::new(Key::Named(NamedKey::ArrowDown)).amplitude(-1));
 
         let manipulator = Entity::builder()
             .mount(TransformBundle::default())
@@ -220,7 +220,7 @@ impl Default for CameraQuery {
 
 type PickingQuery = (
     EntityRefs,
-    Component<f32>,
+    Component<i32>,
     Component<Vec2>,
     Mutable<PickingState>,
 );
@@ -237,9 +237,9 @@ pub fn ray_distance_system(dt: f32) -> BoxedSystem {
             picking_state().as_mut(),
             ray_distance_modifier(),
         )))
-        .for_each(move |(state, change_distance)| {
+        .for_each(move |(state, &change_distance)| {
             if let Some((_, _, distance)) = &mut state.picked_object {
-                *distance = (*distance + change_distance * 5.0 * dt).max(2.0);
+                *distance = (*distance + change_distance as f32 * 5.0 * dt).max(2.0);
             }
         })
         .boxed()
@@ -268,7 +268,7 @@ pub fn pick_ray_system() -> BoxedSystem {
                 {
                     let world = entity.world();
 
-                    if *pick_ray_activation < 1.0 {
+                    if *pick_ray_activation < 1 {
                         state.stop_manipulating(cmd);
                         return Ok(());
                     }

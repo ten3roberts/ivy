@@ -20,8 +20,6 @@ component! {
     pub forward_pass: Asset<ShaderPass>,
     pub shadow_pass: Asset<ShaderPass>,
 
-    pub mesh_primitive(entity): (),
-
     pub main_window: (),
 
     pub window: WindowHandle,

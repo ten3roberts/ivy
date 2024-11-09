@@ -1,19 +1,18 @@
+mod bindings;
 pub mod components;
 pub mod error;
 pub mod layer;
 pub mod types;
 mod vector;
 
-use std::{collections::HashMap, mem, ops::Mul};
+pub use bindings::*;
+
+use std::collections::HashMap;
 
 use flax::{component::ComponentValue, Component, EntityRef};
-use glam::{vec2, Vec2, Vec3};
+use glam::{IVec2, IVec3, Vec2, Vec3};
 
-use types::{InputEvent, InputKind, KeyboardInput, MouseInput};
-use winit::{
-    event::MouseButton,
-    keyboard::{Key, SmolStr},
-};
+use types::{InputEvent, InputKind};
 
 pub struct InputState {
     activations: Vec<ActionKind>,
@@ -37,9 +36,12 @@ impl InputState {
     pub fn apply(&mut self, event: &InputEvent) {
         for activation in self.activations.iter_mut() {
             match activation {
+                ActionKind::Integral(_, mapping) => mapping.apply(event),
                 ActionKind::Scalar(_, mapping) => mapping.apply(event),
                 ActionKind::Vector2(_, mapping) => mapping.apply(event),
                 ActionKind::Vector3(_, mapping) => mapping.apply(event),
+                ActionKind::IVector2(_, mapping) => mapping.apply(event),
+                ActionKind::IVector3(_, mapping) => mapping.apply(event),
             }
         }
     }
@@ -47,6 +49,9 @@ impl InputState {
     pub fn update(&mut self, entity: &EntityRef) -> anyhow::Result<()> {
         for activation in &mut self.activations {
             match activation {
+                ActionKind::Integral(target, m) => {
+                    m.update(*target, entity)?;
+                }
                 ActionKind::Scalar(target, m) => {
                     m.update(*target, entity)?;
                 }
@@ -54,6 +59,12 @@ impl InputState {
                     m.update(*target, entity)?;
                 }
                 ActionKind::Vector3(target, m) => {
+                    m.update(*target, entity)?;
+                }
+                ActionKind::IVector2(target, m) => {
+                    m.update(*target, entity)?;
+                }
+                ActionKind::IVector3(target, m) => {
                     m.update(*target, entity)?;
                 }
             }
@@ -70,9 +81,18 @@ impl Default for InputState {
 }
 
 pub enum ActionKind {
+    Integral(Component<i32>, Action<i32>),
     Scalar(Component<f32>, Action<f32>),
     Vector2(Component<Vec2>, Action<Vec2>),
     Vector3(Component<Vec3>, Action<Vec3>),
+    IVector2(Component<IVec2>, Action<IVec2>),
+    IVector3(Component<IVec3>, Action<IVec3>),
+}
+
+impl From<(Component<i32>, Action<i32>)> for ActionKind {
+    fn from(v: (Component<i32>, Action<i32>)) -> Self {
+        Self::Integral(v.0, v.1)
+    }
 }
 
 impl From<(Component<f32>, Action<f32>)> for ActionKind {
@@ -93,8 +113,20 @@ impl From<(Component<Vec3>, Action<Vec3>)> for ActionKind {
     }
 }
 
+impl From<(Component<IVec2>, Action<IVec2>)> for ActionKind {
+    fn from(v: (Component<IVec2>, Action<IVec2>)) -> Self {
+        Self::IVector2(v.0, v.1)
+    }
+}
+
+impl From<(Component<IVec3>, Action<IVec3>)> for ActionKind {
+    fn from(v: (Component<IVec3>, Action<IVec3>)) -> Self {
+        Self::IVector3(v.0, v.1)
+    }
+}
+
 pub struct Action<T> {
-    bindings: HashMap<InputKind, Box<dyn Binding<T, Input = InputEvent>>>,
+    bindings: HashMap<InputKind, Box<dyn Binding<T>>>,
 }
 
 impl<T: ComponentValue + Stimulus> Action<T> {
@@ -104,19 +136,15 @@ impl<T: ComponentValue + Stimulus> Action<T> {
         }
     }
 
-    pub fn add(&mut self, action: impl 'static + Binding<T, Input = InputEvent>) -> &mut Self {
-        self.bindings.insert(
-            action.binding(),
-            Box::new(action) as Box<dyn Binding<T, Input = InputEvent>>,
-        );
+    pub fn add(&mut self, action: impl 'static + Binding<T>) -> &mut Self {
+        self.bindings
+            .insert(action.binding(), Box::new(action) as Box<dyn Binding<T>>);
         self
     }
 
-    pub fn with_binding(mut self, action: impl 'static + Binding<T, Input = InputEvent>) -> Self {
-        self.bindings.insert(
-            action.binding(),
-            Box::new(action) as Box<dyn Binding<T, Input = InputEvent>>,
-        );
+    pub fn with_binding(mut self, action: impl 'static + Binding<T>) -> Self {
+        self.bindings
+            .insert(action.binding(), Box::new(action) as Box<dyn Binding<T>>);
         self
     }
 
@@ -155,348 +183,6 @@ impl<T: ComponentValue + Stimulus> Default for Action<T> {
     }
 }
 
-pub trait Binding<T>: Send + Sync {
-    type Input;
-
-    fn apply(&mut self, input: &Self::Input);
-    fn read(&mut self) -> T;
-    fn binding(&self) -> InputKind;
-}
-
-pub struct Decompose<B, Axis> {
-    binding: B,
-    axis: Axis,
-}
-
-impl<B: Binding<Vec2>> Binding<f32> for Decompose<B, Axis2D> {
-    type Input = B::Input;
-
-    fn apply(&mut self, input: &Self::Input) {
-        self.binding.apply(input);
-    }
-
-    fn read(&mut self) -> f32 {
-        match self.axis {
-            Axis2D::X => self.binding.read().x,
-            Axis2D::Y => self.binding.read().y,
-        }
-    }
-
-    fn binding(&self) -> InputKind {
-        self.binding.binding()
-    }
-}
-
-impl<B: Binding<Vec3>> Binding<f32> for Decompose<B, Axis3> {
-    type Input = B::Input;
-
-    fn apply(&mut self, input: &Self::Input) {
-        self.binding.apply(input)
-    }
-
-    fn read(&mut self) -> f32 {
-        match self.axis {
-            Axis3::X => self.binding.read().x,
-            Axis3::Y => self.binding.read().y,
-            Axis3::Z => self.binding.read().z,
-        }
-    }
-
-    fn binding(&self) -> InputKind {
-        self.binding.binding()
-    }
-}
-
-pub struct Compose<B, Axis> {
-    binding: B,
-    axis: Axis,
-}
-
-impl<B, Axis> Compose<B, Axis> {
-    pub fn new(binding: B, axis: Axis) -> Self {
-        Self { binding, axis }
-    }
-}
-
-impl<B: Binding<f32>> Binding<Vec2> for Compose<B, Axis2D> {
-    type Input = B::Input;
-
-    fn apply(&mut self, input: &Self::Input) {
-        self.binding.apply(input)
-    }
-
-    fn read(&mut self) -> Vec2 {
-        match self.axis {
-            Axis2D::X => Vec2::new(self.binding.read(), 0.0),
-            Axis2D::Y => Vec2::new(0.0, self.binding.read()),
-        }
-    }
-
-    fn binding(&self) -> InputKind {
-        self.binding.binding()
-    }
-}
-
-impl<B: Binding<f32>> Binding<Vec2> for Compose<B, Vec2> {
-    type Input = B::Input;
-
-    fn apply(&mut self, input: &Self::Input) {
-        self.binding.apply(input)
-    }
-
-    fn read(&mut self) -> Vec2 {
-        self.axis * self.binding.read()
-    }
-
-    fn binding(&self) -> InputKind {
-        self.binding.binding()
-    }
-}
-
-impl<B: Binding<f32>> Binding<Vec3> for Compose<B, Vec3> {
-    type Input = B::Input;
-
-    fn apply(&mut self, input: &Self::Input) {
-        self.binding.apply(input)
-    }
-
-    fn read(&mut self) -> Vec3 {
-        self.axis * self.binding.read()
-    }
-
-    fn binding(&self) -> InputKind {
-        self.binding.binding()
-    }
-}
-
-impl<B: Binding<f32>> Binding<Vec3> for Compose<B, Axis3> {
-    type Input = B::Input;
-
-    fn apply(&mut self, input: &Self::Input) {
-        self.binding.apply(input)
-    }
-
-    fn read(&mut self) -> Vec3 {
-        match self.axis {
-            Axis3::X => Vec3::X * self.binding.read(),
-            Axis3::Y => Vec3::Y * self.binding.read(),
-            Axis3::Z => Vec3::Z * self.binding.read(),
-        }
-    }
-
-    fn binding(&self) -> InputKind {
-        self.binding.binding()
-    }
-}
-
-pub struct Amplitude<B, T> {
-    binding: B,
-    amplitude: T,
-}
-
-impl<B: Binding<T>, T: Send + Sync + Copy + Mul<Output = T>> Binding<T> for Amplitude<B, T> {
-    type Input = B::Input;
-
-    fn apply(&mut self, input: &Self::Input) {
-        self.binding.apply(input)
-    }
-
-    fn read(&mut self) -> T {
-        self.binding.read() * self.amplitude
-    }
-
-    fn binding(&self) -> InputKind {
-        self.binding.binding()
-    }
-}
-
-pub struct KeyBinding {
-    pressed: bool,
-    key: Key<SmolStr>,
-}
-
-impl KeyBinding {
-    pub fn new(key: Key<SmolStr>) -> Self {
-        Self {
-            key,
-            pressed: false,
-        }
-    }
-}
-
-impl Binding<f32> for KeyBinding {
-    type Input = InputEvent;
-
-    fn apply(&mut self, input: &Self::Input) {
-        match input {
-            InputEvent::Keyboard(KeyboardInput { key, state, .. }) if key == &self.key => {
-                self.pressed = state.is_pressed();
-            }
-            _ => panic!("Invalid input event"),
-        }
-    }
-
-    fn read(&mut self) -> f32 {
-        self.pressed as i32 as f32
-    }
-
-    fn binding(&self) -> InputKind {
-        InputKind::Key(self.key.clone())
-    }
-}
-
-pub struct MouseButtonBinding {
-    pressed: bool,
-    button: MouseButton,
-}
-
-impl MouseButtonBinding {
-    pub fn new(button: MouseButton) -> Self {
-        Self {
-            button,
-            pressed: false,
-        }
-    }
-}
-
-impl Binding<f32> for MouseButtonBinding {
-    type Input = InputEvent;
-
-    fn apply(&mut self, input: &Self::Input) {
-        match input {
-            InputEvent::MouseButton(MouseInput { button, state, .. }) if button == &self.button => {
-                self.pressed = state.is_pressed();
-            }
-            _ => panic!("Invalid input event"),
-        }
-    }
-
-    fn read(&mut self) -> f32 {
-        self.pressed as i32 as f32
-    }
-
-    fn binding(&self) -> InputKind {
-        InputKind::MouseButton(self.button)
-    }
-}
-
-pub struct CursorMoveBinding {
-    value: Vec2,
-}
-
-impl CursorMoveBinding {
-    pub fn new() -> Self {
-        Self { value: Vec2::ZERO }
-    }
-}
-
-impl Default for CursorMoveBinding {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Binding<Vec2> for CursorMoveBinding {
-    type Input = InputEvent;
-
-    fn apply(&mut self, input: &Self::Input) {
-        match input {
-            &InputEvent::CursorDelta(delta) => self.value += delta,
-            _ => panic!("Invalid input event"),
-        }
-    }
-
-    fn read(&mut self) -> Vec2 {
-        mem::take(&mut self.value)
-    }
-
-    fn binding(&self) -> InputKind {
-        InputKind::CursorDelta
-    }
-}
-
-pub struct CursorPositionBinding {
-    value: Vec2,
-    normalized: bool,
-}
-
-impl CursorPositionBinding {
-    pub fn new(normalized: bool) -> Self {
-        Self {
-            value: Vec2::ZERO,
-            normalized,
-        }
-    }
-}
-
-impl Binding<Vec2> for CursorPositionBinding {
-    type Input = InputEvent;
-
-    fn apply(&mut self, input: &Self::Input) {
-        match input {
-            InputEvent::CursorMoved(v) if self.normalized => self.value = v.normalized_position,
-            InputEvent::CursorMoved(v) => {
-                self.value = vec2(v.absolute_position.x, v.absolute_position.y)
-            }
-            _ => panic!("Invalid input event"),
-        }
-    }
-
-    fn read(&mut self) -> Vec2 {
-        self.value
-    }
-
-    fn binding(&self) -> InputKind {
-        InputKind::CursorMoved
-    }
-}
-
-pub struct ScrollBinding {
-    value: Vec2,
-}
-
-impl ScrollBinding {
-    pub fn new() -> Self {
-        Self { value: Vec2::ZERO }
-    }
-}
-
-impl Default for ScrollBinding {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Binding<Vec2> for ScrollBinding {
-    type Input = InputEvent;
-
-    fn apply(&mut self, input: &Self::Input) {
-        match input {
-            InputEvent::Scroll(delta) => self.value += delta.delta,
-            _ => panic!("Invalid input event"),
-        }
-    }
-
-    fn read(&mut self) -> Vec2 {
-        mem::take(&mut self.value)
-    }
-
-    fn binding(&self) -> InputKind {
-        InputKind::Scroll
-    }
-}
-
-pub enum Axis2D {
-    X,
-    Y,
-}
-
-pub enum Axis3 {
-    X,
-    Y,
-    Z,
-}
-
 pub trait Stimulus {
     const ZERO: Self;
     fn combine(&self, other: &Self) -> Self;
@@ -504,6 +190,14 @@ pub trait Stimulus {
 
 impl Stimulus for f32 {
     const ZERO: Self = 0.0;
+
+    fn combine(&self, other: &Self) -> Self {
+        self + other
+    }
+}
+
+impl Stimulus for i32 {
+    const ZERO: Self = 0;
 
     fn combine(&self, other: &Self) -> Self {
         self + other
@@ -526,77 +220,21 @@ impl Stimulus for Vec3 {
     }
 }
 
-pub trait BindingExt<V> {
-    fn compose<T>(self, axis: T) -> Compose<Self, T>
-    where
-        Self: Sized,
-    {
-        Compose::new(self, axis)
-    }
+impl Stimulus for IVec2 {
+    const ZERO: Self = IVec2::ZERO;
 
-    fn decompose<T>(self, axis: T) -> Decompose<Self, T>
-    where
-        Self: Sized,
-    {
-        Decompose {
-            binding: self,
-            axis,
-        }
-    }
-
-    fn amplitude<T>(self, amplitude: T) -> Amplitude<Self, T>
-    where
-        Self: Sized,
-    {
-        Amplitude {
-            binding: self,
-            amplitude,
-        }
-    }
-
-    fn rising_edge(self) -> RisingEdge<Self>
-    where
-        Self: Sized,
-    {
-        RisingEdge {
-            binding: self,
-            prev_value: 0.0,
-        }
+    fn combine(&self, other: &Self) -> Self {
+        *self + *other
     }
 }
 
-pub struct RisingEdge<T> {
-    binding: T,
-    prev_value: f32,
-}
+impl Stimulus for IVec3 {
+    const ZERO: Self = IVec3::ZERO;
 
-impl<T> Binding<f32> for RisingEdge<T>
-where
-    T: Binding<f32>,
-{
-    type Input = T::Input;
-
-    fn apply(&mut self, input: &Self::Input) {
-        self.binding.apply(input);
-    }
-
-    fn read(&mut self) -> f32 {
-        let value = self.binding.read();
-        if self.prev_value == 0.0 {
-            self.prev_value = value;
-            return value;
-        }
-        self.prev_value = value;
-
-        0.0
-    }
-
-    fn binding(&self) -> InputKind {
-        self.binding.binding()
+    fn combine(&self, other: &Self) -> Self {
+        *self + *other
     }
 }
-
-impl<T, V> BindingExt<V> for T where T: Binding<V> {}
 
 #[cfg(test)]
 mod test {

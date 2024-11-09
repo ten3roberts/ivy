@@ -9,7 +9,7 @@ use ivy_core::{
     layer::events::EventRegisterContext,
     palette::Srgb,
     profiling::ProfilingLayer,
-    update_layer::{FixedTimeStep, PerTick, Plugin, ScheduledLayer, TimeStep},
+    update_layer::{FixedTimeStep, Plugin, ScheduleSetBuilder, ScheduledLayer},
     App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer,
 };
 use ivy_engine::{
@@ -32,7 +32,7 @@ use ivy_wgpu::{
     driver::WinitDriver,
     events::ResizedEvent,
     layer::GraphicsLayer,
-    light::{LightData, LightKind},
+    light::{LightKind, LightParams},
     material_desc::{MaterialData, MaterialDesc},
     mesh_desc::MeshDesc,
     primitives::{CapsulePrimitive, CubePrimitive, UvSpherePrimitive},
@@ -99,14 +99,11 @@ pub fn main() -> anyhow::Result<()> {
         .with_layer(InputLayer::new())
         .with_layer(LogicLayer)
         .with_layer(
-            ScheduledLayer::new(PerTick)
+            ScheduledLayer::new(FixedTimeStep::new(0.02))
                 .with_plugin(FreeCameraPlugin)
                 .with_plugin(UiStatePlugin {
                     state: ui_state.clone(),
-                }),
-        )
-        .with_layer(
-            ScheduledLayer::new(FixedTimeStep::new(0.02))
+                })
                 .with_plugin(PhysicsPlugin::new())
                 .with_plugin(RayPickingPlugin),
         )
@@ -314,7 +311,10 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
             -1.0,
             0.0,
         )))
-        .set(light_data(), LightData::new(Srgb::new(1.0, 1.0, 1.0), 1.0))
+        .set(
+            light_params(),
+            LightParams::new(Srgb::new(1.0, 1.0, 1.0), 1.0),
+        )
         .set(light_kind(), LightKind::Directional)
         .set_default(cast_shadow())
         .spawn(world);
@@ -326,15 +326,16 @@ struct UiStatePlugin {
     state: Mutable<UiState>,
 }
 
-impl<T: TimeStep> Plugin<T> for UiStatePlugin {
+impl Plugin for UiStatePlugin {
     fn install(
         &self,
         _: &mut World,
         _: &AssetCache,
-        schedule: &mut flax::ScheduleBuilder,
-        _: &T,
+        schedules: &mut ScheduleSetBuilder,
     ) -> anyhow::Result<()> {
-        schedule.with_system(sync_ui_state_system(self.state.clone()));
+        schedules
+            .per_tick_mut()
+            .with_system(sync_ui_state_system(self.state.clone()));
 
         Ok(())
     }

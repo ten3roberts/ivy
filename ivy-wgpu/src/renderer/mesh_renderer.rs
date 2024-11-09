@@ -5,20 +5,25 @@ use std::{
 
 use bytemuck::Zeroable;
 use flax::{
+    components::child_of,
+    entity_ids,
     fetch::{entity_refs, Copied, Modified, Source, TransformFetch, Traverse},
     CommandBuffer, Component, Entity, Fetch, FetchExt, Query, World,
 };
 use glam::Mat4;
 use itertools::Itertools;
 use ivy_assets::{map::AssetMap, stored::Handle, Asset, AssetCache};
-use ivy_core::{components::world_transform, profiling::profile_function};
+use ivy_core::{
+    components::world_transform, profiling::profile_function,
+    subscribers::RemovedComponentSubscriber,
+};
 use ivy_gltf::components::skin;
 use ivy_wgpu_types::shader::Culling;
 use slab::Slab;
 use wgpu::{BindGroup, BindGroupLayout, BufferUsages, RenderPass, ShaderStages};
 
 use crate::{
-    components::{material, mesh, mesh_primitive},
+    components::{material, mesh},
     material::PbrMaterial,
     material_desc::{MaterialData, MaterialDesc},
     mesh::{Vertex, VertexDesc},
@@ -101,7 +106,7 @@ struct ObjectDataQuery {
 impl ObjectDataQuery {
     pub fn new() -> Self {
         Self {
-            transform: world_transform().copied().traverse(mesh_primitive),
+            transform: world_transform().copied().traverse(child_of),
         }
     }
 }
@@ -123,6 +128,7 @@ pub struct MeshRenderer {
     ///
     /// Sorted by each batch
     object_data: Vec<ObjectData>,
+    entity_slots: Vec<Option<Entity>>,
     object_buffer: TypedBuffer<ObjectData>,
 
     bind_group_layout: BindGroupLayout,
@@ -136,7 +142,7 @@ pub struct MeshRenderer {
     batch_map: HashMap<BatchKey, BatchId>,
 
     object_query: Query<(
-        Component<usize>,
+        Component<RendererLocation>,
         <ObjectDataQuery as TransformFetch<Modified>>::Output,
     )>,
 
@@ -144,6 +150,7 @@ pub struct MeshRenderer {
     shader_pass: Component<Asset<ShaderPass>>,
     shader_library: Arc<ShaderLibrary>,
     shader_factory: ShaderFactory,
+    removed_rx: flume::Receiver<(Entity, RendererLocation)>,
 }
 
 impl MeshRenderer {
@@ -170,10 +177,17 @@ impl MeshRenderer {
             .bind_buffer(&object_buffer)
             .build(gpu, &bind_group_layout);
 
+        let (removed_tx, removed_rx) = flume::unbounded();
+        world.subscribe(RemovedComponentSubscriber::new(
+            removed_tx,
+            renderer_location(id),
+        ));
+
         Self {
             id,
             shader_library,
             object_data: Vec::new(),
+            entity_slots: Vec::new(),
             object_buffer,
             bind_group_layout,
             bind_group,
@@ -182,10 +196,11 @@ impl MeshRenderer {
             materials: Default::default(),
             batches: Default::default(),
             batch_map: Default::default(),
-            object_query: Query::new((object_index(id), ObjectDataQuery::new().modified())),
+            object_query: Query::new((renderer_location(id), ObjectDataQuery::new().modified())),
             mesh_buffer: MeshBuffer::new(gpu, "mesh_buffer", 4),
             shader_pass,
             shader_factory: Box::new(|v| v),
+            removed_rx,
         }
     }
 
@@ -229,19 +244,17 @@ impl MeshRenderer {
             self.shader_pass.cloned(),
             ObjectDataQuery::new(),
         ))
-        .without(object_index(self.id));
+        .without(renderer_location(self.id));
 
         let mut needs_reallocation = false;
         let mut dirty = false;
         for (entity, mesh, material, shader, object_data) in &mut query.borrow(world) {
-            let skin = entity
-                .query(&skin().traverse(mesh_primitive))
-                .get()
-                .is_some();
+            let skin = entity.query(&skin().traverse(child_of)).get().is_some();
 
             if skin {
                 continue;
             }
+            tracing::info!(%entity, "adding");
 
             dirty = true;
 
@@ -333,16 +346,20 @@ impl MeshRenderer {
             let batch = &mut self.batches[batch_id];
 
             let index = batch.first_instance + batch.instance_count;
-            cmd.set(id, object_index(self.id), index as usize).set(
+            cmd.set(
                 id,
-                self::batch_id(self.id),
-                batch_id,
+                renderer_location(self.id),
+                RendererLocation {
+                    batch_id,
+                    object_index: index,
+                },
             );
 
             needs_reallocation |= batch.register();
 
             if !needs_reallocation {
                 self.object_data[index as usize] = object_data.into();
+                self.entity_slots[index as usize] = Some(id);
             }
         }
 
@@ -380,23 +397,25 @@ impl MeshRenderer {
         }
 
         let mut query = Query::new((
-            batch_id(self.id),
-            object_index(self.id).as_mut(),
+            entity_ids(),
+            renderer_location(self.id).as_mut(),
             ObjectDataQuery::new(),
         ));
 
         let mut total_found = 0;
 
         self.object_data.resize(cursor as _, Zeroable::zeroed());
+        self.entity_slots.resize(cursor as _, None);
         tracing::info!("resized object data to {cursor}");
-        for (batch_id, object_index, item) in &mut query.borrow(world) {
-            let batch = &mut self.batches[*batch_id];
+        for (id, loc, item) in &mut query.borrow(world) {
+            let batch = &mut self.batches[loc.batch_id];
             let index = batch.first_instance + batch.instance_count;
-            *object_index = index as usize;
+            loc.object_index = index;
             batch.instance_count += 1;
             total_found += 1;
             assert!(total_found <= total_registered);
             self.object_data[index as usize] = item.into();
+            self.entity_slots[index as usize] = Some(id);
         }
 
         assert!(
@@ -407,10 +426,37 @@ impl MeshRenderer {
         self.resize_object_buffer(gpu, cursor as usize)
     }
 
+    pub fn handle_removed(&mut self, world: &World) {
+        for (id, loc) in self.removed_rx.try_iter() {
+            tracing::info!(%id, "removing render object");
+            let batch = &mut self.batches[loc.batch_id];
+            let batch_end = batch.first_instance + batch.instance_count;
+
+            if loc.object_index == batch_end - 1 {
+                assert!(self.entity_slots[loc.object_index as usize] == Some(id));
+                self.entity_slots[loc.object_index as usize] = None;
+                batch.instance_count -= 1;
+            } else {
+                let slot = loc.object_index as usize;
+                self.object_data.swap(slot, batch_end as usize - 1);
+                self.entity_slots.swap(slot, batch_end as usize - 1);
+
+                let swapped_entity =
+                    self.entity_slots[slot].expect("Entity must be present in slot");
+
+                let _ = world.update(swapped_entity, renderer_location(self.id), |v| {
+                    v.object_index = loc.object_index;
+                });
+
+                batch.instance_count -= 1;
+            }
+        }
+    }
+
     fn update_object_data(&mut self, world: &World, gpu: &Gpu) {
-        for (&object_index, item) in &mut self.object_query.borrow(world) {
-            assert!(object_index != usize::MAX);
-            self.object_data[object_index] = ObjectData {
+        for (loc, item) in &mut self.object_query.borrow(world) {
+            assert_ne!(loc.object_index, u32::MAX);
+            self.object_data[loc.object_index as usize] = ObjectData {
                 transform: item.transform,
             };
         }
@@ -422,6 +468,7 @@ impl MeshRenderer {
 impl CameraRenderer for MeshRenderer {
     fn update(&mut self, ctx: &mut super::UpdateContext) -> anyhow::Result<()> {
         let mut cmd = CommandBuffer::new();
+        self.handle_removed(ctx.world);
         self.collect_unbatched(
             ctx.world,
             ctx.assets,
@@ -472,7 +519,12 @@ impl CameraRenderer for MeshRenderer {
 
 type BatchId = usize;
 
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+struct RendererLocation {
+    batch_id: BatchId,
+    object_index: u32,
+}
+
 flax::component! {
-    batch_id(id): BatchId,
-    object_index(id): usize,
+    renderer_location(id): RendererLocation,
 }
