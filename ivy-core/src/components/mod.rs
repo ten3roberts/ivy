@@ -19,7 +19,6 @@ flax::component! {
     pub size:Vec2 => [ Debuggable ],
 
     pub is_static: () => [ Debuggable ],
-    pub visible: Visible => [ Debuggable ],
 
     pub color: Color => [ Debuggable ],
 
@@ -138,44 +137,5 @@ impl Bundle for TransformBundle {
             .set(scale(), self.scale)
             .set(world_transform(), Default::default())
             .set(parent_transform(), Default::default());
-    }
-}
-
-#[derive(Default, Debug, Clone, Copy)]
-/// Marker type for objects that will not move through physics or other means.
-/// Objects are assumed to remain in place and not move. Collisions between two
-/// static objects will be ignored, useful for level objects which may overlap
-/// but not generate collisions
-#[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
-pub struct Static;
-
-#[derive(Default, Debug, Clone, Copy)]
-pub struct Sleeping;
-
-/// Marker type for objects that will not interact with the physics system
-/// through collisions despite having colliders.
-#[derive(Default, Debug, Clone, Copy)]
-#[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
-pub struct Trigger;
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-#[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
-/// Signifies if the entity should be visible or not. Default is true
-pub enum Visible {
-    /// Entity is fully visible
-    Visible,
-    /// Entity is explicitly hidden
-    Hidden,
-    /// Entity is hidden by a parent node
-    HiddenInherit,
-}
-
-impl Visible {
-    /// Returns `true` if the visible is [`Visible`].
-    ///
-    /// [`Visible`]: Visible::Visible
-    #[must_use]
-    pub fn is_visible(&self) -> bool {
-        matches!(self, Self::Visible)
     }
 }

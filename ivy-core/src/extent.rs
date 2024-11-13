@@ -1,6 +1,4 @@
 use glam::Vec2;
-#[cfg(feature = "serialize")]
-use serde::{Deserialize, Serialize};
 use std::{
     fmt::Display,
     ops::{Add, Mul},
@@ -8,7 +6,7 @@ use std::{
 
 /// Represents a width and height.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Default)]
-#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Extent {
     pub width: u32,
     pub height: u32,

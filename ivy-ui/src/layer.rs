@@ -7,19 +7,54 @@ use ivy_core::{
 };
 use ivy_input::types::InputEvent;
 use ivy_wgpu::events::{ApplicationReady, ResizedEvent};
-use violet::{core::Widget, glam::vec2, wgpu::app::AppInstance};
+use violet::{
+    core::{declare_atom, Widget},
+    glam::vec2,
+    wgpu::app::AppInstance,
+};
 
 use crate::SharedUiInstance;
 
+pub type Action = Box<dyn Send + Sync + FnOnce(&mut World, &AssetCache) -> anyhow::Result<()>>;
+
+pub struct ActionSender {
+    tx: flume::Sender<Action>,
+}
+
+impl ActionSender {
+    /// Invokes an action on the world after UI
+    pub fn invoke(
+        &self,
+        action: impl 'static + Send + Sync + FnOnce(&mut World, &AssetCache) -> anyhow::Result<()>,
+    ) {
+        self.tx.send(Box::new(action)).expect("channel closed");
+    }
+}
+
+declare_atom! {
+    pub action_sender: ActionSender,
+}
+
 pub struct UiLayer {
     instance: Rc<RefCell<AppInstance>>,
+    pending_actions: flume::Receiver<Action>,
 }
 
 impl UiLayer {
     pub fn new(root: impl Widget) -> Self {
-        let instance = Rc::new(RefCell::new(AppInstance::new(root)));
+        let mut instance = AppInstance::new(root);
 
-        Self { instance }
+        let (tx, rx) = flume::unbounded();
+        instance
+            .frame
+            .set_atom(action_sender(), ActionSender { tx });
+
+        let instance = Rc::new(RefCell::new(instance));
+
+        Self {
+            instance,
+            pending_actions: rx,
+        }
     }
 
     fn on_ready(&mut self, _: &mut World, _: &mut AssetCache) -> anyhow::Result<()> {
@@ -71,12 +106,17 @@ impl UiLayer {
         Ok(captured)
     }
 
-    fn on_tick(&mut self, _: &mut World, _: &mut AssetCache) -> anyhow::Result<()> {
+    fn on_tick(&mut self, world: &mut World, assets: &mut AssetCache) -> anyhow::Result<()> {
         profile_function!();
 
         let mut instance = self.instance.deref().borrow_mut();
 
         instance.update();
+
+        for action in self.pending_actions.drain() {
+            action(world, assets)?;
+        }
+
         Ok(())
     }
 

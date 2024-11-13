@@ -24,7 +24,7 @@ use wgpu::{
 };
 
 use crate::{
-    components::{environment_data, forward_pass, material, mesh, projection_matrix},
+    components::{environment_data, material, mesh, projection_matrix},
     material::PbrMaterial,
     material_desc::MaterialDesc,
     mesh_desc::MeshDesc,

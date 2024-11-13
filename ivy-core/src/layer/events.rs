@@ -1,7 +1,4 @@
-use std::{
-    any::{Any, TypeId},
-    collections::HashMap,
-};
+use std::{any::TypeId, collections::HashMap};
 
 use downcast_rs::{impl_downcast, Downcast};
 use flax::World;
@@ -10,9 +7,6 @@ use ivy_profiling::{profile_function, profile_scope};
 use slab::Slab;
 
 use crate::{Layer, LayerDyn};
-
-type EventCallback<T> =
-    Box<dyn Fn(&mut dyn LayerDyn, &mut World, &mut AssetCache, &T) -> anyhow::Result<bool>>;
 
 type EventCallbackDyn =
     Box<dyn Fn(&mut dyn LayerDyn, &mut World, &mut AssetCache, &dyn Event) -> anyhow::Result<bool>>;
