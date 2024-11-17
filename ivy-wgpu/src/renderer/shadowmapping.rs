@@ -7,6 +7,7 @@ use crate::{
     },
     rendergraph::{
         BufferHandle, Dependency, Node, NodeExecutionContext, NodeUpdateContext, TextureHandle,
+        UpdateResult,
     },
     shader_library::ShaderLibrary,
     types::{shader::TargetDesc, BindGroupBuilder, BindGroupLayoutBuilder},
@@ -113,7 +114,7 @@ impl ShadowMapNode {
 }
 
 impl Node for ShadowMapNode {
-    fn update(&mut self, ctx: NodeUpdateContext) -> anyhow::Result<()> {
+    fn update(&mut self, ctx: NodeUpdateContext) -> anyhow::Result<UpdateResult> {
         ivy_core::profiling::profile_function!();
 
         let shadow_maps = ctx.get_texture(self.shadow_maps);
@@ -130,7 +131,7 @@ impl Node for ShadowMapNode {
                 .first()
         else {
             tracing::warn!("no main camera");
-            return Ok(());
+            return Ok(UpdateResult::Success);
         };
 
         let camera_inv_viewproj = main_camera.0 * main_camera.1.inverse();
@@ -247,7 +248,7 @@ impl Node for ShadowMapNode {
 
         self.renderer.update(&mut update_ctx)?;
 
-        Ok(())
+        Ok(UpdateResult::Success)
     }
 
     fn draw(&mut self, ctx: NodeExecutionContext) -> anyhow::Result<()> {

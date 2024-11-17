@@ -2,13 +2,14 @@ pub mod pbr;
 
 use std::sync::Arc;
 
+use anyhow::Context;
 use flax::World;
 use image::DynamicImage;
 use ivy_assets::{AssetCache, DynAsyncAssetDesc};
 use ivy_core::profiling::profile_scope;
 use ivy_ui::SharedUiInstance;
 use ivy_wgpu::{
-    rendergraph::{self, ExternalResources, RenderGraph},
+    rendergraph::{self, ExternalResources, RenderGraph, RenderGraphResources, TextureHandle},
     shader_library::{ModuleDesc, ShaderLibrary},
     types::{PhysicalSize, Surface},
     Gpu,
@@ -21,14 +22,15 @@ pub struct SurfacePbrPipelineDesc {
     pub ui_instance: Option<SharedUiInstance>,
 }
 
-pub struct SurfacePbrPipeline {
+/// Uses a rendergraph to render to a surface
+pub struct SurfacePbrRenderer {
     render_graph: RenderGraph,
     surface: Surface,
     surface_texture: rendergraph::TextureHandle,
     pbr: PbrRenderGraph,
 }
 
-impl SurfacePbrPipeline {
+impl SurfacePbrRenderer {
     pub fn new(
         world: &mut World,
         assets: &AssetCache,
@@ -36,18 +38,20 @@ impl SurfacePbrPipeline {
         surface: Surface,
         desc: SurfacePbrPipelineDesc,
     ) -> Self {
-        let mut render_graph = RenderGraph::new();
-
-        let surface_texture = render_graph
-            .resources
-            .insert_texture(rendergraph::TextureDesc::External);
-
+        // TODO; pass as param
         let shader_library = ShaderLibrary::new().with_module(ModuleDesc {
             path: "./assets/shaders/pbr_base.wgsl",
             source: include_str!("../../../assets/shaders/pbr_base.wgsl"),
         });
 
         let shader_library = Arc::new(shader_library);
+
+        let resources = RenderGraphResources::new(shader_library.clone());
+        let mut render_graph = RenderGraph::new(resources);
+
+        let surface_texture = render_graph
+            .resources
+            .insert_texture(rendergraph::TextureDesc::External);
 
         let pbr = PbrRenderGraphConfig {
             shadow_map_config: Some(Default::default()),
@@ -58,13 +62,13 @@ impl SurfacePbrPipeline {
                 format: wgpu::TextureFormat::Rgba16Float,
             }),
             hdr_format: wgpu::TextureFormat::Rgba16Float,
+            label: "surface".into(),
         }
         .configure(
             world,
             gpu,
             assets,
             &mut render_graph,
-            shader_library.clone(),
             desc.ui_instance,
             surface_texture,
         );
@@ -78,7 +82,7 @@ impl SurfacePbrPipeline {
     }
 }
 
-impl ivy_wgpu::layer::Renderer for SurfacePbrPipeline {
+impl ivy_wgpu::layer::Renderer for SurfacePbrRenderer {
     fn draw(
         &mut self,
         world: &mut World,
@@ -90,6 +94,9 @@ impl ivy_wgpu::layer::Renderer for SurfacePbrPipeline {
 
         let mut external_resources = ExternalResources::new();
         external_resources.insert_texture(self.surface_texture, &surface_texture.texture);
+
+        self.render_graph
+            .update(gpu, world, assets, &external_resources)?;
 
         self.render_graph
             .draw(gpu, queue, world, assets, &external_resources)?;
@@ -106,5 +113,137 @@ impl ivy_wgpu::layer::Renderer for SurfacePbrPipeline {
         self.surface.resize(gpu, size);
 
         self.pbr.set_size(&mut self.render_graph, size);
+    }
+
+    fn process_commands(
+        &mut self,
+        world: &mut World,
+        assets: &AssetCache,
+        gpu: &Gpu,
+        cmds: &mut flume::Receiver<ivy_wgpu::layer::RendererCommand>,
+    ) -> anyhow::Result<()> {
+        for cmd in cmds.drain() {
+            match cmd {
+                ivy_wgpu::layer::RendererCommand::ModifyRenderGraph(func) => {
+                    func(world, &mut self.render_graph, assets, gpu)?;
+                }
+                ivy_wgpu::layer::RendererCommand::UpdateTexture { handle, desc } => {
+                    *self
+                        .render_graph
+                        .resources
+                        .get_texture_mut(handle)
+                        .as_managed_mut()
+                        .context("Attempt to modify an external texture")? = desc;
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
+pub struct SurfacePipelineDesc {
+    pub ui_instance: SharedUiInstance,
+}
+
+/// Uses a rendergraph to render to a surface
+pub struct SurfaceRenderer {
+    render_graph: RenderGraph,
+    surface: Surface,
+    surface_handle: rendergraph::TextureHandle,
+}
+
+impl SurfaceRenderer {
+    pub fn new(surface: Surface) -> Self {
+        // TODO; pass as param
+        let shader_library = ShaderLibrary::new().with_module(ModuleDesc {
+            path: "./assets/shaders/pbr_base.wgsl",
+            source: include_str!("../../../assets/shaders/pbr_base.wgsl"),
+        });
+
+        let shader_library = Arc::new(shader_library);
+
+        let resources = RenderGraphResources::new(shader_library.clone());
+        let mut render_graph = RenderGraph::new(resources);
+
+        let surface_texture = render_graph
+            .resources
+            .insert_texture(rendergraph::TextureDesc::External);
+
+        Self {
+            render_graph,
+            surface,
+            surface_handle: surface_texture,
+        }
+    }
+
+    pub fn render_graph(&self) -> &RenderGraph {
+        &self.render_graph
+    }
+
+    pub fn surface_handle(&self) -> TextureHandle {
+        self.surface_handle
+    }
+
+    pub fn render_graph_mut(&mut self) -> &mut RenderGraph {
+        &mut self.render_graph
+    }
+}
+
+impl ivy_wgpu::layer::Renderer for SurfaceRenderer {
+    fn draw(
+        &mut self,
+        world: &mut World,
+        assets: &AssetCache,
+        gpu: &Gpu,
+        queue: &wgpu::Queue,
+    ) -> anyhow::Result<()> {
+        let surface_texture = self.surface.get_current_texture()?;
+
+        let mut external_resources = ExternalResources::new();
+        external_resources.insert_texture(self.surface_handle, &surface_texture.texture);
+
+        self.render_graph
+            .update(gpu, world, assets, &external_resources)?;
+
+        self.render_graph
+            .draw(gpu, queue, world, assets, &external_resources)?;
+
+        {
+            profile_scope!("present");
+            surface_texture.present();
+        }
+
+        Ok(())
+    }
+
+    fn on_resize(&mut self, gpu: &Gpu, size: PhysicalSize<u32>) {
+        self.surface.resize(gpu, size);
+    }
+
+    fn process_commands(
+        &mut self,
+        world: &mut World,
+        assets: &AssetCache,
+        gpu: &Gpu,
+        cmds: &mut flume::Receiver<ivy_wgpu::layer::RendererCommand>,
+    ) -> anyhow::Result<()> {
+        for cmd in cmds.drain() {
+            match cmd {
+                ivy_wgpu::layer::RendererCommand::ModifyRenderGraph(func) => {
+                    func(world, &mut self.render_graph, assets, gpu)?;
+                }
+                ivy_wgpu::layer::RendererCommand::UpdateTexture { handle, desc } => {
+                    *self
+                        .render_graph
+                        .resources
+                        .get_texture_mut(handle)
+                        .as_managed_mut()
+                        .context("Attempt to modify an external texture")? = desc;
+                }
+            }
+        }
+
+        Ok(())
     }
 }

@@ -8,12 +8,12 @@ use ivy_core::{
 use ivy_input::types::InputEvent;
 use ivy_wgpu::events::{ApplicationReady, ResizedEvent};
 use violet::{
-    core::{declare_atom, Widget},
+    core::{declare_atom, ScopeRef, Widget},
     glam::vec2,
     wgpu::app::AppInstance,
 };
 
-use crate::SharedUiInstance;
+use crate::{components::on_input_event, SharedUiInstance};
 
 pub type Action = Box<dyn Send + Sync + FnOnce(&mut World, &AssetCache) -> anyhow::Result<()>>;
 
@@ -57,21 +57,21 @@ impl UiLayer {
         }
     }
 
-    fn on_ready(&mut self, _: &mut World, _: &mut AssetCache) -> anyhow::Result<()> {
+    fn on_ready(&mut self, _: &mut World, _: &AssetCache) -> anyhow::Result<()> {
         Ok(())
     }
 
     fn on_input_event(
         &mut self,
-        _: &mut World,
-        _: &mut AssetCache,
+        engine_world: &mut World,
+        assets: &AssetCache,
         event: &InputEvent,
     ) -> anyhow::Result<bool> {
         profile_function!();
         let instance = &mut *self.instance.deref().borrow_mut();
 
         // TODO: modifiers changed
-        let captured = match event {
+        let mut captured = match event {
             InputEvent::Keyboard(keyboard_input) => instance.input_state.on_keyboard_input(
                 &mut instance.frame,
                 keyboard_input.key.clone(),
@@ -103,10 +103,23 @@ impl UiLayer {
             InputEvent::Focus(_) => false,
         };
 
+        if let Some(focused) = instance.input_state.focused_entity(instance.frame.world()) {
+            if let Ok(mut handler) = focused.get_mut(on_input_event()) {
+                handler(
+                    &ScopeRef::new(&instance.frame, focused),
+                    engine_world,
+                    assets,
+                    event,
+                )?;
+
+                captured = true;
+            }
+        }
+
         Ok(captured)
     }
 
-    fn on_tick(&mut self, world: &mut World, assets: &mut AssetCache) -> anyhow::Result<()> {
+    fn on_tick(&mut self, world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
         profile_function!();
 
         let mut instance = self.instance.deref().borrow_mut();
@@ -123,7 +136,7 @@ impl UiLayer {
     fn on_resized(
         &mut self,
         _: &mut World,
-        _: &mut AssetCache,
+        _: &AssetCache,
         event: &ResizedEvent,
     ) -> anyhow::Result<()> {
         let mut instance = self.instance.deref().borrow_mut();

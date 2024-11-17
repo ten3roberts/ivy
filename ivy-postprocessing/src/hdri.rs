@@ -10,7 +10,7 @@ use ivy_assets::Asset;
 use ivy_core::DEG_90;
 use ivy_wgpu::{
     renderer::SkyboxTextures,
-    rendergraph::{Dependency, Node},
+    rendergraph::{Dependency, Node, UpdateResult},
     types::{
         shader::{ShaderDesc, TargetDesc},
         BindGroupBuilder, BindGroupLayoutBuilder, PhysicalSize, Shader, TypedBuffer,
@@ -501,13 +501,16 @@ impl Node for HdriProcessorNode {
         type_name::<Self>()
     }
 
-    fn update(&mut self, _ctx: ivy_wgpu::rendergraph::NodeUpdateContext) -> anyhow::Result<()> {
+    fn update(
+        &mut self,
+        _ctx: ivy_wgpu::rendergraph::NodeUpdateContext,
+    ) -> anyhow::Result<UpdateResult> {
         if let Some(source) = self.incoming.next().now_or_never().flatten() {
             self.process_hdri = true;
             self.source = Some(source);
         }
 
-        Ok(())
+        Ok(UpdateResult::Success)
     }
 
     fn draw(&mut self, ctx: ivy_wgpu::rendergraph::NodeExecutionContext) -> anyhow::Result<()> {

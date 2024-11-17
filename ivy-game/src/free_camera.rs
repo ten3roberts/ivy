@@ -1,4 +1,4 @@
-use flax::{BoxedSystem, Component, Entity, FetchExt, Mutable, Query, QueryBorrow, System, World};
+use flax::{BoxedSystem, Component, Entity, FetchExt, ComponentMut, Query, QueryBorrow, System, World};
 use glam::{vec3, EulerRot, Quat, Vec2, Vec3};
 use ivy_assets::AssetCache;
 use ivy_core::{
@@ -139,7 +139,7 @@ fn cursor_lock_system() -> BoxedSystem {
         .with_query(Query::new(window().as_mut()).with(main_window()))
         .build(
             |mut query: QueryBorrow<Component<i32>>,
-             mut window: QueryBorrow<Mutable<WindowHandle>, _>| {
+             mut window: QueryBorrow<ComponentMut<WindowHandle>, _>| {
                 query.iter().for_each(|&pan_active| {
                     if let Some(window) = window.first() {
                         window.set_cursor_lock(pan_active > 0);

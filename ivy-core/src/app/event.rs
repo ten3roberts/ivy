@@ -10,7 +10,7 @@ pub enum AppEvent {}
 pub struct TickEvent(pub Duration);
 
 #[derive(Debug, Clone)]
-pub struct InitEvent;
+pub struct PostInitEvent;
 
 impl Event for TickEvent {}
-impl Event for InitEvent {}
+impl Event for PostInitEvent {}

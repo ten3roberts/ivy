@@ -17,7 +17,9 @@ use wgpu::{
 
 use crate::{
     mesh::{Mesh, Vertex, VertexDesc},
-    rendergraph::{Dependency, Node, NodeExecutionContext, NodeUpdateContext, TextureHandle},
+    rendergraph::{
+        Dependency, Node, NodeExecutionContext, NodeUpdateContext, TextureHandle, UpdateResult,
+    },
 };
 
 use super::{get_main_camera_data, CameraData};
@@ -90,7 +92,7 @@ impl GizmosRendererNode {
 }
 
 impl Node for GizmosRendererNode {
-    fn update(&mut self, ctx: NodeUpdateContext) -> anyhow::Result<()> {
+    fn update(&mut self, ctx: NodeUpdateContext) -> anyhow::Result<UpdateResult> {
         let gizmos = ctx
             .world
             .get(engine(), components::gizmos())
@@ -139,7 +141,7 @@ impl Node for GizmosRendererNode {
 
         self.buffer.write(&ctx.gpu.queue, 0, &self.data);
 
-        Ok(())
+        Ok(UpdateResult::Success)
     }
 
     fn draw(&mut self, ctx: NodeExecutionContext) -> anyhow::Result<()> {

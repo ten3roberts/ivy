@@ -296,7 +296,6 @@ impl SkinnedMeshRenderer {
                 let shader = match self.shaders.entry(&key.shader) {
                     slotmap::secondary::Entry::Occupied(slot) => slot.get().clone(),
                     slotmap::secondary::Entry::Vacant(slot) => {
-                        tracing::info!(layouts = layouts.len(), "creating shader");
                         let module = self.shader_library.process(gpu, (&*key.shader).into())?;
 
                         let vertex_layouts = &[SkinnedVertex::layout()];

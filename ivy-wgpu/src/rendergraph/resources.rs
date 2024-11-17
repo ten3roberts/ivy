@@ -1,17 +1,20 @@
 use std::{
     borrow::Cow,
     collections::{BTreeSet, HashMap},
+    sync::Arc,
 };
 
 use itertools::Itertools;
 use ivy_wgpu_types::Gpu;
 use slotmap::{SecondaryMap, SlotMap};
 use wgpu::{
-    Buffer, BufferDescriptor, BufferUsages, Texture, TextureDescriptor, TextureDimension,
-    TextureFormat, TextureUsages,
+    Buffer, BufferAddress, BufferDescriptor, BufferUsages, Texture, TextureDescriptor,
+    TextureDimension, TextureFormat, TextureUsages,
 };
 
-use super::{Dependency, Node, ResourceHandle};
+use crate::shader_library::ShaderLibrary;
+
+use super::{Dependency, Node, NodeId, ResourceHandle};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct Lifetime {
@@ -100,11 +103,11 @@ impl<T> Bucket<T> {
     }
 }
 
-trait SubResource {
-    type Desc<'a>: Clone;
-    fn is_compatible(desc: &Self::Desc<'_>, other: &Self::Desc<'_>) -> bool;
-    fn is_persistent(desc: &Self::Desc<'_>) -> bool;
-    fn create(gpu: &Gpu, desc: Self::Desc<'_>) -> Self;
+trait SubResource: std::fmt::Debug {
+    type Desc: Clone;
+    fn is_compatible(desc: &Self::Desc, other: &Self::Desc) -> bool;
+    fn is_persistent(desc: &Self::Desc) -> bool;
+    fn create(gpu: &Gpu, desc: Self::Desc) -> Self;
 }
 
 #[derive(Debug, Clone)]
@@ -114,23 +117,23 @@ struct AllocatedTextureDescriptor {
 }
 
 impl SubResource for Texture {
-    type Desc<'a> = AllocatedTextureDescriptor;
+    type Desc = AllocatedTextureDescriptor;
 
-    fn is_compatible(desc: &Self::Desc<'_>, other: &Self::Desc<'_>) -> bool {
-        !desc.desc.persistent
-            && !other.desc.persistent
-            && desc.desc.extent == other.desc.extent
-            && desc.desc.dimension == other.desc.dimension
-            && desc.desc.format == other.desc.format
-            && desc.desc.mip_level_count == other.desc.mip_level_count
-            && desc.desc.sample_count == other.desc.sample_count
+    fn is_compatible(desc: &Self::Desc, other: &Self::Desc) -> bool {
+        let inner = &desc.desc;
+        inner.extent == other.desc.extent
+            && inner.dimension == other.desc.dimension
+            && inner.format == other.desc.format
+            && inner.mip_level_count == other.desc.mip_level_count
+            && inner.sample_count == other.desc.sample_count
+            && desc.usage == other.usage
     }
 
-    fn is_persistent(desc: &Self::Desc<'_>) -> bool {
+    fn is_persistent(desc: &Self::Desc) -> bool {
         desc.desc.persistent
     }
 
-    fn create(gpu: &Gpu, desc: Self::Desc<'_>) -> Self {
+    fn create(gpu: &Gpu, desc: Self::Desc) -> Self {
         gpu.device.create_texture(&TextureDescriptor {
             label: Some(&desc.desc.label),
             size: desc.desc.extent,
@@ -144,25 +147,40 @@ impl SubResource for Texture {
     }
 }
 
-impl SubResource for Buffer {
-    type Desc<'a> = BufferDescriptor<'a>;
+#[derive(Clone, Debug)]
+pub struct AllocatedBufferDescriptor {
+    label: Cow<'static, str>,
+    size: BufferAddress,
+    usage: BufferUsages,
+    mapped_at_creation: bool,
+}
 
-    fn is_compatible(desc: &Self::Desc<'_>, other: &Self::Desc<'_>) -> bool {
+impl SubResource for Buffer {
+    type Desc = AllocatedBufferDescriptor;
+
+    fn is_compatible(desc: &Self::Desc, other: &Self::Desc) -> bool {
         desc.size == other.size
     }
 
-    fn is_persistent(_desc: &Self::Desc<'_>) -> bool {
+    fn is_persistent(_desc: &Self::Desc) -> bool {
         false
     }
 
-    fn create(gpu: &Gpu, desc: Self::Desc<'_>) -> Self {
-        gpu.device.create_buffer(&desc)
+    fn create(gpu: &Gpu, desc: Self::Desc) -> Self {
+        gpu.device.create_buffer(&BufferDescriptor {
+            label: Some(desc.label.as_ref()),
+            size: desc.size,
+            usage: desc.usage,
+            mapped_at_creation: desc.mapped_at_creation,
+        })
     }
 }
 
 struct ResourceAllocator<Handle: slotmap::Key, Data: SubResource> {
     bucket_map: SecondaryMap<Handle, BucketId>,
+    allocated_desc: SecondaryMap<Handle, Data::Desc>,
     bucket_data: Vec<Data>,
+    persistent_count: usize,
 }
 
 impl<Handle: slotmap::Key, Data: SubResource> ResourceAllocator<Handle, Data> {
@@ -170,6 +188,8 @@ impl<Handle: slotmap::Key, Data: SubResource> ResourceAllocator<Handle, Data> {
         Self {
             bucket_map: Default::default(),
             bucket_data: Default::default(),
+            persistent_count: 0,
+            allocated_desc: Default::default(),
         }
     }
 
@@ -177,30 +197,42 @@ impl<Handle: slotmap::Key, Data: SubResource> ResourceAllocator<Handle, Data> {
         Some(&self.bucket_data[*self.bucket_map.get(handle)?])
     }
 
-    fn allocate_resources<'a, I: Iterator<Item = (Handle, Data::Desc<'a>, Option<Lifetime>)>>(
+    fn allocate_resources<'a, I: Iterator<Item = (Handle, Data::Desc, Option<Lifetime>)>>(
         &mut self,
         gpu: &Gpu,
         resources: I,
-    ) where
+    ) -> anyhow::Result<()>
+    where
         Handle: Into<ResourceHandle>,
     {
-        let mut buckets: Vec<(Bucket<Data::Desc<'a>>, Vec<Handle>)> = Vec::new();
+        let mut new_buckets: Vec<(Bucket<Data::Desc>, Vec<Handle>)> = Vec::new();
 
         for (handle, desc, lifetime) in resources {
+            if Data::is_persistent(&desc) && self.bucket_map.contains_key(handle) {
+                anyhow::ensure!(
+                    Data::is_compatible(&desc, &self.allocated_desc[handle]),
+                    "persistent textures can not change allocation parameters"
+                );
+
+                continue;
+            }
+
             // Find suitable bucket
-            let bucket_id = lifetime.and_then(|lifetime| {
-                buckets.iter_mut().find_position(|(v, _)| {
-                    Data::is_compatible(&desc, &v.desc) && !v.overlaps(lifetime)
+            let suitable_bucket = lifetime.and_then(|lifetime| {
+                new_buckets.iter_mut().find(|(v, _)| {
+                    !(Data::is_persistent(&desc) || Data::is_persistent(&v.desc))
+                        && Data::is_compatible(&desc, &v.desc)
+                        && !v.overlaps(lifetime)
                 })
             });
 
             let lifetime = lifetime.unwrap_or(Lifetime::new(0, u32::MAX));
 
-            if let Some((_, (bucket, handles))) = bucket_id {
+            if let Some((bucket, handles)) = suitable_bucket {
                 bucket.lifetimes.push(lifetime);
                 handles.push(handle);
             } else {
-                buckets.push((
+                new_buckets.push((
                     Bucket {
                         desc: desc.clone(),
                         lifetimes: vec![lifetime],
@@ -210,35 +242,46 @@ impl<Handle: slotmap::Key, Data: SubResource> ResourceAllocator<Handle, Data> {
             }
         }
 
-        buckets.sort_by_key(|(v, _)| !Data::is_persistent(&v.desc));
+        new_buckets.sort_by_key(|(v, _)| !Data::is_persistent(&v.desc));
 
-        let persistent_count = if self.bucket_data.is_empty() {
-            0
-        } else {
-            buckets
-                .iter()
-                .take_while(|(v, _)| Data::is_persistent(&v.desc))
-                .count()
-        };
+        // let persistent_count = if self.bucket_data.is_empty() {
+        //     0
+        // } else {
+        //     buckets
+        //         .iter()
+        //         .take_while(|(v, _)| Data::is_persistent(&v.desc))
+        //         .count()
+        // };
 
-        self.bucket_data.drain(persistent_count..);
+        let new_persistent_count = new_buckets
+            .iter()
+            .take_while(|(v, _)| Data::is_persistent(&v.desc))
+            .count();
+
+        self.bucket_data.drain(self.persistent_count..);
 
         // Preserve persistent resources
-        for (bucket, handles) in &buckets[persistent_count..] {
+        for (bucket, handles) in &new_buckets[..] {
             let bucket_id = self.bucket_data.len();
 
-            for handle in handles {
-                self.bucket_map.insert(*handle, bucket_id);
+            for &handle in handles {
+                self.allocated_desc.insert(handle, bucket.desc.clone());
+                self.bucket_map.insert(handle, bucket_id);
             }
 
             self.bucket_data
                 .push(Data::create(gpu, bucket.desc.clone()));
         }
+
+        self.persistent_count += new_persistent_count;
+
+        Ok(())
     }
 }
 
-pub struct Resources {
+pub struct RenderGraphResources {
     pub(crate) dirty: bool,
+    shader_library: Arc<ShaderLibrary>,
 
     textures: SlotMap<TextureHandle, TextureDesc>,
     managed_texture_data: ResourceAllocator<TextureHandle, Texture>,
@@ -249,8 +292,8 @@ pub struct Resources {
     pub(crate) modified_resources: BTreeSet<ResourceHandle>,
 }
 
-impl Resources {
-    pub fn new() -> Self {
+impl RenderGraphResources {
+    pub fn new(shader_library: Arc<ShaderLibrary>) -> Self {
         Self {
             dirty: false,
             textures: Default::default(),
@@ -258,6 +301,7 @@ impl Resources {
             managed_texture_data: ResourceAllocator::new(),
             buffer_data: ResourceAllocator::new(),
             modified_resources: Default::default(),
+            shader_library,
         }
     }
 
@@ -276,10 +320,16 @@ impl Resources {
         &self.textures[handle]
     }
 
+    #[track_caller]
     pub(super) fn get_texture_data(&self, key: TextureHandle) -> &Texture {
         match self.textures.get(key).unwrap() {
             TextureDesc::External => panic!("Must use external resources"),
-            TextureDesc::Managed(_) => self.managed_texture_data.get(key).expect("No such texture"),
+            TextureDesc::Managed(_) => match self.managed_texture_data.get(key) {
+                Some(v) => v,
+                None => {
+                    panic!("No such texture {key:?}");
+                }
+            },
         }
     }
 
@@ -293,14 +343,14 @@ impl Resources {
 
     pub(crate) fn allocate_textures(
         &mut self,
-        nodes: &[Box<dyn Node>],
+        nodes: &SlotMap<NodeId, Box<dyn Node>>,
         gpu: &Gpu,
         lifetimes: &HashMap<ResourceHandle, Lifetime>,
-    ) {
+    ) -> anyhow::Result<()> {
         let mut usages = SecondaryMap::default();
 
         nodes
-            .iter()
+            .values()
             .flat_map(|v| {
                 v.read_dependencies()
                     .into_iter()
@@ -319,11 +369,17 @@ impl Resources {
 
         let iter = self.textures.iter().filter_map(|(handle, desc)| {
             let desc = desc.as_managed()?;
-            tracing::info!("allocating {}", desc.label);
+
+            let _span = tracing::info_span!("allocating", ?desc.label, ?handle).entered();
 
             let lf = lifetimes.get(&handle.into()).copied();
 
-            let usage = *usages.get(handle).unwrap();
+            let Some(&usage) = usages.get(handle) else {
+                tracing::warn!("no usages for {}", desc.label);
+                return None;
+            };
+
+            tracing::info!(?usage);
 
             Some((
                 handle,
@@ -335,19 +391,19 @@ impl Resources {
             ))
         });
 
-        self.managed_texture_data.allocate_resources(gpu, iter);
+        self.managed_texture_data.allocate_resources(gpu, iter)
     }
 
     pub(crate) fn allocate_buffers(
         &mut self,
-        nodes: &[Box<dyn Node>],
+        nodes: &SlotMap<NodeId, Box<dyn Node>>,
         gpu: &Gpu,
         lifetimes: &HashMap<ResourceHandle, Lifetime>,
-    ) {
+    ) -> anyhow::Result<()> {
         let mut usages = SecondaryMap::default();
 
         nodes
-            .iter()
+            .values()
             .flat_map(|v| {
                 v.read_dependencies()
                     .into_iter()
@@ -370,8 +426,8 @@ impl Resources {
 
             Some((
                 handle,
-                BufferDescriptor {
-                    label: desc.label.as_ref().into(),
+                AllocatedBufferDescriptor {
+                    label: desc.label.clone(),
                     size: desc.size,
                     usage: desc.usage | usage,
                     mapped_at_creation: false,
@@ -380,12 +436,10 @@ impl Resources {
             ))
         });
 
-        self.buffer_data.allocate_resources(gpu, iter);
+        self.buffer_data.allocate_resources(gpu, iter)
     }
-}
 
-impl Default for Resources {
-    fn default() -> Self {
-        Self::new()
+    pub fn shader_library(&self) -> &Arc<ShaderLibrary> {
+        &self.shader_library
     }
 }

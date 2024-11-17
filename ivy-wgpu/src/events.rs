@@ -4,7 +4,7 @@ use ivy_core::layer::events::Event;
 use winit::{dpi::PhysicalSize, window::Window};
 
 #[derive(Debug, Clone)]
-pub struct ApplicationReady(pub(crate) Arc<Window>);
+pub struct ApplicationReady(pub Arc<Window>);
 
 #[derive(Debug, Clone)]
 pub struct RedrawEvent;

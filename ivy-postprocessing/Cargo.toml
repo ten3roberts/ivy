@@ -28,6 +28,7 @@ wgpu.workspace = true
 async-std.workspace = true
 futures.workspace = true
 tracing.workspace = true
+flume.workspace = true
 
 [dev-dependencies]
 tracing-subscriber.workspace = true

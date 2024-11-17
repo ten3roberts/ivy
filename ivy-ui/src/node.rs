@@ -1,25 +1,36 @@
 use std::{mem, ops::Deref};
 
 use anyhow::Context;
+use flax::{filter::ChangeFilter, Component, ComponentMut, FetchExt, Query};
 use ivy_wgpu::{
-    rendergraph::{Dependency, Node, TextureHandle},
+    rendergraph::{Dependency, Node, TextureHandle, UpdateResult},
     types::PhysicalSize,
     Gpu,
 };
 use violet::{
-    core::components::rect,
+    core::{assets::Asset, components::rect},
     glam::Mat4,
-    wgpu::renderer::{MainRenderer, MainRendererConfig, RendererContext},
+    wgpu::{
+        components::texture_handle,
+        renderer::{MainRenderer, MainRendererConfig, RendererContext},
+    },
 };
-use wgpu::TextureUsages;
+use wgpu::{TextureUsages, TextureView};
 
-use crate::SharedUiInstance;
+use crate::{components::texture_dependency, SharedUiInstance};
 
+/// Renders the violet Ui into the rendergraph
 pub struct UiRenderNode {
     instance: SharedUiInstance,
     renderer: Option<MainRenderer>,
     ctx: RendererContext,
     target: TextureHandle,
+    modified_deps: Query<ChangeFilter<TextureHandle>>,
+    texture_deps: Query<(
+        Component<TextureHandle>,
+        ComponentMut<Option<Asset<TextureView>>>,
+    )>,
+    update_texture_deps: bool,
 }
 
 impl UiRenderNode {
@@ -33,11 +44,47 @@ impl UiRenderNode {
                 queue: gpu.queue.clone(),
             }),
             target,
+            modified_deps: Query::new(texture_dependency().modified()),
+            texture_deps: Query::new((texture_dependency(), texture_handle().as_mut())),
+            update_texture_deps: true,
         }
     }
 }
 
 impl Node for UiRenderNode {
+    fn update(
+        &mut self,
+        ctx: ivy_wgpu::rendergraph::NodeUpdateContext,
+    ) -> anyhow::Result<UpdateResult> {
+        let instance = &mut *self.instance.deref().borrow_mut();
+        let new = self
+            .modified_deps
+            .borrow(instance.frame.world())
+            .iter()
+            .count()
+            > 0;
+
+        if new || self.update_texture_deps {
+            self.texture_deps
+                .borrow(&instance.frame.world)
+                .for_each(|(&handle, view)| {
+                    let texture = ctx.get_texture(handle);
+                    *view = Some(
+                        instance
+                            .frame
+                            .assets
+                            .insert(texture.create_view(&Default::default())),
+                    );
+                });
+        }
+
+        // if new {
+        //     return Ok(UpdateResult::RecalculateDepencies);
+        // }
+
+        Ok(UpdateResult::Success)
+    }
+
     fn draw(&mut self, ctx: ivy_wgpu::rendergraph::NodeExecutionContext) -> anyhow::Result<()> {
         let target = ctx.get_texture(self.target);
         let target_view = target.create_view(&Default::default());
@@ -99,14 +146,25 @@ impl Node for UiRenderNode {
     }
 
     fn on_resource_changed(&mut self, _resource: ivy_wgpu::rendergraph::ResourceHandle) {
-        todo!()
+        self.update_texture_deps = true;
     }
 
     fn read_dependencies(&self) -> Vec<ivy_wgpu::rendergraph::Dependency> {
-        vec![Dependency::texture(
+        let instance = &mut *self.instance.deref().borrow_mut();
+
+        let mut ui_deps = Query::new(
+            texture_dependency()
+                .copied()
+                .map(|v| Dependency::texture(v, TextureUsages::TEXTURE_BINDING)),
+        )
+        .collect_vec(instance.frame.world());
+
+        ui_deps.push(Dependency::texture(
             self.target,
             TextureUsages::RENDER_ATTACHMENT,
-        )]
+        ));
+
+        ui_deps
     }
 
     fn write_dependencies(&self) -> Vec<ivy_wgpu::rendergraph::Dependency> {

@@ -254,7 +254,6 @@ impl MeshRenderer {
             if skin {
                 continue;
             }
-            tracing::info!(%entity, "adding");
 
             dirty = true;
 
@@ -287,25 +286,17 @@ impl MeshRenderer {
                         }
                     }
                     Entry::Vacant(v) => {
-                        tracing::info!("loading mesh");
                         let handle = load_mesh(v.key());
                         v.insert(Arc::downgrade(&handle));
                         handle
                     }
                 };
 
-                let material: Asset<PbrMaterial> =
-                    tracing::info_span!("load_material").in_scope(|| {
-                        assets.try_load(&key.material).unwrap_or_else(|e| {
-                    tracing::error!(?key.material, "{:?}", e.context("Failed to load material"));
-                    assets.load(&MaterialDesc::content(MaterialData::new()))
-                })
-                    });
+                let material: Asset<PbrMaterial> = assets.try_load(&key.material).unwrap_or_else(|e| { tracing::error!(?key.material, "{:?}", e.context("Failed to load material")); assets.load(&MaterialDesc::content(MaterialData::new())) }) ;
 
                 let shader = match self.shaders.entry(&key.shader) {
                     slotmap::secondary::Entry::Occupied(slot) => slot.get().clone(),
                     slotmap::secondary::Entry::Vacant(slot) => {
-                        tracing::info!(layouts = layouts.len(), "creating shader");
                         let module = self.shader_library.process(gpu, (&*key.shader).into())?;
 
                         let vertex_layouts = &[Vertex::layout()];
@@ -392,7 +383,6 @@ impl MeshRenderer {
             batch.first_instance = cursor;
             batch.instance_capacity = cap;
 
-            tracing::info!(batch.first_instance, batch.instance_capacity, cursor);
             cursor += cap;
         }
 

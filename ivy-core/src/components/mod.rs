@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use flax::{Component, Debuggable, EntityBuilder, Fetch, Mutable};
+use flax::{Component, Debuggable, EntityBuilder, Fetch, ComponentMut};
 use glam::{Mat4, Quat, Vec2, Vec3};
 
 use crate::{gizmos::Gizmos, AsyncCommandBuffer, Bundle, Color};
@@ -52,9 +52,9 @@ impl TransformQuery {
 
 #[derive(Fetch, Debug, Clone)]
 pub struct TransformQueryMut {
-    pub pos: Mutable<Vec3>,
-    pub rotation: Mutable<Quat>,
-    pub scale: Mutable<Vec3>,
+    pub pos: ComponentMut<Vec3>,
+    pub rotation: ComponentMut<Quat>,
+    pub scale: ComponentMut<Vec3>,
 }
 
 impl TransformQueryMut {

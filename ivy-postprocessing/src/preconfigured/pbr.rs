@@ -1,4 +1,4 @@
-use std::{future::ready, mem::size_of, sync::Arc};
+use std::{future::ready, mem::size_of};
 
 use flax::World;
 use futures::{stream, StreamExt};
@@ -15,7 +15,6 @@ use ivy_wgpu::{
         CameraNode, LightManager, MsaaResolve, SkyboxTextures,
     },
     rendergraph::{BufferDesc, ManagedTextureDesc, RenderGraph, TextureHandle},
-    shader_library::ShaderLibrary,
     types::{texture::max_mip_levels, PhysicalSize},
     Gpu,
 };
@@ -36,6 +35,7 @@ pub struct PbrRenderGraphConfig {
     pub bloom: Option<BloomConfig>,
     pub skybox: Option<SkyboxConfig>,
     pub hdr_format: TextureFormat,
+    pub label: String,
 }
 
 pub struct SkyboxConfig {
@@ -105,7 +105,6 @@ impl PbrRenderGraphConfig {
         gpu: &Gpu,
         assets: &AssetCache,
         render_graph: &mut RenderGraph,
-        shader_library: Arc<ShaderLibrary>,
         ui_instance: Option<SharedUiInstance>,
         destination: TextureHandle,
     ) -> PbrRenderGraph {
@@ -118,7 +117,7 @@ impl PbrRenderGraphConfig {
         let hdr_format = self.hdr_format;
 
         let final_color = render_graph.resources.insert_texture(ManagedTextureDesc {
-            label: "final_color".into(),
+            label: format!("{}.final_color", self.label).into(),
             extent,
             dimension: wgpu::TextureDimension::D2,
             format: hdr_format,
@@ -222,7 +221,7 @@ impl PbrRenderGraphConfig {
                 shadow_camera_buffer,
                 shadow_map_config.max_shadows as _,
                 shadow_map_config.max_cascades as _,
-                shader_library.clone(),
+                render_graph.resources.shader_library().clone(),
             ));
         }
 
@@ -321,8 +320,18 @@ impl PbrRenderGraphConfig {
 
         let camera_renderers = (
             SkyboxRenderer::new(gpu),
-            MeshRenderer::new(world, gpu, forward_pass(), shader_library.clone()),
-            SkinnedMeshRenderer::new(world, gpu, forward_pass(), shader_library.clone()),
+            MeshRenderer::new(
+                world,
+                gpu,
+                forward_pass(),
+                render_graph.resources.shader_library().clone(),
+            ),
+            SkinnedMeshRenderer::new(
+                world,
+                gpu,
+                forward_pass(),
+                render_graph.resources.shader_library().clone(),
+            ),
         );
 
         let light_manager = LightManager::new(gpu, shadow_maps, shadow_camera_buffer, 4);
@@ -388,7 +397,7 @@ impl PbrRenderGraphConfig {
         ));
 
         if let Some(ui) = ui_instance {
-            render_graph.add_node(UiRenderNode::new(gpu, ui, destination))
+            render_graph.add_node(UiRenderNode::new(gpu, ui, destination));
         }
 
         PbrRenderGraph { screensized }

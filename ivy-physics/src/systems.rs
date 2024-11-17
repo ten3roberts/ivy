@@ -7,7 +7,7 @@ use crate::{
 use anyhow::Context;
 use flax::{
     components::child_of, entity_ids, events::EventSubscriber, fetch::Copied, filter::ChangeFilter,
-    BoxedSystem, CommandBuffer, Component, EntityIds, FetchExt, Mutable, Opt, Query, QueryBorrow,
+    BoxedSystem, CommandBuffer, Component, EntityIds, FetchExt, ComponentMut, Opt, Query, QueryBorrow,
     RelationExt, System, World,
 };
 use glam::{Mat4, Vec3};
@@ -35,7 +35,7 @@ pub fn register_bodies_system() -> BoxedSystem {
         )))
         .build(
             move |cmd: &mut CommandBuffer,
-                  mut query: QueryBorrow<Mutable<PhysicsState>>,
+                  mut query: QueryBorrow<ComponentMut<PhysicsState>>,
                   mut bodies: QueryBorrow<
                 '_,
                 (
@@ -77,7 +77,7 @@ pub fn register_colliders_system() -> BoxedSystem {
         )))
         .build(
             move |cmd: &mut CommandBuffer,
-                  mut query: QueryBorrow<Mutable<PhysicsState>>,
+                  mut query: QueryBorrow<ComponentMut<PhysicsState>>,
                   mut bodies: QueryBorrow<'_, _>| {
                 if let Some(state) = query.first() {
                     for (id, (shape, &density, &restitution, &friction), (parent_id, &parent)) in
@@ -118,7 +118,7 @@ pub fn unregister_bodies_system(world: &mut World) -> BoxedSystem {
         .build(
             move |_: &World,
                   _: &mut CommandBuffer,
-                  mut query: QueryBorrow<Mutable<PhysicsState>>| {
+                  mut query: QueryBorrow<ComponentMut<PhysicsState>>| {
                 if let Some(state) = query.first() {
                     for (_, rb_handle) in rx.try_iter() {
                         tracing::info!("removing rb");
@@ -144,7 +144,7 @@ pub fn unregister_colliders_system(world: &mut World) -> BoxedSystem {
         .build(
             move |_: &World,
                   _: &mut CommandBuffer,
-                  mut query: QueryBorrow<Mutable<PhysicsState>>| {
+                  mut query: QueryBorrow<ComponentMut<PhysicsState>>| {
                 if let Some(state) = query.first() {
                     for (_, handle) in rx.try_iter() {
                         state.remvoe_collider(handle);
@@ -178,7 +178,7 @@ pub fn attach_joints_system(world: &mut World) -> BoxedSystem {
         .build(
             move |world: &World,
                   cmd: &mut CommandBuffer,
-                  mut state: QueryBorrow<Mutable<PhysicsState>>| {
+                  mut state: QueryBorrow<ComponentMut<PhysicsState>>| {
                 if let Some(state) = state.first() {
                     for (id, component, _) in removed_rx.try_iter() {
                         let target = component.key().target().expect("joint target is present");
@@ -220,7 +220,7 @@ pub fn update_bodies_system() -> BoxedSystem {
         .with_query(Query::new(physics_state().as_mut()))
         .with_query(Query::new((rb_handle().copied(), BodyDynamicsQuery::new())))
         .build(
-            move |mut state: QueryBorrow<Mutable<PhysicsState>>,
+            move |mut state: QueryBorrow<ComponentMut<PhysicsState>>,
                   mut query: QueryBorrow<(
                 Copied<Component<RigidBodyHandle>>,
                 BodyDynamicsQuery,
@@ -253,7 +253,7 @@ pub fn sync_simulation_bodies_system() -> BoxedSystem {
         .with_query(Query::new(physics_state().as_mut()))
         .with_query(Query::new(BodyDynamicsQueryMut::new()))
         .build(
-            move |mut state: QueryBorrow<Mutable<PhysicsState>>,
+            move |mut state: QueryBorrow<ComponentMut<PhysicsState>>,
                   mut query: QueryBorrow<BodyDynamicsQueryMut, _>| {
                 if let Some(state) = state.first() {
                     state.sync_body_velocities(&mut query);
@@ -344,7 +344,7 @@ pub fn configure_effectors_system() -> BoxedSystem {
              mut query: QueryBorrow<
                 '_,
                 (
-                    Mutable<crate::Effector>,
+                    ComponentMut<crate::Effector>,
                     flax::filter::Union<(
                         ChangeFilter<f32>,
                         ChangeFilter<RigidBodyHandle>,

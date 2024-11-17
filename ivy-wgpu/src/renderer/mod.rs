@@ -28,7 +28,7 @@ use crate::{
     material::PbrMaterial,
     material_desc::MaterialDesc,
     mesh_desc::MeshDesc,
-    rendergraph::{Dependency, Node, TextureHandle},
+    rendergraph::{Dependency, Node, TextureHandle, UpdateResult},
     shader::ShaderPass,
     types::{BindGroupBuilder, BindGroupLayoutBuilder, Shader, TypedBuffer},
     Gpu,
@@ -53,10 +53,6 @@ impl MsaaResolve {
 impl Node for MsaaResolve {
     fn label(&self) -> &str {
         type_name::<Self>()
-    }
-
-    fn update(&mut self, _ctx: crate::rendergraph::NodeUpdateContext) -> anyhow::Result<()> {
-        Ok(())
     }
 
     fn draw(&mut self, ctx: crate::rendergraph::NodeExecutionContext) -> anyhow::Result<()> {
@@ -285,7 +281,10 @@ impl Node for CameraNode {
         type_name::<Self>()
     }
 
-    fn update(&mut self, ctx: crate::rendergraph::NodeUpdateContext) -> anyhow::Result<()> {
+    fn update(
+        &mut self,
+        ctx: crate::rendergraph::NodeUpdateContext,
+    ) -> anyhow::Result<UpdateResult> {
         let output = ctx.get_texture(self.output);
 
         let depth = ctx.get_texture(self.depth_texture);
@@ -318,7 +317,7 @@ impl Node for CameraNode {
             camera: self.shader_data.data,
         })?;
 
-        Ok(())
+        Ok(UpdateResult::Success)
     }
 
     fn draw(&mut self, ctx: crate::rendergraph::NodeExecutionContext) -> anyhow::Result<()> {

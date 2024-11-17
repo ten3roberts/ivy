@@ -18,3 +18,4 @@ tracing.workspace = true
 violet.workspace = true
 parking_lot.workspace = true
 wgpu.workspace = true
+itertools.workspace = true

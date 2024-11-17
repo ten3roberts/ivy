@@ -1,13 +1,13 @@
 use flax::{
     fetch::{entity_refs, EntityRefs},
-    Mutable, Query,
+    ComponentMut, Query,
 };
 use ivy_core::{app::TickEvent, Layer};
 
 use crate::{components::input_state, InputEvent, InputState};
 
 pub struct InputLayer {
-    query: Query<(EntityRefs, Mutable<InputState>)>,
+    query: Query<(EntityRefs, ComponentMut<InputState>)>,
 }
 
 impl InputLayer {

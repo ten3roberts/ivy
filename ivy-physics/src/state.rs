@@ -7,7 +7,7 @@ use rapier3d::prelude::{
     RigidBodyHandle, RigidBodySet,
 };
 
-use flax::{Component, Entity, Fetch, Mutable, QueryBorrow};
+use flax::{Component, Entity, Fetch, ComponentMut, QueryBorrow};
 use glam::{Quat, Vec3};
 
 use crate::components::{angular_velocity, velocity};
@@ -236,10 +236,10 @@ impl PhysicsState {
 
 #[derive(Fetch)]
 pub struct BodyDynamicsQueryMut {
-    pub pos: Mutable<Vec3>,
-    pub rotation: Mutable<Quat>,
-    pub vel: Mutable<Vec3>,
-    pub ang_vel: Mutable<Vec3>,
+    pub pos: ComponentMut<Vec3>,
+    pub rotation: ComponentMut<Quat>,
+    pub vel: ComponentMut<Vec3>,
+    pub ang_vel: ComponentMut<Vec3>,
 }
 
 impl Default for BodyDynamicsQueryMut {

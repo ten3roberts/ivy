@@ -3,7 +3,7 @@ use flax::World;
 use ivy_assets::AssetCache;
 use ivy_core::profiling::{profile_function, profile_scope};
 pub use resources::*;
-use slotmap::SecondaryMap;
+use slotmap::{new_key_type, SecondaryMap, SlotMap};
 
 use std::{
     collections::{BTreeSet, HashMap},
@@ -16,15 +16,16 @@ use wgpu::{Buffer, BufferUsages, CommandEncoder, Queue, Texture, TextureUsages};
 
 pub struct NodeExecutionContext<'a> {
     pub gpu: &'a Gpu,
-    pub resources: &'a Resources,
+    pub resources: &'a RenderGraphResources,
     pub queue: &'a Queue,
     pub encoder: &'a mut CommandEncoder,
     pub assets: &'a AssetCache,
     pub world: &'a mut World,
-    external_resources: &'a ExternalResources<'a>,
+    pub external_resources: &'a ExternalResources<'a>,
 }
 
 impl<'a> NodeExecutionContext<'a> {
+    #[track_caller]
     pub fn get_texture(&self, handle: TextureHandle) -> &'a Texture {
         match self.external_resources.external_textures.get(handle) {
             Some(v) => v,
@@ -39,13 +40,14 @@ impl<'a> NodeExecutionContext<'a> {
 
 pub struct NodeUpdateContext<'a> {
     pub gpu: &'a Gpu,
-    pub resources: &'a Resources,
+    pub resources: &'a RenderGraphResources,
     pub assets: &'a AssetCache,
     pub world: &'a mut World,
-    external_resources: &'a ExternalResources<'a>,
+    pub external_resources: &'a ExternalResources<'a>,
 }
 
 impl<'a> NodeUpdateContext<'a> {
+    #[track_caller]
     pub fn get_texture(&self, handle: TextureHandle) -> &'a Texture {
         match self.external_resources.external_textures.get(handle) {
             Some(v) => v,
@@ -57,13 +59,19 @@ impl<'a> NodeUpdateContext<'a> {
         self.resources.get_buffer_data(handle)
     }
 }
+
+pub enum UpdateResult {
+    Success,
+    RecalculateDepencies,
+}
+
 pub trait Node: 'static {
     fn label(&self) -> &str {
         std::any::type_name::<Self>()
     }
 
-    fn update(&mut self, _ctx: NodeUpdateContext) -> anyhow::Result<()> {
-        Ok(())
+    fn update(&mut self, _ctx: NodeUpdateContext) -> anyhow::Result<UpdateResult> {
+        Ok(UpdateResult::Success)
     }
 
     fn draw(&mut self, ctx: NodeExecutionContext) -> anyhow::Result<()>;
@@ -139,51 +147,59 @@ impl Dependency {
     }
 }
 
+new_key_type! {
+    pub struct NodeId;
+}
+
 pub struct RenderGraph {
-    nodes: Vec<Box<dyn Node>>,
-    order: Option<Vec<usize>>,
-    pub resources: Resources,
+    nodes: SlotMap<NodeId, Box<dyn Node>>,
+    order: Option<Vec<NodeId>>,
     expected_lifetimes: HashMap<ResourceHandle, Lifetime>,
 
-    resource_map: HashMap<ResourceHandle, BTreeSet<usize>>,
+    resource_to_nodes: HashMap<ResourceHandle, BTreeSet<NodeId>>,
+    pub resources: RenderGraphResources,
 }
 
 impl RenderGraph {
-    pub fn new() -> Self {
+    pub fn new(resources: RenderGraphResources) -> Self {
         Self {
-            nodes: Vec::new(),
+            nodes: Default::default(),
             order: None,
-            resources: Default::default(),
             expected_lifetimes: Default::default(),
-            resource_map: Default::default(),
+            resource_to_nodes: Default::default(),
+            resources,
         }
     }
 
-    pub fn add_node(&mut self, node: impl Node) {
-        self.nodes.push(Box::new(node));
+    pub fn add_node(&mut self, node: impl Node) -> NodeId {
+        self.order = None;
+        self.nodes.insert(Box::new(node))
     }
 
-    fn allocate_resources(&mut self, gpu: &Gpu) {
+    fn allocate_resources(&mut self, gpu: &Gpu) -> anyhow::Result<()> {
         self.resources
-            .allocate_textures(&self.nodes, gpu, &self.expected_lifetimes);
+            .allocate_textures(&self.nodes, gpu, &self.expected_lifetimes)?;
+        self.resources
+            .allocate_buffers(&self.nodes, gpu, &self.expected_lifetimes)?;
 
-        self.resources
-            .allocate_buffers(&self.nodes, gpu, &self.expected_lifetimes);
+        Ok(())
     }
 
     fn build(&mut self) -> anyhow::Result<()> {
-        self.resource_map.clear();
+        profile_function!();
+
+        self.resource_to_nodes.clear();
         let mut writes = HashMap::new();
         let mut reads = HashMap::new();
 
-        for (idx, node) in self.nodes.iter().enumerate() {
+        for (id, node) in self.nodes.iter() {
             for write in node.write_dependencies() {
-                self.resource_map
+                self.resource_to_nodes
                     .entry(write.as_handle())
                     .or_default()
-                    .insert(idx);
+                    .insert(id);
 
-                if writes.insert(write.as_handle(), idx).is_some() {
+                if writes.insert(write.as_handle(), id).is_some() {
                     anyhow::bail!(
                         "Multiple write dependencies for resource {:?}",
                         write.as_handle()
@@ -192,23 +208,22 @@ impl RenderGraph {
             }
 
             for read in node.read_dependencies() {
-                self.resource_map
+                self.resource_to_nodes
                     .entry(read.as_handle())
                     .or_default()
-                    .insert(idx);
+                    .insert(id);
 
                 reads
                     .entry(read.as_handle())
                     .or_insert_with(Vec::new)
-                    .push(idx)
+                    .push(id)
             }
         }
 
         let dependencies = self
             .nodes
             .iter()
-            .enumerate()
-            .flat_map(|(node_idx, node)| {
+            .flat_map(|(node_id, node)| {
                 let writes = &writes;
                 node.read_dependencies().into_iter().filter_map(move |v| {
                     let Some(&write_idx) = writes.get(&v.as_handle()) else {
@@ -216,7 +231,7 @@ impl RenderGraph {
                         return None;
                     };
 
-                    Some((node_idx, write_idx))
+                    Some((node_id, write_idx))
                 })
             })
             .into_group_map();
@@ -252,6 +267,67 @@ impl RenderGraph {
         Ok(())
     }
 
+    fn rebuild(&mut self, gpu: &Gpu) -> anyhow::Result<()> {
+        self.build()?;
+
+        self.invoke_on_resource_modified();
+        self.allocate_resources(gpu)?;
+
+        Ok(())
+    }
+
+    pub fn update(
+        &mut self,
+        gpu: &Gpu,
+        world: &mut World,
+        assets: &AssetCache,
+        external_resources: &ExternalResources,
+    ) -> anyhow::Result<()> {
+        profile_function!();
+
+        if self.order.is_none() {
+            tracing::info!("rebuilding");
+            self.build()?;
+        }
+
+        if mem::take(&mut self.resources.dirty) {
+            tracing::info!("dirty resources");
+            self.invoke_on_resource_modified();
+            self.allocate_resources(gpu)?;
+
+            self.resources.modified_resources.clear();
+        }
+
+        let order = self.order.as_ref().unwrap();
+
+        let mut needs_rebuild = false;
+        for &idx in order {
+            let node = &mut self.nodes[idx];
+            profile_scope!("update_node", node.label());
+
+            let res = node.update(NodeUpdateContext {
+                gpu,
+                resources: &self.resources,
+                assets,
+                world,
+                external_resources,
+            })?;
+
+            match res {
+                UpdateResult::Success => {}
+                UpdateResult::RecalculateDepencies => {
+                    needs_rebuild = true;
+                }
+            }
+        }
+
+        if needs_rebuild {
+            self.rebuild(gpu)?;
+        }
+
+        Ok(())
+    }
+
     pub fn draw(
         &mut self,
         gpu: &Gpu,
@@ -262,29 +338,9 @@ impl RenderGraph {
     ) -> anyhow::Result<()> {
         profile_function!();
 
-        if self.order.is_none() {
-            self.build()?;
-        }
-
-        if mem::take(&mut self.resources.dirty) {
-            self.invoke_on_resource_modified();
-            self.allocate_resources(gpu);
-        }
-
-        let order = self.order.as_ref().unwrap();
-
-        for &idx in order {
-            let node = &mut self.nodes[idx];
-            profile_scope!("update_node", node.label());
-
-            node.update(NodeUpdateContext {
-                gpu,
-                resources: &self.resources,
-                assets,
-                world,
-                external_resources,
-            })?;
-        }
+        let Some(order) = &self.order else {
+            anyhow::bail!("update must be called before draw");
+        };
 
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
 
@@ -309,8 +365,8 @@ impl RenderGraph {
     }
 
     fn invoke_on_resource_modified(&mut self) {
-        for modified in mem::take(&mut self.resources.modified_resources) {
-            self.resource_map
+        for &modified in self.resources.modified_resources.iter() {
+            self.resource_to_nodes
                 .get(&modified)
                 .iter()
                 .flat_map(|v| *v)
@@ -318,12 +374,6 @@ impl RenderGraph {
                     self.nodes[idx].on_resource_changed(modified);
                 })
         }
-    }
-}
-
-impl Default for RenderGraph {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -343,15 +393,19 @@ impl<'a> ExternalResources<'a> {
 }
 
 struct TopoResult {
-    order: Vec<usize>,
-    dependency_levels: Vec<u32>,
+    order: Vec<NodeId>,
+    dependency_levels: SecondaryMap<NodeId, u32>,
 }
 
-fn topo_sort(nodes: &[Box<dyn Node>], edges: &HashMap<usize, Vec<usize>>) -> TopoResult {
-    let mut visited = vec![VisitedState::None; nodes.len()];
+fn topo_sort(
+    nodes: &SlotMap<NodeId, Box<dyn Node>>,
+    edges: &HashMap<NodeId, Vec<NodeId>>,
+) -> TopoResult {
+    profile_function!();
     let mut result = Vec::new();
 
-    let mut dependency_levels = vec![0u32; nodes.len()];
+    let mut visited = nodes.keys().map(|v| (v, VisitedState::None)).collect();
+    let mut dependency_levels = nodes.keys().map(|v| (v, 0)).collect();
 
     #[derive(Clone, Copy)]
     enum VisitedState {
@@ -361,11 +415,11 @@ fn topo_sort(nodes: &[Box<dyn Node>], edges: &HashMap<usize, Vec<usize>>) -> Top
     }
 
     fn visit(
-        edges: &HashMap<usize, Vec<usize>>,
-        visited: &mut Vec<VisitedState>,
-        result: &mut Vec<usize>,
-        dependency_levels: &mut [u32],
-        node: usize,
+        edges: &HashMap<NodeId, Vec<NodeId>>,
+        visited: &mut SecondaryMap<NodeId, VisitedState>,
+        result: &mut Vec<NodeId>,
+        dependency_levels: &mut SecondaryMap<NodeId, u32>,
+        node: NodeId,
     ) -> u32 {
         match visited[node] {
             VisitedState::None => {}
@@ -391,7 +445,7 @@ fn topo_sort(nodes: &[Box<dyn Node>], edges: &HashMap<usize, Vec<usize>>) -> Top
         max_height
     }
 
-    for node in 0..nodes.len() {
+    for node in nodes.keys() {
         visit(
             edges,
             &mut visited,
@@ -415,9 +469,12 @@ mod test {
         TextureDimension, TextureFormat, TextureUsages,
     };
 
-    use crate::rendergraph::{
-        BufferDesc, BufferHandle, Dependency, ManagedTextureDesc, Node, NodeExecutionContext,
-        RenderGraph, TextureHandle,
+    use crate::{
+        rendergraph::{
+            BufferDesc, BufferHandle, Dependency, ManagedTextureDesc, Node, NodeExecutionContext,
+            RenderGraph, RenderGraphResources, TextureHandle,
+        },
+        shader_library::ShaderLibrary,
     };
 
     #[test]
@@ -595,7 +652,8 @@ mod test {
             fn on_resource_changed(&mut self, _resource: super::ResourceHandle) {}
         }
 
-        let mut render_graph = RenderGraph::new();
+        let mut resources = RenderGraphResources::new(Arc::new(ShaderLibrary::new()));
+        let mut render_graph = RenderGraph::new(resources);
 
         let extent = Extent3d {
             width: 256,

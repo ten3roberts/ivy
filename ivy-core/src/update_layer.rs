@@ -9,7 +9,7 @@ use flax::{Schedule, ScheduleBuilder, World};
 use ivy_assets::AssetCache;
 
 use crate::{
-    app::{InitEvent, TickEvent},
+    app::{PostInitEvent, TickEvent},
     layer::events::EventRegisterContext,
     Layer,
 };
@@ -269,7 +269,7 @@ impl Layer for ScheduledLayer {
     where
         Self: Sized,
     {
-        events.subscribe(|this, world, assets, _: &InitEvent| this.register(world, assets));
+        events.subscribe(|this, world, assets, _: &PostInitEvent| this.register(world, assets));
         events.subscribe(|this, world, _, _: &TickEvent| this.tick(world));
 
         Ok(())

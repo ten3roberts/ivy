@@ -1,7 +1,7 @@
 use flax::{
     component,
     fetch::{entity_refs, EntityRefs, Source},
-    system, BoxedSystem, CommandBuffer, Component, Entity, Fetch, FetchExt, Mutable, Query,
+    system, BoxedSystem, CommandBuffer, Component, Entity, Fetch, FetchExt, ComponentMut, Query,
     QueryBorrow, System, World,
 };
 use glam::{vec2, vec4, Mat4, Vec2, Vec3, Vec4Swizzles};
@@ -118,7 +118,7 @@ impl PickingState {
     pub fn draw_gizmos(
         self: &mut PickingState,
         world: &World,
-        gizmos: &mut QueryBorrow<Mutable<Gizmos>>,
+        gizmos: &mut QueryBorrow<ComponentMut<Gizmos>>,
     ) {
         let gizmos = gizmos.first().unwrap();
         let mut gizmos = gizmos.begin_section("PickingState::gizmos");
@@ -222,7 +222,7 @@ type PickingQuery = (
     EntityRefs,
     Component<i32>,
     Component<Vec2>,
-    Mutable<PickingState>,
+    ComponentMut<PickingState>,
 );
 
 type PickRaySystemQuery = (

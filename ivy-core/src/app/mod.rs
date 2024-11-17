@@ -80,7 +80,7 @@ impl App {
             &mut self.layers,
             &mut self.world,
             &mut self.assets,
-            &InitEvent,
+            &PostInitEvent,
         )
     }
 
