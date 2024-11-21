@@ -113,7 +113,7 @@ impl App {
     }
 
     /// Emits an event to all layers.
-    pub fn emit<T: Event>(&mut self, event: T) -> anyhow::Result<()> {
+    pub fn emit_event<T: Event>(&mut self, event: T) -> anyhow::Result<()> {
         self.event_registry
             .emit(&mut self.layers, &mut self.world, &mut self.assets, &event)
     }

@@ -7,8 +7,8 @@ use crate::{
 use anyhow::Context;
 use flax::{
     components::child_of, entity_ids, events::EventSubscriber, fetch::Copied, filter::ChangeFilter,
-    BoxedSystem, CommandBuffer, Component, EntityIds, FetchExt, ComponentMut, Opt, Query, QueryBorrow,
-    RelationExt, System, World,
+    BoxedSystem, CommandBuffer, Component, ComponentMut, EntityIds, FetchExt, Opt, Query,
+    QueryBorrow, RelationExt, System, World,
 };
 use glam::{Mat4, Vec3};
 use ivy_core::{
@@ -161,7 +161,7 @@ pub fn attach_joints_system(world: &mut World) -> BoxedSystem {
     let (tx, rx) = flume::unbounded();
 
     world.subscribe(
-        tx.filter_event_kind(flax::events::EventKind::Added)
+        tx.filter_event_kind(flax::events::EventKindFilter::ADDED)
             .filter_relations([impulse_joint.as_relation().id()]),
     );
 

@@ -64,6 +64,8 @@ slab = "0.4"
 slotmap = "1.0"
 smallvec = "1.0"
 thiserror = "1.0"
+base64 = "0.13"
+urlencoding = "2.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "parking_lot"] }
 tracing-tree = "0.4"
@@ -131,7 +133,9 @@ serde = [
 profile = [ "ivy-core/profile" ]
 
 [profile.dev.package]
-image = { opt-level = 3, debug = false, debug-assertions = false }
+image = { opt-level = 3, debug = true, debug-assertions = false }
+base64 = { opt-level = 3, debug = true, debug-assertions = false }
+fdeflate = { opt-level = 3, debug = true, debug-assertions = false }
 png = { opt-level = 3, debug = false }
 parking_lot = { opt-level = 3, debug = false }
 

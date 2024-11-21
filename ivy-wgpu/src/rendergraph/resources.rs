@@ -206,8 +206,11 @@ impl<Handle: slotmap::Key, Data: SubResource> ResourceAllocator<Handle, Data> {
         Handle: Into<ResourceHandle>,
     {
         let mut new_buckets: Vec<(Bucket<Data::Desc>, Vec<Handle>)> = Vec::new();
+        let mut missing_resources: BTreeSet<_> = self.bucket_map.keys().collect();
 
         for (handle, desc, lifetime) in resources {
+            missing_resources.remove(&handle);
+
             if Data::is_persistent(&desc) && self.bucket_map.contains_key(handle) {
                 anyhow::ensure!(
                     Data::is_compatible(&desc, &self.allocated_desc[handle]),
@@ -252,6 +255,15 @@ impl<Handle: slotmap::Key, Data: SubResource> ResourceAllocator<Handle, Data> {
         //         .take_while(|(v, _)| Data::is_persistent(&v.desc))
         //         .count()
         // };
+
+        for missing in missing_resources {
+            self.bucket_map.remove(missing).unwrap();
+            let desc = self.allocated_desc.remove(missing).unwrap();
+
+            if Data::is_persistent(&desc) {
+                anyhow::bail!("persistent textures can not be removed")
+            }
+        }
 
         let new_persistent_count = new_buckets
             .iter()
@@ -310,6 +322,11 @@ impl RenderGraphResources {
         self.textures.insert(texture.into())
     }
 
+    pub fn remove_texture(&mut self, texture: TextureHandle) -> Option<TextureDesc> {
+        self.dirty = true;
+        self.textures.remove(texture)
+    }
+
     pub fn get_texture_mut(&mut self, handle: TextureHandle) -> &mut TextureDesc {
         self.dirty = true;
         self.modified_resources.insert(handle.into());
@@ -337,6 +354,12 @@ impl RenderGraphResources {
         self.dirty = true;
         self.buffers.insert(buffer)
     }
+
+    pub fn remove_buffer(&mut self, texture: BufferHandle) -> Option<BufferDesc> {
+        self.dirty = true;
+        self.buffers.remove(texture)
+    }
+
     pub fn get_buffer_data(&self, key: BufferHandle) -> &Buffer {
         self.buffer_data.get(key).unwrap()
     }

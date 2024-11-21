@@ -2,6 +2,8 @@ pub mod animation;
 pub mod components;
 
 use animation::skin::Skin;
+use anyhow::Context;
+use futures::stream;
 use futures::StreamExt;
 use futures::TryStreamExt;
 use glam::Mat4;
@@ -10,6 +12,8 @@ use glam::U16Vec4;
 use glam::Vec2;
 use glam::Vec3;
 use glam::Vec4;
+use gltf::buffer;
+use image::ImageFormat;
 use image::{DynamicImage, ImageBuffer, RgbImage, RgbaImage};
 use itertools::Itertools;
 use ivy_assets::fs::AsyncAssetFromPath;
@@ -18,7 +22,16 @@ use ivy_core::components::TransformBundle;
 use ivy_graphics::mesh::MeshData;
 use ivy_profiling::profile_function;
 use ivy_profiling::profile_scope;
+use rayon::iter::ParallelBridge;
+use rayon::iter::ParallelIterator;
+use std::alloc;
+use std::alloc::Layout;
+use std::borrow::Cow;
+use std::fs;
 use std::future::Future;
+use std::io;
+use std::mem;
+use std::slice;
 use std::sync::Arc;
 use std::{collections::HashMap, path::Path};
 use tracing::Instrument;
@@ -110,7 +123,7 @@ impl Document {
             .document
             .buffers()
             .map(|v| {
-                tracing::info!("loading buffer data");
+                profile_scope!("load_buffer_data");
                 // TODO: load using assets
                 gltf::buffer::Data::from_source_and_blob(v.source(), None, &mut gltf.blob)
             })
@@ -118,20 +131,20 @@ impl Document {
 
         let buffer_data = Arc::new(buffer_data);
 
-        let images: Vec<_> = futures::stream::iter(gltf.images().enumerate())
+        let mut images: Vec<_> = gltf
+            .images()
+            .enumerate()
+            .par_bridge()
             .map(|(i, v)| {
-                let image = gltf::image::Data::from_source(v.source(), None, &buffer_data);
-                async {
-                    let image = image?;
-                    let image = async_std::task::spawn_blocking(|| load_image(image)).await?;
-                    anyhow::Ok(assets.insert(image))
-                }
-                .instrument(tracing::debug_span!("load_image", i))
+                // let image = gltf::image::Data::from_source(v.source(), None, &buffer_data);
+                let image = load_image_data(v.source(), None, &buffer_data)
+                    .with_context(|| format!("Failed to load image {:?}", v.name()))?;
+                anyhow::Ok((i, assets.insert(image)))
             })
-            .boxed()
-            .buffered(4)
-            .try_collect()
-            .await?;
+            .collect::<anyhow::Result<_, _>>()?;
+
+        images.sort_by_key(|v| v.0);
+        let images = images.into_iter().map(|v| v.1).collect_vec();
 
         let meshes: Vec<_> = futures::stream::iter(gltf.meshes())
             .map(|v| {
@@ -260,50 +273,81 @@ impl Document {
     }
 }
 
-fn load_image(image: gltf::image::Data) -> Result<DynamicImage, anyhow::Error> {
-    profile_scope!("load_texture");
+/// NOTE: this is a copy of [`gltf::image::Data::from_source`] that returns the `DynamicImage`
+/// directly, saving costly back and forth conversion
+/// Construct an image data object by reading the given source.
+/// If `base` is provided, then external filesystem references will
+/// be resolved from this directory.
+fn load_image_data(
+    source: gltf::image::Source<'_>,
+    base: Option<&Path>,
+    buffer_data: &[buffer::Data],
+) -> gltf::Result<DynamicImage> {
+    profile_function!();
 
-    let image: DynamicImage = match image.format {
-        gltf::image::Format::R8 => todo!(),
-        gltf::image::Format::R8G8 => todo!(),
-        gltf::image::Format::R8G8B8 => {
-            DynamicImage::from(RgbImage::from_raw(image.width, image.height, image.pixels).unwrap())
-                .to_rgba8()
-                .into()
-        }
-        gltf::image::Format::R8G8B8A8 => {
-            RgbaImage::from_raw(image.width, image.height, image.pixels)
-                .unwrap()
-                .into()
-        }
-        gltf::image::Format::R16 => todo!(),
-        gltf::image::Format::R16G16 => todo!(),
-        gltf::image::Format::R16G16B16 => {
-            let pixels = image
-                .pixels
-                .chunks_exact(6)
-                .flat_map(|v| {
-                    let r = u16::from_le_bytes([v[0], v[1]]);
-                    let g = u16::from_le_bytes([v[2], v[3]]);
-                    let b = u16::from_le_bytes([v[4], v[5]]);
-
-                    [r, g, b]
-                })
-                .collect::<Vec<_>>();
-
-            DynamicImage::from(
-                ImageBuffer::<image::Rgb<u16>, _>::from_raw(image.width, image.height, pixels)
-                    .unwrap(),
-            )
-            .to_rgba8()
-            .into()
-        }
-        gltf::image::Format::R16G16B16A16 => todo!(),
-        gltf::image::Format::R32G32B32FLOAT => todo!(),
-        gltf::image::Format::R32G32B32A32FLOAT => todo!(),
+    let guess_format = |encoded_image: &[u8]| match image::guess_format(encoded_image) {
+        Ok(ImageFormat::Png) => Some(ImageFormat::Png),
+        Ok(ImageFormat::Jpeg) => Some(ImageFormat::Jpeg),
+        _ => None,
     };
 
-    Ok(image)
+    let decoded_image = match source {
+        gltf::image::Source::Uri { uri, mime_type } if base.is_some() => match Scheme::parse(uri) {
+            Scheme::Data(Some(annoying_case), base64) => {
+                let encoded_image = base64::decode(base64).map_err(gltf::Error::Base64)?;
+                let encoded_format = match annoying_case {
+                    "image/png" => ImageFormat::Png,
+                    "image/jpeg" => ImageFormat::Jpeg,
+                    _ => match guess_format(&encoded_image) {
+                        Some(format) => format,
+                        None => return Err(gltf::Error::UnsupportedImageEncoding),
+                    },
+                };
+
+                image::load_from_memory_with_format(&encoded_image, encoded_format)?
+            }
+            Scheme::Unsupported => return Err(gltf::Error::UnsupportedScheme),
+            _ => {
+                let encoded_image = Scheme::read(base, uri)?;
+                let encoded_format = match mime_type {
+                    Some("image/png") => ImageFormat::Png,
+                    Some("image/jpeg") => ImageFormat::Jpeg,
+                    Some(_) => match guess_format(&encoded_image) {
+                        Some(format) => format,
+                        None => return Err(gltf::Error::UnsupportedImageEncoding),
+                    },
+                    None => match uri.rsplit('.').next() {
+                        Some("png") => ImageFormat::Png,
+                        Some("jpg") | Some("jpeg") => ImageFormat::Jpeg,
+                        _ => match guess_format(&encoded_image) {
+                            Some(format) => format,
+                            None => return Err(gltf::Error::UnsupportedImageEncoding),
+                        },
+                    },
+                };
+                image::load_from_memory_with_format(&encoded_image, encoded_format)?
+            }
+        },
+        gltf::image::Source::View { view, mime_type } => {
+            let parent_buffer_data = &buffer_data[view.buffer().index()].0;
+            let begin = view.offset();
+            let end = begin + view.length();
+            let encoded_image = &parent_buffer_data[begin..end];
+            let encoded_format = match mime_type {
+                "image/png" => ImageFormat::Png,
+                "image/jpeg" => ImageFormat::Jpeg,
+                _ => match guess_format(encoded_image) {
+                    Some(format) => format,
+                    None => return Err(gltf::Error::UnsupportedImageEncoding),
+                },
+            };
+            profile_scope!("decode image");
+            image::load_from_memory_with_format(encoded_image, encoded_format)?
+        }
+        _ => return Err(gltf::Error::ExternalReferenceInSliceImport),
+    };
+
+    Ok(decoded_image)
 }
 
 impl AsyncAssetFromPath for Document {
@@ -538,4 +582,74 @@ pub(crate) fn mesh_from_gltf(
 
         Ok(this)
     }
+}
+
+/// Represents the set of URI schemes the importer supports.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+enum Scheme<'a> {
+    /// `data:[<media type>];base64,<data>`.
+    Data(Option<&'a str>, &'a str),
+
+    /// `file:[//]<absolute file path>`.
+    ///
+    /// Note: The file scheme does not implement authority.
+    File(&'a str),
+
+    /// `../foo`, etc.
+    Relative(Cow<'a, str>),
+
+    /// Placeholder for an unsupported URI scheme identifier.
+    Unsupported,
+}
+
+impl<'a> Scheme<'a> {
+    fn parse(uri: &str) -> Scheme<'_> {
+        if uri.contains(':') {
+            if let Some(rest) = uri.strip_prefix("data:") {
+                let mut it = rest.split(";base64,");
+
+                match (it.next(), it.next()) {
+                    (match0_opt, Some(match1)) => Scheme::Data(match0_opt, match1),
+                    (Some(match0), _) => Scheme::Data(None, match0),
+                    _ => Scheme::Unsupported,
+                }
+            } else if let Some(rest) = uri.strip_prefix("file://") {
+                Scheme::File(rest)
+            } else if let Some(rest) = uri.strip_prefix("file:") {
+                Scheme::File(rest)
+            } else {
+                Scheme::Unsupported
+            }
+        } else {
+            Scheme::Relative(urlencoding::decode(uri).unwrap())
+        }
+    }
+
+    fn read(base: Option<&Path>, uri: &str) -> gltf::Result<Vec<u8>> {
+        match Scheme::parse(uri) {
+            // The path may be unused in the Scheme::Data case
+            // Example: "uri" : "data:application/octet-stream;base64,wsVHPgA...."
+            Scheme::Data(_, base64) => base64::decode(base64).map_err(gltf::Error::Base64),
+            Scheme::File(path) if base.is_some() => read_to_end(path),
+            Scheme::Relative(path) if base.is_some() => read_to_end(base.unwrap().join(&*path)),
+            Scheme::Unsupported => Err(gltf::Error::UnsupportedScheme),
+            _ => Err(gltf::Error::ExternalReferenceInSliceImport),
+        }
+    }
+}
+
+fn read_to_end<P>(path: P) -> gltf::Result<Vec<u8>>
+where
+    P: AsRef<Path>,
+{
+    use io::Read;
+    let file = fs::File::open(path.as_ref()).map_err(gltf::Error::Io)?;
+    // Allocate one extra byte so the buffer doesn't need to grow before the
+    // final `read` call at the end of the file.  Don't worry about `usize`
+    // overflow because reading will fail regardless in that case.
+    let length = file.metadata().map(|x| x.len() + 1).unwrap_or(0);
+    let mut reader = io::BufReader::new(file);
+    let mut data = Vec::with_capacity(length as usize);
+    reader.read_to_end(&mut data).map_err(gltf::Error::Io)?;
+    Ok(data)
 }

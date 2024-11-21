@@ -98,7 +98,7 @@ impl<'a> ApplicationHandler for WinitEventHandler<'a> {
 
         self.app.init().unwrap();
 
-        if let Err(err) = self.app.emit(ApplicationReady(window.clone())) {
+        if let Err(err) = self.app.emit_event(ApplicationReady(window.clone())) {
             tracing::error!("Error emitting window created event: {:?}", err);
             event_loop.exit();
         }
@@ -169,7 +169,7 @@ impl<'a> WinitEventHandler<'a> {
                 let window = self.app.world().entity(window_id).unwrap();
                 *window.get_mut(window_size()).unwrap() = logical_size;
 
-                self.app.emit(ResizedEvent {
+                self.app.emit_event(ResizedEvent {
                     physical_size: size,
                 })?;
             }
@@ -181,7 +181,7 @@ impl<'a> WinitEventHandler<'a> {
             WindowEvent::HoveredFileCancelled => todo!(),
             WindowEvent::Focused(_focus) => {}
             WindowEvent::KeyboardInput { event, .. } => {
-                self.app.emit(InputEvent::Keyboard(KeyboardInput {
+                self.app.emit_event(InputEvent::Keyboard(KeyboardInput {
                     modifiers: self.modifiers,
                     key: event.logical_key,
                     state: event.state,
@@ -190,7 +190,7 @@ impl<'a> WinitEventHandler<'a> {
             }
             WindowEvent::ModifiersChanged(mods) => {
                 self.modifiers = mods.state();
-                self.app.emit(InputEvent::ModifiersChanged(mods))?;
+                self.app.emit_event(InputEvent::ModifiersChanged(mods))?;
             }
             WindowEvent::Ime(_) => {}
             WindowEvent::CursorMoved {
@@ -211,21 +211,21 @@ impl<'a> WinitEventHandler<'a> {
                         .cursor_moved(&window.window, position);
                 }
 
-                self.app.emit(InputEvent::CursorMoved(CursorMoved {
+                self.app.emit_event(InputEvent::CursorMoved(CursorMoved {
                     absolute_position: logical_pos,
                     normalized_position: vec2(logical_pos.x, logical_pos.y)
                         / vec2(size.width, size.height),
                 }))?;
             }
             WindowEvent::CursorEntered { device_id: _ } => {
-                self.app.emit(InputEvent::CursorEntered)?;
+                self.app.emit_event(InputEvent::CursorEntered)?;
             }
             WindowEvent::CursorLeft { device_id: _ } => {
                 self.last_cursor_pos = None;
-                self.app.emit(InputEvent::CursorLeft)?;
+                self.app.emit_event(InputEvent::CursorLeft)?;
             }
             WindowEvent::MouseWheel { delta, .. } => {
-                self.app.emit(InputEvent::Scroll(ScrollMotion {
+                self.app.emit_event(InputEvent::Scroll(ScrollMotion {
                     delta: match delta {
                         winit::event::MouseScrollDelta::LineDelta(x, y) => vec2(x, y) * 4.0,
                         winit::event::MouseScrollDelta::PixelDelta(v) => {
@@ -236,7 +236,7 @@ impl<'a> WinitEventHandler<'a> {
                 }))?;
             }
             WindowEvent::MouseInput { state, button, .. } => {
-                self.app.emit(InputEvent::MouseButton(MouseInput {
+                self.app.emit_event(InputEvent::MouseButton(MouseInput {
                     modifiers: self.modifiers,
                     button,
                     state,
@@ -278,7 +278,7 @@ impl<'a> WinitEventHandler<'a> {
             WindowEvent::ThemeChanged(_) => {}
             WindowEvent::Occluded(_) => {}
             WindowEvent::RedrawRequested => {
-                self.app.emit(RedrawEvent)?;
+                self.app.emit_event(RedrawEvent)?;
                 let window = self
                     .app
                     .world
@@ -302,7 +302,7 @@ impl<'a> WinitEventHandler<'a> {
             winit::event::DeviceEvent::Removed => {}
             winit::event::DeviceEvent::MouseMotion { delta } => {
                 self.app
-                    .emit(InputEvent::CursorDelta(vec2(delta.0 as _, delta.1 as _)))?;
+                    .emit_event(InputEvent::CursorDelta(vec2(delta.0 as _, delta.1 as _)))?;
             }
             winit::event::DeviceEvent::MouseWheel { delta: _ } => {}
             winit::event::DeviceEvent::Motion { axis: _, value: _ } => {}

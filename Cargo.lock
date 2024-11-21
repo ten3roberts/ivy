@@ -998,7 +998,7 @@ dependencies = [
 [[package]]
 name = "flax"
 version = "0.7.1"
-source = "git+https://github.com/ten3roberts/flax#e92527c5d6d5ff7ab251c7c2e2297cef05bfc98e"
+source = "git+https://github.com/ten3roberts/flax#c06ea012a6e79dca8ce6f97f5b5a98e97bf15ea3"
 dependencies = [
  "anyhow",
  "atomic_refcell",
@@ -1018,7 +1018,7 @@ dependencies = [
 [[package]]
 name = "flax-derive"
 version = "0.7.1"
-source = "git+https://github.com/ten3roberts/flax#e92527c5d6d5ff7ab251c7c2e2297cef05bfc98e"
+source = "git+https://github.com/ten3roberts/flax#c06ea012a6e79dca8ce6f97f5b5a98e97bf15ea3"
 dependencies = [
  "heck",
  "itertools 0.13.0",
@@ -1744,6 +1744,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-std",
+ "base64",
  "flax",
  "futures",
  "glam 0.28.0",
@@ -1755,7 +1756,9 @@ dependencies = [
  "ivy-graphics",
  "ivy-profiling",
  "ordered-float",
+ "rayon",
  "tracing",
+ "urlencoding",
 ]
 
 [[package]]

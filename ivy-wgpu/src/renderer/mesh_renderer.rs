@@ -359,7 +359,6 @@ impl MeshRenderer {
         }
 
         if needs_reallocation {
-            tracing::info!("reallocating object buffer");
             self.reallocate_object_buffer(world, gpu);
         } else if dirty {
             self.object_buffer.write(&gpu.queue, 0, &self.object_data);
@@ -396,7 +395,6 @@ impl MeshRenderer {
 
         self.object_data.resize(cursor as _, Zeroable::zeroed());
         self.entity_slots.resize(cursor as _, None);
-        tracing::info!("resized object data to {cursor}");
         for (id, loc, item) in &mut query.borrow(world) {
             let batch = &mut self.batches[loc.batch_id];
             let index = batch.first_instance + batch.instance_count;
@@ -418,7 +416,6 @@ impl MeshRenderer {
 
     pub fn handle_removed(&mut self, world: &World) {
         for (id, loc) in self.removed_rx.try_iter() {
-            tracing::info!(%id, "removing render object");
             let batch = &mut self.batches[loc.batch_id];
             let batch_end = batch.first_instance + batch.instance_count;
 

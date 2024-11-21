@@ -176,6 +176,11 @@ impl RenderGraph {
         self.nodes.insert(Box::new(node))
     }
 
+    pub fn remove_node(&mut self, node_id: NodeId) -> Option<Box<dyn Node>> {
+        self.order = None;
+        self.nodes.remove(node_id)
+    }
+
     fn allocate_resources(&mut self, gpu: &Gpu) -> anyhow::Result<()> {
         self.resources
             .allocate_textures(&self.nodes, gpu, &self.expected_lifetimes)?;
@@ -359,7 +364,10 @@ impl RenderGraph {
             })?;
         }
 
-        queue.submit([encoder.finish()]);
+        {
+            profile_scope!("submit");
+            queue.submit([encoder.finish()]);
+        }
 
         Ok(())
     }

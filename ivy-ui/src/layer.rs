@@ -35,26 +35,16 @@ declare_atom! {
     pub action_sender: ActionSender,
 }
 
-pub struct UiLayer {
+pub struct UiInputLayer {
     instance: Rc<RefCell<AppInstance>>,
-    pending_actions: flume::Receiver<Action>,
 }
 
-impl UiLayer {
+impl UiInputLayer {
     pub fn new(root: impl Widget) -> Self {
-        let mut instance = AppInstance::new(root);
-
-        let (tx, rx) = flume::unbounded();
-        instance
-            .frame
-            .set_atom(action_sender(), ActionSender { tx });
-
+        let instance = AppInstance::new(root);
         let instance = Rc::new(RefCell::new(instance));
 
-        Self {
-            instance,
-            pending_actions: rx,
-        }
+        Self { instance }
     }
 
     fn on_ready(&mut self, _: &mut World, _: &AssetCache) -> anyhow::Result<()> {
@@ -119,6 +109,71 @@ impl UiLayer {
         Ok(captured)
     }
 
+    fn on_resized(
+        &mut self,
+        _: &mut World,
+        _: &AssetCache,
+        event: &ResizedEvent,
+    ) -> anyhow::Result<()> {
+        let mut instance = self.instance.deref().borrow_mut();
+
+        instance.on_resize(event.physical_size);
+        Ok(())
+    }
+
+    /// Now be careful with this one, alright?
+    pub fn instance(&self) -> &SharedUiInstance {
+        &self.instance
+    }
+}
+
+impl Layer for UiInputLayer {
+    fn register(
+        &mut self,
+        _: &mut World,
+        _: &AssetCache,
+        mut events: EventRegisterContext<Self>,
+    ) -> anyhow::Result<()>
+    where
+        Self: Sized,
+    {
+        events.subscribe(|this, world, assets, _: &ApplicationReady| this.on_ready(world, assets));
+
+        events.intercept(|this, world, assets, event: &InputEvent| {
+            this.on_input_event(world, assets, event)
+        });
+
+        events.subscribe(|this, world, assets, event: &ResizedEvent| {
+            this.on_resized(world, assets, event)
+        });
+
+        Ok(())
+    }
+}
+
+pub struct UiUpdateLayer {
+    instance: Rc<RefCell<AppInstance>>,
+    pending_actions: flume::Receiver<Action>,
+}
+
+impl UiUpdateLayer {
+    pub fn new(instance: SharedUiInstance) -> Self {
+        let (tx, rx) = flume::unbounded();
+        instance
+            .borrow_mut()
+            .frame
+            .set_atom(action_sender(), ActionSender { tx });
+
+        Self {
+            instance,
+            pending_actions: rx,
+        }
+    }
+
+    fn on_ready(&mut self, _: &mut World, _: &AssetCache) -> anyhow::Result<()> {
+        Ok(())
+    }
+
     fn on_tick(&mut self, world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
         profile_function!();
 
@@ -151,7 +206,7 @@ impl UiLayer {
     }
 }
 
-impl Layer for UiLayer {
+impl Layer for UiUpdateLayer {
     fn register(
         &mut self,
         _: &mut World,
@@ -162,10 +217,6 @@ impl Layer for UiLayer {
         Self: Sized,
     {
         events.subscribe(|this, world, assets, _: &ApplicationReady| this.on_ready(world, assets));
-
-        events.intercept(|this, world, assets, event: &InputEvent| {
-            this.on_input_event(world, assets, event)
-        });
 
         events.subscribe(|this, world, assets, _: &TickEvent| this.on_tick(world, assets));
 
