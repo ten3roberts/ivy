@@ -10,15 +10,20 @@ use flax::{
     BoxedSystem, CommandBuffer, Component, ComponentMut, EntityIds, FetchExt, Opt, Query,
     QueryBorrow, RelationExt, System, World,
 };
-use glam::{Mat4, Vec3};
+use glam::{Mat3, Mat4, Vec3};
 use ivy_core::{
-    components::{engine, main_camera, position, world_transform},
+    components::{
+        engine, main_camera, position, world_transform, TransformQuery, TransformQueryItem,
+    },
     gizmos::{Gizmos, Line, DEFAULT_THICKNESS},
     subscribers::{RemovedComponentSubscriber, RemovedRelationSubscriber},
     Color, ColorExt,
 };
-use rapier3d::prelude::{
-    ColliderBuilder, LockedAxes, RigidBodyBuilder, RigidBodyHandle, RigidBodyType, SharedShape,
+use rapier3d::{
+    math::Isometry,
+    prelude::{
+        ColliderBuilder, LockedAxes, RigidBodyBuilder, RigidBodyHandle, RigidBodyType, SharedShape,
+    },
 };
 
 #[allow(clippy::type_complexity)]
@@ -73,22 +78,40 @@ pub fn register_colliders_system() -> BoxedSystem {
         .with_query(Query::new((
             entity_ids(),
             (collider_shape(), density(), restitution(), friction()).added(),
+            TransformQuery::new(),
             (entity_ids(), rb_handle()).traverse(child_of),
         )))
         .build(
             move |cmd: &mut CommandBuffer,
-                  mut query: QueryBorrow<ComponentMut<PhysicsState>>,
+                  mut physics_state: QueryBorrow<ComponentMut<PhysicsState>>,
                   mut bodies: QueryBorrow<'_, _>| {
-                if let Some(state) = query.first() {
-                    for (id, (shape, &density, &restitution, &friction), (parent_id, &parent)) in
-                        bodies.iter()
+                if let Some(state) = physics_state.first() {
+                    for (
+                        id,
+                        (shape, &density, &restitution, &friction),
+                        transform,
+                        (parent_id, &parent),
+                    ) in bodies.iter()
                     {
+                        tracing::info!("mounting collider {id} for {parent:?}");
+
+                        let local_position = if parent_id == id {
+                            Isometry::identity()
+                        } else {
+                            let transform: TransformQueryItem = transform;
+                            Isometry::new(
+                                (*transform.pos).into(),
+                                transform.rotation.to_scaled_axis().into(),
+                            )
+                        };
+
                         let handle = state.attach_collider(
                             id,
                             ColliderBuilder::new(SharedShape::clone(shape))
                                 .density(density)
                                 .restitution(restitution)
                                 .friction(friction)
+                                .position(local_position)
                                 .build(),
                             parent,
                         );
@@ -121,7 +144,6 @@ pub fn unregister_bodies_system(world: &mut World) -> BoxedSystem {
                   mut query: QueryBorrow<ComponentMut<PhysicsState>>| {
                 if let Some(state) = query.first() {
                     for (_, rb_handle) in rx.try_iter() {
-                        tracing::info!("removing rb");
                         state.remove_body(rb_handle);
                     }
                 }

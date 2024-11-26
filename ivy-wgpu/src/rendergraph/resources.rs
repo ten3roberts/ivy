@@ -393,16 +393,12 @@ impl RenderGraphResources {
         let iter = self.textures.iter().filter_map(|(handle, desc)| {
             let desc = desc.as_managed()?;
 
-            let _span = tracing::info_span!("allocating", ?desc.label, ?handle).entered();
-
             let lf = lifetimes.get(&handle.into()).copied();
 
             let Some(&usage) = usages.get(handle) else {
                 tracing::warn!("no usages for {}", desc.label);
                 return None;
             };
-
-            tracing::info!(?usage);
 
             Some((
                 handle,

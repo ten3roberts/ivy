@@ -82,7 +82,7 @@ impl PickingState {
         let result = physics_state.cast_ray(&ray, 1e3, true, QueryFilter::exclude_fixed());
 
         if let Some(hit) = result {
-            let entity = world.entity(hit.id)?;
+            let entity = world.entity(hit.collider_id)?;
 
             let point: Vec3 = ray.point_at(hit.intersection.time_of_impact).into();
 
@@ -100,9 +100,9 @@ impl PickingState {
                 ))
                 .build();
 
-            cmd.set(self.manipulator, impulse_joint(hit.id), joint.into());
+            cmd.set(self.manipulator, impulse_joint(hit.collider_id), joint.into());
 
-            self.picked_object = Some((hit.id, anchor, distance));
+            self.picked_object = Some((hit.collider_id, anchor, distance));
         }
 
         Ok(())

@@ -7,22 +7,29 @@ use rapier3d::prelude::{
     RigidBodyHandle, RigidBodySet,
 };
 
-use flax::{Component, Entity, Fetch, ComponentMut, QueryBorrow};
+use flax::{Component, ComponentMut, Entity, Fetch, QueryBorrow};
 use glam::{Quat, Vec3};
 
 use crate::components::{angular_velocity, velocity};
 
 #[derive(Debug, Clone)]
 pub struct RaycastHit {
-    pub id: Entity,
+    pub rigidbody_id: Entity,
+    pub collider_id: Entity,
     pub collider: ColliderHandle,
     pub intersection: RayIntersection,
 }
 
 impl RaycastHit {
-    pub fn new(id: Entity, collider: ColliderHandle, intersection: RayIntersection) -> Self {
+    pub fn new(
+        id: Entity,
+        root_id: Entity,
+        collider: ColliderHandle,
+        intersection: RayIntersection,
+    ) -> Self {
         Self {
-            id,
+            collider_id: id,
+            rigidbody_id: root_id,
             collider,
             intersection,
         }
@@ -97,6 +104,13 @@ impl PhysicsState {
         &self.collider_set[handle]
     }
 
+    pub fn collider_parent(&self, handle: ColliderHandle) -> Entity {
+        let rb = self.collider_set[handle]
+            .parent()
+            .expect("Collider must have a parent");
+        Entity::try_from_bits(self.bodies[rb].user_data as _).unwrap()
+    }
+
     pub fn remvoe_collider(&mut self, handle: ColliderHandle) {
         self.collider_set
             .remove(handle, &mut self.island_manager, &mut self.bodies, true);
@@ -150,9 +164,12 @@ impl PhysicsState {
                 filter,
             )
             .map(|(handle, v)| {
-                let id = Entity::try_from_bits(self.collider_set[handle].user_data as u64)
+                let collider = &self.collider_set[handle];
+                let root = collider.parent().unwrap();
+                let id = Entity::try_from_bits(collider.user_data as u64)
                     .expect("user_data is valid entity");
-                RaycastHit::new(id, handle, v)
+                let root_id = Entity::try_from_bits(self.bodies[root].user_data as u64).unwrap();
+                RaycastHit::new(id, root_id, handle, v)
             })
     }
 
@@ -172,9 +189,12 @@ impl PhysicsState {
             solid,
             filter,
             |handle, intersect| {
-                let id = Entity::try_from_bits(self.collider_set[handle].user_data as u64)
+                let collider = &self.collider_set[handle];
+                let root = collider.parent().unwrap();
+                let id = Entity::try_from_bits(collider.user_data as u64)
                     .expect("user_data is valid entity");
-                callback(RaycastHit::new(id, handle, intersect))
+                let root_id = Entity::try_from_bits(self.bodies[root].user_data as u64).unwrap();
+                callback(RaycastHit::new(id, root_id, handle, intersect))
             },
         )
     }

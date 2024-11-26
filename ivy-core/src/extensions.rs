@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use flax::{
-    component::ComponentValue, entity_ids, CommandBuffer, Component, Entity, EntityBuilder,
-    EntityRef, Query, World,
+    component::ComponentValue, components::child_of, entity_ids, CommandBuffer, Component, Entity,
+    EntityBuilder, EntityRef, Query, World,
 };
 use parking_lot::{Mutex, MutexGuard};
 
@@ -17,6 +17,8 @@ pub trait WorldExt {
         component: Component<T>,
         iter: I,
     ) -> flax::error::Result<()>;
+
+    fn root_entity(&self, entity: Entity) -> EntityRef;
 }
 
 impl WorldExt for World {
@@ -43,6 +45,15 @@ impl WorldExt for World {
     ) -> flax::error::Result<()> {
         iter.into_iter()
             .try_for_each(|(id, value)| self.set(id, component, value).map(|_| {}))
+    }
+
+    fn root_entity(&self, id: Entity) -> EntityRef {
+        let mut entity = self.entity(id).expect("invalid entity");
+        while let Some((parent, _)) = entity.relations(child_of).next() {
+            entity = self.entity(parent).expect("dead parent");
+        }
+
+        entity
     }
 }
 

@@ -17,6 +17,7 @@ use crate::{components::on_input_event, SharedUiInstance};
 
 pub type Action = Box<dyn Send + Sync + FnOnce(&mut World, &AssetCache) -> anyhow::Result<()>>;
 
+#[derive(Clone, Debug)]
 pub struct ActionSender {
     tx: flume::Sender<Action>,
 }

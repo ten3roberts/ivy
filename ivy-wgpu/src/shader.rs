@@ -1,6 +1,5 @@
-use std::{borrow::Cow, collections::BTreeMap};
+use std::borrow::Cow;
 
-use flax::Component;
 use wgpu::Face;
 
 /// Describes a shader
