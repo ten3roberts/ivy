@@ -6,7 +6,7 @@ use image::DynamicImage;
 use ivy_assets::{AssetCache, DynAsyncAssetDesc};
 use ivy_ui::{node::UiRenderNode, SharedUiInstance};
 use ivy_wgpu::{
-    components::forward_pass,
+    components::{forward_pass, transparent_pass},
     renderer::{
         gizmos_renderer::GizmosRendererNode,
         mesh_renderer::MeshRenderer,
@@ -330,6 +330,12 @@ impl PbrRenderGraphConfig {
                 world,
                 gpu,
                 forward_pass(),
+                render_graph.resources.shader_library().clone(),
+            ),
+            MeshRenderer::new(
+                world,
+                gpu,
+                transparent_pass(),
                 render_graph.resources.shader_library().clone(),
             ),
         );

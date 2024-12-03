@@ -1,9 +1,9 @@
 use std::time::Duration;
 
-use flax::{Component, Debuggable, EntityBuilder, Fetch, ComponentMut};
+use flax::{Component, ComponentMut, Debuggable, EntityBuilder, Fetch};
 use glam::{Mat4, Quat, Vec2, Vec3};
 
-use crate::{gizmos::Gizmos, AsyncCommandBuffer, Bundle, Color};
+use crate::{gizmos::Gizmos, time::Time, AsyncCommandBuffer, Bundle, Color};
 
 flax::component! {
     pub position: Vec3 => [Debuggable],
@@ -27,7 +27,7 @@ flax::component! {
     pub gizmos: Gizmos,
     pub async_commandbuffer: AsyncCommandBuffer,
 
-    /// Time since last tick
+    pub time: Time,
     pub delta_time: Duration,
 
     pub engine,
@@ -79,11 +79,18 @@ impl Default for TransformQuery {
     }
 }
 
+fn one_scale() -> Vec3 {
+    Vec3::ONE
+}
+
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct TransformBundle {
+    #[cfg_attr(feature = "serde", serde(default))]
     pub pos: Vec3,
+    #[cfg_attr(feature = "serde", serde(default))]
     pub rotation: Quat,
+    #[cfg_attr(feature = "serde", serde(default = "one_scale"))]
     pub scale: Vec3,
 }
 
@@ -135,7 +142,10 @@ impl Bundle for TransformBundle {
             .set(position(), self.pos)
             .set(rotation(), self.rotation)
             .set(scale(), self.scale)
-            .set(world_transform(), Default::default())
+            .set(
+                world_transform(),
+                Mat4::from_scale_rotation_translation(self.scale, self.rotation, self.pos),
+            )
             .set(parent_transform(), Default::default());
     }
 }

@@ -129,6 +129,7 @@ serde = [
   "ivy-wgpu/serde",
   "ivy-wgpu-types/serde",
   "ivy-assets/serde",
+  "ivy-input/serde"
 ]
 profile = [ "ivy-core/profile" ]
 

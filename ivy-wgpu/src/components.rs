@@ -18,6 +18,8 @@ component! {
     pub mesh: MeshDesc,
     pub material: MaterialDesc,
     pub forward_pass: Asset<ShaderPass>,
+    pub transparent_pass: Asset<ShaderPass>,
+
     pub shadow_pass: Asset<ShaderPass>,
 
     pub main_window: (),

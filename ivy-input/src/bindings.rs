@@ -174,6 +174,7 @@ impl<B: Binding<f32>> Binding<Vec3> for Compose<B, Axis3> {
     }
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Amplitude<B, T> {
     binding: B,
     amplitude: T,
@@ -193,6 +194,7 @@ impl<B: Binding<T>, T: Send + Sync + Copy + Mul<Output = T>> Binding<T> for Ampl
     }
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct KeyBinding {
     pressed: bool,
     key: Key<SmolStr>,
@@ -279,6 +281,7 @@ where
     }
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MouseButtonBinding {
     pressed: bool,
     button: MouseButton,
@@ -312,6 +315,7 @@ impl Binding<i32> for MouseButtonBinding {
     }
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CursorMoveBinding {
     value: Vec2,
 }
@@ -345,6 +349,7 @@ impl Binding<Vec2> for CursorMoveBinding {
     }
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CursorPositionBinding {
     value: Vec2,
     normalized: bool,
@@ -379,6 +384,7 @@ impl Binding<Vec2> for CursorPositionBinding {
     }
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ScrollBinding {
     value: Vec2,
 }

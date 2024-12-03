@@ -3,7 +3,7 @@ use itertools::Itertools;
 use ivy_assets::{Asset, AssetDesc};
 use ivy_gltf::GltfPrimitive;
 use ivy_graphics::mesh::{MeshData, POSITION_ATTRIBUTE};
-use rapier3d::prelude::SharedShape;
+use rapier3d::prelude::{SharedShape, TriMeshFlags, TriMeshPseudoNormals};
 
 /// Create a trimesh collider from provided primitive
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -37,12 +37,13 @@ impl AssetDesc<SharedShape> for GltfTriMeshDesc {
             .map(|&v| v.into())
             .collect_vec();
 
-        let shape = SharedShape::trimesh(
+        let shape = SharedShape::trimesh_with_flags(
             vertices,
             mesh.indices()
                 .chunks(3)
                 .map(|v| [v[0], v[1], v[2]])
                 .collect_vec(),
+            TriMeshFlags::FIX_INTERNAL_EDGES,
         );
 
         Ok(assets.insert(shape))

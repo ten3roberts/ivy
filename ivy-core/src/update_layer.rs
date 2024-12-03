@@ -1,7 +1,7 @@
 use std::{
     fmt::Display,
     ops::{Deref, DerefMut},
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use anyhow::Context;
@@ -10,6 +10,8 @@ use ivy_assets::AssetCache;
 
 use crate::{
     app::{PostInitEvent, TickEvent},
+    components::{delta_time, engine},
+    impl_for_tuples,
     layer::events::EventRegisterContext,
     Layer,
 };
@@ -47,15 +49,44 @@ pub trait TimeStep: 'static + Display + Copy {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct PerTick;
+pub struct PerTick {
+    current_time: Instant,
+}
 
 impl TimeStep for PerTick {
     fn step(&mut self, world: &mut World, schedule: &mut Schedule) -> anyhow::Result<()> {
-        schedule.execute_seq(world)
+        let new_time = Instant::now();
+        let elapsed = new_time.duration_since(self.current_time);
+
+        self.current_time = new_time;
+
+        world.set(engine(), delta_time(), elapsed)?;
+        schedule.execute_seq(world)?;
+        world.set(engine(), delta_time(), Duration::ZERO)?;
+
+        Ok(())
     }
 }
 
 impl Display for PerTick {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("PerTick").finish()
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Startup;
+
+impl TimeStep for Startup {
+    fn step(&mut self, world: &mut World, schedule: &mut Schedule) -> anyhow::Result<()> {
+        world.set(engine(), delta_time(), Duration::ZERO)?;
+        schedule.execute_seq(world)?;
+
+        Ok(())
+    }
+}
+
+impl Display for Startup {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("PerTick").finish()
     }
@@ -91,11 +122,19 @@ impl TimeStep for FixedTimeStep {
 
         self.acc += elapsed.as_secs_f64();
 
+        world.set(
+            engine(),
+            delta_time(),
+            Duration::from_secs_f64(self.delta_time),
+        )?;
+
         if self.acc > self.delta_time {
             // while self.acc > self.delta_time {
             schedule.execute_seq(world)?;
             self.acc -= self.delta_time;
         }
+
+        world.set(engine(), delta_time(), Duration::ZERO)?;
 
         Ok(())
     }
@@ -162,13 +201,17 @@ impl<T: TimeStep> TimeStepScheduleBuilder<T> {
 pub struct ScheduleSetBuilder {
     per_tick: TimeStepScheduleBuilder<PerTick>,
     fixed: TimeStepScheduleBuilder<FixedTimeStep>,
+    startup: TimeStepScheduleBuilder<Startup>,
 }
 
 impl ScheduleSetBuilder {
     pub fn new(fixed_timestep: FixedTimeStep) -> Self {
         Self {
-            per_tick: TimeStepScheduleBuilder::new(PerTick),
+            per_tick: TimeStepScheduleBuilder::new(PerTick {
+                current_time: Instant::now(),
+            }),
             fixed: TimeStepScheduleBuilder::new(fixed_timestep),
+            startup: TimeStepScheduleBuilder::new(Startup),
         }
     }
 
@@ -176,6 +219,7 @@ impl ScheduleSetBuilder {
         ScheduleSet {
             per_tick: self.per_tick.build(),
             fixed_timestep: self.fixed.build(),
+            startup: Some(self.startup.build()),
         }
     }
 
@@ -186,11 +230,16 @@ impl ScheduleSetBuilder {
     pub fn per_tick_mut(&mut self) -> &mut TimeStepScheduleBuilder<PerTick> {
         &mut self.per_tick
     }
+
+    pub fn startup_mut(&mut self) -> &mut TimeStepScheduleBuilder<Startup> {
+        &mut self.startup
+    }
 }
 
 pub struct ScheduleSet {
     per_tick: TimeStepSchedule<PerTick>,
     fixed_timestep: TimeStepSchedule<FixedTimeStep>,
+    startup: Option<TimeStepSchedule<Startup>>,
 }
 
 impl ScheduleSet {
@@ -200,6 +249,10 @@ impl ScheduleSet {
 
     pub fn fixed_timestep_mut(&mut self) -> &mut TimeStepSchedule<FixedTimeStep> {
         &mut self.fixed_timestep
+    }
+
+    pub fn startup_mut(&mut self) -> &mut Option<TimeStepSchedule<Startup>> {
+        &mut self.startup
     }
 }
 
@@ -240,6 +293,12 @@ impl ScheduledLayer {
         let Some(schedules) = &mut self.schedules else {
             return Ok(());
         };
+
+        if let Some(mut startup) = schedules.startup.take() {
+            startup
+                .step(world)
+                .context("Failed to execute startup schedule")?;
+        }
 
         schedules.fixed_timestep.step(world).with_context(|| {
             format!(

@@ -1,7 +1,10 @@
 #![allow(non_snake_case)]
-use crate::components::{async_commandbuffer, engine, gizmos};
+use std::time::{Duration, Instant};
+
+use crate::components::{async_commandbuffer, engine, gizmos, time};
 use crate::gizmos::Gizmos;
 use crate::systems::update_transform_system;
+use crate::time::Time;
 use crate::AsyncCommandBuffer;
 use crate::{app::TickEvent, systems::apply_async_commandbuffers};
 use downcast_rs::{impl_downcast, Downcast};
@@ -97,6 +100,7 @@ impl Layer for EngineLayer {
         Entity::builder()
             .set(async_commandbuffer(), self.cmd.clone())
             .set(gizmos(), Gizmos::new())
+            .set(time(), Time::new(Instant::now(), Duration::ZERO))
             .append_to(world, engine())?;
 
         events.subscribe(|this, world, _, _: &TickEvent| {
