@@ -432,9 +432,8 @@ impl<T, E> Future for AssetLoadFuture<T, E> {
 mod tests {
     use std::{convert::Infallible, path::Path};
 
-    use crate::service::FsAssetError;
-
     use super::*;
+    use crate::service::FsAssetError;
 
     #[test]
     fn asset_cache() {

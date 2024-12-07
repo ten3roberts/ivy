@@ -9,9 +9,8 @@ use wgpu::{
     util::DeviceExt, vertex_attr_array, Buffer, RenderPass, VertexAttribute, VertexBufferLayout,
 };
 
-use crate::material::PbrMaterial;
-
 use super::Gpu;
+use crate::material::PbrMaterial;
 
 #[repr(C)]
 #[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Debug, Clone)]

@@ -1,7 +1,7 @@
-use itertools::Itertools;
 use std::collections::BTreeMap;
 
 use glam::{vec2, vec3, U16Vec4, UVec4, Vec2, Vec3, Vec4};
+use itertools::Itertools;
 use ivy_profiling::profile_function;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

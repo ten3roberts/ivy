@@ -1,17 +1,16 @@
 mod resources;
-use flax::World;
-use ivy_assets::AssetCache;
-use ivy_core::profiling::{profile_function, profile_scope};
-pub use resources::*;
-use slotmap::{new_key_type, SecondaryMap, SlotMap};
-
 use std::{
     collections::{BTreeSet, HashMap},
     mem,
 };
 
+use flax::World;
 use itertools::Itertools;
+use ivy_assets::AssetCache;
+use ivy_core::profiling::{profile_function, profile_scope};
 use ivy_wgpu_types::Gpu;
+pub use resources::*;
+use slotmap::{new_key_type, SecondaryMap, SlotMap};
 use wgpu::{Buffer, BufferUsages, CommandEncoder, Queue, Texture, TextureUsages};
 
 pub struct NodeExecutionContext<'a> {

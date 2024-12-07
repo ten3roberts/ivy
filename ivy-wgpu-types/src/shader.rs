@@ -1,9 +1,10 @@
-use crate::Gpu;
 use itertools::Itertools;
 use wgpu::{
     BindGroupLayout, DepthBiasState, Face, FrontFace, PipelineLayoutDescriptor, RenderPipeline,
     TextureFormat, VertexBufferLayout,
 };
+
+use crate::Gpu;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

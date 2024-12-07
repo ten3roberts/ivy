@@ -12,4 +12,12 @@ impl Time {
             elapsed,
         }
     }
+
+    pub fn start_time(&self) -> Instant {
+        self.start_time
+    }
+
+    pub fn elapsed(&self) -> Duration {
+        self.elapsed
+    }
 }

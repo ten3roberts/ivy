@@ -1,9 +1,5 @@
 use core::f32;
 
-use crate::{
-    components::*,
-    state::{BodyDynamicsQuery, BodyDynamicsQueryMut, PhysicsState},
-};
 use anyhow::Context;
 use flax::{
     components::child_of, entity_ids, events::EventSubscriber, fetch::Copied, filter::ChangeFilter,
@@ -24,6 +20,11 @@ use rapier3d::{
     prelude::{
         ColliderBuilder, LockedAxes, RigidBodyBuilder, RigidBodyHandle, RigidBodyType, SharedShape,
     },
+};
+
+use crate::{
+    components::*,
+    state::{BodyDynamicsQuery, BodyDynamicsQueryMut, PhysicsState},
 };
 
 #[allow(clippy::type_complexity)]

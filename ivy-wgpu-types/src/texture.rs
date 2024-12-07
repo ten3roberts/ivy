@@ -10,9 +10,8 @@ use wgpu::{
     TextureFormat, TextureUsages,
 };
 
-use crate::{mipmap::generate_mipmaps, TypedBuffer};
-
 use super::Gpu;
+use crate::{mipmap::generate_mipmaps, TypedBuffer};
 
 #[derive(Debug, Clone)]
 pub struct TextureFromImageDesc {

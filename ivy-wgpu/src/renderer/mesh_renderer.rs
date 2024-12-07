@@ -22,6 +22,7 @@ use ivy_wgpu_types::shader::Culling;
 use slab::Slab;
 use wgpu::{BindGroup, BindGroupLayout, BufferUsages, RenderPass, ShaderStages};
 
+use super::{CameraRenderer, ObjectData, TargetDesc};
 use crate::{
     components::{material, mesh},
     material::PbrMaterial,
@@ -35,8 +36,6 @@ use crate::{
     types::{shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, Shader, TypedBuffer},
     Gpu,
 };
-
-use super::{CameraRenderer, ObjectData, TargetDesc};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BatchKey {

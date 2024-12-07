@@ -8,10 +8,113 @@ use winit::{
 
 use crate::types::{InputEvent, InputKind, KeyboardInput, MouseInput};
 
-pub trait Binding<T>: Send + Sync {
+pub trait Binding: Send + Sync {
+    type Value;
     fn apply(&mut self, input: &InputEvent);
-    fn read(&mut self) -> T;
+    fn read(&mut self) -> Self::Value;
     fn binding(&self) -> InputKind;
+}
+
+pub trait Composable<Space> {
+    type Output;
+    fn compose(&self, axis: Space) -> Self::Output;
+}
+
+pub trait Decomposable<Space> {
+    type Output;
+    fn decompose(&self, axis: Space) -> Self::Output;
+}
+
+impl Composable<Axis2D> for i32 {
+    type Output = IVec2;
+
+    fn compose(&self, axis: Axis2D) -> Self::Output {
+        match axis {
+            Axis2D::X => IVec2::X * *self,
+            Axis2D::Y => IVec2::Y * *self,
+        }
+    }
+}
+
+impl Composable<Axis3D> for i32 {
+    type Output = IVec3;
+
+    fn compose(&self, axis: Axis3D) -> Self::Output {
+        match axis {
+            Axis3D::X => IVec3::X * *self,
+            Axis3D::Y => IVec3::Y * *self,
+            Axis3D::Z => IVec3::Z * *self,
+        }
+    }
+}
+
+impl Composable<Axis2D> for f32 {
+    type Output = Vec2;
+
+    fn compose(&self, axis: Axis2D) -> Self::Output {
+        match axis {
+            Axis2D::X => Vec2::X * *self,
+            Axis2D::Y => Vec2::Y * *self,
+        }
+    }
+}
+
+impl Composable<Axis3D> for f32 {
+    type Output = Vec3;
+
+    fn compose(&self, axis: Axis3D) -> Self::Output {
+        match axis {
+            Axis3D::X => Vec3::X * *self,
+            Axis3D::Y => Vec3::Y * *self,
+            Axis3D::Z => Vec3::Z * *self,
+        }
+    }
+}
+
+impl Decomposable<Axis2D> for Vec2 {
+    type Output = f32;
+
+    fn decompose(&self, axis: Axis2D) -> Self::Output {
+        match axis {
+            Axis2D::X => self.x,
+            Axis2D::Y => self.y,
+        }
+    }
+}
+
+impl Decomposable<Axis2D> for IVec2 {
+    type Output = i32;
+
+    fn decompose(&self, axis: Axis2D) -> Self::Output {
+        match axis {
+            Axis2D::X => self.x,
+            Axis2D::Y => self.y,
+        }
+    }
+}
+
+impl Decomposable<Axis3D> for Vec3 {
+    type Output = f32;
+
+    fn decompose(&self, axis: Axis3D) -> Self::Output {
+        match axis {
+            Axis3D::X => self.x,
+            Axis3D::Y => self.y,
+            Axis3D::Z => self.z,
+        }
+    }
+}
+
+impl Decomposable<Axis3D> for IVec3 {
+    type Output = i32;
+
+    fn decompose(&self, axis: Axis3D) -> Self::Output {
+        match axis {
+            Axis3D::X => self.x,
+            Axis3D::Y => self.y,
+            Axis3D::Z => self.z,
+        }
+    }
 }
 
 pub struct Decompose<B, Axis> {
@@ -19,69 +122,17 @@ pub struct Decompose<B, Axis> {
     axis: Axis,
 }
 
-impl<B: Binding<Vec2>> Binding<f32> for Decompose<B, Axis2D> {
+impl<Space: Copy + Send + Sync, T: Decomposable<Space>, B: Binding<Value = T>> Binding
+    for Decompose<B, Space>
+{
+    type Value = T::Output;
+
     fn apply(&mut self, input: &InputEvent) {
         self.binding.apply(input);
     }
 
-    fn read(&mut self) -> f32 {
-        match self.axis {
-            Axis2D::X => self.binding.read().x,
-            Axis2D::Y => self.binding.read().y,
-        }
-    }
-
-    fn binding(&self) -> InputKind {
-        self.binding.binding()
-    }
-}
-
-impl<B: Binding<IVec2>> Binding<i32> for Decompose<B, Axis2D> {
-    fn apply(&mut self, input: &InputEvent) {
-        self.binding.apply(input);
-    }
-
-    fn read(&mut self) -> i32 {
-        match self.axis {
-            Axis2D::X => self.binding.read().x,
-            Axis2D::Y => self.binding.read().y,
-        }
-    }
-
-    fn binding(&self) -> InputKind {
-        self.binding.binding()
-    }
-}
-
-impl<B: Binding<Vec3>> Binding<f32> for Decompose<B, Axis3> {
-    fn apply(&mut self, input: &InputEvent) {
-        self.binding.apply(input)
-    }
-
-    fn read(&mut self) -> f32 {
-        match self.axis {
-            Axis3::X => self.binding.read().x,
-            Axis3::Y => self.binding.read().y,
-            Axis3::Z => self.binding.read().z,
-        }
-    }
-
-    fn binding(&self) -> InputKind {
-        self.binding.binding()
-    }
-}
-
-impl<B: Binding<IVec3>> Binding<i32> for Decompose<B, Axis3> {
-    fn apply(&mut self, input: &InputEvent) {
-        self.binding.apply(input)
-    }
-
-    fn read(&mut self) -> i32 {
-        match self.axis {
-            Axis3::X => self.binding.read().x,
-            Axis3::Y => self.binding.read().y,
-            Axis3::Z => self.binding.read().z,
-        }
+    fn read(&mut self) -> Self::Value {
+        self.binding.read().decompose(self.axis)
     }
 
     fn binding(&self) -> InputKind {
@@ -100,73 +151,17 @@ impl<B, Axis> Compose<B, Axis> {
     }
 }
 
-impl<B: Binding<f32>> Binding<Vec2> for Compose<B, Vec2> {
+impl<Space: Copy + Send + Sync, T: Composable<Space>, B: Binding<Value = T>> Binding
+    for Compose<B, Space>
+{
+    type Value = T::Output;
+
     fn apply(&mut self, input: &InputEvent) {
         self.binding.apply(input)
     }
 
-    fn read(&mut self) -> Vec2 {
-        self.axis * self.binding.read()
-    }
-
-    fn binding(&self) -> InputKind {
-        self.binding.binding()
-    }
-}
-
-impl<B: Binding<i32>> Binding<IVec2> for Compose<B, IVec2> {
-    fn apply(&mut self, input: &InputEvent) {
-        self.binding.apply(input)
-    }
-
-    fn read(&mut self) -> IVec2 {
-        self.axis * self.binding.read()
-    }
-
-    fn binding(&self) -> InputKind {
-        self.binding.binding()
-    }
-}
-
-impl<B: Binding<f32>> Binding<Vec3> for Compose<B, Vec3> {
-    fn apply(&mut self, input: &InputEvent) {
-        self.binding.apply(input)
-    }
-
-    fn read(&mut self) -> Vec3 {
-        self.axis * self.binding.read()
-    }
-
-    fn binding(&self) -> InputKind {
-        self.binding.binding()
-    }
-}
-
-impl<B: Binding<i32>> Binding<IVec3> for Compose<B, IVec3> {
-    fn apply(&mut self, input: &InputEvent) {
-        self.binding.apply(input)
-    }
-
-    fn read(&mut self) -> IVec3 {
-        self.axis * self.binding.read()
-    }
-
-    fn binding(&self) -> InputKind {
-        self.binding.binding()
-    }
-}
-
-impl<B: Binding<f32>> Binding<Vec3> for Compose<B, Axis3> {
-    fn apply(&mut self, input: &InputEvent) {
-        self.binding.apply(input)
-    }
-
-    fn read(&mut self) -> Vec3 {
-        match self.axis {
-            Axis3::X => Vec3::X * self.binding.read(),
-            Axis3::Y => Vec3::Y * self.binding.read(),
-            Axis3::Z => Vec3::Z * self.binding.read(),
-        }
+    fn read(&mut self) -> Self::Value {
+        self.binding.read().compose(self.axis)
     }
 
     fn binding(&self) -> InputKind {
@@ -175,12 +170,19 @@ impl<B: Binding<f32>> Binding<Vec3> for Compose<B, Axis3> {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct Amplitude<B, T> {
+pub struct Amplitude<B, Rhs> {
     binding: B,
-    amplitude: T,
+    amplitude: Rhs,
 }
 
-impl<B: Binding<T>, T: Send + Sync + Copy + Mul<Output = T>> Binding<T> for Amplitude<B, T> {
+impl<B, T, Rhs> Binding for Amplitude<B, Rhs>
+where
+    B: Binding<Value = T>,
+    T: Send + Sync + Copy + Mul<Rhs, Output = T>,
+    Rhs: Copy + Send + Sync,
+{
+    type Value = T;
+
     fn apply(&mut self, input: &InputEvent) {
         self.binding.apply(input)
     }
@@ -209,7 +211,9 @@ impl KeyBinding {
     }
 }
 
-impl Binding<i32> for KeyBinding {
+impl Binding for KeyBinding {
+    type Value = bool;
+
     fn apply(&mut self, input: &InputEvent) {
         match input {
             InputEvent::Keyboard(KeyboardInput { key, state, .. }) if key == &self.key => {
@@ -219,8 +223,8 @@ impl Binding<i32> for KeyBinding {
         }
     }
 
-    fn read(&mut self) -> i32 {
-        self.pressed as i32
+    fn read(&mut self) -> bool {
+        self.pressed
     }
 
     fn binding(&self) -> InputKind {
@@ -228,18 +232,44 @@ impl Binding<i32> for KeyBinding {
     }
 }
 
+#[doc(hidden)]
+pub trait AsAnalog {
+    type Output;
+
+    fn as_analog(self) -> Self::Output;
+}
+
+impl AsAnalog for bool {
+    type Output = f32;
+
+    fn as_analog(self) -> Self::Output {
+        self as i32 as f32
+    }
+}
+
+impl AsAnalog for i32 {
+    type Output = f32;
+
+    fn as_analog(self) -> Self::Output {
+        self as f32
+    }
+}
+
 pub struct Analog<T>(T);
 
-impl<T> Binding<f32> for Analog<T>
+impl<T, B> Binding for Analog<B>
 where
-    T: Binding<i32>,
+    B: Binding<Value = T>,
+    T: AsAnalog,
 {
+    type Value = T::Output;
+
     fn apply(&mut self, input: &InputEvent) {
         self.0.apply(input);
     }
 
-    fn read(&mut self) -> f32 {
-        self.0.read() as f32
+    fn read(&mut self) -> Self::Value {
+        self.0.read().as_analog()
     }
 
     fn binding(&self) -> InputKind {
@@ -247,33 +277,20 @@ where
     }
 }
 
-impl<T> Binding<Vec2> for Analog<T>
+pub struct Integral<T>(T);
+
+impl<B> Binding for Integral<B>
 where
-    T: Binding<IVec2>,
+    B: Binding<Value = bool>,
 {
+    type Value = i32;
+
     fn apply(&mut self, input: &InputEvent) {
         self.0.apply(input);
     }
 
-    fn read(&mut self) -> Vec2 {
-        self.0.read().as_vec2()
-    }
-
-    fn binding(&self) -> InputKind {
-        self.0.binding()
-    }
-}
-
-impl<T> Binding<Vec3> for Analog<T>
-where
-    T: Binding<IVec3>,
-{
-    fn apply(&mut self, input: &InputEvent) {
-        self.0.apply(input);
-    }
-
-    fn read(&mut self) -> Vec3 {
-        self.0.read().as_vec3()
+    fn read(&mut self) -> Self::Value {
+        self.0.read() as i32
     }
 
     fn binding(&self) -> InputKind {
@@ -296,7 +313,9 @@ impl MouseButtonBinding {
     }
 }
 
-impl Binding<i32> for MouseButtonBinding {
+impl Binding for MouseButtonBinding {
+    type Value = bool;
+
     fn apply(&mut self, input: &InputEvent) {
         match input {
             InputEvent::MouseButton(MouseInput { button, state, .. }) if button == &self.button => {
@@ -306,8 +325,8 @@ impl Binding<i32> for MouseButtonBinding {
         }
     }
 
-    fn read(&mut self) -> i32 {
-        self.pressed as i32
+    fn read(&mut self) -> bool {
+        self.pressed
     }
 
     fn binding(&self) -> InputKind {
@@ -332,7 +351,9 @@ impl Default for CursorMoveBinding {
     }
 }
 
-impl Binding<Vec2> for CursorMoveBinding {
+impl Binding for CursorMoveBinding {
+    type Value = Vec2;
+
     fn apply(&mut self, input: &InputEvent) {
         match input {
             &InputEvent::CursorDelta(delta) => self.value += delta,
@@ -364,7 +385,9 @@ impl CursorPositionBinding {
     }
 }
 
-impl Binding<Vec2> for CursorPositionBinding {
+impl Binding for CursorPositionBinding {
+    type Value = Vec2;
+
     fn apply(&mut self, input: &InputEvent) {
         match input {
             InputEvent::CursorMoved(v) if self.normalized => self.value = v.normalized_position,
@@ -401,7 +424,9 @@ impl Default for ScrollBinding {
     }
 }
 
-impl Binding<Vec2> for ScrollBinding {
+impl Binding for ScrollBinding {
+    type Value = Vec2;
+
     fn apply(&mut self, input: &InputEvent) {
         match input {
             InputEvent::Scroll(delta) => self.value += delta.delta,
@@ -418,18 +443,23 @@ impl Binding<Vec2> for ScrollBinding {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Axis2D {
     X,
     Y,
 }
 
-pub enum Axis3 {
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Axis3D {
     X,
     Y,
     Z,
 }
 
-pub trait BindingExt<V> {
+pub trait BindingExt
+where
+    Self: Binding,
+{
     fn compose<T>(self, axis: T) -> Compose<Self, T>
     where
         Self: Sized,
@@ -463,7 +493,7 @@ pub trait BindingExt<V> {
     {
         RisingEdge {
             binding: self,
-            prev_value: 0,
+            prev_value: false,
         }
     }
 
@@ -473,30 +503,39 @@ pub trait BindingExt<V> {
     {
         Analog(self)
     }
+
+    fn integral(self) -> Integral<Self>
+    where
+        Self: Sized,
+    {
+        Integral(self)
+    }
 }
 
 pub struct RisingEdge<T> {
     binding: T,
-    prev_value: i32,
+    prev_value: bool,
 }
 
-impl<T> Binding<i32> for RisingEdge<T>
+impl<T> Binding for RisingEdge<T>
 where
-    T: Binding<i32>,
+    T: Binding<Value = bool>,
 {
+    type Value = bool;
+
     fn apply(&mut self, input: &InputEvent) {
         self.binding.apply(input);
     }
 
-    fn read(&mut self) -> i32 {
+    fn read(&mut self) -> bool {
         let value = self.binding.read();
-        if self.prev_value == 0 {
+        if !self.prev_value {
             self.prev_value = value;
             return value;
         }
         self.prev_value = value;
 
-        0
+        false
     }
 
     fn binding(&self) -> InputKind {
@@ -504,4 +543,4 @@ where
     }
 }
 
-impl<T, V> BindingExt<V> for T where T: Binding<V> {}
+impl<T> BindingExt for T where T: Binding {}

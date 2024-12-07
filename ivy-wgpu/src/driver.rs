@@ -358,7 +358,7 @@ impl WindowHandle {
         &self.window
     }
 
-    pub fn set_cursor_lock(&mut self, lock: bool) {
+    pub fn set_cursor_lock(&self, lock: bool) {
         self.cursor_lock
             .borrow_mut()
             .set_cursor_lock(&self.window, lock)

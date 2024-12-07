@@ -26,6 +26,7 @@ flax::component! {
 
     pub gizmos: Gizmos,
     pub async_commandbuffer: AsyncCommandBuffer,
+    pub request_capture_mouse: bool,
 
     pub time: Time,
     pub delta_time: Duration,

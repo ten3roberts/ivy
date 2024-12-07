@@ -1,8 +1,9 @@
-use glam::Vec2;
 use std::{
     fmt::Display,
     ops::{Add, Mul},
 };
+
+use glam::Vec2;
 
 /// Represents a width and height.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Default)]

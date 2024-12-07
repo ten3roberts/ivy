@@ -15,14 +15,13 @@ use wgpu::{
     SamplerDescriptor, ShaderStages, TextureUsages,
 };
 
+use super::{get_main_camera_data, CameraData};
 use crate::{
     mesh::{Mesh, Vertex, VertexDesc},
     rendergraph::{
         Dependency, Node, NodeExecutionContext, NodeUpdateContext, TextureHandle, UpdateResult,
     },
 };
-
-use super::{get_main_camera_data, CameraData};
 
 pub struct GizmosRendererNode {
     mesh: Mesh,

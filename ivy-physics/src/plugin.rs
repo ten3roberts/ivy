@@ -1,3 +1,11 @@
+use flax::World;
+use glam::Vec3;
+use ivy_assets::AssetCache;
+use ivy_core::{
+    components::engine,
+    update_layer::{Plugin, ScheduleSetBuilder},
+};
+
 use crate::{
     components::{gravity, physics_state},
     state::{PhysicsState, PhysicsStateConfiguration},
@@ -6,13 +14,6 @@ use crate::{
         register_bodies_system, register_colliders_system, sync_simulation_bodies_system,
         unregister_bodies_system, unregister_colliders_system, update_bodies_system,
     },
-};
-use flax::World;
-use glam::Vec3;
-use ivy_assets::AssetCache;
-use ivy_core::{
-    components::engine,
-    update_layer::{Plugin, ScheduleSetBuilder},
 };
 
 #[derive(Default)]

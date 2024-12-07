@@ -4,12 +4,11 @@ use bytemuck::Pod;
 use itertools::Itertools;
 use wgpu::{BufferUsages, RenderPass};
 
-use crate::mesh::Vertex;
-
 use super::{
     types::multi_buffer::{MultiBuffer, SubBuffer},
     Gpu,
 };
+use crate::mesh::Vertex;
 
 pub struct MeshBufferInner {}
 

@@ -5,13 +5,11 @@ pub mod layer;
 pub mod types;
 mod vector;
 
-pub use bindings::*;
-
 use std::collections::HashMap;
 
+pub use bindings::*;
 use flax::{component::ComponentValue, Component, EntityRef};
 use glam::{IVec2, IVec3, Vec2, Vec3};
-
 use types::{InputEvent, InputKind};
 
 pub struct InputState {
@@ -36,6 +34,7 @@ impl InputState {
     pub fn apply(&mut self, event: &InputEvent) {
         for activation in self.activations.iter_mut() {
             match activation {
+                ActionKind::Boolean(_, mapping) => mapping.apply(event),
                 ActionKind::Integral(_, mapping) => mapping.apply(event),
                 ActionKind::Scalar(_, mapping) => mapping.apply(event),
                 ActionKind::Vector2(_, mapping) => mapping.apply(event),
@@ -49,6 +48,9 @@ impl InputState {
     pub fn update(&mut self, entity: &EntityRef) -> anyhow::Result<()> {
         for activation in &mut self.activations {
             match activation {
+                ActionKind::Boolean(target, m) => {
+                    m.update(*target, entity)?;
+                }
                 ActionKind::Integral(target, m) => {
                     m.update(*target, entity)?;
                 }
@@ -81,12 +83,19 @@ impl Default for InputState {
 }
 
 pub enum ActionKind {
+    Boolean(Component<bool>, Action<bool>),
     Integral(Component<i32>, Action<i32>),
     Scalar(Component<f32>, Action<f32>),
     Vector2(Component<Vec2>, Action<Vec2>),
     Vector3(Component<Vec3>, Action<Vec3>),
     IVector2(Component<IVec2>, Action<IVec2>),
     IVector3(Component<IVec3>, Action<IVec3>),
+}
+
+impl From<(Component<bool>, Action<bool>)> for ActionKind {
+    fn from(v: (Component<bool>, Action<bool>)) -> Self {
+        Self::Boolean(v.0, v.1)
+    }
 }
 
 impl From<(Component<i32>, Action<i32>)> for ActionKind {
@@ -126,7 +135,7 @@ impl From<(Component<IVec3>, Action<IVec3>)> for ActionKind {
 }
 
 pub struct Action<T> {
-    bindings: HashMap<InputKind, Box<dyn Binding<T>>>,
+    bindings: HashMap<InputKind, Box<dyn Binding<Value = T>>>,
 }
 
 impl<T: ComponentValue + Stimulus> Action<T> {
@@ -136,15 +145,19 @@ impl<T: ComponentValue + Stimulus> Action<T> {
         }
     }
 
-    pub fn add(&mut self, action: impl 'static + Binding<T>) -> &mut Self {
-        self.bindings
-            .insert(action.binding(), Box::new(action) as Box<dyn Binding<T>>);
+    pub fn add(&mut self, action: impl 'static + Binding<Value = T>) -> &mut Self {
+        self.bindings.insert(
+            action.binding(),
+            Box::new(action) as Box<dyn Binding<Value = T>>,
+        );
         self
     }
 
-    pub fn with_binding(mut self, action: impl 'static + Binding<T>) -> Self {
-        self.bindings
-            .insert(action.binding(), Box::new(action) as Box<dyn Binding<T>>);
+    pub fn with_binding(mut self, action: impl 'static + Binding<Value = T>) -> Self {
+        self.bindings.insert(
+            action.binding(),
+            Box::new(action) as Box<dyn Binding<Value = T>>,
+        );
         self
     }
 
@@ -193,6 +206,14 @@ impl Stimulus for f32 {
 
     fn combine(&self, other: &Self) -> Self {
         self + other
+    }
+}
+
+impl Stimulus for bool {
+    const ZERO: Self = false;
+
+    fn combine(&self, other: &Self) -> Self {
+        *self || *other
     }
 }
 

@@ -1,5 +1,4 @@
 use self::driver::{DefaultDriver, Driver};
-
 use super::*;
 
 pub struct AppBuilder {

@@ -17,6 +17,7 @@ use ivy_core::{
     to_linear_vec3, Bundle,
 };
 use ivy_wgpu_types::shader::TargetDesc;
+pub use light_manager::LightManager;
 use wgpu::{
     AddressMode, BindGroup, BindGroupLayout, BufferUsages, Extent3d, FilterMode, Operations, Queue,
     RenderPass, RenderPassColorAttachment, RenderPassDescriptor, ShaderStages, TextureDescriptor,
@@ -33,8 +34,6 @@ use crate::{
     types::{BindGroupBuilder, BindGroupLayoutBuilder, Shader, TypedBuffer},
     Gpu,
 };
-
-pub use light_manager::LightManager;
 
 pub struct MsaaResolve {
     final_color: TextureHandle,

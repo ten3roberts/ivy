@@ -1,8 +1,7 @@
 use glam::Vec3;
 
-use crate::{Color, ColorExt};
-
 use super::{GizmosSection, Line, Sphere, DEFAULT_RADIUS};
+use crate::{Color, ColorExt};
 
 pub trait DrawGizmos {
     /// Draw a set of gizmos using the current section

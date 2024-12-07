@@ -13,10 +13,7 @@ use flax::{
 use glam::Mat4;
 use itertools::Itertools;
 use ivy_assets::{map::AssetMap, stored::Handle, Asset, AssetCache};
-use ivy_core::{
-    components::world_transform,
-    profiling::profile_function,
-};
+use ivy_core::{components::world_transform, profiling::profile_function};
 use ivy_gltf::{
     animation::{player::Animator, skin::Skin},
     components::{animator, skin},
@@ -25,6 +22,7 @@ use ivy_wgpu_types::shader::{Culling, TargetDesc};
 use slab::Slab;
 use wgpu::{BindGroup, BindGroupLayout, BufferUsages, DepthBiasState, RenderPass, ShaderStages};
 
+use super::{mesh_renderer::ShaderFactory, CameraRenderer, ObjectData};
 use crate::{
     components::{material, mesh},
     material::PbrMaterial,
@@ -38,8 +36,6 @@ use crate::{
     types::{shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, Shader, TypedBuffer},
     Gpu,
 };
-
-use super::{mesh_renderer::ShaderFactory, CameraRenderer, ObjectData};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BatchKey {

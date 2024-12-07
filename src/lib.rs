@@ -34,22 +34,20 @@
 //!
 //! See the documentation for [`ivy-core::Layer`]
 
+pub use flax;
 pub use ivy_assets;
 /// Rexports
 pub use ivy_core;
+pub use ivy_core::{components::*, App, Extent, Layer};
 pub use ivy_game;
 pub use ivy_gltf;
 pub use ivy_graphics;
 pub use ivy_input as input;
+pub use ivy_input::InputState;
 pub use ivy_physics as physics;
+pub use ivy_physics::RigidBodyBundle;
 pub use ivy_postprocessing as postprocessing;
 pub use ivy_random as random;
 pub use ivy_scene as scene;
 pub use ivy_ui;
 pub use ivy_wgpu;
-
-pub use ivy_core::{components::*, App, Extent, Layer};
-pub use ivy_input::InputState;
-pub use ivy_physics::RigidBodyBundle;
-
-pub use flax;

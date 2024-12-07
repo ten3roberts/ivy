@@ -1,4 +1,6 @@
-use flax::{BoxedSystem, Component, Entity, FetchExt, ComponentMut, Query, QueryBorrow, System, World};
+use flax::{
+    BoxedSystem, Component, ComponentMut, Entity, FetchExt, Query, QueryBorrow, System, World,
+};
 use glam::{vec3, EulerRot, Quat, Vec2, Vec3};
 use ivy_assets::AssetCache;
 use ivy_core::{
@@ -9,8 +11,8 @@ use ivy_core::{
 use ivy_input::{
     components::input_state,
     types::{Key, NamedKey},
-    Action, Axis2D, BindingExt, CursorMoveBinding, InputState, KeyBinding, MouseButtonBinding,
-    ScrollBinding,
+    Action, Axis2D, Axis3D, BindingExt, CursorMoveBinding, InputState, KeyBinding,
+    MouseButtonBinding, ScrollBinding,
 };
 use ivy_physics::{
     components::{angular_velocity, velocity},
@@ -23,7 +25,7 @@ use ivy_wgpu::{
 };
 
 flax::component! {
-    pub pan_active: i32,
+    pub pan_active: bool,
     pub rotation_input: Vec2,
     pub euler_rotation: Vec3,
     pub camera_movement: Vec3,
@@ -59,38 +61,42 @@ pub fn setup_camera() -> flax::EntityBuilder {
     move_action.add(
         KeyBinding::new(Key::Character("w".into()))
             .analog()
-            .compose(Vec3::Z),
+            .compose(Axis3D::Z),
     );
     move_action.add(
         KeyBinding::new(Key::Character("a".into()))
             .analog()
-            .compose(-Vec3::X),
+            .compose(Axis3D::X)
+            .amplitude(-1.0),
     );
     move_action.add(
         KeyBinding::new(Key::Character("s".into()))
             .analog()
-            .compose(-Vec3::Z),
+            .compose(Axis3D::Z)
+            .amplitude(-1.0),
     );
     move_action.add(
         KeyBinding::new(Key::Character("d".into()))
             .analog()
-            .compose(Vec3::X),
+            .compose(Axis3D::X),
     );
 
     move_action.add(
         KeyBinding::new(Key::Character("c".into()))
             .analog()
-            .compose(-Vec3::Y),
+            .compose(Axis3D::Y)
+            .amplitude(-1.0),
     );
     move_action.add(
         KeyBinding::new(Key::Named(NamedKey::Control))
             .analog()
-            .compose(-Vec3::Y),
+            .compose(Axis3D::Y)
+            .amplitude(-1.0),
     );
     move_action.add(
         KeyBinding::new(Key::Named(NamedKey::Space))
             .analog()
-            .compose(Vec3::Y),
+            .compose(Axis3D::Y),
     );
 
     let mut rotate_action = Action::new();
@@ -138,11 +144,11 @@ fn cursor_lock_system() -> BoxedSystem {
         .with_query(Query::new(pan_active()))
         .with_query(Query::new(window().as_mut()).with(main_window()))
         .build(
-            |mut query: QueryBorrow<Component<i32>>,
+            |mut query: QueryBorrow<Component<bool>>,
              mut window: QueryBorrow<ComponentMut<WindowHandle>, _>| {
                 query.iter().for_each(|&pan_active| {
                     if let Some(window) = window.first() {
-                        window.set_cursor_lock(pan_active > 0);
+                        window.set_cursor_lock(pan_active);
                     }
                 });
             },
@@ -170,10 +176,10 @@ fn camera_rotation_input_system() -> BoxedSystem {
             rotation().as_mut(),
             euler_rotation().as_mut(),
             rotation_input(),
-            pan_active(),
+            pan_active().eq(true),
         )))
-        .for_each(|(rotation, euler_rotation, rotation_input, &pan_active)| {
-            *euler_rotation += pan_active as f32 * vec3(rotation_input.y, rotation_input.x, 0.0);
+        .for_each(|(rotation, euler_rotation, rotation_input, _)| {
+            *euler_rotation += vec3(rotation_input.y, rotation_input.x, 0.0);
             *rotation = Quat::from_euler(EulerRot::YXZ, -euler_rotation.y, -euler_rotation.x, 0.0);
         })
         .boxed()

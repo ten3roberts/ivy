@@ -1,7 +1,9 @@
-use std::convert::Infallible;
-use std::fs::File;
-use std::io::{self, BufReader, Read};
-use std::path::{Path, PathBuf};
+use std::{
+    convert::Infallible,
+    fs::File,
+    io::{self, BufReader, Read},
+    path::{Path, PathBuf},
+};
 
 use futures::AsyncReadExt;
 use thiserror::Error;

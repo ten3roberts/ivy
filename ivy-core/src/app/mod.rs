@@ -6,18 +6,15 @@ use std::time::Duration;
 
 pub use builder::*;
 pub use event::*;
-
 use flax::World;
+use ivy_assets::{service::FileSystemMapService, AssetCache};
 
+use self::driver::Driver;
 use crate::{
     components::{self, engine},
     layer::events::{Event, EventRegistry},
     Layer, LayerDyn,
 };
-
-use ivy_assets::{service::FileSystemMapService, AssetCache};
-
-use self::driver::Driver;
 
 pub struct App {
     name: String,

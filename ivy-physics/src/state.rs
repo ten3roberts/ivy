@@ -1,3 +1,5 @@
+use flax::{Component, ComponentMut, Entity, Fetch, QueryBorrow};
+use glam::{Quat, Vec3};
 use ivy_core::components::{position, rotation};
 use nalgebra::Isometry3;
 use rapier3d::prelude::{
@@ -6,9 +8,6 @@ use rapier3d::prelude::{
     NarrowPhase, PhysicsPipeline, QueryFilter, QueryPipeline, Ray, RayIntersection, RigidBody,
     RigidBodyHandle, RigidBodySet,
 };
-
-use flax::{Component, ComponentMut, Entity, Fetch, QueryBorrow};
-use glam::{Quat, Vec3};
 
 use crate::components::{angular_velocity, velocity};
 

@@ -12,10 +12,7 @@ pub struct PbrShaderDesc;
 impl AssetDesc<ShaderPass> for PbrShaderDesc {
     type Error = Infallible;
 
-    fn create(
-        &self,
-        assets: &ivy_assets::AssetCache,
-    ) -> Result<Asset<ShaderPass>, Self::Error> {
+    fn create(&self, assets: &ivy_assets::AssetCache) -> Result<Asset<ShaderPass>, Self::Error> {
         Ok(assets.insert(ShaderPass {
             label: "pbr_shader".into(),
             path: "../../assets/shader/pbr.wgsl".into(),
@@ -32,10 +29,7 @@ pub struct SkinnedPbrShaderDesc;
 impl AssetDesc<ShaderPass> for SkinnedPbrShaderDesc {
     type Error = Infallible;
 
-    fn create(
-        &self,
-        assets: &ivy_assets::AssetCache,
-    ) -> Result<Asset<ShaderPass>, Self::Error> {
+    fn create(&self, assets: &ivy_assets::AssetCache) -> Result<Asset<ShaderPass>, Self::Error> {
         Ok(assets.insert(ShaderPass {
             label: "skinned_pbr_shader".into(),
             path: "../../assets/shaders/skinned_pbr.wgsl".into(),
@@ -51,10 +45,7 @@ pub struct ShadowShaderDesc;
 impl AssetDesc<ShaderPass> for ShadowShaderDesc {
     type Error = Infallible;
 
-    fn create(
-        &self,
-        assets: &ivy_assets::AssetCache,
-    ) -> Result<Asset<ShaderPass>, Self::Error> {
+    fn create(&self, assets: &ivy_assets::AssetCache) -> Result<Asset<ShaderPass>, Self::Error> {
         Ok(assets.insert(ShaderPass {
             label: "shadow_shader".into(),
             path: "../../assets/shaders/shadow.wgsl".into(),
@@ -70,10 +61,7 @@ pub struct SkinnedShadowShaderDesc;
 impl AssetDesc<ShaderPass> for SkinnedShadowShaderDesc {
     type Error = Infallible;
 
-    fn create(
-        &self,
-        assets: &ivy_assets::AssetCache,
-    ) -> Result<Asset<ShaderPass>, Self::Error> {
+    fn create(&self, assets: &ivy_assets::AssetCache) -> Result<Asset<ShaderPass>, Self::Error> {
         Ok(assets.insert(ShaderPass {
             label: "skinned_shadow_shader".into(),
             path: "../../assets/shaders/skinned_shadow.wgsl".into(),

@@ -1,38 +1,20 @@
 pub mod animation;
 pub mod components;
 
+use std::{borrow::Cow, collections::HashMap, fs, future::Future, io, path::Path, sync::Arc};
+
 use animation::skin::Skin;
 use anyhow::Context;
-use futures::StreamExt;
-use futures::TryStreamExt;
-use glam::Mat4;
-use glam::Quat;
-use glam::U16Vec4;
-use glam::Vec2;
-use glam::Vec3;
-use glam::Vec4;
-use gltf::buffer;
-use image::DynamicImage;
-use image::ImageFormat;
+use futures::{StreamExt, TryStreamExt};
+use glam::{Mat4, Quat, U16Vec4, Vec2, Vec3, Vec4};
+use gltf::{buffer, Gltf};
+use image::{DynamicImage, ImageFormat};
 use itertools::Itertools;
-use ivy_assets::fs::AsyncAssetFromPath;
-use ivy_assets::AssetDesc;
+use ivy_assets::{fs::AsyncAssetFromPath, Asset, AssetCache, AssetDesc};
 use ivy_core::components::TransformBundle;
-use ivy_graphics::mesh::MeshData;
-use ivy_graphics::mesh::TANGENT_ATTRIBUTE;
-use ivy_profiling::profile_function;
-use ivy_profiling::profile_scope;
-use rayon::iter::ParallelBridge;
-use rayon::iter::ParallelIterator;
-use std::borrow::Cow;
-use std::fs;
-use std::future::Future;
-use std::io;
-use std::sync::Arc;
-use std::{collections::HashMap, path::Path};
-
-use gltf::Gltf;
-use ivy_assets::{Asset, AssetCache};
+use ivy_graphics::mesh::{MeshData, TANGENT_ATTRIBUTE};
+use ivy_profiling::{profile_function, profile_scope};
+use rayon::iter::{ParallelBridge, ParallelIterator};
 
 /// An in memory representation of a gltf document and binary buffer data
 pub struct DocumentData {

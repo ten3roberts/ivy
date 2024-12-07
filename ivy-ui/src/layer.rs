@@ -1,12 +1,17 @@
-use std::{cell::RefCell, ops::Deref, rc::Rc};
+use std::{cell::RefCell, convert::identity, ops::Deref, rc::Rc};
 
 use flax::World;
 use ivy_assets::AssetCache;
 use ivy_core::{
-    app::TickEvent, layer::events::EventRegisterContext, profiling::profile_function, Layer,
+    app::TickEvent, components::request_capture_mouse, layer::events::EventRegisterContext,
+    profiling::profile_function, Layer, WorldExt,
 };
 use ivy_input::types::InputEvent;
-use ivy_wgpu::events::{ApplicationReady, ResizedEvent};
+use ivy_wgpu::{
+    components::{main_window, window},
+    driver::WindowHandle,
+    events::{ApplicationReady, ResizedEvent},
+};
 use violet::{
     core::{declare_atom, ScopeRef, Widget},
     glam::vec2,
@@ -38,6 +43,7 @@ declare_atom! {
 
 pub struct UiInputLayer {
     instance: Rc<RefCell<AppInstance>>,
+    window: Option<WindowHandle>,
 }
 
 impl UiInputLayer {
@@ -45,10 +51,19 @@ impl UiInputLayer {
         let instance = AppInstance::new(root);
         let instance = Rc::new(RefCell::new(instance));
 
-        Self { instance }
+        Self {
+            instance,
+            window: None,
+        }
     }
 
-    fn on_ready(&mut self, _: &mut World, _: &AssetCache) -> anyhow::Result<()> {
+    fn on_ready(&mut self, engine_world: &mut World, _: &AssetCache) -> anyhow::Result<()> {
+        let main_window = engine_world.by_tag(main_window());
+
+        if let Some(main_window) = main_window {
+            self.window = Some(main_window.get(window())?.clone());
+        }
+
         Ok(())
     }
 
@@ -60,6 +75,10 @@ impl UiInputLayer {
     ) -> anyhow::Result<bool> {
         profile_function!();
         let instance = &mut *self.instance.deref().borrow_mut();
+
+        instance
+            .input_state
+            .update_external_focus(&mut instance.frame);
 
         // TODO: modifiers changed
         let mut captured = match event {
@@ -94,7 +113,15 @@ impl UiInputLayer {
             InputEvent::Focus(_) => false,
         };
 
-        if let Some(focused) = instance.input_state.focused_entity(instance.frame.world()) {
+        if let Some(focused) = instance.input_state.get_focused(instance.frame.world()) {
+            let capture_mouse = focused
+                .get_copy(request_capture_mouse())
+                .is_ok_and(identity);
+
+            if let Some(window) = &self.window {
+                window.set_cursor_lock(capture_mouse);
+            }
+
             if let Ok(mut handler) = focused.get_mut(on_input_event()) {
                 handler(
                     &ScopeRef::new(&instance.frame, focused),

@@ -1,7 +1,7 @@
 use flax::{
     component,
     fetch::{entity_refs, EntityRefs, Source},
-    system, BoxedSystem, CommandBuffer, Component, Entity, Fetch, FetchExt, ComponentMut, Query,
+    system, BoxedSystem, CommandBuffer, Component, ComponentMut, Entity, Fetch, FetchExt, Query,
     QueryBorrow, System, World,
 };
 use glam::{vec2, vec4, Mat4, Vec2, Vec3, Vec4Swizzles};
@@ -100,7 +100,11 @@ impl PickingState {
                 ))
                 .build();
 
-            cmd.set(self.manipulator, impulse_joint(hit.collider_id), joint.into());
+            cmd.set(
+                self.manipulator,
+                impulse_joint(hit.collider_id),
+                joint.into(),
+            );
 
             self.picked_object = Some((hit.collider_id, anchor, distance));
         }
@@ -136,10 +140,10 @@ impl PickingState {
 }
 
 component! {
-    pick_ray_action: i32,
+    pick_ray_action: bool,
     cursor_position_action: Vec2,
     picking_state: PickingState,
-    ray_distance_modifier: i32,
+    ray_distance_modifier: f32,
 }
 
 pub struct RayPickingPlugin;
@@ -158,8 +162,12 @@ impl Plugin for RayPickingPlugin {
         cursor_position.add(CursorPositionBinding::new(true));
 
         let mut ray_distance_action = Action::new();
-        ray_distance_action.add(KeyBinding::new(Key::Named(NamedKey::ArrowUp)));
-        ray_distance_action.add(KeyBinding::new(Key::Named(NamedKey::ArrowDown)).amplitude(-1));
+        ray_distance_action.add(KeyBinding::new(Key::Named(NamedKey::ArrowUp)).analog());
+        ray_distance_action.add(
+            KeyBinding::new(Key::Named(NamedKey::ArrowDown))
+                .analog()
+                .amplitude(-1.0),
+        );
 
         let manipulator = Entity::builder()
             .mount(TransformBundle::default())
@@ -220,7 +228,7 @@ impl Default for CameraQuery {
 
 type PickingQuery = (
     EntityRefs,
-    Component<i32>,
+    Component<bool>,
     Component<Vec2>,
     ComponentMut<PickingState>,
 );
@@ -268,7 +276,7 @@ pub fn pick_ray_system() -> BoxedSystem {
                 {
                     let world = entity.world();
 
-                    if *pick_ray_activation < 1 {
+                    if !pick_ray_activation {
                         state.stop_manipulating(cmd);
                         return Ok(());
                     }

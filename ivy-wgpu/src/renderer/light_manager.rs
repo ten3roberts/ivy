@@ -3,20 +3,18 @@ use std::iter::repeat;
 use flax::{FetchExt, Query};
 use glam::{Vec3, Vec4};
 use itertools::Itertools;
-use ivy_core::{components::world_transform, palette::num::Trigonometry, to_linear_vec3};
+use ivy_core::{components::world_transform, to_linear_vec3};
 use ivy_wgpu_types::{BindGroupBuilder, BindGroupLayoutBuilder, Gpu, TypedBuffer};
-use ordered_float::Float;
 use wgpu::{
     BindGroup, BindGroupLayout, BufferUsages, SamplerDescriptor, ShaderStages,
     TextureViewDescriptor, TextureViewDimension,
 };
 
+use super::shadowmapping::LightShadowData;
 use crate::{
     components::{light_kind, light_params, light_shadow_data},
     rendergraph::{BufferHandle, NodeUpdateContext, TextureHandle},
 };
-
-use super::shadowmapping::LightShadowData;
 
 pub struct LightManager {
     layout: BindGroupLayout,

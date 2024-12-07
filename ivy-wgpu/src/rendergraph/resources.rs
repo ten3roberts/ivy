@@ -4,7 +4,6 @@ use std::{
     sync::Arc,
 };
 
-use itertools::Itertools;
 use ivy_wgpu_types::Gpu;
 use slotmap::{SecondaryMap, SlotMap};
 use wgpu::{
@@ -12,9 +11,8 @@ use wgpu::{
     TextureDimension, TextureFormat, TextureUsages,
 };
 
-use crate::shader_library::ShaderLibrary;
-
 use super::{Dependency, Node, NodeId, ResourceHandle};
+use crate::shader_library::ShaderLibrary;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct Lifetime {

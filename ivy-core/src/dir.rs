@@ -1,5 +1,6 @@
-use anyhow::Context;
 use std::env;
+
+use anyhow::Context;
 
 // Set directory to nth parent of current executable
 pub fn normalize_dir(nth: usize) -> anyhow::Result<()> {

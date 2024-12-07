@@ -13,5 +13,4 @@ pub use effector::*;
 pub use error::*;
 pub use gltf::*;
 pub use plugin::*;
-
 pub use rapier3d;
