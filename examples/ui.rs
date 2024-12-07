@@ -5,17 +5,14 @@ use glam::{vec3, EulerRot, Mat4, Quat, Vec2, Vec3};
 use itertools::Itertools;
 use ivy_assets::AssetCache;
 use ivy_core::{
-    app::InitEvent,
+    app::PostInitEvent,
     layer::events::EventRegisterContext,
     palette::Srgb,
     profiling::ProfilingLayer,
     update_layer::{FixedTimeStep, Plugin, ScheduleSetBuilder, ScheduledLayer},
     App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer,
 };
-use ivy_engine::{
-    is_static, ivy_ui::layer::UiLayer, main_camera, rotation, scale, RigidBodyBundle,
-    TransformBundle,
-};
+use ivy_engine::{is_static, main_camera, rotation, scale, RigidBodyBundle, TransformBundle};
 use ivy_game::{
     free_camera::{camera_speed, setup_camera, FreeCameraPlugin},
     ray_picker::RayPickingPlugin,
@@ -26,7 +23,8 @@ use ivy_physics::{
     components::{collider_shape, rigid_body_type},
     ColliderBundle, PhysicsPlugin,
 };
-use ivy_postprocessing::preconfigured::{SurfacePbrPipeline, SurfacePbrPipelineDesc};
+use ivy_postprocessing::preconfigured::{SurfacePbrPipelineDesc, SurfacePbrRenderer};
+use ivy_ui::layer::{UiInputLayer, UiUpdateLayer};
 use ivy_wgpu::{
     components::*,
     driver::WinitDriver,
@@ -43,7 +41,7 @@ use rapier3d::prelude::{RigidBodyType, SharedShape};
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
 use violet::{
-    core::{layout::Alignment, state::State, style::SizeExt, to_owned, widget::*, Widget},
+    core::{layout::Align, state::State, style::SizeExt, to_owned, widget::*, Widget},
     futures_signals::signal::Mutable,
     palette::Srgba,
 };
@@ -70,7 +68,9 @@ pub fn main() -> anyhow::Result<()> {
         .init();
 
     let ui_state = Mutable::new(UiState::default());
-    let ui_layer = UiLayer::new(ui_app(ui_state.clone()));
+    let ui_input_layer = UiInputLayer::new(ui_app(ui_state.clone()));
+
+    let ui_layer = UiUpdateLayer::new(ui_input_layer.instance().clone());
     let ui_instance = ui_layer.instance().clone();
 
     if let Err(err) = App::builder()
@@ -82,7 +82,7 @@ pub fn main() -> anyhow::Result<()> {
         .with_layer(EngineLayer::new())
         .with_layer(ProfilingLayer::new())
         .with_layer(GraphicsLayer::new(move |world, assets, gpu, surface| {
-            Ok(SurfacePbrPipeline::new(
+            Ok(SurfacePbrRenderer::new(
                 world,
                 assets,
                 gpu,
@@ -95,7 +95,7 @@ pub fn main() -> anyhow::Result<()> {
                 },
             ))
         }))
-        .with_layer(ui_layer)
+        .with_layer(ui_input_layer)
         .with_layer(InputLayer::new())
         .with_layer(LogicLayer)
         .with_layer(
@@ -107,6 +107,7 @@ pub fn main() -> anyhow::Result<()> {
                 .with_plugin(PhysicsPlugin::new())
                 .with_plugin(RayPickingPlugin),
         )
+        .with_layer(ui_layer)
         .run()
     {
         tracing::error!("{err:?}");
@@ -140,14 +141,14 @@ pub fn ui_app(state: Mutable<UiState>) -> impl Widget {
     Stack::new((
         Stack::new(card(col((test, TextInput::new(input.clone())))))
             .with_maximize(Vec2::ONE)
-            .with_horizontal_alignment(Alignment::Start),
+            .with_horizontal_alignment(Align::Start),
         Stack::new(card(radio_buttons))
             .with_maximize(Vec2::ONE)
-            .with_horizontal_alignment(Alignment::End)
-            .with_vertical_alignment(Alignment::End),
+            .with_horizontal_alignment(Align::End)
+            .with_vertical_alignment(Align::End),
         Stack::new(card(label("Ivy")))
             .with_maximize(Vec2::ONE)
-            .with_horizontal_alignment(Alignment::Center),
+            .with_horizontal_alignment(Align::Center),
     ))
     .with_maximize(Vec2::ONE)
 }
@@ -161,7 +162,7 @@ impl Layer for LogicLayer {
         _: &AssetCache,
         mut events: EventRegisterContext<Self>,
     ) -> anyhow::Result<()> {
-        events.subscribe(|_, world, assets, _: &InitEvent| {
+        events.subscribe(|_, world, assets, _: &PostInitEvent| {
             setup_objects(world, assets.clone())?;
 
             Ok(())

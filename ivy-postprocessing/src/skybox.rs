@@ -1,4 +1,5 @@
 use glam::{Mat4, Vec3};
+use ivy_core::profiling::profile_function;
 use ivy_wgpu::{
     renderer::{CameraRenderer, UpdateContext},
     types::{shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, Shader, TypedBuffer},
@@ -56,6 +57,8 @@ impl SkyboxRenderer {
 
 impl CameraRenderer for SkyboxRenderer {
     fn update(&mut self, ctx: &mut UpdateContext<'_>) -> anyhow::Result<()> {
+        profile_function!();
+
         self.buffer.write(
             &ctx.gpu.queue,
             0,
@@ -75,6 +78,8 @@ impl CameraRenderer for SkyboxRenderer {
         ctx: &ivy_wgpu::renderer::RenderContext<'s>,
         render_pass: &mut wgpu::RenderPass<'s>,
     ) -> anyhow::Result<()> {
+        profile_function!();
+
         let shader = self.shader.get_or_insert_with(|| {
             Shader::new(
                 ctx.gpu,

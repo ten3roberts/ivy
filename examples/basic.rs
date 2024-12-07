@@ -2,10 +2,9 @@ use std::f32::consts::PI;
 
 use anyhow::Context;
 use flax::{
-    BoxedSystem, Component, Entity, EntityBuilder, FetchExt, Query, QueryBorrow, ScheduleBuilder,
-    System, World,
+    BoxedSystem, Component, Entity, EntityBuilder, FetchExt, Query, QueryBorrow, System, World,
 };
-use glam::{vec3, EulerRot, Mat4, Quat, Vec3};
+use glam::{vec3, Mat4, Quat, Vec3};
 use ivy_assets::{Asset, AssetCache};
 use ivy_core::{
     app::PostInitEvent,
@@ -13,7 +12,7 @@ use ivy_core::{
     layer::events::EventRegisterContext,
     palette::{Srgb, WithAlpha},
     profiling::ProfilingLayer,
-    update_layer::{FixedTimeStep, PerTick, Plugin, ScheduleSetBuilder, ScheduledLayer},
+    update_layer::{FixedTimeStep, Plugin, ScheduleSetBuilder, ScheduledLayer},
     App, EngineLayer, EntityBuilderExt, Layer,
 };
 use ivy_engine::{
@@ -32,8 +31,7 @@ use ivy_postprocessing::preconfigured::{SurfacePbrPipelineDesc, SurfacePbrRender
 use ivy_scene::{GltfNodeExt, NodeMountOptions};
 use ivy_wgpu::{
     components::{
-        cast_shadow, environment_data, forward_pass, light_kind, light_params, projection_matrix,
-        shadow_pass,
+        environment_data, forward_pass, light_kind, light_params, projection_matrix, shadow_pass,
     },
     driver::WinitDriver,
     events::ResizedEvent,
@@ -326,7 +324,13 @@ impl LogicLayer {
                 let animation = skin.animations()[0].clone();
 
                 let root: EntityBuilder = node
-                    .mount(&assets, &mut Entity::builder(), NodeMountOptions {})
+                    .mount(
+                        &assets,
+                        &mut Entity::builder(),
+                        &NodeMountOptions {
+                            skip_empty_children: true,
+                        },
+                    )
                     .mount(TransformBundle::new(
                         vec3(0.0, 0.0, 2.0),
                         Quat::IDENTITY,
@@ -344,7 +348,13 @@ impl LogicLayer {
                     .unwrap();
 
                 let root: EntityBuilder = node
-                    .mount(&assets, &mut Entity::builder(), NodeMountOptions {})
+                    .mount(
+                        &assets,
+                        &mut Entity::builder(),
+                        &NodeMountOptions {
+                            skip_empty_children: true,
+                        },
+                    )
                     .mount(TransformBundle::new(
                         vec3(0.0, 1.0, -2.0),
                         Quat::IDENTITY,
@@ -392,7 +402,7 @@ impl LogicLayer {
             )
             .set(
                 light_params(),
-                LightParams::new(Srgb::new(1.0, 1.0, 1.0, 50.0)).with_cutoffs(0.3, 0.4),
+                LightParams::new(Srgb::new(1.0, 1.0, 1.0), 50.0).with_angular_cutoffs(0.3, 0.4),
             )
             .set(light_kind(), LightKind::Spotlight)
             .spawn(world);

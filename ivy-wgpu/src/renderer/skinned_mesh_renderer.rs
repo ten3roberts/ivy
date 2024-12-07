@@ -13,7 +13,10 @@ use flax::{
 use glam::Mat4;
 use itertools::Itertools;
 use ivy_assets::{map::AssetMap, stored::Handle, Asset, AssetCache};
-use ivy_core::components::world_transform;
+use ivy_core::{
+    components::world_transform,
+    profiling::{profile_function, profile_scope},
+};
 use ivy_gltf::{
     animation::{player::Animator, skin::Skin},
     components::{animator, skin},
@@ -447,6 +450,7 @@ impl SkinnedMeshRenderer {
 
 impl CameraRenderer for SkinnedMeshRenderer {
     fn update(&mut self, ctx: &mut super::UpdateContext) -> anyhow::Result<()> {
+        profile_function!();
         let mut cmd = CommandBuffer::new();
         self.collect_unbatched(
             ctx.world,
@@ -468,6 +472,8 @@ impl CameraRenderer for SkinnedMeshRenderer {
         ctx: &'s super::RenderContext<'s>,
         render_pass: &mut RenderPass<'s>,
     ) -> anyhow::Result<()> {
+        profile_function!();
+
         for (i, bind_group) in ctx.bind_groups.iter().enumerate() {
             render_pass.set_bind_group(i as _, bind_group, &[]);
         }

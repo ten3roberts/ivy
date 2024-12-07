@@ -2,7 +2,7 @@ use flax::{Entity, Query, World};
 use glam::{Mat4, Quat, Vec3};
 use ivy_assets::{Asset, AssetCache, DynAsyncAssetDesc};
 use ivy_core::{
-    app::InitEvent,
+    app::PostInitEvent,
     layer::events::EventRegisterContext,
     palette::Srgb,
     profiling::ProfilingLayer,
@@ -14,7 +14,7 @@ use ivy_game::free_camera::{setup_camera, FreeCameraPlugin};
 use ivy_gltf::Document;
 use ivy_input::layer::InputLayer;
 use ivy_physics::PhysicsPlugin;
-use ivy_postprocessing::preconfigured::{SurfacePbrPipeline, SurfacePbrPipelineDesc};
+use ivy_postprocessing::preconfigured::{SurfacePbrPipelineDesc, SurfacePbrRenderer};
 use ivy_scene::{GltfNodeExt, NodeMountOptions};
 use ivy_wgpu::{
     components::{environment_data, projection_matrix},
@@ -50,7 +50,7 @@ pub fn main() -> anyhow::Result<()> {
         .with_layer(EngineLayer::new())
         .with_layer(ProfilingLayer::new())
         .with_layer(GraphicsLayer::new(|world, assets, gpu, surface| {
-            Ok(SurfacePbrPipeline::new(
+            Ok(SurfacePbrRenderer::new(
                 world,
                 assets,
                 gpu,
@@ -63,8 +63,11 @@ pub fn main() -> anyhow::Result<()> {
         }))
         .with_layer(InputLayer::new())
         .with_layer(LogicLayer)
-        .with_layer(ScheduledLayer::new(PerTick).with_plugin(FreeCameraPlugin))
-        .with_layer(ScheduledLayer::new(FixedTimeStep::new(0.02)).with_plugin(PhysicsPlugin::new()))
+        .with_layer(
+            ScheduledLayer::new(FixedTimeStep::new(0.02))
+                .with_plugin(FreeCameraPlugin)
+                .with_plugin(PhysicsPlugin::new()),
+        )
         .run()
     {
         tracing::error!("{err:?}");
@@ -80,7 +83,13 @@ async fn setup_objects(cmd: AsyncCommandBuffer, assets: AssetCache) -> anyhow::R
     document
         .node(0)
         .unwrap()
-        .mount(&assets, &mut Entity::builder(), NodeMountOptions {})
+        .mount(
+            &assets,
+            &mut Entity::builder(),
+            &NodeMountOptions {
+                skip_empty_children: true,
+            },
+        )
         .mount(
             TransformBundle::default()
                 .with_position(-Vec3::Z)
@@ -100,7 +109,7 @@ impl Layer for LogicLayer {
         _: &AssetCache,
         mut events: EventRegisterContext<Self>,
     ) -> anyhow::Result<()> {
-        events.subscribe(|_, world, assets, InitEvent| {
+        events.subscribe(|_, world, assets, _: &PostInitEvent| {
             async_std::task::spawn(setup_objects(
                 world.get(engine(), async_commandbuffer()).unwrap().clone(),
                 assets.clone(),

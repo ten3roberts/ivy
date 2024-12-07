@@ -2,6 +2,7 @@ use std::{mem::size_of, sync::Arc};
 
 use crate::{
     components::{cast_shadow, light_kind, light_params, projection_matrix, shadow_pass},
+    light::{LightKind, LightParams},
     renderer::{
         mesh_renderer::MeshRenderer, CameraRenderer, RenderContext, RendererStore, UpdateContext,
     },
@@ -13,11 +14,12 @@ use crate::{
     types::{shader::TargetDesc, BindGroupBuilder, BindGroupLayoutBuilder},
     Gpu,
 };
-use flax::{entity_ids, FetchExt, Query, World};
+use flax::{entity_ids, filter::With, Component, EntityIds, FetchExt, Query, World};
 use glam::{vec2, vec3, Mat4, Vec2, Vec3, Vec4Swizzles};
-use itertools::Itertools;
+use itertools::{izip, Itertools};
 use ivy_core::{
     components::{main_camera, world_transform},
+    profiling::{profile_function, profile_scope},
     WorldExt,
 };
 use ivy_wgpu_types::shader::ShaderDesc;
@@ -25,7 +27,8 @@ use ordered_float::OrderedFloat;
 use tracing::info;
 use wgpu::{
     BindGroup, BindGroupLayout, Buffer, BufferDescriptor, BufferUsages, DepthBiasState, Operations,
-    RenderPassDescriptor, ShaderStages, TextureUsages, TextureViewDescriptor, TextureViewDimension,
+    RenderPassDescriptor, ShaderStages, TextureUsages, TextureView, TextureViewDescriptor,
+    TextureViewDimension,
 };
 
 use crate::components::light_shadow_data;
@@ -47,9 +50,19 @@ pub struct LightShadowCamera {
     _padding: f32,
 }
 
+#[derive(flax::Fetch)]
+struct ShadowMapNodeQuery {
+    id: EntityIds,
+    world_transform: Component<Mat4>,
+    light_kind: Component<LightKind>,
+    light_params: Component<LightParams>,
+    cast_shadow: With,
+}
+
 pub struct ShadowMapNode {
     // Texture array
     shadow_maps: TextureHandle,
+    shadow_map_views: Option<Vec<TextureView>>,
     layout: BindGroupLayout,
     bind_groups: Option<Vec<BindGroup>>,
     lights: Vec<LightShadowCamera>,
@@ -58,6 +71,7 @@ pub struct ShadowMapNode {
     renderer: (MeshRenderer, SkinnedMeshRenderer),
     store: RendererStore,
     max_cascades: usize,
+    query: Query<ShadowMapNodeQuery>,
 }
 
 impl ShadowMapNode {
@@ -110,6 +124,14 @@ impl ShadowMapNode {
             shadow_camera_buffer: light_camera_buffer,
             renderer,
             store: RendererStore::new(),
+            query: Query::new(ShadowMapNodeQuery {
+                id: entity_ids(),
+                world_transform: world_transform(),
+                light_kind: light_kind(),
+                light_params: light_params(),
+                cast_shadow: cast_shadow().with(),
+            }),
+            shadow_map_views: None,
         }
     }
 }
@@ -182,22 +204,14 @@ impl Node for ShadowMapNode {
             })
             .collect_vec();
 
-        for (id, &transform, &kind, light_params) in Query::new((
-            entity_ids(),
-            world_transform(),
-            light_kind(),
-            light_params(),
-        ))
-        .with(cast_shadow())
-        .borrow(ctx.world)
-        .iter()
-        {
-            let (_, light_rot, light_pos) = transform.to_scale_rotation_translation();
+        for item in self.query.borrow(ctx.world).iter() {
+            profile_scope!("update_light_camera");
+            let (_, light_rot, light_pos) = item.world_transform.to_scale_rotation_translation();
 
             let light_index = self.lights.len() as u32;
 
             let light_forward = light_rot * -Vec3::Z;
-            if kind.is_directional() {
+            if item.light_kind.is_directional() {
                 for frustrum in &frustrums {
                     let snapping = 0.1;
                     let center = (frustrum.center / snapping).ceil() * snapping;
@@ -225,7 +239,7 @@ impl Node for ShadowMapNode {
                     });
 
                     to_add.push((
-                        id,
+                        item.id,
                         LightShadowData {
                             index: light_index,
                             cascade_count: self.max_cascades as u32,
@@ -236,10 +250,10 @@ impl Node for ShadowMapNode {
                 let view = Mat4::from_rotation_translation(light_rot, light_pos);
 
                 const MIN_LUM: f32 = 0.01;
-                let max_range = (light_params.intensity / MIN_LUM).sqrt();
+                let max_range = (item.light_params.intensity / MIN_LUM).sqrt();
 
                 let proj =
-                    Mat4::perspective_rh(light_params.outer_theta * 2.0, 1.0, 0.1, max_range);
+                    Mat4::perspective_rh(item.light_params.outer_theta * 2.0, 1.0, 0.1, max_range);
 
                 self.lights.push(LightShadowCamera {
                     viewproj: proj * view.inverse(),
@@ -249,13 +263,22 @@ impl Node for ShadowMapNode {
                 });
 
                 to_add.push((
-                    id,
+                    item.id,
                     LightShadowData {
                         index: light_index,
                         cascade_count: 1,
                     },
                 ));
             };
+        }
+
+        if self
+            .shadow_map_views
+            .as_ref()
+            .is_some_and(|v| v.len() != self.lights.len())
+        {
+            self.shadow_map_views = None;
+            self.bind_groups = None;
         }
 
         ctx.world.append_all(light_shadow_data(), to_add)?;
@@ -280,26 +303,32 @@ impl Node for ShadowMapNode {
     }
 
     fn draw(&mut self, ctx: NodeExecutionContext) -> anyhow::Result<()> {
+        profile_function!();
         let shadow_maps = ctx.get_texture(self.shadow_maps);
+
         let light_shadow_stride = (ctx.gpu.device.limits().min_uniform_buffer_offset_alignment
             as u64)
             .max(size_of::<LightShadowCamera>() as u64);
 
-        ctx.queue.write_buffer(
-            ctx.get_buffer(self.shadow_camera_buffer),
-            0,
-            bytemuck::cast_slice(&self.lights),
-        );
-
-        for (i, &light) in self.lights.iter().enumerate() {
+        {
+            profile_scope!("write_light_buffer");
             ctx.queue.write_buffer(
-                &self.dynamic_light_camera_buffer,
-                i as u64 * light_shadow_stride,
-                bytemuck::cast_slice(&[light]),
+                ctx.get_buffer(self.shadow_camera_buffer),
+                0,
+                bytemuck::cast_slice(&self.lights),
             );
-        }
 
+            for (i, &light) in self.lights.iter().enumerate() {
+                ctx.queue.write_buffer(
+                    &self.dynamic_light_camera_buffer,
+                    i as u64 * light_shadow_stride,
+                    bytemuck::cast_slice(&[light]),
+                );
+            }
+        }
         let bind_groups = self.bind_groups.get_or_insert_with(|| {
+            profile_scope!("create_bind_groups");
+
             (0..self.lights.len())
                 .map(|i| {
                     let bind_group = BindGroupBuilder::new("LightCamera")
@@ -315,14 +344,25 @@ impl Node for ShadowMapNode {
                 .collect_vec()
         });
 
-        for (i, bind_group) in bind_groups.iter().enumerate() {
-            let view = shadow_maps.create_view(&TextureViewDescriptor {
-                aspect: wgpu::TextureAspect::DepthOnly,
-                dimension: Some(TextureViewDimension::D2),
-                base_array_layer: i as u32,
-                array_layer_count: Some(1),
-                ..Default::default()
-            });
+        let shadow_map_views = self.shadow_map_views.get_or_insert_with(|| {
+            profile_scope!("create_shadow_views");
+
+            (0..self.lights.len())
+                .map(|i| {
+                    shadow_maps.create_view(&TextureViewDescriptor {
+                        aspect: wgpu::TextureAspect::DepthOnly,
+                        dimension: Some(TextureViewDimension::D2),
+                        base_array_layer: i as u32,
+                        array_layer_count: Some(1),
+                        ..Default::default()
+                    })
+                })
+                .collect_vec()
+        });
+
+        assert_eq!(bind_groups.len(), shadow_map_views.len());
+        for (bind_group, view) in izip!(bind_groups, shadow_map_views) {
+            profile_scope!("cascade_draw");
 
             let draw_ctx = RenderContext {
                 world: ctx.world,
@@ -339,19 +379,22 @@ impl Node for ShadowMapNode {
                 },
             };
 
-            let mut render_pass = ctx.encoder.begin_render_pass(&RenderPassDescriptor {
-                label: "shadow_map".into(),
-                color_attachments: &[],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &view,
-                    depth_ops: Some(Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: wgpu::StoreOp::Store,
+            let mut render_pass = {
+                profile_scope!("begin_render_pass");
+                ctx.encoder.begin_render_pass(&RenderPassDescriptor {
+                    label: "shadow_map".into(),
+                    color_attachments: &[],
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view,
+                        depth_ops: Some(Operations {
+                            load: wgpu::LoadOp::Clear(1.0),
+                            store: wgpu::StoreOp::Store,
+                        }),
+                        stencil_ops: None,
                     }),
-                    stencil_ops: None,
-                }),
-                ..Default::default()
-            });
+                    ..Default::default()
+                })
+            };
 
             self.renderer.draw(&draw_ctx, &mut render_pass)?;
         }
@@ -372,6 +415,7 @@ impl Node for ShadowMapNode {
 
     fn on_resource_changed(&mut self, _resource: crate::rendergraph::ResourceHandle) {
         self.bind_groups = None;
+        self.shadow_map_views = None;
     }
 }
 

@@ -3,7 +3,7 @@ use itertools::Itertools;
 use ivy_assets::{Asset, AssetDesc};
 use ivy_gltf::GltfPrimitive;
 use ivy_graphics::mesh::{MeshData, POSITION_ATTRIBUTE};
-use rapier3d::prelude::{SharedShape, TriMeshFlags, TriMeshPseudoNormals};
+use rapier3d::prelude::{SharedShape, TriMeshFlags};
 
 /// Create a trimesh collider from provided primitive
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]

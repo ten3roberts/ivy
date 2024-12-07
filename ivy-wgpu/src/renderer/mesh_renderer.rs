@@ -454,6 +454,7 @@ impl MeshRenderer {
 
 impl CameraRenderer for MeshRenderer {
     fn update(&mut self, ctx: &mut super::UpdateContext) -> anyhow::Result<()> {
+        profile_function!();
         let mut cmd = CommandBuffer::new();
         self.handle_removed(ctx.world);
         self.collect_unbatched(
@@ -476,6 +477,8 @@ impl CameraRenderer for MeshRenderer {
         ctx: &'s super::RenderContext<'s>,
         render_pass: &mut RenderPass<'s>,
     ) -> anyhow::Result<()> {
+        profile_function!();
+
         for (i, bind_group) in ctx.bind_groups.iter().enumerate() {
             render_pass.set_bind_group(i as _, bind_group, &[]);
         }

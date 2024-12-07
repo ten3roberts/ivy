@@ -1920,8 +1920,6 @@ dependencies = [
  "naga_oil",
  "ordered-float",
  "parking_lot",
- "puffin",
- "puffin_http",
  "rayon",
  "serde",
  "slab",

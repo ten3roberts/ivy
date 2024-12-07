@@ -2,11 +2,11 @@ use flax::{Entity, Query, World};
 use glam::{vec3, EulerRot, Mat4, Quat, Vec3};
 use ivy_assets::AssetCache;
 use ivy_core::{
-    app::InitEvent,
+    app::PostInitEvent,
     layer::events::EventRegisterContext,
     palette::{Srgb, Srgba},
     profiling::ProfilingLayer,
-    update_layer::{FixedTimeStep, PerTick, ScheduledLayer},
+    update_layer::{FixedTimeStep, ScheduledLayer},
     App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer,
 };
 use ivy_engine::{is_static, main_camera, rotation, scale, RigidBodyBundle, TransformBundle};
@@ -20,7 +20,7 @@ use ivy_physics::{
     components::{collider_shape, rigid_body_type},
     ColliderBundle, PhysicsPlugin,
 };
-use ivy_postprocessing::preconfigured::{SurfacePbrPipeline, SurfacePbrPipelineDesc};
+use ivy_postprocessing::preconfigured::{SurfacePbrPipelineDesc, SurfacePbrRenderer};
 use ivy_wgpu::{
     components::*,
     driver::WinitDriver,
@@ -61,7 +61,7 @@ pub fn main() -> anyhow::Result<()> {
         .with_layer(EngineLayer::new())
         .with_layer(ProfilingLayer::new())
         .with_layer(GraphicsLayer::new(|world, assets, gpu, surface| {
-            Ok(SurfacePbrPipeline::new(
+            Ok(SurfacePbrRenderer::new(
                 world,
                 assets,
                 gpu,
@@ -76,7 +76,7 @@ pub fn main() -> anyhow::Result<()> {
         }))
         .with_layer(InputLayer::new())
         .with_layer(LogicLayer)
-        .with_layer(ScheduledLayer::new(PerTick).with_plugin(FreeCameraPlugin))
+        .with_layer(ScheduledLayer::new(FixedTimeStep::new(0.02)).with_plugin(FreeCameraPlugin))
         .with_layer(
             ScheduledLayer::new(FixedTimeStep::new(0.02))
                 .with_plugin(PhysicsPlugin::new().with_gravity(-Vec3::Y * 9.81))
@@ -230,7 +230,7 @@ impl Layer for LogicLayer {
         _: &AssetCache,
         mut events: EventRegisterContext<Self>,
     ) -> anyhow::Result<()> {
-        events.subscribe(|_, world, assets, _: &InitEvent| {
+        events.subscribe(|_, world, assets, _: &PostInitEvent| {
             setup_objects(world, assets.clone())?;
 
             Ok(())

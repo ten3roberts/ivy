@@ -98,8 +98,21 @@ impl ivy_wgpu::layer::Renderer for SurfacePbrRenderer {
         self.render_graph
             .update(gpu, world, assets, &external_resources)?;
 
-        self.render_graph
-            .draw(gpu, queue, world, assets, &external_resources)?;
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
+
+        self.render_graph.draw_with_encoder(
+            gpu,
+            queue,
+            &mut encoder,
+            world,
+            assets,
+            &external_resources,
+        )?;
+
+        {
+            profile_scope!("submit");
+            gpu.queue.submit([encoder.finish()]);
+        }
 
         {
             profile_scope!("present");
@@ -206,8 +219,21 @@ impl ivy_wgpu::layer::Renderer for SurfaceRenderer {
         self.render_graph
             .update(gpu, world, assets, &external_resources)?;
 
-        self.render_graph
-            .draw(gpu, queue, world, assets, &external_resources)?;
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
+
+        self.render_graph.draw_with_encoder(
+            gpu,
+            queue,
+            &mut encoder,
+            world,
+            assets,
+            &external_resources,
+        )?;
+
+        {
+            profile_scope!("submit");
+            gpu.queue.submit([encoder.finish()]);
+        }
 
         {
             profile_scope!("present");

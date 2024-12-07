@@ -255,7 +255,7 @@ mod test {
             text: Default::default(),
         }));
 
-        assert_eq!(activation.get_stimulus(), 1.0);
+        assert_eq!(activation.get_stimulus(), 1);
 
         activation.apply(&InputEvent::Keyboard(KeyboardInput {
             key: Key::Character("B".into()),
@@ -264,7 +264,7 @@ mod test {
             text: Default::default(),
         }));
 
-        assert_eq!(activation.get_stimulus(), 1.0);
+        assert_eq!(activation.get_stimulus(), 1);
 
         activation.apply(&InputEvent::Keyboard(KeyboardInput {
             key: Key::Character("A".into()),
@@ -273,7 +273,7 @@ mod test {
             text: Default::default(),
         }));
 
-        assert_eq!(activation.get_stimulus(), 1.0);
+        assert_eq!(activation.get_stimulus(), 1);
         activation.apply(&InputEvent::Keyboard(KeyboardInput {
             key: Key::Character("B".into()),
             state: ElementState::Released,
@@ -281,6 +281,6 @@ mod test {
             text: Default::default(),
         }));
 
-        assert_eq!(activation.get_stimulus(), 0.0);
+        assert_eq!(activation.get_stimulus(), 0);
     }
 }

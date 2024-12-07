@@ -333,10 +333,11 @@ impl RenderGraph {
         Ok(())
     }
 
-    pub fn draw(
+    pub fn draw_with_encoder(
         &mut self,
         gpu: &Gpu,
         queue: &Queue,
+        encoder: &mut CommandEncoder,
         world: &mut World,
         assets: &AssetCache,
         external_resources: &ExternalResources,
@@ -347,8 +348,6 @@ impl RenderGraph {
             anyhow::bail!("update must be called before draw");
         };
 
-        let mut encoder = gpu.device.create_command_encoder(&Default::default());
-
         for &idx in order {
             let node = &mut self.nodes[idx];
             profile_scope!("render_node", node.label());
@@ -357,16 +356,11 @@ impl RenderGraph {
                 gpu,
                 resources: &self.resources,
                 queue,
-                encoder: &mut encoder,
+                encoder,
                 assets,
                 world,
                 external_resources,
             })?;
-        }
-
-        {
-            profile_scope!("submit");
-            queue.submit([encoder.finish()]);
         }
 
         Ok(())
@@ -471,6 +465,8 @@ fn topo_sort(
 
 #[cfg(test)]
 mod test {
+    use std::sync::Arc;
+
     use ivy_wgpu_types::{Gpu, TypedBuffer};
     use wgpu::{
         BufferUsages, Extent3d, ImageCopyBuffer, ImageCopyTexture, ImageDataLayout,
@@ -543,10 +539,6 @@ mod test {
                 vec![Dependency::texture(self.write, TextureUsages::COPY_DST)]
             }
 
-            fn update(&mut self, _ctx: super::NodeUpdateContext) -> anyhow::Result<()> {
-                Ok(())
-            }
-
             fn on_resource_changed(&mut self, _resource: super::ResourceHandle) {}
         }
 
@@ -612,10 +604,6 @@ mod test {
                 )]
             }
 
-            fn update(&mut self, _ctx: super::NodeUpdateContext) -> anyhow::Result<()> {
-                Ok(())
-            }
-
             fn on_resource_changed(&mut self, _resource: super::ResourceHandle) {}
         }
 
@@ -651,10 +639,6 @@ mod test {
                     self.texture,
                     TextureUsages::COPY_DST | TextureUsages::COPY_SRC,
                 )]
-            }
-
-            fn update(&mut self, _ctx: super::NodeUpdateContext) -> anyhow::Result<()> {
-                Ok(())
             }
 
             fn on_resource_changed(&mut self, _resource: super::ResourceHandle) {}
@@ -709,15 +693,20 @@ mod test {
 
         render_graph.add_node(WriteIntoTexture::new(buffer, texture2));
 
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
+
         render_graph
-            .draw(
+            .draw_with_encoder(
                 &gpu,
                 &gpu.queue,
-                &mut Default::default(),
+                &mut encoder,
+                &mut World::default(),
                 &Default::default(),
                 &Default::default(),
             )
             .unwrap();
+
+        gpu.queue.submit([encoder.finish()]);
 
         let (ready_tx, ready_rx) = futures::channel::oneshot::channel();
 
