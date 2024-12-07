@@ -6,7 +6,7 @@ use ivy_core::{
     layer::events::EventRegisterContext,
     palette::{Srgb, Srgba},
     profiling::ProfilingLayer,
-    update_layer::{FixedTimeStep, PerTick, ScheduledLayer},
+    update_layer::{FixedTimeStep, ScheduledLayer},
     App, EngineLayer, EntityBuilderExt, Layer, DEG_180, DEG_45,
 };
 use ivy_engine::{main_camera, RigidBodyBundle, TransformBundle};

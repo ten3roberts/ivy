@@ -644,7 +644,7 @@ mod test {
             fn on_resource_changed(&mut self, _resource: super::ResourceHandle) {}
         }
 
-        let mut resources = RenderGraphResources::new(Arc::new(ShaderLibrary::new()));
+        let resources = RenderGraphResources::new(Arc::new(ShaderLibrary::new()));
         let mut render_graph = RenderGraph::new(resources);
 
         let extent = Extent3d {
