@@ -24,7 +24,6 @@ use ivy_core::{
 };
 use ivy_wgpu_types::shader::ShaderDesc;
 use ordered_float::OrderedFloat;
-use tracing::info;
 use wgpu::{
     BindGroup, BindGroupLayout, Buffer, BufferDescriptor, BufferUsages, DepthBiasState, Operations,
     RenderPassDescriptor, ShaderStages, TextureUsages, TextureView, TextureViewDescriptor,

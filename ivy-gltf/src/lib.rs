@@ -18,7 +18,6 @@ use itertools::Itertools;
 use ivy_assets::fs::AsyncAssetFromPath;
 use ivy_assets::AssetDesc;
 use ivy_core::components::TransformBundle;
-use ivy_core::impl_for_tuples;
 use ivy_graphics::mesh::MeshData;
 use ivy_graphics::mesh::TANGENT_ATTRIBUTE;
 use ivy_profiling::profile_function;

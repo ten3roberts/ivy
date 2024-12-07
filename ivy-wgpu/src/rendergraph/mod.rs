@@ -700,7 +700,7 @@ mod test {
                 &gpu,
                 &gpu.queue,
                 &mut encoder,
-                &mut World::default(),
+                &mut Default::default(),
                 &Default::default(),
                 &Default::default(),
             )

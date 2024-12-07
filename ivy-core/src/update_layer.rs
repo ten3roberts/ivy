@@ -11,7 +11,6 @@ use ivy_assets::AssetCache;
 use crate::{
     app::{PostInitEvent, TickEvent},
     components::{delta_time, engine},
-    impl_for_tuples,
     layer::events::EventRegisterContext,
     Layer,
 };

@@ -1,12 +1,10 @@
 use std::{
     borrow::Cow,
     collections::{BTreeSet, HashMap},
-    ops::Sub,
     sync::Arc,
 };
 
 use itertools::Itertools;
-use ivy_core::impl_for_tuples;
 use ivy_wgpu_types::Gpu;
 use slotmap::{SecondaryMap, SlotMap};
 use wgpu::{

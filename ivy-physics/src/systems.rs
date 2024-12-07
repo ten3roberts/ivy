@@ -10,7 +10,7 @@ use flax::{
     BoxedSystem, CommandBuffer, Component, ComponentMut, EntityIds, FetchExt, Opt, Query,
     QueryBorrow, RelationExt, System, World,
 };
-use glam::{Mat3, Mat4, Vec3};
+use glam::{Mat4, Vec3};
 use ivy_core::{
     components::{
         engine, main_camera, position, world_transform, TransformQuery, TransformQueryItem,

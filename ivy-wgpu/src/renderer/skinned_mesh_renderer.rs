@@ -15,7 +15,7 @@ use itertools::Itertools;
 use ivy_assets::{map::AssetMap, stored::Handle, Asset, AssetCache};
 use ivy_core::{
     components::world_transform,
-    profiling::{profile_function, profile_scope},
+    profiling::profile_function,
 };
 use ivy_gltf::{
     animation::{player::Animator, skin::Skin},
