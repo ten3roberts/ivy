@@ -3,15 +3,16 @@ use std::iter::repeat;
 use flax::{FetchExt, Query};
 use glam::{Vec3, Vec4};
 use itertools::Itertools;
-use ivy_core::{components::world_transform, to_linear_vec3};
+use ivy_core::{components::world_transform, palette::num::Trigonometry, to_linear_vec3};
 use ivy_wgpu_types::{BindGroupBuilder, BindGroupLayoutBuilder, Gpu, TypedBuffer};
+use ordered_float::Float;
 use wgpu::{
     BindGroup, BindGroupLayout, BufferUsages, SamplerDescriptor, ShaderStages,
     TextureViewDescriptor, TextureViewDimension,
 };
 
 use crate::{
-    components::{light_params, light_kind, light_shadow_data},
+    components::{light_kind, light_params, light_shadow_data},
     rendergraph::{BufferHandle, NodeUpdateContext, TextureHandle},
 };
 
@@ -106,9 +107,11 @@ impl LightManager {
                 color,
                 kind: *kind as u32,
                 direction: direction.normalize().extend(0.0),
-                padding: Default::default(),
+                theta_epsilon: data.inner_theta.cos() - data.outer_theta.cos(),
+                outer_theta: data.outer_theta.cos(),
                 shadow_index: shadow_data.index,
                 shadow_cascades: shadow_data.cascade_count,
+                _padding: [0.0; 3],
             }
         })
         .chain(repeat(LightData::NONE))
@@ -151,7 +154,9 @@ pub struct LightData {
     pub kind: u32,
     pub shadow_index: u32,
     pub shadow_cascades: u32,
-    pub padding: f32,
+    pub theta_epsilon: f32,
+    pub outer_theta: f32,
+    pub _padding: [f32; 3],
     pub direction: Vec4,
     pub position: Vec4,
     pub color: Vec4,
@@ -162,9 +167,11 @@ impl LightData {
         kind: u32::MAX,
         shadow_index: u32::MAX,
         shadow_cascades: u32::MAX,
-        padding: 0.0,
+        theta_epsilon: 0.0,
         direction: Vec4::ZERO,
         position: Vec4::ZERO,
         color: Vec4::ZERO,
+        outer_theta: 0.0,
+        _padding: [0.0; 3],
     };
 }

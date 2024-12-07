@@ -263,6 +263,12 @@ impl MeshData {
 
     pub fn generate_tangents(&mut self) -> anyhow::Result<()> {
         profile_function!();
+
+        if self.get_attribute(TANGENT_ATTRIBUTE).is_some() {
+            tracing::info!("Tangent data already present on mesh");
+            return Ok(());
+        }
+
         let positions = self
             .get_attribute(POSITION_ATTRIBUTE)
             .unwrap()

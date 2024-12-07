@@ -50,7 +50,8 @@ struct Light {
     kind: u32,
     shadow_index: u32,
     shadow_cascades: u32,
-    _padding: f32,
+    theta_epsilon: f32,
+    cos_outer_theta: f32,
     direction: vec3<f32>,
     position: vec3<f32>,
     color: vec3<f32>,
@@ -118,12 +119,13 @@ const U32_MAX = 0xFFFFFFFFu;
 const MAX_REFLECTION_LOD: f32 = 7f;
 const LIGHT_POINT: u32 = 0;
 const LIGHT_DIRECTIONAL: u32 = 1;
+const LIGHT_SPOTLIGHT: u32 = 2;
 
 const LIGHT_COUNT: u32 = 4;
 
 fn pbr_luminance(in: PbrLuminance, light: Light) -> vec3<f32> {
-    var l: vec3<f32>;
-    var attenuation: f32;
+    var l: vec3<f32> = vec3(0.0);
+    var attenuation: f32 = 0.0;
 
     if light.kind == LIGHT_POINT {
         let light_position = in.tbn * light.position;
@@ -135,6 +137,20 @@ fn pbr_luminance(in: PbrLuminance, light: Light) -> vec3<f32> {
     } else if light.kind == LIGHT_DIRECTIONAL {
         l = in.tbn * -light.direction;
         attenuation = 1f;
+    } else if light.kind == LIGHT_SPOTLIGHT {
+        let tangent_light_position = in.tbn * light.position;
+        let tangent_light_direction = in.tbn * -light.direction;
+        let to_light = tangent_light_position - in.tangent_pos;
+        let dist_sqr: f32 = dot(to_light, to_light);
+
+        l = normalize(to_light);
+
+        // in tangent space
+        let l_theta = dot(l, normalize(tangent_light_direction));
+
+        let intensity = clamp((l_theta - light.cos_outer_theta) / light.theta_epsilon, 0.0, 1.0);
+
+        attenuation = 1f / dist_sqr * intensity;
     }
 
     var in_light = 1f;

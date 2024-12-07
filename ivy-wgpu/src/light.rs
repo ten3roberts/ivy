@@ -7,11 +7,24 @@ use crate::components::{light_kind, light_params};
 pub struct LightParams {
     pub color: Srgb,
     pub intensity: f32,
+    pub inner_theta: f32,
+    pub outer_theta: f32,
 }
 
 impl LightParams {
     pub fn new(color: Srgb, intensity: f32) -> Self {
-        Self { color, intensity }
+        Self {
+            color,
+            intensity,
+            inner_theta: 1.0,
+            outer_theta: 1.0,
+        }
+    }
+
+    pub fn with_angular_cutoffs(mut self, inner_theta: f32, outer_theta: f32) -> Self {
+        self.inner_theta = inner_theta;
+        self.outer_theta = outer_theta;
+        self
     }
 }
 
@@ -21,6 +34,7 @@ impl LightParams {
 pub enum LightKind {
     Point,
     Directional,
+    Spotlight,
 }
 
 impl LightKind {
@@ -38,6 +52,14 @@ impl LightKind {
     #[must_use]
     pub fn is_point(&self) -> bool {
         matches!(self, Self::Point)
+    }
+
+    /// Returns `true` if the light kind is [`Spotlight`].
+    ///
+    /// [`Spotlight`]: LightKind::Spotlight
+    #[must_use]
+    pub fn is_spotlight(&self) -> bool {
+        matches!(self, Self::Spotlight)
     }
 }
 

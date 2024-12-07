@@ -1,7 +1,7 @@
 use std::{mem::size_of, sync::Arc};
 
 use crate::{
-    components::{cast_shadow, light_kind, projection_matrix, shadow_pass},
+    components::{cast_shadow, light_kind, light_params, projection_matrix, shadow_pass},
     renderer::{
         mesh_renderer::MeshRenderer, CameraRenderer, RenderContext, RendererStore, UpdateContext,
     },
@@ -22,6 +22,7 @@ use ivy_core::{
 };
 use ivy_wgpu_types::shader::ShaderDesc;
 use ordered_float::OrderedFloat;
+use tracing::info;
 use wgpu::{
     BindGroup, BindGroupLayout, Buffer, BufferDescriptor, BufferUsages, DepthBiasState, Operations,
     RenderPassDescriptor, ShaderStages, TextureUsages, TextureViewDescriptor, TextureViewDimension,
@@ -181,24 +182,22 @@ impl Node for ShadowMapNode {
             })
             .collect_vec();
 
-        for (id, &transform, &kind) in Query::new((entity_ids(), world_transform(), light_kind()))
-            .with(cast_shadow())
-            .borrow(ctx.world)
-            .iter()
+        for (id, &transform, &kind, light_params) in Query::new((
+            entity_ids(),
+            world_transform(),
+            light_kind(),
+            light_params(),
+        ))
+        .with(cast_shadow())
+        .borrow(ctx.world)
+        .iter()
         {
-            let (_, rot, _) = transform.to_scale_rotation_translation();
+            let (_, light_rot, light_pos) = transform.to_scale_rotation_translation();
 
-            to_add.push((
-                id,
-                LightShadowData {
-                    index: self.lights.len() as _,
-                    cascade_count: self.max_cascades as _,
-                },
-            ));
+            let light_index = self.lights.len() as u32;
 
+            let light_forward = light_rot * -Vec3::Z;
             if kind.is_directional() {
-                let light_forward = rot * -Vec3::Z;
-
                 for frustrum in &frustrums {
                     let snapping = 0.1;
                     let center = (frustrum.center / snapping).ceil() * snapping;
@@ -213,7 +212,7 @@ impl Node for ShadowMapNode {
                     let radius = (radius / snapping).ceil() * snapping + snapping;
 
                     let light_camera_pos = center - light_forward * radius;
-                    let view = Mat4::from_rotation_translation(rot, light_camera_pos);
+                    let view = Mat4::from_rotation_translation(light_rot, light_camera_pos);
 
                     let proj =
                         Mat4::orthographic_rh(-radius, radius, -radius, radius, 0.1, radius * 2.0);
@@ -224,9 +223,38 @@ impl Node for ShadowMapNode {
                         depth: frustrum.split_distance,
                         _padding: Default::default(),
                     });
+
+                    to_add.push((
+                        id,
+                        LightShadowData {
+                            index: light_index,
+                            cascade_count: self.max_cascades as u32,
+                        },
+                    ));
                 }
             } else {
-                todo!()
+                let view = Mat4::from_rotation_translation(light_rot, light_pos);
+
+                const MIN_LUM: f32 = 0.01;
+                let max_range = (light_params.intensity / MIN_LUM).sqrt();
+
+                let proj =
+                    Mat4::perspective_rh(light_params.outer_theta * 2.0, 1.0, 0.1, max_range);
+
+                self.lights.push(LightShadowCamera {
+                    viewproj: proj * view.inverse(),
+                    texel_size,
+                    depth: 0.0,
+                    _padding: Default::default(),
+                });
+
+                to_add.push((
+                    id,
+                    LightShadowData {
+                        index: light_index,
+                        cascade_count: 1,
+                    },
+                ));
             };
         }
 

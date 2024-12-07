@@ -18,7 +18,9 @@ use itertools::Itertools;
 use ivy_assets::fs::AsyncAssetFromPath;
 use ivy_assets::AssetDesc;
 use ivy_core::components::TransformBundle;
+use ivy_core::impl_for_tuples;
 use ivy_graphics::mesh::MeshData;
+use ivy_graphics::mesh::TANGENT_ATTRIBUTE;
 use ivy_profiling::profile_function;
 use ivy_profiling::profile_scope;
 use rayon::iter::ParallelBridge;
@@ -550,6 +552,8 @@ pub(crate) fn mesh_from_gltf(
 
     let normals = reader.read_normals().into_iter().flatten().map(Vec3::from);
 
+    let tangents = reader.read_tangents().map(|v| v.map(Vec4::from));
+
     let joints = reader
         .read_joints(0)
         .into_iter()
@@ -571,6 +575,13 @@ pub(crate) fn mesh_from_gltf(
         .map(Vec2::from);
 
     let this = MeshData::skinned(indices, pos, texcoord, normals, joints, weights);
+    let this = if let Some(tangents) = tangents {
+        tracing::info!("using mesh tangents");
+        this.with_attribute(TANGENT_ATTRIBUTE, tangents)
+    } else {
+        this
+    };
+
     async move {
         let this = async_std::task::spawn_blocking(move || this.with_generated_tangents()).await?;
 

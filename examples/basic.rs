@@ -1,3 +1,5 @@
+use std::f32::consts::PI;
+
 use anyhow::Context;
 use flax::{
     BoxedSystem, Component, Entity, EntityBuilder, FetchExt, Query, QueryBorrow, ScheduleBuilder,
@@ -6,12 +8,12 @@ use flax::{
 use glam::{vec3, EulerRot, Mat4, Quat, Vec3};
 use ivy_assets::{Asset, AssetCache};
 use ivy_core::{
-    app::InitEvent,
+    app::PostInitEvent,
     gizmos,
     layer::events::EventRegisterContext,
     palette::{Srgb, WithAlpha},
     profiling::ProfilingLayer,
-    update_layer::{FixedTimeStep, PerTick, Plugin, ScheduledLayer},
+    update_layer::{FixedTimeStep, PerTick, Plugin, ScheduleSetBuilder, ScheduledLayer},
     App, EngineLayer, EntityBuilderExt, Layer,
 };
 use ivy_engine::{
@@ -26,17 +28,17 @@ use ivy_gltf::{animation::player::Animator, components::animator, Document};
 use ivy_graphics::texture::TextureDesc;
 use ivy_input::layer::InputLayer;
 use ivy_physics::{components::gravity_influence, ColliderBundle, GizmoSettings, PhysicsPlugin};
-use ivy_postprocessing::preconfigured::{SurfacePbrPipeline, SurfacePbrPipelineDesc};
+use ivy_postprocessing::preconfigured::{SurfacePbrPipelineDesc, SurfacePbrRenderer};
 use ivy_scene::{GltfNodeExt, NodeMountOptions};
 use ivy_wgpu::{
     components::{
-        cast_shadow, environment_data, forward_pass, light_data, light_kind, projection_matrix,
+        cast_shadow, environment_data, forward_pass, light_kind, light_params, projection_matrix,
         shadow_pass,
     },
     driver::WinitDriver,
     events::ResizedEvent,
     layer::GraphicsLayer,
-    light::{LightParams, LightKind},
+    light::{LightKind, LightParams},
     material_desc::{MaterialData, MaterialDesc},
     mesh_desc::MeshDesc,
     primitives::{generate_plane, CubePrimitive, UvSpherePrimitive},
@@ -71,7 +73,7 @@ pub fn main() -> anyhow::Result<()> {
         .with_layer(EngineLayer::new())
         .with_layer(ProfilingLayer::new())
         .with_layer(GraphicsLayer::new(|world, assets, gpu, surface| {
-            Ok(SurfacePbrPipeline::new(
+            Ok(SurfacePbrRenderer::new(
                 world,
                 assets,
                 gpu,
@@ -85,12 +87,9 @@ pub fn main() -> anyhow::Result<()> {
         .with_layer(InputLayer::new())
         .with_layer(LogicLayer::new())
         .with_layer(
-            ScheduledLayer::new(PerTick)
-                .with_plugin(FreeCameraPlugin)
-                .with_plugin(GizmosPlugin),
-        )
-        .with_layer(
             ScheduledLayer::new(FixedTimeStep::new(0.02))
+                .with_plugin(FreeCameraPlugin)
+                .with_plugin(GizmosPlugin)
                 .with_plugin(
                     PhysicsPlugin::new()
                         .with_gravity(-Vec3::Y * 9.81)
@@ -109,30 +108,30 @@ pub fn main() -> anyhow::Result<()> {
 
 pub struct AnimationPlugin;
 
-impl Plugin<PerTick> for AnimationPlugin {
+impl Plugin for AnimationPlugin {
     fn install(
         &self,
         _: &mut World,
         _: &AssetCache,
-        schedule: &mut ScheduleBuilder,
-        _: &PerTick,
+        schedules: &mut ScheduleSetBuilder,
     ) -> anyhow::Result<()> {
-        schedule.with_system(animate_system());
+        schedules.per_tick_mut().with_system(animate_system());
         Ok(())
     }
 }
 
 pub struct GizmosPlugin;
 
-impl Plugin<PerTick> for GizmosPlugin {
+impl Plugin for GizmosPlugin {
     fn install(
         &self,
         _: &mut World,
         _: &AssetCache,
-        schedule: &mut ScheduleBuilder,
-        _: &PerTick,
+        schedules: &mut ScheduleSetBuilder,
     ) -> anyhow::Result<()> {
-        schedule.with_system(point_light_gizmo_system());
+        schedules
+            .per_tick_mut()
+            .with_system(point_light_gizmo_system());
 
         Ok(())
     }
@@ -371,28 +370,41 @@ impl LogicLayer {
     fn setup_objects(&mut self, world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
         self.setup_assets(world, assets)?;
 
+        // Entity::builder()
+        //     .mount(
+        //         TransformBundle::default()
+        //             .with_position(Vec3::Y * 5.0)
+        //             .with_rotation(Quat::from_euler(EulerRot::YXZ, 0.5, -1.0, 0.0)),
+        //     )
+        //     .set(
+        //         light_params(),
+        //         LightParams::new(Srgb::new(1.0, 1.0, 1.0), 1.0),
+        //     )
+        //     .set(light_kind(), LightKind::Directional)
+        //     .set_default(cast_shadow())
+        //     .spawn(world);
+
         Entity::builder()
             .mount(
                 TransformBundle::default()
-                    .with_position(Vec3::Y * 5.0)
-                    .with_rotation(Quat::from_euler(EulerRot::YXZ, 0.5, -1.0, 0.0)),
+                    .with_position(vec3(0.0, 2.0, 0.0))
+                    .with_rotation(Quat::from_axis_angle(Vec3::X, PI + 0.5)),
             )
-            .set(light_data(), LightParams::new(Srgb::new(1.0, 1.0, 1.0), 1.0))
-            .set(light_kind(), LightKind::Directional)
-            .set_default(cast_shadow())
+            .set(
+                light_params(),
+                LightParams::new(Srgb::new(1.0, 1.0, 1.0, 50.0)).with_cutoffs(0.3, 0.4),
+            )
+            .set(light_kind(), LightKind::Spotlight)
             .spawn(world);
 
-        Entity::builder()
-            .mount(TransformBundle::default().with_position(vec3(0.0, 2.0, 0.0)))
-            .set(light_data(), LightParams::new(Srgb::new(1.0, 0.0, 0.0), 25.0))
-            .set(light_kind(), LightKind::Point)
-            .spawn(world);
-
-        Entity::builder()
-            .mount(TransformBundle::default().with_position(vec3(2.0, 2.0, 5.0)))
-            .set(light_data(), LightParams::new(Srgb::new(0.0, 0.0, 1.0), 25.0))
-            .set(light_kind(), LightKind::Point)
-            .spawn(world);
+        // Entity::builder()
+        //     .mount(TransformBundle::default().with_position(vec3(2.0, 2.0, 5.0)))
+        //     .set(
+        //         light_params(),
+        //         LightParams::new(Srgb::new(0.0, 0.0, 1.0), 25.0),
+        //     )
+        //     .set(light_kind(), LightKind::Point)
+        //     .spawn(world);
         Ok(())
     }
 }
@@ -404,7 +416,8 @@ impl Layer for LogicLayer {
         _: &AssetCache,
         mut events: EventRegisterContext<Self>,
     ) -> anyhow::Result<()> {
-        events.subscribe(|this, world, assets, InitEvent| this.setup_objects(world, assets));
+        events
+            .subscribe(|this, world, assets, _: &PostInitEvent| this.setup_objects(world, assets));
 
         events.subscribe(|_, world, _, resized: &ResizedEvent| {
             if let Some(main_camera) = Query::new(projection_matrix().as_mut())
@@ -453,7 +466,11 @@ fn animate_system() -> BoxedSystem {
 fn point_light_gizmo_system() -> BoxedSystem {
     System::builder()
         .with_query(Query::new(ivy_core::components::gizmos().source(engine())))
-        .with_query(Query::new((world_transform(), light_data(), light_kind())))
+        .with_query(Query::new((
+            world_transform(),
+            light_params(),
+            light_kind(),
+        )))
         .build(
             |mut gizmos: QueryBorrow<flax::fetch::Source<Component<gizmos::Gizmos>, Entity>>,
              mut query: QueryBorrow<(
@@ -474,7 +491,7 @@ fn point_light_gizmo_system() -> BoxedSystem {
                             0.1,
                             light.color.with_alpha(1.0),
                         )),
-                        LightKind::Directional => {
+                        LightKind::Directional | LightKind::Spotlight => {
                             let pos = transform.transform_point3(Vec3::ZERO);
                             let dir = transform.transform_vector3(-Vec3::Z);
 

@@ -13,21 +13,23 @@ use ivy_wgpu::{
 };
 
 #[derive(Debug, Clone, Copy)]
-pub struct NodeMountOptions {}
+pub struct NodeMountOptions {
+    pub skip_empty_children: bool,
+}
 
 pub trait GltfNodeExt {
     fn mount<'a>(
         &self,
         assets: &AssetCache,
         entity: &'a mut EntityBuilder,
-        opts: NodeMountOptions,
+        opts: &NodeMountOptions,
     ) -> &'a mut EntityBuilder;
 
     fn mount_with_shaders<'a>(
         &self,
         entity: &'a mut EntityBuilder,
         shaders: &[(Component<Asset<ShaderPass>>, Asset<ShaderPass>)],
-        opts: NodeMountOptions,
+        opts: &NodeMountOptions,
     ) -> &'a mut EntityBuilder;
 }
 
@@ -36,7 +38,7 @@ impl GltfNodeExt for GltfNode {
         &self,
         assets: &AssetCache,
         entity: &'a mut EntityBuilder,
-        opts: NodeMountOptions,
+        opts: &NodeMountOptions,
     ) -> &'a mut EntityBuilder {
         let shader;
         let shadow_shader;
@@ -63,7 +65,7 @@ impl GltfNodeExt for GltfNode {
         &self,
         entity: &'a mut EntityBuilder,
         shaders: &[(Component<Asset<ShaderPass>>, Asset<ShaderPass>)],
-        opts: NodeMountOptions,
+        opts: &NodeMountOptions,
     ) -> &'a mut EntityBuilder {
         let skin = self.skin();
 
@@ -89,6 +91,10 @@ impl GltfNodeExt for GltfNode {
         entity.mount(self.transform());
 
         for child in self.children() {
+            if child.children().next().is_none() && child.mesh().is_none() {
+                continue;
+            }
+
             entity.attach(
                 child_of,
                 child.mount_with_shaders(&mut Entity::builder(), shaders, opts),
