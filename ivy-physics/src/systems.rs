@@ -94,8 +94,6 @@ pub fn register_colliders_system() -> BoxedSystem {
                         (parent_id, &parent),
                     ) in bodies.iter()
                     {
-                        tracing::info!("mounting collider {id} for {parent:?}");
-
                         let local_position = if parent_id == id {
                             Isometry::identity()
                         } else {

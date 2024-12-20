@@ -48,7 +48,7 @@ flume = "0.11"
 futures = "0.3"
 glam = { version = "0.28", features = ["bytemuck", "rand"] }
 gltf = "1.0"
-image = { version = "0.25.1", default-features = false, features = ["png", "jpeg", "rayon", "hdr"] }
+image = { version = "0.25.1", default-features = false, features = ["png", "jpeg", "rayon", "hdr", "exr"] }
 itertools = "0.13"
 mikktspace = "0.3"
 once_cell = "1.0"

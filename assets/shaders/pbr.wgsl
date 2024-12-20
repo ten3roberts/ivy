@@ -103,7 +103,7 @@ const DISPLACEMENT_STRENGTH: f32 = 0.2f;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let albedo = textureSample(albedo_texture, material_sampler, in.tex_coord).rgb;
+    let albedo = textureSample(albedo_texture, material_sampler, in.tex_coord);
 
     let ao = textureSample(ao_texture, material_sampler, in.tex_coord).r;
     let displacement = textureSample(displacement_texture, material_sampler, in.tex_coord).r;
@@ -134,7 +134,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     in_lum.world_normal = world_normal;
     in_lum.tangent_normal = tangent_normal;
 
-    in_lum.albedo = albedo;
+    in_lum.albedo = albedo.rgb;
     in_lum.metallic = metallic;
     in_lum.roughness = roughness;
     in_lum.ao = ao;
@@ -145,5 +145,5 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let luminance = brdf_forward(in_lum);
 
     let color = mix(luminance, in.fog.rgb, in.fog.a);
-    return vec4(color, 1f);
+    return vec4(color, albedo.a);
 }

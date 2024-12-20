@@ -4,25 +4,22 @@ use flax::{
 use glam::{vec3, EulerRot, Quat, Vec2, Vec3};
 use ivy_assets::AssetCache;
 use ivy_core::{
-    components::{main_camera, rotation, TransformBundle},
+    components::{main_camera, request_capture_mouse, rotation, TransformBundle},
     update_layer::{Plugin, ScheduleSetBuilder},
     EntityBuilderExt, DEG_45,
 };
 use ivy_input::{
     components::input_state,
     types::{Key, NamedKey},
-    Action, Axis2D, Axis3D, BindingExt, CursorMoveBinding, InputState, KeyBinding,
-    MouseButtonBinding, ScrollBinding,
+    Action, Axis2D, Axis3D, BindingExt, CompositeBinding, CursorMoveBinding, InputState,
+    KeyBinding, MouseButtonBinding, ScrollBinding,
 };
 use ivy_physics::{
     components::{angular_velocity, velocity},
     rapier3d::prelude::RigidBodyType,
     RigidBodyBundle,
 };
-use ivy_wgpu::{
-    components::{main_window, projection_matrix, window},
-    driver::WindowHandle,
-};
+use ivy_wgpu::components::projection_matrix;
 
 flax::component! {
     pub pan_active: bool,
@@ -55,7 +52,10 @@ impl Plugin for FreeCameraPlugin {
 
 pub fn setup_camera() -> flax::EntityBuilder {
     let mut speed_action = Action::new();
-    speed_action.add(ScrollBinding::new().decompose(Axis2D::Y));
+    speed_action.add(
+        CompositeBinding::new(ScrollBinding::new(), [KeyBinding::new(NamedKey::Shift)])
+            .decompose(Axis2D::Y),
+    );
 
     let mut move_action = Action::<Vec3>::new();
     move_action.add(
@@ -87,12 +87,12 @@ pub fn setup_camera() -> flax::EntityBuilder {
             .compose(Axis3D::Y)
             .amplitude(-1.0),
     );
-    move_action.add(
-        KeyBinding::new(Key::Named(NamedKey::Control))
-            .analog()
-            .compose(Axis3D::Y)
-            .amplitude(-1.0),
-    );
+    // move_action.add(
+    //     KeyBinding::new(Key::Named(NamedKey::Control))
+    //         .analog()
+    //         .compose(Axis3D::Y)
+    //         .amplitude(-1.0),
+    // );
     move_action.add(
         KeyBinding::new(Key::Named(NamedKey::Space))
             .analog()
@@ -133,7 +133,7 @@ pub fn setup_camera() -> flax::EntityBuilder {
         .set_default(rotation_input())
         .set(euler_rotation(), vec3(DEG_45, 0.0, 0.0))
         .set_default(pan_active())
-        .set(camera_speed(), 5.0)
+        .set(camera_speed(), 10.0)
         .set_default(camera_speed_delta());
 
     builder
@@ -142,13 +142,13 @@ pub fn setup_camera() -> flax::EntityBuilder {
 fn cursor_lock_system() -> BoxedSystem {
     System::builder()
         .with_query(Query::new(pan_active()))
-        .with_query(Query::new(window().as_mut()).with(main_window()))
+        .with_query(Query::new(request_capture_mouse().as_mut()))
         .build(
             |mut query: QueryBorrow<Component<bool>>,
-             mut window: QueryBorrow<ComponentMut<WindowHandle>, _>| {
+             mut cursor_lock: QueryBorrow<ComponentMut<bool>, _>| {
                 query.iter().for_each(|&pan_active| {
-                    if let Some(window) = window.first() {
-                        window.set_cursor_lock(pan_active);
+                    if let Some(cursor_lock) = cursor_lock.first() {
+                        *cursor_lock = pan_active;
                     }
                 });
             },

@@ -7,6 +7,7 @@ mod plugin;
 pub mod state;
 pub mod systems;
 pub mod util;
+pub mod shapes;
 
 pub use bundles::*;
 pub use effector::*;

@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use flax::{
-    component::ComponentValue, components::child_of, entity_ids, CommandBuffer, Component, Entity,
-    EntityBuilder, EntityRef, Query, World,
+    component::ComponentValue, components::child_of, entity_ids, fetch::entity_refs, CommandBuffer,
+    Component, Entity, EntityBuilder, EntityRef, Query, World,
 };
 use parking_lot::{Mutex, MutexGuard};
 
@@ -19,6 +19,12 @@ pub trait WorldExt {
     ) -> flax::error::Result<()>;
 
     fn root_entity(&self, entity: Entity) -> EntityRef;
+
+    fn find_in_tree<'a>(
+        &'a self,
+        root: EntityRef<'a>,
+        f: &impl Fn(&EntityRef) -> bool,
+    ) -> Option<EntityRef<'a>>;
 }
 
 impl WorldExt for World {
@@ -54,6 +60,26 @@ impl WorldExt for World {
         }
 
         entity
+    }
+
+    fn find_in_tree<'a>(
+        &'a self,
+        root: EntityRef<'a>,
+        f: &impl Fn(&EntityRef) -> bool,
+    ) -> Option<EntityRef<'a>> {
+        if f(&root) {
+            return Some(root);
+        }
+
+        let mut children = Query::new(entity_refs()).with(child_of(root.id()));
+
+        for child in children.borrow(self).iter() {
+            if let Some(v) = self.find_in_tree(child, f) {
+                return Some(self.entity(v.id()).unwrap());
+            }
+        }
+
+        None
     }
 }
 

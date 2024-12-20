@@ -6,13 +6,16 @@ use winit::{
     keyboard::{Key, SmolStr},
 };
 
-use crate::types::{InputEvent, InputKind, KeyboardInput, MouseInput};
+use crate::{
+    types::{InputEvent, InputKind, KeyboardInput, MouseInput},
+    Stimulus,
+};
 
 pub trait Binding: Send + Sync {
     type Value;
     fn apply(&mut self, input: &InputEvent);
     fn read(&mut self) -> Self::Value;
-    fn binding(&self) -> InputKind;
+    fn bindings(&self) -> Vec<InputKind>;
 }
 
 pub trait Composable<Space> {
@@ -135,8 +138,8 @@ impl<Space: Copy + Send + Sync, T: Decomposable<Space>, B: Binding<Value = T>> B
         self.binding.read().decompose(self.axis)
     }
 
-    fn binding(&self) -> InputKind {
-        self.binding.binding()
+    fn bindings(&self) -> Vec<InputKind> {
+        self.binding.bindings()
     }
 }
 
@@ -164,8 +167,8 @@ impl<Space: Copy + Send + Sync, T: Composable<Space>, B: Binding<Value = T>> Bin
         self.binding.read().compose(self.axis)
     }
 
-    fn binding(&self) -> InputKind {
-        self.binding.binding()
+    fn bindings(&self) -> Vec<InputKind> {
+        self.binding.bindings()
     }
 }
 
@@ -191,8 +194,8 @@ where
         self.binding.read() * self.amplitude
     }
 
-    fn binding(&self) -> InputKind {
-        self.binding.binding()
+    fn bindings(&self) -> Vec<InputKind> {
+        self.binding.bindings()
     }
 }
 
@@ -203,9 +206,9 @@ pub struct KeyBinding {
 }
 
 impl KeyBinding {
-    pub fn new(key: Key<SmolStr>) -> Self {
+    pub fn new(key: impl Into<Key<SmolStr>>) -> Self {
         Self {
-            key,
+            key: key.into(),
             pressed: false,
         }
     }
@@ -219,7 +222,7 @@ impl Binding for KeyBinding {
             InputEvent::Keyboard(KeyboardInput { key, state, .. }) if key == &self.key => {
                 self.pressed = state.is_pressed();
             }
-            _ => panic!("Invalid input event"),
+            _ => {}
         }
     }
 
@@ -227,31 +230,102 @@ impl Binding for KeyBinding {
         self.pressed
     }
 
-    fn binding(&self) -> InputKind {
-        InputKind::Key(self.key.clone())
+    fn bindings(&self) -> Vec<InputKind> {
+        vec![InputKind::Key(self.key.clone())]
+    }
+}
+
+pub struct CompositeBinding<T, U> {
+    binding: T,
+    modifiers: Vec<U>,
+}
+
+impl<T, U> CompositeBinding<T, U> {
+    pub fn new(binding: T, modifiers: impl IntoIterator<Item = U>) -> Self {
+        Self {
+            binding,
+            modifiers: modifiers.into_iter().collect(),
+        }
+    }
+}
+
+impl<T, U> Binding for CompositeBinding<T, U>
+where
+    T: Binding,
+    T::Value: std::fmt::Debug + Stimulus,
+    U: Binding<Value = bool>,
+{
+    type Value = T::Value;
+
+    fn apply(&mut self, input: &InputEvent) {
+        self.binding.apply(input);
+        for modifier in &mut self.modifiers {
+            modifier.apply(input);
+        }
+    }
+
+    fn read(&mut self) -> Self::Value {
+        let value = self.binding.read();
+
+        if self.modifiers.iter_mut().all(|v| v.read()) {
+            value
+        } else {
+            T::Value::ZERO
+        }
+    }
+
+    fn bindings(&self) -> Vec<InputKind> {
+        self.binding
+            .bindings()
+            .into_iter()
+            .chain(self.modifiers.iter().flat_map(|v| v.bindings()))
+            .collect()
     }
 }
 
 #[doc(hidden)]
-pub trait AsAnalog {
+pub trait IntoAnalog {
     type Output;
 
-    fn as_analog(self) -> Self::Output;
+    fn into_analog(self) -> Self::Output;
 }
 
-impl AsAnalog for bool {
+impl IntoAnalog for bool {
     type Output = f32;
 
-    fn as_analog(self) -> Self::Output {
+    fn into_analog(self) -> Self::Output {
         self as i32 as f32
     }
 }
 
-impl AsAnalog for i32 {
+impl IntoAnalog for i32 {
     type Output = f32;
 
-    fn as_analog(self) -> Self::Output {
+    fn into_analog(self) -> Self::Output {
         self as f32
+    }
+}
+
+#[doc(hidden)]
+pub trait IntoIntegral {
+    type Output;
+
+    fn into_integral(self) -> Self::Output;
+}
+
+impl IntoIntegral for f32 {
+    type Output = i32;
+
+    fn into_integral(self) -> Self::Output {
+        self as i32
+    }
+}
+
+impl IntoIntegral for bool {
+    type Output = i32;
+
+    fn into_integral(self) -> Self::Output {
+        self as i32
     }
 }
 
@@ -260,7 +334,7 @@ pub struct Analog<T>(T);
 impl<T, B> Binding for Analog<B>
 where
     B: Binding<Value = T>,
-    T: AsAnalog,
+    T: IntoAnalog,
 {
     type Value = T::Output;
 
@@ -269,32 +343,33 @@ where
     }
 
     fn read(&mut self) -> Self::Value {
-        self.0.read().as_analog()
+        self.0.read().into_analog()
     }
 
-    fn binding(&self) -> InputKind {
-        self.0.binding()
+    fn bindings(&self) -> Vec<InputKind> {
+        self.0.bindings()
     }
 }
 
 pub struct Integral<T>(T);
 
-impl<B> Binding for Integral<B>
+impl<T, B> Binding for Integral<B>
 where
-    B: Binding<Value = bool>,
+    B: Binding<Value = T>,
+    T: IntoIntegral,
 {
-    type Value = i32;
+    type Value = T::Output;
 
     fn apply(&mut self, input: &InputEvent) {
         self.0.apply(input);
     }
 
     fn read(&mut self) -> Self::Value {
-        self.0.read() as i32
+        self.0.read().into_integral()
     }
 
-    fn binding(&self) -> InputKind {
-        self.0.binding()
+    fn bindings(&self) -> Vec<InputKind> {
+        self.0.bindings()
     }
 }
 
@@ -321,7 +396,7 @@ impl Binding for MouseButtonBinding {
             InputEvent::MouseButton(MouseInput { button, state, .. }) if button == &self.button => {
                 self.pressed = state.is_pressed();
             }
-            _ => panic!("Invalid input event"),
+            _ => {}
         }
     }
 
@@ -329,8 +404,8 @@ impl Binding for MouseButtonBinding {
         self.pressed
     }
 
-    fn binding(&self) -> InputKind {
-        InputKind::MouseButton(self.button)
+    fn bindings(&self) -> Vec<InputKind> {
+        vec![InputKind::MouseButton(self.button)]
     }
 }
 
@@ -355,9 +430,8 @@ impl Binding for CursorMoveBinding {
     type Value = Vec2;
 
     fn apply(&mut self, input: &InputEvent) {
-        match input {
-            &InputEvent::CursorDelta(delta) => self.value += delta,
-            _ => panic!("Invalid input event"),
+        if let &InputEvent::CursorDelta(delta) = input {
+            self.value += delta
         }
     }
 
@@ -365,8 +439,8 @@ impl Binding for CursorMoveBinding {
         mem::take(&mut self.value)
     }
 
-    fn binding(&self) -> InputKind {
-        InputKind::CursorDelta
+    fn bindings(&self) -> Vec<InputKind> {
+        vec![InputKind::CursorDelta]
     }
 }
 
@@ -394,7 +468,7 @@ impl Binding for CursorPositionBinding {
             InputEvent::CursorMoved(v) => {
                 self.value = vec2(v.absolute_position.x, v.absolute_position.y)
             }
-            _ => panic!("Invalid input event"),
+            _ => {}
         }
     }
 
@@ -402,8 +476,8 @@ impl Binding for CursorPositionBinding {
         self.value
     }
 
-    fn binding(&self) -> InputKind {
-        InputKind::CursorMoved
+    fn bindings(&self) -> Vec<InputKind> {
+        vec![InputKind::CursorMoved]
     }
 }
 
@@ -428,9 +502,8 @@ impl Binding for ScrollBinding {
     type Value = Vec2;
 
     fn apply(&mut self, input: &InputEvent) {
-        match input {
-            InputEvent::Scroll(delta) => self.value += delta.delta,
-            _ => panic!("Invalid input event"),
+        if let InputEvent::Scroll(delta) = input {
+            self.value += delta.delta
         }
     }
 
@@ -438,8 +511,43 @@ impl Binding for ScrollBinding {
         mem::take(&mut self.value)
     }
 
-    fn binding(&self) -> InputKind {
-        InputKind::Scroll
+    fn bindings(&self) -> Vec<InputKind> {
+        vec![InputKind::Scroll]
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct ScrollSteppedBinding {
+    value: Vec2,
+}
+
+impl ScrollSteppedBinding {
+    pub fn new() -> Self {
+        Self { value: Vec2::ZERO }
+    }
+}
+
+impl Default for ScrollSteppedBinding {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Binding for ScrollSteppedBinding {
+    type Value = Vec2;
+
+    fn apply(&mut self, input: &InputEvent) {
+        if let InputEvent::Scroll(delta) = input {
+            self.value += delta.line_delta
+        }
+    }
+
+    fn read(&mut self) -> Vec2 {
+        mem::take(&mut self.value)
+    }
+
+    fn bindings(&self) -> Vec<InputKind> {
+        vec![InputKind::Scroll]
     }
 }
 
@@ -500,6 +608,7 @@ where
     fn analog(self) -> Analog<Self>
     where
         Self: Sized,
+        Self::Value: IntoAnalog,
     {
         Analog(self)
     }
@@ -507,6 +616,7 @@ where
     fn integral(self) -> Integral<Self>
     where
         Self: Sized,
+        Self::Value: IntoIntegral,
     {
         Integral(self)
     }
@@ -538,8 +648,8 @@ where
         false
     }
 
-    fn binding(&self) -> InputKind {
-        self.binding.binding()
+    fn bindings(&self) -> Vec<InputKind> {
+        self.binding.bindings()
     }
 }
 

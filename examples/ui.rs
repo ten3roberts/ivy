@@ -133,7 +133,7 @@ pub fn ui_app(state: Mutable<UiState>) -> impl Widget {
             to_owned!(state);
             row(Radio::new(
                 label(format!("{i}")),
-                state.map(move |v| v == i, move |_| i),
+                state.map_value(move |v| v == i, move |_| i),
             ))
         })
         .collect_vec());

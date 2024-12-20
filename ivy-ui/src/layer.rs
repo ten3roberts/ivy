@@ -48,7 +48,7 @@ pub struct UiInputLayer {
 
 impl UiInputLayer {
     pub fn new(root: impl Widget) -> Self {
-        let instance = AppInstance::new(root);
+        let instance = AppInstance::new(root, false);
         let instance = Rc::new(RefCell::new(instance));
 
         Self {
@@ -134,6 +134,7 @@ impl UiInputLayer {
             }
         }
 
+        captured = true;
         Ok(captured)
     }
 

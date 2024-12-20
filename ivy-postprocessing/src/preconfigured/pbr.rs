@@ -233,11 +233,11 @@ impl PbrRenderGraphConfig {
                 let environment_map = render_graph.resources.insert_texture(ManagedTextureDesc {
                     label: "hdr_cubemap".into(),
                     extent: Extent3d {
-                        width: 1024,
-                        height: 1024,
+                        width: 2048,
+                        height: 2048,
                         depth_or_array_layers: 6,
                     },
-                    mip_level_count: max_mip_levels(1024, 1024),
+                    mip_level_count: max_mip_levels(2048, 2048),
                     sample_count: 1,
                     dimension: TextureDimension::D2,
                     format: hdri_processor.format(),

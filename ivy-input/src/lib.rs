@@ -5,7 +5,7 @@ pub mod layer;
 pub mod types;
 mod vector;
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 pub use bindings::*;
 use flax::{component::ComponentValue, Component, EntityRef};
@@ -135,41 +135,56 @@ impl From<(Component<IVec3>, Action<IVec3>)> for ActionKind {
 }
 
 pub struct Action<T> {
-    bindings: HashMap<InputKind, Box<dyn Binding<Value = T>>>,
+    bindings: Vec<Box<dyn Binding<Value = T>>>,
+    binding_map: BTreeSet<(InputKind, usize)>,
+}
+
+impl<T> std::fmt::Debug for Action<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Action")
+            .field("binding_map", &self.binding_map)
+            .finish()
+    }
 }
 
 impl<T: ComponentValue + Stimulus> Action<T> {
     pub fn new() -> Self {
         Self {
-            bindings: HashMap::new(),
+            bindings: Vec::new(),
+            binding_map: BTreeSet::new(),
         }
     }
 
     pub fn add(&mut self, action: impl 'static + Binding<Value = T>) -> &mut Self {
-        self.bindings.insert(
-            action.binding(),
-            Box::new(action) as Box<dyn Binding<Value = T>>,
-        );
+        let index = self.bindings.len();
+        for binding in action.bindings() {
+            self.binding_map.insert((binding, index));
+        }
+
+        self.bindings
+            .push(Box::new(action) as Box<dyn Binding<Value = T>>);
         self
     }
 
     pub fn with_binding(mut self, action: impl 'static + Binding<Value = T>) -> Self {
-        self.bindings.insert(
-            action.binding(),
-            Box::new(action) as Box<dyn Binding<Value = T>>,
-        );
+        self.add(action);
         self
     }
 
     fn apply(&mut self, event: &InputEvent) {
-        if let Some(binding) = self.bindings.get_mut(&event.to_kind()) {
-            binding.apply(event);
+        let kind = event.to_kind();
+        for (_, binding) in self
+            .binding_map
+            .range((kind.clone(), usize::MIN)..(kind, usize::MAX))
+        {
+            self.bindings[*binding].apply(event);
         }
+        // if let Some(&binding) = self.binding_map.range(&event.to_kind()) {}
     }
 
     fn get_stimulus(&mut self) -> T {
         self.bindings
-            .values_mut()
+            .iter_mut()
             .fold(T::ZERO, |acc, binding| acc.combine(&binding.read()))
     }
 
@@ -276,7 +291,7 @@ mod test {
             text: Default::default(),
         }));
 
-        assert_eq!(activation.get_stimulus(), 1);
+        assert!(activation.get_stimulus());
 
         activation.apply(&InputEvent::Keyboard(KeyboardInput {
             key: Key::Character("B".into()),
@@ -285,7 +300,7 @@ mod test {
             text: Default::default(),
         }));
 
-        assert_eq!(activation.get_stimulus(), 1);
+        assert!(activation.get_stimulus());
 
         activation.apply(&InputEvent::Keyboard(KeyboardInput {
             key: Key::Character("A".into()),
@@ -294,7 +309,7 @@ mod test {
             text: Default::default(),
         }));
 
-        assert_eq!(activation.get_stimulus(), 1);
+        assert!(activation.get_stimulus());
         activation.apply(&InputEvent::Keyboard(KeyboardInput {
             key: Key::Character("B".into()),
             state: ElementState::Released,
@@ -302,6 +317,6 @@ mod test {
             text: Default::default(),
         }));
 
-        assert_eq!(activation.get_stimulus(), 0);
+        assert!(!activation.get_stimulus());
     }
 }

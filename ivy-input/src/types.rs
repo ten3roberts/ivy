@@ -1,4 +1,4 @@
-use glam::Vec2;
+use glam::{IVec2, Vec2};
 use ivy_core::layer::events::Event;
 use winit::{dpi::LogicalPosition, event::Modifiers, keyboard::SmolStr};
 pub use winit::{
@@ -37,6 +37,7 @@ pub struct MouseMotion {
 #[derive(Debug, Clone)]
 pub struct ScrollMotion {
     pub delta: Vec2,
+    pub line_delta: Vec2,
 }
 
 #[derive(Debug, Clone)]

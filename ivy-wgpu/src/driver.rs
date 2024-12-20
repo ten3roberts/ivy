@@ -225,15 +225,18 @@ impl<'a> WinitEventHandler<'a> {
                 self.app.emit_event(InputEvent::CursorLeft)?;
             }
             WindowEvent::MouseWheel { delta, .. } => {
-                self.app.emit_event(InputEvent::Scroll(ScrollMotion {
-                    delta: match delta {
-                        winit::event::MouseScrollDelta::LineDelta(x, y) => vec2(x, y) * 4.0,
-                        winit::event::MouseScrollDelta::PixelDelta(v) => {
-                            let v = v.to_logical(self.scale_factor);
-                            vec2(v.x, v.y)
-                        }
-                    },
-                }))?;
+                let (delta, line_delta) = match delta {
+                    winit::event::MouseScrollDelta::LineDelta(x, y) => {
+                        (vec2(x, y) * 4.0, vec2(x, y))
+                    }
+                    winit::event::MouseScrollDelta::PixelDelta(v) => {
+                        let v = v.to_logical(self.scale_factor);
+                        (vec2(v.x, v.y), vec2(v.x, v.y))
+                    }
+                };
+
+                self.app
+                    .emit_event(InputEvent::Scroll(ScrollMotion { delta, line_delta }))?;
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 self.app.emit_event(InputEvent::MouseButton(MouseInput {
@@ -335,7 +338,9 @@ impl CursorLock {
     pub fn set_cursor_lock(&mut self, window: &Window, lock: bool) {
         if lock {
             if window.set_cursor_grab(CursorGrabMode::Locked).is_err() {
-                window.set_cursor_grab(CursorGrabMode::Confined).unwrap();
+                if let Err(err) = window.set_cursor_grab(CursorGrabMode::Confined) {
+                    tracing::warn!("Faile to lock {err:?}");
+                }
                 self.manual_lock = true;
             }
         } else {
