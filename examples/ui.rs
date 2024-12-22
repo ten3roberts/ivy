@@ -92,6 +92,7 @@ pub fn main() -> anyhow::Result<()> {
                         "hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
                     )),
                     ui_instance: Some(ui_instance.clone()),
+                    ..Default::default()
                 },
             ))
         }))

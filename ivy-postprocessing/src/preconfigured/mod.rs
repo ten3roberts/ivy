@@ -14,12 +14,14 @@ use ivy_wgpu::{
     types::{PhysicalSize, Surface},
     Gpu,
 };
-use pbr::{PbrRenderGraph, PbrRenderGraphConfig, SkyboxConfig};
+use pbr::{PbrRenderGraph, PbrRenderGraphConfig};
 
+#[derive(Default)]
 pub struct SurfacePbrPipelineDesc {
     pub hdri: Option<Box<dyn DynAsyncAssetDesc<DynamicImage>>>,
     /// Render Ui if configured
     pub ui_instance: Option<SharedUiInstance>,
+    pub pbr_config: PbrRenderGraphConfig,
 }
 
 /// Uses a rendergraph to render to a surface
@@ -53,18 +55,7 @@ impl SurfacePbrRenderer {
             .resources
             .insert_texture(rendergraph::TextureDesc::External);
 
-        let pbr = PbrRenderGraphConfig {
-            shadow_map_config: Some(Default::default()),
-            msaa: Some(Default::default()),
-            bloom: None,
-            skybox: desc.hdri.map(|v| SkyboxConfig {
-                hdri: v,
-                format: wgpu::TextureFormat::Rgba16Float,
-            }),
-            hdr_format: wgpu::TextureFormat::Rgba16Float,
-            label: "surface".into(),
-        }
-        .configure(
+        let pbr = desc.pbr_config.configure(
             world,
             gpu,
             assets,

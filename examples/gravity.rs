@@ -63,6 +63,7 @@ pub fn main() -> anyhow::Result<()> {
                 SurfacePbrPipelineDesc {
                     hdri: None,
                     ui_instance: None,
+                    pbr_config: Default::default(),
                 },
             ))
         }))
