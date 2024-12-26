@@ -23,11 +23,17 @@ use ivy_game::{
     free_camera::{setup_camera, FreeCameraPlugin},
     ray_picker::RayPickingPlugin,
 };
-use ivy_gltf::{animation::player::Animator, components::animator, Document};
+use ivy_gltf::{
+    animation::{player::Animator, plugin::AnimationPlugin},
+    components::animator,
+    Document,
+};
 use ivy_graphics::texture::TextureDesc;
 use ivy_input::layer::InputLayer;
 use ivy_physics::{components::gravity_influence, ColliderBundle, GizmoSettings, PhysicsPlugin};
-use ivy_postprocessing::preconfigured::{SurfacePbrPipelineDesc, SurfacePbrRenderer};
+use ivy_postprocessing::preconfigured::{
+    pbr::PbrRenderGraphConfig, SurfacePbrPipelineDesc, SurfacePbrRenderer,
+};
 use ivy_scene::{GltfNodeExt, NodeMountOptions};
 use ivy_wgpu::{
     components::{
@@ -77,7 +83,15 @@ pub fn main() -> anyhow::Result<()> {
                 gpu,
                 surface,
                 SurfacePbrPipelineDesc {
-                    hdri: Some(Box::new("hdris/lauter_waterfall_4k.hdr")),
+                    // hdri: Some(Box::new("hdris/lauter_waterfall_4k.hdr")),
+                    pbr_config: PbrRenderGraphConfig {
+                        shadow_map_config: None,
+                        msaa: None,
+                        bloom: None,
+                        skybox: None,
+                        hdr_format: None,
+                        label: "basic".into(),
+                    },
                     ..Default::default()
                 },
             ))
@@ -88,6 +102,7 @@ pub fn main() -> anyhow::Result<()> {
             ScheduledLayer::new(FixedTimeStep::new(0.02))
                 .with_plugin(FreeCameraPlugin)
                 .with_plugin(GizmosPlugin)
+                .with_plugin(AnimationPlugin)
                 .with_plugin(
                     PhysicsPlugin::new()
                         .with_gravity(-Vec3::Y * 9.81)
@@ -100,20 +115,6 @@ pub fn main() -> anyhow::Result<()> {
         tracing::error!("{err:?}");
         Err(err)
     } else {
-        Ok(())
-    }
-}
-
-pub struct AnimationPlugin;
-
-impl Plugin for AnimationPlugin {
-    fn install(
-        &self,
-        _: &mut World,
-        _: &AssetCache,
-        schedules: &mut ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
-        schedules.per_tick_mut().with_system(animate_system());
         Ok(())
     }
 }
@@ -162,34 +163,34 @@ impl LogicLayer {
             async move {
                 let shader = assets.load(&PbrShaderDesc);
                 let sphere_mesh = MeshDesc::content(assets.load(&UvSpherePrimitive::default()));
-                let materials: Asset<Document> = assets.load_async("textures/materials.glb").await;
+                // let materials: Asset<Document> = assets.load_async("textures/materials.glb").await;
 
-                {
-                    let mut cmd = cmd.lock();
+                // {
+                //     let mut cmd = cmd.lock();
 
-                    for (i, material) in materials.materials().enumerate() {
-                        cmd.spawn(
-                            Entity::builder()
-                                .mount(TransformBundle::new(
-                                    vec3(0.0 + i as f32 * 2.0, 1.0, 12.0),
-                                    Quat::IDENTITY,
-                                    Vec3::ONE * 0.5,
-                                ))
-                                .mount(RenderObjectBundle {
-                                    mesh: sphere_mesh.clone(),
-                                    material: material.into(),
-                                    shaders: &[(forward_pass(), shader.clone())],
-                                })
-                                .mount(RigidBodyBundle::dynamic())
-                                .mount(
-                                    ColliderBundle::new(SharedShape::ball(0.5))
-                                        .with_density(DENSITY)
-                                        .with_restitution(RESTITUTION)
-                                        .with_friction(FRICTION),
-                                ),
-                        );
-                    }
-                }
+                //     for (i, material) in materials.materials().enumerate() {
+                //         cmd.spawn(
+                //             Entity::builder()
+                //                 .mount(TransformBundle::new(
+                //                     vec3(0.0 + i as f32 * 2.0, 1.0, 12.0),
+                //                     Quat::IDENTITY,
+                //                     Vec3::ONE * 0.5,
+                //                 ))
+                //                 .mount(RenderObjectBundle {
+                //                     mesh: sphere_mesh.clone(),
+                //                     material: material.into(),
+                //                     shaders: &[(forward_pass(), shader.clone())],
+                //                 })
+                //                 .mount(RigidBodyBundle::dynamic())
+                //                 .mount(
+                //                     ColliderBundle::new(SharedShape::ball(0.5))
+                //                         .with_density(DENSITY)
+                //                         .with_restitution(RESTITUTION)
+                //                         .with_friction(FRICTION),
+                //                 ),
+                //         );
+                //     }
+                // }
             }
         });
 
@@ -201,19 +202,18 @@ impl LogicLayer {
 
                 let texture_group = "textures/BaseCollection/ConcreteTiles/Concrete007_2K-PNG";
                 let plane_material = MaterialDesc::content(
-                    MaterialData::new()
-                        .with_metallic_factor(0.0)
-                        .with_albedo(TextureDesc::path(format!("{texture_group}_Color.png")))
-                        .with_normal(TextureDesc::path(format!("{texture_group}_NormalGL.png")))
-                        .with_metallic_roughness(TextureDesc::path(format!(
-                            "{texture_group}_Roughness.png"
-                        )))
-                        .with_ambient_occlusion(TextureDesc::path(format!(
-                            "{texture_group}_AmbientOcclusion.png"
-                        )))
-                        .with_displacement(TextureDesc::path(format!(
-                            "{texture_group}_Displacement.png"
-                        ))),
+                    MaterialData::new().with_metallic_factor(0.0),
+                    // .with_albedo(TextureDesc::path(format!("{texture_group}_Color.png")))
+                    // .with_normal(TextureDesc::path(format!("{texture_group}_NormalGL.png")))
+                    // .with_metallic_roughness(TextureDesc::path(format!(
+                    //     "{texture_group}_Roughness.png"
+                    // )))
+                    // .with_ambient_occlusion(TextureDesc::path(format!(
+                    //     "{texture_group}_AmbientOcclusion.png"
+                    // )))
+                    // .with_displacement(TextureDesc::path(format!(
+                    //     "{texture_group}_Displacement.png"
+                    // ))),
                 );
 
                 cmd.lock().spawn(
@@ -241,7 +241,7 @@ impl LogicLayer {
                 let sphere_mesh = MeshDesc::content(assets.load(&UvSpherePrimitive::default()));
                 let cube_mesh = MeshDesc::content(assets.load(&CubePrimitive));
 
-                for i in 0..8 {
+                for i in 0..0 {
                     let roughness = i as f32 / (7) as f32;
                     for j in 0..2 {
                         let metallic = j as f32;
@@ -277,7 +277,7 @@ impl LogicLayer {
                     }
                 }
 
-                for i in 0..8 {
+                for i in 0..0 {
                     let roughness = i as f32 / (7) as f32;
                     for j in 0..2 {
                         let metallic = j as f32;
@@ -323,6 +323,9 @@ impl LogicLayer {
                 let skin = node.skin().unwrap();
                 let animation = skin.animations()[0].clone();
 
+                let mut animator = Animator::new();
+                animator.start_animation(animation);
+
                 let root: EntityBuilder = node
                     .mount(
                         &assets,
@@ -336,40 +339,40 @@ impl LogicLayer {
                         Quat::IDENTITY,
                         Vec3::ONE,
                     ))
-                    .set(animator(), Animator::new(animation))
+                    .set(ivy_gltf::components::animator(), animator)
                     .into();
 
                 cmd.lock().spawn(root);
 
-                let document: Asset<Document> = assets.load_async("models/crate.glb").await;
-                let node = document
-                    .find_node("Cube")
-                    .context("Missing document node")
-                    .unwrap();
+                // let document: Asset<Document> = assets.load_async("models/crate.glb").await;
+                // let node = document
+                //     .find_node("Cube")
+                //     .context("Missing document node")
+                //     .unwrap();
 
-                let root: EntityBuilder = node
-                    .mount(
-                        &assets,
-                        &mut Entity::builder(),
-                        &NodeMountOptions {
-                            skip_empty_children: true,
-                        },
-                    )
-                    .mount(TransformBundle::new(
-                        vec3(0.0, 1.0, -2.0),
-                        Quat::IDENTITY,
-                        Vec3::ONE,
-                    ))
-                    .mount(RigidBodyBundle::dynamic())
-                    .mount(
-                        ColliderBundle::new(SharedShape::cuboid(1.0, 1.0, 1.0))
-                            .with_density(DENSITY / 2.0)
-                            .with_restitution(RESTITUTION)
-                            .with_friction(FRICTION),
-                    )
-                    .into();
+                // let root: EntityBuilder = node
+                //     .mount(
+                //         &assets,
+                //         &mut Entity::builder(),
+                //         &NodeMountOptions {
+                //             skip_empty_children: true,
+                //         },
+                //     )
+                //     .mount(TransformBundle::new(
+                //         vec3(0.0, 1.0, -2.0),
+                //         Quat::IDENTITY,
+                //         Vec3::ONE,
+                //     ))
+                //     .mount(RigidBodyBundle::dynamic())
+                //     .mount(
+                //         ColliderBundle::new(SharedShape::cuboid(1.0, 1.0, 1.0))
+                //             .with_density(DENSITY / 2.0)
+                //             .with_restitution(RESTITUTION)
+                //             .with_friction(FRICTION),
+                //     )
+                //     .into();
 
-                cmd.lock().spawn(root);
+                // cmd.lock().spawn(root);
             }
             .instrument(tracing::debug_span!("load_assets")),
         );
@@ -397,7 +400,7 @@ impl LogicLayer {
         Entity::builder()
             .mount(
                 TransformBundle::default()
-                    .with_position(vec3(0.0, 2.0, 0.0))
+                    .with_position(vec3(0.0, 5.0, -5.0))
                     .with_rotation(Quat::from_axis_angle(Vec3::X, PI + 0.5)),
             )
             .set(

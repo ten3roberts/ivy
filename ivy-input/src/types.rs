@@ -1,4 +1,4 @@
-use glam::{IVec2, Vec2};
+use glam::Vec2;
 use ivy_core::layer::events::Event;
 use winit::{dpi::LogicalPosition, event::Modifiers, keyboard::SmolStr};
 pub use winit::{

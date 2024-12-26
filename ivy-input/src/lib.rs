@@ -5,7 +5,7 @@ pub mod layer;
 pub mod types;
 mod vector;
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 
 pub use bindings::*;
 use flax::{component::ComponentValue, Component, EntityRef};

@@ -1,4 +1,5 @@
 pub mod player;
+pub mod plugin;
 pub mod skin;
 
 use std::borrow::Cow;
@@ -44,6 +45,7 @@ impl Channel {
     }
 }
 
+#[derive(Debug)]
 pub(crate) enum KeyFrameValues {
     Positions(Vec<Vec3>),
     Rotations(Vec<Quat>),

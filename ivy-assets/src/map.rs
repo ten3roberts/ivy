@@ -1,3 +1,5 @@
+use std::borrow::Borrow;
+
 use slotmap::{
     secondary::{self},
     SecondaryMap,
@@ -19,8 +21,15 @@ impl<K, V> AssetMap<K, V> {
         }
     }
 
-    pub fn insert(&mut self, handle: Asset<K>, value: V) {
-        self.inner.insert(handle.id(), value);
+    pub fn insert<Q>(&mut self, handle: Q, value: V)
+    where
+        Q: Borrow<Asset<K>>,
+    {
+        self.inner.insert(handle.borrow().id(), value);
+    }
+
+    pub fn insert_with_id(&mut self, id: AssetId, value: V) {
+        self.inner.insert(id, value);
     }
 
     pub fn get(&self, handle: &Asset<K>) -> Option<&V> {
@@ -31,11 +40,46 @@ impl<K, V> AssetMap<K, V> {
         self.inner.get_mut(handle.id())
     }
 
+    pub fn remove(&mut self, handle: &Asset<K>) -> Option<V> {
+        self.inner.remove(handle.id())
+    }
+
     pub fn entry<'a>(&'a mut self, handle: &Asset<K>) -> secondary::Entry<'a, AssetId, V> {
         self.inner.entry(handle.id()).expect("Invalid handle")
     }
+
+    pub fn iter(&self) -> secondary::Iter<'_, AssetId, V> {
+        self.inner.iter()
+    }
+
+    pub fn iter_mut(&mut self) -> secondary::IterMut<'_, AssetId, V> {
+        self.inner.iter_mut()
+    }
+
+    pub fn contains(&self, animation: &Asset<K>) -> bool {
+        self.inner.contains_key(animation.id())
+    }
 }
 
+impl<'a, K, V> IntoIterator for &'a AssetMap<K, V> {
+    type Item = (AssetId, &'a V);
+
+    type IntoIter = slotmap::secondary::Iter<'a, AssetId, V>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.inner.iter()
+    }
+}
+
+impl<'a, K, V> IntoIterator for &'a mut AssetMap<K, V> {
+    type Item = (AssetId, &'a mut V);
+
+    type IntoIter = slotmap::secondary::IterMut<'a, AssetId, V>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.inner.iter_mut()
+    }
+}
 // pub struct Entry<'a, 'h, K, V> {
 //     entry: secondary::Entry<'a, AssetId, V>,
 //     handle: &'h Asset<K>,

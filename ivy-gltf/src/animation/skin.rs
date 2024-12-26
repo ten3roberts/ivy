@@ -81,7 +81,7 @@ impl Skin {
                     None => {
                         skin_animations.push(Animation {
                             label: animation.name().unwrap_or("unknown").to_string().into(),
-                            channels: Vec::new(),
+                            channels: vec![channel],
                         });
                     }
                 }

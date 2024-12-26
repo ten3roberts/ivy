@@ -4,7 +4,7 @@ use flax::{
 };
 use ivy_assets::{Asset, AssetCache};
 use ivy_core::EntityBuilderExt;
-use ivy_gltf::GltfNode;
+use ivy_gltf::{animation::player::Animator, components::animator, GltfNode};
 use ivy_wgpu::{
     components::{forward_pass, shadow_pass},
     renderer::RenderObjectBundle,
@@ -86,6 +86,7 @@ impl GltfNodeExt for GltfNode {
         if let Some(skin) = skin {
             tracing::info!("adding skin to node");
             entity.set(ivy_gltf::components::skin(), skin);
+            entity.set(animator(), Animator::new());
         }
 
         entity.mount(self.transform());

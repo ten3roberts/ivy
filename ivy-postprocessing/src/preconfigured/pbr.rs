@@ -11,16 +11,14 @@ use ivy_wgpu::{
         gizmos_renderer::GizmosRendererNode,
         mesh_renderer::MeshRenderer,
         shadowmapping::{LightShadowCamera, ShadowMapNode},
+        skinned_mesh_renderer::SkinnedMeshRenderer,
         CameraNode, LightManager, MsaaResolve, SkyboxTextures,
     },
     rendergraph::{BufferDesc, ManagedTextureDesc, RenderGraph, TextureHandle},
     types::{texture::max_mip_levels, PhysicalSize},
     Gpu,
 };
-use wgpu::{
-    naga::proc::index::find_checked_indexes, BufferUsages, Extent3d, TextureDimension,
-    TextureFormat,
-};
+use wgpu::{BufferUsages, Extent3d, TextureDimension, TextureFormat};
 
 use crate::{
     bloom::BloomNode,
@@ -351,12 +349,12 @@ impl PbrRenderGraphConfig {
                 forward_pass(),
                 render_graph.resources.shader_library().clone(),
             ),
-            // SkinnedMeshRenderer::new(
-            //     world,
-            //     gpu,
-            //     forward_pass(),
-            //     render_graph.resources.shader_library().clone(),
-            // ),
+            SkinnedMeshRenderer::new(
+                world,
+                gpu,
+                forward_pass(),
+                render_graph.resources.shader_library().clone(),
+            ),
             MeshRenderer::new(
                 world,
                 gpu,
