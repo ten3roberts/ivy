@@ -99,7 +99,7 @@ fn vs_main(in: SkinnedVertexInput) -> VertexOutput {
 
     let normal = normalize((object.world_matrix * vec4(in.normal, 0)).xyz);
     let tangent = normalize((object.world_matrix * vec4(in.tangent.xyz, 0)).xyz);
-    let bitangent = normalize(cross(in.tangent.xyz, in.normal)) * in.tangent.w;
+    let bitangent = normalize(cross(tangent.xyz, normal)) * in.tangent.w;
 
     let tbn = transpose(mat3x3(tangent, bitangent, normal));
 

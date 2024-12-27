@@ -70,21 +70,25 @@ impl Animator {
         &self,
         skin: &Asset<Skin>,
         parent_transform: Mat4,
-        index: usize,
+        joint_index: usize,
         buffer: &mut [Mat4],
     ) {
-        let joint = &skin.joints()[index];
+        let joint = &skin.joints()[joint_index];
         let target = self
             .joint_targets
             .get(&joint.scene_index)
             .unwrap_or(&joint.local_bind_transform);
 
         let transform = parent_transform * target.to_mat4();
-        buffer[index] = transform * joint.inverse_bind_matrix;
+        buffer[joint_index] = transform * joint.inverse_bind_matrix;
 
         for &child in &joint.children {
             self.fill_buffer_recursive(skin, transform, skin.joint_to_index(child), buffer);
         }
+    }
+
+    pub fn joint_targets(&self) -> &BTreeMap<usize, TransformBundle> {
+        &self.joint_targets
     }
 }
 

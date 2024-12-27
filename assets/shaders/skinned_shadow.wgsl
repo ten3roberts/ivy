@@ -16,6 +16,7 @@ struct VertexOutput {
 
 struct Object {
     world_matrix: mat4x4<f32>,
+    joint_offset: u32,
 }
 
 struct Globals {
@@ -44,7 +45,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
         let joint: u32 = in.joints[i];
         let weight: f32 = in.weights[i];
 
-        pos += (joint_matrices[joint] * vec4(in.pos, 1.0)).xyz * weight;
+        pos += (joint_matrices[object.joint_offset + joint] * vec4(in.pos, 1.0)).xyz * weight;
     }
 
     let world_position = object.world_matrix * vec4(pos, 1.0);

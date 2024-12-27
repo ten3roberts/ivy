@@ -239,6 +239,20 @@ impl PhysicsState {
         }
     }
 
+    pub fn update_colliders<'x, I>(&mut self, data: I)
+    where
+        I: Iterator<Item = (ColliderHandle, ColliderDynamicsQueryItem<'x>)>,
+    {
+        for (handle, v) in data {
+            let collider = &mut self.collider_set[handle];
+
+            collider.set_position_wrt_parent(Isometry3::new(
+                (*v.pos).into(),
+                v.rotation.to_scaled_axis().into(),
+            ));
+        }
+    }
+
     pub fn sync_body_velocities(&mut self, query: &mut QueryBorrow<BodyDynamicsQueryMut>) {
         for body in self.island_manager.active_dynamic_bodies() {
             let rb = &self.bodies[*body];
@@ -298,6 +312,27 @@ impl BodyDynamicsQuery {
 }
 
 impl Default for BodyDynamicsQuery {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Fetch)]
+pub struct ColliderDynamicsQuery {
+    pub pos: Component<Vec3>,
+    pub rotation: Component<Quat>,
+}
+
+impl ColliderDynamicsQuery {
+    pub fn new() -> Self {
+        Self {
+            pos: position(),
+            rotation: rotation(),
+        }
+    }
+}
+
+impl Default for ColliderDynamicsQuery {
     fn default() -> Self {
         Self::new()
     }

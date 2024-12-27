@@ -24,6 +24,7 @@ use crate::{
     bloom::BloomNode,
     depth_resolve::MsaaDepthResolve,
     hdri::{HdriProcessor, HdriProcessorNode},
+    skybox::SkyboxRenderer,
     tonemap::TonemapNode,
 };
 
@@ -256,11 +257,11 @@ impl PbrRenderGraphConfig {
                 let environment_map = render_graph.resources.insert_texture(ManagedTextureDesc {
                     label: "hdr_cubemap".into(),
                     extent: Extent3d {
-                        width: 2048,
-                        height: 2048,
+                        width: 4098,
+                        height: 4098,
                         depth_or_array_layers: 6,
                     },
-                    mip_level_count: max_mip_levels(2048, 2048),
+                    mip_level_count: max_mip_levels(4098, 4098),
                     sample_count: 1,
                     dimension: TextureDimension::D2,
                     format: hdri_processor.format(),
@@ -270,8 +271,8 @@ impl PbrRenderGraphConfig {
                 let irradiance_map = render_graph.resources.insert_texture(ManagedTextureDesc {
                     label: "skybox_ir".into(),
                     extent: Extent3d {
-                        width: 256,
-                        height: 256,
+                        width: 512,
+                        height: 512,
                         depth_or_array_layers: 6,
                     },
                     mip_level_count: 1,
@@ -342,7 +343,7 @@ impl PbrRenderGraphConfig {
         };
 
         let camera_renderers = (
-            // SkyboxRenderer::new(gpu),
+            SkyboxRenderer::new(gpu),
             MeshRenderer::new(
                 world,
                 gpu,

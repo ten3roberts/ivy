@@ -24,11 +24,13 @@ use ivy_game::{
     ray_picker::RayPickingPlugin,
 };
 use ivy_gltf::{
-    animation::{player::Animator, plugin::AnimationPlugin},
+    animation::{
+        player::{AnimationPlayer, Animator},
+        plugin::AnimationPlugin,
+    },
     components::animator,
     Document,
 };
-use ivy_graphics::texture::TextureDesc;
 use ivy_input::layer::InputLayer;
 use ivy_physics::{components::gravity_influence, ColliderBundle, GizmoSettings, PhysicsPlugin};
 use ivy_postprocessing::preconfigured::{
@@ -324,7 +326,7 @@ impl LogicLayer {
                 let animation = skin.animations()[0].clone();
 
                 let mut animator = Animator::new();
-                animator.start_animation(animation);
+                animator.start_animation(AnimationPlayer::new(animation));
 
                 let root: EntityBuilder = node
                     .mount(

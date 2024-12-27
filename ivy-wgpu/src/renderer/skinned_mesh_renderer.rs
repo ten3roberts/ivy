@@ -10,7 +10,7 @@ use flax::{
     fetch::{Copied, Source, Traverse},
     CommandBuffer, Component, Entity, Fetch, FetchExt, Query, World,
 };
-use glam::Mat4;
+use glam::{Mat4, Vec3};
 use itertools::Itertools;
 use ivy_assets::{map::AssetMap, stored::Handle, Asset, AssetCache};
 use ivy_core::{components::world_transform, profiling::profile_function};
@@ -22,7 +22,7 @@ use ivy_wgpu_types::shader::{Culling, TargetDesc};
 use slab::Slab;
 use wgpu::{BindGroup, BindGroupLayout, BufferUsages, DepthBiasState, RenderPass, ShaderStages};
 
-use super::{mesh_renderer::ShaderFactory, CameraRenderer, ObjectData};
+use super::{mesh_renderer::ShaderFactory, CameraRenderer};
 use crate::{
     components::{material, mesh},
     material::PbrMaterial,
@@ -127,6 +127,14 @@ impl ObjectDataQuery {
             skin: skin(),
         }
     }
+}
+
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+#[repr(C)]
+pub struct ObjectData {
+    transform: Mat4,
+    joint_offset: u32,
+    _padding: Vec3,
 }
 
 type ObjectQueryType = (
@@ -412,6 +420,8 @@ impl SkinnedMeshRenderer {
 
             self.object_data[index as usize] = ObjectData {
                 transform: item.transform,
+                joint_offset: index * batch.skin.joints().len() as u32,
+                _padding: Default::default(),
             };
         }
 
@@ -424,10 +434,13 @@ impl SkinnedMeshRenderer {
         for (&object_index, &batch_index, item) in &mut self.object_query.borrow(world) {
             let batch = &mut self.batches[batch_index];
 
-            let local_offset = object_index - batch.first_instance as usize;
+            let local_offset =
+                (object_index - batch.first_instance as usize) * batch.skin.joints().len();
 
             self.object_data[object_index] = ObjectData {
                 transform: item.transform,
+                joint_offset: object_index as u32 * batch.skin.joints().len() as u32,
+                _padding: Default::default(),
             };
 
             item.animator

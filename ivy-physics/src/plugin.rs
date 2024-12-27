@@ -13,6 +13,7 @@ use crate::{
         apply_effectors_system, attach_joints_system, gizmo_system, physics_step_system,
         register_bodies_system, register_colliders_system, sync_simulation_bodies_system,
         unregister_bodies_system, unregister_colliders_system, update_bodies_system,
+        update_colliders_system,
     },
 };
 
@@ -84,6 +85,7 @@ impl Plugin for PhysicsPlugin {
 
         // rapier barrier
         schedule
+            .with_system(update_colliders_system())
             .with_system(update_bodies_system())
             .with_system(physics_step_system())
             .with_system(sync_simulation_bodies_system());

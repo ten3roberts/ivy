@@ -18,13 +18,14 @@ use ivy_core::{
 use rapier3d::{
     math::Isometry,
     prelude::{
-        ColliderBuilder, LockedAxes, RigidBodyBuilder, RigidBodyHandle, RigidBodyType, SharedShape,
+        ColliderBuilder, ColliderHandle, LockedAxes, RigidBodyBuilder, RigidBodyHandle,
+        RigidBodyType, SharedShape,
     },
 };
 
 use crate::{
     components::*,
-    state::{BodyDynamicsQuery, BodyDynamicsQueryMut, PhysicsState},
+    state::{BodyDynamicsQuery, BodyDynamicsQueryMut, ColliderDynamicsQuery, PhysicsState},
 };
 
 #[allow(clippy::type_complexity)]
@@ -248,6 +249,30 @@ pub fn update_bodies_system() -> BoxedSystem {
             )>| {
                 if let Some(state) = state.first() {
                     state.update_bodies(query.iter());
+                }
+
+                anyhow::Ok(())
+            },
+        )
+        .boxed()
+}
+
+// writes collider position data into the physics state
+pub fn update_colliders_system() -> BoxedSystem {
+    System::builder()
+        .with_query(Query::new(physics_state().as_mut()))
+        .with_query(
+            Query::new((collider_handle().copied(), ColliderDynamicsQuery::new()))
+                .without(rb_handle()),
+        )
+        .build(
+            move |mut state: QueryBorrow<ComponentMut<PhysicsState>>,
+                  mut query: QueryBorrow<
+                (Copied<Component<ColliderHandle>>, ColliderDynamicsQuery),
+                _,
+            >| {
+                if let Some(state) = state.first() {
+                    state.update_colliders(query.iter());
                 }
 
                 anyhow::Ok(())

@@ -12,8 +12,9 @@ pub type JointIndex = usize;
 
 #[derive(Debug)]
 pub struct Joint {
-    /// Transform vertex to bone space when no animation is applied
+    pub name: Option<String>,
     pub scene_index: usize,
+    /// Transform vertex to bone space when no animation is applied
     pub inverse_bind_matrix: Mat4,
     pub(crate) local_bind_transform: TransformBundle,
     pub children: Vec<JointIndex>,
@@ -114,6 +115,7 @@ impl Skin {
                                 scale: transform.2.into(),
                             },
                             children: joint.children().map(|val| val.index()).collect(),
+                            name: joint.name().map(|v| v.to_string()),
                         }
                     })
                     .collect_vec();
