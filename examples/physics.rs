@@ -1,6 +1,6 @@
 use flax::{Entity, Query, World};
 use glam::{vec3, EulerRot, Mat4, Quat, Vec3};
-use ivy_assets::AssetCache;
+use ivy_assets::{fs::AssetPath, AssetCache};
 use ivy_core::{
     app::PostInitEvent,
     layer::events::EventRegisterContext,
@@ -61,7 +61,9 @@ pub fn main() -> anyhow::Result<()> {
                 gpu,
                 surface,
                 SurfacePbrPipelineDesc {
-                    hdri: Some(Box::new("hdris/HDR_artificial_planet_close.hdr")),
+                    hdri: Some(Box::new(AssetPath::new(
+                        "hdris/HDR_artificial_planet_close.hdr",
+                    ))),
                     ..Default::default()
                 },
             ))

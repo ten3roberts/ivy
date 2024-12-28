@@ -34,6 +34,17 @@ flax::component! {
     pub engine,
 }
 
+flax::register_serializable! {
+    position,
+    rotation,
+    scale,
+    world_transform,
+    main_camera,
+    delta_time,
+    color,
+    is_static
+}
+
 #[derive(Fetch, Debug, Clone)]
 pub struct TransformQuery {
     pub pos: Component<Vec3>,

@@ -84,7 +84,6 @@ impl GltfNodeExt for GltfNode {
         }
 
         if let Some(skin) = skin {
-            tracing::info!("adding skin to node");
             entity.set(ivy_gltf::components::skin(), skin);
             entity.set(animator(), Animator::new());
         }

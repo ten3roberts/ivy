@@ -1,6 +1,6 @@
 use flax::{Entity, Query, World};
 use glam::{vec3, EulerRot, Mat4, Quat, Vec3};
-use ivy_assets::AssetCache;
+use ivy_assets::{fs::AssetPath, AssetCache};
 use ivy_core::{
     app::PostInitEvent,
     layer::events::EventRegisterContext,
@@ -67,9 +67,9 @@ pub fn main() -> anyhow::Result<()> {
                 gpu,
                 surface,
                 SurfacePbrPipelineDesc {
-                    hdri: Some(Box::new(
+                    hdri: Some(Box::new(AssetPath::new(
                         "hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
-                    )),
+                    ))),
                     ..Default::default()
                 },
             ))

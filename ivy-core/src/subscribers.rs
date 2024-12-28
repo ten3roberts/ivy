@@ -23,11 +23,11 @@ impl<T> RemovedComponentSubscriber<T> {
 }
 
 impl<T: ComponentValue + Copy> EventSubscriber for RemovedComponentSubscriber<T> {
-    fn on_added(&self, _: &flax::archetype::Storage, _: &flax::events::EventData) {}
+    fn on_added(&self, _: &flax::archetype::ArchetypeStorage, _: &flax::events::EventData) {}
 
     fn on_modified(&self, _: &flax::events::EventData) {}
 
-    fn on_removed(&self, storage: &flax::archetype::Storage, event: &flax::events::EventData) {
+    fn on_removed(&self, storage: &flax::archetype::ArchetypeStorage, event: &flax::events::EventData) {
         let storage = storage.downcast_ref::<T>();
         for (&id, slot) in event.ids.iter().zip(event.slots) {
             self.tx.send((id, storage[slot])).ok();
@@ -65,11 +65,11 @@ impl<T> RemovedRelationSubscriber<T> {
 }
 
 impl<T: ComponentValue + Copy> EventSubscriber for RemovedRelationSubscriber<T> {
-    fn on_added(&self, _: &flax::archetype::Storage, _: &flax::events::EventData) {}
+    fn on_added(&self, _: &flax::archetype::ArchetypeStorage, _: &flax::events::EventData) {}
 
     fn on_modified(&self, _: &flax::events::EventData) {}
 
-    fn on_removed(&self, storage: &flax::archetype::Storage, event: &flax::events::EventData) {
+    fn on_removed(&self, storage: &flax::archetype::ArchetypeStorage, event: &flax::events::EventData) {
         let values = storage.downcast_ref::<T>();
         for (&id, slot) in event.ids.iter().zip(event.slots) {
             self.tx

@@ -47,6 +47,7 @@ flax = { git = "https://github.com/ten3roberts/flax", features = [ "serde", "der
 flume = "0.11"
 futures = "0.3"
 glam = { version = "0.28", features = ["bytemuck", "rand"] }
+derivative = "2.2"
 gltf = "1.0"
 image = { version = "0.25.1", default-features = false, features = ["png", "jpeg", "rayon", "hdr", "exr"] }
 itertools = "0.13"
@@ -129,7 +130,8 @@ serde = [
   "ivy-wgpu/serde",
   "ivy-wgpu-types/serde",
   "ivy-assets/serde",
-  "ivy-input/serde"
+  "ivy-input/serde",
+  "ivy-gltf/serde"
 ]
 profile = [ "ivy-core/profile" ]
 

@@ -1,6 +1,6 @@
 use flax::{Entity, Query, World};
 use glam::{Mat4, Quat, Vec3};
-use ivy_assets::{Asset, AssetCache, DynAsyncAssetDesc};
+use ivy_assets::{fs::AssetPath, Asset, AssetCache, DynAsyncAssetDesc};
 use ivy_core::{
     app::PostInitEvent,
     layer::events::EventRegisterContext,
@@ -56,7 +56,9 @@ pub fn main() -> anyhow::Result<()> {
                 gpu,
                 surface,
                 SurfacePbrPipelineDesc {
-                    hdri: Some(Box::new("hdris/HDR_artificial_planet_close.hdr")),
+                    hdri: Some(Box::new(AssetPath::new(
+                        "hdris/HDR_artificial_planet_close.hdr",
+                    ))),
                     ..Default::default()
                 },
             ))
@@ -78,7 +80,9 @@ pub fn main() -> anyhow::Result<()> {
 }
 
 async fn setup_objects(cmd: AsyncCommandBuffer, assets: AssetCache) -> anyhow::Result<()> {
-    let document: Asset<Document> = "models/droplet.glb".load_async(&assets).await?;
+    let document: Asset<Document> = AssetPath::new("models/droplet.glb")
+        .load_async(&assets)
+        .await?;
 
     document
         .node(0)

@@ -17,12 +17,11 @@ use dashmap::DashMap;
 pub mod cell;
 pub mod fs;
 mod handle;
+pub mod loadable;
 pub mod map;
-#[cfg(feature = "serde")]
-pub mod serde;
 pub mod service;
 pub mod stored;
-use fs::{AssetFromPath, AsyncAssetFromPath};
+use fs::{AssetFromPath, AssetPath, AsyncAssetFromPath, BytesFromPath};
 use futures::{
     future::{BoxFuture, Shared, WeakShared},
     FutureExt, TryFutureExt,
@@ -75,7 +74,7 @@ impl<E> Clone for SharedError<E> {
 type KeyMap<K, V> = DashMap<K, WeakHandle<V>>;
 type PendingKeyMap<K, V> = DashMap<
     <K as StoredKey>::Stored,
-    WeakShared<BoxFuture<'static, Result<Asset<V>, SharedError<<K as AsyncAssetDesc<V>>::Error>>>>,
+    WeakShared<BoxFuture<'static, Result<Asset<V>, SharedError<<K as AsyncAssetDesc>::Error>>>>,
 >;
 
 /// Stores assets which are accessible through handles
@@ -138,13 +137,17 @@ impl AssetCache {
         }
     }
 
-    pub fn try_load_async<K, V>(&self, desc: &K) -> AssetLoadFuture<V, K::Error>
-    where
-        K: ?Sized + AsyncAssetDesc<V>,
-        V: 'static + Send + Sync,
-    {
-        // ivy_profiling::profile_function!(format!("{desc:?}"));
+    pub fn from_path<V: AsyncAssetFromPath>(
+        &self,
+        path: impl AsRef<Path>,
+    ) -> AssetLoadFuture<V, V::Error> {
+        self.try_load_async(&AssetPath::<V>::new(path.as_ref()))
+    }
 
+    pub fn try_load_async<K>(&self, desc: &K) -> AssetLoadFuture<K::Output, K::Error>
+    where
+        K: ?Sized + AsyncAssetDesc,
+    {
         if let Some(handle) = self.get_async(desc) {
             return AssetLoadFuture {
                 inner: Ok(Ok(handle)),
@@ -152,9 +155,14 @@ impl AssetCache {
         }
 
         {
-            let pending = self.inner.pending_keys.get(&TypeId::of::<(K::Stored, V)>());
+            let pending = self
+                .inner
+                .pending_keys
+                .get(&TypeId::of::<(K::Stored, K::Output)>());
             if let Some(pending) = pending {
-                let pending = pending.downcast_ref::<PendingKeyMap<K, V>>().unwrap();
+                let pending = pending
+                    .downcast_ref::<PendingKeyMap<K, K::Output>>()
+                    .unwrap();
 
                 if let Some(fut) = pending.get(desc).and_then(|v| WeakShared::upgrade(&v)) {
                     return AssetLoadFuture { inner: Err(fut) };
@@ -177,14 +185,14 @@ impl AssetCache {
                 .await
                 .map_err(|v| SharedError(Arc::new(v)))?;
 
-            tracing::info!(duration=?start.elapsed(), desc=%desc_debug, "loaded asset");
+            tracing::debug!(duration=?start.elapsed(), desc=%desc_debug, "loaded asset");
 
             assets
                 .inner
                 .keys
-                .entry(TypeId::of::<(K::Stored, V)>())
-                .or_insert_with(|| Box::<KeyMap<K::Stored, V>>::default())
-                .downcast_mut::<KeyMap<K::Stored, V>>()
+                .entry(TypeId::of::<(K::Stored, K::Output)>())
+                .or_insert_with(|| Box::<KeyMap<K::Stored, K::Output>>::default())
+                .downcast_mut::<KeyMap<K::Stored, K::Output>>()
                 .unwrap()
                 .insert(desc, value.downgrade());
 
@@ -197,10 +205,12 @@ impl AssetCache {
             let mut pending = self
                 .inner
                 .pending_keys
-                .entry(TypeId::of::<(K::Stored, V)>())
-                .or_insert_with(|| Box::new(PendingKeyMap::<K, V>::new()));
+                .entry(TypeId::of::<(K::Stored, K::Output)>())
+                .or_insert_with(|| Box::new(PendingKeyMap::<K, K::Output>::new()));
 
-            let pending = pending.downcast_mut::<PendingKeyMap<K, V>>().unwrap();
+            let pending = pending
+                .downcast_mut::<PendingKeyMap<K, K::Output>>()
+                .unwrap();
             pending.insert(stored, fut.downgrade().unwrap());
         }
 
@@ -209,10 +219,7 @@ impl AssetCache {
         AssetLoadFuture { inner: Err(fut) }
     }
 
-    pub async fn load_async<V>(&self, key: &(impl AsyncAssetDesc<V> + ?Sized)) -> Asset<V>
-    where
-        V: 'static + Send + Sync,
-    {
+    pub async fn load_async<K: AsyncAssetDesc + ?Sized>(&self, key: &K) -> Asset<K::Output> {
         match self.try_load_async(key).await {
             Ok(v) => v,
             Err(err) => {
@@ -221,6 +228,7 @@ impl AssetCache {
             }
         }
     }
+
     pub fn get<K, V>(&self, key: &K) -> Option<Asset<V>>
     where
         K: ?Sized + AssetDesc<V>,
@@ -238,16 +246,18 @@ impl AssetCache {
         Some(handle)
     }
 
-    pub fn get_async<K, V>(&self, key: &K) -> Option<Asset<V>>
+    pub fn get_async<K>(&self, key: &K) -> Option<Asset<K::Output>>
     where
-        K: ?Sized + AsyncAssetDesc<V>,
-        V: 'static + Send + Sync,
+        K: ?Sized + AsyncAssetDesc,
     {
         // Keys of K
-        let keys = self.inner.keys.get(&TypeId::of::<(K::Stored, V)>())?;
+        let keys = self
+            .inner
+            .keys
+            .get(&TypeId::of::<(K::Stored, K::Output)>())?;
 
         let handle = keys
-            .downcast_ref::<KeyMap<K::Stored, V>>()
+            .downcast_ref::<KeyMap<K::Stored, K::Output>>()
             .unwrap()
             .get(key)?
             .upgrade()?;
@@ -335,7 +345,7 @@ pub trait DynAsyncAssetDesc<V>: 'static + Send + Sync {
 
 impl<T, V> DynAsyncAssetDesc<V> for T
 where
-    T: AsyncAssetDesc<V>,
+    T: AsyncAssetDesc<Output = V>,
     T::Error: Debug + Display,
     V: 'static + Send + Sync,
 {
@@ -363,13 +373,18 @@ pub trait AssetDesc<V>: StoredKey + Debug {
     fn create(&self, assets: &AssetCache) -> Result<Asset<V>, Self::Error>;
 }
 
-pub trait AsyncAssetDesc<V>: StoredKey + Debug + Send + Sync {
+/// Describes an asset that can be loaded
+pub trait AsyncAssetDesc: StoredKey + Debug + Send + Sync {
+    type Output: 'static + Send + Sync;
     type Error: Send + Sync + 'static + Debug;
 
+    /// Create the resource
+    ///
+    /// Returns Asset directly to allow returning already loaded assets stored elsewhere
     fn create(
         &self,
         assets: &AssetCache,
-    ) -> impl Future<Output = Result<Asset<V>, Self::Error>> + Send;
+    ) -> impl Future<Output = Result<Asset<Self::Output>, Self::Error>> + Send;
 }
 
 impl AssetFromPath for DynamicImage {
@@ -388,7 +403,7 @@ impl AsyncAssetFromPath for DynamicImage {
 
     async fn load_from_path(path: &Path, assets: &AssetCache) -> anyhow::Result<Asset<Self>> {
         let format = image::ImageFormat::from_path(path)?;
-        let data = assets.try_load_async::<_, Vec<u8>>(path).await?;
+        let data = assets.try_load_async(&BytesFromPath::new(path)).await?;
         let image = async_std::task::spawn_blocking(move || {
             image::load_from_memory_with_format(&data, format)
         })
@@ -437,7 +452,9 @@ mod tests {
 
     #[test]
     fn asset_cache() {
-        impl AssetFromPath for () {
+        struct TestAsset;
+
+        impl AssetFromPath for TestAsset {
             type Error = FsAssetError;
 
             fn load_from_path(
@@ -445,16 +462,16 @@ mod tests {
                 assets: &AssetCache,
             ) -> Result<Asset<Self>, Self::Error> {
                 eprintln!("Loading {:?}", path);
-                Ok(assets.insert(()))
+                Ok(assets.insert(TestAsset))
             }
         }
 
         let assets = AssetCache::new();
 
-        let content: Asset<()> = assets.load(&"Foo");
-        let content2: Asset<()> = assets.load(&"Foo".to_string());
-        let bar: Asset<()> = assets.load(&"Bar".to_string());
-        let content4: Asset<()> = assets.load(&"Foo");
+        let content: Asset<TestAsset> = assets.load(&"Foo");
+        let content2: Asset<TestAsset> = assets.load(&"Foo".to_string());
+        let bar: Asset<TestAsset> = assets.load(&"Bar".to_string());
+        let content4: Asset<TestAsset> = assets.load(&"Foo");
 
         assert_eq!(content, content2);
 
@@ -462,11 +479,11 @@ mod tests {
         assert!(!Arc::ptr_eq(content.as_arc(), bar.as_arc()));
         assert_eq!(content, content4);
 
-        assert!(assets.get::<_, ()>(&"Bar".to_string()).is_some());
+        assert!(assets.get::<_, TestAsset>(&"Bar".to_string()).is_some());
 
         drop(bar);
 
-        assert!(assets.get::<_, ()>(&"Bar".to_string()).is_none());
+        assert!(assets.get::<_, TestAsset>(&"Bar".to_string()).is_none());
     }
 
     #[test]
@@ -493,7 +510,11 @@ mod tests {
             }
         }
 
-        impl AsyncAssetDesc<()> for str {
+        #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+        struct Key(String);
+
+        impl AsyncAssetDesc for Key {
+            type Output = ();
             type Error = Infallible;
 
             async fn create(&self, assets: &AssetCache) -> Result<Asset<()>, Infallible> {
@@ -508,11 +529,11 @@ mod tests {
         let assets = AssetCache::new();
 
         eprintln!("Starting first request");
-        let mut pending1 = Box::pin(assets.try_load_async::<_, ()>("Foo"));
+        let mut pending1 = Box::pin(assets.try_load_async(&Key("Foo".into())));
 
         eprintln!("Starting second request");
 
-        let pending2 = assets.try_load_async::<_, ()>("Foo");
+        let pending2 = assets.try_load_async(&Key("Foo".into()));
 
         use futures::future::FutureExt;
         assert!((&mut pending1).now_or_never().is_none());
@@ -521,7 +542,7 @@ mod tests {
         assert!(Arc::ptr_eq(content.as_arc(), content2.as_arc()));
 
         let pending3 = assets
-            .try_load_async::<_, ()>("Foo")
+            .try_load_async(&Key("Foo".into()))
             .now_or_never()
             .unwrap()
             .unwrap();

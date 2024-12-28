@@ -1,5 +1,5 @@
 use image::{DynamicImage, ImageBuffer};
-use ivy_assets::{Asset, AssetDesc, AsyncAssetDesc, DynAssetDesc, DynAsyncAssetDesc};
+use ivy_assets::{Asset, AssetDesc};
 use ivy_core::palette::Srgba;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -85,29 +85,12 @@ impl TextureProcessor for MetallicRoughnessProcessor {
 /// Describes a texture
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TextureDesc {
-    Path(String),
     Content(Asset<DynamicImage>),
     Color(image::Rgba<u8>),
     Processed(Box<ProcessedTexture>),
 }
 
-impl From<String> for TextureDesc {
-    fn from(v: String) -> Self {
-        Self::Path(v)
-    }
-}
-
-impl From<&str> for TextureDesc {
-    fn from(v: &str) -> Self {
-        Self::Path(v.into())
-    }
-}
-
 impl TextureDesc {
-    pub fn path(path: impl Into<String>) -> Self {
-        Self::Path(path.into())
-    }
-
     pub fn content(content: Asset<DynamicImage>) -> Self {
         Self::Content(content)
     }
@@ -137,44 +120,20 @@ impl TextureDesc {
         Self::Color(image::Rgba([127, 127, 255, 255]))
     }
 
-    pub fn label(&self) -> &str {
+    pub fn label(&self) -> String {
         match self {
-            TextureDesc::Path(v) => v,
-            TextureDesc::Content(_) => "content",
-            TextureDesc::Color(_) => "color",
-            TextureDesc::Processed(v) => v.texture.label(),
+            TextureDesc::Content(_) => "content".to_string(),
+            TextureDesc::Color(_) => "color".to_string(),
+            TextureDesc::Processed(v) => v.texture.label().to_string(),
         }
     }
 
-    fn load_image(&self, assets: &ivy_assets::AssetCache) -> anyhow::Result<DynamicImage> {
+    fn load_image(&self) -> anyhow::Result<DynamicImage> {
         match self {
-            TextureDesc::Path(v) => v
-                .try_load(assets)
-                .map(|v: Asset<DynamicImage>| (*v).to_owned()),
             TextureDesc::Content(v) => Ok((**v).clone()),
             TextureDesc::Color(v) => Ok(ImageBuffer::from_pixel(32, 32, *v).into()),
             TextureDesc::Processed(v) => {
-                let original = v.texture.load_image(assets)?;
-                let processed = v.processor.process(original);
-                Ok(processed)
-            }
-        }
-    }
-
-    async fn load_image_async(
-        &self,
-        assets: &ivy_assets::AssetCache,
-    ) -> anyhow::Result<DynamicImage> {
-        match self {
-            TextureDesc::Path(v) => v
-                .load_async(assets)
-                .await
-                .map(|v: Asset<DynamicImage>| (*v).to_owned())
-                .map_err(Into::into),
-            TextureDesc::Content(v) => Ok((**v).clone()),
-            TextureDesc::Color(v) => Ok(ImageBuffer::from_pixel(32, 32, *v).into()),
-            TextureDesc::Processed(v) => {
-                let original = v.texture.load_image(assets)?;
+                let original = v.texture.load_image()?;
                 let processed = v.processor.process(original);
                 Ok(processed)
             }
@@ -186,35 +145,6 @@ impl AssetDesc<DynamicImage> for TextureDesc {
     type Error = anyhow::Error;
 
     fn create(&self, assets: &ivy_assets::AssetCache) -> Result<Asset<DynamicImage>, Self::Error> {
-        match self {
-            TextureDesc::Path(v) => v.try_load(assets),
-            TextureDesc::Content(v) => Ok(v.clone()),
-            TextureDesc::Color(v) => Ok(assets.insert(ImageBuffer::from_pixel(32, 32, *v).into())),
-            TextureDesc::Processed(v) => {
-                let original = v.texture.load_image(assets)?;
-                let processed = v.processor.process(original);
-                Ok(assets.insert(processed))
-            }
-        }
-    }
-}
-
-impl AsyncAssetDesc<DynamicImage> for TextureDesc {
-    type Error = anyhow::Error;
-
-    async fn create(
-        &self,
-        assets: &ivy_assets::AssetCache,
-    ) -> Result<Asset<DynamicImage>, Self::Error> {
-        match self {
-            TextureDesc::Path(v) => v.load_async(assets).await.map_err(|v| v.into()),
-            TextureDesc::Content(v) => Ok(v.clone()),
-            TextureDesc::Color(v) => Ok(assets.insert(ImageBuffer::from_pixel(32, 32, *v).into())),
-            TextureDesc::Processed(v) => {
-                let original = v.texture.load_image_async(assets).await?;
-                let processed = v.processor.process(original);
-                Ok(assets.insert(processed))
-            }
-        }
+        Ok(assets.insert(self.load_image()?))
     }
 }

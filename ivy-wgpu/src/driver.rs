@@ -70,7 +70,7 @@ pub struct WinitEventHandler<'a> {
     window_attributes: WindowAttributes,
 }
 
-impl<'a> ApplicationHandler for WinitEventHandler<'a> {
+impl ApplicationHandler for WinitEventHandler<'_> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         tracing::info!("Received resume event");
 

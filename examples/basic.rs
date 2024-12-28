@@ -243,7 +243,7 @@ impl LogicLayer {
                 let sphere_mesh = MeshDesc::content(assets.load(&UvSpherePrimitive::default()));
                 let cube_mesh = MeshDesc::content(assets.load(&CubePrimitive));
 
-                for i in 0..0 {
+                for i in 0..8 {
                     let roughness = i as f32 / (7) as f32;
                     for j in 0..2 {
                         let metallic = j as f32;
@@ -279,7 +279,7 @@ impl LogicLayer {
                     }
                 }
 
-                for i in 0..0 {
+                for i in 0..8 {
                     let roughness = i as f32 / (7) as f32;
                     for j in 0..2 {
                         let metallic = j as f32;
@@ -316,7 +316,7 @@ impl LogicLayer {
                 }
 
                 tracing::info!("loading spine");
-                let document: Asset<Document> = assets.load_async("models/spine.glb").await;
+                let document: Asset<Document> = assets.from_path("models/spine.glb").await.unwrap();
                 let node = document
                     .find_node("Cube")
                     .context("Missing document node")
@@ -462,20 +462,6 @@ impl Layer for LogicLayer {
 
         Ok(())
     }
-}
-
-fn animate_system() -> BoxedSystem {
-    System::builder()
-        .with_query(Query::new((
-            animator().as_mut(),
-            delta_time()
-                .source(engine())
-                .expect("delta_time must be present"),
-        )))
-        .par_for_each(move |(animator, dt)| {
-            animator.step(dt.as_secs_f32());
-        })
-        .boxed()
 }
 
 fn point_light_gizmo_system() -> BoxedSystem {

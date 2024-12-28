@@ -92,7 +92,7 @@ impl std::ops::Deref for DocumentData {
 
 impl Document {
     async fn load(assets: &AssetCache, path: impl AsRef<Path>) -> anyhow::Result<Self> {
-        let bytes: Asset<Vec<u8>> = assets.try_load_async(path.as_ref()).await?;
+        let bytes: Asset<Vec<u8>> = assets.from_path(path).await?;
 
         let mut gltf = Gltf::from_slice(&bytes)?;
 

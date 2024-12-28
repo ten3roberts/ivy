@@ -1,10 +1,16 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::PathBuf,
+};
 
+use anyhow::Context;
 use glam::{Mat4, Quat};
-use gltf::{buffer, Document};
+use gltf::buffer;
 use itertools::Itertools;
-use ivy_assets::{Asset, AssetCache};
+use ivy_assets::{Asset, AssetCache, AsyncAssetDesc};
 use ivy_core::components::TransformBundle;
+
+use crate::Document;
 
 use super::{Animation, Channel, KeyFrameValues};
 
@@ -31,7 +37,7 @@ pub struct Skin {
 impl Skin {
     pub fn load_from_document(
         assets: &AssetCache,
-        document: &Document,
+        document: &gltf::Document,
         buffer_data: &[buffer::Data],
     ) -> anyhow::Result<Vec<Asset<Self>>> {
         // NOTE: each joint in a skin refers to a node in the scene hierarchy
@@ -195,9 +201,34 @@ impl Skin {
     pub fn animations(&self) -> &[Asset<Animation>] {
         &self.animations
     }
+}
 
-    // /// Get a reference to the skin's root.
-    // pub fn roots(&self) -> &[JointIndex] {
-    //     &self.roots
-    // }
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
+pub struct SkinDesc {
+    document: PathBuf,
+    node: String,
+}
+
+impl AsyncAssetDesc for SkinDesc {
+    type Output = Skin;
+    type Error = anyhow::Error;
+
+    async fn create(&self, assets: &AssetCache) -> Result<Asset<Skin>, Self::Error> {
+        let document: Asset<Document> = assets.from_path(&self.document).await?;
+
+        let skin = document
+            .find_node(&self.node)
+            .with_context(|| {
+                format!(
+                    "Node {:?} not found in document {:?}",
+                    self.node, self.document
+                )
+            })?
+            .skin()
+            .context("Missing skin")?;
+
+        Ok(skin)
+    }
 }
