@@ -1,7 +1,6 @@
 pub mod components;
 pub mod driver;
 pub mod events;
-pub mod gltf;
 pub mod layer;
 pub mod light;
 pub mod material;

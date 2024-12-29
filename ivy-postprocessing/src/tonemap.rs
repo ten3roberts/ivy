@@ -2,7 +2,7 @@ use ivy_wgpu::{
     rendergraph::{Dependency, Node, TextureHandle},
     types::{
         shader::{ShaderDesc, TargetDesc},
-        BindGroupBuilder, BindGroupLayoutBuilder, Shader,
+        BindGroupBuilder, BindGroupLayoutBuilder, RenderShader,
     },
     Gpu,
 };
@@ -14,7 +14,7 @@ use wgpu::{
 pub struct TonemapNode {
     input: TextureHandle,
     output: TextureHandle,
-    shader: Option<Shader>,
+    shader: Option<RenderShader>,
     layout: BindGroupLayout,
     bind_group: Option<BindGroup>,
     default_sampler: wgpu::Sampler,
@@ -61,7 +61,7 @@ impl Node for TonemapNode {
         });
 
         let shader = self.shader.get_or_insert_with(|| {
-            Shader::new(
+            RenderShader::new(
                 ctx.gpu,
                 &ShaderDesc::new(
                     "tonemap",

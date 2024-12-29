@@ -68,7 +68,7 @@ impl Default for ShadowMapConfig {
         Self {
             resolution: 2048,
             max_cascades: 4,
-            max_shadows: 4,
+            max_shadows: 8,
         }
     }
 }
@@ -132,6 +132,7 @@ impl PbrRenderGraphConfig {
         // TODO: extend with generic effects
         let needs_indirection_target = self.hdr_format.is_some() || self.bloom.is_some();
 
+        tracing::info!(?target_format);
         let final_color = if needs_indirection_target {
             render_graph.resources.insert_texture(ManagedTextureDesc {
                 label: format!("{}.final_color", self.label).into(),
@@ -364,7 +365,7 @@ impl PbrRenderGraphConfig {
             ),
         );
 
-        let light_manager = LightManager::new(gpu, shadow_maps, shadow_camera_buffer, 4);
+        let light_manager = LightManager::new(gpu, shadow_maps, shadow_camera_buffer, 16);
 
         render_graph.add_node(CameraNode::new(
             gpu,

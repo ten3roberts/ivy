@@ -1,6 +1,5 @@
 use glam::{UVec4, Vec2, Vec3, Vec4};
 use itertools::{izip, Itertools};
-use ivy_assets::Asset;
 use ivy_graphics::mesh::{
     MeshData, JOINT_INDEX_ATTRIBUTE, NORMAL_ATTRIBUTE, POSITION_ATTRIBUTE, TANGENT_ATTRIBUTE,
     TEX_COORD_ATTRIBUTE, WEIGHT_ATTRIBUTE,
@@ -10,7 +9,6 @@ use wgpu::{
 };
 
 use super::Gpu;
-use crate::material::PbrMaterial;
 
 #[repr(C)]
 #[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Debug, Clone)]
@@ -188,7 +186,6 @@ impl VertexDesc for Vertex2d {
 pub struct Primitive {
     pub first_index: u32,
     pub index_count: u32,
-    pub material: Asset<PbrMaterial>,
 }
 
 /// Flat mesh of vertices and indices

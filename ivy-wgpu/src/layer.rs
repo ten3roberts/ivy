@@ -17,15 +17,13 @@ use crate::{
 type OnInitFunc =
     Box<dyn FnOnce(&mut World, &AssetCache, &Gpu, Surface) -> anyhow::Result<Box<dyn Renderer>>>;
 
+type ModifyRenderGraphFunc = Box<
+    dyn Send + Sync + FnOnce(&mut World, &mut RenderGraph, &AssetCache, &Gpu) -> anyhow::Result<()>,
+>;
+
 /// Control the renderer externally
 pub enum RendererCommand {
-    ModifyRenderGraph(
-        Box<
-            dyn Send
-                + Sync
-                + FnOnce(&mut World, &mut RenderGraph, &AssetCache, &Gpu) -> anyhow::Result<()>,
-        >,
-    ),
+    ModifyRenderGraph(ModifyRenderGraphFunc),
     UpdateTexture {
         handle: TextureHandle,
         desc: ManagedTextureDesc,

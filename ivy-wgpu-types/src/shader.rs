@@ -90,11 +90,11 @@ impl<'a> ShaderDesc<'a> {
 
 /// Represents a graphics shader
 #[derive(Debug)]
-pub struct Shader {
+pub struct RenderShader {
     pipeline: RenderPipeline,
 }
 
-impl Shader {
+impl RenderShader {
     pub fn new(gpu: &Gpu, desc: &ShaderDesc) -> Self {
         // let shader = gpu
         //     .device

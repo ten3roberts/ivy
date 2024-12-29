@@ -1,26 +1,24 @@
 use flax::{component, Debuggable};
 use glam::Mat4;
-use ivy_assets::Asset;
 use winit::dpi::{LogicalPosition, LogicalSize};
 
 use crate::{
     driver::WindowHandle,
     light::{LightKind, LightParams},
-    material_desc::MaterialDesc,
+    material_desc::MaterialData,
     mesh_desc::MeshDesc,
     renderer::{shadowmapping::LightShadowData, EnvironmentData},
-    shader::ShaderPass,
 };
 
 component! {
     pub projection_matrix: Mat4 => [ Debuggable ],
 
     pub mesh: MeshDesc,
-    pub material: MaterialDesc,
-    pub forward_pass: Asset<ShaderPass>,
-    pub transparent_pass: Asset<ShaderPass>,
 
-    pub shadow_pass: Asset<ShaderPass>,
+    pub forward_pass: MaterialData,
+    pub transparent_pass: MaterialData,
+    pub shadow_pass: MaterialData,
+
 
     pub main_window: (),
 

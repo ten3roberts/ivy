@@ -1,6 +1,6 @@
 use ivy_core::{palette::Srgb, Bundle};
 
-use crate::components::{light_kind, light_params};
+use crate::components::{cast_shadow, light_kind, light_params};
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -68,6 +68,7 @@ impl LightKind {
 pub struct LightBundle {
     pub params: LightParams,
     pub kind: LightKind,
+    pub cast_shadow: bool,
 }
 
 impl Bundle for LightBundle {
@@ -75,5 +76,9 @@ impl Bundle for LightBundle {
         entity
             .set(light_params(), self.params)
             .set(light_kind(), self.kind);
+
+        if self.cast_shadow {
+            entity.set(cast_shadow(), ());
+        }
     }
 }

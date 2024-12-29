@@ -2,7 +2,7 @@ use glam::{Mat4, Vec3};
 use ivy_core::profiling::profile_function;
 use ivy_wgpu::{
     renderer::{CameraRenderer, UpdateContext},
-    types::{shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, Shader, TypedBuffer},
+    types::{shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, RenderShader, TypedBuffer},
     Gpu,
 };
 use wgpu::{
@@ -10,7 +10,7 @@ use wgpu::{
 };
 
 pub struct SkyboxRenderer {
-    shader: Option<Shader>,
+    shader: Option<RenderShader>,
     bind_group: wgpu::BindGroup,
     bind_group_layout: wgpu::BindGroupLayout,
     buffer: TypedBuffer<UniformData>,
@@ -81,7 +81,7 @@ impl CameraRenderer for SkyboxRenderer {
         profile_function!();
 
         let shader = self.shader.get_or_insert_with(|| {
-            Shader::new(
+            RenderShader::new(
                 ctx.gpu,
                 &ShaderDesc::new(
                     "skybox_shader",

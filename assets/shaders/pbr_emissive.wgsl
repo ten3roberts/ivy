@@ -1,11 +1,8 @@
-struct SkinnedVertexInput {
+struct VertexInput {
     @location(0) pos: vec3<f32>,
     @location(1) tex_coord: vec2<f32>,
     @location(2) normal: vec3<f32>,
     @location(3) tangent: vec4<f32>,
-    @location(4) joints: vec4<u32>,
-    @location(5) weights: vec4<f32>,
-
     @builtin(instance_index) instance: u32,
 }
 
@@ -36,28 +33,17 @@ struct Globals {
     fog_density: f32,
 }
 
-struct Light {
-    kind: u32,
-    direction: vec3<f32>,
-    position: vec3<f32>,
-    color: vec3<f32>,
-}
-
 struct MaterialData {
     roughness_factor: f32,
     metallic_factor: f32,
+    emissive_factor: f32,
 }
-
-const LIGHT_COUNT: u32 = 16;
 
 @group(0) @binding(0)
 var<uniform> globals: Globals;
 
 @group(2) @binding(0)
 var<storage> objects: array<Object>;
-
-@group(2) @binding(1)
-var<storage> joint_matrices: array<mat4x4<f32>>;
 
 // material
 @group(3) @binding(0)
@@ -73,33 +59,22 @@ var normal_texture: texture_2d<f32>;
 var mr_texture: texture_2d<f32>;
 
 @group(3) @binding(4)
-var ao_texture: texture_2d<f32>;
+var emissive_texture: texture_2d<f32>;
 
 @group(3) @binding(5)
-var displacement_texture: texture_2d<f32>;
-
-@group(3) @binding(6)
 var<uniform> material_data: MaterialData;
 
+const E: f32 = 2.718281828459;
+
 @vertex
-fn vs_main(in: SkinnedVertexInput) -> VertexOutput {
+fn vs_main(in: VertexInput) -> VertexOutput {
     var out: VertexOutput;
     let object = objects[in.instance];
-
-    var pos = vec3(0f);
-
-    for (var i = 0u; i < 4; i++) {
-        let joint: u32 = in.joints[i];
-        let weight: f32 = in.weights[i];
-
-        pos += (joint_matrices[joint] * vec4(in.pos, 1.0)).xyz * weight;
-    }
-
-    let world_position = object.world_matrix * vec4(pos, 1.0);
+    let world_position = object.world_matrix * vec4(in.pos, 1.0);
 
     let normal = normalize((object.world_matrix * vec4(in.normal, 0)).xyz);
     let tangent = normalize((object.world_matrix * vec4(in.tangent.xyz, 0)).xyz);
-    let bitangent = normalize(cross(tangent.xyz, normal)) * in.tangent.w;
+    let bitangent = normalize(cross(tangent, normal)) * in.tangent.w;
 
     let tbn = transpose(mat3x3(tangent, bitangent, normal));
 
@@ -122,15 +97,13 @@ fn vs_main(in: SkinnedVertexInput) -> VertexOutput {
 }
 
 #import pbr_base::{PbrLuminance, brdf_forward};
-
 const DISPLACEMENT_STRENGTH: f32 = 0.2f;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let albedo = textureSample(albedo_texture, material_sampler, in.tex_coord).rgb;
+    let albedo = textureSample(albedo_texture, material_sampler, in.tex_coord);
 
-    let ao = textureSample(ao_texture, material_sampler, in.tex_coord).r;
-    let displacement = textureSample(displacement_texture, material_sampler, in.tex_coord).r;
+    let emissive = textureSample(emissive_texture, material_sampler, in.tex_coord).rgb * material_data.emissive_factor;
 
     let tangent_normal = textureSample(normal_texture, material_sampler, in.tex_coord).rgb * 2f - 1f;
 
@@ -149,7 +122,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     var in_lum: PbrLuminance;
 
-    let world_pos = in.world_pos - DISPLACEMENT_STRENGTH * in.normal * (1f - displacement);
+    let world_pos = in.world_pos;
 
     in_lum.camera_dir = camera_dir;
     in_lum.tangent_camera_dir = tangent_camera_dir;
@@ -158,16 +131,16 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     in_lum.world_normal = world_normal;
     in_lum.tangent_normal = tangent_normal;
 
-    in_lum.albedo = albedo;
+    in_lum.albedo = albedo.rgb;
     in_lum.metallic = metallic;
     in_lum.roughness = roughness;
-    in_lum.ao = ao;
+    in_lum.ao = 1.0;
 
     in_lum.tbn = tbn;
     in_lum.view_pos = in.view_pos;
 
-    let luminance = brdf_forward(in_lum);
+    let luminance = brdf_forward(in_lum) + emissive;
 
     let color = mix(luminance, in.fog.rgb, in.fog.a);
-    return vec4(color, 1f);
+    return vec4(color, albedo.a);
 }

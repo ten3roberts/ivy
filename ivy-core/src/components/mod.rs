@@ -3,7 +3,7 @@ use std::time::Duration;
 use flax::{Component, ComponentMut, Debuggable, EntityBuilder, Fetch};
 use glam::{Mat4, Quat, Vec2, Vec3};
 
-use crate::{gizmos::Gizmos, time::Time, AsyncCommandBuffer, Bundle, Color};
+use crate::{gizmos::Gizmos, AsyncCommandBuffer, Bundle, Color};
 
 flax::component! {
     pub position: Vec3 => [Debuggable],
@@ -28,7 +28,8 @@ flax::component! {
     pub async_commandbuffer: AsyncCommandBuffer,
     pub request_capture_mouse: bool,
 
-    pub time: Time,
+    // Set by `ScheduleLayer`
+    pub elapsed_time: Duration,
     pub delta_time: Duration,
 
     pub engine,

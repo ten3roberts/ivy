@@ -1,9 +1,9 @@
-use std::{borrow::Cow, convert::Infallible, path::PathBuf};
+use std::{borrow::Cow, path::PathBuf};
 
 use anyhow::Context;
 use image::{ColorType, DynamicImage, GenericImageView, ImageBuffer, Rgba};
 use itertools::Itertools;
-use ivy_assets::{Asset, AssetCache, AssetDesc};
+use ivy_assets::{Asset, AssetDesc};
 use ivy_core::profiling::{profile_function, profile_scope};
 use wgpu::{
     BufferUsages, Extent3d, ImageCopyBuffer, ImageCopyTexture, ImageDataLayout, Origin3d, Texture,
@@ -35,7 +35,7 @@ impl Default for TextureFromImageDesc {
 }
 
 pub fn max_mip_levels(width: u32, height: u32) -> u32 {
-    (width.max(height) as f32).log2().ceil() as u32
+    (width.max(height) as f32).log2().floor() as u32 + 1
 }
 
 pub fn texture_from_image(
@@ -266,46 +266,6 @@ impl AssetDesc<Texture> for TextureFromPath {
                 TextureFromImageDesc {
                     label: self.path.display().to_string().into(),
                     format: self.format,
-                    ..Default::default()
-                },
-            )
-            .unwrap(),
-        ))
-    }
-}
-
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct DefaultNormalTexture;
-
-impl AssetDesc<Texture> for DefaultNormalTexture {
-    type Error = Infallible;
-
-    fn create(&self, assets: &AssetCache) -> Result<Asset<Texture>, Self::Error> {
-        assets.try_load(&TextureFromColor {
-            color: [128, 128, 255, 255],
-            format: wgpu::TextureFormat::Rgba8Unorm,
-        })
-    }
-}
-
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct TextureFromColor {
-    pub color: [u8; 4],
-    pub format: TextureFormat,
-}
-
-impl AssetDesc<Texture> for TextureFromColor {
-    type Error = Infallible;
-
-    fn create(&self, assets: &AssetCache) -> Result<Asset<Texture>, Infallible> {
-        Ok(assets.insert(
-            texture_from_image(
-                &assets.service(),
-                &DynamicImage::ImageRgba8(ImageBuffer::from_pixel(32, 32, image::Rgba(self.color))),
-                TextureFromImageDesc {
-                    format: self.format,
-                    mip_level_count: Some(1),
-                    label: "TextureFromColor".into(),
                     ..Default::default()
                 },
             )

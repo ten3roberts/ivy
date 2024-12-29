@@ -9,7 +9,9 @@ ivy-core = { path = "../ivy-core" }
 ivy-assets = { path = "../ivy-assets" }
 ivy-profiling = { path = "../ivy-profiling" }
 
+serde = { workspace = true, optional = true }
 
+either.workspace = true
 anyhow.workspace = true
 glam.workspace = true
 tracing.workspace = true

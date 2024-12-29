@@ -23,7 +23,7 @@ struct Globals {
     viewproj: mat4x4<f32>,
 }
 
-const LIGHT_COUNT: u32 = 4;
+const LIGHT_COUNT: u32 = 16;
 
 @group(0) @binding(0)
 var<uniform> globals: Globals;

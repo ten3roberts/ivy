@@ -1,6 +1,6 @@
 use std::convert::Infallible;
 
-use ivy_assets::{Asset, AssetDesc};
+use ivy_assets::{Asset, AssetCache, AssetDesc};
 use wgpu::Face;
 
 use crate::shader::ShaderPass;
@@ -50,7 +50,7 @@ impl AssetDesc<ShaderPass> for ShadowShaderDesc {
             label: "shadow_shader".into(),
             path: "../../assets/shaders/shadow.wgsl".into(),
             source: include_str!("../../assets/shaders/shadow.wgsl").into(),
-            cull_mode: Some(Face::Front),
+            cull_mode: Some(Face::Back),
         }))
     }
 }
@@ -67,6 +67,40 @@ impl AssetDesc<ShaderPass> for SkinnedShadowShaderDesc {
             path: "../../assets/shaders/skinned_shadow.wgsl".into(),
             source: include_str!("../../assets/shaders/skinned_shadow.wgsl").into(),
             cull_mode: Some(Face::Front),
+        }))
+    }
+}
+
+/// Not affected by light
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct UnlitShaderDesc;
+
+impl AssetDesc<ShaderPass> for UnlitShaderDesc {
+    type Error = Infallible;
+
+    fn create(&self, assets: &AssetCache) -> Result<Asset<ShaderPass>, Self::Error> {
+        Ok(assets.insert(ShaderPass {
+            label: "pbr_shader".into(),
+            path: "assets/shader/unlit.wgsl".into(),
+            source: include_str!("../../assets/shaders/unlit.wgsl").into(),
+            cull_mode: Some(Face::Back),
+        }))
+    }
+}
+
+/// Emissive textured pbr material
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct EmissiveShaderDesc;
+
+impl AssetDesc<ShaderPass> for EmissiveShaderDesc {
+    type Error = Infallible;
+
+    fn create(&self, assets: &AssetCache) -> Result<Asset<ShaderPass>, Self::Error> {
+        Ok(assets.insert(ShaderPass {
+            label: "emissive_shader".into(),
+            path: "assets/shader/pbr_emissive.wgsl".into(),
+            source: include_str!("../../assets/shaders/pbr_emissive.wgsl").into(),
+            cull_mode: Some(Face::Back),
         }))
     }
 }

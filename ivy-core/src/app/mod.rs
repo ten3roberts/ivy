@@ -58,7 +58,7 @@ impl App {
         self.event_registry.emit(
             &mut self.layers,
             &mut self.world,
-            &mut self.assets,
+            &self.assets,
             &TickEvent(delta),
         )
     }
@@ -76,7 +76,7 @@ impl App {
         self.event_registry.emit(
             &mut self.layers,
             &mut self.world,
-            &mut self.assets,
+            &self.assets,
             &PostInitEvent,
         )
     }

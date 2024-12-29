@@ -9,7 +9,7 @@ use std::any::type_name;
 use flax::{fetch::entity_refs, Component, EntityRef, Query, World};
 use glam::{Mat4, Vec3};
 use itertools::Itertools;
-use ivy_assets::{stored::Store, Asset, AssetCache};
+use ivy_assets::{stored::Store, AssetCache};
 use ivy_core::{
     components::{main_camera, world_transform},
     impl_for_tuples,
@@ -25,13 +25,11 @@ use wgpu::{
 };
 
 use crate::{
-    components::{environment_data, material, mesh, projection_matrix},
-    material::PbrMaterial,
-    material_desc::MaterialDesc,
+    components::{environment_data, mesh, projection_matrix},
+    material_desc::MaterialData,
     mesh_desc::MeshDesc,
     rendergraph::{Dependency, Node, TextureHandle, UpdateResult},
-    shader::ShaderPass,
-    types::{BindGroupBuilder, BindGroupLayoutBuilder, Shader, TypedBuffer},
+    types::{BindGroupBuilder, BindGroupLayoutBuilder, RenderShader, TypedBuffer},
     Gpu,
 };
 
@@ -548,44 +546,33 @@ impl CameraShaderData {
 
 pub struct RenderObjectBundle<'a> {
     pub mesh: MeshDesc,
-    pub material: MaterialDesc,
-    pub shaders: &'a [(Component<Asset<ShaderPass>>, Asset<ShaderPass>)],
+    pub materials: &'a [(Component<MaterialData>, MaterialData)],
 }
 
 impl<'a> RenderObjectBundle<'a> {
-    pub fn new(
-        mesh: MeshDesc,
-        material: MaterialDesc,
-        shaders: &'a [(Component<Asset<ShaderPass>>, Asset<ShaderPass>)],
-    ) -> Self {
-        Self {
-            mesh,
-            material,
-            shaders,
-        }
+    pub fn new(mesh: MeshDesc, materials: &'a [(Component<MaterialData>, MaterialData)]) -> Self {
+        Self { mesh, materials }
     }
 }
 
 impl Bundle for RenderObjectBundle<'_> {
     fn mount(self, entity: &mut flax::EntityBuilder) {
-        entity.set(mesh(), self.mesh).set(material(), self.material);
+        entity.set(mesh(), self.mesh);
 
-        for (pass, shader) in self.shaders {
-            entity.set(*pass, shader.clone());
+        for (pass, material) in self.materials {
+            entity.set(*pass, material.clone());
         }
     }
 }
 
 pub struct RendererStore {
-    pub materials: Store<PbrMaterial>,
-    pub shaders: Store<Shader>,
+    pub shaders: Store<RenderShader>,
     pub bind_groups: Store<BindGroup>,
 }
 
 impl RendererStore {
     pub fn new() -> Self {
         Self {
-            materials: Store::new(),
             shaders: Store::new(),
             bind_groups: Store::new(),
         }

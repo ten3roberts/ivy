@@ -9,6 +9,6 @@ pub mod typed_buffer;
 
 pub use bind_groups::{BindGroupBuilder, BindGroupLayoutBuilder};
 pub use gpu::{Gpu, Surface};
-pub use shader::Shader;
+pub use shader::RenderShader;
 pub use typed_buffer::TypedBuffer;
 pub use winit::dpi::PhysicalSize;

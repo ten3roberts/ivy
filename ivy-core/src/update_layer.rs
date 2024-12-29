@@ -10,7 +10,7 @@ use ivy_assets::AssetCache;
 
 use crate::{
     app::{PostInitEvent, TickEvent},
-    components::{delta_time, engine},
+    components::{delta_time, elapsed_time, engine},
     layer::events::EventRegisterContext,
     Layer,
 };
@@ -50,16 +50,19 @@ pub trait TimeStep: 'static + Display + Copy {
 #[derive(Debug, Clone, Copy)]
 pub struct PerTick {
     current_time: Instant,
+    elapsed: Duration,
 }
 
 impl TimeStep for PerTick {
     fn step(&mut self, world: &mut World, schedule: &mut Schedule) -> anyhow::Result<()> {
         let new_time = Instant::now();
-        let elapsed = new_time.duration_since(self.current_time);
+        let dt = new_time.duration_since(self.current_time);
 
         self.current_time = new_time;
+        self.elapsed += dt;
 
-        world.set(engine(), delta_time(), elapsed)?;
+        world.set(engine(), delta_time(), dt)?;
+        world.set(engine(), elapsed_time(), self.elapsed)?;
         schedule.execute_seq(world)?;
         world.set(engine(), delta_time(), Duration::ZERO)?;
 
@@ -79,6 +82,7 @@ pub struct Startup;
 impl TimeStep for Startup {
     fn step(&mut self, world: &mut World, schedule: &mut Schedule) -> anyhow::Result<()> {
         world.set(engine(), delta_time(), Duration::ZERO)?;
+        world.set(engine(), elapsed_time(), Duration::ZERO)?;
         schedule.execute_seq(world)?;
 
         Ok(())
@@ -96,6 +100,7 @@ pub struct FixedTimeStep {
     delta_time: f64,
     current_time: Instant,
     acc: f64,
+    elapsed: Duration,
 }
 
 impl FixedTimeStep {
@@ -104,6 +109,7 @@ impl FixedTimeStep {
             delta_time: dt,
             current_time: Instant::now(),
             acc: 0.0,
+            elapsed: Duration::ZERO,
         }
     }
 
@@ -128,8 +134,11 @@ impl TimeStep for FixedTimeStep {
         )?;
 
         if self.acc > self.delta_time {
+            world.set(engine(), elapsed_time(), self.elapsed)?;
             // while self.acc > self.delta_time {
             schedule.execute_seq(world)?;
+
+            self.elapsed += Duration::from_secs_f64(self.delta_time);
             self.acc -= self.delta_time;
         }
 
@@ -208,6 +217,7 @@ impl ScheduleSetBuilder {
         Self {
             per_tick: TimeStepScheduleBuilder::new(PerTick {
                 current_time: Instant::now(),
+                elapsed: Duration::ZERO,
             }),
             fixed: TimeStepScheduleBuilder::new(fixed_timestep),
             startup: TimeStepScheduleBuilder::new(Startup),

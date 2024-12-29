@@ -1,16 +1,12 @@
-#![allow(non_snake_case)]
-use std::time::{Duration, Instant};
-
 use downcast_rs::{impl_downcast, Downcast};
 use flax::{Entity, Schedule, World};
 use ivy_assets::AssetCache;
 
 use crate::{
     app::TickEvent,
-    components::{async_commandbuffer, engine, gizmos, request_capture_mouse, time},
+    components::{async_commandbuffer, engine, gizmos, request_capture_mouse},
     gizmos::Gizmos,
     systems::{apply_async_commandbuffers, update_transform_system},
-    time::Time,
     AsyncCommandBuffer,
 };
 
@@ -103,7 +99,6 @@ impl Layer for EngineLayer {
         Entity::builder()
             .set(async_commandbuffer(), self.cmd.clone())
             .set(gizmos(), Gizmos::new())
-            .set(time(), Time::new(Instant::now(), Duration::ZERO))
             .set(request_capture_mouse(), false)
             .append_to(world, engine())?;
 

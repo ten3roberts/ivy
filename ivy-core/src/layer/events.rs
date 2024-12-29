@@ -105,7 +105,7 @@ impl EventRegistry {
     }
 
     fn register_global(&mut self, layer_index: usize, callback: usize) {
-        for (_, dispatcher) in &mut self.dispatchers {
+        for dispatcher in self.dispatchers.values_mut() {
             dispatcher.register(layer_index, callback)
         }
 

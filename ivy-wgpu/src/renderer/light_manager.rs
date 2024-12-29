@@ -57,7 +57,7 @@ impl LightManager {
     pub fn update(&mut self, ctx: &NodeUpdateContext) -> anyhow::Result<()> {
         self.bind_group.get_or_insert_with(|| {
             let shadow_sampler = ctx.gpu.device.create_sampler(&SamplerDescriptor {
-                label: "shadow sampler".into(),
+                label: "shadow_sampler".into(),
                 address_mode_u: wgpu::AddressMode::ClampToEdge,
                 address_mode_v: wgpu::AddressMode::ClampToEdge,
                 address_mode_w: wgpu::AddressMode::ClampToEdge,

@@ -6,7 +6,7 @@ use ivy_wgpu::{
     rendergraph::{Dependency, Node, TextureHandle},
     types::{
         shader::{ShaderDesc, TargetDesc},
-        BindGroupBuilder, BindGroupLayoutBuilder, Shader, TypedBuffer,
+        BindGroupBuilder, BindGroupLayoutBuilder, RenderShader, TypedBuffer,
     },
     Gpu,
 };
@@ -32,9 +32,9 @@ pub struct BloomNode {
     mip_level_count: u32,
     data: Option<Data>,
 
-    downsample_shader: Shader,
-    upsample_shader: Shader,
-    mix_shader: Shader,
+    downsample_shader: RenderShader,
+    upsample_shader: RenderShader,
+    mix_shader: RenderShader,
 
     sampler: Sampler,
     filter_radius: f32,
@@ -54,7 +54,7 @@ impl BloomNode {
             .bind_uniform_buffer(ShaderStages::FRAGMENT)
             .build(gpu);
 
-        let downsample_shader = Shader::new(
+        let downsample_shader = RenderShader::new(
             gpu,
             &ShaderDesc::new(
                 "bloom_downsample",
@@ -73,7 +73,7 @@ impl BloomNode {
             .with_bind_group_layouts(&[&layout]),
         );
 
-        let upsample_shader = Shader::new(
+        let upsample_shader = RenderShader::new(
             gpu,
             &ShaderDesc::new(
                 "bloom_upsample",
@@ -98,7 +98,7 @@ impl BloomNode {
             .bind_sampler(ShaderStages::FRAGMENT)
             .build(gpu);
 
-        let mix_shader = Shader::new(
+        let mix_shader = RenderShader::new(
             gpu,
             &ShaderDesc::new(
                 "bloom_mix",
@@ -112,7 +112,7 @@ impl BloomNode {
                     sample_count: 1,
                 },
             )
-            .with_bind_group_layouts(&[&layout]),
+            .with_bind_group_layouts(&[&mix_layout]),
         );
         let sampler = gpu.device.create_sampler(&SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::ClampToEdge,

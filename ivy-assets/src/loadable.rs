@@ -1,10 +1,10 @@
-use std::{future::Future, path::Path};
+use std::{collections::BTreeMap, future::Future, path::Path};
 
-use serde::de::DeserializeOwned;
+use futures::{stream, StreamExt, TryStreamExt};
 
 use crate::{
     fs::{AssetPath, AsyncAssetFromPath, BytesFromPath},
-    Asset, AssetCache,
+    Asset, AssetCache, AsyncAssetDesc,
 };
 
 /// Represents a type that can be loaded from an offline descriptor
@@ -51,10 +51,44 @@ impl<T: Load> LoadWithPath for T {
     }
 }
 
+impl<T> Load for Vec<T>
+where
+    T: Load,
+{
+    type Output = Vec<T::Output>;
+
+    type Error = T::Error;
+
+    async fn load(self, assets: &AssetCache) -> Result<Self::Output, Self::Error> {
+        stream::iter(self)
+            .then(|item| item.load(assets))
+            .try_collect()
+            .await
+    }
+}
+
+impl<K, V> Load for BTreeMap<K, V>
+where
+    K: 'static + Send + Sync + Ord,
+    V: Load,
+{
+    type Output = BTreeMap<K, V::Output>;
+
+    type Error = V::Error;
+
+    async fn load(self, assets: &AssetCache) -> Result<Self::Output, Self::Error> {
+        stream::iter(self)
+            .then(|(k, v)| async move { Ok((k, v.load(assets).await?)) })
+            .try_collect()
+            .await
+    }
+}
+
+#[cfg(feature = "serde")]
 impl<V> AsyncAssetFromPath for V
 where
     V: 'static + ResourceDescriptor + Send + Sync,
-    V::Desc: DeserializeOwned + LoadWithPath<Output = V>,
+    V::Desc: serde::de::DeserializeOwned + LoadWithPath<Output = V>,
     <V::Desc as LoadWithPath>::Error: Into<anyhow::Error>,
 {
     type Error = anyhow::Error;
@@ -68,5 +102,20 @@ where
                 .await
                 .map_err(Into::into)?,
         ))
+    }
+}
+
+impl<V> Load for V
+where
+    V: 'static + AsyncAssetDesc + Send + Sync,
+    V::Error: std::fmt::Debug + std::fmt::Display,
+    // V::Desc: DeserializeOwned + LoadWithPath<Output = V>,
+    // <V::Desc as LoadWithPath>::Error: Into<anyhow::Error>,
+{
+    type Output = Asset<<Self as AsyncAssetDesc>::Output>;
+    type Error = anyhow::Error;
+
+    async fn load(self, assets: &AssetCache) -> Result<Asset<V::Output>, Self::Error> {
+        assets.try_load_async(&self).await.map_err(Into::into)
     }
 }

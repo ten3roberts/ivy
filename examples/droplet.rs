@@ -88,7 +88,6 @@ async fn setup_objects(cmd: AsyncCommandBuffer, assets: AssetCache) -> anyhow::R
         .node(0)
         .unwrap()
         .mount(
-            &assets,
             &mut Entity::builder(),
             &NodeMountOptions {
                 skip_empty_children: true,

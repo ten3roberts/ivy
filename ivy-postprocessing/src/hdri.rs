@@ -13,7 +13,7 @@ use ivy_wgpu::{
     rendergraph::{Dependency, Node, UpdateResult},
     types::{
         shader::{ShaderDesc, TargetDesc},
-        BindGroupBuilder, BindGroupLayoutBuilder, PhysicalSize, Shader, TypedBuffer,
+        BindGroupBuilder, BindGroupLayoutBuilder, PhysicalSize, RenderShader, TypedBuffer,
     },
     Gpu,
 };
@@ -179,7 +179,7 @@ impl HdriProcessor {
             })
             .collect_vec();
 
-        let shader = Shader::new(
+        let shader = RenderShader::new(
             gpu,
             &ShaderDesc::new(
                 "hdri_project",
@@ -280,7 +280,7 @@ impl HdriProcessor {
             })
             .collect_vec();
 
-        let shader = Shader::new(
+        let shader = RenderShader::new(
             gpu,
             &ShaderDesc::new(
                 "diffuse_irradiance",
@@ -374,7 +374,7 @@ impl HdriProcessor {
             })
             .collect_vec();
 
-        let shader = Shader::new(
+        let shader = RenderShader::new(
             gpu,
             &ShaderDesc::new(
                 "specular_ibl",
@@ -426,7 +426,7 @@ impl HdriProcessor {
     }
 
     pub fn process_brdf_lookup(&self, gpu: &Gpu, encoder: &mut CommandEncoder, dest: &Texture) {
-        let shader = Shader::new(
+        let shader = RenderShader::new(
             gpu,
             &ShaderDesc::new(
                 "brdf_lookup",

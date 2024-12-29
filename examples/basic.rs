@@ -1,11 +1,14 @@
-use std::f32::consts::PI;
+use std::f32::consts::{PI, TAU};
 
-use anyhow::Context;
+use color_eyre::owo_colors::OwoColorize;
 use flax::{
-    BoxedSystem, Component, Entity, EntityBuilder, FetchExt, Query, QueryBorrow, System, World,
+    components::child_of, BoxedSystem, Component, Entity, FetchExt, Query, QueryBorrow, System,
+    World,
 };
-use glam::{vec3, Mat4, Quat, Vec3};
-use ivy_assets::{Asset, AssetCache};
+use glam::{vec3, EulerRot, Mat4, Quat, Vec3};
+use image::{DynamicImage, Rgb, Rgba};
+use itertools::Either;
+use ivy_assets::{fs::AssetPath, loadable::Load, Asset, AssetCache};
 use ivy_core::{
     app::PostInitEvent,
     gizmos,
@@ -16,45 +19,43 @@ use ivy_core::{
     App, EngineLayer, EntityBuilderExt, Layer,
 };
 use ivy_engine::{
-    async_commandbuffer, delta_time, engine, main_camera, world_transform, RigidBodyBundle,
-    TransformBundle,
+    async_commandbuffer, elapsed_time, engine, main_camera, rotation, world_transform,
+    RigidBodyBundle, TransformBundle,
 };
 use ivy_game::{
     free_camera::{setup_camera, FreeCameraPlugin},
     ray_picker::RayPickingPlugin,
 };
-use ivy_gltf::{
-    animation::{
-        player::{AnimationPlayer, Animator},
-        plugin::AnimationPlugin,
-    },
-    components::animator,
-    Document,
-};
+use ivy_gltf::animation::plugin::AnimationPlugin;
+use ivy_graphics::texture::{ColorChannel, MetallicRoughnessProcessor, TextureData, TextureDesc};
 use ivy_input::layer::InputLayer;
-use ivy_physics::{components::gravity_influence, ColliderBundle, GizmoSettings, PhysicsPlugin};
+use ivy_physics::{ColliderBundle, GizmoSettings, PhysicsPlugin};
 use ivy_postprocessing::preconfigured::{
-    pbr::PbrRenderGraphConfig, SurfacePbrPipelineDesc, SurfacePbrRenderer,
+    pbr::{PbrRenderGraphConfig, SkyboxConfig},
+    SurfacePbrPipelineDesc, SurfacePbrRenderer,
 };
-use ivy_scene::{GltfNodeExt, NodeMountOptions};
 use ivy_wgpu::{
     components::{
         environment_data, forward_pass, light_kind, light_params, projection_matrix, shadow_pass,
+        transparent_pass,
     },
     driver::WinitDriver,
     events::ResizedEvent,
     layer::GraphicsLayer,
-    light::{LightKind, LightParams},
-    material_desc::{MaterialData, MaterialDesc},
+    light::{LightBundle, LightKind, LightParams},
+    material_desc::{
+        MaterialData, MaterialDesc, PbrEmissiveMaterialData, PbrMaterialData, PbrMaterialDesc,
+    },
     mesh_desc::MeshDesc,
-    primitives::{generate_plane, CubePrimitive, UvSpherePrimitive},
+    primitives::{generate_plane, UvSpherePrimitive},
     renderer::{EnvironmentData, RenderObjectBundle},
-    shaders::{PbrShaderDesc, ShadowShaderDesc},
 };
-use rapier3d::prelude::{RigidBodyType, SharedShape};
+use rapier3d::prelude::SharedShape;
 use tracing::Instrument;
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
+use violet::palette::{Hsl, IntoColor};
+use wgpu::TextureFormat;
 use winit::{dpi::LogicalSize, window::WindowAttributes};
 
 const ENABLE_SKYBOX: bool = true;
@@ -85,14 +86,16 @@ pub fn main() -> anyhow::Result<()> {
                 gpu,
                 surface,
                 SurfacePbrPipelineDesc {
-                    // hdri: Some(Box::new("hdris/lauter_waterfall_4k.hdr")),
                     pbr_config: PbrRenderGraphConfig {
-                        shadow_map_config: None,
-                        msaa: None,
-                        bloom: None,
-                        skybox: None,
-                        hdr_format: None,
                         label: "basic".into(),
+                        shadow_map_config: Some(Default::default()),
+                        msaa: Some(Default::default()),
+                        bloom: Some(Default::default()),
+                        skybox: Some(SkyboxConfig {
+                            hdri: Box::new(AssetPath::new("hdris/EveningSkyHDRI035B_8K-HDR.exr")),
+                            format: TextureFormat::Rgba16Float,
+                        }),
+                        hdr_format: Some(wgpu::TextureFormat::Rgba16Float),
                     },
                     ..Default::default()
                 },
@@ -110,6 +113,7 @@ pub fn main() -> anyhow::Result<()> {
                         .with_gravity(-Vec3::Y * 9.81)
                         .with_gizmos(GizmoSettings { rigidbody: true }),
                 )
+                .with_plugin(RotateSpotlightPlugin)
                 .with_plugin(RayPickingPlugin),
         )
         .run()
@@ -159,267 +163,222 @@ impl LogicLayer {
         const FRICTION: f32 = 0.5;
         const RESTITUTION: f32 = 0.1;
 
-        async_std::task::spawn({
-            let cmd = cmd.clone();
-            let assets = assets.clone();
-            async move {
-                let shader = assets.load(&PbrShaderDesc);
-                let sphere_mesh = MeshDesc::content(assets.load(&UvSpherePrimitive::default()));
-                // let materials: Asset<Document> = assets.load_async("textures/materials.glb").await;
+        let future = async move {
+            let plane_mesh = MeshDesc::content(assets.insert(generate_plane(8.0, Vec3::Y)));
 
-                // {
-                //     let mut cmd = cmd.lock();
+            let texture_group = "textures/BaseCollection/Sand";
+            let albedo = AssetPath::new(format!("{texture_group}/albedo.png"));
 
-                //     for (i, material) in materials.materials().enumerate() {
-                //         cmd.spawn(
-                //             Entity::builder()
-                //                 .mount(TransformBundle::new(
-                //                     vec3(0.0 + i as f32 * 2.0, 1.0, 12.0),
-                //                     Quat::IDENTITY,
-                //                     Vec3::ONE * 0.5,
-                //                 ))
-                //                 .mount(RenderObjectBundle {
-                //                     mesh: sphere_mesh.clone(),
-                //                     material: material.into(),
-                //                     shaders: &[(forward_pass(), shader.clone())],
-                //                 })
-                //                 .mount(RigidBodyBundle::dynamic())
-                //                 .mount(
-                //                     ColliderBundle::new(SharedShape::ball(0.5))
-                //                         .with_density(DENSITY)
-                //                         .with_restitution(RESTITUTION)
-                //                         .with_friction(FRICTION),
-                //                 ),
-                //         );
-                //     }
-                // }
-            }
-        });
+            let normal = AssetPath::new(format!("{texture_group}/normal.png"));
 
-        async_std::task::spawn(
-            async move {
-                let shader = assets.load(&PbrShaderDesc);
+            let roughness = AssetPath::new(format!("{texture_group}/roughness.png"));
 
-                let plane_mesh = MeshDesc::content(assets.insert(generate_plane(8.0, Vec3::Y)));
+            let ao = AssetPath::new(format!("{texture_group}/ao.png"));
 
-                let texture_group = "textures/BaseCollection/ConcreteTiles/Concrete007_2K-PNG";
-                let plane_material = MaterialDesc::content(
-                    MaterialData::new().with_metallic_factor(0.0),
-                    // .with_albedo(TextureDesc::path(format!("{texture_group}_Color.png")))
-                    // .with_normal(TextureDesc::path(format!("{texture_group}_NormalGL.png")))
-                    // .with_metallic_roughness(TextureDesc::path(format!(
-                    //     "{texture_group}_Roughness.png"
-                    // )))
-                    // .with_ambient_occlusion(TextureDesc::path(format!(
-                    //     "{texture_group}_AmbientOcclusion.png"
-                    // )))
-                    // .with_displacement(TextureDesc::path(format!(
-                    //     "{texture_group}_Displacement.png"
-                    // ))),
-                );
+            let displacement = AssetPath::new(format!("{texture_group}/displacement.png"));
 
-                cmd.lock().spawn(
-                    Entity::builder()
-                        .mount(TransformBundle::new(
-                            Vec3::ZERO,
-                            Quat::IDENTITY,
-                            Vec3::ONE * 2.0,
-                        ))
-                        .mount(RenderObjectBundle {
-                            mesh: plane_mesh.clone(),
-                            material: plane_material.clone(),
-                            shaders: &[(forward_pass(), shader.clone())],
-                        })
-                        .mount(RigidBodyBundle::fixed())
-                        .mount(
-                            ColliderBundle::new(SharedShape::cuboid(16.0, 0.01, 16.0))
-                                .with_density(DENSITY)
-                                .with_restitution(RESTITUTION)
-                                .with_friction(FRICTION),
-                        )
-                        .set(shadow_pass(), assets.load(&ShadowShaderDesc)),
-                );
-
-                let sphere_mesh = MeshDesc::content(assets.load(&UvSpherePrimitive::default()));
-                let cube_mesh = MeshDesc::content(assets.load(&CubePrimitive));
-
-                for i in 0..8 {
-                    let roughness = i as f32 / (7) as f32;
-                    for j in 0..2 {
-                        let metallic = j as f32;
-
-                        let plastic_material = MaterialDesc::content(
-                            MaterialData::new()
-                                .with_metallic_factor(metallic)
-                                .with_roughness_factor(roughness),
-                        );
-
-                        cmd.lock().spawn(
-                            Entity::builder()
-                                .mount(TransformBundle::new(
-                                    vec3(0.0 + i as f32 * 2.0, 1.0, 5.0 + 4.0 * j as f32),
-                                    Quat::IDENTITY,
-                                    Vec3::ONE * 0.5,
-                                ))
-                                .mount(RenderObjectBundle {
-                                    mesh: sphere_mesh.clone(),
-                                    material: plastic_material.clone(),
-                                    shaders: &[(forward_pass(), shader.clone())],
-                                })
-                                .mount(RigidBodyBundle::new(RigidBodyType::Dynamic))
-                                .mount(
-                                    ColliderBundle::new(SharedShape::ball(0.5))
-                                        .with_density(DENSITY)
-                                        .with_restitution(RESTITUTION)
-                                        .with_friction(FRICTION),
-                                )
-                                .set(gravity_influence(), 1.0)
-                                .set(shadow_pass(), assets.load(&ShadowShaderDesc)),
-                        );
-                    }
-                }
-
-                for i in 0..8 {
-                    let roughness = i as f32 / (7) as f32;
-                    for j in 0..2 {
-                        let metallic = j as f32;
-
-                        let plastic_material = MaterialDesc::content(
-                            MaterialData::new()
-                                .with_metallic_factor(metallic)
-                                .with_roughness_factor(roughness),
-                        );
-
-                        cmd.lock().spawn(
-                            Entity::builder()
-                                .mount(TransformBundle::new(
-                                    vec3(0.0 + i as f32 * 2.0, 2.0, 5.1 + 4.0 * j as f32),
-                                    Quat::IDENTITY,
-                                    Vec3::ONE * 0.5,
-                                ))
-                                .mount(RenderObjectBundle {
-                                    mesh: cube_mesh.clone(),
-                                    material: plastic_material.clone(),
-                                    shaders: &[(forward_pass(), shader.clone())],
-                                })
-                                .set(gravity_influence(), 1.0)
-                                .mount(RigidBodyBundle::dynamic())
-                                .mount(
-                                    ColliderBundle::new(SharedShape::cuboid(0.5, 0.5, 0.5))
-                                        .with_density(DENSITY)
-                                        .with_restitution(RESTITUTION)
-                                        .with_friction(FRICTION),
-                                )
-                                .set(shadow_pass(), assets.load(&ShadowShaderDesc)),
-                        );
-                    }
-                }
-
-                tracing::info!("loading spine");
-                let document: Asset<Document> = assets.from_path("models/spine.glb").await.unwrap();
-                let node = document
-                    .find_node("Cube")
-                    .context("Missing document node")
-                    .unwrap();
-
-                let skin = node.skin().unwrap();
-                let animation = skin.animations()[0].clone();
-
-                let mut animator = Animator::new();
-                animator.start_animation(AnimationPlayer::new(animation));
-
-                let root: EntityBuilder = node
-                    .mount(
-                        &assets,
-                        &mut Entity::builder(),
-                        &NodeMountOptions {
-                            skip_empty_children: true,
-                        },
-                    )
-                    .mount(TransformBundle::new(
-                        vec3(0.0, 0.0, 2.0),
-                        Quat::IDENTITY,
-                        Vec3::ONE,
+            let plane_material = MaterialDesc::PbrMaterial(
+                PbrMaterialDesc::new()
+                    .with_metallic_factor(0.0)
+                    .with_albedo(TextureDesc::Path(albedo))
+                    .with_normal(TextureDesc::Path(normal))
+                    .with_metallic_roughness(TextureDesc::Path(roughness).process(
+                        MetallicRoughnessProcessor::new(
+                            Either::Right(0),
+                            Either::Left(ColorChannel::Red),
+                        ),
                     ))
-                    .set(ivy_gltf::components::animator(), animator)
-                    .into();
+                    .with_ambient_occlusion(TextureDesc::Path(ao))
+                    .with_displacement(TextureDesc::Path(displacement)),
+            )
+            .load(&assets)
+            .await?;
 
-                cmd.lock().spawn(root);
+            cmd.lock().spawn(
+                Entity::builder()
+                    .mount(TransformBundle::new(
+                        Vec3::ZERO,
+                        Quat::IDENTITY,
+                        Vec3::ONE * 2.0,
+                    ))
+                    .mount(RenderObjectBundle::new(
+                        plane_mesh.clone(),
+                        &[
+                            (forward_pass(), plane_material),
+                            (shadow_pass(), MaterialData::ShadowMaterial),
+                        ],
+                    ))
+                    .mount(RigidBodyBundle::fixed())
+                    .mount(
+                        ColliderBundle::new(SharedShape::cuboid(16.0, 0.01, 16.0))
+                            .with_density(DENSITY)
+                            .with_restitution(RESTITUTION)
+                            .with_friction(FRICTION),
+                    ),
+            );
 
-                // let document: Asset<Document> = assets.load_async("models/crate.glb").await;
-                // let node = document
-                //     .find_node("Cube")
-                //     .context("Missing document node")
-                //     .unwrap();
+            let sphere_mesh = MeshDesc::content(assets.load(&UvSpherePrimitive::default()));
 
-                // let root: EntityBuilder = node
-                //     .mount(
-                //         &assets,
-                //         &mut Entity::builder(),
-                //         &NodeMountOptions {
-                //             skip_empty_children: true,
-                //         },
-                //     )
-                //     .mount(TransformBundle::new(
-                //         vec3(0.0, 1.0, -2.0),
-                //         Quat::IDENTITY,
-                //         Vec3::ONE,
-                //     ))
-                //     .mount(RigidBodyBundle::dynamic())
-                //     .mount(
-                //         ColliderBundle::new(SharedShape::cuboid(1.0, 1.0, 1.0))
-                //             .with_density(DENSITY / 2.0)
-                //             .with_restitution(RESTITUTION)
-                //             .with_friction(FRICTION),
-                //     )
-                //     .into();
+            let unlit_material = MaterialData::PbrMaterial(
+                PbrMaterialData::new()
+                    .with_metallic_factor(1.0)
+                    .with_roughness_factor(0.1)
+                    .with_albedo(TextureData::Color(Rgba([255, 255, 255, 128]))),
+            );
+            Entity::builder()
+                .mount(TransformBundle::default().with_position(vec3(5.0, 2.0, 0.0)))
+                .mount(RenderObjectBundle::new(
+                    sphere_mesh.clone(),
+                    &[
+                        (transparent_pass(), unlit_material.clone()),
+                        (shadow_pass(), MaterialData::ShadowMaterial),
+                    ],
+                ))
+                .spawn_into(&mut cmd.lock());
 
-                // cmd.lock().spawn(root);
+            let albedo = assets
+                .from_path("textures/BaseCollection/Porcelein/albedo.png")
+                .await?;
+
+            let normal = assets
+                .from_path("textures/BaseCollection/Porcelein/normal.png")
+                .await?;
+
+            let roughness: Asset<DynamicImage> = assets
+                .from_path("textures/BaseCollection/Porcelein/roughness.png")
+                .await?;
+
+            let emissive_material = MaterialData::EmissiveMaterial(PbrEmissiveMaterialData::new(
+                PbrMaterialData::new()
+                    .with_albedo(TextureData::Content(albedo))
+                    .with_normal(TextureData::Content(normal))
+                    .with_metallic_roughness(TextureData::Content(roughness.clone()).process(
+                        MetallicRoughnessProcessor::new(
+                            Either::Right(0),
+                            Either::Left(ColorChannel::Red),
+                        ),
+                    )),
+                TextureData::Content(roughness),
+                50.0,
+            ));
+            Entity::builder()
+                .mount(
+                    TransformBundle::default()
+                        .with_position(vec3(-5.0, 2.0, 0.0))
+                        .with_scale(Vec3::splat(0.25)),
+                )
+                .mount(RenderObjectBundle::new(
+                    sphere_mesh.clone(),
+                    &[
+                        (forward_pass(), emissive_material.clone()),
+                        (shadow_pass(), MaterialData::ShadowMaterial),
+                    ],
+                ))
+                .mount(LightBundle {
+                    params: LightParams::new(Srgb::new(1.0, 1.0, 1.0), 2.0),
+                    kind: LightKind::Point,
+                    cast_shadow: false,
+                })
+                .spawn_into(&mut cmd.lock());
+
+            let roughness_count = 16;
+            for i in 0..roughness_count {
+                let roughness = i as f32 / (roughness_count - 1) as f32;
+                for j in 0..2 {
+                    let metallic = j as f32;
+
+                    let plastic_material = MaterialData::PbrMaterial(
+                        PbrMaterialData::new()
+                            .with_metallic_factor(metallic)
+                            .with_roughness_factor(roughness),
+                    );
+
+                    let phi = (i as f32 / roughness_count as f32) * TAU
+                        + j as f32 * PI / roughness_count as f32;
+
+                    let radius = 8.0 + j as f32 * 3.0;
+                    cmd.lock().spawn(
+                        Entity::builder()
+                            .mount(TransformBundle::default().with_position(vec3(
+                                phi.cos() * radius,
+                                1.0,
+                                phi.sin() * radius,
+                            )))
+                            .mount(RenderObjectBundle::new(
+                                sphere_mesh.clone(),
+                                &[
+                                    (forward_pass(), plastic_material.clone()),
+                                    (shadow_pass(), MaterialData::ShadowMaterial),
+                                ],
+                            )),
+                    );
+                }
             }
-            .instrument(tracing::debug_span!("load_assets")),
-        );
+
+            anyhow::Ok(())
+        };
+
+        async_std::task::spawn(future.instrument(tracing::debug_span!("load_assets")));
 
         Ok(())
     }
+}
 
-    fn setup_objects(&mut self, world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
-        self.setup_assets(world, assets)?;
+struct RotateSpotlightPlugin;
 
-        // Entity::builder()
-        //     .mount(
-        //         TransformBundle::default()
-        //             .with_position(Vec3::Y * 5.0)
-        //             .with_rotation(Quat::from_euler(EulerRot::YXZ, 0.5, -1.0, 0.0)),
-        //     )
-        //     .set(
-        //         light_params(),
-        //         LightParams::new(Srgb::new(1.0, 1.0, 1.0), 1.0),
-        //     )
-        //     .set(light_kind(), LightKind::Directional)
-        //     .set_default(cast_shadow())
-        //     .spawn(world);
+impl Plugin for RotateSpotlightPlugin {
+    fn install(
+        &self,
+        world: &mut World,
+        _: &AssetCache,
+        schedules: &mut ScheduleSetBuilder,
+    ) -> anyhow::Result<()> {
+        flax::component! {
+            rotate_light: Quat,
+        }
 
-        Entity::builder()
-            .mount(
-                TransformBundle::default()
-                    .with_position(vec3(0.0, 5.0, -5.0))
-                    .with_rotation(Quat::from_axis_angle(Vec3::X, PI + 0.5)),
-            )
-            .set(
-                light_params(),
-                LightParams::new(Srgb::new(1.0, 1.0, 1.0), 50.0).with_angular_cutoffs(0.3, 0.4),
-            )
-            .set(light_kind(), LightKind::Spotlight)
+        let count = 3;
+        let parent = Entity::builder()
+            .mount(TransformBundle::default().with_position(vec3(0.0, 4.0, 0.0)))
+            .set(rotate_light(), Quat::IDENTITY)
             .spawn(world);
 
-        // Entity::builder()
-        //     .mount(TransformBundle::default().with_position(vec3(2.0, 2.0, 5.0)))
-        //     .set(
-        //         light_params(),
-        //         LightParams::new(Srgb::new(0.0, 0.0, 1.0), 25.0),
-        //     )
-        //     .set(light_kind(), LightKind::Point)
-        //     .spawn(world);
+        for i in 0..count {
+            let phi = (i as f32 / count as f32) * TAU;
+
+            let radius = 2.0;
+            Entity::builder()
+                .mount(
+                    TransformBundle::default()
+                        .with_position(vec3(phi.sin() * radius, 0.0, phi.cos() * radius))
+                        .with_rotation(Quat::from_euler(EulerRot::YXZ, phi, PI + 0.5, 0.0)),
+                )
+                .mount(LightBundle {
+                    params: LightParams::new(
+                        Hsl::new(phi * 180.0 / PI, 1.0, 0.5).into_color(),
+                        25.0,
+                    )
+                    .with_angular_cutoffs(0.4, 0.5),
+                    kind: LightKind::Spotlight,
+                    cast_shadow: true,
+                })
+                .set(child_of(parent), ())
+                .spawn(world);
+        }
+
+        schedules.fixed_mut().with_system(
+            System::builder()
+                .with_query(Query::new((
+                    rotate_light(),
+                    rotation().as_mut(),
+                    elapsed_time().source(engine()),
+                )))
+                .for_each(move |(&base_rotation, rotation, &t)| {
+                    *rotation =
+                        Quat::from_axis_angle(Vec3::Y, t.as_secs_f32() * 0.1) * base_rotation;
+                }),
+        );
+
         Ok(())
     }
 }
@@ -431,8 +390,7 @@ impl Layer for LogicLayer {
         _: &AssetCache,
         mut events: EventRegisterContext<Self>,
     ) -> anyhow::Result<()> {
-        events
-            .subscribe(|this, world, assets, _: &PostInitEvent| this.setup_objects(world, assets));
+        events.subscribe(|this, world, assets, _: &PostInitEvent| this.setup_assets(world, assets));
 
         events.subscribe(|_, world, _, resized: &ResizedEvent| {
             if let Some(main_camera) = Query::new(projection_matrix().as_mut())

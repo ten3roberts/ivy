@@ -11,7 +11,7 @@ use ivy_core::{
 };
 use ivy_engine::{is_static, main_camera, RigidBodyBundle, TransformBundle};
 use ivy_game::free_camera::{setup_camera, FreeCameraPlugin};
-use ivy_graphics::texture::TextureDesc;
+use ivy_graphics::texture::TextureData;
 use ivy_input::layer::InputLayer;
 use ivy_physics::{
     components::{angular_velocity, friction, gravity_influence},
@@ -24,7 +24,7 @@ use ivy_wgpu::{
     events::ResizedEvent,
     layer::GraphicsLayer,
     light::{LightKind, LightParams},
-    material_desc::{MaterialData, MaterialDesc},
+    material_desc::{MaterialData, PbrMaterialData},
     mesh_desc::MeshDesc,
     primitives::{CapsulePrimitive, CubePrimitive},
     renderer::{EnvironmentData, RenderObjectBundle},
@@ -88,18 +88,18 @@ pub fn main() -> anyhow::Result<()> {
 }
 
 fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
-    let white_material = MaterialDesc::Content(
-        MaterialData::new()
+    let white_material = MaterialData::PbrMaterial(
+        PbrMaterialData::new()
             .with_roughness_factor(1.0)
             .with_metallic_factor(0.0)
-            .with_albedo(TextureDesc::srgba(Srgba::new(1.0, 1.0, 1.0, 1.0))),
+            .with_albedo(TextureData::srgba(Srgba::new(1.0, 1.0, 1.0, 1.0))),
     );
 
-    let red_material = MaterialDesc::Content(
-        MaterialData::new()
+    let red_material = MaterialData::PbrMaterial(
+        PbrMaterialData::new()
             .with_roughness_factor(0.1)
             .with_metallic_factor(0.0)
-            .with_albedo(TextureDesc::srgba(Color::from_hsla(0.0, 0.7, 0.7, 1.0))),
+            .with_albedo(TextureData::srgba(Color::from_hsla(0.0, 0.7, 0.7, 1.0))),
     );
 
     let cube_mesh = MeshDesc::Content(assets.load(&CubePrimitive));
@@ -133,10 +133,11 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
             )
             .mount(RenderObjectBundle::new(
                 mesh.clone(),
-                white_material.clone(),
-                &[(forward_pass(), shader.clone())],
-            ))
-            .set(shadow_pass(), shadow.clone());
+                &[
+                    (forward_pass(), white_material.clone()),
+                    (shadow_pass(), MaterialData::ShadowMaterial),
+                ],
+            ));
 
         builder
     };
@@ -145,7 +146,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
         vec3(0.0, 2.0, 0.0),
         Quat::from_scaled_axis(vec3(0.0, 0.0, 0.1)),
     )
-    .set(material(), red_material.clone())
+    .set(forward_pass(), red_material.clone())
     .set(friction(), 0.8)
     .set(angular_velocity(), Vec3::Y * 10.0)
     .set(gravity_influence(), 1.0)
@@ -166,10 +167,11 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
         .set(is_static(), ())
         .mount(RenderObjectBundle::new(
             cube_mesh.clone(),
-            white_material.clone(),
-            &[(forward_pass(), shader.clone())],
+            &[
+                (forward_pass(), white_material.clone()),
+                (shadow_pass(), MaterialData::ShadowMaterial),
+            ],
         ))
-        .set(shadow_pass(), shadow.clone())
         .spawn(world);
 
     Entity::builder()
@@ -188,10 +190,11 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
         .set(is_static(), ())
         .mount(RenderObjectBundle::new(
             cube_mesh.clone(),
-            white_material.clone(),
-            &[(forward_pass(), shader.clone())],
+            &[
+                (forward_pass(), white_material),
+                (shadow_pass(), MaterialData::ShadowMaterial),
+            ],
         ))
-        .set(shadow_pass(), shadow.clone())
         .spawn(world);
 
     Entity::builder()

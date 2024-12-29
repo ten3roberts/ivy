@@ -24,24 +24,24 @@ use wgpu::{BindGroup, BindGroupLayout, BufferUsages, DepthBiasState, RenderPass,
 
 use super::{mesh_renderer::ShaderFactory, CameraRenderer};
 use crate::{
-    components::{material, mesh},
-    material::PbrMaterial,
-    material_desc::{MaterialData, MaterialDesc},
+    components::mesh,
+    material::RenderMaterial,
+    material_desc::{MaterialData, PbrMaterialData},
     mesh::{SkinnedVertex, VertexDesc},
     mesh_buffer::{MeshBuffer, MeshHandle},
     mesh_desc::MeshDesc,
     renderer::RendererStore,
-    shader::ShaderPass,
     shader_library::ShaderLibrary,
-    types::{shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, Shader, TypedBuffer},
+    types::{
+        shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, RenderShader, TypedBuffer,
+    },
     Gpu,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BatchKey {
     pub skin: Asset<Skin>,
-    pub shader: Asset<crate::shader::ShaderPass>,
-    pub material: MaterialDesc,
+    pub material: MaterialData,
     pub mesh: MeshDesc,
 }
 
@@ -53,8 +53,8 @@ struct Batch {
 
     skin: Asset<Skin>,
     mesh: Arc<MeshHandle<SkinnedVertex>>,
-    material: Asset<PbrMaterial>,
-    shader: Handle<Shader>,
+    material: Asset<RenderMaterial>,
+    shader: Handle<RenderShader>,
     skinning_buffer: TypedBuffer<Mat4>,
     skinning_data: Vec<Mat4>,
 
@@ -64,8 +64,8 @@ struct Batch {
 impl Batch {
     pub fn new(
         mesh: Arc<MeshHandle<SkinnedVertex>>,
-        material: Asset<PbrMaterial>,
-        shader: Handle<Shader>,
+        material: Asset<RenderMaterial>,
+        shader: Handle<RenderShader>,
         skin: Asset<Skin>,
         skinning_buffer: TypedBuffer<Mat4>,
         bind_group: BindGroup,
@@ -99,7 +99,9 @@ impl Batch {
     ) {
         render_pass.set_pipeline(store.shaders[&self.shader].pipeline());
         render_pass.set_bind_group(first_bindgroup, &self.bind_group, &[]);
-        render_pass.set_bind_group(first_bindgroup + 1, self.material.bind_group(), &[]);
+        if let Some(bind_group) = self.material.bind_group() {
+            render_pass.set_bind_group(first_bindgroup + 1, bind_group, &[]);
+        }
 
         let index_offset = self.mesh.ib().offset() as u32;
 
@@ -155,8 +157,8 @@ pub struct SkinnedMeshRenderer {
     bind_group_layout: BindGroupLayout,
 
     pub meshes: HashMap<MeshDesc, Weak<MeshHandle<SkinnedVertex>>>,
-    pub shaders: AssetMap<crate::shader::ShaderPass, Handle<Shader>>,
-    pub materials: HashMap<MaterialDesc, Asset<PbrMaterial>>,
+    pub shaders: AssetMap<crate::shader::ShaderPass, Handle<RenderShader>>,
+    pub materials: HashMap<MaterialData, Asset<RenderMaterial>>,
 
     batches: Slab<Batch>,
     batch_map: HashMap<BatchKey, BatchId>,
@@ -165,7 +167,7 @@ pub struct SkinnedMeshRenderer {
 
     mesh_buffer: MeshBuffer<SkinnedVertex>,
 
-    shader_pass: Component<Asset<ShaderPass>>,
+    shader_pass: Component<MaterialData>,
     shader_library: Arc<ShaderLibrary>,
     shader_factory: ShaderFactory,
 }
@@ -174,7 +176,7 @@ impl SkinnedMeshRenderer {
     pub fn new(
         world: &mut World,
         gpu: &Gpu,
-        shader_pass: Component<Asset<ShaderPass>>,
+        shader_pass: Component<MaterialData>,
         shader_library: Arc<ShaderLibrary>,
     ) -> Self {
         let id = world.spawn();
@@ -245,14 +247,13 @@ impl SkinnedMeshRenderer {
         let mut query = Query::new((
             entity_ids(),
             mesh().cloned(),
-            material().cloned(),
             self.shader_pass.cloned(),
             skin().cloned().traverse(child_of),
         ))
         .without(object_index(self.id));
 
         let mut needs_reallocation = false;
-        for (id, mesh, material, shader, skin) in &mut query.borrow(world) {
+        for (id, mesh, material, skin) in &mut query.borrow(world) {
             let skinning_buffer = TypedBuffer::new_uninit(
                 gpu,
                 "skinning_buffer",
@@ -263,7 +264,6 @@ impl SkinnedMeshRenderer {
             let key = BatchKey {
                 mesh,
                 material,
-                shader,
                 skin,
             };
 
@@ -295,44 +295,41 @@ impl SkinnedMeshRenderer {
                     }
                 };
 
-                let material: Asset<PbrMaterial> = assets.try_load(&key.material).unwrap_or_else(|e| {
+                let material: Asset<RenderMaterial> = assets.try_load(&key.material).unwrap_or_else(|e| {
                     tracing::error!(?key.material, "{:?}", e.context("Failed to load material"));
-                    assets.load(&MaterialDesc::content(MaterialData::new()))
+                    assets.load(&MaterialData::PbrMaterial(PbrMaterialData::new()))
                 });
 
-                let shader = match self.shaders.entry(&key.shader) {
-                    slotmap::secondary::Entry::Occupied(slot) => slot.get().clone(),
-                    slotmap::secondary::Entry::Vacant(slot) => {
-                        let module = self.shader_library.process(gpu, (&*key.shader).into())?;
+                let shader = material.shader();
+                let shader =
+                    match self.shaders.entry(shader) {
+                        slotmap::secondary::Entry::Occupied(slot) => slot.get().clone(),
+                        slotmap::secondary::Entry::Vacant(slot) => {
+                            let module = self.shader_library.process(gpu, (&**shader).into())?;
 
-                        let vertex_layouts = &[SkinnedVertex::layout()];
-                        let bind_group_layouts = layouts
-                            .iter()
-                            .copied()
-                            .chain([&self.bind_group_layout, material.layout()])
-                            .collect_vec();
+                            let vertex_layouts = &[SkinnedVertex::layout()];
+                            let bind_group_layouts = layouts
+                                .iter()
+                                .copied()
+                                .chain([&self.bind_group_layout])
+                                .chain(material.layout())
+                                .collect_vec();
 
-                        let shader_desc = ShaderDesc::new(key.shader.label(), &module, target)
-                            .with_vertex_layouts(vertex_layouts)
-                            .with_bind_group_layouts(&bind_group_layouts)
-                            .with_culling_mode(Culling {
-                                cull_mode: key.shader.cull_mode,
-                                front_face: wgpu::FrontFace::Ccw,
-                            })
-                            .with_depth_bias(DepthBiasState {
-                                constant: 0,
-                                slope_scale: -2.0,
-                                clamp: 0.0,
-                            });
+                            let shader_desc = ShaderDesc::new(shader.label(), &module, target)
+                                .with_vertex_layouts(vertex_layouts)
+                                .with_bind_group_layouts(&bind_group_layouts)
+                                .with_culling_mode(Culling {
+                                    cull_mode: shader.cull_mode,
+                                    front_face: wgpu::FrontFace::Ccw,
+                                });
 
-                        slot.insert(
-                            store
-                                .shaders
-                                .insert(Shader::new(gpu, &(self.shader_factory)(shader_desc))),
-                        )
-                        .clone()
-                    }
-                };
+                            slot.insert(store.shaders.insert(RenderShader::new(
+                                gpu,
+                                &(self.shader_factory)(shader_desc),
+                            )))
+                            .clone()
+                        }
+                    };
 
                 let bind_group = BindGroupBuilder::new("ObjectBuffer")
                     .bind_buffer(&self.object_buffer)

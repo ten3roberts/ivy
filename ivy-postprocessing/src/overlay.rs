@@ -2,7 +2,7 @@ use ivy_wgpu::{
     rendergraph::{Dependency, Node, TextureHandle},
     types::{
         shader::{ShaderDesc, TargetDesc},
-        BindGroupBuilder, BindGroupLayoutBuilder, Shader,
+        BindGroupBuilder, BindGroupLayoutBuilder, RenderShader,
     },
     Gpu,
 };
@@ -15,7 +15,7 @@ use wgpu::{
 pub struct OverlayNode {
     input: TextureHandle,
     output: TextureHandle,
-    shader: Option<Shader>,
+    shader: Option<RenderShader>,
     layout: BindGroupLayout,
     bind_group: Option<BindGroup>,
     default_sampler: wgpu::Sampler,
@@ -72,7 +72,7 @@ impl Node for OverlayNode {
             .build(ctx.gpu, &self.layout);
 
         let shader = self.shader.get_or_insert_with(|| {
-            Shader::new(
+            RenderShader::new(
                 ctx.gpu,
                 &ShaderDesc::new(
                     "overlay",

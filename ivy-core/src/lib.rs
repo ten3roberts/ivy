@@ -39,7 +39,6 @@ pub mod layer;
 pub mod macros;
 pub mod subscribers;
 mod systems;
-pub mod time;
 mod updatable;
 pub mod update_layer;
 

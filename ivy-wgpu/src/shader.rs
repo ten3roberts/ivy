@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use wgpu::Face;
 
-/// Describes a shader
+/// Represents a shader
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ShaderPass {

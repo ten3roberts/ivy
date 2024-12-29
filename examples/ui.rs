@@ -17,7 +17,7 @@ use ivy_game::{
     free_camera::{camera_speed, setup_camera, FreeCameraPlugin},
     ray_picker::RayPickingPlugin,
 };
-use ivy_graphics::texture::TextureDesc;
+use ivy_graphics::texture::TextureData;
 use ivy_input::layer::InputLayer;
 use ivy_physics::{
     components::{collider_shape, rigid_body_type},
@@ -31,11 +31,10 @@ use ivy_wgpu::{
     events::ResizedEvent,
     layer::GraphicsLayer,
     light::{LightKind, LightParams},
-    material_desc::{MaterialData, MaterialDesc},
+    material_desc::{MaterialData, PbrMaterialData},
     mesh_desc::MeshDesc,
     primitives::{CapsulePrimitive, CubePrimitive, UvSpherePrimitive},
     renderer::{EnvironmentData, RenderObjectBundle},
-    shaders::{PbrShaderDesc, ShadowShaderDesc},
 };
 use rapier3d::prelude::{RigidBodyType, SharedShape};
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
@@ -204,22 +203,19 @@ impl Layer for LogicLayer {
 }
 
 fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
-    let white_material = MaterialDesc::Content(
-        MaterialData::new()
+    let white_material = MaterialData::PbrMaterial(
+        PbrMaterialData::new()
             .with_roughness_factor(1.0)
             .with_metallic_factor(0.0)
-            .with_albedo(TextureDesc::srgba(Srgba::new(1.0, 1.0, 1.0, 1.0))),
+            .with_albedo(TextureData::srgba(Srgba::new(1.0, 1.0, 1.0, 1.0))),
     );
 
-    let red_material = MaterialDesc::Content(
-        MaterialData::new()
+    let red_material = MaterialData::PbrMaterial(
+        PbrMaterialData::new()
             .with_roughness_factor(1.0)
             .with_metallic_factor(0.0)
-            .with_albedo(TextureDesc::srgba(Color::from_hsla(1.0, 0.7, 0.7, 1.0))),
+            .with_albedo(TextureData::srgba(Color::from_hsla(1.0, 0.7, 0.7, 1.0))),
     );
-
-    let shader = assets.load(&PbrShaderDesc);
-    let shadow = assets.load(&ShadowShaderDesc);
 
     const RESTITUTION: f32 = 0.1;
     const FRICTION: f32 = 0.8;
@@ -236,10 +232,11 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
             )
             .mount(RenderObjectBundle::new(
                 MeshDesc::Content(assets.load(&CubePrimitive)),
-                red_material.clone(),
-                &[(forward_pass(), shader.clone())],
-            ))
-            .set(shadow_pass(), shadow.clone());
+                &[
+                    (forward_pass(), red_material.clone()),
+                    (shadow_pass(), MaterialData::ShadowMaterial),
+                ],
+            ));
 
         builder
     };
@@ -281,7 +278,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
         .set(rigid_body_type(), RigidBodyType::Fixed)
         .set(scale(), vec3(100.0, 1.0, 100.0))
         .set(is_static(), ())
-        .set(material(), white_material)
+        .set(forward_pass(), white_material)
         .spawn(world);
 
     let drop_height = 10.0;

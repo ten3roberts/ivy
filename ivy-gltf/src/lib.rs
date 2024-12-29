@@ -406,6 +406,10 @@ impl GltfMaterial {
         }
     }
 
+    pub fn material(&self) -> gltf::Material {
+        self.data.material(self.index).unwrap()
+    }
+
     pub fn name(&self) -> Option<&str> {
         self.data.material(self.index).and_then(|v| v.name())
     }
@@ -588,7 +592,7 @@ enum Scheme<'a> {
     Unsupported,
 }
 
-impl<'a> Scheme<'a> {
+impl Scheme<'_> {
     fn parse(uri: &str) -> Scheme<'_> {
         if uri.contains(':') {
             if let Some(rest) = uri.strip_prefix("data:") {

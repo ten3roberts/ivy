@@ -11,7 +11,7 @@ use ivy_core::{
 };
 use ivy_engine::{main_camera, RigidBodyBundle, TransformBundle};
 use ivy_game::free_camera::{setup_camera, FreeCameraPlugin};
-use ivy_graphics::texture::TextureDesc;
+use ivy_graphics::texture::TextureData;
 use ivy_input::layer::InputLayer;
 use ivy_physics::{ColliderBundle, PhysicsPlugin};
 use ivy_postprocessing::preconfigured::{SurfacePbrPipelineDesc, SurfacePbrRenderer};
@@ -23,11 +23,10 @@ use ivy_wgpu::{
     events::ResizedEvent,
     layer::GraphicsLayer,
     light::{LightKind, LightParams},
-    material_desc::{MaterialData, MaterialDesc},
+    material_desc::{MaterialData, PbrMaterialData},
     mesh_desc::MeshDesc,
     primitives::CapsulePrimitive,
     renderer::{EnvironmentData, RenderObjectBundle},
-    shaders::PbrShaderDesc,
 };
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
@@ -75,6 +74,7 @@ pub fn main() -> anyhow::Result<()> {
                 .with_plugin(FreeCameraPlugin)
                 .with_plugin(
                     PhysicsPlugin::new()
+                        .with_gravity(Vec3::ZERO)
                         .with_gizmos(ivy_physics::GizmoSettings { rigidbody: true }),
                 ),
         )
@@ -88,16 +88,14 @@ pub fn main() -> anyhow::Result<()> {
 }
 
 fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
-    let material = MaterialDesc::Content(
-        MaterialData::new()
+    let material = MaterialData::PbrMaterial(
+        PbrMaterialData::new()
             .with_roughness_factor(0.1)
             .with_metallic_factor(0.0)
-            .with_albedo(TextureDesc::srgba(Srgba::new(1.0, 1.0, 1.0, 1.0))),
+            .with_albedo(TextureData::srgba(Srgba::new(1.0, 1.0, 1.0, 1.0))),
     );
 
     let cube_mesh = MeshDesc::Content(assets.load(&CapsulePrimitive::default()));
-
-    let shader = assets.load(&PbrShaderDesc);
 
     let simulate = true;
 
@@ -123,8 +121,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
             )
             .mount(RenderObjectBundle::new(
                 cube_mesh.clone(),
-                material.clone(),
-                &[(forward_pass(), shader.clone())],
+                &[(forward_pass(), material.clone())],
             ))
             .spawn(world);
     };

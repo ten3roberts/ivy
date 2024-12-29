@@ -101,11 +101,18 @@ struct PbrLuminance {
     view_pos: vec3<f32>,
 }
 
-fn shadow_pcf(uv: vec2<f32>, index: u32, current_depth: f32, texel_size: vec2<f32>) -> f32 {
+const biasMat: mat4x4<f32> = mat4x4(
+    vec4(0.5, 0.0, 0.0, 0.0),
+    vec4(0.0, -0.5, 0.0, 0.0),
+    vec4(0.0, 0.0, 1.0, 0.0),
+    vec4(0.5, 0.5, 0.0, 1.0),
+);
+
+fn shadow_pcf(coord: vec4<f32>, index: u32, texel_size: vec2<f32>) -> f32 {
     var total = 0.0;
     for (var x = -1; x <= 1; x++) {
         for (var y = -1; y <= 1; y++) {
-            total += textureSampleCompare(shadow_maps, shadow_sampler, uv + vec2(f32(x), f32(y)) * texel_size, index, current_depth);
+            total += textureSampleCompare(shadow_maps, shadow_sampler, coord.xy + vec2(f32(x), f32(y)) * texel_size, index, coord.z - 0.001);
         }
     }
 
@@ -121,7 +128,7 @@ const LIGHT_POINT: u32 = 0;
 const LIGHT_DIRECTIONAL: u32 = 1;
 const LIGHT_SPOTLIGHT: u32 = 2;
 
-const LIGHT_COUNT: u32 = 4;
+const LIGHT_COUNT: u32 = 16;
 
 fn pbr_luminance(in: PbrLuminance, light: Light) -> vec3<f32> {
     var l: vec3<f32> = vec3(0.0);
@@ -165,12 +172,15 @@ fn pbr_luminance(in: PbrLuminance, light: Light) -> vec3<f32> {
 
         let shadow_camera = shadow_cameras[light.shadow_index + cascade_index];
         let light_space_clip = shadow_camera.viewproj * vec4(in.world_pos, 1.0);
-        let light_space_pos = light_space_clip.xyz / light_space_clip.w;
 
-        var light_space_uv = vec2(light_space_pos.x, -light_space_pos.y) * 0.5 + 0.5;
-        let current_depth = light_space_pos.z;
+        let light_space_uv = biasMat * light_space_clip;
 
-        in_light = shadow_pcf(light_space_uv, light.shadow_index + cascade_index, current_depth, shadow_camera.texel_size);
+        // let light_space_pos = light_space_clip.xyz / light_space_clip.w;
+
+        // var light_space_uv = vec2(light_space_pos.x, -light_space_pos.y) * 0.5 + 0.5;
+        // let current_depth = light_space_pos.z;
+
+        in_light = shadow_pcf(light_space_uv / light_space_uv.w, light.shadow_index + cascade_index, shadow_camera.texel_size);
     }
 
     let h = normalize(in.tangent_camera_dir + l);

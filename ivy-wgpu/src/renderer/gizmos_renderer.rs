@@ -8,7 +8,7 @@ use ivy_core::{
 use ivy_graphics::mesh::MeshData;
 use ivy_wgpu_types::{
     shader::{ShaderDesc, TargetDesc},
-    BindGroupBuilder, BindGroupLayoutBuilder, Gpu, Shader, TypedBuffer,
+    BindGroupBuilder, BindGroupLayoutBuilder, Gpu, RenderShader, TypedBuffer,
 };
 use wgpu::{
     BindingType, BufferUsages, RenderPassColorAttachment, RenderPassDescriptor, SamplerBindingType,
@@ -25,7 +25,7 @@ use crate::{
 
 pub struct GizmosRendererNode {
     mesh: Mesh,
-    shader: Option<Shader>,
+    shader: Option<RenderShader>,
     buffer: TypedBuffer<Data>,
     camera_buffer: TypedBuffer<CameraData>,
     data: Vec<Data>,
@@ -188,7 +188,7 @@ impl Node for GizmosRendererNode {
                     ),
                 });
 
-            Shader::new(
+            RenderShader::new(
                 ctx.gpu,
                 &ShaderDesc::new("gizmos", &shader_module, &target)
                     .with_vertex_layouts(&[Vertex::layout()])
