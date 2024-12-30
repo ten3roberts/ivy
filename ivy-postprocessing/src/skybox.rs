@@ -2,7 +2,9 @@ use glam::{Mat4, Vec3};
 use ivy_core::profiling::profile_function;
 use ivy_wgpu::{
     renderer::{CameraRenderer, UpdateContext},
-    types::{shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, RenderShader, TypedBuffer},
+    types::{
+        shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, RenderShader, TypedBuffer,
+    },
     Gpu,
 };
 use wgpu::{

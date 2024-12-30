@@ -7,11 +7,12 @@ use std::time::Duration;
 pub use builder::*;
 pub use event::*;
 use flax::World;
-use ivy_assets::{service::FileSystemMapService, AssetCache};
+use ivy_assets::{service::FileSystemMapService, stored::DynamicStore, AssetCache};
 
 use self::driver::Driver;
 use crate::{
     components::{self, engine},
+    events::EventContext,
     layer::events::{Event, EventRegistry},
     Layer, LayerDyn,
 };
@@ -19,6 +20,7 @@ use crate::{
 pub struct App {
     name: String,
 
+    store: DynamicStore,
     layers: Vec<Box<dyn LayerDyn>>,
     /// Event bus for layers
     pub event_registry: EventRegistry,
@@ -39,7 +41,6 @@ impl App {
             .set(engine(), components::gizmos(), Default::default())
             .unwrap();
 
-        #[allow(deprecated)]
         Self {
             name: "Ivy".into(),
             layers: Default::default(),
@@ -47,6 +48,7 @@ impl App {
             world,
             assets: asset_cache,
             running: false,
+            store: DynamicStore::new(),
         }
     }
 
@@ -57,8 +59,11 @@ impl App {
     pub fn tick(&mut self, delta: Duration) -> anyhow::Result<()> {
         self.event_registry.emit(
             &mut self.layers,
-            &mut self.world,
-            &self.assets,
+            &mut EventContext {
+                world: &mut self.world,
+                assets: &self.assets,
+                store: &mut self.store,
+            },
             &TickEvent(delta),
         )
     }
@@ -75,8 +80,11 @@ impl App {
 
         self.event_registry.emit(
             &mut self.layers,
-            &mut self.world,
-            &self.assets,
+            &mut EventContext {
+                world: &mut self.world,
+                assets: &self.assets,
+                store: &mut self.store,
+            },
             &PostInitEvent,
         )
     }
@@ -111,8 +119,15 @@ impl App {
 
     /// Emits an event to all layers.
     pub fn emit_event<T: Event>(&mut self, event: T) -> anyhow::Result<()> {
-        self.event_registry
-            .emit(&mut self.layers, &mut self.world, &mut self.assets, &event)
+        self.event_registry.emit(
+            &mut self.layers,
+            &mut EventContext {
+                world: &mut self.world,
+                assets: &self.assets,
+                store: &mut self.store,
+            },
+            &event,
+        )
     }
 
     /// Get a reference to the app's asset_cache.

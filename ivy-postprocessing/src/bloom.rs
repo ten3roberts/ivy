@@ -2,6 +2,7 @@ use std::slice;
 
 use glam::{uvec2, vec3};
 use itertools::Itertools;
+use ivy_core::profiling::{profile_function, profile_scope};
 use ivy_wgpu::{
     rendergraph::{Dependency, Node, TextureHandle},
     types::{
@@ -142,6 +143,7 @@ impl BloomNode {
 
 impl Node for BloomNode {
     fn draw(&mut self, ctx: ivy_wgpu::rendergraph::NodeExecutionContext) -> anyhow::Result<()> {
+        profile_function!();
         let input = ctx.get_texture(self.input);
         let output = ctx.get_texture(self.final_output);
 
@@ -182,30 +184,33 @@ impl Node for BloomNode {
             ];
 
             let mut size = uvec2(input.width(), input.height());
-            let bind_groups = views
-                .into_iter()
-                .flatten()
-                .map(|view| {
-                    let uniform_data = TypedBuffer::new(
-                        ctx.gpu,
-                        "Bloom",
-                        BufferUsages::UNIFORM,
-                        &[vec3(
-                            1.0 / (size.x as f32),
-                            1.0 / (size.y as f32),
-                            self.filter_radius,
-                        )],
-                    );
+            let bind_groups = {
+                profile_scope!("create_bind_groups");
+                views
+                    .into_iter()
+                    .flatten()
+                    .map(|view| {
+                        let uniform_data = TypedBuffer::new(
+                            ctx.gpu,
+                            "Bloom",
+                            BufferUsages::UNIFORM,
+                            &[vec3(
+                                1.0 / (size.x as f32),
+                                1.0 / (size.y as f32),
+                                self.filter_radius,
+                            )],
+                        );
 
-                    size /= 2;
+                        size /= 2;
 
-                    BindGroupBuilder::new("Bloom")
-                        .bind_texture(view)
-                        .bind_sampler(&self.sampler)
-                        .bind_buffer(&uniform_data)
-                        .build(ctx.gpu, &self.layout)
-                })
-                .collect_vec();
+                        BindGroupBuilder::new("Bloom")
+                            .bind_texture(view)
+                            .bind_sampler(&self.sampler)
+                            .bind_buffer(&uniform_data)
+                            .build(ctx.gpu, &self.layout)
+                    })
+                    .collect_vec()
+            };
 
             let mix_bind_group = BindGroupBuilder::new("bloom_mix")
                 .bind_texture(&input_view)
@@ -219,30 +224,43 @@ impl Node for BloomNode {
                 mip_chain,
             }
         });
-        // tracing::info!("downsampling");
 
         for (bind_group, target) in data.bind_groups[..data.bind_groups.len() - 1]
             .iter()
-            .zip_eq(&data.mip_chain)
+            .zip(&data.mip_chain)
         {
-            let mut render_pass = ctx.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: "Bloom".into(),
-                color_attachments: &[Some(RenderPassColorAttachment {
-                    view: target,
-                    resolve_target: None,
-                    ops: Operations {
-                        load: wgpu::LoadOp::Clear(Color::BLACK),
-                        store: StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                ..Default::default()
-            });
+            profile_scope!("downsample");
+            let mut render_pass = {
+                profile_scope!("begin_render_pass");
+                ctx.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: "Bloom".into(),
+                    color_attachments: &[Some(RenderPassColorAttachment {
+                        view: target,
+                        resolve_target: None,
+                        ops: Operations {
+                            load: wgpu::LoadOp::Clear(Color::BLACK),
+                            store: StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    ..Default::default()
+                })
+            };
 
-            render_pass.set_pipeline(self.downsample_shader.pipeline());
-            render_pass.set_bind_group(0, bind_group, &[]);
+            {
+                profile_scope!("set_pipeline");
+                render_pass.set_pipeline(self.downsample_shader.pipeline());
+                render_pass.set_bind_group(0, bind_group, &[]);
+            }
 
-            render_pass.draw(0..3, 0..1);
+            {
+                profile_scope!("draw");
+                render_pass.draw(0..3, 0..1);
+            }
+            {
+                profile_scope!("drop");
+                drop(render_pass);
+            }
         }
 
         // tracing::info!("upsampling");
@@ -254,6 +272,7 @@ impl Node for BloomNode {
                 .rev()
                 .zip_eq(data.mip_chain.iter().rev().skip(1))
         {
+            profile_scope!("upsample");
             let mut render_pass = ctx.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: "Bloom".into(),
                 color_attachments: &[Some(RenderPassColorAttachment {
@@ -275,6 +294,7 @@ impl Node for BloomNode {
         }
 
         {
+            profile_scope!("mix");
             let mut render_pass = ctx.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: "Bloom".into(),
                 color_attachments: &[Some(RenderPassColorAttachment {

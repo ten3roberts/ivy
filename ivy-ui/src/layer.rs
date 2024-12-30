@@ -76,9 +76,7 @@ impl UiInputLayer {
         profile_function!();
         let instance = &mut *self.instance.deref().borrow_mut();
 
-        instance
-            .input_state
-            .update_external_focus(&mut instance.frame);
+        instance.input_state.update_external_focus(&instance.frame);
 
         // TODO: modifiers changed
         let mut captured = match event {
@@ -166,14 +164,14 @@ impl Layer for UiInputLayer {
     where
         Self: Sized,
     {
-        events.subscribe(|this, world, assets, _: &ApplicationReady| this.on_ready(world, assets));
+        events.subscribe(|this, ctx, _: &ApplicationReady| this.on_ready(ctx.world, ctx.assets));
 
-        events.intercept(|this, world, assets, event: &InputEvent| {
-            this.on_input_event(world, assets, event)
+        events.intercept(|this, ctx, event: &InputEvent| {
+            this.on_input_event(ctx.world, ctx.assets, event)
         });
 
-        events.subscribe(|this, world, assets, event: &ResizedEvent| {
-            this.on_resized(world, assets, event)
+        events.subscribe(|this, ctx, event: &ResizedEvent| {
+            this.on_resized(ctx.world, ctx.assets, event)
         });
 
         Ok(())
@@ -245,12 +243,12 @@ impl Layer for UiUpdateLayer {
     where
         Self: Sized,
     {
-        events.subscribe(|this, world, assets, _: &ApplicationReady| this.on_ready(world, assets));
+        events.subscribe(|this, ctx, _: &ApplicationReady| this.on_ready(ctx.world, ctx.assets));
 
-        events.subscribe(|this, world, assets, _: &TickEvent| this.on_tick(world, assets));
+        events.subscribe(|this, ctx, _: &TickEvent| this.on_tick(ctx.world, ctx.assets));
 
-        events.subscribe(|this, world, assets, event: &ResizedEvent| {
-            this.on_resized(world, assets, event)
+        events.subscribe(|this, ctx, event: &ResizedEvent| {
+            this.on_resized(ctx.world, ctx.assets, event)
         });
 
         Ok(())

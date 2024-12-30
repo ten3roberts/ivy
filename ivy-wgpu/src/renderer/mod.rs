@@ -1,6 +1,7 @@
 pub mod gizmos_renderer;
 mod light_manager;
 pub mod mesh_renderer;
+mod object_manager;
 pub mod shadowmapping;
 pub mod skinned_mesh_renderer;
 
@@ -9,7 +10,10 @@ use std::any::type_name;
 use flax::{fetch::entity_refs, Component, EntityRef, Query, World};
 use glam::{Mat4, Vec3};
 use itertools::Itertools;
-use ivy_assets::{stored::Store, AssetCache};
+use ivy_assets::{
+    stored::{Handle, Store},
+    AssetCache,
+};
 use ivy_core::{
     components::{main_camera, world_transform},
     impl_for_tuples,
@@ -18,6 +22,7 @@ use ivy_core::{
 };
 use ivy_wgpu_types::shader::TargetDesc;
 pub use light_manager::LightManager;
+pub use object_manager::ObjectManager;
 use wgpu::{
     AddressMode, BindGroup, BindGroupLayout, BufferUsages, Extent3d, FilterMode, Operations, Queue,
     RenderPass, RenderPassColorAttachment, RenderPassDescriptor, ShaderStages, TextureDescriptor,
@@ -28,7 +33,7 @@ use crate::{
     components::{environment_data, mesh, projection_matrix},
     material_desc::MaterialData,
     mesh_desc::MeshDesc,
-    rendergraph::{Dependency, Node, TextureHandle, UpdateResult},
+    rendergraph::{Dependency, Node, NodeUpdateContext, TextureHandle, UpdateResult},
     types::{BindGroupBuilder, BindGroupLayoutBuilder, RenderShader, TypedBuffer},
     Gpu,
 };
@@ -101,6 +106,7 @@ pub struct RenderContext<'a> {
     pub gpu: &'a Gpu,
     pub queue: &'a Queue,
     pub store: &'a mut RendererStore,
+    pub object_manager: &'a ObjectManager,
     // pub camera_data: &'a CameraShaderData,
     pub layouts: &'a [&'a BindGroupLayout],
     pub bind_groups: &'a [&'a BindGroup],
@@ -112,6 +118,7 @@ pub struct UpdateContext<'a> {
     pub assets: &'a AssetCache,
     pub gpu: &'a Gpu,
     pub store: &'a mut RendererStore,
+    pub object_manager: &'a ObjectManager,
     pub layouts: &'a [&'a BindGroupLayout],
     // pub camera_data: &'a CameraShaderData,
     pub camera: CameraData,
@@ -249,6 +256,7 @@ pub struct CameraNode {
     pub bind_group: Option<BindGroup>,
     light_manager: LightManager,
     skybox: Option<SkyboxTextures>,
+    object_manager: Handle<ObjectManager>,
 }
 
 impl CameraNode {
@@ -258,10 +266,12 @@ impl CameraNode {
         output: TextureHandle,
         renderer: impl 'static + CameraRenderer,
         light_manager: LightManager,
+        object_manager: Handle<ObjectManager>,
         skybox: Option<SkyboxTextures>,
     ) -> Self {
         Self {
             light_manager,
+            object_manager,
             renderer: Box::new(renderer),
             shader_data: CameraShaderData::new(gpu),
             depth_texture,
@@ -278,10 +288,7 @@ impl Node for CameraNode {
         type_name::<Self>()
     }
 
-    fn update(
-        &mut self,
-        ctx: crate::rendergraph::NodeUpdateContext,
-    ) -> anyhow::Result<UpdateResult> {
+    fn update(&mut self, ctx: NodeUpdateContext) -> anyhow::Result<UpdateResult> {
         let output = ctx.get_texture(self.output);
 
         let depth = ctx.get_texture(self.depth_texture);
@@ -299,6 +306,9 @@ impl Node for CameraNode {
         }
 
         self.light_manager.update(&ctx)?;
+        let object_manager = ctx.store.get_mut(&self.object_manager);
+
+        object_manager.update(ctx.world, ctx.gpu)?;
 
         self.renderer.update(&mut UpdateContext {
             world: ctx.world,
@@ -310,8 +320,13 @@ impl Node for CameraNode {
                 depth_format: depth.format().into(),
                 sample_count: output.sample_count(),
             },
-            layouts: &[&self.shader_data.layout, self.light_manager.layout()],
+            layouts: &[
+                &self.shader_data.layout,
+                self.light_manager.layout(),
+                object_manager.bind_group_layout(),
+            ],
             camera: self.shader_data.data,
+            object_manager,
         })?;
 
         Ok(UpdateResult::Success)
@@ -404,6 +419,8 @@ impl Node for CameraNode {
         let output = ctx.get_texture(self.output);
         let output_view = output.create_view(&Default::default());
 
+        let object_manager = ctx.store.get_mut(&self.object_manager);
+
         let render_context = RenderContext {
             world: ctx.world,
             assets: ctx.assets,
@@ -416,8 +433,17 @@ impl Node for CameraNode {
                 depth_format: depth.format().into(),
                 sample_count: output.sample_count(),
             },
-            bind_groups: &[bind_group, self.light_manager.bind_group().unwrap()],
-            layouts: &[&self.shader_data.layout, self.light_manager.layout()],
+            bind_groups: &[
+                bind_group,
+                self.light_manager.bind_group().unwrap(),
+                object_manager.bind_group(),
+            ],
+            layouts: &[
+                &self.shader_data.layout,
+                self.light_manager.layout(),
+                object_manager.bind_group_layout(),
+            ],
+            object_manager,
         };
 
         let mut render_pass = ctx.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -491,12 +517,6 @@ impl Node for CameraNode {
     fn on_resource_changed(&mut self, _resource: crate::rendergraph::ResourceHandle) {
         self.light_manager.clear();
     }
-}
-
-#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-#[repr(C)]
-pub struct ObjectData {
-    transform: Mat4,
 }
 
 #[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]

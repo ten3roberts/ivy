@@ -3,16 +3,15 @@ use std::{future::ready, mem::size_of};
 use flax::World;
 use futures::{stream, StreamExt};
 use image::DynamicImage;
-use ivy_assets::{AssetCache, DynAsyncAssetDesc};
+use ivy_assets::{stored::DynamicStore, AssetCache, DynAsyncAssetDesc};
 use ivy_ui::{node::UiRenderNode, SharedUiInstance};
 use ivy_wgpu::{
-    components::{forward_pass, transparent_pass},
+    components::forward_pass,
     renderer::{
         gizmos_renderer::GizmosRendererNode,
         mesh_renderer::MeshRenderer,
         shadowmapping::{LightShadowCamera, ShadowMapNode},
-        skinned_mesh_renderer::SkinnedMeshRenderer,
-        CameraNode, LightManager, MsaaResolve, SkyboxTextures,
+        CameraNode, LightManager, MsaaResolve, ObjectManager, SkyboxTextures,
     },
     rendergraph::{BufferDesc, ManagedTextureDesc, RenderGraph, TextureHandle},
     types::{texture::max_mip_levels, PhysicalSize},
@@ -93,7 +92,7 @@ pub struct BloomConfig {
 impl Default for BloomConfig {
     fn default() -> Self {
         Self {
-            filter_radius: 0.002,
+            filter_radius: 0.001,
             layers: 4,
         }
     }
@@ -117,10 +116,13 @@ impl PbrRenderGraphConfig {
         world: &mut World,
         gpu: &Gpu,
         assets: &AssetCache,
+        store: &mut DynamicStore,
         render_graph: &mut RenderGraph,
         ui_instance: Option<SharedUiInstance>,
         destination: TextureHandle,
     ) -> PbrRenderGraph {
+        let object_manager = store.insert(ObjectManager::new(world, gpu));
+
         let extent = Extent3d {
             width: 0,
             height: 0,
@@ -247,6 +249,7 @@ impl PbrRenderGraphConfig {
                 shadow_map_config.max_shadows as _,
                 shadow_map_config.max_cascades as _,
                 render_graph.resources.shader_library().clone(),
+                object_manager.clone(),
             ));
         }
 
@@ -351,18 +354,18 @@ impl PbrRenderGraphConfig {
                 forward_pass(),
                 render_graph.resources.shader_library().clone(),
             ),
-            SkinnedMeshRenderer::new(
-                world,
-                gpu,
-                forward_pass(),
-                render_graph.resources.shader_library().clone(),
-            ),
-            MeshRenderer::new(
-                world,
-                gpu,
-                transparent_pass(),
-                render_graph.resources.shader_library().clone(),
-            ),
+            // SkinnedMeshRenderer::new(
+            //     world,
+            //     gpu,
+            //     forward_pass(),
+            //     render_graph.resources.shader_library().clone(),
+            // ),
+            // MeshRenderer::new(
+            //     world,
+            //     gpu,
+            //     transparent_pass(),
+            //     render_graph.resources.shader_library().clone(),
+            // ),
         );
 
         let light_manager = LightManager::new(gpu, shadow_maps, shadow_camera_buffer, 16);
@@ -373,6 +376,7 @@ impl PbrRenderGraphConfig {
             sampled_target,
             camera_renderers,
             light_manager,
+            object_manager,
             skybox_textures,
         ));
 

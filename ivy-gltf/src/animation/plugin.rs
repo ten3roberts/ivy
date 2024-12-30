@@ -25,6 +25,7 @@ impl Plugin for AnimationPlugin {
             .per_tick_mut()
             .with_system(animation_step_system())
             .with_system(follow_bone_plugin_system());
+
         Ok(())
     }
 }

@@ -20,7 +20,7 @@ use ivy_gltf::{
 };
 use ivy_wgpu_types::shader::{Culling, TargetDesc};
 use slab::Slab;
-use wgpu::{BindGroup, BindGroupLayout, BufferUsages, DepthBiasState, RenderPass, ShaderStages};
+use wgpu::{BindGroup, BindGroupLayout, BufferUsages, RenderPass, ShaderStages};
 
 use super::{mesh_renderer::ShaderFactory, CameraRenderer};
 use crate::{

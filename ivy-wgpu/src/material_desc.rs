@@ -236,6 +236,9 @@ impl PbrMaterialData {
             material_data.metallic_roughness = TextureData::Content(texture);
         }
 
+        material_data.metallic_factor = NotNan::new(pbr.metallic_factor()).unwrap();
+        material_data.roughness_factor = NotNan::new(pbr.roughness_factor()).unwrap();
+
         material_data
     }
 

@@ -1,6 +1,5 @@
 use std::f32::consts::{PI, TAU};
 
-use color_eyre::owo_colors::OwoColorize;
 use flax::{
     components::child_of, BoxedSystem, Component, Entity, FetchExt, Query, QueryBorrow, System,
     World,
@@ -79,10 +78,11 @@ pub fn main() -> anyhow::Result<()> {
         ))
         .with_layer(EngineLayer::new())
         .with_layer(ProfilingLayer::new())
-        .with_layer(GraphicsLayer::new(|world, assets, gpu, surface| {
+        .with_layer(GraphicsLayer::new(|world, assets, store, gpu, surface| {
             Ok(SurfacePbrRenderer::new(
                 world,
                 assets,
+                store,
                 gpu,
                 surface,
                 SurfacePbrPipelineDesc {
@@ -346,7 +346,7 @@ impl Plugin for RotateSpotlightPlugin {
         for i in 0..count {
             let phi = (i as f32 / count as f32) * TAU;
 
-            let radius = 2.0;
+            let radius = 1.0;
             Entity::builder()
                 .mount(
                     TransformBundle::default()
@@ -390,12 +390,12 @@ impl Layer for LogicLayer {
         _: &AssetCache,
         mut events: EventRegisterContext<Self>,
     ) -> anyhow::Result<()> {
-        events.subscribe(|this, world, assets, _: &PostInitEvent| this.setup_assets(world, assets));
+        events.subscribe(|this, ctx, _: &PostInitEvent| this.setup_assets(ctx.world, ctx.assets));
 
-        events.subscribe(|_, world, _, resized: &ResizedEvent| {
+        events.subscribe(|_, ctx, resized: &ResizedEvent| {
             if let Some(main_camera) = Query::new(projection_matrix().as_mut())
                 .with(main_camera())
-                .borrow(world)
+                .borrow(ctx.world)
                 .first()
             {
                 let aspect =

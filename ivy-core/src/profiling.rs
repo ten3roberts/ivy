@@ -44,7 +44,7 @@ impl Layer for ProfilingLayer {
         #[cfg(feature = "profile")]
         {
             let mut _events = _events;
-            _events.subscribe(|_, _, _, _: &crate::app::TickEvent| {
+            _events.subscribe(|_, _, _: &crate::app::TickEvent| {
                 puffin::GlobalProfiler::lock().new_frame();
                 Ok(())
             });

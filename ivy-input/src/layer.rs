@@ -46,12 +46,12 @@ impl Layer for InputLayer {
     where
         Self: Sized,
     {
-        events.subscribe(|this, world, _, event: &InputEvent| -> Result<_, _> {
-            this.handle_event(world, event);
+        events.subscribe(|this, ctx, event: &InputEvent| -> Result<_, _> {
+            this.handle_event(ctx.world, event);
             Ok(())
         });
 
-        events.subscribe(|this, world, _, _: &TickEvent| -> Result<_, _> { this.update(world) });
+        events.subscribe(|this, ctx, _: &TickEvent| -> Result<_, _> { this.update(ctx.world) });
 
         Ok(())
     }

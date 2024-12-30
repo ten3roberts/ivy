@@ -5,7 +5,7 @@ use std::sync::Arc;
 use anyhow::Context;
 use flax::World;
 use image::DynamicImage;
-use ivy_assets::{AssetCache, DynAsyncAssetDesc};
+use ivy_assets::{stored::DynamicStore, AssetCache, DynAsyncAssetDesc};
 use ivy_core::profiling::profile_scope;
 use ivy_ui::SharedUiInstance;
 use ivy_wgpu::{
@@ -36,6 +36,7 @@ impl SurfacePbrRenderer {
     pub fn new(
         world: &mut World,
         assets: &AssetCache,
+        store: &mut DynamicStore,
         gpu: &Gpu,
         surface: Surface,
         desc: SurfacePbrPipelineDesc,
@@ -59,6 +60,7 @@ impl SurfacePbrRenderer {
             world,
             gpu,
             assets,
+            store,
             &mut render_graph,
             desc.ui_instance,
             surface_texture,
@@ -78,6 +80,7 @@ impl ivy_wgpu::layer::Renderer for SurfacePbrRenderer {
         &mut self,
         world: &mut World,
         assets: &AssetCache,
+        store: &mut DynamicStore,
         gpu: &Gpu,
         queue: &wgpu::Queue,
     ) -> anyhow::Result<()> {
@@ -87,7 +90,7 @@ impl ivy_wgpu::layer::Renderer for SurfacePbrRenderer {
         external_resources.insert_texture(self.surface_texture, &surface_texture.texture);
 
         self.render_graph
-            .update(gpu, world, assets, &external_resources)?;
+            .update(gpu, world, assets, store, &external_resources)?;
 
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
 
@@ -97,6 +100,7 @@ impl ivy_wgpu::layer::Renderer for SurfacePbrRenderer {
             &mut encoder,
             world,
             assets,
+            store,
             &external_resources,
         )?;
 
@@ -123,13 +127,14 @@ impl ivy_wgpu::layer::Renderer for SurfacePbrRenderer {
         &mut self,
         world: &mut World,
         assets: &AssetCache,
+        store: &mut DynamicStore,
         gpu: &Gpu,
         cmds: &mut flume::Receiver<ivy_wgpu::layer::RendererCommand>,
     ) -> anyhow::Result<()> {
         for cmd in cmds.drain() {
             match cmd {
                 ivy_wgpu::layer::RendererCommand::ModifyRenderGraph(func) => {
-                    func(world, &mut self.render_graph, assets, gpu)?;
+                    func(world, assets, store, gpu, &mut self.render_graph)?;
                 }
                 ivy_wgpu::layer::RendererCommand::UpdateTexture { handle, desc } => {
                     *self
@@ -199,6 +204,7 @@ impl ivy_wgpu::layer::Renderer for SurfaceRenderer {
         &mut self,
         world: &mut World,
         assets: &AssetCache,
+        store: &mut DynamicStore,
         gpu: &Gpu,
         queue: &wgpu::Queue,
     ) -> anyhow::Result<()> {
@@ -208,7 +214,7 @@ impl ivy_wgpu::layer::Renderer for SurfaceRenderer {
         external_resources.insert_texture(self.surface_handle, &surface_texture.texture);
 
         self.render_graph
-            .update(gpu, world, assets, &external_resources)?;
+            .update(gpu, world, assets, store, &external_resources)?;
 
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
 
@@ -218,6 +224,7 @@ impl ivy_wgpu::layer::Renderer for SurfaceRenderer {
             &mut encoder,
             world,
             assets,
+            store,
             &external_resources,
         )?;
 
@@ -242,13 +249,14 @@ impl ivy_wgpu::layer::Renderer for SurfaceRenderer {
         &mut self,
         world: &mut World,
         assets: &AssetCache,
+        store: &mut DynamicStore,
         gpu: &Gpu,
         cmds: &mut flume::Receiver<ivy_wgpu::layer::RendererCommand>,
     ) -> anyhow::Result<()> {
         for cmd in cmds.drain() {
             match cmd {
                 ivy_wgpu::layer::RendererCommand::ModifyRenderGraph(func) => {
-                    func(world, &mut self.render_graph, assets, gpu)?;
+                    func(world, assets, store, gpu, &mut self.render_graph)?;
                 }
                 ivy_wgpu::layer::RendererCommand::UpdateTexture { handle, desc } => {
                     *self

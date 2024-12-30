@@ -337,8 +337,8 @@ impl Layer for ScheduledLayer {
     where
         Self: Sized,
     {
-        events.subscribe(|this, world, assets, _: &PostInitEvent| this.register(world, assets));
-        events.subscribe(|this, world, _, _: &TickEvent| this.tick(world));
+        events.subscribe(|this, ctx, _: &PostInitEvent| this.register(ctx.world, ctx.assets));
+        events.subscribe(|this, ctx, _: &TickEvent| this.tick(ctx.world));
 
         Ok(())
     }

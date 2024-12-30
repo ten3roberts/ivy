@@ -6,7 +6,7 @@ use std::{
 
 use flax::World;
 use itertools::Itertools;
-use ivy_assets::AssetCache;
+use ivy_assets::{stored::DynamicStore, AssetCache};
 use ivy_core::profiling::{profile_function, profile_scope};
 use ivy_wgpu_types::Gpu;
 pub use resources::*;
@@ -20,6 +20,7 @@ pub struct NodeExecutionContext<'a> {
     pub encoder: &'a mut CommandEncoder,
     pub assets: &'a AssetCache,
     pub world: &'a mut World,
+    pub store: &'a mut DynamicStore,
     pub external_resources: &'a ExternalResources<'a>,
 }
 
@@ -42,6 +43,7 @@ pub struct NodeUpdateContext<'a> {
     pub resources: &'a RenderGraphResources,
     pub assets: &'a AssetCache,
     pub world: &'a mut World,
+    pub store: &'a mut DynamicStore,
     pub external_resources: &'a ExternalResources<'a>,
 }
 
@@ -285,6 +287,7 @@ impl RenderGraph {
         gpu: &Gpu,
         world: &mut World,
         assets: &AssetCache,
+        store: &mut DynamicStore,
         external_resources: &ExternalResources,
     ) -> anyhow::Result<()> {
         profile_function!();
@@ -315,6 +318,7 @@ impl RenderGraph {
                 assets,
                 world,
                 external_resources,
+                store,
             })?;
 
             match res {
@@ -339,6 +343,7 @@ impl RenderGraph {
         encoder: &mut CommandEncoder,
         world: &mut World,
         assets: &AssetCache,
+        store: &mut DynamicStore,
         external_resources: &ExternalResources,
     ) -> anyhow::Result<()> {
         profile_function!();
@@ -358,6 +363,7 @@ impl RenderGraph {
                 encoder,
                 assets,
                 world,
+                store,
                 external_resources,
             })?;
         }
@@ -466,6 +472,8 @@ fn topo_sort(
 mod test {
     use std::sync::Arc;
 
+    use flax::World;
+    use ivy_assets::{stored::DynamicStore, AssetCache};
     use ivy_wgpu_types::{Gpu, TypedBuffer};
     use wgpu::{
         BufferUsages, Extent3d, ImageCopyBuffer, ImageCopyTexture, ImageDataLayout,
@@ -474,8 +482,8 @@ mod test {
 
     use crate::{
         rendergraph::{
-            BufferDesc, BufferHandle, Dependency, ManagedTextureDesc, Node, NodeExecutionContext,
-            RenderGraph, RenderGraphResources, TextureHandle,
+            BufferDesc, BufferHandle, Dependency, ExternalResources, ManagedTextureDesc, Node,
+            NodeExecutionContext, RenderGraph, RenderGraphResources, TextureHandle,
         },
         shader_library::ShaderLibrary,
     };
@@ -699,9 +707,10 @@ mod test {
                 &gpu,
                 &gpu.queue,
                 &mut encoder,
-                &mut Default::default(),
-                &Default::default(),
-                &Default::default(),
+                &mut World::default(),
+                &AssetCache::default(),
+                &mut DynamicStore::default(),
+                &ExternalResources::default(),
             )
             .unwrap();
 

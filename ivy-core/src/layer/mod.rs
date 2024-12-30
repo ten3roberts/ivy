@@ -102,8 +102,8 @@ impl Layer for EngineLayer {
             .set(request_capture_mouse(), false)
             .append_to(world, engine())?;
 
-        events.subscribe(|this, world, _, _: &TickEvent| {
-            this.schedule.execute_par(world)?;
+        events.subscribe(|this, ctx, _: &TickEvent| {
+            this.schedule.execute_par(ctx.world)?;
             Ok(())
         });
 

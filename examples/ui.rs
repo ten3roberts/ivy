@@ -80,21 +80,24 @@ pub fn main() -> anyhow::Result<()> {
         ))
         .with_layer(EngineLayer::new())
         .with_layer(ProfilingLayer::new())
-        .with_layer(GraphicsLayer::new(move |world, assets, gpu, surface| {
-            Ok(SurfacePbrRenderer::new(
-                world,
-                assets,
-                gpu,
-                surface,
-                SurfacePbrPipelineDesc {
-                    hdri: Some(Box::new(AssetPath::new(
-                        "hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
-                    ))),
-                    ui_instance: Some(ui_instance.clone()),
-                    ..Default::default()
-                },
-            ))
-        }))
+        .with_layer(GraphicsLayer::new(
+            move |world, assets, store, gpu, surface| {
+                Ok(SurfacePbrRenderer::new(
+                    world,
+                    assets,
+                    store,
+                    gpu,
+                    surface,
+                    SurfacePbrPipelineDesc {
+                        hdri: Some(Box::new(AssetPath::new(
+                            "hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
+                        ))),
+                        ui_instance: Some(ui_instance.clone()),
+                        ..Default::default()
+                    },
+                ))
+            },
+        ))
         .with_layer(ui_input_layer)
         .with_layer(InputLayer::new())
         .with_layer(LogicLayer)
@@ -162,16 +165,16 @@ impl Layer for LogicLayer {
         _: &AssetCache,
         mut events: EventRegisterContext<Self>,
     ) -> anyhow::Result<()> {
-        events.subscribe(|_, world, assets, _: &PostInitEvent| {
-            setup_objects(world, assets.clone())?;
+        events.subscribe(|_, ctx, _: &PostInitEvent| {
+            setup_objects(ctx.world, ctx.assets.clone())?;
 
             Ok(())
         });
 
-        events.subscribe(|_, world, _, resized: &ResizedEvent| {
+        events.subscribe(|_, ctx, resized: &ResizedEvent| {
             if let Some(main_camera) = Query::new(projection_matrix().as_mut())
                 .with(main_camera())
-                .borrow(world)
+                .borrow(ctx.world)
                 .first()
             {
                 let aspect =

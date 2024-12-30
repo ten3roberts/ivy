@@ -53,10 +53,11 @@ pub fn main() -> anyhow::Result<()> {
         ))
         .with_layer(EngineLayer::new())
         .with_layer(ProfilingLayer::new())
-        .with_layer(GraphicsLayer::new(|world, assets, gpu, surface| {
+        .with_layer(GraphicsLayer::new(|world, assets, store, gpu, surface| {
             Ok(SurfacePbrRenderer::new(
                 world,
                 assets,
+                store,
                 gpu,
                 surface,
                 SurfacePbrPipelineDesc {
@@ -201,16 +202,16 @@ impl Layer for LogicLayer {
         _: &AssetCache,
         mut events: EventRegisterContext<Self>,
     ) -> anyhow::Result<()> {
-        events.subscribe(|_, world, assets, _: &PostInitEvent| {
-            setup_objects(world, assets.clone())?;
+        events.subscribe(|_, ctx, _: &PostInitEvent| {
+            setup_objects(ctx.world, ctx.assets.clone())?;
 
             Ok(())
         });
 
-        events.subscribe(|_, world, _, resized: &ResizedEvent| {
+        events.subscribe(|_, ctx, resized: &ResizedEvent| {
             if let Some(main_camera) = Query::new(projection_matrix().as_mut())
                 .with(main_camera())
-                .borrow(world)
+                .borrow(ctx.world)
                 .first()
             {
                 let aspect =

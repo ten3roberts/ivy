@@ -151,7 +151,7 @@ impl ApplicationHandler for WinitEventHandler<'_> {
     }
 }
 
-impl<'a> WinitEventHandler<'a> {
+impl WinitEventHandler<'_> {
     fn process_event(
         &mut self,
         event_loop: &ActiveEventLoop,

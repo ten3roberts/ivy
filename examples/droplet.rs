@@ -49,10 +49,11 @@ pub fn main() -> anyhow::Result<()> {
         ))
         .with_layer(EngineLayer::new())
         .with_layer(ProfilingLayer::new())
-        .with_layer(GraphicsLayer::new(|world, assets, gpu, surface| {
+        .with_layer(GraphicsLayer::new(|world, assets, store, gpu, surface| {
             Ok(SurfacePbrRenderer::new(
                 world,
                 assets,
+                store,
                 gpu,
                 surface,
                 SurfacePbrPipelineDesc {
@@ -91,6 +92,7 @@ async fn setup_objects(cmd: AsyncCommandBuffer, assets: AssetCache) -> anyhow::R
             &mut Entity::builder(),
             &NodeMountOptions {
                 skip_empty_children: true,
+                material_overrides: &Default::default(),
             },
         )
         .mount(
@@ -112,19 +114,22 @@ impl Layer for LogicLayer {
         _: &AssetCache,
         mut events: EventRegisterContext<Self>,
     ) -> anyhow::Result<()> {
-        events.subscribe(|_, world, assets, _: &PostInitEvent| {
+        events.subscribe(|_, ctx, _: &PostInitEvent| {
             async_std::task::spawn(setup_objects(
-                world.get(engine(), async_commandbuffer()).unwrap().clone(),
-                assets.clone(),
+                ctx.world
+                    .get(engine(), async_commandbuffer())
+                    .unwrap()
+                    .clone(),
+                ctx.assets.clone(),
             ));
 
             Ok(())
         });
 
-        events.subscribe(|_, world, _, resized: &ResizedEvent| {
+        events.subscribe(|_, ctx, resized: &ResizedEvent| {
             if let Some(main_camera) = Query::new(projection_matrix().as_mut())
                 .with(main_camera())
-                .borrow(world)
+                .borrow(ctx.world)
                 .first()
             {
                 let aspect =

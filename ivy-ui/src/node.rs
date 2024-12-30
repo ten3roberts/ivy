@@ -19,6 +19,11 @@ use wgpu::{TextureUsages, TextureView};
 
 use crate::{components::texture_dependency, SharedUiInstance};
 
+type TextureDepFetch = (
+    Component<TextureHandle>,
+    ComponentMut<Option<Asset<TextureView>>>,
+);
+
 /// Renders the violet Ui into the rendergraph
 pub struct UiRenderNode {
     instance: SharedUiInstance,
@@ -26,10 +31,7 @@ pub struct UiRenderNode {
     ctx: RendererContext,
     target: TextureHandle,
     modified_deps: Query<ChangeFilter<TextureHandle>>,
-    texture_deps: Query<(
-        Component<TextureHandle>,
-        ComponentMut<Option<Asset<TextureView>>>,
-    )>,
+    texture_deps: Query<TextureDepFetch>,
     update_texture_deps: bool,
 }
 

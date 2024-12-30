@@ -3,6 +3,7 @@ use std::{mem::size_of, sync::Arc};
 use flax::{entity_ids, filter::With, Component, EntityIds, FetchExt, Query, World};
 use glam::{vec2, vec3, Mat4, Vec2, Vec3, Vec4Swizzles};
 use itertools::{izip, Itertools};
+use ivy_assets::stored::Handle;
 use ivy_core::{
     components::{main_camera, world_transform},
     profiling::{profile_function, profile_scope},
@@ -16,7 +17,7 @@ use wgpu::{
     TextureViewDimension,
 };
 
-use super::skinned_mesh_renderer::SkinnedMeshRenderer;
+use super::{skinned_mesh_renderer::SkinnedMeshRenderer, ObjectManager};
 use crate::{
     components::{
         cast_shadow, light_kind, light_params, light_shadow_data, projection_matrix, shadow_pass,
@@ -71,6 +72,7 @@ pub struct ShadowMapNode {
     store: RendererStore,
     max_cascades: usize,
     query: Query<ShadowMapNodeQuery>,
+    object_manager: Handle<ObjectManager>,
 }
 
 impl ShadowMapNode {
@@ -82,6 +84,7 @@ impl ShadowMapNode {
         max_shadows: usize,
         max_cascades: usize,
         shader_library: Arc<ShaderLibrary>,
+        object_manager: Handle<ObjectManager>,
     ) -> Self {
         let layout = BindGroupLayoutBuilder::new("LightCameraBuffer")
             .bind_uniform_buffer(ShaderStages::VERTEX)
@@ -131,6 +134,7 @@ impl ShadowMapNode {
                 cast_shadow: cast_shadow().with(),
             }),
             shadow_map_views: None,
+            object_manager,
         }
     }
 }
@@ -282,18 +286,20 @@ impl Node for ShadowMapNode {
 
         ctx.world.append_all(light_shadow_data(), to_add)?;
 
+        let object_manager = ctx.store.get(&self.object_manager);
         let mut update_ctx = UpdateContext {
             world: ctx.world,
             assets: ctx.assets,
             gpu: ctx.gpu,
             store: &mut self.store,
-            layouts: &[&self.layout],
+            layouts: &[&self.layout, object_manager.bind_group_layout()],
             camera: Default::default(),
             target_desc: TargetDesc {
                 formats: &[],
                 depth_format: Some(shadow_maps.format()),
                 sample_count: shadow_maps.sample_count(),
             },
+            object_manager,
         };
 
         self.renderer.update(&mut update_ctx)?;
@@ -363,19 +369,21 @@ impl Node for ShadowMapNode {
         for (bind_group, view) in izip!(bind_groups, shadow_map_views) {
             profile_scope!("cascade_draw");
 
+            let object_manager = ctx.store.get(&self.object_manager);
             let draw_ctx = RenderContext {
                 world: ctx.world,
                 assets: ctx.assets,
                 gpu: ctx.gpu,
                 queue: ctx.queue,
                 store: &mut self.store,
-                bind_groups: &[bind_group],
-                layouts: &[&self.layout],
+                bind_groups: &[bind_group, object_manager.bind_group()],
+                layouts: &[&self.layout, object_manager.bind_group_layout()],
                 target_desc: TargetDesc {
                     formats: &[],
                     depth_format: Some(shadow_maps.format()),
                     sample_count: shadow_maps.sample_count(),
                 },
+                object_manager,
             };
 
             let mut render_pass = {
