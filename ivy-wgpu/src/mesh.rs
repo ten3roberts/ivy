@@ -1,3 +1,5 @@
+use std::iter::repeat;
+
 use glam::{UVec4, Vec2, Vec3, Vec4};
 use itertools::{izip, Itertools};
 use ivy_graphics::mesh::{
@@ -121,19 +123,25 @@ impl SkinnedVertex {
 
         let joints = mesh
             .get_attribute(JOINT_INDEX_ATTRIBUTE)
-            .expect("missing joint attribute")
-            .as_u16_vec4()
-            .unwrap();
+            .map(|v| v.as_u16_vec4())
+            .unwrap_or_default()
+            .into_iter()
+            .flatten()
+            .copied()
+            .chain(repeat(Default::default()));
 
         let weights = mesh
             .get_attribute(WEIGHT_ATTRIBUTE)
-            .expect("missing weight attribute")
-            .as_vec4()
-            .unwrap();
+            .map(|v| v.as_vec4())
+            .unwrap_or_default()
+            .into_iter()
+            .flatten()
+            .copied()
+            .chain(repeat(Default::default()));
 
         izip!(positions, tex_coords, normals, tangents, joints, weights)
             .map(
-                |(&pos, &tex_coord, &normal, &tangent, &joints, &weights)| Self {
+                |(&pos, &tex_coord, &normal, &tangent, joints, weights)| Self {
                     pos,
                     tex_coord,
                     normal,

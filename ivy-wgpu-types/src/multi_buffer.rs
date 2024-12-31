@@ -75,8 +75,8 @@ where
         }
     }
 
-    pub fn grow(&mut self, gpu: &Gpu, size: usize) {
-        let size = (self.buffer.len() + size.next_power_of_two()).next_power_of_two();
+    pub fn grow(&mut self, gpu: &Gpu, additional: usize) {
+        let size = (self.buffer.len() + additional.next_power_of_two()).next_power_of_two();
         tracing::debug!(?size, "grow");
         self.allocator.grow_to(size);
 

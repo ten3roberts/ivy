@@ -1,8 +1,12 @@
+#define_import_path vertex
+
 struct VertexInput {
     @location(0) pos: vec3<f32>,
     @location(1) tex_coord: vec2<f32>,
     @location(2) normal: vec3<f32>,
     @location(3) tangent: vec4<f32>,
+    @location(4) joints: vec4<u32>,
+    @location(5) weights: vec4<f32>,
     @builtin(instance_index) instance: u32,
 }
 
@@ -18,10 +22,7 @@ struct VertexOutput {
     @location(6) tangent: vec3<f32>,
     @location(7) bitangent: vec3<f32>,
     @location(8) fog: vec4<f32>,
-}
-
-struct Object {
-    world_matrix: mat4x4<f32>,
+    @location(9) color: vec3<f32>,
 }
 
 struct Globals {
@@ -33,50 +34,16 @@ struct Globals {
     fog_density: f32,
 }
 
-struct MaterialData {
-    roughness_factor: f32,
-    metallic_factor: f32,
-}
-
 @group(0) @binding(0)
 var<uniform> globals: Globals;
 
-@group(2) @binding(0)
-var<storage> objects: array<Object>;
-
-// material
-@group(3) @binding(0)
-var material_sampler: sampler;
-
-@group(3) @binding(1)
-var albedo_texture: texture_2d<f32>;
-
-@group(3) @binding(2)
-var normal_texture: texture_2d<f32>;
-
-@group(3) @binding(3)
-var mr_texture: texture_2d<f32>;
-
-@group(3) @binding(4)
-var ao_texture: texture_2d<f32>;
-
-@group(3) @binding(5)
-var displacement_texture: texture_2d<f32>;
-
-@group(3) @binding(6)
-var<uniform> material_data: MaterialData;
-
-const E: f32 = 2.718281828459;
-
-@vertex
-fn vs_main(in: VertexInput) -> VertexOutput {
+fn transform_vertex(in: VertexInput, world_transform: mat4x4<f32>, color: vec3<f32>) -> VertexOutput {
     var out: VertexOutput;
-    let object = objects[in.instance];
-    let world_position = object.world_matrix * vec4(in.pos, 1.0);
+    let world_position = world_transform * vec4(in.pos, 1.0);
 
-    let normal = normalize((object.world_matrix * vec4(in.normal, 0)).xyz);
-    let tangent = normalize((object.world_matrix * vec4(in.tangent.xyz, 0)).xyz);
-    let bitangent = normalize(cross(in.tangent.xyz, in.normal)) * in.tangent.w;
+    let normal = normalize((world_transform * vec4(in.normal, 0)).xyz);
+    let tangent = normalize((world_transform * vec4(in.tangent.xyz, 0)).xyz);
+    let bitangent = normalize(cross(tangent, normal)) * in.tangent.w;
 
     let tbn = transpose(mat3x3(tangent, bitangent, normal));
 
@@ -89,6 +56,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     out.tangent = tangent;
     out.bitangent = bitangent;
     out.tangent_pos = tbn * world_position.xyz;
+    out.color = color;
 
     let distance = length(world_position.xyz - globals.camera_pos);
 
@@ -96,16 +64,4 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     out.fog = vec4(globals.fog_color, fog_opacity);
 
     return out;
-}
-
-#import pbr_base::{PbrLuminance, brdf_forward};
-const DISPLACEMENT_STRENGTH: f32 = 0.2f;
-
-@fragment
-fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let albedo = textureSample(albedo_texture, material_sampler, in.tex_coord);
-
-    let base_color = albedo;
-    let color = mix(base_color.rgb, in.fog.rgb, in.fog.a);
-    return vec4(color, albedo.a);
 }

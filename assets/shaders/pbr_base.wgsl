@@ -72,16 +72,16 @@ var integrated_brdf: texture_2d<f32>;
 @group(0) @binding(5)
 var environment_sampler: sampler;
 
-@group(1) @binding(0)
+@group(2) @binding(0)
 var<storage> lights: array<Light>;
 
-@group(1) @binding(1)
+@group(2) @binding(1)
 var<storage> shadow_cameras: array<ShadowCamera>;
 
-@group(1) @binding(2)
+@group(2) @binding(2)
 var shadow_maps: texture_depth_2d_array;
 
-@group(1) @binding(3)
+@group(2) @binding(3)
 var shadow_sampler: sampler_comparison;
 
 struct PbrLuminance {

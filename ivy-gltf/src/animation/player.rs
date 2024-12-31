@@ -5,7 +5,7 @@ use itertools::Itertools;
 use ivy_assets::{map::AssetMap, Asset};
 use ivy_core::components::TransformBundle;
 
-use super::{skin::Skin, Animation};
+use super::{skin::Skin, Animation, KeyFrameValues};
 
 pub struct Animator {
     joint_targets: BTreeMap<usize, TransformBundle>,
@@ -154,6 +154,22 @@ impl AnimationPlayer {
 
         for (i, state) in self.channels.iter_mut().enumerate() {
             let channel = &self.animation.channels()[i];
+            if channel.times.len() == 1 {
+                match &channel.values {
+                    KeyFrameValues::Positions(v) => {
+                        writer(channel.joint_scene_index, AnimationTarget::Position(v[0]));
+                    }
+                    KeyFrameValues::Rotations(v) => {
+                        writer(channel.joint_scene_index, AnimationTarget::Rotation(v[0]));
+                    }
+                    KeyFrameValues::Scales(v) => {
+                        writer(channel.joint_scene_index, AnimationTarget::Scale(v[0]));
+                    }
+                };
+                return;
+            }
+
+            let last_keyframe = channel.times.len() - 1;
             let mut right_keyframe = state.left_keyframe + 1;
             // assert!(self.progress >= channel.times[state.left_keyframe]);
 
@@ -173,7 +189,7 @@ impl AnimationPlayer {
                 }
             } else {
                 while self.progress > channel.times[right_keyframe] {
-                    if state.left_keyframe + 1 == channel.times.len() - 1 {
+                    if state.left_keyframe + 1 == last_keyframe {
                         if self.looping {
                             state.left_keyframe = 0;
                             right_keyframe = 1;
@@ -192,15 +208,15 @@ impl AnimationPlayer {
                 / (channel.times[right_keyframe] - channel.times[state.left_keyframe]);
 
             match &channel.values {
-                super::KeyFrameValues::Positions(v) => {
+                KeyFrameValues::Positions(v) => {
                     let v = v[state.left_keyframe].lerp(v[right_keyframe], t);
                     writer(channel.joint_scene_index, AnimationTarget::Position(v));
                 }
-                super::KeyFrameValues::Rotations(v) => {
+                KeyFrameValues::Rotations(v) => {
                     let v = v[state.left_keyframe].lerp(v[right_keyframe], t);
                     writer(channel.joint_scene_index, AnimationTarget::Rotation(v));
                 }
-                super::KeyFrameValues::Scales(v) => {
+                KeyFrameValues::Scales(v) => {
                     let v = v[state.left_keyframe].lerp(v[right_keyframe], t);
                     writer(channel.joint_scene_index, AnimationTarget::Scale(v));
                 }

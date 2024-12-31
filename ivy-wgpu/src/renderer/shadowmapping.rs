@@ -17,7 +17,7 @@ use wgpu::{
     TextureViewDimension,
 };
 
-use super::{skinned_mesh_renderer::SkinnedMeshRenderer, ObjectManager};
+use super::ObjectManager;
 use crate::{
     components::{
         cast_shadow, light_kind, light_params, light_shadow_data, projection_matrix, shadow_pass,
@@ -68,7 +68,7 @@ pub struct ShadowMapNode {
     lights: Vec<LightShadowCamera>,
     dynamic_light_camera_buffer: Buffer,
     shadow_camera_buffer: BufferHandle,
-    renderer: (MeshRenderer, SkinnedMeshRenderer),
+    renderer: MeshRenderer,
     store: RendererStore,
     max_cascades: usize,
     query: Query<ShadowMapNodeQuery>,
@@ -98,12 +98,8 @@ impl ShadowMapNode {
             })
         }
 
-        let renderer = (
-            MeshRenderer::new(world, gpu, shadow_pass(), shader_library.clone())
-                .with_shader_factory(shader_factory),
-            SkinnedMeshRenderer::new(world, gpu, shadow_pass(), shader_library)
-                .with_shader_factory(shader_factory),
-        );
+        let renderer = MeshRenderer::new(world, gpu, shadow_pass(), shader_library.clone())
+            .with_shader_factory(shader_factory);
 
         let align = gpu.device.limits().min_uniform_buffer_offset_alignment as u64;
 

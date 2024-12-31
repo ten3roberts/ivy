@@ -1,4 +1,4 @@
-use ivy_assets::{loadable::Load, Asset, AssetCache, AssetDesc, DynAssetDesc};
+use ivy_assets::{loadable::Load, Asset, AssetCache, AssetDesc};
 use ivy_gltf::GltfMaterial;
 use ivy_graphics::texture::{TextureData, TextureDesc};
 use ordered_float::NotNan;
@@ -9,7 +9,7 @@ use crate::{
         emissive::PbrEmissiveMaterialParams, PbrMaterialParams, RenderMaterial, ShadowMaterialDesc,
     },
     shader::ShaderPass,
-    shaders::{EmissiveShaderDesc, PbrShaderDesc, UnlitShaderDesc},
+    shaders::{PbrEmissiveShaderDesc, PbrShaderDesc, ShadowShaderDesc},
     texture::TextureWithFormatDesc,
 };
 
@@ -413,19 +413,48 @@ impl Default for PbrMaterialData {
     }
 }
 
-impl AssetDesc<RenderMaterial> for MaterialData {
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct RenderMaterialDesc {
+    pub material: MaterialData,
+    pub skinned: bool,
+}
+
+impl AssetDesc<RenderMaterial> for RenderMaterialDesc {
     type Error = anyhow::Error;
 
     fn create(
         &self,
         assets: &ivy_assets::AssetCache,
     ) -> Result<Asset<RenderMaterial>, Self::Error> {
-        match self {
-            MaterialData::PbrMaterial(v) => v.create(assets, PbrShaderDesc.load(assets)),
-            MaterialData::UnlitMaterial(v) => v.create(assets, UnlitShaderDesc.load(assets)),
-            MaterialData::EmissiveMaterial(v) => v.create(assets, EmissiveShaderDesc.load(assets)),
+        match &self.material {
+            MaterialData::PbrMaterial(v) => v.create(
+                assets,
+                assets.load(&PbrShaderDesc {
+                    skinned: self.skinned,
+                    lit: true,
+                }),
+            ),
+            MaterialData::UnlitMaterial(v) => v.create(
+                assets,
+                assets.load(&PbrShaderDesc {
+                    skinned: self.skinned,
+                    lit: false,
+                }),
+            ),
+            MaterialData::EmissiveMaterial(v) => v.create(
+                assets,
+                assets.load(&PbrEmissiveShaderDesc {
+                    skinned: self.skinned,
+                    lit: true,
+                }),
+            ),
             MaterialData::ShadowMaterial => {
-                Ok(assets.insert(ShadowMaterialDesc {}.create_material("shadow".into(), assets)))
+                Ok(assets.insert(ShadowMaterialDesc {}.create_material(
+                    "shadow".into(),
+                    assets.load(&ShadowShaderDesc {
+                        skinned: self.skinned,
+                    }),
+                )))
             }
         }
     }

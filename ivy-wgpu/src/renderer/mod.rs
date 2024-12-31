@@ -3,7 +3,6 @@ mod light_manager;
 pub mod mesh_renderer;
 mod object_manager;
 pub mod shadowmapping;
-pub mod skinned_mesh_renderer;
 
 use std::any::type_name;
 
@@ -322,8 +321,8 @@ impl Node for CameraNode {
             },
             layouts: &[
                 &self.shader_data.layout,
-                self.light_manager.layout(),
                 object_manager.bind_group_layout(),
+                self.light_manager.layout(),
             ],
             camera: self.shader_data.data,
             object_manager,
@@ -435,13 +434,13 @@ impl Node for CameraNode {
             },
             bind_groups: &[
                 bind_group,
-                self.light_manager.bind_group().unwrap(),
                 object_manager.bind_group(),
+                self.light_manager.bind_group().unwrap(),
             ],
             layouts: &[
                 &self.shader_data.layout,
-                self.light_manager.layout(),
                 object_manager.bind_group_layout(),
+                self.light_manager.layout(),
             ],
             object_manager,
         };

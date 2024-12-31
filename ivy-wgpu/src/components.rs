@@ -1,5 +1,6 @@
 use flax::{component, Debuggable};
 use glam::Mat4;
+use ivy_core::Color;
 use winit::dpi::{LogicalPosition, LogicalSize};
 
 use crate::{
@@ -18,7 +19,6 @@ component! {
     pub forward_pass: MaterialData,
     pub transparent_pass: MaterialData,
     pub shadow_pass: MaterialData,
-
 
     pub main_window: (),
 

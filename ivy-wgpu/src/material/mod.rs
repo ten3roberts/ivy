@@ -105,9 +105,7 @@ impl PbrMaterialParams {
 pub struct ShadowMaterialDesc {}
 
 impl ShadowMaterialDesc {
-    pub fn create_material(self, label: String, assets: &AssetCache) -> RenderMaterial {
-        let shader = ShadowShaderDesc.load(assets);
-
+    pub fn create_material(self, label: String, shader: Asset<ShaderPass>) -> RenderMaterial {
         RenderMaterial {
             label,
             bind_group: None,

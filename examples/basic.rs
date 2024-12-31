@@ -1,12 +1,13 @@
 use std::f32::consts::{PI, TAU};
 
+use anyhow::Context;
 use flax::{
-    components::child_of, BoxedSystem, Component, Entity, FetchExt, Query, QueryBorrow, System,
-    World,
+    components::child_of, BoxedSystem, Component, Entity, EntityBuilder, FetchExt, Query,
+    QueryBorrow, System, World,
 };
 use glam::{vec3, EulerRot, Mat4, Quat, Vec3};
-use image::{DynamicImage, Rgb, Rgba};
-use itertools::Either;
+use image::{DynamicImage, Rgba};
+use itertools::{Either, Itertools};
 use ivy_assets::{fs::AssetPath, loadable::Load, Asset, AssetCache};
 use ivy_core::{
     app::PostInitEvent,
@@ -25,7 +26,13 @@ use ivy_game::{
     free_camera::{setup_camera, FreeCameraPlugin},
     ray_picker::RayPickingPlugin,
 };
-use ivy_gltf::animation::plugin::AnimationPlugin;
+use ivy_gltf::{
+    animation::{
+        player::{AnimationPlayer, Animator},
+        plugin::AnimationPlugin,
+    },
+    Document,
+};
 use ivy_graphics::texture::{ColorChannel, MetallicRoughnessProcessor, TextureData, TextureDesc};
 use ivy_input::layer::InputLayer;
 use ivy_physics::{ColliderBundle, GizmoSettings, PhysicsPlugin};
@@ -33,6 +40,7 @@ use ivy_postprocessing::preconfigured::{
     pbr::{PbrRenderGraphConfig, SkyboxConfig},
     SurfacePbrPipelineDesc, SurfacePbrRenderer,
 };
+use ivy_scene::{GltfNodeExt, NodeMountOptions};
 use ivy_wgpu::{
     components::{
         environment_data, forward_pass, light_kind, light_params, projection_matrix, shadow_pass,
@@ -53,7 +61,7 @@ use rapier3d::prelude::SharedShape;
 use tracing::Instrument;
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
-use violet::palette::{Hsl, IntoColor};
+use violet::palette::{self, rgb::Rgb, Hsl, IntoColor};
 use wgpu::TextureFormat;
 use winit::{dpi::LogicalSize, window::WindowAttributes};
 
@@ -315,6 +323,43 @@ impl LogicLayer {
                 }
             }
 
+            let document: Asset<Document> = assets.from_path("models/Gears.glb").await.unwrap();
+            tracing::info!(
+                "{:?}",
+                document
+                    .nodes()
+                    .map(|v| v.name().map(|v| v.to_string()))
+                    .collect_vec()
+            );
+            let node = document
+                .find_node("Gears")
+                .context("Missing document node")
+                .unwrap();
+
+            let skin = node.skin().unwrap();
+            let animation = skin.animations()[0].clone();
+
+            let mut animator = Animator::new();
+            let mut player = AnimationPlayer::new(animation);
+            player.set_looping(true);
+            player.set_speed(0.2);
+            animator.start_animation(player);
+
+            node.mount(
+                &mut Entity::builder(),
+                &NodeMountOptions {
+                    skip_empty_children: true,
+                    material_overrides: &Default::default(),
+                },
+            )
+            .mount(TransformBundle::new(
+                vec3(0.0, 0.5, 0.0),
+                Quat::IDENTITY,
+                Vec3::ONE,
+            ))
+            .set(ivy_gltf::components::animator(), animator)
+            .spawn_into(&mut cmd.lock());
+
             anyhow::Ok(())
         };
 
@@ -341,6 +386,21 @@ impl Plugin for RotateSpotlightPlugin {
         let parent = Entity::builder()
             .mount(TransformBundle::default().with_position(vec3(0.0, 4.0, 0.0)))
             .set(rotate_light(), Quat::IDENTITY)
+            .spawn(world);
+
+        Entity::builder()
+            .mount(
+                TransformBundle::default()
+                    .with_position(vec3(0.0, 5.0, -1.0))
+                    .with_rotation(Quat::from_euler(EulerRot::YXZ, 0.0, -PI / 2.0 - 0.5, 0.0)),
+            )
+            .mount(LightBundle {
+                params: LightParams::new(Rgb::new(1.0, 1.0, 1.0), 25.0)
+                    .with_angular_cutoffs(0.4, 0.5),
+                kind: LightKind::Spotlight,
+                cast_shadow: true,
+            })
+            .set(child_of(parent), ())
             .spawn(world);
 
         for i in 0..count {

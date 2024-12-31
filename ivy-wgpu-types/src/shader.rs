@@ -91,6 +91,7 @@ impl<'a> ShaderDesc<'a> {
 /// Represents a graphics shader
 #[derive(Debug)]
 pub struct RenderShader {
+    label: String,
     pipeline: RenderPipeline,
 }
 
@@ -172,10 +173,17 @@ impl RenderShader {
                 cache: None,
             });
 
-        Self { pipeline }
+        Self {
+            label: desc.label.into(),
+            pipeline,
+        }
     }
 
     pub fn pipeline(&self) -> &RenderPipeline {
         &self.pipeline
+    }
+
+    pub fn label(&self) -> &str {
+        &self.label
     }
 }

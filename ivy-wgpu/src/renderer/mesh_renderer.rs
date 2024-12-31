@@ -16,12 +16,15 @@ use ivy_wgpu_types::shader::Culling;
 use slab::Slab;
 use wgpu::{BindGroupLayout, DepthBiasState, RenderPass};
 
-use super::{object_manager::object_buffer_index, CameraRenderer, TargetDesc};
+use super::{
+    object_manager::{object_buffer_index, object_skinning_buffer},
+    CameraRenderer, TargetDesc,
+};
 use crate::{
     components::mesh,
     material::RenderMaterial,
-    material_desc::{MaterialData, PbrMaterialData},
-    mesh::{Vertex, VertexDesc},
+    material_desc::{MaterialData, PbrMaterialData, RenderMaterialDesc},
+    mesh::{SkinnedVertex, Vertex, VertexDesc},
     mesh_buffer::{MeshBuffer, MeshHandle},
     mesh_desc::MeshDesc,
     renderer::RendererStore,
@@ -39,14 +42,14 @@ pub struct BatchKey {
 
 /// A single rendering batch of similar objects
 struct Batch {
-    mesh: Arc<MeshHandle>,
+    mesh: Arc<MeshHandle<SkinnedVertex>>,
     material: Asset<RenderMaterial>,
     shader: Handle<RenderShader>,
 }
 
 impl Batch {
     pub fn new(
-        mesh: Arc<MeshHandle>,
+        mesh: Arc<MeshHandle<SkinnedVertex>>,
         material: Asset<RenderMaterial>,
         shader: Handle<RenderShader>,
     ) -> Self {
@@ -68,7 +71,7 @@ struct DrawObject {
 
 pub struct MeshRenderer {
     id: Entity,
-    pub meshes: HashMap<MeshDesc, Weak<MeshHandle>>,
+    pub meshes: HashMap<MeshDesc, Weak<MeshHandle<SkinnedVertex>>>,
     pub shaders: AssetMap<ShaderPass, Handle<RenderShader>>,
 
     /// Keep track of loaded materials
@@ -80,7 +83,7 @@ pub struct MeshRenderer {
     draw_map: BTreeMap<Entity, usize>,
     batch_map: HashMap<BatchKey, BatchId>,
 
-    mesh_buffer: MeshBuffer,
+    mesh_buffer: MeshBuffer<SkinnedVertex>,
     shader_pass: Component<MaterialData>,
     shader_library: Arc<ShaderLibrary>,
     shader_factory: ShaderFactory,
@@ -146,11 +149,12 @@ impl MeshRenderer {
             mesh().cloned(),
             self.shader_pass.cloned(),
             object_buffer_index(),
+            object_skinning_buffer().satisfied(),
         ))
         .without(renderer_location(self.id));
         let mut new_components = Vec::new();
 
-        for (entity, mesh, material, &object_index) in &mut query.borrow(world) {
+        for (entity, mesh, material, &object_index, skinned) in &mut query.borrow(world) {
             let id = entity.id();
             let key = BatchKey { mesh, material };
 
@@ -160,7 +164,7 @@ impl MeshRenderer {
 
                     Arc::new(self.mesh_buffer.insert(
                         gpu,
-                        &Vertex::compose_from_mesh(&mesh_data),
+                        &SkinnedVertex::compose_from_mesh(&mesh_data),
                         mesh_data.indices(),
                     ))
                 };
@@ -182,7 +186,21 @@ impl MeshRenderer {
                     }
                 };
 
-                let material: Asset<RenderMaterial> = assets.try_load(&key.material).unwrap_or_else(|e| { tracing::error!(?key.material, "{:?}", e.context("Failed to load material")); assets.load(&MaterialData::PbrMaterial(PbrMaterialData::new())) }) ;
+                let material = RenderMaterialDesc {
+                    material: key.material.clone(),
+                    skinned,
+                };
+
+                let broken_material = |e: anyhow::Error| {
+                    tracing::error!(?key.material, "{:?}", e.context("Failed to load material"));
+                    assets.load(&RenderMaterialDesc {
+                        material: MaterialData::PbrMaterial(PbrMaterialData::new()),
+                        skinned: false,
+                    })
+                };
+
+                let material: Asset<RenderMaterial> =
+                    assets.try_load(&material).unwrap_or_else(broken_material);
 
                 let shader = material.shader();
                 let shader =
@@ -191,7 +209,8 @@ impl MeshRenderer {
                         slotmap::secondary::Entry::Vacant(slot) => {
                             let module = self.shader_library.process(gpu, (&**shader).into())?;
 
-                            let vertex_layouts = &[Vertex::layout()];
+                            let vertex_layouts = &[SkinnedVertex::layout()];
+
                             let bind_group_layouts = layouts
                                 .iter()
                                 .copied()
@@ -298,8 +317,6 @@ impl CameraRenderer for MeshRenderer {
         for (i, bind_group) in ctx.bind_groups.iter().enumerate() {
             render_pass.set_bind_group(i as _, bind_group, &[]);
         }
-
-        tracing::info!("drawing {} objects", self.draws.len());
 
         self.mesh_buffer.bind(render_pass);
 

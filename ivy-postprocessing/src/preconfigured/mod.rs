@@ -10,7 +10,7 @@ use ivy_core::profiling::profile_scope;
 use ivy_ui::SharedUiInstance;
 use ivy_wgpu::{
     rendergraph::{self, ExternalResources, RenderGraph, RenderGraphResources, TextureHandle},
-    shader_library::{ModuleDesc, ShaderLibrary},
+    shader_library::{ShaderLibrary, ShaderModuleDesc},
     types::{PhysicalSize, Surface},
     Gpu,
 };
@@ -42,10 +42,22 @@ impl SurfacePbrRenderer {
         desc: SurfacePbrPipelineDesc,
     ) -> Self {
         // TODO; pass as param
-        let shader_library = ShaderLibrary::new().with_module(ModuleDesc {
-            path: "./assets/shaders/pbr_base.wgsl",
-            source: include_str!("../../../assets/shaders/pbr_base.wgsl"),
-        });
+        let shader_library = ShaderLibrary::new()
+            .with_module(ShaderModuleDesc {
+                path: "./assets/shaders/pbr_base.wgsl",
+                source: include_str!("../../../assets/shaders/pbr_base.wgsl"),
+                shader_defs: Default::default(),
+            })
+            .with_module(ShaderModuleDesc {
+                path: "./assets/shaders/vertex.wgsl",
+                source: include_str!("../../../assets/shaders/vertex.wgsl"),
+                shader_defs: Default::default(),
+            })
+            .with_module(ShaderModuleDesc {
+                path: "./assets/shaders/material_pbr.wgsl",
+                source: include_str!("../../../assets/shaders/material_pbr.wgsl"),
+                shader_defs: Default::default(),
+            });
 
         let shader_library = Arc::new(shader_library);
 
@@ -165,10 +177,22 @@ pub struct SurfaceRenderer {
 impl SurfaceRenderer {
     pub fn new(surface: Surface) -> Self {
         // TODO; pass as param
-        let shader_library = ShaderLibrary::new().with_module(ModuleDesc {
-            path: "./assets/shaders/pbr_base.wgsl",
-            source: include_str!("../../../assets/shaders/pbr_base.wgsl"),
-        });
+        let shader_library = ShaderLibrary::new()
+            .with_module(ShaderModuleDesc {
+                path: "./assets/shaders/pbr_base.wgsl",
+                source: include_str!("../../../assets/shaders/pbr_base.wgsl"),
+                shader_defs: Default::default(),
+            })
+            .with_module(ShaderModuleDesc {
+                path: "./assets/shaders/vertex.wgsl",
+                source: include_str!("../../../assets/shaders/vertex.wgsl"),
+                shader_defs: Default::default(),
+            })
+            .with_module(ShaderModuleDesc {
+                path: "./assets/shaders/material_pbr.wgsl",
+                source: include_str!("../../../assets/shaders/material_pbr.wgsl"),
+                shader_defs: Default::default(),
+            });
 
         let shader_library = Arc::new(shader_library);
 

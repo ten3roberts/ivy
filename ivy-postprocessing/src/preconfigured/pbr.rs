@@ -6,7 +6,7 @@ use image::DynamicImage;
 use ivy_assets::{stored::DynamicStore, AssetCache, DynAsyncAssetDesc};
 use ivy_ui::{node::UiRenderNode, SharedUiInstance};
 use ivy_wgpu::{
-    components::forward_pass,
+    components::{forward_pass, transparent_pass},
     renderer::{
         gizmos_renderer::GizmosRendererNode,
         mesh_renderer::MeshRenderer,
@@ -354,18 +354,12 @@ impl PbrRenderGraphConfig {
                 forward_pass(),
                 render_graph.resources.shader_library().clone(),
             ),
-            // SkinnedMeshRenderer::new(
-            //     world,
-            //     gpu,
-            //     forward_pass(),
-            //     render_graph.resources.shader_library().clone(),
-            // ),
-            // MeshRenderer::new(
-            //     world,
-            //     gpu,
-            //     transparent_pass(),
-            //     render_graph.resources.shader_library().clone(),
-            // ),
+            MeshRenderer::new(
+                world,
+                gpu,
+                transparent_pass(),
+                render_graph.resources.shader_library().clone(),
+            ),
         );
 
         let light_manager = LightManager::new(gpu, shadow_maps, shadow_camera_buffer, 16);
