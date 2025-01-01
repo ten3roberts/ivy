@@ -3,6 +3,7 @@ use std::{
     sync::{Arc, Weak},
 };
 
+use bytemuck::{Pod, Zeroable};
 use flax::{
     entity_ids,
     fetch::entity_refs,
@@ -12,9 +13,9 @@ use flax::{
 use itertools::Itertools;
 use ivy_assets::{map::AssetMap, stored::Handle, Asset, AssetCache};
 use ivy_core::{profiling::profile_function, subscribers::RemovedComponentSubscriber, WorldExt};
-use ivy_wgpu_types::shader::Culling;
+use ivy_wgpu_types::{shader::Culling, TypedBuffer};
 use slab::Slab;
-use wgpu::{BindGroupLayout, DepthBiasState, RenderPass};
+use wgpu::{BindGroupLayout, BufferUsages, DepthBiasState, RenderPass};
 
 use super::{
     object_manager::{object_buffer_index, object_skinning_buffer},
@@ -24,7 +25,7 @@ use crate::{
     components::mesh,
     material::RenderMaterial,
     material_desc::{MaterialData, PbrMaterialData, RenderMaterialDesc},
-    mesh::{SkinnedVertex, Vertex, VertexDesc},
+    mesh::{SkinnedVertex, VertexDesc},
     mesh_buffer::{MeshBuffer, MeshHandle},
     mesh_desc::MeshDesc,
     renderer::RendererStore,
@@ -69,6 +70,30 @@ struct DrawObject {
     batch_id: usize,
 }
 
+struct IndirectBatch {
+    batch_id: usize,
+    offset: usize,
+    count: usize,
+}
+
+/// Argument buffer layout for draw_indexed_indirect commands.
+#[repr(C)]
+#[derive(Copy, Clone, Debug, Default, Pod, Zeroable)]
+pub struct DrawIndexedIndirectArgs {
+    /// The number of indices to draw.
+    pub index_count: u32,
+    /// The number of instances to draw.
+    pub instance_count: u32,
+    /// The first index within the index buffer.
+    pub first_index: u32,
+    /// The value added to the vertex index before indexing into the vertex buffer.
+    pub base_vertex: i32,
+    /// The instance ID of the first instance to draw.
+    ///
+    /// Has to be 0, unless [`Features::INDIRECT_FIRST_INSTANCE`](crate::Features::INDIRECT_FIRST_INSTANCE) is enabled.
+    pub first_instance: u32,
+}
+
 pub struct MeshRenderer {
     id: Entity,
     pub meshes: HashMap<MeshDesc, Weak<MeshHandle<SkinnedVertex>>>,
@@ -82,6 +107,8 @@ pub struct MeshRenderer {
     draws: Vec<DrawObject>,
     draw_map: BTreeMap<Entity, usize>,
     batch_map: HashMap<BatchKey, BatchId>,
+    indirect_draws: Vec<IndirectBatch>,
+    indirect_commands: TypedBuffer<DrawIndexedIndirectArgs>,
 
     mesh_buffer: MeshBuffer<SkinnedVertex>,
     shader_pass: Component<MaterialData>,
@@ -106,6 +133,13 @@ impl MeshRenderer {
             renderer_location(id),
         ));
 
+        let indirect_commands = TypedBuffer::new_uninit(
+            gpu,
+            "IndirectDraw",
+            BufferUsages::INDIRECT | BufferUsages::COPY_DST,
+            128,
+        );
+
         Self {
             id,
             shader_library,
@@ -122,6 +156,8 @@ impl MeshRenderer {
             draw_map: Default::default(),
             updated_object_indexes: Query::new((entity_ids(), object_buffer_index().modified()))
                 .with(renderer_location(id)),
+            indirect_draws: Vec::new(),
+            indirect_commands,
         }
     }
 
@@ -154,6 +190,7 @@ impl MeshRenderer {
         .without(renderer_location(self.id));
         let mut new_components = Vec::new();
 
+        let mut new_objects = false;
         for (entity, mesh, material, &object_index, skinned) in &mut query.borrow(world) {
             let id = entity.id();
             let key = BatchKey { mesh, material };
@@ -259,11 +296,55 @@ impl MeshRenderer {
 
             self.draw_map.insert(id, self.draws.len());
             self.draws.push(draw);
+            new_objects = true;
         }
 
         world
             .append_all(renderer_location(self.id), new_components)
             .unwrap();
+
+        if !new_objects {
+            return Ok(());
+        }
+
+        let mut total_object_count = 0;
+        self.indirect_draws.clear();
+        self.draws.sort_by_key(|v| v.batch_id);
+
+        let chunks = self.draws.iter().chunk_by(|v| v.batch_id);
+        for (batch_id, group) in &chunks {
+            let group_count = group.count();
+            let batch = IndirectBatch {
+                batch_id,
+                offset: total_object_count,
+                count: group_count,
+            };
+
+            tracing::info!("group of {group_count}");
+            self.indirect_draws.push(batch);
+            total_object_count += group_count;
+        }
+
+        let indirect_draws = self
+            .draws
+            .iter()
+            .map(|v| {
+                let batch = &self.batches[v.batch_id];
+
+                let index_offset = batch.mesh.ib().offset() as u32;
+                let index_count = batch.mesh.index_count() as u32;
+
+                DrawIndexedIndirectArgs {
+                    index_count,
+                    instance_count: 1,
+                    first_index: index_offset,
+                    base_vertex: 0,
+                    first_instance: v.object_index as u32,
+                }
+            })
+            .collect_vec();
+
+        self.indirect_commands.write(&gpu.queue, 0, &indirect_draws);
 
         Ok(())
     }
@@ -320,22 +401,25 @@ impl CameraRenderer for MeshRenderer {
 
         self.mesh_buffer.bind(render_pass);
 
-        for draw in &self.draws {
+        for draw in &self.indirect_draws {
             let batch = &self.batches[draw.batch_id];
 
             if let Some(bind_group) = batch.material.bind_group() {
                 render_pass.set_bind_group(ctx.bind_groups.len() as u32, bind_group, &[]);
             }
 
-            let index_offset = batch.mesh.ib().offset() as u32;
-            let index_count = batch.mesh.index_count() as u32;
-
             render_pass.set_pipeline(ctx.store.shaders[&batch.shader].pipeline());
-            render_pass.draw_indexed(
-                index_offset..index_offset + index_count,
-                0,
-                draw.object_index as u32..draw.object_index as u32 + 1,
+
+            render_pass.multi_draw_indexed_indirect(
+                &self.indirect_commands,
+                draw.offset as u64 * size_of::<DrawIndexedIndirectArgs>() as u64,
+                draw.count as u32,
             );
+            // render_pass.draw_indexed(
+            //     index_offset..index_offset + index_count,
+            //     0,
+            //     draw.object_index as u32..draw.object_index as u32 + 1,
+            // );
         }
 
         Ok(())

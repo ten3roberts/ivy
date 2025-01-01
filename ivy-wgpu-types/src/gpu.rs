@@ -5,7 +5,10 @@ use wgpu::{Backends, Features, SurfaceConfiguration, SurfaceError, SurfaceTextur
 use winit::{dpi::PhysicalSize, window::Window};
 
 fn device_features() -> wgpu::Features {
-    Features::TEXTURE_FORMAT_16BIT_NORM | Features::POLYGON_MODE_LINE
+    Features::TEXTURE_FORMAT_16BIT_NORM
+        | Features::POLYGON_MODE_LINE
+        | wgpu::Features::MULTI_DRAW_INDIRECT
+        | wgpu::Features::INDIRECT_FIRST_INSTANCE
 }
 
 /// Represents the basic graphics state, such as the device and queue.
