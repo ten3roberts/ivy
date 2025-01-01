@@ -146,4 +146,8 @@ where
     pub fn label(&self) -> &str {
         self.label.as_ref()
     }
+
+    pub fn gen(&self) -> u32 {
+        self.buffer.gen()
+    }
 }

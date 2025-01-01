@@ -1,14 +1,15 @@
 use glam::{Mat4, Vec3};
 use ivy_core::profiling::profile_function;
 use ivy_wgpu::{
-    renderer::{CameraRenderer, UpdateContext},
+    renderer::{CameraRenderer, RenderContext, UpdateContext},
     types::{
         shader::ShaderDesc, BindGroupBuilder, BindGroupLayoutBuilder, RenderShader, TypedBuffer,
     },
     Gpu,
 };
 use wgpu::{
-    AddressMode, BufferUsages, FilterMode, ShaderModuleDescriptor, ShaderSource, ShaderStages,
+    AddressMode, BufferUsages, CommandEncoder, FilterMode, ShaderModuleDescriptor, ShaderSource,
+    ShaderStages,
 };
 
 pub struct SkyboxRenderer {
@@ -58,14 +59,22 @@ impl SkyboxRenderer {
 }
 
 impl CameraRenderer for SkyboxRenderer {
-    fn update(&mut self, ctx: &mut UpdateContext<'_>) -> anyhow::Result<()> {
+    fn update(&mut self, _: &mut UpdateContext) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn before_draw(
+        &mut self,
+        ctx: &RenderContext<'_>,
+        _: &mut CommandEncoder,
+    ) -> anyhow::Result<()> {
         profile_function!();
 
         self.buffer.write(
             &ctx.gpu.queue,
             0,
             &[UniformData {
-                inv_proj: ctx.camera.projection.inverse(),
+                inv_proj: ctx.camera.proj.inverse(),
                 inv_view: ctx.camera.view.inverse(),
                 fog_color: ctx.camera.fog_color,
                 fog_blend: ctx.camera.fog_blend,

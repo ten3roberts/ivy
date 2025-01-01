@@ -6,18 +6,22 @@ use std::{
 use bytemuck::{Pod, Zeroable};
 use flax::{
     entity_ids,
-    fetch::entity_refs,
+    fetch::{entity_refs, EntityRefs, Satisfied},
     filter::{All, ChangeFilter, With},
     Component, Entity, EntityIds, FetchExt, Query, World,
 };
+use glam::{vec4, Mat4, Vec3, Vec4, Vec4Swizzles};
 use itertools::Itertools;
 use ivy_assets::{map::AssetMap, stored::Handle, Asset, AssetCache};
 use ivy_core::{profiling::profile_function, subscribers::RemovedComponentSubscriber, WorldExt};
-use ivy_wgpu_types::{shader::Culling, TypedBuffer};
+use ivy_wgpu_types::{
+    multi_buffer::SubBuffer, shader::Culling, BindGroupBuilder, BindGroupLayoutBuilder,
+};
 use slab::Slab;
-use wgpu::{BindGroupLayout, BufferUsages, DepthBiasState, RenderPass};
+use wgpu::{BindGroup, BindGroupLayout, CommandEncoder, DepthBiasState, RenderPass, ShaderStages};
 
 use super::{
+    culling::{CullDrawObject, ObjectCulling},
     object_manager::{object_buffer_index, object_skinning_buffer},
     CameraRenderer, TargetDesc,
 };
@@ -28,7 +32,7 @@ use crate::{
     mesh::{SkinnedVertex, VertexDesc},
     mesh_buffer::{MeshBuffer, MeshHandle},
     mesh_desc::MeshDesc,
-    renderer::RendererStore,
+    renderer::{culling::CullData, RendererStore},
     shader::ShaderPass,
     shader_library::ShaderLibrary,
     types::{shader::ShaderDesc, RenderShader},
@@ -43,14 +47,14 @@ pub struct BatchKey {
 
 /// A single rendering batch of similar objects
 struct Batch {
-    mesh: Arc<MeshHandle<SkinnedVertex>>,
+    mesh: CachedMesh,
     material: Asset<RenderMaterial>,
     shader: Handle<RenderShader>,
 }
 
 impl Batch {
     pub fn new(
-        mesh: Arc<MeshHandle<SkinnedVertex>>,
+        mesh: CachedMesh,
         material: Asset<RenderMaterial>,
         shader: Handle<RenderShader>,
     ) -> Self {
@@ -64,16 +68,9 @@ impl Batch {
 
 pub type ShaderFactory = Box<dyn FnMut(ShaderDesc) -> ShaderDesc>;
 
-struct DrawObject {
-    id: Entity,
-    object_index: usize,
-    batch_id: usize,
-}
-
 struct IndirectBatch {
-    batch_id: usize,
-    offset: usize,
-    count: usize,
+    batch_id: u32,
+    offset: u32,
 }
 
 /// Argument buffer layout for draw_indexed_indirect commands.
@@ -94,9 +91,32 @@ pub struct DrawIndexedIndirectArgs {
     pub first_instance: u32,
 }
 
+struct WeakCachedMesh {
+    handle: Weak<MeshHandle<SkinnedVertex>>,
+    bounding_radius: f32,
+}
+
+struct CachedMesh {
+    handle: Arc<MeshHandle<SkinnedVertex>>,
+    bounding_radius: f32,
+}
+
+type NewObjectQuery = (
+    EntityRefs,
+    Component<MeshDesc>,
+    Component<MaterialData>,
+    Component<usize>,
+    Satisfied<Component<SubBuffer<Mat4>>>,
+);
+
 pub struct MeshRenderer {
     id: Entity,
-    pub meshes: HashMap<MeshDesc, Weak<MeshHandle<SkinnedVertex>>>,
+
+    object_buffer_gen: u32,
+    skin_buffer_gen: u32,
+    bind_group: Option<BindGroup>,
+    bind_group_layout: BindGroupLayout,
+    meshes: HashMap<MeshDesc, WeakCachedMesh>,
     pub shaders: AssetMap<ShaderPass, Handle<RenderShader>>,
 
     /// Keep track of loaded materials
@@ -104,23 +124,26 @@ pub struct MeshRenderer {
     pub materials: HashMap<MaterialData, Asset<RenderMaterial>>,
 
     batches: Slab<Batch>,
-    draws: Vec<DrawObject>,
+    draws: Vec<CullDrawObject>,
     draw_map: BTreeMap<Entity, usize>,
     batch_map: HashMap<BatchKey, BatchId>,
-    indirect_draws: Vec<IndirectBatch>,
-    indirect_commands: TypedBuffer<DrawIndexedIndirectArgs>,
+    indirect_draws: Vec<DrawIndexedIndirectArgs>,
+    indirect_batches: Vec<IndirectBatch>,
 
     mesh_buffer: MeshBuffer<SkinnedVertex>,
-    shader_pass: Component<MaterialData>,
     shader_library: Arc<ShaderLibrary>,
     shader_factory: ShaderFactory,
     updated_object_indexes: Query<(EntityIds, ChangeFilter<usize>), (All, With)>,
     removed_rx: flume::Receiver<(Entity, RendererLocation)>,
+    cull: ObjectCulling,
+    new_object_query: Query<NewObjectQuery, (All, flax::filter::Without)>,
+    needs_indirect_rebuild: bool,
 }
 
 impl MeshRenderer {
     pub fn new(
         world: &mut World,
+        assets: &AssetCache,
         gpu: &Gpu,
         shader_pass: Component<MaterialData>,
         shader_library: Arc<ShaderLibrary>,
@@ -133,15 +156,28 @@ impl MeshRenderer {
             renderer_location(id),
         ));
 
-        let indirect_commands = TypedBuffer::new_uninit(
-            gpu,
-            "IndirectDraw",
-            BufferUsages::INDIRECT | BufferUsages::COPY_DST,
-            128,
-        );
+        let cull = ObjectCulling::new(assets, gpu);
+
+        let bind_group_layout = BindGroupLayoutBuilder::new("ObjectBuffer")
+            .bind_storage_buffer(ShaderStages::VERTEX) // object_data
+            .bind_storage_buffer(ShaderStages::VERTEX) // indirection
+            .bind_storage_buffer(ShaderStages::VERTEX) // skin_data
+            .build(gpu);
+
+        let new_object_query = Query::new((
+            entity_refs(),
+            mesh(),
+            shader_pass,
+            object_buffer_index(),
+            object_skinning_buffer().satisfied(),
+        ))
+        .without(renderer_location(id));
 
         Self {
             id,
+            bind_group: None,
+            bind_group_layout,
+            cull,
             shader_library,
             meshes: Default::default(),
             shaders: Default::default(),
@@ -149,15 +185,18 @@ impl MeshRenderer {
             batches: Default::default(),
             batch_map: Default::default(),
             mesh_buffer: MeshBuffer::new(gpu, "mesh_buffer", 4),
-            shader_pass,
             shader_factory: Box::new(|v| v),
             removed_rx,
             draws: Vec::new(),
             draw_map: Default::default(),
             updated_object_indexes: Query::new((entity_ids(), object_buffer_index().modified()))
                 .with(renderer_location(id)),
+            new_object_query,
             indirect_draws: Vec::new(),
-            indirect_commands,
+            indirect_batches: Vec::new(),
+            object_buffer_gen: 0,
+            skin_buffer_gen: 0,
+            needs_indirect_rebuild: true,
         }
     }
 
@@ -180,46 +219,63 @@ impl MeshRenderer {
         store: &mut RendererStore,
         target: &TargetDesc,
     ) -> anyhow::Result<()> {
-        let mut query = Query::new((
-            entity_refs(),
-            mesh().cloned(),
-            self.shader_pass.cloned(),
-            object_buffer_index(),
-            object_skinning_buffer().satisfied(),
-        ))
-        .without(renderer_location(self.id));
         let mut new_components = Vec::new();
 
-        let mut new_objects = false;
-        for (entity, mesh, material, &object_index, skinned) in &mut query.borrow(world) {
+        for (entity, mesh, material, &object_index, skinned) in
+            self.new_object_query.borrow(world).iter()
+        {
             let id = entity.id();
-            let key = BatchKey { mesh, material };
+            let key = BatchKey {
+                mesh: mesh.clone(),
+                material: material.clone(),
+            };
 
             let mut create_batch = |key: &BatchKey| {
                 let mut load_mesh = |v: &MeshDesc| {
                     let mesh_data = v.load_data(assets).unwrap();
+                    let vertices = SkinnedVertex::compose_from_mesh(&mesh_data);
 
-                    Arc::new(self.mesh_buffer.insert(
-                        gpu,
-                        &SkinnedVertex::compose_from_mesh(&mesh_data),
-                        mesh_data.indices(),
-                    ))
+                    let bounding_radius = vertices
+                        .iter()
+                        .map(|v| v.pos.length())
+                        .max_by_key(|&v| ordered_float::OrderedFloat(v))
+                        .unwrap_or_default();
+
+                    CachedMesh {
+                        handle: Arc::new(self.mesh_buffer.insert(
+                            gpu,
+                            &vertices,
+                            mesh_data.indices(),
+                        )),
+                        bounding_radius,
+                    }
                 };
 
                 let mesh = match self.meshes.entry(key.mesh.clone()) {
                     Entry::Occupied(mut v) => {
-                        if let Some(mesh) = v.get().upgrade() {
-                            mesh
+                        if let Some(mesh) = v.get().handle.upgrade() {
+                            CachedMesh {
+                                handle: mesh,
+                                bounding_radius: v.get().bounding_radius,
+                            }
                         } else {
-                            let handle = load_mesh(v.key());
-                            v.insert(Arc::downgrade(&handle));
-                            handle
+                            let mesh = load_mesh(v.key());
+                            v.insert(WeakCachedMesh {
+                                handle: Arc::downgrade(&mesh.handle),
+                                bounding_radius: mesh.bounding_radius,
+                            });
+
+                            mesh
                         }
                     }
                     Entry::Vacant(v) => {
-                        let handle = load_mesh(v.key());
-                        v.insert(Arc::downgrade(&handle));
-                        handle
+                        let mesh = load_mesh(v.key());
+                        v.insert(WeakCachedMesh {
+                            handle: Arc::downgrade(&mesh.handle),
+                            bounding_radius: mesh.bounding_radius,
+                        });
+
+                        mesh
                     }
                 };
 
@@ -251,6 +307,7 @@ impl MeshRenderer {
                             let bind_group_layouts = layouts
                                 .iter()
                                 .copied()
+                                .chain([&self.bind_group_layout])
                                 .chain(material.layout())
                                 .collect_vec();
 
@@ -286,78 +343,68 @@ impl MeshRenderer {
                 }
             };
 
-            let draw = DrawObject {
+            let draw = CullDrawObject {
+                object_index: object_index as u32,
+                batch_id: batch_id as u32,
+                radius: self.batches[batch_id].mesh.bounding_radius,
                 id,
-                object_index,
-                batch_id,
             };
 
             new_components.push((id, RendererLocation { batch_id }));
 
             self.draw_map.insert(id, self.draws.len());
             self.draws.push(draw);
-            new_objects = true;
+            self.needs_indirect_rebuild = true;
         }
 
         world
             .append_all(renderer_location(self.id), new_components)
             .unwrap();
 
-        if !new_objects {
-            return Ok(());
-        }
+        Ok(())
+    }
 
+    fn rebuild_indirect_batches(&mut self, gpu: &Gpu) {
         let mut total_object_count = 0;
         self.indirect_draws.clear();
+        self.indirect_batches.clear();
         self.draws.sort_by_key(|v| v.batch_id);
 
         let chunks = self.draws.iter().chunk_by(|v| v.batch_id);
         for (batch_id, group) in &chunks {
-            let group_count = group.count();
-            let batch = IndirectBatch {
-                batch_id,
-                offset: total_object_count,
-                count: group_count,
+            let instance_count = group.count() as u32;
+            let batch = &self.batches[batch_id as usize];
+            let cmd = DrawIndexedIndirectArgs {
+                index_count: batch.mesh.handle.index_count() as u32,
+                instance_count: 0, // filled by culling
+                first_index: batch.mesh.handle.ib().offset() as u32,
+                base_vertex: 0,
+                first_instance: total_object_count,
             };
 
-            tracing::info!("group of {group_count}");
-            self.indirect_draws.push(batch);
-            total_object_count += group_count;
+            let batch = IndirectBatch {
+                batch_id,
+                offset: self.indirect_draws.len() as u32,
+            };
+
+            self.indirect_draws.push(cmd);
+            self.indirect_batches.push(batch);
+            total_object_count += instance_count;
         }
 
-        let indirect_draws = self
-            .draws
-            .iter()
-            .map(|v| {
-                let batch = &self.batches[v.batch_id];
-
-                let index_offset = batch.mesh.ib().offset() as u32;
-                let index_count = batch.mesh.index_count() as u32;
-
-                DrawIndexedIndirectArgs {
-                    index_count,
-                    instance_count: 1,
-                    first_index: index_offset,
-                    base_vertex: 0,
-                    first_instance: v.object_index as u32,
-                }
-            })
-            .collect_vec();
-
-        self.indirect_commands.write(&gpu.queue, 0, &indirect_draws);
-
-        Ok(())
+        self.cull.update_objects(gpu, &self.draws);
     }
 
     pub fn process_moved_objects(&mut self, world: &World) {
         for (id, &index) in self.updated_object_indexes.borrow(world).iter() {
             let draw_index = *self.draw_map.get(&id).unwrap();
-            self.draws[draw_index].object_index = index;
+            self.draws[draw_index].object_index = index as u32;
         }
     }
 
     pub fn handle_removed(&mut self) {
         for (id, _) in self.removed_rx.try_iter() {
+            self.needs_indirect_rebuild = true;
             let index = self.draw_map.remove(&id).expect("Object not in renderer");
             if index == self.draws.len() - 1 {
                 self.draws.pop();
@@ -382,8 +429,68 @@ impl CameraRenderer for MeshRenderer {
             ctx.store,
             &ctx.target_desc,
         )?;
+
         self.process_moved_objects(ctx.world);
         self.handle_removed();
+
+        if self.needs_indirect_rebuild {
+            self.needs_indirect_rebuild = false;
+            self.rebuild_indirect_batches(ctx.gpu);
+        }
+
+        Ok(())
+    }
+
+    fn before_draw(
+        &mut self,
+        ctx: &super::RenderContext,
+        encoder: &mut CommandEncoder,
+    ) -> anyhow::Result<()> {
+        profile_function!();
+        let object_buffer = ctx.object_manager.object_buffer();
+        let skinning_buffer = ctx.object_manager.skinning_buffer();
+
+        if self.object_buffer_gen != object_buffer.gen()
+            || self.skin_buffer_gen != skinning_buffer.gen()
+        {
+            self.object_buffer_gen = object_buffer.gen();
+            self.skin_buffer_gen = skinning_buffer.gen();
+
+            tracing::info!("discarding renderer bind group");
+            self.bind_group = None;
+            self.cull.bind_group = None;
+        }
+
+        fn normalize_plane(plane: Vec4) -> Vec4 {
+            plane / plane.xyz().length()
+        }
+
+        fn transform_perspective(inv_viewproj: Mat4, clip: Vec3) -> Vec3 {
+            let p = inv_viewproj * clip.extend(1.0);
+            p.xyz() / p.w
+        }
+
+        let proj_transposed = ctx.camera.proj.transpose();
+        let frustum_x = normalize_plane(proj_transposed.col(3) + proj_transposed.col(0));
+        let frustum_y = normalize_plane(proj_transposed.col(3) + proj_transposed.col(1));
+        let inv_proj = ctx.camera.proj.inverse();
+        let near = -transform_perspective(inv_proj, Vec3::ZERO).z;
+        let far = -transform_perspective(inv_proj, Vec3::Z).z;
+
+        self.cull.run(
+            ctx.gpu,
+            encoder,
+            CullData {
+                view: ctx.camera.view,
+                frustum: vec4(frustum_x.x, frustum_x.z, frustum_y.y, frustum_y.z),
+                near,
+                far,
+                object_count: self.draws.len() as u32,
+                _padding: Default::default(),
+            },
+            object_buffer,
+            &self.indirect_draws,
+        );
 
         Ok(())
     }
@@ -395,31 +502,38 @@ impl CameraRenderer for MeshRenderer {
     ) -> anyhow::Result<()> {
         profile_function!();
 
+        let object_buffer = ctx.object_manager.object_buffer();
+        let skinning_buffer = ctx.object_manager.skinning_buffer();
+
+        let bind_group = self.bind_group.get_or_insert_with(|| {
+            BindGroupBuilder::new("ObjectBuffer")
+                .bind_buffer(object_buffer.buffer())
+                .bind_buffer(self.cull.indirection_buffer())
+                .bind_buffer(skinning_buffer.buffer())
+                .build(ctx.gpu, &self.bind_group_layout)
+        });
+
         for (i, bind_group) in ctx.bind_groups.iter().enumerate() {
             render_pass.set_bind_group(i as _, bind_group, &[]);
         }
 
+        render_pass.set_bind_group(ctx.bind_groups.len() as u32, bind_group, &[]);
+
         self.mesh_buffer.bind(render_pass);
 
-        for draw in &self.indirect_draws {
-            let batch = &self.batches[draw.batch_id];
+        for draw in &self.indirect_batches {
+            let batch = &self.batches[draw.batch_id as usize];
 
             if let Some(bind_group) = batch.material.bind_group() {
-                render_pass.set_bind_group(ctx.bind_groups.len() as u32, bind_group, &[]);
+                render_pass.set_bind_group(ctx.bind_groups.len() as u32 + 1, bind_group, &[]);
             }
 
             render_pass.set_pipeline(ctx.store.shaders[&batch.shader].pipeline());
 
-            render_pass.multi_draw_indexed_indirect(
-                &self.indirect_commands,
+            render_pass.draw_indexed_indirect(
+                self.cull.indirect_draw_buffer(),
                 draw.offset as u64 * size_of::<DrawIndexedIndirectArgs>() as u64,
-                draw.count as u32,
             );
-            // render_pass.draw_indexed(
-            //     index_offset..index_offset + index_count,
-            //     0,
-            //     draw.object_index as u32..draw.object_index as u32 + 1,
-            // );
         }
 
         Ok(())

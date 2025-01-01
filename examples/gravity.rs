@@ -28,7 +28,6 @@ use ivy_wgpu::{
     mesh_desc::MeshDesc,
     primitives::{CapsulePrimitive, CubePrimitive},
     renderer::{EnvironmentData, RenderObjectBundle},
-    shaders::{PbrShaderDesc, ShadowShaderDesc},
 };
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;

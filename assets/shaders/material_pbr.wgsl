@@ -3,7 +3,7 @@
 #import vertex::{VertexOutput, globals};
 
 #import pbr_base::{PbrLuminance, brdf_forward};
-const DISPLACEMENT_STRENGTH: f32 = 0.2f;
+const DISPLACEMENT_STRENGTH: f32 = 0.05f;
 
 struct SurfaceProperties {
     albedo: vec4<f32>,

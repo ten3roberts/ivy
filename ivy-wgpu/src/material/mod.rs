@@ -1,10 +1,10 @@
 pub mod emissive;
 
-use ivy_assets::{Asset, AssetCache, DynAssetDesc};
+use ivy_assets::{Asset, AssetCache};
 use ivy_wgpu_types::{BindGroupBuilder, BindGroupLayoutBuilder};
 use wgpu::{BindGroup, BindGroupLayout, BufferUsages, SamplerDescriptor, ShaderStages, Texture};
 
-use crate::{shader::ShaderPass, shaders::ShadowShaderDesc, types::TypedBuffer};
+use crate::{shader::ShaderPass, types::TypedBuffer};
 
 /// A material for a single pass of the renderer
 ///

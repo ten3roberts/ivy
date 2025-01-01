@@ -29,8 +29,11 @@ var<uniform> globals: Globals;
 @group(1) @binding(0)
 var<storage> objects: array<Object>;
 
+@group(1) @binding(1)
+var<storage> indirection: array<u32>;
+
 #ifdef SKINNED
-    @group(1) @binding(1)
+    @group(1) @binding(2)
     var<storage> joint_matrices: array<mat4x4<f32>>;
 #endif
 
@@ -40,17 +43,19 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
     var pos = in.pos;
 
+    let object_index = indirection[in.instance];
+    let object = objects[object_index];
+
     #ifdef SKINNED
     pos = vec3(0f);
     for (var i = 0u; i < 4; i++) {
         let joint: u32 = in.joints[i];
         let weight: f32 = in.weights[i];
 
-        pos += (joint_matrices[joint] * vec4(in.pos, 1.0)).xyz * weight;
+        pos += (joint_matrices[object.joint_offset + joint] * vec4(in.pos, 1.0)).xyz * weight;
     }
     #endif
 
-    let object = objects[in.instance];
     let world_position = object.world_matrix * vec4(pos, 1.0);
     out.normal = (object.world_matrix * vec4(in.normal, 0.0)).xyz;
 

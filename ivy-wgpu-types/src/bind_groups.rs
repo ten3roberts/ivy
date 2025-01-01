@@ -161,6 +161,17 @@ impl BindGroupLayoutBuilder {
         )
     }
 
+    pub fn bind_storage_buffer_write(&mut self, visibility: ShaderStages) -> &mut Self {
+        self.bind(
+            visibility,
+            BindingType::Buffer {
+                ty: BufferBindingType::Storage { read_only: false },
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+        )
+    }
+
     pub fn build(&self, gpu: &Gpu) -> BindGroupLayout {
         gpu.device
             .create_bind_group_layout(&BindGroupLayoutDescriptor {

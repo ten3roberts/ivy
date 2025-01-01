@@ -1,6 +1,5 @@
 use flax::{component, Debuggable};
 use glam::Mat4;
-use ivy_core::Color;
 use winit::dpi::{LogicalPosition, LogicalSize};
 
 use crate::{

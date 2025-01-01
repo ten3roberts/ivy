@@ -31,7 +31,6 @@ use ivy_wgpu::{
     mesh_desc::MeshDesc,
     primitives::{CapsulePrimitive, CubePrimitive, UvSpherePrimitive},
     renderer::{EnvironmentData, RenderObjectBundle},
-    shaders::{PbrShaderDesc, ShadowShaderDesc},
 };
 use rapier3d::prelude::{RigidBodyType, SharedShape};
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};

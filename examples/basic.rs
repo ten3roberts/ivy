@@ -2,8 +2,8 @@ use std::f32::consts::{PI, TAU};
 
 use anyhow::Context;
 use flax::{
-    components::child_of, BoxedSystem, Component, Entity, EntityBuilder, FetchExt, Query,
-    QueryBorrow, System, World,
+    components::child_of, BoxedSystem, Component, Entity, FetchExt, Query, QueryBorrow, System,
+    World,
 };
 use glam::{vec3, EulerRot, Mat4, Quat, Vec3};
 use image::{DynamicImage, Rgba};
@@ -61,7 +61,7 @@ use rapier3d::prelude::SharedShape;
 use tracing::Instrument;
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
-use violet::palette::{self, rgb::Rgb, Hsl, IntoColor};
+use violet::palette::{rgb::Rgb, Hsl, IntoColor};
 use wgpu::TextureFormat;
 use winit::{dpi::LogicalSize, window::WindowAttributes};
 

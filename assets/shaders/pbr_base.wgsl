@@ -42,6 +42,8 @@ fn geometry_smith(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, roughness: f32) -> f
 
 struct ShadowCamera {
     viewproj: mat4x4<f32>,
+    view: mat4x4<f32>,
+    proj: mat4x4<f32>,
     texel_size: vec2<f32>,
     depth: f32,
 }
@@ -72,16 +74,16 @@ var integrated_brdf: texture_2d<f32>;
 @group(0) @binding(5)
 var environment_sampler: sampler;
 
-@group(2) @binding(0)
+@group(1) @binding(0)
 var<storage> lights: array<Light>;
 
-@group(2) @binding(1)
+@group(1) @binding(1)
 var<storage> shadow_cameras: array<ShadowCamera>;
 
-@group(2) @binding(2)
+@group(1) @binding(2)
 var shadow_maps: texture_depth_2d_array;
 
-@group(2) @binding(3)
+@group(1) @binding(3)
 var shadow_sampler: sampler_comparison;
 
 struct PbrLuminance {

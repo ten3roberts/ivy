@@ -21,9 +21,9 @@ use ivy_gltf::{
 };
 use ivy_wgpu_types::{
     multi_buffer::{MultiBuffer, SubBuffer},
-    BindGroupBuilder, BindGroupLayoutBuilder, Gpu, TypedBuffer,
+    Gpu, TypedBuffer,
 };
-use wgpu::{BindGroupLayout, BufferUsages, ShaderStages};
+use wgpu::BufferUsages;
 
 use crate::components::mesh;
 
@@ -86,8 +86,6 @@ pub struct ObjectManager {
     skinning_buffer: MultiBuffer<Mat4>,
     skinning_data: Vec<Mat4>,
 
-    bind_group_layout: BindGroupLayout,
-    bind_group: wgpu::BindGroup,
     removed_rx: flume::Receiver<(flax::Entity, usize)>,
     object_query: Query<UpdateFetch, (All, With)>,
     skin_query: Query<SkinUpdateFetch, (All, With)>,
@@ -95,11 +93,6 @@ pub struct ObjectManager {
 
 impl ObjectManager {
     pub fn new(world: &mut World, gpu: &Gpu) -> Self {
-        let bind_group_layout = BindGroupLayoutBuilder::new("ObjectBuffer")
-            .bind_storage_buffer(ShaderStages::VERTEX)
-            .bind_storage_buffer(ShaderStages::VERTEX)
-            .build(gpu);
-
         let object_buffer = TypedBuffer::new(
             gpu,
             "object_buffer",
@@ -114,11 +107,6 @@ impl ObjectManager {
             64,
         );
 
-        let bind_group = BindGroupBuilder::new("ObjectBuffer")
-            .bind_buffer(&object_buffer)
-            .bind_buffer(skinning_buffer.buffer())
-            .build(gpu, &bind_group_layout);
-
         let (removed_tx, removed_rx) = flume::unbounded();
         world.subscribe(RemovedComponentSubscriber::new(
             removed_tx,
@@ -129,8 +117,6 @@ impl ObjectManager {
             object_data: Vec::new(),
             object_map: Vec::new(),
             object_buffer,
-            bind_group_layout,
-            bind_group,
             removed_rx,
             object_query: Query::new((object_buffer_index(), ObjectDataQuery::new().modified()))
                 .with(mesh()),
@@ -152,11 +138,6 @@ impl ObjectManager {
 
         self.object_buffer
             .resize(gpu, capacity.next_power_of_two(), false);
-
-        self.bind_group = BindGroupBuilder::new("ObjectBuffer")
-            .bind_buffer(&self.object_buffer)
-            .bind_buffer(self.skinning_buffer.buffer())
-            .build(gpu, &self.bind_group_layout);
     }
 
     pub fn collect_unbatched(&mut self, world: &mut World, gpu: &Gpu) {
@@ -171,7 +152,6 @@ impl ObjectManager {
         let mut new_components = Vec::new();
         let mut new_skin_components = Vec::new();
 
-        let mut resized_skinning_buffer = false;
         for (entity, (&transform, skin)) in &mut query.borrow(world) {
             let id = entity.id();
             let new_index = self.object_data.len();
@@ -182,7 +162,6 @@ impl ObjectManager {
                     let subbuffer = if let Some(handle) = self.skinning_buffer.allocate(joints) {
                         handle
                     } else {
-                        resized_skinning_buffer = true;
                         self.skinning_buffer.grow(gpu, joints);
                         self.skinning_data
                             .resize(self.skinning_buffer.len(), Mat4::IDENTITY);
@@ -217,13 +196,7 @@ impl ObjectManager {
 
         if self.object_data.len() > self.object_buffer.len() {
             self.resize_object_buffer(gpu, self.object_data.len());
-        } else if resized_skinning_buffer {
-            self.bind_group = BindGroupBuilder::new("ObjectBuffer")
-                .bind_buffer(&self.object_buffer)
-                .bind_buffer(self.skinning_buffer.buffer())
-                .build(gpu, &self.bind_group_layout);
         }
-
         {
             self.object_buffer.write(&gpu.queue, 0, &self.object_data);
         }
@@ -288,12 +261,16 @@ impl ObjectManager {
         &self.object_buffer
     }
 
-    pub fn bind_group(&self) -> &wgpu::BindGroup {
-        &self.bind_group
+    pub fn object_data(&self) -> &[RenderObjectData] {
+        &self.object_data
     }
 
-    pub fn bind_group_layout(&self) -> &BindGroupLayout {
-        &self.bind_group_layout
+    pub fn skinning_buffer(&self) -> &MultiBuffer<Mat4> {
+        &self.skinning_buffer
+    }
+
+    pub fn skinning_data(&self) -> &[Mat4] {
+        &self.skinning_data
     }
 }
 

@@ -247,7 +247,7 @@ pub fn ray_distance_system(dt: f32) -> BoxedSystem {
         )))
         .for_each(move |(state, &change_distance)| {
             if let Some((_, _, distance)) = &mut state.picked_object {
-                *distance = (*distance + change_distance as f32 * 5.0 * dt).max(2.0);
+                *distance = (*distance + change_distance * 5.0 * dt).max(2.0);
             }
         })
         .boxed()

@@ -7,7 +7,6 @@ use winit::{dpi::PhysicalSize, window::Window};
 fn device_features() -> wgpu::Features {
     Features::TEXTURE_FORMAT_16BIT_NORM
         | Features::POLYGON_MODE_LINE
-        | wgpu::Features::MULTI_DRAW_INDIRECT
         | wgpu::Features::INDIRECT_FIRST_INSTANCE
 }
 
@@ -109,7 +108,10 @@ impl Gpu {
                     required_limits: if cfg!(target_arch = "wasm32") {
                         wgpu::Limits::downlevel_webgl2_defaults()
                     } else {
-                        wgpu::Limits::default()
+                        wgpu::Limits {
+                            max_bind_groups: 6,
+                            ..wgpu::Limits::default()
+                        }
                     },
                     label: None,
                     ..Default::default()

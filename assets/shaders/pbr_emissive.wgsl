@@ -4,19 +4,23 @@ struct Object {
     joint_offset: u32,
 }
 
-@group(1) @binding(0)
+@group(2) @binding(0)
 var<storage> objects: array<Object>;
+
+@group(2) @binding(1)
+var<storage> indirection: array<u32>;
 
 #import vertex::{VertexInput, VertexOutput, transform_vertex, Globals, globals};
 
 #ifdef SKINNED
-    @group(1) @binding(1)
+    @group(2) @binding(1)
     var<storage> joint_matrices: array<mat4x4<f32>>;
 #endif
 
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput {
-    let object = objects[in.instance];
+    let object_index = indirection[in.instance];
+    let object = objects[object_index];
 
     var vertex = in;
 

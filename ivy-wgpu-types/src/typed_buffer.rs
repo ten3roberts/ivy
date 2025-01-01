@@ -4,7 +4,7 @@ use std::{
     ops::{Bound, Deref, RangeBounds},
 };
 
-use bytemuck::Pod;
+use bytemuck::NoUninit;
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     Buffer, BufferAsyncError, BufferDescriptor, BufferSlice, BufferUsages, BufferView,
@@ -18,6 +18,7 @@ pub struct TypedBuffer<T> {
     buffer: Buffer,
     len: usize,
     label: String,
+    gen: u32,
     _marker: PhantomData<T>,
 }
 
@@ -31,7 +32,7 @@ impl<T> Deref for TypedBuffer<T> {
 
 impl<T> TypedBuffer<T>
 where
-    T: Pod,
+    T: NoUninit,
 {
     pub fn new(gpu: &Gpu, label: impl Into<String>, usage: BufferUsages, data: &[T]) -> Self {
         let label = label.into();
@@ -46,6 +47,7 @@ where
             buffer,
             len: data.len(),
             label,
+            gen: 0,
             _marker: PhantomData,
         }
     }
@@ -68,6 +70,7 @@ where
             buffer,
             len,
             label,
+            gen: 0,
             _marker: PhantomData,
         }
     }
@@ -91,6 +94,7 @@ where
             buffer,
             len,
             label,
+            gen: 0,
             _marker: PhantomData,
         }
     }
@@ -158,6 +162,7 @@ where
 
         self.len = new_len;
         self.buffer = buffer;
+        self.gen += 1;
     }
 
     pub fn slice(&self, bounds: impl RangeBounds<usize>) -> BufferSlice<'_> {
@@ -201,5 +206,9 @@ where
 
     pub fn buffer(&self) -> &Buffer {
         &self.buffer
+    }
+
+    pub fn gen(&self) -> u32 {
+        self.gen
     }
 }

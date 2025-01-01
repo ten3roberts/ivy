@@ -1,3 +1,4 @@
+mod culling;
 pub mod gizmos_renderer;
 mod light_manager;
 pub mod mesh_renderer;
@@ -23,9 +24,9 @@ use ivy_wgpu_types::shader::TargetDesc;
 pub use light_manager::LightManager;
 pub use object_manager::ObjectManager;
 use wgpu::{
-    AddressMode, BindGroup, BindGroupLayout, BufferUsages, Extent3d, FilterMode, Operations, Queue,
-    RenderPass, RenderPassColorAttachment, RenderPassDescriptor, ShaderStages, TextureDescriptor,
-    TextureUsages, TextureViewDescriptor, TextureViewDimension,
+    AddressMode, BindGroup, BindGroupLayout, BufferUsages, CommandEncoder, Extent3d, FilterMode,
+    Operations, Queue, RenderPass, RenderPassColorAttachment, RenderPassDescriptor, ShaderStages,
+    TextureDescriptor, TextureUsages, TextureViewDescriptor, TextureViewDimension,
 };
 
 use crate::{
@@ -110,6 +111,7 @@ pub struct RenderContext<'a> {
     pub layouts: &'a [&'a BindGroupLayout],
     pub bind_groups: &'a [&'a BindGroup],
     pub target_desc: TargetDesc<'a>,
+    pub camera: CameraData,
 }
 
 pub struct UpdateContext<'a> {
@@ -120,12 +122,19 @@ pub struct UpdateContext<'a> {
     pub object_manager: &'a ObjectManager,
     pub layouts: &'a [&'a BindGroupLayout],
     // pub camera_data: &'a CameraShaderData,
-    pub camera: CameraData,
     pub target_desc: TargetDesc<'a>,
 }
 
 pub trait CameraRenderer {
     fn update(&mut self, ctx: &mut UpdateContext) -> anyhow::Result<()>;
+
+    fn before_draw(
+        &mut self,
+        _ctx: &RenderContext,
+        _encoder: &mut CommandEncoder,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
 
     fn draw<'s>(
         &'s mut self,
@@ -142,6 +151,15 @@ macro_rules! impl_for_tuples {
                 Ok(())
             }
 
+            fn before_draw<'s>(
+                &'s mut self,
+                ctx: &'s RenderContext<'s>,
+                encoder: &mut CommandEncoder,
+            ) -> anyhow::Result<()> {
+                $(self.$idx.before_draw(ctx, encoder)?;)*
+
+                Ok(())
+            }
             fn draw<'s>(
                 &'s mut self,
                 ctx: &'s RenderContext<'s>,
@@ -163,6 +181,14 @@ impl_for_tuples! { 0 => A, 1 => B, 2 => C, 3 => D }
 impl CameraRenderer for Box<dyn CameraRenderer> {
     fn update(&mut self, ctx: &mut UpdateContext) -> anyhow::Result<()> {
         (**self).update(ctx)
+    }
+
+    fn before_draw(
+        &mut self,
+        ctx: &RenderContext,
+        encoder: &mut CommandEncoder,
+    ) -> anyhow::Result<()> {
+        (**self).before_draw(ctx, encoder)
     }
 
     fn draw<'s>(
@@ -233,7 +259,7 @@ pub fn get_camera_data(camera: &EntityRef) -> CameraData {
     CameraData {
         viewproj: projection * view,
         view,
-        projection,
+        proj: projection,
         camera_pos: world_transform.transform_point3(Vec3::ZERO),
         fog_color: to_linear_vec3(env_data.fog_color),
         fog_density: env_data.fog_density,
@@ -319,12 +345,7 @@ impl Node for CameraNode {
                 depth_format: depth.format().into(),
                 sample_count: output.sample_count(),
             },
-            layouts: &[
-                &self.shader_data.layout,
-                object_manager.bind_group_layout(),
-                self.light_manager.layout(),
-            ],
-            camera: self.shader_data.data,
+            layouts: &[&self.shader_data.layout, self.light_manager.layout()],
             object_manager,
         })?;
 
@@ -432,18 +453,13 @@ impl Node for CameraNode {
                 depth_format: depth.format().into(),
                 sample_count: output.sample_count(),
             },
-            bind_groups: &[
-                bind_group,
-                object_manager.bind_group(),
-                self.light_manager.bind_group().unwrap(),
-            ],
-            layouts: &[
-                &self.shader_data.layout,
-                object_manager.bind_group_layout(),
-                self.light_manager.layout(),
-            ],
+            bind_groups: &[bind_group, self.light_manager.bind_group().unwrap()],
+            layouts: &[&self.shader_data.layout, self.light_manager.layout()],
+            camera: self.shader_data.data,
             object_manager,
         };
+
+        self.renderer.before_draw(&render_context, ctx.encoder)?;
 
         let mut render_pass = ctx.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: "main_renderpass".into(),
@@ -523,7 +539,7 @@ impl Node for CameraNode {
 pub struct CameraData {
     pub viewproj: Mat4,
     pub view: Mat4,
-    pub projection: Mat4,
+    pub proj: Mat4,
     pub camera_pos: Vec3,
     pub fog_blend: f32,
     pub fog_color: Vec3,
@@ -533,7 +549,6 @@ pub struct CameraData {
 pub struct CameraShaderData {
     pub data: CameraData,
     buffer: TypedBuffer<CameraData>,
-    // TODO: lights should be managed by shared class in mesh renderer
     pub layout: BindGroupLayout,
 }
 

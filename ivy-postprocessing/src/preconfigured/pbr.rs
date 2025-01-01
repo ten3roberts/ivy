@@ -350,12 +350,14 @@ impl PbrRenderGraphConfig {
             SkyboxRenderer::new(gpu),
             MeshRenderer::new(
                 world,
+                assets,
                 gpu,
                 forward_pass(),
                 render_graph.resources.shader_library().clone(),
             ),
             MeshRenderer::new(
                 world,
+                assets,
                 gpu,
                 transparent_pass(),
                 render_graph.resources.shader_library().clone(),

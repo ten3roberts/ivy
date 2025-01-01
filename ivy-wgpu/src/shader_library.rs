@@ -6,7 +6,7 @@ use naga_oil::compose::{Composer, ShaderDefValue};
 use parking_lot::Mutex;
 use wgpu::{ShaderModule, ShaderModuleDescriptor, ShaderSource};
 
-use crate::shader::{ShaderPass, ShaderValue};
+use crate::shader::ShaderPass;
 
 pub struct ShaderModuleDesc<'a> {
     pub path: &'a str,

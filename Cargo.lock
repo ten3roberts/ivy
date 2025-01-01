@@ -436,6 +436,7 @@ version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b048fb63fd8b5923fc5aa7b340d8e156aec7ec02f0c78fa8a6ddc2613f6f71de"
 dependencies = [
+ "bytemuck",
  "serde",
 ]
 
@@ -505,9 +506,9 @@ checksum = "64fa3c856b712db6612c019f14756e64e4bcea13337a6b33b696333a9eaa2d06"
 
 [[package]]
 name = "bytemuck"
-version = "1.18.0"
+version = "1.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94bbb0ad554ad961ddc5da507a12a29b14e4ae5bda06b19f575a3e6079d2e2ae"
+checksum = "ef657dfab802224e671f5818e9a4935f9b1957ed18e58292690cc39e7a4092a3"
 dependencies = [
  "bytemuck_derive",
 ]
@@ -1113,11 +1114,12 @@ dependencies = [
 [[package]]
 name = "flax"
 version = "0.7.1"
-source = "git+https://github.com/ten3roberts/flax#23a22118a062085250b95522cf14e1f53cf8c151"
+source = "git+https://github.com/ten3roberts/flax#c07e645b60ee3f777edc9fb241d285945b60f784"
 dependencies = [
  "anyhow",
  "atomic_refcell",
  "bitflags 2.6.0",
+ "bytemuck",
  "erased-serde",
  "flax-derive",
  "flume",
@@ -1134,7 +1136,7 @@ dependencies = [
 [[package]]
 name = "flax-derive"
 version = "0.7.1"
-source = "git+https://github.com/ten3roberts/flax#23a22118a062085250b95522cf14e1f53cf8c151"
+source = "git+https://github.com/ten3roberts/flax#c07e645b60ee3f777edc9fb241d285945b60f784"
 dependencies = [
  "heck",
  "itertools 0.13.0",
@@ -2214,7 +2216,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4979f22fdb869068da03c9f7528f8297c6fd2606bc3a4affe42e6a823fdb8da4"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.6",
 ]
 
 [[package]]
