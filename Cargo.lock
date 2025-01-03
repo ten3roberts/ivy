@@ -1114,7 +1114,7 @@ dependencies = [
 [[package]]
 name = "flax"
 version = "0.7.1"
-source = "git+https://github.com/ten3roberts/flax#c07e645b60ee3f777edc9fb241d285945b60f784"
+source = "git+https://github.com/ten3roberts/flax#ad6ebf0b09dd07b91e24f7175fec32eba9e5bda6"
 dependencies = [
  "anyhow",
  "atomic_refcell",
@@ -1136,7 +1136,7 @@ dependencies = [
 [[package]]
 name = "flax-derive"
 version = "0.7.1"
-source = "git+https://github.com/ten3roberts/flax#c07e645b60ee3f777edc9fb241d285945b60f784"
+source = "git+https://github.com/ten3roberts/flax#ad6ebf0b09dd07b91e24f7175fec32eba9e5bda6"
 dependencies = [
  "heck",
  "itertools 0.13.0",
@@ -2216,7 +2216,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4979f22fdb869068da03c9f7528f8297c6fd2606bc3a4affe42e6a823fdb8da4"
 dependencies = [
  "cfg-if",
- "windows-targets 0.52.6",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]

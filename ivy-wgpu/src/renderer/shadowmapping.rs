@@ -400,7 +400,7 @@ impl Node for ShadowMapNode {
                 assets: ctx.assets,
                 gpu: ctx.gpu,
                 queue: ctx.queue,
-                store: &mut self.store,
+                store: &self.store,
                 bind_groups: &[bind_group],
                 layouts: &[&self.layout],
                 target_desc: TargetDesc {

@@ -1,8 +1,10 @@
+use std::collections::BTreeMap;
+
 use bytemuck::Zeroable;
 use flax::{
     component,
     components::child_of,
-    fetch::{entity_refs, Copied, Modified, Source, TransformFetch, Traverse},
+    fetch::{entity_refs, Modified, Source, TransformFetch, Traverse},
     filter::{All, With},
     Component, Entity, Fetch, FetchExt, Query, World,
 };
@@ -11,7 +13,7 @@ use ivy_assets::Asset;
 use ivy_core::{
     components::{color, world_transform},
     palette::WithAlpha,
-    profiling::profile_function,
+    profiling::{profile_function, profile_scope},
     subscribers::RemovedComponentSubscriber,
     to_linear_vec3, Color, WorldExt,
 };
@@ -48,23 +50,20 @@ impl RenderObjectData {
 #[derive(Fetch)]
 #[fetch(transforms = [ Modified ])]
 struct ObjectDataQuery {
-    transform: Source<Copied<Component<Mat4>>, Traverse>,
-    color: Source<Copied<Component<Color>>, Traverse>,
+    transform: Component<Mat4>,
+    color: Component<Color>,
 }
 
 impl ObjectDataQuery {
     pub fn new() -> Self {
         Self {
-            transform: world_transform().copied().traverse(child_of),
-            color: color().copied().traverse(child_of),
+            transform: world_transform(),
+            color: color(),
         }
     }
 }
 
-type UpdateFetch = (
-    Component<usize>,
-    <ObjectDataQuery as TransformFetch<Modified>>::Output,
-);
+type UpdateFetch = (Component<usize>, Source<ObjectDataQuery, Traverse>);
 
 type SkinUpdateFetch = (
     Component<usize>,
@@ -80,6 +79,7 @@ type SkinUpdateFetch = (
 pub struct ObjectManager {
     object_data: Vec<RenderObjectData>,
     object_map: Vec<Entity>,
+    entity_locations: BTreeMap<Entity, usize>,
 
     object_buffer: TypedBuffer<RenderObjectData>,
 
@@ -118,8 +118,11 @@ impl ObjectManager {
             object_map: Vec::new(),
             object_buffer,
             removed_rx,
-            object_query: Query::new((object_buffer_index(), ObjectDataQuery::new().modified()))
-                .with(mesh()),
+            object_query: Query::new((
+                object_buffer_index(),
+                ObjectDataQuery::new().traverse(child_of),
+            ))
+            .with(mesh()),
             skin_query: Query::new((
                 object_buffer_index(),
                 object_skinning_buffer(),
@@ -128,6 +131,7 @@ impl ObjectManager {
             .with(mesh()),
             skinning_data: vec![Mat4::IDENTITY; skinning_buffer.len()],
             skinning_buffer,
+            entity_locations: BTreeMap::new(),
         }
     }
 
@@ -154,7 +158,6 @@ impl ObjectManager {
 
         for (entity, (&transform, skin)) in &mut query.borrow(world) {
             let id = entity.id();
-            let new_index = self.object_data.len();
 
             let skin_buffer_offset = match skin {
                 Some(skin) => {
@@ -175,6 +178,7 @@ impl ObjectManager {
                 None => None,
             };
 
+            let new_index = self.object_data.len();
             new_components.push((id, new_index));
 
             self.object_data.push(RenderObjectData::new(
@@ -184,6 +188,7 @@ impl ObjectManager {
             ));
 
             self.object_map.push(id);
+            self.entity_locations.insert(id, new_index);
         }
 
         world
@@ -204,19 +209,23 @@ impl ObjectManager {
 
     pub fn process_removed(&mut self, world: &World) {
         profile_function!();
-        for (id, loc) in self.removed_rx.try_iter() {
+        for (id, _) in self.removed_rx.try_iter() {
+            let loc = self.entity_locations.remove(&id).unwrap();
             if loc == self.object_data.len() - 1 {
-                assert!(self.object_map[loc] == id);
                 self.object_map.pop();
                 self.object_data.pop();
             } else {
                 let end = self.object_data.len() - 1;
-                self.object_data.swap(loc, end);
-                self.object_map.swap(loc, end);
+                self.object_data.swap_remove(loc);
+                self.object_map.swap_remove(loc);
 
                 let swapped_entity = self.object_map[loc];
 
-                let _ = world.update_dedup(swapped_entity, object_buffer_index(), loc);
+                self.entity_locations.insert(swapped_entity, loc);
+                let _ = world.update(swapped_entity, object_buffer_index(), |v| {
+                    assert_eq!(*v, end);
+                    *v = loc;
+                });
             }
         }
     }
@@ -226,11 +235,14 @@ impl ObjectManager {
         for (&loc, item) in &mut self.object_query.borrow(world) {
             assert_ne!(loc, usize::MAX);
             let object_data = &mut self.object_data[loc];
-            object_data.transform = item.transform;
+            object_data.transform = *item.transform;
             object_data.color = to_linear_vec3(item.color.without_alpha())
         }
 
-        self.object_buffer.write(&gpu.queue, 0, &self.object_data);
+        {
+            profile_scope!("upload_object_data");
+            self.object_buffer.write(&gpu.queue, 0, &self.object_data);
+        }
     }
 
     fn update_skin_data(&mut self, world: &World, gpu: &Gpu) {
@@ -273,11 +285,6 @@ impl ObjectManager {
         &self.skinning_data
     }
 }
-
-// pub struct ObjectBufferLoc {
-//     index: usize,
-//     skin_buffer_offset: Option<SubBuffer<Mat4>>,
-// }
 
 component! {
     pub(crate) object_buffer_index: usize,

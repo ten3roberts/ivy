@@ -1,6 +1,6 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use anyhow::Context;
@@ -39,6 +39,7 @@ impl Skin {
         assets: &AssetCache,
         document: &gltf::Document,
         buffer_data: &[buffer::Data],
+        path: &Path,
     ) -> anyhow::Result<Vec<Asset<Self>>> {
         // NOTE: each joint in a skin refers to a node in the scene hierarchy
         let joint_maps = document
@@ -63,7 +64,11 @@ impl Skin {
                     .iter()
                     .position(|v| v.contains_key(&joint_scene_index))
                 else {
-                    tracing::error!("Missing skin for animation");
+                    tracing::error!(
+                        "No skin for animation target joint {:?} referenced in animation {:?} in document {path:?}",
+                        target.node().name(),
+                        animation.name(),
+                    );
                     return;
                 };
 
@@ -203,9 +208,8 @@ impl Skin {
     }
 }
 
-#[derive(
-    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SkinDesc {
     document: PathBuf,
     node: String,

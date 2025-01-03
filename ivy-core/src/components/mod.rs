@@ -35,6 +35,7 @@ flax::component! {
     pub engine,
 }
 
+#[cfg(feature = "serde")]
 flax::register_serializable! {
     position,
     rotation,
@@ -47,6 +48,7 @@ flax::register_serializable! {
 }
 
 #[derive(Fetch, Debug, Clone)]
+#[fetch(transforms=[Modified])]
 pub struct TransformQuery {
     pub pos: Component<Vec3>,
     pub rotation: Component<Quat>,
@@ -92,6 +94,7 @@ impl Default for TransformQuery {
     }
 }
 
+#[cfg(feature = "serde")]
 fn one_scale() -> Vec3 {
     Vec3::ONE
 }

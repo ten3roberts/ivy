@@ -293,12 +293,10 @@ impl RenderGraph {
         profile_function!();
 
         if self.order.is_none() {
-            tracing::info!("rebuilding");
             self.build()?;
         }
 
         if mem::take(&mut self.resources.dirty) {
-            tracing::info!("dirty resources");
             self.invoke_on_resource_modified();
             self.allocate_resources(gpu)?;
 

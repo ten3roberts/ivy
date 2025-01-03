@@ -15,10 +15,10 @@ use ivy_assets::{
     AssetCache,
 };
 use ivy_core::{
-    components::{main_camera, world_transform},
+    components::{color, main_camera, world_transform},
     impl_for_tuples,
     palette::Srgb,
-    to_linear_vec3, Bundle,
+    to_linear_vec3, Bundle, Color, ColorExt,
 };
 use ivy_wgpu_types::shader::TargetDesc;
 pub use light_manager::LightManager;
@@ -105,7 +105,7 @@ pub struct RenderContext<'a> {
     pub assets: &'a AssetCache,
     pub gpu: &'a Gpu,
     pub queue: &'a Queue,
-    pub store: &'a mut RendererStore,
+    pub store: &'a RendererStore,
     pub object_manager: &'a ObjectManager,
     // pub camera_data: &'a CameraShaderData,
     pub layouts: &'a [&'a BindGroupLayout],
@@ -580,18 +580,23 @@ impl CameraShaderData {
 
 pub struct RenderObjectBundle<'a> {
     pub mesh: MeshDesc,
+    pub color: Color,
     pub materials: &'a [(Component<MaterialData>, MaterialData)],
 }
 
 impl<'a> RenderObjectBundle<'a> {
     pub fn new(mesh: MeshDesc, materials: &'a [(Component<MaterialData>, MaterialData)]) -> Self {
-        Self { mesh, materials }
+        Self {
+            mesh,
+            materials,
+            color: Color::white(),
+        }
     }
 }
 
 impl Bundle for RenderObjectBundle<'_> {
     fn mount(self, entity: &mut flax::EntityBuilder) {
-        entity.set(mesh(), self.mesh);
+        entity.set(mesh(), self.mesh).set(color(), self.color);
 
         for (pass, material) in self.materials {
             entity.set(*pass, material.clone());

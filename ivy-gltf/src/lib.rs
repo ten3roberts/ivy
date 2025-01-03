@@ -92,6 +92,7 @@ impl std::ops::Deref for DocumentData {
 
 impl Document {
     async fn load(assets: &AssetCache, path: impl AsRef<Path>) -> anyhow::Result<Self> {
+        let path = path.as_ref();
         let bytes: Asset<Vec<u8>> = assets.from_path(path).await?;
 
         let mut gltf = Gltf::from_slice(&bytes)?;
@@ -168,7 +169,7 @@ impl Document {
             .filter_map(|(i, v)| Some((v.name().map(ToString::to_string)?, i)))
             .collect();
 
-        let skins = Skin::load_from_document(assets, &gltf.document, &buffer_data)?;
+        let skins = Skin::load_from_document(assets, &gltf.document, &buffer_data, path)?;
 
         let data = assets.insert(DocumentData {
             gltf,

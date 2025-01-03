@@ -141,15 +141,20 @@ impl AnimationPlayer {
         self.progress += step_time * self.speed;
 
         // Do this after stepping to not show past-end lerps when we could have wrapped
-        if self.looping && self.progress > self.animation.duration() {
-            self.channels.iter_mut().for_each(|v| v.left_keyframe = 0);
-            self.progress %= self.animation.duration();
-        } else if self.looping && self.progress < 0.0 {
-            self.channels
-                .iter_mut()
-                .zip(self.animation.channels())
-                .for_each(|(v, channel)| v.left_keyframe = channel.times.len() - 2);
-            self.progress = (self.progress + self.animation.duration()) % self.animation.duration();
+        if self.looping {
+            if self.progress > self.animation.duration() {
+                self.channels.iter_mut().for_each(|v| v.left_keyframe = 0);
+                self.progress %= self.animation.duration();
+            } else if self.progress < 0.0 {
+                self.channels
+                    .iter_mut()
+                    .zip(self.animation.channels())
+                    .for_each(|(v, channel)| v.left_keyframe = channel.times.len() - 2);
+                self.progress =
+                    (self.progress + self.animation.duration()) % self.animation.duration();
+            }
+        } else {
+            self.progress = self.progress.clamp(0.0, self.animation.duration());
         }
 
         for (i, state) in self.channels.iter_mut().enumerate() {
@@ -222,6 +227,10 @@ impl AnimationPlayer {
                 }
             };
         }
+    }
+
+    pub fn progress(&self) -> f32 {
+        self.progress
     }
 }
 

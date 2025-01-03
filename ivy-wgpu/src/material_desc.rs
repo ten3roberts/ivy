@@ -48,15 +48,15 @@ impl Load for MaterialDesc {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PbrMaterialDesc {
     label: String,
-    #[serde(default = "TextureDesc::white")]
+    #[cfg_attr(feature = "serde", serde(default = "TextureDesc::white"))]
     albedo: TextureDesc,
-    #[serde(default = "TextureDesc::default_normal")]
+    #[cfg_attr(feature = "serde", serde(default = "TextureDesc::default_normal"))]
     normal: TextureDesc,
-    #[serde(default = "TextureDesc::white")]
+    #[cfg_attr(feature = "serde", serde(default = "TextureDesc::white"))]
     metallic_roughness: TextureDesc,
-    #[serde(default = "TextureDesc::white")]
+    #[cfg_attr(feature = "serde", serde(default = "TextureDesc::white"))]
     ambient_occlusion: TextureDesc,
-    #[serde(default = "TextureDesc::white")]
+    #[cfg_attr(feature = "serde", serde(default = "TextureDesc::white"))]
     displacement: TextureDesc,
     roughness_factor: NotNan<f32>,
     metallic_factor: NotNan<f32>,

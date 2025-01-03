@@ -7,7 +7,7 @@ use bytemuck::{Pod, Zeroable};
 use flax::{
     entity_ids,
     fetch::{entity_refs, EntityRefs, Satisfied},
-    filter::{All, ChangeFilter, With},
+    filter::{All, ChangeFilter},
     Component, Entity, EntityIds, FetchExt, Query, World,
 };
 use glam::{vec4, Mat4, Vec3, Vec4, Vec4Swizzles};
@@ -17,7 +17,6 @@ use ivy_core::{profiling::profile_function, subscribers::RemovedComponentSubscri
 use ivy_wgpu_types::{
     multi_buffer::SubBuffer, shader::Culling, BindGroupBuilder, BindGroupLayoutBuilder,
 };
-use slab::Slab;
 use wgpu::{BindGroup, BindGroupLayout, CommandEncoder, DepthBiasState, RenderPass, ShaderStages};
 
 use super::{
@@ -68,6 +67,7 @@ impl Batch {
 
 pub type ShaderFactory = Box<dyn FnMut(ShaderDesc) -> ShaderDesc>;
 
+#[derive(Copy, Clone)]
 struct IndirectBatch {
     batch_id: u32,
     offset: u32,
@@ -123,18 +123,19 @@ pub struct MeshRenderer {
     // TODO: move higher to deduplicate globally
     pub materials: HashMap<MaterialData, Asset<RenderMaterial>>,
 
-    batches: Slab<Batch>,
+    batches: Vec<Batch>,
     draws: Vec<CullDrawObject>,
-    draw_map: BTreeMap<Entity, usize>,
+    sorted_draws: Vec<CullDrawObject>,
+    entity_locations: BTreeMap<Entity, usize>,
     batch_map: HashMap<BatchKey, BatchId>,
     indirect_draws: Vec<DrawIndexedIndirectArgs>,
-    indirect_batches: Vec<IndirectBatch>,
+    indirect_batches: Vec<Option<IndirectBatch>>,
 
     mesh_buffer: MeshBuffer<SkinnedVertex>,
     shader_library: Arc<ShaderLibrary>,
     shader_factory: ShaderFactory,
-    updated_object_indexes: Query<(EntityIds, ChangeFilter<usize>), (All, With)>,
-    removed_rx: flume::Receiver<(Entity, RendererLocation)>,
+    updated_object_indexes: Query<(EntityIds, Component<usize>, ChangeFilter<usize>)>,
+    removed_rx: flume::Receiver<(Entity, usize)>,
     cull: ObjectCulling,
     new_object_query: Query<NewObjectQuery, (All, flax::filter::Without)>,
     needs_indirect_rebuild: bool,
@@ -188,15 +189,19 @@ impl MeshRenderer {
             shader_factory: Box::new(|v| v),
             removed_rx,
             draws: Vec::new(),
-            draw_map: Default::default(),
-            updated_object_indexes: Query::new((entity_ids(), object_buffer_index().modified()))
-                .with(renderer_location(id)),
+            updated_object_indexes: Query::new((
+                entity_ids(),
+                renderer_location(id),
+                object_buffer_index().modified(),
+            )),
             new_object_query,
             indirect_draws: Vec::new(),
             indirect_batches: Vec::new(),
             object_buffer_gen: 0,
             skin_buffer_gen: 0,
             needs_indirect_rebuild: true,
+            entity_locations: BTreeMap::new(),
+            sorted_draws: Vec::new(),
         }
     }
 
@@ -339,7 +344,10 @@ impl MeshRenderer {
                 Entry::Occupied(slot) => *slot.get(),
                 Entry::Vacant(slot) => {
                     let batch = create_batch(slot.key());
-                    *slot.insert(self.batches.insert(batch?))
+                    let batch_index = self.batches.len();
+                    self.batches.push(batch?);
+                    slot.insert(batch_index);
+                    batch_index
                 }
             };
 
@@ -350,9 +358,10 @@ impl MeshRenderer {
                 id,
             };
 
-            new_components.push((id, RendererLocation { batch_id }));
+            let new_index = self.draws.len();
+            new_components.push((id, new_index));
+            self.entity_locations.insert(id, new_index);
 
-            self.draw_map.insert(id, self.draws.len());
             self.draws.push(draw);
             self.needs_indirect_rebuild = true;
         }
@@ -368,9 +377,24 @@ impl MeshRenderer {
         let mut total_object_count = 0;
         self.indirect_draws.clear();
         self.indirect_batches.clear();
-        self.draws.sort_by_key(|v| v.batch_id);
+        self.indirect_batches.resize(self.batches.len(), None);
+        self.indirect_draws.resize(
+            self.batches.len(),
+            DrawIndexedIndirectArgs {
+                index_count: 0,
+                instance_count: 0,
+                first_index: 0,
+                base_vertex: 0,
+                first_instance: 0,
+            },
+        );
 
-        let chunks = self.draws.iter().chunk_by(|v| v.batch_id);
+        self.sorted_draws.clear();
+        self.sorted_draws.extend(self.draws.iter().copied());
+        // sort same batches by id, to ensure stable rendering
+        self.sorted_draws.sort_by_key(|v| (v.batch_id, v.id));
+
+        let chunks = self.sorted_draws.iter().chunk_by(|v| v.batch_id);
         for (batch_id, group) in &chunks {
             let instance_count = group.count() as u32;
             let batch = &self.batches[batch_id as usize];
@@ -384,35 +408,43 @@ impl MeshRenderer {
 
             let batch = IndirectBatch {
                 batch_id,
-                offset: self.indirect_draws.len() as u32,
+                offset: batch_id,
             };
 
-            self.indirect_draws.push(cmd);
-            self.indirect_batches.push(batch);
+            self.indirect_draws[batch_id as usize] = cmd;
+            self.indirect_batches[batch_id as usize] = Some(batch);
             total_object_count += instance_count;
         }
 
-        self.cull.update_objects(gpu, &self.draws);
+        self.cull.update_objects(gpu, &self.sorted_draws);
     }
 
     pub fn process_moved_objects(&mut self, world: &World) {
-        for (id, &index) in self.updated_object_indexes.borrow(world).iter() {
-            let draw_index = *self.draw_map.get(&id).unwrap();
-            self.draws[draw_index].object_index = index as u32;
+        for (id, &loc, &new_index) in self.updated_object_indexes.borrow(world).iter() {
+            assert_eq!(self.draws[loc].id, id);
+            self.draws[loc].object_index = new_index as u32;
+            self.needs_indirect_rebuild = true
         }
     }
 
-    pub fn handle_removed(&mut self) {
+    pub fn process_removed(&mut self, world: &World) {
         for (id, _) in self.removed_rx.try_iter() {
             self.needs_indirect_rebuild = true;
-            let index = self.draw_map.remove(&id).expect("Object not in renderer");
-            if index == self.draws.len() - 1 {
+
+            let loc = self.entity_locations.remove(&id).unwrap();
+            if loc == self.draws.len() - 1 {
                 self.draws.pop();
             } else {
-                self.draws.swap_remove(index);
-                let swapped = &self.draws[index];
-                assert_eq!(self.draw_map.get(&swapped.id), Some(&self.draws.len()));
-                *self.draw_map.get_mut(&swapped.id).unwrap() = index;
+                let end = self.draws.len() - 1;
+                self.draws.swap_remove(loc);
+
+                let swapped = &self.draws[loc];
+
+                self.entity_locations.insert(swapped.id, loc);
+                let _ = world.update(swapped.id, renderer_location(self.id), |v| {
+                    assert_eq!(*v, end);
+                    *v = loc;
+                });
             }
         }
     }
@@ -431,7 +463,7 @@ impl CameraRenderer for MeshRenderer {
         )?;
 
         self.process_moved_objects(ctx.world);
-        self.handle_removed();
+        self.process_removed(ctx.world);
 
         if self.needs_indirect_rebuild {
             self.needs_indirect_rebuild = false;
@@ -456,7 +488,6 @@ impl CameraRenderer for MeshRenderer {
             self.object_buffer_gen = object_buffer.gen();
             self.skin_buffer_gen = skinning_buffer.gen();
 
-            tracing::info!("discarding renderer bind group");
             self.bind_group = None;
             self.cull.bind_group = None;
         }
@@ -522,6 +553,10 @@ impl CameraRenderer for MeshRenderer {
         self.mesh_buffer.bind(render_pass);
 
         for draw in &self.indirect_batches {
+            let Some(draw) = draw else {
+                continue;
+            };
+
             let batch = &self.batches[draw.batch_id as usize];
 
             if let Some(bind_group) = batch.material.bind_group() {
@@ -542,11 +577,6 @@ impl CameraRenderer for MeshRenderer {
 
 type BatchId = usize;
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
-struct RendererLocation {
-    batch_id: BatchId,
-}
-
 flax::component! {
-    renderer_location(id): RendererLocation,
+    renderer_location(id): usize,
 }
