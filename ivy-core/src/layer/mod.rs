@@ -76,7 +76,7 @@ impl EngineLayer {
         let cmd = AsyncCommandBuffer::new();
         let schedule = Schedule::builder()
             .with_system(apply_async_commandbuffers(cmd.clone()))
-            .with_system(update_root_transforms_system())
+            // .with_system(update_root_transforms_system())
             .with_system(update_transform_system())
             .build();
 

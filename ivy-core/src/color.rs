@@ -16,6 +16,8 @@ pub trait ColorExt {
 
     fn red() -> Self;
 
+    fn orange() -> Self;
+
     fn green() -> Self;
 
     fn blue() -> Self;
@@ -61,6 +63,10 @@ impl ColorExt for Color {
     // TODO: replace with color scheme from violet
     fn red() -> Self {
         Color::new(1.0, 0.0, 0.0, 1.0)
+    }
+
+    fn orange() -> Self {
+        Color::new(1.0, 0.5, 0.0, 1.0)
     }
 
     fn green() -> Self {

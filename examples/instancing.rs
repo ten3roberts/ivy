@@ -31,7 +31,7 @@ use ivy_wgpu::{
     layer::GraphicsLayer,
     material_desc::{MaterialData, PbrMaterialData},
     mesh_desc::MeshDesc,
-    primitives::{CubePrimitive, UvSpherePrimitive},
+    primitives::CubePrimitive,
     renderer::EnvironmentData,
 };
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
@@ -119,7 +119,7 @@ impl LogicLayer {
     }
 
     fn setup_objects(&mut self, world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
-        let sphere_mesh = MeshDesc::content(assets.load(&UvSpherePrimitive::default()));
+        let sphere_mesh = MeshDesc::content(assets.load(&CubePrimitive));
 
         let plastic_material = MaterialData::PbrMaterial(
             PbrMaterialData::new()
@@ -178,7 +178,7 @@ impl Layer for LogicLayer {
                 let aspect =
                     resized.physical_size.width as f32 / resized.physical_size.height as f32;
                 tracing::info!(%aspect);
-                *main_camera = Mat4::perspective_rh(1.0, aspect, 0.1, 5000.0);
+                *main_camera = Mat4::perspective_rh(1.0, aspect, 0.1, 1000.0);
             }
 
             Ok(())
@@ -228,7 +228,7 @@ impl Plugin for DynamicsPlugin {
         // #[system(args(elapsed=elapsed_time().source(engine())), par)]
         // fn rotate(rotate_target: &(), rotation: &mut Quat, elapsed: &Duration) {}
 
-        // schedules.per_tick_mut().with_system(rotate_system);
+        schedules.per_tick_mut().with_system(rotate_system);
 
         Ok(())
     }

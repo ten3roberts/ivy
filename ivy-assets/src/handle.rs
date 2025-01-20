@@ -70,6 +70,12 @@ where
     }
 }
 
+impl AsRef<[u8]> for Asset<Vec<u8>> {
+    fn as_ref(&self) -> &[u8] {
+        &**self
+    }
+}
+
 impl<T: ?Sized> std::ops::Deref for Asset<T> {
     type Target = T;
 

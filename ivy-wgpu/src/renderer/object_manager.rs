@@ -97,14 +97,14 @@ impl ObjectManager {
             gpu,
             "object_buffer",
             BufferUsages::STORAGE | BufferUsages::COPY_DST,
-            &[RenderObjectData::zeroed(); 64],
+            &[RenderObjectData::zeroed(); 8],
         );
 
         let skinning_buffer = MultiBuffer::new(
             gpu,
             "skinning_buffer",
-            BufferUsages::STORAGE | BufferUsages::COPY_DST,
-            64,
+            BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
+            8,
         );
 
         let (removed_tx, removed_rx) = flume::unbounded();

@@ -200,6 +200,36 @@ where
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct Value<B, T> {
+    binding: B,
+    value: T,
+}
+
+impl<B, T> Binding for Value<B, T>
+where
+    B: Binding<Value = bool>,
+    T: Send + Sync + Copy + Default,
+{
+    type Value = T;
+
+    fn apply(&mut self, input: &InputEvent) {
+        self.binding.apply(input)
+    }
+
+    fn read(&mut self) -> T {
+        if self.binding.read() {
+            self.value
+        } else {
+            T::default()
+        }
+    }
+
+    fn bindings(&self) -> Vec<InputKind> {
+        self.binding.bindings()
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct KeyBinding {
     pressed: bool,
     key: Key<SmolStr>,
@@ -592,6 +622,16 @@ where
         Amplitude {
             binding: self,
             amplitude,
+        }
+    }
+
+    fn value<T>(self, value: T) -> Value<Self, T>
+    where
+        Self: Sized,
+    {
+        Value {
+            binding: self,
+            value,
         }
     }
 

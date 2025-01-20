@@ -8,12 +8,12 @@ mod vector;
 use std::collections::BTreeSet;
 
 pub use bindings::*;
-use flax::{component::ComponentValue, Component, EntityRef};
+use flax::{component::ComponentValue, CommandBuffer, Component, EntityRef};
 use glam::{IVec2, IVec3, Vec2, Vec3};
 use types::{InputEvent, InputKind};
 
 pub struct InputState {
-    activations: Vec<ActionKind>,
+    activations: Vec<Box<dyn ActionHandler>>,
 }
 
 impl InputState {
@@ -23,53 +23,59 @@ impl InputState {
         }
     }
 
-    pub fn with_action<T>(mut self, target: Component<T>, action: Action<T>) -> Self
-    where
-        (Component<T>, Action<T>): Into<ActionKind>,
-    {
-        self.activations.push((target, action).into());
+    pub fn with_action<T: ComponentValue + Stimulus + PartialEq>(
+        mut self,
+        target: Component<T>,
+        action: Action<T>,
+    ) -> Self {
+        self.activations
+            .push(Box::new(ComponentActionHandler::new(target, action)));
+        self
+    }
+
+    pub fn with_trigger_action<
+        F: 'static + Send + Sync + FnMut(&EntityRef, &mut CommandBuffer) -> anyhow::Result<()>,
+    >(
+        mut self,
+        target: F,
+        action: Action<bool>,
+    ) -> Self {
+        self.activations
+            .push(Box::new(TriggerActionHandler::new(target, action)));
+        self
+    }
+
+    pub fn add_action<T: ComponentValue + Stimulus + PartialEq>(
+        &mut self,
+        target: Component<T>,
+        action: Action<T>,
+    ) -> &mut Self {
+        self.activations
+            .push(Box::new(ComponentActionHandler::new(target, action)));
+        self
+    }
+
+    pub fn add_trigger_action<
+        F: 'static + Send + Sync + FnMut(&EntityRef, &mut CommandBuffer) -> anyhow::Result<()>,
+    >(
+        &mut self,
+        action: Action<bool>,
+        callback: F,
+    ) -> &mut Self {
+        self.activations
+            .push(Box::new(TriggerActionHandler::new(callback, action)));
         self
     }
 
     pub fn apply(&mut self, event: &InputEvent) {
         for activation in self.activations.iter_mut() {
-            match activation {
-                ActionKind::Boolean(_, mapping) => mapping.apply(event),
-                ActionKind::Integral(_, mapping) => mapping.apply(event),
-                ActionKind::Scalar(_, mapping) => mapping.apply(event),
-                ActionKind::Vector2(_, mapping) => mapping.apply(event),
-                ActionKind::Vector3(_, mapping) => mapping.apply(event),
-                ActionKind::IVector2(_, mapping) => mapping.apply(event),
-                ActionKind::IVector3(_, mapping) => mapping.apply(event),
-            }
+            activation.apply_input(event);
         }
     }
 
-    pub fn update(&mut self, entity: &EntityRef) -> anyhow::Result<()> {
+    pub fn update(&mut self, entity: &EntityRef, cmd: &mut CommandBuffer) -> anyhow::Result<()> {
         for activation in &mut self.activations {
-            match activation {
-                ActionKind::Boolean(target, m) => {
-                    m.update(*target, entity)?;
-                }
-                ActionKind::Integral(target, m) => {
-                    m.update(*target, entity)?;
-                }
-                ActionKind::Scalar(target, m) => {
-                    m.update(*target, entity)?;
-                }
-                ActionKind::Vector2(target, m) => {
-                    m.update(*target, entity)?;
-                }
-                ActionKind::Vector3(target, m) => {
-                    m.update(*target, entity)?;
-                }
-                ActionKind::IVector2(target, m) => {
-                    m.update(*target, entity)?;
-                }
-                ActionKind::IVector3(target, m) => {
-                    m.update(*target, entity)?;
-                }
-            }
+            activation.update(entity, cmd)?;
         }
 
         Ok(())
@@ -82,55 +88,74 @@ impl Default for InputState {
     }
 }
 
-pub enum ActionKind {
-    Boolean(Component<bool>, Action<bool>),
-    Integral(Component<i32>, Action<i32>),
-    Scalar(Component<f32>, Action<f32>),
-    Vector2(Component<Vec2>, Action<Vec2>),
-    Vector3(Component<Vec3>, Action<Vec3>),
-    IVector2(Component<IVec2>, Action<IVec2>),
-    IVector3(Component<IVec3>, Action<IVec3>),
+pub(crate) trait ActionHandler: 'static + Send + Sync {
+    fn update(&mut self, entity: &EntityRef, cmd: &mut CommandBuffer) -> anyhow::Result<()>;
+    fn apply_input(&mut self, event: &InputEvent);
 }
 
-impl From<(Component<bool>, Action<bool>)> for ActionKind {
-    fn from(v: (Component<bool>, Action<bool>)) -> Self {
-        Self::Boolean(v.0, v.1)
+pub type TriggerAction =
+    Box<dyn Send + Sync + FnMut(&EntityRef<'_>, &mut CommandBuffer) -> anyhow::Result<()>>;
+
+pub(crate) struct TriggerActionHandler<F> {
+    callback: F,
+    action: Action<bool>,
+}
+
+impl<F> TriggerActionHandler<F> {
+    pub(crate) fn new(callback: F, action: Action<bool>) -> Self {
+        Self { callback, action }
     }
 }
 
-impl From<(Component<i32>, Action<i32>)> for ActionKind {
-    fn from(v: (Component<i32>, Action<i32>)) -> Self {
-        Self::Integral(v.0, v.1)
+impl<F> ActionHandler for TriggerActionHandler<F>
+where
+    F: 'static + Send + Sync + FnMut(&EntityRef<'_>, &mut CommandBuffer) -> anyhow::Result<()>,
+{
+    fn update(&mut self, entity: &EntityRef, cmd: &mut CommandBuffer) -> anyhow::Result<()> {
+        if self.action.read_stimulus() {
+            (self.callback)(entity, cmd)?;
+        }
+
+        Ok(())
+    }
+
+    fn apply_input(&mut self, event: &InputEvent) {
+        self.action.apply(event);
     }
 }
 
-impl From<(Component<f32>, Action<f32>)> for ActionKind {
-    fn from(v: (Component<f32>, Action<f32>)) -> Self {
-        Self::Scalar(v.0, v.1)
+pub(crate) struct ComponentActionHandler<T> {
+    target: Component<T>,
+    action: Action<T>,
+}
+
+impl<T> ComponentActionHandler<T> {
+    pub(crate) fn new(target: Component<T>, action: Action<T>) -> Self {
+        Self { target, action }
     }
 }
 
-impl From<(Component<Vec2>, Action<Vec2>)> for ActionKind {
-    fn from(v: (Component<Vec2>, Action<Vec2>)) -> Self {
-        Self::Vector2(v.0, v.1)
+impl<T: ComponentValue + Stimulus + PartialEq> ActionHandler for ComponentActionHandler<T> {
+    fn update(&mut self, entity: &EntityRef, cmd: &mut CommandBuffer) -> anyhow::Result<()> {
+        let stimulus = self.action.read_stimulus();
+        if entity.has(self.target) {
+            entity.update_dedup(self.target, stimulus);
+        } else {
+            cmd.set(entity.id(), self.target, stimulus);
+        }
+        Ok(())
+    }
+
+    fn apply_input(&mut self, event: &InputEvent) {
+        self.action.apply(event);
     }
 }
 
-impl From<(Component<Vec3>, Action<Vec3>)> for ActionKind {
-    fn from(v: (Component<Vec3>, Action<Vec3>)) -> Self {
-        Self::Vector3(v.0, v.1)
-    }
-}
-
-impl From<(Component<IVec2>, Action<IVec2>)> for ActionKind {
-    fn from(v: (Component<IVec2>, Action<IVec2>)) -> Self {
-        Self::IVector2(v.0, v.1)
-    }
-}
-
-impl From<(Component<IVec3>, Action<IVec3>)> for ActionKind {
-    fn from(v: (Component<IVec3>, Action<IVec3>)) -> Self {
-        Self::IVector3(v.0, v.1)
+impl<T: ComponentValue + Stimulus + PartialEq> From<(Component<T>, Action<T>)>
+    for ComponentActionHandler<T>
+{
+    fn from(v: (Component<T>, Action<T>)) -> Self {
+        Self::new(v.0, v.1)
     }
 }
 
@@ -179,29 +204,12 @@ impl<T: ComponentValue + Stimulus> Action<T> {
         {
             self.bindings[*binding].apply(event);
         }
-        // if let Some(&binding) = self.binding_map.range(&event.to_kind()) {}
     }
 
-    fn get_stimulus(&mut self) -> T {
+    fn read_stimulus(&mut self) -> T {
         self.bindings
             .iter_mut()
             .fold(T::ZERO, |acc, binding| acc.combine(&binding.read()))
-    }
-
-    fn update(
-        &mut self,
-        target: Component<T>,
-        entity: &EntityRef,
-    ) -> Result<(), error::MissingTargetError>
-    where
-        T: PartialEq,
-    {
-        entity
-            .update_dedup(target, self.get_stimulus())
-            .ok_or_else(|| error::MissingTargetError {
-                target: target.desc(),
-                entity: entity.id(),
-            })
     }
 }
 
@@ -291,7 +299,7 @@ mod test {
             text: Default::default(),
         }));
 
-        assert!(activation.get_stimulus());
+        assert!(activation.read_stimulus());
 
         activation.apply(&InputEvent::Keyboard(KeyboardInput {
             key: Key::Character("B".into()),
@@ -300,7 +308,7 @@ mod test {
             text: Default::default(),
         }));
 
-        assert!(activation.get_stimulus());
+        assert!(activation.read_stimulus());
 
         activation.apply(&InputEvent::Keyboard(KeyboardInput {
             key: Key::Character("A".into()),
@@ -309,7 +317,7 @@ mod test {
             text: Default::default(),
         }));
 
-        assert!(activation.get_stimulus());
+        assert!(activation.read_stimulus());
         activation.apply(&InputEvent::Keyboard(KeyboardInput {
             key: Key::Character("B".into()),
             state: ElementState::Released,
@@ -317,6 +325,6 @@ mod test {
             text: Default::default(),
         }));
 
-        assert!(!activation.get_stimulus());
+        assert!(!activation.read_stimulus());
     }
 }

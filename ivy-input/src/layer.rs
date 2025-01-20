@@ -1,6 +1,6 @@
 use flax::{
     fetch::{entity_refs, EntityRefs},
-    ComponentMut, Query,
+    CommandBuffer, ComponentMut, Query,
 };
 use ivy_core::{app::TickEvent, Layer};
 
@@ -23,10 +23,14 @@ impl InputLayer {
         });
     }
 
-    fn update(&mut self, world: &mut flax::World) -> anyhow::Result<()> {
+    fn update(&mut self, world: &mut flax::World, cmd: &mut CommandBuffer) -> anyhow::Result<()> {
         self.query
             .borrow(world)
-            .try_for_each(|(entity, state)| state.update(&entity))
+            .try_for_each(|(entity, state)| state.update(&entity, cmd))?;
+
+        cmd.apply(world)?;
+
+        Ok(())
     }
 }
 
@@ -51,7 +55,10 @@ impl Layer for InputLayer {
             Ok(())
         });
 
-        events.subscribe(|this, ctx, _: &TickEvent| -> Result<_, _> { this.update(ctx.world) });
+        let mut cmd = CommandBuffer::new();
+        events.subscribe(move |this, ctx, _: &TickEvent| -> Result<_, _> {
+            this.update(ctx.world, &mut cmd)
+        });
 
         Ok(())
     }

@@ -417,6 +417,9 @@ impl MeshRenderer {
         }
 
         self.cull.update_objects(gpu, &self.sorted_draws);
+        if self.cull.bind_group.is_none() {
+            self.bind_group = None;
+        }
     }
 
     pub fn process_moved_objects(&mut self, world: &World) {
@@ -508,20 +511,23 @@ impl CameraRenderer for MeshRenderer {
         let near = -transform_perspective(inv_proj, Vec3::ZERO).z;
         let far = -transform_perspective(inv_proj, Vec3::Z).z;
 
-        self.cull.run(
-            ctx.gpu,
-            encoder,
-            CullData {
-                view: ctx.camera.view,
-                frustum: vec4(frustum_x.x, frustum_x.z, frustum_y.y, frustum_y.z),
-                near,
-                far,
-                object_count: self.draws.len() as u32,
-                _padding: Default::default(),
-            },
-            object_buffer,
-            &self.indirect_draws,
-        );
+        let cull_data = CullData {
+            view: ctx.camera.view,
+            frustum: vec4(frustum_x.x, frustum_x.z, frustum_y.y, frustum_y.z),
+            near,
+            far,
+            object_count: self.draws.len() as u32,
+            _padding: Default::default(),
+        };
+
+        self.cull
+            .update_run_commands(ctx.gpu, cull_data, &self.indirect_draws);
+
+        if self.cull.bind_group.is_none() {
+            self.bind_group = None;
+        }
+
+        self.cull.run(ctx.gpu, encoder, cull_data, object_buffer);
 
         Ok(())
     }

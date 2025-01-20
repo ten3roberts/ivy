@@ -4,7 +4,7 @@ use flax::{
     components::{child_of, name},
     Entity, EntityBuilder,
 };
-use ivy_core::EntityBuilderExt;
+use ivy_core::{components::color, Color, ColorExt, EntityBuilderExt};
 use ivy_gltf::{animation::player::Animator, components::animator, GltfNode};
 use ivy_wgpu::{
     components::{forward_pass, shadow_pass},
@@ -67,7 +67,7 @@ impl GltfNodeExt for GltfNode {
             entity.set(animator(), Animator::new());
         }
 
-        entity.mount(self.transform());
+        entity.mount(self.transform()).set(color(), Color::white());
 
         for child in self.children() {
             if child.children().next().is_none() && child.mesh().is_none() {

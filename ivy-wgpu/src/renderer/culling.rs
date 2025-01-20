@@ -149,12 +149,10 @@ impl ObjectCulling {
         self.draw_object_buffer.write(&gpu.queue, 0, draw_objects);
     }
 
-    pub fn run(
+    pub fn update_run_commands(
         &mut self,
         gpu: &Gpu,
-        encoder: &mut CommandEncoder,
         cull_data: CullData,
-        object_buffer: &TypedBuffer<RenderObjectData>,
         indirect_draws: &[DrawIndexedIndirectArgs],
     ) {
         profile_function!();
@@ -169,6 +167,15 @@ impl ObjectCulling {
             .write(&gpu.queue, 0, indirect_draws);
 
         self.cull_data_buffer.write(&gpu.queue, 0, &[cull_data]);
+    }
+
+    pub fn run(
+        &mut self,
+        gpu: &Gpu,
+        encoder: &mut CommandEncoder,
+        cull_data: CullData,
+        object_buffer: &TypedBuffer<RenderObjectData>,
+    ) {
         let mut compute_pass = encoder.begin_compute_pass(&ComputePassDescriptor {
             label: Some("culling"),
             timestamp_writes: None,

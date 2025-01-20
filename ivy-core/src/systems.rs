@@ -1,8 +1,5 @@
 use anyhow::Context;
-use flax::{
-    components::child_of, system, BoxedSystem, Dfs, DfsBorrow, FetchExt, Query, RelationExt,
-    System, World,
-};
+use flax::{components::child_of, BoxedSystem, Dfs, DfsBorrow, FetchExt, Query, System, World};
 use glam::{Mat4, Quat, Vec3};
 
 use crate::{
