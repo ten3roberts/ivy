@@ -1,9 +1,4 @@
-use std::borrow::BorrowMut;
-
-use flax::{
-    fetch::{MaybeMut, MutGuard},
-    system, Entity, FetchExt, World,
-};
+use flax::{fetch::MutGuard, system, Entity, FetchExt, World};
 use glam::{vec3, EulerRot, Quat, Vec2, Vec3};
 use ivy_assets::AssetCache;
 use ivy_core::{
@@ -54,7 +49,7 @@ struct OrbitCameraBundle;
 
 impl Bundle for OrbitCameraBundle {
     fn mount(self, entity: &mut flax::EntityBuilder) {
-        let mut control_action = Action::new()
+        let control_action = Action::new()
             .with_binding(MouseButtonBinding::new(MouseButton::Left))
             .with_binding(MouseButtonBinding::new(MouseButton::Right));
 
@@ -64,7 +59,7 @@ impl Bundle for OrbitCameraBundle {
         ));
 
         let pan_action = Action::new().with_binding(CompositeBinding::new(
-            CursorMoveBinding::new().amplitude(Vec2::ONE * 0.004),
+            CursorMoveBinding::new().amplitude(Vec2::ONE * 0.0005),
             vec![MouseButtonBinding::new(MouseButton::Left)],
         ));
 
@@ -110,8 +105,8 @@ fn camera_orbit(
 }
 
 #[system]
-fn camera_pan(focus_point: &mut Vec3, rotation: Quat, pan_input: Vec2) {
-    let delta = rotation * vec3(-pan_input.x, pan_input.y, 0.0);
+fn camera_pan(focus_point: &mut Vec3, rotation: Quat, pan_input: Vec2, distance: f32) {
+    let delta = rotation * vec3(-pan_input.x, pan_input.y, 0.0) * distance;
     *focus_point += delta;
 }
 
