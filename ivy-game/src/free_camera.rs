@@ -6,7 +6,7 @@ use ivy_assets::AssetCache;
 use ivy_core::{
     components::{main_camera, request_capture_mouse, rotation, TransformBundle},
     update_layer::{Plugin, ScheduleSetBuilder},
-    EntityBuilderExt, DEG_45,
+    Bundle, EntityBuilderExt, DEG_45,
 };
 use ivy_input::{
     components::input_state,
@@ -19,7 +19,7 @@ use ivy_physics::{
     rapier3d::prelude::RigidBodyType,
     RigidBodyBundle,
 };
-use ivy_wgpu::components::projection_matrix;
+use ivy_wgpu::components::{environment_data, projection_matrix};
 
 flax::component! {
     pub pan_active: bool,
@@ -35,10 +35,12 @@ pub struct FreeCameraPlugin;
 impl Plugin for FreeCameraPlugin {
     fn install(
         &self,
-        _: &mut World,
+        world: &mut World,
         _: &AssetCache,
         schedules: &mut ScheduleSetBuilder,
     ) -> anyhow::Result<()> {
+        Entity::builder().mount(FreeCameraBundle).spawn(world);
+
         schedules
             .per_tick_mut()
             .with_system(cursor_lock_system())
@@ -50,93 +52,95 @@ impl Plugin for FreeCameraPlugin {
     }
 }
 
-pub fn setup_camera() -> flax::EntityBuilder {
-    let mut speed_action = Action::new();
-    speed_action.add(
-        CompositeBinding::new(ScrollBinding::new(), [KeyBinding::new(NamedKey::Shift)])
-            .decompose(Axis2D::Y),
-    );
+struct FreeCameraBundle;
 
-    let mut move_action = Action::<Vec3>::new();
-    move_action.add(
-        KeyBinding::new(Key::Character("w".into()))
-            .analog()
-            .compose(Axis3D::Z),
-    );
-    move_action.add(
-        KeyBinding::new(Key::Character("a".into()))
-            .analog()
-            .compose(Axis3D::X)
-            .amplitude(-1.0),
-    );
-    move_action.add(
-        KeyBinding::new(Key::Character("s".into()))
-            .analog()
-            .compose(Axis3D::Z)
-            .amplitude(-1.0),
-    );
-    move_action.add(
-        KeyBinding::new(Key::Character("d".into()))
-            .analog()
-            .compose(Axis3D::X),
-    );
+impl Bundle for FreeCameraBundle {
+    fn mount(self, entity: &mut flax::EntityBuilder) {
+        let mut speed_action = Action::new();
+        speed_action.add(
+            CompositeBinding::new(ScrollBinding::new(), [KeyBinding::new(NamedKey::Shift)])
+                .decompose(Axis2D::Y),
+        );
 
-    move_action.add(
-        KeyBinding::new(Key::Character("c".into()))
-            .analog()
-            .compose(Axis3D::Y)
-            .amplitude(-1.0),
-    );
-    // move_action.add(
-    //     KeyBinding::new(Key::Named(NamedKey::Control))
-    //         .analog()
-    //         .compose(Axis3D::Y)
-    //         .amplitude(-1.0),
-    // );
-    move_action.add(
-        KeyBinding::new(Key::Named(NamedKey::Space))
-            .analog()
-            .compose(Axis3D::Y),
-    );
+        let mut move_action = Action::<Vec3>::new();
+        move_action.add(
+            KeyBinding::new(Key::Character("w".into()))
+                .analog()
+                .compose(Axis3D::Z),
+        );
+        move_action.add(
+            KeyBinding::new(Key::Character("a".into()))
+                .analog()
+                .compose(Axis3D::X)
+                .amplitude(-1.0),
+        );
+        move_action.add(
+            KeyBinding::new(Key::Character("s".into()))
+                .analog()
+                .compose(Axis3D::Z)
+                .amplitude(-1.0),
+        );
+        move_action.add(
+            KeyBinding::new(Key::Character("d".into()))
+                .analog()
+                .compose(Axis3D::X),
+        );
 
-    let mut rotate_action = Action::new();
-    rotate_action.add(CursorMoveBinding::new().amplitude(Vec2::ONE * 0.001));
+        move_action.add(
+            KeyBinding::new(Key::Character("c".into()))
+                .analog()
+                .compose(Axis3D::Y)
+                .amplitude(-1.0),
+        );
+        // move_action.add(
+        //     KeyBinding::new(Key::Named(NamedKey::Control))
+        //         .analog()
+        //         .compose(Axis3D::Y)
+        //         .amplitude(-1.0),
+        // );
+        move_action.add(
+            KeyBinding::new(Key::Named(NamedKey::Space))
+                .analog()
+                .compose(Axis3D::Y),
+        );
 
-    let mut pan_action = Action::new();
-    pan_action
-        .add(KeyBinding::new(Key::Character("q".into())))
-        .add(MouseButtonBinding::new(
-            ivy_input::types::MouseButton::Right,
-        ));
+        let mut rotate_action = Action::new();
+        rotate_action.add(CursorMoveBinding::new().amplitude(Vec2::ONE * 0.001));
 
-    let mut builder = Entity::builder();
-    builder
-        .mount(TransformBundle::new(
-            vec3(0.0, 10.0, 10.0),
-            Quat::IDENTITY,
-            Vec3::ONE,
-        ))
-        .mount(RigidBodyBundle::new(RigidBodyType::Dynamic).with_can_sleep(false))
-        .set(main_camera(), ())
-        .set_default(projection_matrix())
-        .set_default(velocity())
-        .set_default(angular_velocity())
-        .set(
-            input_state(),
-            InputState::new()
-                .with_action(camera_movement(), move_action)
-                .with_action(rotation_input(), rotate_action)
-                .with_action(pan_active(), pan_action)
-                .with_action(camera_speed_delta(), speed_action),
-        )
-        .set_default(camera_movement())
-        .set_default(rotation_input())
-        .set(euler_rotation(), vec3(DEG_45, 0.0, 0.0))
-        .set_default(pan_active())
-        .set(camera_speed(), 10.0)
-        .set_default(camera_speed_delta());
+        let mut pan_action = Action::new();
+        pan_action
+            .add(KeyBinding::new(Key::Character("q".into())))
+            .add(MouseButtonBinding::new(
+                ivy_input::types::MouseButton::Right,
+            ));
 
-    builder
+        entity
+            .mount(TransformBundle::new(
+                vec3(0.0, 10.0, 10.0),
+                Quat::IDENTITY,
+                Vec3::ONE,
+            ))
+            .mount(RigidBodyBundle::new(RigidBodyType::Dynamic).with_can_sleep(false))
+            .set(main_camera(), ())
+            .set_default(projection_matrix())
+            .set_default(environment_data())
+            .set_default(velocity())
+            .set_default(angular_velocity())
+            .set(
+                input_state(),
+                InputState::new()
+                    .with_action(camera_movement(), move_action)
+                    .with_action(rotation_input(), rotate_action)
+                    .with_action(pan_active(), pan_action)
+                    .with_action(camera_speed_delta(), speed_action),
+            )
+            .set_default(camera_movement())
+            .set_default(rotation_input())
+            .set(euler_rotation(), vec3(DEG_45, 0.0, 0.0))
+            .set_default(pan_active())
+            .set(camera_speed(), 10.0)
+            .set_default(camera_speed_delta());
+    }
 }
 
 fn cursor_lock_system() -> BoxedSystem {

@@ -1,5 +1,4 @@
 use ivy_assets::{loadable::Load, Asset, AssetCache, AssetDesc};
-use ivy_core::Color;
 use ivy_gltf::GltfMaterial;
 use ivy_graphics::texture::{TextureData, TextureDesc};
 use ordered_float::NotNan;

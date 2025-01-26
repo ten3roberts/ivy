@@ -1,5 +1,5 @@
-use flax::{Entity, Query, World};
-use glam::{vec3, EulerRot, Mat4, Quat, Vec3};
+use flax::{Entity, World};
+use glam::{vec3, EulerRot, Quat, Vec3};
 use ivy_assets::AssetCache;
 use ivy_core::{
     app::PostInitEvent,
@@ -9,19 +9,23 @@ use ivy_core::{
     update_layer::{FixedTimeStep, ScheduledLayer},
     App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer,
 };
-use ivy_engine::{is_static, main_camera, RigidBodyBundle, TransformBundle};
-use ivy_game::free_camera::{setup_camera, FreeCameraPlugin};
+use ivy_engine::{is_static, RigidBodyBundle, TransformBundle};
+use ivy_game::{
+    free_camera::FreeCameraPlugin,
+    viewport_camera::{CameraSettings, ViewportCameraLayer},
+};
 use ivy_graphics::texture::TextureData;
 use ivy_input::layer::InputLayer;
 use ivy_physics::{
     components::{angular_velocity, friction, gravity_influence},
     ColliderBundle, PhysicsPlugin,
 };
-use ivy_postprocessing::preconfigured::{SurfacePbrPipelineDesc, SurfacePbrRenderer};
+use ivy_postprocessing::preconfigured::{
+    pbr::PbrRenderGraphConfig, SurfacePbrPipelineDesc, SurfacePbrRenderer,
+};
 use ivy_wgpu::{
     components::*,
     driver::WinitDriver,
-    events::ResizedEvent,
     layer::GraphicsLayer,
     light::{LightKind, LightParams},
     material_desc::{MaterialData, PbrMaterialData},
@@ -61,9 +65,10 @@ pub fn main() -> anyhow::Result<()> {
                 gpu,
                 surface,
                 SurfacePbrPipelineDesc {
-                    hdri: None,
-                    ui_instance: None,
-                    pbr_config: Default::default(),
+                    pbr_config: PbrRenderGraphConfig {
+                        ..Default::default()
+                    },
+                    ..Default::default()
                 },
             ))
         }))
@@ -78,6 +83,14 @@ pub fn main() -> anyhow::Result<()> {
                         .with_gravity(-Vec3::Y),
                 ),
         )
+        .with_layer(ViewportCameraLayer::new(CameraSettings {
+            environment_data: EnvironmentData::new(
+                Srgb::new(0.2, 0.2, 0.3),
+                0.001,
+                if ENABLE_SKYBOX { 0.0 } else { 1.0 },
+            ),
+            fov: 1.0,
+        }))
         .run()
     {
         tracing::error!("{err:?}");
@@ -218,7 +231,7 @@ struct LogicLayer;
 impl Layer for LogicLayer {
     fn register(
         &mut self,
-        world: &mut World,
+        _: &mut World,
         _: &AssetCache,
         mut events: EventRegisterContext<Self>,
     ) -> anyhow::Result<()> {
@@ -227,31 +240,6 @@ impl Layer for LogicLayer {
 
             Ok(())
         });
-
-        events.subscribe(|_, ctx, resized: &ResizedEvent| {
-            if let Some(main_camera) = Query::new(projection_matrix().as_mut())
-                .with(main_camera())
-                .borrow(ctx.world)
-                .first()
-            {
-                let aspect =
-                    resized.physical_size.width as f32 / resized.physical_size.height as f32;
-                *main_camera = Mat4::perspective_rh(1.0, aspect, 0.1, 1000.0);
-            }
-
-            Ok(())
-        });
-
-        setup_camera()
-            .set(
-                environment_data(),
-                EnvironmentData::new(
-                    Srgb::new(0.2, 0.2, 0.3),
-                    0.001,
-                    if ENABLE_SKYBOX { 0.0 } else { 1.0 },
-                ),
-            )
-            .spawn(world);
 
         Ok(())
     }

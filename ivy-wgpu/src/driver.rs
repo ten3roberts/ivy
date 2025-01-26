@@ -7,7 +7,11 @@ use std::{
 use atomic_refcell::AtomicRefCell;
 use flax::{components::name, Entity};
 use glam::{vec2, Vec2};
-use ivy_core::{driver::Driver, App};
+use ivy_core::{
+    components::{engine, request_capture_mouse},
+    driver::Driver,
+    App,
+};
 use ivy_input::types::{CursorMoved, InputEvent, KeyboardInput, MouseInput, ScrollMotion};
 use winit::{
     application::ApplicationHandler,
@@ -132,8 +136,21 @@ impl ApplicationHandler for WinitEventHandler<'_> {
         self.current_time = new_time;
         self.stats.record_frame(delta);
 
+        if let Err(err) = self.app.tick(delta) {
+            tracing::error!("{err:?}");
+            event_loop.exit();
+        }
+
         if let Some(w) = self.main_window {
             let handle = self.app.world.get(w, window()).unwrap();
+            let lock = self
+                .app
+                .world
+                .get_copy(engine(), request_capture_mouse())
+                .unwrap_or_default();
+
+            handle.set_cursor_lock(lock);
+
             let report = self.stats.report();
             handle.window.set_title(&format!(
                 "{} - {:>4.1?} {:>4.1?} {:>4.1?}",
@@ -142,11 +159,6 @@ impl ApplicationHandler for WinitEventHandler<'_> {
                 report.average_frame_time,
                 report.max_frame_time,
             ))
-        }
-
-        if let Err(err) = self.app.tick(delta) {
-            tracing::error!("{err:?}");
-            event_loop.exit();
         }
     }
 }

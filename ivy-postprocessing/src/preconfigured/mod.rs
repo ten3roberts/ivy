@@ -4,8 +4,7 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use flax::World;
-use image::DynamicImage;
-use ivy_assets::{stored::DynamicStore, AssetCache, DynAsyncAssetDesc};
+use ivy_assets::{stored::DynamicStore, AssetCache};
 use ivy_core::profiling::profile_scope;
 use ivy_ui::SharedUiInstance;
 use ivy_wgpu::{
@@ -18,7 +17,6 @@ use pbr::{PbrRenderGraph, PbrRenderGraphConfig};
 
 #[derive(Default)]
 pub struct SurfacePbrPipelineDesc {
-    pub hdri: Option<Box<dyn DynAsyncAssetDesc<DynamicImage>>>,
     /// Render Ui if configured
     pub ui_instance: Option<SharedUiInstance>,
     pub pbr_config: PbrRenderGraphConfig,

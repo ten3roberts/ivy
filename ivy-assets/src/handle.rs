@@ -72,7 +72,7 @@ where
 
 impl AsRef<[u8]> for Asset<Vec<u8>> {
     fn as_ref(&self) -> &[u8] {
-        &**self
+        self
     }
 }
 

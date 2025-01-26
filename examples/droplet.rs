@@ -1,5 +1,5 @@
-use flax::{Entity, Query, World};
-use glam::{Mat4, Quat, Vec3};
+use flax::{Entity, World};
+use glam::{Quat, Vec3};
 use ivy_assets::{fs::AssetPath, Asset, AssetCache, DynAsyncAssetDesc};
 use ivy_core::{
     app::PostInitEvent,
@@ -9,25 +9,24 @@ use ivy_core::{
     update_layer::{FixedTimeStep, ScheduledLayer},
     App, AsyncCommandBuffer, EngineLayer, EntityBuilderExt, Layer, DEG_90,
 };
-use ivy_engine::{async_commandbuffer, engine, main_camera, TransformBundle};
-use ivy_game::free_camera::{setup_camera, FreeCameraPlugin};
+use ivy_engine::{async_commandbuffer, engine, TransformBundle};
+use ivy_game::{
+    orbit_camera::OrbitCameraPlugin,
+    viewport_camera::{CameraSettings, ViewportCameraLayer},
+};
 use ivy_gltf::Document;
 use ivy_input::layer::InputLayer;
 use ivy_physics::PhysicsPlugin;
-use ivy_postprocessing::preconfigured::{SurfacePbrPipelineDesc, SurfacePbrRenderer};
-use ivy_scene::{GltfNodeExt, NodeMountOptions};
-use ivy_wgpu::{
-    components::{environment_data, projection_matrix},
-    driver::WinitDriver,
-    events::ResizedEvent,
-    layer::GraphicsLayer,
-    renderer::EnvironmentData,
+use ivy_postprocessing::preconfigured::{
+    pbr::{PbrRenderGraphConfig, SkyboxConfig},
+    SurfacePbrPipelineDesc, SurfacePbrRenderer,
 };
+use ivy_scene::{GltfNodeExt, NodeMountOptions};
+use ivy_wgpu::{driver::WinitDriver, layer::GraphicsLayer, renderer::EnvironmentData};
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
+use wgpu::TextureFormat;
 use winit::window::WindowAttributes;
-
-const ENABLE_SKYBOX: bool = true;
 
 pub fn main() -> anyhow::Result<()> {
     registry()
@@ -44,8 +43,7 @@ pub fn main() -> anyhow::Result<()> {
         .with_driver(WinitDriver::new(
             WindowAttributes::default()
                 .with_fullscreen(Some(winit::window::Fullscreen::Borderless(None)))
-                // .with_inner_size(LogicalSize::new(1920, 1080))
-                .with_title("Ivy Physics"),
+                .with_title("Droplet"),
         ))
         .with_layer(EngineLayer::new())
         .with_layer(ProfilingLayer::new())
@@ -57,9 +55,14 @@ pub fn main() -> anyhow::Result<()> {
                 gpu,
                 surface,
                 SurfacePbrPipelineDesc {
-                    hdri: Some(Box::new(AssetPath::new(
-                        "hdris/HDR_artificial_planet_close.hdr",
-                    ))),
+                    pbr_config: PbrRenderGraphConfig {
+                        label: "basic".into(),
+                        skybox: Some(SkyboxConfig {
+                            hdri: Box::new(AssetPath::new("hdris/HDR_artificial_planet_close.hdr")),
+                            format: TextureFormat::Rgba16Float,
+                        }),
+                        ..Default::default()
+                    },
                     ..Default::default()
                 },
             ))
@@ -68,9 +71,13 @@ pub fn main() -> anyhow::Result<()> {
         .with_layer(LogicLayer)
         .with_layer(
             ScheduledLayer::new(FixedTimeStep::new(0.02))
-                .with_plugin(FreeCameraPlugin)
+                .with_plugin(OrbitCameraPlugin)
                 .with_plugin(PhysicsPlugin::new()),
         )
+        .with_layer(ViewportCameraLayer::new(CameraSettings {
+            environment_data: EnvironmentData::new(Srgb::new(0.0, 0.0, 0.1), 0.001, 0.0),
+            fov: 1.0,
+        }))
         .run()
     {
         tracing::error!("{err:?}");
@@ -110,7 +117,7 @@ struct LogicLayer;
 impl Layer for LogicLayer {
     fn register(
         &mut self,
-        world: &mut World,
+        _: &mut World,
         _: &AssetCache,
         mut events: EventRegisterContext<Self>,
     ) -> anyhow::Result<()> {
@@ -125,32 +132,6 @@ impl Layer for LogicLayer {
 
             Ok(())
         });
-
-        events.subscribe(|_, ctx, resized: &ResizedEvent| {
-            if let Some(main_camera) = Query::new(projection_matrix().as_mut())
-                .with(main_camera())
-                .borrow(ctx.world)
-                .first()
-            {
-                let aspect =
-                    resized.physical_size.width as f32 / resized.physical_size.height as f32;
-                tracing::info!(%aspect);
-                *main_camera = Mat4::perspective_rh(1.0, aspect, 0.1, 1000.0);
-            }
-
-            Ok(())
-        });
-
-        setup_camera()
-            .set(
-                environment_data(),
-                EnvironmentData::new(
-                    Srgb::new(0.0, 0.0, 0.0),
-                    0.001,
-                    if ENABLE_SKYBOX { 0.0 } else { 1.0 },
-                ),
-            )
-            .spawn(world);
 
         Ok(())
     }

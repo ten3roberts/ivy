@@ -19,12 +19,13 @@ use ivy_core::{
     App, EngineLayer, EntityBuilderExt, Layer,
 };
 use ivy_engine::{
-    async_commandbuffer, elapsed_time, engine, main_camera, rotation, world_transform,
-    RigidBodyBundle, TransformBundle,
+    async_commandbuffer, elapsed_time, engine, rotation, world_transform, RigidBodyBundle,
+    TransformBundle,
 };
 use ivy_game::{
-    free_camera::{setup_camera, FreeCameraPlugin},
+    orbit_camera::OrbitCameraPlugin,
     ray_picker::RayPickingPlugin,
+    viewport_camera::{CameraSettings, ViewportCameraLayer},
 };
 use ivy_gltf::{
     animation::{
@@ -42,12 +43,8 @@ use ivy_postprocessing::preconfigured::{
 };
 use ivy_scene::{GltfNodeExt, NodeMountOptions};
 use ivy_wgpu::{
-    components::{
-        environment_data, forward_pass, light_kind, light_params, projection_matrix, shadow_pass,
-        transparent_pass,
-    },
+    components::{forward_pass, light_kind, light_params, shadow_pass, transparent_pass},
     driver::WinitDriver,
-    events::ResizedEvent,
     layer::GraphicsLayer,
     light::{LightBundle, LightKind, LightParams},
     material_desc::{
@@ -96,14 +93,13 @@ pub fn main() -> anyhow::Result<()> {
                 SurfacePbrPipelineDesc {
                     pbr_config: PbrRenderGraphConfig {
                         label: "basic".into(),
-                        shadow_map_config: Some(Default::default()),
-                        msaa: Some(Default::default()),
-                        bloom: Some(Default::default()),
                         skybox: Some(SkyboxConfig {
-                            hdri: Box::new(AssetPath::new("hdris/EveningSkyHDRI035B_8K-HDR.exr")),
+                            hdri: Box::new(AssetPath::new(
+                                "hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
+                            )),
                             format: TextureFormat::Rgba16Float,
                         }),
-                        hdr_format: Some(wgpu::TextureFormat::Rgba16Float),
+                        ..Default::default()
                     },
                     ..Default::default()
                 },
@@ -113,7 +109,7 @@ pub fn main() -> anyhow::Result<()> {
         .with_layer(LogicLayer::new())
         .with_layer(
             ScheduledLayer::new(FixedTimeStep::new(0.02))
-                .with_plugin(FreeCameraPlugin)
+                .with_plugin(OrbitCameraPlugin)
                 .with_plugin(GizmosPlugin)
                 .with_plugin(AnimationPlugin)
                 .with_plugin(
@@ -124,6 +120,14 @@ pub fn main() -> anyhow::Result<()> {
                 .with_plugin(RotateSpotlightPlugin)
                 .with_plugin(RayPickingPlugin),
         )
+        .with_layer(ViewportCameraLayer::new(CameraSettings {
+            environment_data: EnvironmentData::new(
+                Srgb::new(0.2, 0.2, 0.3),
+                0.001,
+                if ENABLE_SKYBOX { 0.0 } else { 1.0 },
+            ),
+            fov: 1.0,
+        }))
         .run()
     {
         tracing::error!("{err:?}");
@@ -446,37 +450,11 @@ impl Plugin for RotateSpotlightPlugin {
 impl Layer for LogicLayer {
     fn register(
         &mut self,
-        world: &mut World,
+        _: &mut World,
         _: &AssetCache,
         mut events: EventRegisterContext<Self>,
     ) -> anyhow::Result<()> {
         events.subscribe(|this, ctx, _: &PostInitEvent| this.setup_assets(ctx.world, ctx.assets));
-
-        events.subscribe(|_, ctx, resized: &ResizedEvent| {
-            if let Some(main_camera) = Query::new(projection_matrix().as_mut())
-                .with(main_camera())
-                .borrow(ctx.world)
-                .first()
-            {
-                let aspect =
-                    resized.physical_size.width as f32 / resized.physical_size.height as f32;
-                tracing::info!(%aspect);
-                *main_camera = Mat4::perspective_rh(1.0, aspect, 0.1, 1000.0);
-            }
-
-            Ok(())
-        });
-
-        setup_camera()
-            .set(
-                environment_data(),
-                EnvironmentData::new(
-                    Srgb::new(0.2, 0.2, 0.3),
-                    0.001,
-                    if ENABLE_SKYBOX { 0.0 } else { 1.0 },
-                ),
-            )
-            .spawn(world);
 
         Ok(())
     }
