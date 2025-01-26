@@ -327,7 +327,8 @@ impl MeshRenderer {
                                     constant: -2,
                                     slope_scale: 2.0,
                                     clamp: 0.0,
-                                });
+                                })
+                                .with_polygon_mode(shader.polygon_mode);
 
                             slot.insert(store.shaders.insert(RenderShader::new(
                                 gpu,

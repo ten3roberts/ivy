@@ -1,15 +1,16 @@
 use std::convert::Infallible;
 
 use ivy_assets::{Asset, AssetCache, AssetDesc};
-use wgpu::Face;
+use wgpu::{Face, PolygonMode};
 
 use crate::shader::{ShaderPass, ShaderValue};
 
 /// Loads the default PBR shader
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PbrShaderDesc {
     pub skinned: bool,
     pub lit: bool,
+    pub polygon_mode: PolygonMode,
 }
 
 impl AssetDesc<ShaderPass> for PbrShaderDesc {
@@ -29,6 +30,7 @@ impl AssetDesc<ShaderPass> for PbrShaderDesc {
             .into_iter()
             .flatten()
             .collect(),
+            polygon_mode: self.polygon_mode,
         }))
     }
 }
@@ -53,6 +55,7 @@ impl AssetDesc<ShaderPass> for ShadowShaderDesc {
             .into_iter()
             .flatten()
             .collect(),
+            polygon_mode: PolygonMode::Fill,
         }))
     }
 }
@@ -81,6 +84,7 @@ impl AssetDesc<ShaderPass> for PbrEmissiveShaderDesc {
             .into_iter()
             .flatten()
             .collect(),
+            polygon_mode: PolygonMode::Fill,
         }))
     }
 }

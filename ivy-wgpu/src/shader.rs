@@ -1,6 +1,6 @@
 use std::{borrow::Cow, collections::BTreeMap};
 
-use wgpu::Face;
+use wgpu::{Face, PolygonMode};
 
 /// Represents a shader
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -11,6 +11,7 @@ pub struct ShaderPass {
     pub source: Cow<'static, str>,
     pub cull_mode: Option<Face>,
     pub shader_defs: BTreeMap<String, ShaderValue>,
+    pub polygon_mode: PolygonMode,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -44,7 +45,14 @@ impl ShaderPass {
             source: source.into(),
             cull_mode: None,
             shader_defs: shader_defs.into_iter().collect(),
+            polygon_mode: PolygonMode::Fill,
         }
+    }
+
+    /// Set the polygon mode
+    pub fn with_polygon_mode(mut self, polygon_mode: PolygonMode) -> Self {
+        self.polygon_mode = polygon_mode;
+        self
     }
 
     /// Set the cull mode

@@ -1,8 +1,9 @@
 use ivy_assets::{loadable::Load, Asset, AssetCache, AssetDesc};
+use ivy_core::Color;
 use ivy_gltf::GltfMaterial;
 use ivy_graphics::texture::{TextureData, TextureDesc};
 use ordered_float::NotNan;
-use wgpu::TextureFormat;
+use wgpu::{PolygonMode, TextureFormat};
 
 use crate::{
     material::{
@@ -21,6 +22,7 @@ pub enum MaterialDesc {
     UnlitMaterial(PbrMaterialDesc),
     EmissiveMaterial(PbrEmissiveMaterialDesc),
     ShadowMaterial,
+    WireframeMaterial(PbrMaterialDesc),
 }
 
 impl Load for MaterialDesc {
@@ -40,6 +42,9 @@ impl Load for MaterialDesc {
                 Ok(MaterialData::EmissiveMaterial(desc.load(assets).await?))
             }
             MaterialDesc::ShadowMaterial => Ok(MaterialData::ShadowMaterial),
+            MaterialDesc::WireframeMaterial(desc) => {
+                Ok(MaterialData::WireframeMaterial(desc.load(assets).await?))
+            }
         }
     }
 }
@@ -177,6 +182,7 @@ pub enum MaterialData {
     PbrMaterial(PbrMaterialData),
     UnlitMaterial(PbrMaterialData),
     EmissiveMaterial(PbrEmissiveMaterialData),
+    WireframeMaterial(PbrMaterialData),
     ShadowMaterial,
 }
 
@@ -432,6 +438,7 @@ impl AssetDesc<RenderMaterial> for RenderMaterialDesc {
                 assets.load(&PbrShaderDesc {
                     skinned: self.skinned,
                     lit: true,
+                    polygon_mode: PolygonMode::Fill,
                 }),
             ),
             MaterialData::UnlitMaterial(v) => v.create(
@@ -439,6 +446,7 @@ impl AssetDesc<RenderMaterial> for RenderMaterialDesc {
                 assets.load(&PbrShaderDesc {
                     skinned: self.skinned,
                     lit: false,
+                    polygon_mode: PolygonMode::Fill,
                 }),
             ),
             MaterialData::EmissiveMaterial(v) => v.create(
@@ -446,6 +454,14 @@ impl AssetDesc<RenderMaterial> for RenderMaterialDesc {
                 assets.load(&PbrEmissiveShaderDesc {
                     skinned: self.skinned,
                     lit: true,
+                }),
+            ),
+            MaterialData::WireframeMaterial(v) => v.create(
+                assets,
+                assets.load(&PbrShaderDesc {
+                    skinned: self.skinned,
+                    lit: false,
+                    polygon_mode: PolygonMode::Line,
                 }),
             ),
             MaterialData::ShadowMaterial => {

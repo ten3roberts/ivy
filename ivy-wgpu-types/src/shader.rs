@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use wgpu::{
-    BindGroupLayout, DepthBiasState, Face, FrontFace, PipelineLayoutDescriptor, RenderPipeline,
-    TextureFormat, VertexBufferLayout,
+    BindGroupLayout, DepthBiasState, Face, FrontFace, PipelineLayoutDescriptor, PolygonMode,
+    RenderPipeline, TextureFormat, VertexBufferLayout,
 };
 
 use crate::Gpu;
@@ -39,6 +39,7 @@ pub struct ShaderDesc<'a> {
     pub vertex_entry_point: &'a str,
     pub fragment_entry_point: &'a str,
     pub culling_mode: Culling,
+    pub polygon_mode: PolygonMode,
     pub depth_bias: DepthBiasState,
 }
 
@@ -54,6 +55,7 @@ impl<'a> ShaderDesc<'a> {
             fragment_entry_point: "fs_main",
             culling_mode: Default::default(),
             depth_bias: Default::default(),
+            polygon_mode: PolygonMode::Fill,
         }
     }
 
@@ -84,6 +86,12 @@ impl<'a> ShaderDesc<'a> {
     /// Set the culling mode
     pub fn with_culling_mode(mut self, culling_mode: Culling) -> Self {
         self.culling_mode = culling_mode;
+        self
+    }
+
+    /// Set the with polygon mode
+    pub fn with_polygon_mode(mut self, mode: PolygonMode) -> Self {
+        self.polygon_mode = mode;
         self
     }
 }
@@ -148,7 +156,7 @@ impl RenderShader {
                     front_face: desc.culling_mode.front_face,
                     cull_mode: desc.culling_mode.cull_mode,
                     // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
-                    polygon_mode: wgpu::PolygonMode::Fill,
+                    polygon_mode: desc.polygon_mode,
                     // Requires Features::DEPTH_CLIP_CONTROL
                     unclipped_depth: false,
                     // Requires Features::CONSERVATIVE_RASTERIZATION
