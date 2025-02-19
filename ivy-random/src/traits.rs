@@ -1,6 +1,7 @@
 use glam::{Vec2, Vec3};
 use rand::Rng;
 
+// TODO: remove
 pub trait Random {
     // Generates a random unit vector
     fn rand_unit<R: Rng>(rng: &mut R) -> Self;
@@ -14,8 +15,8 @@ pub trait Random {
 
 impl Random for Vec3 {
     fn rand_unit<R: Rng>(rng: &mut R) -> Self {
-        let phi = rng.gen_range(0.0..std::f32::consts::TAU);
-        let costheta: f32 = rng.gen_range(-1.0..=1.0);
+        let phi = rng.random_range(0.0..std::f32::consts::TAU);
+        let costheta: f32 = rng.random_range(-1.0..=1.0);
         let theta = costheta.acos();
 
         Vec3::new(
@@ -26,49 +27,49 @@ impl Random for Vec3 {
     }
 
     fn rand_sphere<R: Rng>(rng: &mut R) -> Self {
-        let length = rng.gen_range(0.0..=1.0);
+        let length = rng.random_range(0.0..=1.0);
         Self::rand_unit(rng) * length
     }
 
     fn rand_constrained_sphere<R: Rng>(rng: &mut R, r1: f32, r2: f32) -> Self {
-        let length = rng.gen_range(r1..=r2);
+        let length = rng.random_range(r1..=r2);
         Self::rand_unit(rng) * length
     }
 
     fn rand_uniform<R: Rng>(rng: &mut R) -> Self {
         Vec3::new(
-            rng.gen_range(-1.0..=1.0),
-            rng.gen_range(-1.0..=1.0),
-            rng.gen_range(-1.0..=1.0),
+            rng.random_range(-1.0..=1.0),
+            rng.random_range(-1.0..=1.0),
+            rng.random_range(-1.0..=1.0),
         )
     }
 }
 
 impl Random for Vec2 {
     fn rand_unit<R: Rng>(rng: &mut R) -> Self {
-        let phi = rng.gen_range(0.0..std::f32::consts::TAU);
+        let phi = rng.random_range(0.0..std::f32::consts::TAU);
 
         Vec2::new(phi.cos(), phi.sin())
     }
 
     fn rand_sphere<R: Rng>(rng: &mut R) -> Self {
-        let length = rng.gen_range(0.0..=1.0);
+        let length = rng.random_range(0.0..=1.0);
         Self::rand_unit(rng) * length
     }
 
     fn rand_constrained_sphere<R: Rng>(rng: &mut R, r1: f32, r2: f32) -> Self {
-        let length = rng.gen_range(r1..=r2);
+        let length = rng.random_range(r1..=r2);
         Self::rand_unit(rng) * length
     }
 
     fn rand_uniform<R: Rng>(rng: &mut R) -> Self {
-        Vec2::new(rng.gen_range(-1.0..=1.0), rng.gen_range(-1.0..=1.0))
+        Vec2::new(rng.random_range(-1.0..=1.0), rng.random_range(-1.0..=1.0))
     }
 }
 
 impl Random for f32 {
     fn rand_unit<R: Rng>(rng: &mut R) -> Self {
-        if rng.gen_bool(0.5) {
+        if rng.random_bool(0.5) {
             1.0
         } else {
             -1.0
@@ -76,11 +77,11 @@ impl Random for f32 {
     }
 
     fn rand_sphere<R: Rng>(rng: &mut R) -> Self {
-        rng.gen_range(0.0..=1.0)
+        rng.random_range(0.0..=1.0)
     }
 
     fn rand_constrained_sphere<R: Rng>(rng: &mut R, r1: f32, r2: f32) -> Self {
-        rng.gen_range(r1..=r2)
+        rng.random_range(r1..=r2)
     }
 
     fn rand_uniform<R: Rng>(rng: &mut R) -> Self {
@@ -90,7 +91,7 @@ impl Random for f32 {
 
 impl Random for f64 {
     fn rand_unit<R: Rng>(rng: &mut R) -> Self {
-        if rng.gen_bool(0.5) {
+        if rng.random_bool(0.5) {
             1.0
         } else {
             -1.0
@@ -98,11 +99,11 @@ impl Random for f64 {
     }
 
     fn rand_sphere<R: Rng>(rng: &mut R) -> Self {
-        rng.gen_range(0.0..=1.0)
+        rng.random_range(0.0..=1.0)
     }
 
     fn rand_constrained_sphere<R: Rng>(rng: &mut R, r1: f32, r2: f32) -> Self {
-        rng.gen_range(r1..=r2) as f64
+        rng.random_range(r1..=r2) as f64
     }
 
     fn rand_uniform<R: Rng>(rng: &mut R) -> Self {

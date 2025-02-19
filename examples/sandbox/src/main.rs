@@ -54,12 +54,12 @@ impl SandboxLayer {
         world.spawn_batch((0..10).map(|_| {
             (
                 Position {
-                    x: rng.gen_range(-5..5),
-                    y: rng.gen_range(-5..5),
+                    x: rng.random_range(-5..5),
+                    y: rng.random_range(-5..5),
                 },
                 Velocity {
-                    x: rng.gen_range(-3..3),
-                    y: rng.gen_range(-3..3),
+                    x: rng.random_range(-3..3),
+                    y: rng.random_range(-3..3),
                 },
             )
         }));
@@ -67,14 +67,16 @@ impl SandboxLayer {
         // And some without
         world.spawn_batch((0..10).map(|_| {
             (Position {
-                x: rng.gen_range(-5..5),
-                y: rng.gen_range(-5..5),
+                x: rng.random_range(-5..5),
+                y: rng.random_range(-5..5),
             },)
         }));
 
         // And many unrelated
         world.spawn_batch((0..1_000).map(|_| {
-            let name = (0..5).map(|_| rng.gen_range('a'..'z')).collect::<String>();
+            let name = (0..5)
+                .map(|_| rng.random_range('a'..'z'))
+                .collect::<String>();
             (name,)
         }));
 

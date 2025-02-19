@@ -44,7 +44,7 @@ impl AssetDesc<SharedShape> for GltfTriMeshDesc {
                 .map(|v| [v[0], v[1], v[2]])
                 .collect_vec(),
             TriMeshFlags::FIX_INTERNAL_EDGES,
-        );
+        )?;
 
         Ok(assets.insert(shape))
     }
