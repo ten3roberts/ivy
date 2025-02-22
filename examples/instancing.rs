@@ -16,7 +16,7 @@ use ivy_engine::{
     color, elapsed_time, engine, parent_transform, position, rotation, scale, world_transform,
 };
 use ivy_game::{
-    free_camera::FreeCameraPlugin,
+    fly_camera::FlyCameraPlugin,
     viewport_camera::{CameraSettings, ViewportCameraLayer},
 };
 use ivy_gltf::animation::plugin::AnimationPlugin;
@@ -90,7 +90,7 @@ pub fn main() -> anyhow::Result<()> {
         .with_layer(LogicLayer::new())
         .with_layer(
             ScheduledLayer::new(FixedTimeStep::new(0.02))
-                .with_plugin(FreeCameraPlugin)
+                .with_plugin(FlyCameraPlugin)
                 .with_plugin(AnimationPlugin)
                 .with_plugin(DynamicsPlugin)
                 .with_plugin(

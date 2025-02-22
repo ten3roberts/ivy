@@ -30,9 +30,9 @@ flax::component! {
     pub camera_speed_delta: f32,
 }
 
-pub struct FreeCameraPlugin;
+pub struct FlyCameraPlugin;
 
-impl Plugin for FreeCameraPlugin {
+impl Plugin for FlyCameraPlugin {
     fn install(
         &self,
         world: &mut World,

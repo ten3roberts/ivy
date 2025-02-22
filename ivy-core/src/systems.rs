@@ -1,59 +1,54 @@
 use anyhow::Context;
-use flax::{components::child_of, BoxedSystem, Dfs, DfsBorrow, FetchExt, Query, System, World};
-use glam::{Mat4, Quat, Vec3};
+use flax::{
+    components::child_of,
+    fetch::{entity_refs, EntityRefs},
+    filter::{All, ChangeFilter},
+    BoxedSystem, ComponentMut, Dfs, DfsBorrow, FetchExt, Query, QueryBorrow, System, World,
+};
+use glam::{Mat4, Vec3};
 
 use crate::{
-    components::{position, rotation, scale, world_transform, TransformQuery},
+    components::{parent_transform, position, world_transform, TransformQuery},
     AsyncCommandBuffer,
 };
 
-// #[system(args(position=position(),rotation=rotation().modified(),scale=scale()), par)]
-// pub fn update_root_transforms(
-//     world_transform: &mut Mat4,
-//     position: &Vec3,
-//     rotation: &Quat,
-//     scale: &Vec3,
-// ) {
-//     *world_transform = Mat4::from_scale_rotation_translation(*scale, *rotation, *position)
-// }
-
 pub fn update_root_transforms_system() -> BoxedSystem {
     System::builder()
+        .with_query(Query::new(entity_refs()).with_filter(position().modified()))
         .with_query(
-            Query::new((world_transform().as_mut(), TransformQuery::new().modified()))
-                .batch_size(1024),
+            Query::new((
+                parent_transform().as_mut(),
+                world_transform().as_mut(),
+                TransformQuery::new(),
+            ))
+            .with_strategy(Dfs::new(child_of)),
         )
-        .par_for_each(|(world_transform, item)| {
-            *world_transform =
-                Mat4::from_scale_rotation_translation(*item.scale, *item.rotation, *item.pos)
-        })
-        .boxed()
-}
+        .build(
+            |mut query: QueryBorrow<EntityRefs, (All, ChangeFilter<Vec3>)>,
+             mut children: DfsBorrow<
+                '_,
+                (ComponentMut<Mat4>, ComponentMut<Mat4>, TransformQuery),
+            >| {
+                for id in &mut query {
+                    children.traverse_from(
+                        id.id(),
+                        &None,
+                        |(parent_transform, world_transform, item), _, &parent| {
+                            let parent = parent.unwrap_or(*parent_transform);
+                            *parent_transform = parent;
+                            *world_transform = parent
+                                * Mat4::from_scale_rotation_translation(
+                                    *item.scale,
+                                    *item.rotation,
+                                    *item.pos,
+                                );
 
-pub fn update_transform_system() -> BoxedSystem {
-    System::builder()
-        .with_query(
-            // TODO: be smarter about this, sleeping entities etc
-            Query::new((world_transform().as_mut(), position(), rotation(), scale()))
-                .with_strategy(Dfs::new(child_of)),
+                            Some(*world_transform)
+                        },
+                    );
+                }
+            },
         )
-        .build(|mut query: DfsBorrow<_, _>| {
-            query.traverse(
-                &Mat4::IDENTITY,
-                |(world_transform, &position, &rotation, &scale): (
-                    &mut Mat4,
-                    &Vec3,
-                    &Quat,
-                    &Vec3,
-                ),
-                 _,
-                 parent| {
-                    *world_transform =
-                        *parent * Mat4::from_scale_rotation_translation(scale, rotation, position);
-                    *world_transform
-                },
-            );
-        })
         .boxed()
 }
 

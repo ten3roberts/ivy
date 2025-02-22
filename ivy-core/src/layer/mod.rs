@@ -6,24 +6,13 @@ use crate::{
     app::TickEvent,
     components::{async_commandbuffer, engine, gizmos, request_capture_mouse},
     gizmos::Gizmos,
-    systems::{apply_async_commandbuffers, update_root_transforms_system, update_transform_system},
+    systems::{apply_async_commandbuffers, update_root_transforms_system},
     AsyncCommandBuffer,
 };
 
 pub mod events;
 
 use self::events::{EventRegisterContext, EventRegistry};
-
-// impl<T, L> LayerDesc for L::Desc
-// where
-//     L: Layer<Desc = T>,
-// {
-//     type Layer = L;
-
-//     fn register(self, world: &mut World, assets: &AssetCache) -> anyhow::Result<Self::Layer> {
-//         L::register(self, world, assets, EventRegisterContext::default())
-//     }
-// }
 
 /// A layer controls it's own event handling and update logic
 pub trait Layer: 'static {
@@ -76,8 +65,8 @@ impl EngineLayer {
         let cmd = AsyncCommandBuffer::new();
         let schedule = Schedule::builder()
             .with_system(apply_async_commandbuffers(cmd.clone()))
-            // .with_system(update_root_transforms_system())
-            .with_system(update_transform_system())
+            .with_system(update_root_transforms_system())
+            // .with_system(update_transform_system())
             .build();
 
         Self { cmd, schedule }

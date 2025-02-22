@@ -18,7 +18,6 @@ pub struct Effector {
     instant_dw: Vector3<f32>,
     inv_mass: Vec3,
     inertia_tensor_sqrt: SdpMatrix3<f32>,
-    translation: Vec3,
     wake: bool,
 }
 
@@ -30,7 +29,6 @@ impl Effector {
             dw: Vector3::new(0.0, 0.0, 0.0),
             instant_dv: Vec3::ZERO,
             instant_dw: Default::default(),
-            translation: Vec3::ZERO,
             wake: false,
             inertia_tensor_sqrt: SdpMatrix3::from_sdp_matrix(Matrix3::identity()),
         }
@@ -63,7 +61,6 @@ impl Effector {
             dw: Default::default(),
             instant_dv: Vec3::ZERO,
             instant_dw: Default::default(),
-            translation: Vec3::ZERO,
             inv_mass: self.inv_mass,
             inertia_tensor_sqrt: self.inertia_tensor_sqrt,
             wake: false,
@@ -126,10 +123,6 @@ impl Effector {
         self.apply_angular_velocity_change(at.cross(dv))
     }
 
-    pub fn translate(&mut self, translate: Vec3) {
-        self.translation += translate;
-    }
-
     /// Returns the total net effect of forces, impulses, and velocity changes
     /// during `dt`. Note, Effector should be clear afterwards.
     pub fn net_velocity_change(&self, dt: f32) -> Vec3 {
@@ -140,11 +133,6 @@ impl Effector {
     /// velocity changes. Note: Effector should be cleared afterwards.
     pub fn net_angular_velocity_change(&self, dt: f32) -> Vec3 {
         (self.dw * dt + self.instant_dw).into()
-    }
-
-    /// Get the effector's translation.
-    pub fn translation(&self) -> Vec3 {
-        self.translation
     }
 }
 

@@ -11,7 +11,7 @@ use ivy_core::{
 };
 use ivy_engine::{is_static, RigidBodyBundle, TransformBundle};
 use ivy_game::{
-    free_camera::FreeCameraPlugin,
+    fly_camera::FlyCameraPlugin,
     viewport_camera::{CameraSettings, ViewportCameraLayer},
 };
 use ivy_graphics::texture::TextureData;
@@ -76,7 +76,7 @@ pub fn main() -> anyhow::Result<()> {
         .with_layer(LogicLayer)
         .with_layer(
             ScheduledLayer::new(FixedTimeStep::new(0.02))
-                .with_plugin(FreeCameraPlugin)
+                .with_plugin(FlyCameraPlugin)
                 .with_plugin(
                     PhysicsPlugin::new()
                         .with_gizmos(ivy_physics::GizmoSettings { rigidbody: true })

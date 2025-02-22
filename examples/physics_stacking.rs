@@ -11,7 +11,7 @@ use ivy_core::{
 };
 use ivy_engine::{is_static, rotation, scale, RigidBodyBundle, TransformBundle};
 use ivy_game::{
-    free_camera::FreeCameraPlugin,
+    fly_camera::FlyCameraPlugin,
     ray_picker::RayPickingPlugin,
     viewport_camera::{CameraSettings, ViewportCameraLayer},
 };
@@ -87,7 +87,7 @@ pub fn main() -> anyhow::Result<()> {
         }))
         .with_layer(InputLayer::new())
         .with_layer(LogicLayer)
-        .with_layer(ScheduledLayer::new(FixedTimeStep::new(0.02)).with_plugin(FreeCameraPlugin))
+        .with_layer(ScheduledLayer::new(FixedTimeStep::new(0.02)).with_plugin(FlyCameraPlugin))
         .with_layer(
             ScheduledLayer::new(FixedTimeStep::new(0.02))
                 .with_plugin(PhysicsPlugin::new().with_gravity(-Vec3::Y * 9.81))

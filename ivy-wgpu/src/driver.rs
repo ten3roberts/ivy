@@ -143,13 +143,13 @@ impl ApplicationHandler for WinitEventHandler<'_> {
 
         if let Some(w) = self.main_window {
             let handle = self.app.world.get(w, window()).unwrap();
-            let lock = self
+            let request_lock = self
                 .app
                 .world
                 .get_copy(engine(), request_capture_mouse())
                 .unwrap_or_default();
 
-            handle.set_cursor_lock(lock);
+            handle.set_cursor_lock(request_lock && handle.window().has_focus());
 
             let report = self.stats.report();
             handle.window.set_title(&format!(
@@ -375,7 +375,7 @@ impl WindowHandle {
         &self.window
     }
 
-    pub fn set_cursor_lock(&self, lock: bool) {
+    fn set_cursor_lock(&self, lock: bool) {
         self.cursor_lock
             .borrow_mut()
             .set_cursor_lock(&self.window, lock)

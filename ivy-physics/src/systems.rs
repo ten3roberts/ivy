@@ -2,15 +2,17 @@ use core::f32;
 
 use anyhow::Context;
 use flax::{
-    components::child_of, entity_ids, events::EventSubscriber, fetch::Copied, filter::ChangeFilter,
+    components::child_of,
+    entity_ids,
+    events::EventSubscriber,
+    fetch::Copied,
+    filter::{ChangeFilter, Not},
     BoxedSystem, CommandBuffer, Component, ComponentMut, EntityIds, FetchExt, Opt, Query,
     QueryBorrow, RelationExt, System, World,
 };
 use glam::{Mat4, Vec3};
 use ivy_core::{
-    components::{
-        engine, main_camera, position, world_transform, TransformQuery, TransformQueryItem,
-    },
+    components::{engine, main_camera, world_transform, TransformQuery, TransformQueryItem},
     gizmos::{Gizmos, Line, DEFAULT_THICKNESS},
     subscribers::{RemovedComponentSubscriber, RemovedRelationSubscriber},
     Color, ColorExt,
@@ -412,19 +414,18 @@ pub fn configure_effectors_system() -> BoxedSystem {
 /// Applies effectors to their respective entities and clears the effects.
 pub fn apply_effectors_system(dt: f32) -> BoxedSystem {
     System::builder()
-        .with_query(Query::new((
-            position().as_mut(),
-            velocity().as_mut(),
-            angular_velocity().as_mut(),
-            effector().as_mut(),
-            sleeping().satisfied(),
-        )))
-        .par_for_each(move |(position, vel, ang_vel, effector, is_sleeping)| {
-            if !is_sleeping || effector.should_wake() {
-                // tracing::info!(%physics_state.dt, ?effector, "updating effector");
+        .with_query(Query::new(
+            (
+                velocity().as_mut(),
+                angular_velocity().as_mut(),
+                effector().as_mut(),
+            )
+                .filtered(Not(sleeping().satisfied())),
+        ))
+        .par_for_each(move |(vel, ang_vel, effector)| {
+            if effector.should_wake() {
                 let net_dv = effector.net_velocity_change(dt);
                 *vel += net_dv;
-                *position += effector.translation();
 
                 *ang_vel += effector.net_angular_velocity_change(dt);
             }

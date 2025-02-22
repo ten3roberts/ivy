@@ -3,8 +3,11 @@ use std::{cell::RefCell, convert::identity, ops::Deref, rc::Rc};
 use flax::World;
 use ivy_assets::AssetCache;
 use ivy_core::{
-    app::TickEvent, components::request_capture_mouse, layer::events::EventRegisterContext,
-    profiling::profile_function, Layer, WorldExt,
+    app::TickEvent,
+    components::{engine, request_capture_mouse},
+    layer::events::EventRegisterContext,
+    profiling::profile_function,
+    Layer, WorldExt,
 };
 use ivy_input::types::InputEvent;
 use ivy_wgpu::{
@@ -116,9 +119,7 @@ impl UiInputLayer {
                 .get_copy(request_capture_mouse())
                 .is_ok_and(identity);
 
-            if let Some(window) = &self.window {
-                window.set_cursor_lock(capture_mouse);
-            }
+            *engine_world.get_mut(engine(), request_capture_mouse())? = capture_mouse;
 
             if let Ok(mut handler) = focused.get_mut(on_input_event()) {
                 handler(
