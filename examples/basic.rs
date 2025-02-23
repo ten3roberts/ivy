@@ -490,7 +490,7 @@ fn point_light_gizmo_system() -> BoxedSystem {
                         )),
                         LightKind::Directional | LightKind::Spotlight => {
                             let pos = transform.transform_point3(Vec3::ZERO);
-                            let dir = transform.transform_vector3(-Vec3::Z);
+                            let dir = transform.transform_vector3(Vec3::FORWARD);
 
                             gizmos.draw(gizmos::Sphere::new(pos, 0.1, light.color.with_alpha(1.0)));
 

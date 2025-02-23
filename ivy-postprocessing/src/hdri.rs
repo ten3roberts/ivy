@@ -7,7 +7,7 @@ use glam::{Mat4, Vec3};
 use image::DynamicImage;
 use itertools::Itertools;
 use ivy_assets::Asset;
-use ivy_core::DEG_90;
+use ivy_core::{math::Vec3Ext, DEG_90};
 use ivy_wgpu::{
     renderer::SkyboxTextures,
     rendergraph::{Dependency, Node, UpdateResult},
@@ -61,10 +61,10 @@ impl HdriProcessor {
         let view_matrices = [
             Mat4::look_at_lh(Vec3::ZERO, Vec3::X, Vec3::Y),
             Mat4::look_at_lh(Vec3::ZERO, -Vec3::X, Vec3::Y),
-            Mat4::look_at_lh(Vec3::ZERO, Vec3::Y, -Vec3::Z),
+            Mat4::look_at_lh(Vec3::ZERO, Vec3::Y, Vec3::FORWARD),
             Mat4::look_at_lh(Vec3::ZERO, -Vec3::Y, Vec3::Z),
             Mat4::look_at_lh(Vec3::ZERO, Vec3::Z, Vec3::Y),
-            Mat4::look_at_lh(Vec3::ZERO, -Vec3::Z, Vec3::Y),
+            Mat4::look_at_lh(Vec3::ZERO, Vec3::FORWARD, Vec3::Y),
         ];
 
         let viewproj_buffers = view_matrices.map(|v| {

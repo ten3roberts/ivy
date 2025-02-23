@@ -104,7 +104,7 @@ async fn setup_objects(cmd: AsyncCommandBuffer, assets: AssetCache) -> anyhow::R
         )
         .mount(
             TransformBundle::default()
-                .with_position(-Vec3::Z)
+                .with_position(Vec3::FORWARD)
                 .with_rotation(Quat::from_axis_angle(Vec3::Y, -DEG_90)),
         )
         .spawn_into(&mut cmd.lock());

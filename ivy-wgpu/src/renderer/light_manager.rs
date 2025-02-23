@@ -3,7 +3,7 @@ use std::iter::repeat;
 use flax::{FetchExt, Query};
 use glam::{Vec3, Vec4};
 use itertools::Itertools;
-use ivy_core::{components::world_transform, to_linear_vec3};
+use ivy_core::{components::world_transform, math::Vec3Ext, to_linear_vec3};
 use ivy_wgpu_types::{BindGroupBuilder, BindGroupLayoutBuilder, Gpu, TypedBuffer};
 use wgpu::{
     BindGroup, BindGroupLayout, BufferUsages, SamplerDescriptor, ShaderStages,
@@ -93,7 +93,7 @@ impl LightManager {
             let color = (to_linear_vec3(data.color) * data.intensity).extend(1.0);
 
             let position = transform.transform_point3(Vec3::ZERO);
-            let direction = transform.transform_vector3(-Vec3::Z).normalize();
+            let direction = transform.transform_vector3(Vec3::FORWARD).normalize();
 
             let shadow_data = shadow_data.copied().unwrap_or(LightShadowData {
                 index: u32::MAX,

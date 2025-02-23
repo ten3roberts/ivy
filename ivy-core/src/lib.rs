@@ -37,6 +37,7 @@ mod extent;
 pub mod gizmos;
 pub mod layer;
 pub mod macros;
+pub mod math;
 pub mod subscribers;
 mod systems;
 mod updatable;

@@ -6,6 +6,7 @@ use itertools::{izip, Itertools};
 use ivy_assets::stored::Handle;
 use ivy_core::{
     components::{main_camera, world_transform},
+    math::Vec3Ext,
     profiling::{profile_function, profile_scope},
     WorldExt,
 };
@@ -211,7 +212,7 @@ impl Node for ShadowMapNode {
 
             let light_index = self.shadow_casters.len() as u32;
 
-            let light_forward = light_rot * -Vec3::Z;
+            let light_forward = light_rot * Vec3::FORWARD;
             if item.light_kind.is_directional() {
                 for frustrum in &frustrums {
                     let snapping = 0.1;
