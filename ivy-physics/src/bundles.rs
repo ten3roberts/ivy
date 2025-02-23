@@ -14,17 +14,32 @@ use crate::{
     Effector,
 };
 
+fn default_fixed() -> RigidBodyType {
+    RigidBodyType::Fixed
+}
+
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 /// Bundle for a rigidbody without collider
 pub struct RigidBodyBundle {
+    #[serde(default = "default_fixed")]
     pub body_type: RigidBodyType,
+    #[serde(default = "default_true")]
     pub can_sleep: bool,
+    #[serde(default)]
     pub mass: f32,
+    #[serde(default)]
     pub angular_mass: f32,
+    #[serde(default)]
     pub locked_axes: Option<LockedAxes>,
 
+    #[serde(default)]
     pub velocity: Vec3,
+    #[serde(default)]
     pub angular_velocity: Vec3,
 }
 

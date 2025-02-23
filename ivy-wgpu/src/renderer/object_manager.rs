@@ -4,9 +4,9 @@ use bytemuck::Zeroable;
 use flax::{
     component,
     components::child_of,
-    fetch::{entity_refs, Modified, Source, TransformFetch, Traverse},
-    filter::{All, With},
-    Component, Entity, Fetch, FetchExt, Query, World,
+    fetch::{entity_refs, EntityRefs, Modified, Source, TransformFetch, Traverse},
+    filter::{All, With, Without},
+    Component, Entity, Fetch, FetchExt, Opt, Query, World,
 };
 use glam::{Mat4, Vec3};
 use ivy_assets::Asset;
@@ -76,6 +76,11 @@ type SkinUpdateFetch = (
         Traverse,
     >,
 );
+type UnbatchedFetch = (
+    EntityRefs,
+    Source<(Component<Mat4>, Opt<Component<Asset<Skin>>>), Traverse>,
+);
+
 pub struct ObjectManager {
     object_data: Vec<RenderObjectData>,
     object_map: Vec<Entity>,
@@ -89,6 +94,8 @@ pub struct ObjectManager {
     removed_rx: flume::Receiver<(flax::Entity, usize)>,
     object_query: Query<UpdateFetch, (All, With)>,
     skin_query: Query<SkinUpdateFetch, (All, With)>,
+
+    unbatched_query: Query<UnbatchedFetch, (All, With, Without)>,
 }
 
 impl ObjectManager {
@@ -113,6 +120,13 @@ impl ObjectManager {
             object_buffer_index(),
         ));
 
+        let unbatched_query = Query::new((
+            entity_refs(),
+            (world_transform(), skin().opt()).traverse(child_of),
+        ))
+        .with(mesh())
+        .without(object_buffer_index());
+
         Self {
             object_data: Vec::new(),
             object_map: Vec::new(),
@@ -132,6 +146,7 @@ impl ObjectManager {
             skinning_data: vec![Mat4::IDENTITY; skinning_buffer.len()],
             skinning_buffer,
             entity_locations: BTreeMap::new(),
+            unbatched_query,
         }
     }
 
@@ -146,17 +161,10 @@ impl ObjectManager {
 
     pub fn collect_unbatched(&mut self, world: &mut World, gpu: &Gpu) {
         profile_function!();
-        let mut query = Query::new((
-            entity_refs(),
-            (world_transform(), skin().opt()).traverse(child_of),
-        ))
-        .with(mesh())
-        .without(object_buffer_index());
-
         let mut new_components = Vec::new();
         let mut new_skin_components = Vec::new();
 
-        for (entity, (&transform, skin)) in &mut query.borrow(world) {
+        for (entity, (&transform, skin)) in &mut self.unbatched_query.borrow(world) {
             let id = entity.id();
 
             let skin_buffer_offset = match skin {

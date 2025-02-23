@@ -2,11 +2,7 @@ use core::f32;
 
 use anyhow::Context;
 use flax::{
-    components::child_of,
-    entity_ids,
-    events::EventSubscriber,
-    fetch::Copied,
-    filter::{ChangeFilter, Not},
+    components::child_of, entity_ids, events::EventSubscriber, fetch::Copied, filter::ChangeFilter,
     BoxedSystem, CommandBuffer, Component, ComponentMut, EntityIds, FetchExt, Opt, Query,
     QueryBorrow, RelationExt, System, World,
 };
@@ -414,14 +410,11 @@ pub fn configure_effectors_system() -> BoxedSystem {
 /// Applies effectors to their respective entities and clears the effects.
 pub fn apply_effectors_system(dt: f32) -> BoxedSystem {
     System::builder()
-        .with_query(Query::new(
-            (
-                velocity().as_mut(),
-                angular_velocity().as_mut(),
-                effector().as_mut(),
-            )
-                .filtered(Not(sleeping().satisfied())),
-        ))
+        .with_query(Query::new((
+            velocity().as_mut(),
+            angular_velocity().as_mut(),
+            effector().as_mut(),
+        )))
         .par_for_each(move |(vel, ang_vel, effector)| {
             if effector.should_wake() {
                 let net_dv = effector.net_velocity_change(dt);

@@ -1,24 +1,12 @@
-use flax::{
-    BoxedSystem, Component, ComponentMut, Entity, FetchExt, Query, QueryBorrow, System, World,
-};
-use glam::{vec3, EulerRot, Quat, Vec2, Vec3};
+use flax::{Entity, World};
+use glam::{vec3, Quat, Vec3};
 use ivy_assets::AssetCache;
 use ivy_core::{
-    components::{main_camera, request_capture_mouse, rotation, TransformBundle},
+    components::{main_camera, TransformBundle},
     update_layer::{Plugin, ScheduleSetBuilder},
-    Bundle, EntityBuilderExt, DEG_45,
+    Bundle, EntityBuilderExt,
 };
-use ivy_input::{
-    components::input_state,
-    types::{Key, NamedKey},
-    Action, Axis2D, Axis3D, BindingExt, CompositeBinding, CursorMoveBinding, InputState,
-    KeyBinding, MouseButtonBinding, ScrollBinding,
-};
-use ivy_physics::{
-    components::{angular_velocity, velocity},
-    rapier3d::prelude::RigidBodyType,
-    RigidBodyBundle,
-};
+use ivy_physics::{rapier3d::prelude::RigidBodyType, RigidBodyBundle};
 use ivy_wgpu::components::{environment_data, projection_matrix};
 
 pub struct StandaloneCameraPlugin;
