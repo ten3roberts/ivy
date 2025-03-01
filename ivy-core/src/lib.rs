@@ -42,6 +42,7 @@ pub mod subscribers;
 mod systems;
 mod updatable;
 pub mod update_layer;
+pub mod transforms;
 
 use std::f32::consts::PI;
 

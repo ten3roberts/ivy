@@ -6,6 +6,7 @@ use ivy_core::{
     layer::events::EventRegisterContext,
     palette::{Srgb, Srgba},
     profiling::ProfilingLayer,
+    transforms::TransformUpdatePlugin,
     update_layer::{FixedTimeStep, ScheduledLayer},
     App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer,
 };
@@ -91,7 +92,8 @@ pub fn main() -> anyhow::Result<()> {
         .with_layer(
             ScheduledLayer::new(FixedTimeStep::new(0.02))
                 .with_plugin(PhysicsPlugin::new().with_gravity(-Vec3::Y * 9.81))
-                .with_plugin(RayPickingPlugin),
+                .with_plugin(RayPickingPlugin)
+                .with_plugin(TransformUpdatePlugin),
         )
         .with_layer(ViewportCameraLayer::new(CameraSettings {
             environment_data: EnvironmentData::new(

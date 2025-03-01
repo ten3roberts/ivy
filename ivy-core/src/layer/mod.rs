@@ -4,9 +4,9 @@ use ivy_assets::AssetCache;
 
 use crate::{
     app::TickEvent,
-    components::{async_commandbuffer, engine, gizmos, request_capture_mouse},
+    components::{asset_cache, async_commandbuffer, engine, gizmos, request_capture_mouse},
     gizmos::Gizmos,
-    systems::{apply_async_commandbuffers, update_root_transforms_system},
+    systems::apply_async_commandbuffers,
     AsyncCommandBuffer,
 };
 
@@ -65,8 +65,6 @@ impl EngineLayer {
         let cmd = AsyncCommandBuffer::new();
         let schedule = Schedule::builder()
             .with_system(apply_async_commandbuffers(cmd.clone()))
-            .with_system(update_root_transforms_system())
-            // .with_system(update_transform_system())
             .build();
 
         Self { cmd, schedule }
@@ -83,11 +81,12 @@ impl Layer for EngineLayer {
     fn register(
         &mut self,
         world: &mut World,
-        _: &AssetCache,
+        assets: &AssetCache,
         mut events: EventRegisterContext<Self>,
     ) -> anyhow::Result<()> {
         Entity::builder()
             .set(async_commandbuffer(), self.cmd.clone())
+            .set(asset_cache(), assets.clone())
             .set(gizmos(), Gizmos::new())
             .set(request_capture_mouse(), false)
             .append_to(world, engine())?;

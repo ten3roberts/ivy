@@ -1,5 +1,8 @@
 use std::{
+    any,
+    collections::BTreeMap,
     fmt::Display,
+    mem,
     ops::{Deref, DerefMut},
     time::{Duration, Instant},
 };
@@ -24,12 +27,27 @@ pub enum TimeStepKind {
 ///
 /// For full control of events and update frequency, use [crate::layer::Layer].
 pub trait Plugin {
+    // Installs the plugin to the schedule set
     fn install(
         &self,
         world: &mut World,
         assets: &AssetCache,
         schedules: &mut ScheduleSetBuilder,
     ) -> anyhow::Result<()>;
+
+    fn key(&self) -> &'static str {
+        any::type_name::<Self>()
+    }
+
+    // Plugin runs before other plugin
+    fn before(&self) -> Vec<&str> {
+        Vec::new()
+    }
+
+    // Plugin runs after another plugin
+    fn after(&self) -> Vec<&str> {
+        Vec::new()
+    }
 }
 
 impl<U: Plugin> Plugin for Box<U> {
@@ -289,13 +307,110 @@ impl ScheduledLayer {
     pub fn register(&mut self, world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
         assert!(self.schedules.is_none());
 
-        for plugin in &self.plugins {
+        let plugins = mem::take(&mut self.plugins);
+        for plugin in Self::sort_plugins(&plugins)? {
             plugin.install(world, assets, &mut self.builder)?;
         }
 
         self.schedules = Some(self.builder.build());
 
         Ok(())
+    }
+
+    fn collect_dependencies(
+        plugins: &[Box<dyn Plugin>],
+    ) -> anyhow::Result<BTreeMap<String, String>> {
+        let mut dependencies = BTreeMap::new();
+
+        for plugin in plugins {
+            let name = plugin.key();
+            let before = plugin.before();
+            let after = plugin.after();
+
+            tracing::info!(?name, ?before, ?after);
+
+            for b in before {
+                dependencies.insert(b.to_string(), name.to_string());
+            }
+
+            for a in after {
+                dependencies.insert(name.to_string(), a.to_string());
+            }
+        }
+
+        Ok(dependencies)
+    }
+
+    // Sort plugins based on dependencies using topological sort
+    fn sort_plugins(plugins: &[Box<dyn Plugin>]) -> anyhow::Result<Vec<&dyn Plugin>> {
+        fn visit<'a>(
+            plugin: &'a dyn Plugin,
+            dependencies: &BTreeMap<String, String>,
+            sorted: &mut Vec<&'a dyn Plugin>,
+            visited: &mut BTreeMap<String, bool>,
+        ) -> anyhow::Result<()> {
+            let name = plugin.key();
+            let before = plugin.before();
+            let after = plugin.after();
+
+            if let Some(visited) = visited.get(name) {
+                if *visited {
+                    return Ok(());
+                }
+            }
+
+            visited.insert(name.to_string(), false);
+
+            for b in before {
+                if let Some(dependency) = dependencies.get(b) {
+                    if !visited.get(dependency).unwrap_or(&false) {
+                        return Err(anyhow::anyhow!(
+                            "Plugin {} has a circular dependency with {}",
+                            name,
+                            dependency
+                        ));
+                    }
+
+                    visit(plugin, dependencies, sorted, visited)?;
+                } else {
+                    return Err(anyhow::anyhow!(
+                        "Plugin {} has a dependency on {} which does not exist",
+                        name,
+                        b
+                    ));
+                }
+            }
+
+            sorted.push(plugin);
+            visited.insert(name.to_string(), true);
+
+            for a in after {
+                if let Some(dependency) = dependencies.get(a) {
+                    if !visited.get(dependency).unwrap_or(&false) {
+                        return Err(anyhow::anyhow!(
+                            "Plugin {} has a circular dependency with {}",
+                            name,
+                            dependency
+                        ));
+                    }
+
+                    visit(plugin, dependencies, sorted, visited)?;
+                }
+            }
+
+            Ok(())
+        }
+
+        let dependencies = Self::collect_dependencies(plugins)?;
+
+        let mut sorted = Vec::new();
+        let mut visited = BTreeMap::new();
+
+        for plugin in plugins {
+            visit(&**plugin, &dependencies, &mut sorted, &mut visited)?;
+        }
+
+        Ok(sorted)
     }
 
     pub fn tick(&mut self, world: &mut World) -> anyhow::Result<()> {

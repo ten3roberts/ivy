@@ -1,8 +1,11 @@
+use std::any::type_name;
+
 use flax::World;
 use glam::Vec3;
 use ivy_assets::AssetCache;
 use ivy_core::{
     components::engine,
+    transforms::TransformUpdatePlugin,
     update_layer::{Plugin, ScheduleSetBuilder},
 };
 
@@ -95,6 +98,10 @@ impl Plugin for PhysicsPlugin {
         }
 
         Ok(())
+    }
+
+    fn after(&self) -> Vec<&str> {
+        vec![type_name::<TransformUpdatePlugin>()]
     }
 }
 

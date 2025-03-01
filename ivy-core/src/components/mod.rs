@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use flax::{Component, ComponentMut, Debuggable, EntityBuilder, Fetch};
 use glam::{Mat4, Quat, Vec2, Vec3};
+use ivy_assets::AssetCache;
 
 use crate::{gizmos::Gizmos, AsyncCommandBuffer, Bundle, Color};
 
@@ -25,6 +26,7 @@ flax::component! {
     pub main_camera: () => [ Debuggable ],
 
     pub gizmos: Gizmos,
+    pub asset_cache: AssetCache,
     pub async_commandbuffer: AsyncCommandBuffer,
     pub request_capture_mouse: bool,
 

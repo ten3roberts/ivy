@@ -9,6 +9,7 @@ use ivy_core::{
     layer::events::EventRegisterContext,
     palette::Srgb,
     profiling::ProfilingLayer,
+    transforms::TransformUpdatePlugin,
     update_layer::{FixedTimeStep, Plugin, ScheduleSetBuilder, ScheduledLayer},
     App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer,
 };
@@ -118,7 +119,8 @@ pub fn main() -> anyhow::Result<()> {
                     state: ui_state.clone(),
                 })
                 .with_plugin(PhysicsPlugin::new())
-                .with_plugin(RayPickingPlugin),
+                .with_plugin(RayPickingPlugin)
+                .with_plugin(TransformUpdatePlugin),
         )
         .with_layer(ViewportCameraLayer::new(CameraSettings {
             environment_data: EnvironmentData::new(

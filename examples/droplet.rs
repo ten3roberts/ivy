@@ -4,8 +4,10 @@ use ivy_assets::{fs::AssetPath, Asset, AssetCache, DynAsyncAssetDesc};
 use ivy_core::{
     app::PostInitEvent,
     layer::events::EventRegisterContext,
+    math::Vec3Ext,
     palette::Srgb,
     profiling::ProfilingLayer,
+    transforms::TransformUpdatePlugin,
     update_layer::{FixedTimeStep, ScheduledLayer},
     App, AsyncCommandBuffer, EngineLayer, EntityBuilderExt, Layer, DEG_90,
 };
@@ -72,7 +74,8 @@ pub fn main() -> anyhow::Result<()> {
         .with_layer(
             ScheduledLayer::new(FixedTimeStep::new(0.02))
                 .with_plugin(OrbitCameraPlugin)
-                .with_plugin(PhysicsPlugin::new()),
+                .with_plugin(PhysicsPlugin::new())
+                .with_plugin(TransformUpdatePlugin),
         )
         .with_layer(ViewportCameraLayer::new(CameraSettings {
             environment_data: EnvironmentData::new(Srgb::new(0.0, 0.0, 0.1), 0.001, 0.0),

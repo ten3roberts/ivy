@@ -9,6 +9,7 @@ use ivy_core::{
     layer::events::EventRegisterContext,
     palette::Srgb,
     profiling::ProfilingLayer,
+    transforms::TransformUpdatePlugin,
     update_layer::{FixedTimeStep, Plugin, ScheduledLayer},
     App, Color, ColorExt, EngineLayer, Layer,
 };
@@ -97,7 +98,8 @@ pub fn main() -> anyhow::Result<()> {
                     PhysicsPlugin::new()
                         .with_gravity(Vec3::ZERO)
                         .with_gizmos(GizmoSettings { rigidbody: true }),
-                ),
+                )
+                .with_plugin(TransformUpdatePlugin),
         )
         .with_layer(ViewportCameraLayer::new(CameraSettings {
             environment_data: EnvironmentData::new(

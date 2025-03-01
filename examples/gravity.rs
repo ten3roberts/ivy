@@ -6,6 +6,7 @@ use ivy_core::{
     layer::events::EventRegisterContext,
     palette::{Srgb, Srgba},
     profiling::ProfilingLayer,
+    transforms::TransformUpdatePlugin,
     update_layer::{FixedTimeStep, ScheduledLayer},
     App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer,
 };
@@ -81,7 +82,8 @@ pub fn main() -> anyhow::Result<()> {
                     PhysicsPlugin::new()
                         .with_gizmos(ivy_physics::GizmoSettings { rigidbody: true })
                         .with_gravity(-Vec3::Y),
-                ),
+                )
+                .with_plugin(TransformUpdatePlugin),
         )
         .with_layer(ViewportCameraLayer::new(CameraSettings {
             environment_data: EnvironmentData::new(
@@ -169,7 +171,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
                 .with_scale(vec3(5.0, 0.1, 5.0))
                 .with_rotation(Quat::from_scaled_axis(Vec3::Z * 0.1)),
         )
-        .mount(RigidBodyBundle::dynamic().with_mass(1.0))
+        .mount(RigidBodyBundle::fixed().with_mass(1.0))
         .mount(
             ColliderBundle::new(rapier3d::prelude::SharedShape::cuboid(1.0, 1.0, 1.0))
                 .with_friction(FRICTION)
@@ -192,7 +194,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
                 .with_scale(vec3(20.0, 0.1, 20.0))
                 .with_rotation(Quat::from_scaled_axis(Vec3::Z * -0.2)),
         )
-        .mount(RigidBodyBundle::dynamic().with_mass(1.0))
+        .mount(RigidBodyBundle::fixed().with_mass(1.0))
         .mount(
             ColliderBundle::new(rapier3d::prelude::SharedShape::cuboid(1.0, 1.0, 1.0))
                 .with_friction(FRICTION)

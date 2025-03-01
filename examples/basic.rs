@@ -13,8 +13,10 @@ use ivy_core::{
     app::PostInitEvent,
     gizmos,
     layer::events::EventRegisterContext,
+    math::Vec3Ext,
     palette::{Srgb, WithAlpha},
     profiling::ProfilingLayer,
+    transforms::TransformUpdatePlugin,
     update_layer::{FixedTimeStep, Plugin, ScheduleSetBuilder, ScheduledLayer},
     App, EngineLayer, EntityBuilderExt, Layer,
 };
@@ -118,7 +120,8 @@ pub fn main() -> anyhow::Result<()> {
                         .with_gizmos(GizmoSettings { rigidbody: true }),
                 )
                 .with_plugin(RotateSpotlightPlugin)
-                .with_plugin(RayPickingPlugin),
+                .with_plugin(RayPickingPlugin)
+                .with_plugin(TransformUpdatePlugin),
         )
         .with_layer(ViewportCameraLayer::new(CameraSettings {
             environment_data: EnvironmentData::new(

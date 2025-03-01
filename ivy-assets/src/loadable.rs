@@ -84,6 +84,23 @@ where
     }
 }
 
+impl<V> Load for Option<V>
+where
+    V: Load,
+{
+    type Output = Option<V::Output>;
+
+    type Error = V::Error;
+
+    async fn load(self, assets: &AssetCache) -> Result<Self::Output, Self::Error> {
+        if let Some(val) = self {
+            Ok(Some(val.load(assets).await?))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
 #[cfg(feature = "serde")]
 impl<V> AsyncAssetFromPath for V
 where

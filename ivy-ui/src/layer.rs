@@ -18,7 +18,7 @@ use ivy_wgpu::{
 use violet::{
     core::{declare_atom, ScopeRef, Widget},
     glam::vec2,
-    wgpu::app::AppInstance,
+    wgpu::app::{AppInstance, AppInstanceBuilder},
 };
 
 use crate::{components::on_input_event, SharedUiInstance};
@@ -47,17 +47,25 @@ declare_atom! {
 pub struct UiInputLayer {
     instance: Rc<RefCell<AppInstance>>,
     window: Option<WindowHandle>,
+    capture_all_input: bool,
 }
 
 impl UiInputLayer {
     pub fn new(root: impl Widget) -> Self {
-        let instance = AppInstance::new(root, false);
+        let instance = AppInstanceBuilder::new().build(root);
         let instance = Rc::new(RefCell::new(instance));
 
         Self {
             instance,
             window: None,
+            capture_all_input: false,
         }
+    }
+
+    /// Capture all input events instead of feeding forward to lower layers
+    pub fn with_capture_all_input(mut self, capture_all_input: bool) -> Self {
+        self.capture_all_input = capture_all_input;
+        self
     }
 
     fn on_ready(&mut self, engine_world: &mut World, _: &AssetCache) -> anyhow::Result<()> {
@@ -133,7 +141,7 @@ impl UiInputLayer {
             }
         }
 
-        // captured = true;
+        captured |= self.capture_all_input;
         Ok(captured)
     }
 
