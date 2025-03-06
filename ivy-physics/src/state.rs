@@ -234,8 +234,8 @@ impl PhysicsState {
                 false,
             );
 
-            rb.set_linvel((*v.vel).into(), false);
-            rb.set_angvel((*v.ang_vel).into(), false);
+            rb.set_linvel((*v.vel).into(), true);
+            rb.set_angvel((*v.ang_vel).into(), true);
         }
     }
 
@@ -293,6 +293,7 @@ impl BodyDynamicsQueryMut {
 }
 
 #[derive(Fetch)]
+#[fetch(item_derives = [Debug], transforms = [Modified])]
 pub struct BodyDynamicsQuery {
     pub pos: Component<Vec3>,
     pub rotation: Component<Quat>,

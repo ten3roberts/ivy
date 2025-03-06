@@ -2,7 +2,11 @@ use core::f32;
 
 use anyhow::Context;
 use flax::{
-    components::child_of, entity_ids, events::EventSubscriber, fetch::Copied, filter::ChangeFilter,
+    components::child_of,
+    entity_ids,
+    events::EventSubscriber,
+    fetch::{Copied, Modified, TransformFetch},
+    filter::ChangeFilter,
     BoxedSystem, CommandBuffer, Component, ComponentMut, EntityIds, FetchExt, Opt, Query,
     QueryBorrow, RelationExt, System, World,
 };
@@ -23,7 +27,10 @@ use rapier3d::{
 
 use crate::{
     components::*,
-    state::{BodyDynamicsQuery, BodyDynamicsQueryMut, ColliderDynamicsQuery, PhysicsState},
+    state::{
+        BodyDynamicsQuery, BodyDynamicsQueryItem, BodyDynamicsQueryMut, ColliderDynamicsQuery,
+        PhysicsState,
+    },
 };
 
 #[allow(clippy::type_complexity)]
@@ -234,19 +241,34 @@ pub fn attach_joints_system(world: &mut World) -> BoxedSystem {
         .boxed()
 }
 
+type UpdateBodiesFetch = (
+    Copied<Component<RigidBodyHandle>>,
+    <BodyDynamicsQuery as TransformFetch<Modified>>::Output,
+);
+
 // writes body data into the physics state
 pub fn update_bodies_system() -> BoxedSystem {
     System::builder()
         .with_query(Query::new(physics_state().as_mut()))
-        .with_query(Query::new((rb_handle().copied(), BodyDynamicsQuery::new())))
+        .with_query(Query::new((
+            rb_handle().copied(),
+            BodyDynamicsQuery::new().modified(),
+        )))
         .build(
             move |mut state: QueryBorrow<ComponentMut<PhysicsState>>,
-                  mut query: QueryBorrow<(
-                Copied<Component<RigidBodyHandle>>,
-                BodyDynamicsQuery,
-            )>| {
+                  mut query: QueryBorrow<UpdateBodiesFetch>| {
                 if let Some(state) = state.first() {
-                    state.update_bodies(query.iter());
+                    state.update_bodies(query.iter().map(|(rb, v)| {
+                        (
+                            rb,
+                            BodyDynamicsQueryItem {
+                                pos: v.pos,
+                                rotation: v.rotation,
+                                vel: v.vel,
+                                ang_vel: v.ang_vel,
+                            },
+                        )
+                    }));
                 }
 
                 anyhow::Ok(())
