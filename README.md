@@ -23,12 +23,8 @@ the engine.
 Basic scene
 ![PBR example](https://github.com/user-attachments/assets/a83689d0-42fb-4002-804c-921b6702dc8f)
 
-Skybox reflections
-![Reflective Skybox](https://github.com/user-attachments/assets/838ebad7-e39c-4ed7-bb7c-40b66676bea3)
-
 Emissive materials
 ![Emissive Materials](https://github.com/user-attachments/assets/8e640d28-345c-44f7-b607-94febb1682fc)
-
 
 ## How it works
 
