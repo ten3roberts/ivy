@@ -1,6 +1,6 @@
 # Ivy
 
-ECS based game engine wirtten in rust
+ECS based game engine wirtten in Rust
 
 ## [Guide](https://ten3roberts.github.io/ivy)
 
