@@ -1,12 +1,6 @@
 # Ivy
 
-
-## What it is
-
-Ivy is a modular application and game framework for Rust.
-
-This crate provides an amalgamation and rexport as well as aliasing for the
-multiple `ivy` crates.
+ECS based game engine wirtten in rust
 
 ## [Guide](https://ten3roberts.github.io/ivy)
 
@@ -14,21 +8,27 @@ A user guide is provided to quickly familiarize the user with the basic usage of
 the engine.
 
 ## Features
-  - Vulkan high level rendering
   - PBR rendering and post processing
-  - Rendergraph abstractions
-  - Collision detection and realistic physics response
+  - Rendergraph abstractions for fine tuned render results
+  - Collision detection and integrated physics engine
   - ECS driven architecture
   - Deferred dynamic events using observer pattern
   - Ray casting for arbitrary convex shapes
-  - Handle based dynamic storage
+  - Async asset management system
   - Input system with composeable vector generation
   - UI system with configurable widget and positioning system
   - ... And more
 
 # Gallery
 
-![Cubes and Collision](./img/cubes.png)
+![PBR example](https://github.com/user-attachments/assets/a83689d0-42fb-4002-804c-921b6702dc8f)
+
+Skybox reflections
+![Reflective Skybox](https://github.com/user-attachments/assets/838ebad7-e39c-4ed7-bb7c-40b66676bea3)
+
+Emissive materials
+![Emissive Materials](https://github.com/user-attachments/assets/8e640d28-345c-44f7-b607-94febb1682fc)
+
 
 ## How it works
 
