@@ -13,7 +13,8 @@ pub struct PbrShaderDesc {
     pub polygon_mode: PolygonMode,
 }
 
-impl AssetDesc<ShaderPass> for PbrShaderDesc {
+impl AssetDesc for PbrShaderDesc {
+    type Output = ShaderPass;
     type Error = Infallible;
 
     fn create(&self, assets: &ivy_assets::AssetCache) -> Result<Asset<ShaderPass>, Self::Error> {
@@ -40,7 +41,8 @@ pub struct ShadowShaderDesc {
     pub skinned: bool,
 }
 
-impl AssetDesc<ShaderPass> for ShadowShaderDesc {
+impl AssetDesc for ShadowShaderDesc {
+    type Output = ShaderPass;
     type Error = Infallible;
 
     fn create(&self, assets: &ivy_assets::AssetCache) -> Result<Asset<ShaderPass>, Self::Error> {
@@ -67,7 +69,8 @@ pub struct PbrEmissiveShaderDesc {
     pub lit: bool,
 }
 
-impl AssetDesc<ShaderPass> for PbrEmissiveShaderDesc {
+impl AssetDesc for PbrEmissiveShaderDesc {
+    type Output = ShaderPass;
     type Error = Infallible;
 
     fn create(&self, assets: &AssetCache) -> Result<Asset<ShaderPass>, Self::Error> {

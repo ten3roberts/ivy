@@ -1,11 +1,13 @@
 use std::collections::BTreeMap;
 
-use glam::{Mat4, Quat, Vec3};
+use glam::{Quat, Vec3};
 use itertools::Itertools;
 use ivy_assets::{map::AssetMap, Asset};
-use ivy_core::components::TransformBundle;
+use ivy_core::{components::TransformBundle, Bundle};
 
-use super::{skin::Skin, Animation, KeyFrameValues};
+use crate::components::animator;
+
+use super::{Animation, KeyFrameValues};
 
 pub struct Animator {
     joint_targets: BTreeMap<usize, TransformBundle>,
@@ -57,34 +59,6 @@ impl Animator {
 
     pub fn stop_animation(&mut self, animation: &Asset<Animation>) {
         self.players.remove(animation);
-    }
-
-    pub fn fill_buffer(&self, skin: &Asset<Skin>, buffer: &mut [Mat4]) {
-        for &root in skin.roots() {
-            let index = skin.joint_to_index(root);
-            self.fill_buffer_recursive(skin, Mat4::IDENTITY, index, buffer);
-        }
-    }
-
-    pub fn fill_buffer_recursive(
-        &self,
-        skin: &Asset<Skin>,
-        parent_transform: Mat4,
-        joint_index: usize,
-        buffer: &mut [Mat4],
-    ) {
-        let joint = &skin.joints()[joint_index];
-        let target = self
-            .joint_targets
-            .get(&joint.scene_index)
-            .unwrap_or(&joint.local_bind_transform);
-
-        let transform = parent_transform * target.to_mat4();
-        buffer[joint_index] = transform * joint.inverse_bind_matrix;
-
-        for &child in &joint.children {
-            self.fill_buffer_recursive(skin, transform, skin.joint_to_index(child), buffer);
-        }
     }
 
     pub fn joint_targets(&self) -> &BTreeMap<usize, TransformBundle> {
@@ -243,4 +217,15 @@ pub enum AnimationTarget {
 
 struct ChannelState {
     left_keyframe: usize,
+}
+
+/// Adds an animator to the entity
+#[derive(Debug, Clone, Copy)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct AnimatorBundle {}
+
+impl Bundle for AnimatorBundle {
+    fn mount(self, entity: &mut flax::EntityBuilder) {
+        entity.set(animator(), Animator::new());
+    }
 }

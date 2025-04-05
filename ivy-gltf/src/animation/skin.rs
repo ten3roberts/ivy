@@ -1,18 +1,15 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    path::{Path, PathBuf},
-};
+use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::Context;
 use glam::{Mat4, Quat};
 use gltf::buffer;
 use itertools::Itertools;
-use ivy_assets::{Asset, AssetCache, AsyncAssetDesc};
+use ivy_assets::{fs::AssetPath, Asset, AssetCache, AsyncAssetDesc, AsyncAssetExt};
 use ivy_core::components::TransformBundle;
 
 use crate::Document;
 
-use super::{Animation, Channel, KeyFrameValues};
+use super::player::Animator;
 
 pub type JointIndex = usize;
 
@@ -30,7 +27,6 @@ pub struct Skin {
     // Map from node index to index
     joint_map: BTreeMap<JointIndex, usize>,
     joints: Vec<Joint>,
-    animations: Vec<Asset<Animation>>,
     roots: BTreeSet<JointIndex>,
 }
 
@@ -39,7 +35,6 @@ impl Skin {
         assets: &AssetCache,
         document: &gltf::Document,
         buffer_data: &[buffer::Data],
-        path: &Path,
     ) -> anyhow::Result<Vec<Asset<Self>>> {
         // NOTE: each joint in a skin refers to a node in the scene hierarchy
         let joint_maps = document
@@ -52,60 +47,12 @@ impl Skin {
             })
             .collect_vec();
 
-        let mut skin_animations = BTreeMap::<usize, Vec<Animation>>::new();
-
-        for animation in document.animations() {
-            animation.channels().for_each(|channel| {
-                let target = channel.target();
-
-                let joint_scene_index = target.node().index();
-
-                let Some(skin_index) = joint_maps
-                    .iter()
-                    .position(|v| v.contains_key(&joint_scene_index))
-                else {
-                    tracing::error!(
-                        "No skin for animation target joint {:?} referenced in animation {:?} in document {path:?}",
-                        target.node().name(),
-                        animation.name(),
-                    );
-                    return;
-                };
-
-                let reader = channel.reader(|buffer| Some(&buffer_data[buffer.index()]));
-
-                let inputs = reader.read_inputs().unwrap();
-                let outputs = reader.read_outputs().unwrap();
-
-                let values = KeyFrameValues::new(outputs);
-                let times = inputs.collect();
-
-                let channel = Channel {
-                    joint_scene_index,
-                    times,
-                    values,
-                };
-
-                let skin_animations = skin_animations.entry(skin_index).or_default();
-
-                match skin_animations.last_mut() {
-                    Some(v) => v.channels.push(channel),
-                    None => {
-                        skin_animations.push(Animation {
-                            label: animation.name().unwrap_or("unknown").to_string().into(),
-                            channels: vec![channel],
-                        });
-                    }
-                }
-            });
-        }
-
         document
             .skins()
             .enumerate()
             .map(|(i, skin)| {
                 let reader = skin.reader(|buffer| Some(&buffer_data[buffer.index()]));
-                let joints = skin
+                let skin_joints = skin
                     .joints()
                     .zip(reader.read_inverse_bind_matrices().unwrap())
                     .map(|(joint, ibm)| {
@@ -132,26 +79,14 @@ impl Skin {
                     .collect_vec();
 
                 assert_eq!(skin.index(), i);
-                let animations = skin_animations
-                    .remove(&skin.index())
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|v| assets.insert(v))
-                    .collect();
 
-                let joint_map = joint_maps[i].clone();
-                let mut roots = joints
+                let mut roots = skin_joints
                     .iter()
                     .map(|v| v.scene_index)
                     .collect::<BTreeSet<_>>();
 
-                for joint in &joints {
+                for joint in &skin_joints {
                     let node = document.nodes().nth(joint.scene_index).unwrap();
-                    tracing::info!(
-                        index = joint.scene_index,
-                        children = ?node.children().map(|v| v.index()).collect_vec(),
-                        "node"
-                    );
 
                     for child in node.children() {
                         roots.remove(&child.index());
@@ -160,28 +95,45 @@ impl Skin {
 
                 tracing::info!(?roots, "roots");
 
-                // let armature = document
-                //     .nodes()
-                //     .find(|node| node.name() == Some(name))
-                //     .ok_or(Error::MissingArmature)?;
-
-                // // Find the intersect of armature children and joints
-
-                // let roots = armature
-                //     .children()
-                //     .filter(|val| joint_map.contains_key(&val.index()))
-                //     .map(|val| val.index())
-                //     .collect();
                 Ok(assets.insert(Self {
-                    joints,
-                    joint_map,
-                    animations,
+                    joints: skin_joints,
+                    joint_map: joint_maps[i].clone(),
                     roots,
                 }))
             })
             .try_collect()
     }
 
+    pub fn update_skinning_matrix(&self, animator: &Animator, skinning_matrix: &mut Vec<Mat4>) {
+        skinning_matrix.clear();
+        skinning_matrix.resize(self.joints.len(), Mat4::IDENTITY);
+
+        for &root in self.roots() {
+            let index = self.joint_to_index(root);
+            self.fill_buffer_recursive(animator, Mat4::IDENTITY, index, skinning_matrix);
+        }
+    }
+
+    fn fill_buffer_recursive(
+        &self,
+        animator: &Animator,
+        parent_transform: Mat4,
+        joint_index: usize,
+        buffer: &mut [Mat4],
+    ) {
+        let joint = &self.joints()[joint_index];
+        let target = animator
+            .joint_targets()
+            .get(&joint.scene_index)
+            .unwrap_or(&joint.local_bind_transform);
+
+        let transform = parent_transform * target.to_mat4();
+        buffer[joint_index] = transform * joint.inverse_bind_matrix;
+
+        for &child in &joint.children {
+            self.fill_buffer_recursive(animator, transform, self.joint_to_index(child), buffer);
+        }
+    }
     /// Transform a node index to a joint index used for meshes
     pub fn joint_to_index(&self, index: JointIndex) -> usize {
         self.joint_map[&index]
@@ -202,16 +154,12 @@ impl Skin {
     pub fn roots(&self) -> &BTreeSet<JointIndex> {
         &self.roots
     }
-
-    pub fn animations(&self) -> &[Asset<Animation>] {
-        &self.animations
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SkinDesc {
-    document: PathBuf,
+    document: AssetPath<Document>,
     node: String,
 }
 
@@ -220,7 +168,7 @@ impl AsyncAssetDesc for SkinDesc {
     type Error = anyhow::Error;
 
     async fn create(&self, assets: &AssetCache) -> Result<Asset<Skin>, Self::Error> {
-        let document: Asset<Document> = assets.from_path(&self.document).await?;
+        let document: Asset<Document> = self.document.load_async(assets).await?;
 
         let skin = document
             .find_node(&self.node)

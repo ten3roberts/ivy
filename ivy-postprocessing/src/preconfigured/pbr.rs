@@ -3,7 +3,7 @@ use std::{future::ready, mem::size_of};
 use flax::World;
 use futures::{stream, StreamExt};
 use image::DynamicImage;
-use ivy_assets::{stored::DynamicStore, AssetCache, DynAsyncAssetDesc};
+use ivy_assets::{stored::DynamicStore, AssetCache, AsyncAssetExt};
 use ivy_ui::{node::UiRenderNode, SharedUiInstance};
 use ivy_wgpu::{
     components::{forward_pass, transparent_pass},
@@ -51,7 +51,7 @@ impl Default for PbrRenderGraphConfig {
 }
 
 pub struct SkyboxConfig {
-    pub hdri: Box<dyn DynAsyncAssetDesc<DynamicImage>>,
+    pub hdri: Box<dyn AsyncAssetExt<DynamicImage>>,
     pub format: TextureFormat,
 }
 
@@ -242,7 +242,6 @@ impl PbrRenderGraphConfig {
 
         if let Some(shadow_map_config) = self.shadow_map_config {
             render_graph.add_node(ShadowMapNode::new(
-                world,
                 gpu,
                 shadow_maps,
                 shadow_camera_buffer,

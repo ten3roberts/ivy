@@ -1,9 +1,9 @@
-use std::{borrow::Cow, path::PathBuf};
+use std::borrow::Cow;
 
 use anyhow::Context;
 use image::{ColorType, DynamicImage, GenericImageView, ImageBuffer, Rgba};
 use itertools::Itertools;
-use ivy_assets::{Asset, AssetDesc};
+use ivy_assets::fs::AssetPath;
 use ivy_core::profiling::{profile_function, profile_scope};
 use wgpu::{
     BufferUsages, Extent3d, ImageCopyBuffer, ImageCopyTexture, ImageDataLayout, Origin3d, Texture,
@@ -230,19 +230,22 @@ pub async fn read_texture(
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TextureFromPath {
-    pub path: PathBuf,
+    pub path: AssetPath<DynamicImage>,
     pub format: TextureFormat,
 }
 
 impl TextureFromPath {
-    pub fn new(path: impl Into<PathBuf>) -> Self {
+    pub fn new(path: impl Into<AssetPath<DynamicImage>>) -> Self {
         Self {
             path: path.into(),
             format: TextureFormat::Rgba8UnormSrgb,
         }
     }
 
-    pub fn new_with_format(path: impl Into<PathBuf>, format: TextureFormat) -> Self {
+    pub fn new_with_format(
+        path: impl Into<AssetPath<DynamicImage>>,
+        format: TextureFormat,
+    ) -> Self {
         Self {
             path: path.into(),
             format,
@@ -250,26 +253,26 @@ impl TextureFromPath {
     }
 }
 
-impl AssetDesc<Texture> for TextureFromPath {
-    type Error = anyhow::Error;
+// impl AssetDesc<Texture> for TextureFromPath {
+//     type Error = anyhow::Error;
 
-    fn create(
-        &self,
-        assets: &ivy_assets::AssetCache,
-    ) -> Result<ivy_assets::Asset<Texture>, Self::Error> {
-        let image: Asset<DynamicImage> = assets.try_load(&self.path)?;
+//     fn create(
+//         &self,
+//         assets: &ivy_assets::AssetCache,
+//     ) -> Result<ivy_assets::Asset<Texture>, Self::Error> {
+//         let image: Asset<DynamicImage> = self.path.load(assets)?;
 
-        Ok(assets.insert(
-            texture_from_image(
-                &assets.service(),
-                &image,
-                TextureFromImageDesc {
-                    label: self.path.display().to_string().into(),
-                    format: self.format,
-                    ..Default::default()
-                },
-            )
-            .unwrap(),
-        ))
-    }
-}
+//         Ok(assets.insert(
+//             texture_from_image(
+//                 &assets.service(),
+//                 &image,
+//                 TextureFromImageDesc {
+//                     label: self.path.display().to_string().into(),
+//                     format: self.format,
+//                     ..Default::default()
+//                 },
+//             )
+//             .unwrap(),
+//         ))
+//     }
+// }

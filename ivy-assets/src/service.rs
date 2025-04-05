@@ -1,7 +1,7 @@
 use std::{
     convert::Infallible,
     fs::File,
-    io::{self, BufReader, Read},
+    io::{self, BufReader},
     path::{Path, PathBuf},
 };
 
@@ -66,36 +66,6 @@ impl FileSystemMapService {
         let inner = || {
             let file = File::open(self.root.join(path))?;
             Ok(BufReader::new(file))
-        };
-
-        inner().map_err(|err| FsAssetError {
-            path: path.into(),
-            error: err,
-        })
-    }
-
-    pub fn load_bytes(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, FsAssetError> {
-        let path = path.as_ref();
-        let inner = || {
-            let mut file = File::open(self.root.join(path))?;
-            let mut bytes = Vec::new();
-            file.read_to_end(&mut bytes)?;
-            Ok(bytes)
-        };
-
-        inner().map_err(|err| FsAssetError {
-            path: path.into(),
-            error: err,
-        })
-    }
-
-    pub fn load_string(&self, path: impl AsRef<Path>) -> Result<String, FsAssetError> {
-        let path = path.as_ref();
-        let inner = || {
-            let mut file = File::open(self.root.join(path))?;
-            let mut string = String::new();
-            file.read_to_string(&mut string)?;
-            Ok(string)
         };
 
         inner().map_err(|err| FsAssetError {

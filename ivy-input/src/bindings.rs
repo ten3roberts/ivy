@@ -645,6 +645,16 @@ where
         }
     }
 
+    fn falling_edge(self) -> FallingEdge<Self>
+    where
+        Self: Sized,
+    {
+        FallingEdge {
+            binding: self,
+            prev_value: false,
+        }
+    }
+
     fn analog(self) -> Analog<Self>
     where
         Self: Sized,
@@ -679,9 +689,40 @@ where
 
     fn read(&mut self) -> bool {
         let value = self.binding.read();
-        if !self.prev_value {
+        if !self.prev_value && value {
             self.prev_value = value;
-            return value;
+            return true;
+        }
+        self.prev_value = value;
+
+        false
+    }
+
+    fn bindings(&self) -> Vec<InputKind> {
+        self.binding.bindings()
+    }
+}
+
+pub struct FallingEdge<T> {
+    binding: T,
+    prev_value: bool,
+}
+
+impl<T> Binding for FallingEdge<T>
+where
+    T: Binding<Value = bool>,
+{
+    type Value = bool;
+
+    fn apply(&mut self, input: &InputEvent) {
+        self.binding.apply(input);
+    }
+
+    fn read(&mut self) -> bool {
+        let value = self.binding.read();
+        if self.prev_value && !value {
+            self.prev_value = value;
+            return true;
         }
         self.prev_value = value;
 

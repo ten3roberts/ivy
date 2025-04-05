@@ -37,11 +37,11 @@ impl InputState {
         F: 'static + Send + Sync + FnMut(&EntityRef, &mut CommandBuffer) -> anyhow::Result<()>,
     >(
         mut self,
-        target: F,
         action: Action<bool>,
+        func: F,
     ) -> Self {
         self.activations
-            .push(Box::new(TriggerActionHandler::new(target, action)));
+            .push(Box::new(TriggerActionHandler::new(func, action)));
         self
     }
 
@@ -97,13 +97,18 @@ pub type TriggerAction =
     Box<dyn Send + Sync + FnMut(&EntityRef<'_>, &mut CommandBuffer) -> anyhow::Result<()>>;
 
 pub(crate) struct TriggerActionHandler<F> {
+    active: bool,
     callback: F,
     action: Action<bool>,
 }
 
 impl<F> TriggerActionHandler<F> {
     pub(crate) fn new(callback: F, action: Action<bool>) -> Self {
-        Self { callback, action }
+        Self {
+            callback,
+            action,
+            active: false,
+        }
     }
 }
 
@@ -113,7 +118,12 @@ where
 {
     fn update(&mut self, entity: &EntityRef, cmd: &mut CommandBuffer) -> anyhow::Result<()> {
         if self.action.read_stimulus() {
-            (self.callback)(entity, cmd)?;
+            if !self.active {
+                self.active = true;
+                (self.callback)(entity, cmd)?;
+            }
+        } else {
+            self.active = false
         }
 
         Ok(())

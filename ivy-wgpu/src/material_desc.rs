@@ -1,4 +1,4 @@
-use ivy_assets::{loadable::Load, Asset, AssetCache, AssetDesc};
+use ivy_assets::{loadable::ResourceDesc, Asset, AssetCache, AssetDesc};
 use ivy_gltf::GltfMaterial;
 use ivy_graphics::texture::{TextureData, TextureDesc};
 use ordered_float::NotNan;
@@ -24,7 +24,7 @@ pub enum MaterialDesc {
     WireframeMaterial(PbrMaterialDesc),
 }
 
-impl Load for MaterialDesc {
+impl ResourceDesc for MaterialDesc {
     type Output = MaterialData;
 
     type Error = anyhow::Error;
@@ -66,7 +66,7 @@ pub struct PbrMaterialDesc {
     metallic_factor: NotNan<f32>,
 }
 
-impl Load for PbrMaterialDesc {
+impl ResourceDesc for PbrMaterialDesc {
     type Output = PbrMaterialData;
 
     type Error = anyhow::Error;
@@ -162,7 +162,7 @@ pub struct PbrEmissiveMaterialDesc {
     emissive_factor: NotNan<f32>,
 }
 
-impl Load for PbrEmissiveMaterialDesc {
+impl ResourceDesc for PbrEmissiveMaterialDesc {
     type Output = PbrEmissiveMaterialData;
 
     type Error = anyhow::Error;
@@ -424,7 +424,8 @@ pub(crate) struct RenderMaterialDesc {
     pub skinned: bool,
 }
 
-impl AssetDesc<RenderMaterial> for RenderMaterialDesc {
+impl AssetDesc for RenderMaterialDesc {
+    type Output = RenderMaterial;
     type Error = anyhow::Error;
 
     fn create(

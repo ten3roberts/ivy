@@ -23,7 +23,7 @@ pub trait WorldExt {
     fn find_in_tree<'a>(
         &'a self,
         root: EntityRef<'a>,
-        f: &impl Fn(&EntityRef) -> bool,
+        f: impl Fn(&EntityRef) -> bool,
     ) -> Option<EntityRef<'a>>;
 }
 
@@ -65,21 +65,29 @@ impl WorldExt for World {
     fn find_in_tree<'a>(
         &'a self,
         root: EntityRef<'a>,
-        f: &impl Fn(&EntityRef) -> bool,
+        f: impl Fn(&EntityRef) -> bool,
     ) -> Option<EntityRef<'a>> {
-        if f(&root) {
-            return Some(root);
-        }
-
-        let mut children = Query::new(entity_refs()).with(child_of(root.id()));
-
-        for child in children.borrow(self).iter() {
-            if let Some(v) = self.find_in_tree(child, f) {
-                return Some(self.entity(v.id()).unwrap());
+        fn find_in_tree<'a, F: Fn(&EntityRef) -> bool>(
+            world: &'a World,
+            root: EntityRef<'a>,
+            f: &F,
+        ) -> Option<EntityRef<'a>> {
+            if f(&root) {
+                return Some(root);
             }
+
+            let mut children = Query::new(entity_refs()).with(child_of(root.id()));
+
+            for child in children.borrow(world).iter() {
+                if let Some(v) = find_in_tree(world, child, f) {
+                    return Some(world.entity(v.id()).unwrap());
+                }
+            }
+
+            None
         }
 
-        None
+        find_in_tree(self, root, &f)
     }
 }
 

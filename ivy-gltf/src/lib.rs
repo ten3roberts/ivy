@@ -10,7 +10,9 @@ use glam::{Mat4, Quat, U16Vec4, Vec2, Vec3, Vec4};
 use gltf::{buffer, Gltf};
 use image::{DynamicImage, ImageFormat};
 use itertools::Itertools;
-use ivy_assets::{fs::AsyncAssetFromPath, Asset, AssetCache, AssetDesc};
+use ivy_assets::{
+    fs::AssetPath, loadable::ResourceFromPath, Asset, AssetCache, AssetDesc, AsyncAssetExt,
+};
 use ivy_core::components::TransformBundle;
 use ivy_graphics::mesh::{MeshData, TANGENT_ATTRIBUTE};
 use ivy_profiling::{profile_function, profile_scope};
@@ -76,6 +78,10 @@ impl DocumentData {
     pub fn mesh_data(&self) -> &[Vec<Asset<MeshData>>] {
         &self.mesh_data
     }
+
+    pub fn gltf(&self) -> &Gltf {
+        &self.gltf
+    }
 }
 
 pub struct Document {
@@ -93,7 +99,7 @@ impl std::ops::Deref for DocumentData {
 impl Document {
     async fn load(assets: &AssetCache, path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let path = path.as_ref();
-        let bytes: Asset<Vec<u8>> = assets.from_path(path).await?;
+        let bytes: Asset<Vec<u8>> = AssetPath::new(path).load_async(assets).await?;
 
         let mut gltf = Gltf::from_slice(&bytes)?;
 
@@ -169,7 +175,7 @@ impl Document {
             .filter_map(|(i, v)| Some((v.name().map(ToString::to_string)?, i)))
             .collect();
 
-        let skins = Skin::load_from_document(assets, &gltf.document, &buffer_data, path)?;
+        let skins = Skin::load_from_document(assets, &gltf.document, &buffer_data)?;
 
         let data = assets.insert(DocumentData {
             gltf,
@@ -328,11 +334,11 @@ fn load_image_data(
     Ok(decoded_image)
 }
 
-impl AsyncAssetFromPath for Document {
+impl ResourceFromPath for Document {
     type Error = anyhow::Error;
 
-    async fn load_from_path(path: &Path, assets: &AssetCache) -> Result<Asset<Self>, Self::Error> {
-        Document::load(assets, path).await.map(|v| assets.insert(v))
+    async fn load(path: AssetPath<Self>, assets: &AssetCache) -> Result<Self, Self::Error> {
+        Document::load(assets, path.path()).await
     }
 }
 
@@ -501,7 +507,8 @@ impl GltfPrimitive {
     }
 }
 
-impl AssetDesc<MeshData> for GltfPrimitive {
+impl AssetDesc for GltfPrimitive {
+    type Output = MeshData;
     type Error = anyhow::Error;
 
     fn create(&self, _: &AssetCache) -> Result<Asset<MeshData>, Self::Error> {

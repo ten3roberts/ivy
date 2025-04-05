@@ -13,3 +13,4 @@ ivy-assets = { path = "../ivy-assets" }
 
 tracing.workspace = true
 flax.workspace = true
+glam.workspace = true

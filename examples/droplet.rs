@@ -1,6 +1,6 @@
 use flax::{Entity, World};
 use glam::{Quat, Vec3};
-use ivy_assets::{fs::AssetPath, Asset, AssetCache, DynAsyncAssetDesc};
+use ivy_assets::{fs::AssetPath, Asset, AssetCache, AsyncAssetExt};
 use ivy_core::{
     app::PostInitEvent,
     layer::events::EventRegisterContext,
@@ -28,7 +28,7 @@ use ivy_wgpu::{driver::WinitDriver, layer::GraphicsLayer, renderer::EnvironmentD
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
 use wgpu::TextureFormat;
-use winit::window::WindowAttributes;
+use winit::{dpi::LogicalSize, window::WindowAttributes};
 
 pub fn main() -> anyhow::Result<()> {
     registry()
@@ -44,7 +44,8 @@ pub fn main() -> anyhow::Result<()> {
     if let Err(err) = App::builder()
         .with_driver(WinitDriver::new(
             WindowAttributes::default()
-                .with_fullscreen(Some(winit::window::Fullscreen::Borderless(None)))
+                .with_inner_size(LogicalSize::new(1920, 1080))
+                // .with_fullscreen(Some(winit::window::Fullscreen::Borderless(None)))
                 .with_title("Droplet"),
         ))
         .with_layer(EngineLayer::new())

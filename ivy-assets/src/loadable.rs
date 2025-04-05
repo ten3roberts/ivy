@@ -1,33 +1,18 @@
-use std::{collections::BTreeMap, future::Future, path::Path};
+use std::{collections::BTreeMap, future::Future};
 
 use futures::{stream, StreamExt, TryStreamExt};
+use serde::de::DeserializeOwned;
 
-use crate::{
-    fs::{AssetPath, AsyncAssetFromPath, BytesFromPath},
-    Asset, AssetCache, AsyncAssetDesc,
-};
+use crate::{fs::AssetPath, Asset, AssetCache, AsyncAssetDesc};
 
-/// Represents a type that can be loaded from an offline descriptor
-pub trait ResourceDescriptor: 'static + Send + Sync
-where
-    Self: Sized,
-{
-    type Desc: Send + Sync;
+pub trait Resource: 'static + Send + Sync + Sized {
+    type Desc: ResourceDesc;
 }
 
-pub trait LoadWithPath: 'static + Send + Sync {
-    type Output: Send + Sync;
-    type Error: Send + Sync;
-
-    fn load_from_path(
-        self,
-        path: AssetPath<Self::Output>,
-        assets: &AssetCache,
-    ) -> impl Send + Future<Output = Result<Self::Output, Self::Error>>;
-}
-
-/// General trait for any type of asset/resource descriptor that can be loaded
-pub trait Load: 'static + Send + Sync {
+/// Represents an owned resource that needs to be initialized from its descriptor.
+///
+/// Resources can *access* and load assets, but are themselves not assets.
+pub trait ResourceDesc: 'static + Send + Sync + Sized {
     type Output: Send + Sync;
     type Error: Send + Sync;
 
@@ -37,23 +22,21 @@ pub trait Load: 'static + Send + Sync {
     ) -> impl Send + Future<Output = Result<Self::Output, Self::Error>>;
 }
 
-impl<T: Load> LoadWithPath for T {
-    type Output = <Self as Load>::Output;
+/// Allows a resource to load itself directly from a path, for example a png image.
+///
+/// Any implementation will also implement [`AsyncAssetDesc`] for `AssetPath<Self>`
+pub trait ResourceFromPath: 'static + Send + Sync + Sized {
+    type Error: Send + Sync;
 
-    type Error = <Self as Load>::Error;
-
-    async fn load_from_path(
-        self,
-        _: AssetPath<Self::Output>,
+    fn load(
+        path: AssetPath<Self>,
         assets: &AssetCache,
-    ) -> Result<Self::Output, Self::Error> {
-        Load::load(self, assets).await
-    }
+    ) -> impl Send + Future<Output = Result<Self, Self::Error>>;
 }
 
-impl<T> Load for Vec<T>
+impl<T> ResourceDesc for Vec<T>
 where
-    T: Load,
+    T: ResourceDesc,
 {
     type Output = Vec<T::Output>;
 
@@ -67,10 +50,10 @@ where
     }
 }
 
-impl<K, V> Load for BTreeMap<K, V>
+impl<K, V> ResourceDesc for BTreeMap<K, V>
 where
     K: 'static + Send + Sync + Ord,
-    V: Load,
+    V: ResourceDesc,
 {
     type Output = BTreeMap<K, V::Output>;
 
@@ -84,13 +67,13 @@ where
     }
 }
 
-impl<V> Load for Option<V>
+impl<T> ResourceDesc for Option<T>
 where
-    V: Load,
+    T: ResourceDesc,
 {
-    type Output = Option<V::Output>;
+    type Output = Option<T::Output>;
 
-    type Error = V::Error;
+    type Error = T::Error;
 
     async fn load(self, assets: &AssetCache) -> Result<Self::Output, Self::Error> {
         if let Some(val) = self {
@@ -101,38 +84,52 @@ where
     }
 }
 
-#[cfg(feature = "serde")]
-impl<V> AsyncAssetFromPath for V
+impl<T> ResourceDesc for T
 where
-    V: 'static + ResourceDescriptor + Send + Sync,
-    V::Desc: serde::de::DeserializeOwned + LoadWithPath<Output = V>,
-    <V::Desc as LoadWithPath>::Error: Into<anyhow::Error>,
+    T: AsyncAssetDesc,
 {
+    type Output = Asset<T::Output>;
+
     type Error = anyhow::Error;
 
-    async fn load_from_path(path: &Path, assets: &AssetCache) -> Result<Asset<V>, Self::Error> {
-        let content = assets.try_load_async(&BytesFromPath::new(path)).await?;
-        let desc: V::Desc = serde_json::from_slice(&content[..])?;
+    async fn load(self, assets: &AssetCache) -> Result<Self::Output, Self::Error> {
+        let v = assets.try_load_async(&self).await?;
 
-        Ok(assets.insert(
-            desc.load_from_path(AssetPath::new(path), assets)
-                .await
-                .map_err(Into::into)?,
-        ))
+        Ok(v)
     }
 }
 
-impl<V> Load for V
+impl<T> AsyncAssetDesc for AssetPath<T>
 where
-    V: 'static + AsyncAssetDesc + Send + Sync,
-    V::Error: std::fmt::Debug + std::fmt::Display,
-    // V::Desc: DeserializeOwned + LoadWithPath<Output = V>,
-    // <V::Desc as LoadWithPath>::Error: Into<anyhow::Error>,
+    T: ResourceFromPath,
+    T::Error: Into<anyhow::Error>,
 {
-    type Output = Asset<<Self as AsyncAssetDesc>::Output>;
+    type Output = T;
+
     type Error = anyhow::Error;
 
-    async fn load(self, assets: &AssetCache) -> Result<Asset<V::Output>, Self::Error> {
-        assets.try_load_async(&self).await.map_err(Into::into)
+    async fn create(&self, assets: &AssetCache) -> Result<Asset<Self::Output>, Self::Error> {
+        Ok(assets.insert(T::load(self.clone(), assets).await.map_err(Into::into)?))
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<T> ResourceFromPath for T
+where
+    T: Resource,
+    T::Desc: ResourceDesc<Output = T> + DeserializeOwned,
+    <T::Desc as ResourceDesc>::Error: Into<anyhow::Error>,
+{
+    type Error = anyhow::Error;
+
+    async fn load(path: AssetPath<Self>, assets: &AssetCache) -> Result<Self, Self::Error> {
+        let content = assets
+            .service::<crate::service::FileSystemMapService>()
+            .load_bytes_async(path.path())
+            .await?;
+
+        let desc: T::Desc = serde_json::from_slice(&content[..])?;
+
+        desc.load(assets).await.map_err(Into::into)
     }
 }

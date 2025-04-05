@@ -176,7 +176,7 @@ impl LogicLayer {
 impl Layer for LogicLayer {
     fn register(
         &mut self,
-        world: &mut World,
+        _: &mut World,
         _: &AssetCache,
         mut events: EventRegisterContext<Self>,
     ) -> anyhow::Result<()> {

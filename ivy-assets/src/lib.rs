@@ -1,3 +1,26 @@
+//! Sync and Async asset system and caching.
+//!
+//! Allows for async and blocking retrieval of assets.
+//!
+//! ## Asset
+//! An asset is a *shared* value that can be loaded from an [`AssetDesc`] or [`AsyncAssetDesc`].
+//!
+//! Once loaded, the asset is retained, and further requests will reuse the same asset.
+//!
+//! The core purpose of an asset is to load data once, and then share it across the application.
+//! ## Resource
+//!
+//! Unlike an asset, a resource is a common description for *any* type that can be loaded or processed from a descriptor.
+//!
+//! The value provided is not necessarily deduplicated.
+//!
+//! For instance, an image, texture, or 3D model is an *Asset*, as they are intended to be loaded
+//! and shared and reused across the application.
+//!
+//! However, a vector of images is a *resource*, as it needs to be loaded from the descriptor (list
+//! of paths), but the vector itself does not necessarily need to be shared or deduplicated.
+//!
+//! For convenience, `AsyncAssetDesc` also implements `ResourceDesc`, loading into an `Asset<V>`
 use std::{
     any::{Any, TypeId},
     borrow::Borrow,
@@ -6,7 +29,6 @@ use std::{
     future::Future,
     hash::Hash,
     ops::Deref,
-    path::Path,
     sync::Arc,
     task::Poll,
     time::Instant,
@@ -21,15 +43,17 @@ pub mod loadable;
 pub mod map;
 pub mod service;
 pub mod stored;
-use fs::{AssetFromPath, AssetPath, AsyncAssetFromPath, BytesFromPath};
+use fs::AssetPath;
 use futures::{
     future::{BoxFuture, Shared, WeakShared},
     FutureExt, TryFutureExt,
 };
 pub use handle::Asset;
 use image::DynamicImage;
+use ivy_profiling::profile_scope;
+use loadable::ResourceFromPath;
 use parking_lot::{RwLock, RwLockReadGuard};
-use service::Service;
+use service::{FileSystemMapService, Service};
 
 use self::{cell::AssetCell, handle::WeakHandle};
 
@@ -97,10 +121,9 @@ impl AssetCache {
         }
     }
 
-    pub fn try_load<K, V>(&self, desc: &K) -> Result<Asset<V>, K::Error>
+    pub fn try_load<K>(&self, desc: &K) -> Result<Asset<K::Output>, K::Error>
     where
-        K: ?Sized + AssetDesc<V>,
-        V: 'static + Send + Sync,
+        K: ?Sized + AssetDesc,
     {
         ivy_profiling::profile_function!(format!("{desc:?}"));
 
@@ -115,9 +138,9 @@ impl AssetCache {
 
         self.inner
             .keys
-            .entry(TypeId::of::<(K::Stored, V)>())
-            .or_insert_with(|| Box::<KeyMap<K::Stored, V>>::default())
-            .downcast_mut::<KeyMap<K::Stored, V>>()
+            .entry(TypeId::of::<(K::Stored, K::Output)>())
+            .or_insert_with(|| Box::<KeyMap<K::Stored, K::Output>>::default())
+            .downcast_mut::<KeyMap<K::Stored, K::Output>>()
             .unwrap()
             .insert(desc.to_stored(), value.downgrade());
 
@@ -125,9 +148,9 @@ impl AssetCache {
     }
 
     #[track_caller]
-    pub fn load<V>(&self, key: &(impl AssetDesc<V> + ?Sized)) -> Asset<V>
+    pub fn load<K>(&self, key: &K) -> Asset<K::Output>
     where
-        V: 'static + Send + Sync,
+        K: AssetDesc,
     {
         match self.try_load(key) {
             Ok(v) => v,
@@ -135,13 +158,6 @@ impl AssetCache {
                 panic!("{err:?}");
             }
         }
-    }
-
-    pub fn from_path<V: AsyncAssetFromPath>(
-        &self,
-        path: impl AsRef<Path>,
-    ) -> AssetLoadFuture<V, V::Error> {
-        self.try_load_async(&AssetPath::<V>::new(path.as_ref()))
     }
 
     pub fn try_load_async<K>(&self, desc: &K) -> AssetLoadFuture<K::Output, K::Error>
@@ -229,16 +245,18 @@ impl AssetCache {
         }
     }
 
-    pub fn get<K, V>(&self, key: &K) -> Option<Asset<V>>
+    pub fn get<K>(&self, key: &K) -> Option<Asset<K::Output>>
     where
-        K: ?Sized + AssetDesc<V>,
-        V: 'static + Send + Sync,
+        K: ?Sized + AssetDesc,
     {
         // Keys of K
-        let keys = self.inner.keys.get(&TypeId::of::<(K::Stored, V)>())?;
+        let keys = self
+            .inner
+            .keys
+            .get(&TypeId::of::<(K::Stored, K::Output)>())?;
 
         let handle = keys
-            .downcast_ref::<KeyMap<K::Stored, V>>()
+            .downcast_ref::<KeyMap<K::Stored, K::Output>>()
             .unwrap()
             .get(key)?
             .upgrade()?;
@@ -319,31 +337,25 @@ where
     }
 }
 
-pub trait DynAssetDesc<V>: 'static + Send + Sync {
-    fn load(&self, assets: &AssetCache) -> Asset<V>;
-    fn try_load(&self, assets: &AssetCache) -> anyhow::Result<Asset<V>>;
+pub trait AssetExt<V>: 'static + Send + Sync {
+    fn load(&self, assets: &AssetCache) -> anyhow::Result<Asset<V>>;
 }
 
-impl<T, V> DynAssetDesc<V> for T
+impl<T> AssetExt<T::Output> for T
 where
-    T: AssetDesc<V>,
+    T: AssetDesc,
     T::Error: Into<anyhow::Error>,
-    V: 'static + Send + Sync,
 {
-    fn load(&self, assets: &AssetCache) -> Asset<V> {
-        assets.load(self)
-    }
-
-    fn try_load(&self, assets: &AssetCache) -> anyhow::Result<Asset<V>> {
+    fn load(&self, assets: &AssetCache) -> anyhow::Result<Asset<T::Output>> {
         assets.try_load(self).map_err(Into::into)
     }
 }
 
-pub trait DynAsyncAssetDesc<V>: 'static + Send + Sync {
+pub trait AsyncAssetExt<V>: 'static + Send + Sync {
     fn load_async(&self, assets: &AssetCache) -> AssetLoadFuture<V, anyhow::Error>;
 }
 
-impl<T, V> DynAsyncAssetDesc<V> for T
+impl<T, V> AsyncAssetExt<V> for T
 where
     T: AsyncAssetDesc<Output = V>,
     T::Error: Debug + Display,
@@ -367,16 +379,21 @@ where
 ///
 /// This trait is implemented for `Path`, `str` and `String` by default to load assets from the
 /// filesystem using the provided [`FsProvider`].
-pub trait AssetDesc<V>: StoredKey + Debug {
+pub trait AssetDesc: StoredKey + Debug {
+    type Output: 'static + Send + Sync;
     type Error: 'static + Debug;
 
-    fn create(&self, assets: &AssetCache) -> Result<Asset<V>, Self::Error>;
+    fn create(&self, assets: &AssetCache) -> Result<Asset<Self::Output>, Self::Error>;
 }
 
-/// Describes an asset that can be loaded
+/// Describes a description that allows loading an asset.
+///
+/// Assets are immutable, and shared.
+///
+/// For mutable and owned/exclusive resource loading, refer to [`Loadable`]
 pub trait AsyncAssetDesc: StoredKey + Debug + Send + Sync {
     type Output: 'static + Send + Sync;
-    type Error: Send + Sync + 'static + Debug;
+    type Error: Send + Sync + 'static + Debug + Display + Into<anyhow::Error>;
 
     /// Create the resource
     ///
@@ -387,28 +404,22 @@ pub trait AsyncAssetDesc: StoredKey + Debug + Send + Sync {
     ) -> impl Future<Output = Result<Asset<Self::Output>, Self::Error>> + Send;
 }
 
-impl AssetFromPath for DynamicImage {
+impl ResourceFromPath for DynamicImage {
     type Error = anyhow::Error;
 
-    fn load_from_path(path: &Path, assets: &AssetCache) -> anyhow::Result<Asset<Self>> {
-        let format = image::ImageFormat::from_path(path)?;
-        let data = assets.try_load::<_, Vec<u8>>(path)?;
-        let image = image::load_from_memory_with_format(&data, format)?;
-        Ok(assets.insert(image))
-    }
-}
+    async fn load(path: AssetPath<Self>, assets: &AssetCache) -> anyhow::Result<Self> {
+        let format = image::ImageFormat::from_path(path.path())?;
+        let data = assets
+            .service::<FileSystemMapService>()
+            .load_bytes_async(path.path())
+            .await?;
 
-impl AsyncAssetFromPath for DynamicImage {
-    type Error = anyhow::Error;
-
-    async fn load_from_path(path: &Path, assets: &AssetCache) -> anyhow::Result<Asset<Self>> {
-        let format = image::ImageFormat::from_path(path)?;
-        let data = assets.try_load_async(&BytesFromPath::new(path)).await?;
         let image = async_std::task::spawn_blocking(move || {
+            profile_scope!("load_image_blocking");
             image::load_from_memory_with_format(&data, format)
         })
         .await?;
-        Ok(assets.insert(image))
+        Ok(image)
     }
 }
 
@@ -445,7 +456,7 @@ impl<T, E> Future for AssetLoadFuture<T, E> {
 
 #[cfg(test)]
 mod tests {
-    use std::{convert::Infallible, path::Path};
+    use std::convert::Infallible;
 
     use super::*;
     use crate::service::FsAssetError;
@@ -454,24 +465,25 @@ mod tests {
     fn asset_cache() {
         struct TestAsset;
 
-        impl AssetFromPath for TestAsset {
+        #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+        struct TestAssetKey(String);
+
+        impl AssetDesc for TestAssetKey {
+            type Output = TestAsset;
             type Error = FsAssetError;
 
-            fn load_from_path(
-                path: &Path,
-                assets: &AssetCache,
-            ) -> Result<Asset<Self>, Self::Error> {
-                eprintln!("Loading {:?}", path);
+            fn create(&self, assets: &AssetCache) -> Result<Asset<Self::Output>, Self::Error> {
+                eprintln!("Loading {:?}", self.0);
                 Ok(assets.insert(TestAsset))
             }
         }
 
         let assets = AssetCache::new();
 
-        let content: Asset<TestAsset> = assets.load(&"Foo");
-        let content2: Asset<TestAsset> = assets.load(&"Foo".to_string());
-        let bar: Asset<TestAsset> = assets.load(&"Bar".to_string());
-        let content4: Asset<TestAsset> = assets.load(&"Foo");
+        let content: Asset<TestAsset> = assets.load(&TestAssetKey("Foo".into()));
+        let content2: Asset<TestAsset> = assets.load(&TestAssetKey("Foo".into()));
+        let bar: Asset<TestAsset> = assets.load(&TestAssetKey("Bar".into()));
+        let content4: Asset<TestAsset> = assets.load(&TestAssetKey("Foo".into()));
 
         assert_eq!(content, content2);
 
@@ -479,11 +491,11 @@ mod tests {
         assert!(!Arc::ptr_eq(content.as_arc(), bar.as_arc()));
         assert_eq!(content, content4);
 
-        assert!(assets.get::<_, TestAsset>(&"Bar".to_string()).is_some());
+        assert!(assets.get(&TestAssetKey("Bar".to_string())).is_some());
 
         drop(bar);
 
-        assert!(assets.get::<_, TestAsset>(&"Bar".to_string()).is_none());
+        assert!(assets.get(&TestAssetKey("Bar".to_string())).is_none());
     }
 
     #[test]

@@ -16,7 +16,8 @@ use super::{mesh_renderer::DrawIndexedIndirectArgs, object_manager::RenderObject
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct ObjectCullingPipelineDesc;
 
-impl AssetDesc<ComputePipeline> for ObjectCullingPipelineDesc {
+impl AssetDesc for ObjectCullingPipelineDesc {
+    type Output = ComputePipeline;
     type Error = Infallible;
 
     fn create(

@@ -1,29 +1,23 @@
 use anyhow::Context;
+use glam::Mat4;
 use itertools::Itertools;
-use ivy_assets::{Asset, AssetDesc};
+use ivy_assets::Asset;
 use ivy_gltf::GltfPrimitive;
 use ivy_graphics::mesh::{MeshData, POSITION_ATTRIBUTE};
 use rapier3d::prelude::{SharedShape, TriMeshFlags};
 
 /// Create a trimesh collider from provided primitive
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct GltfTriMeshDesc {
+    pub transform: Mat4,
     pub primitive: GltfPrimitive,
 }
 
 impl GltfTriMeshDesc {
-    pub fn new(primitive: GltfPrimitive) -> Self {
-        Self { primitive }
-    }
-}
-
-impl AssetDesc<SharedShape> for GltfTriMeshDesc {
-    type Error = anyhow::Error;
-
-    fn create(
+    pub fn create(
         &self,
         assets: &ivy_assets::AssetCache,
-    ) -> Result<ivy_assets::Asset<SharedShape>, Self::Error> {
+    ) -> anyhow::Result<ivy_assets::Asset<SharedShape>> {
         let mesh: Asset<MeshData> = assets.try_load(&self.primitive)?;
 
         let positions = mesh
@@ -34,7 +28,7 @@ impl AssetDesc<SharedShape> for GltfTriMeshDesc {
             .as_vec3()
             .context("Expected attribute of type vec3")?
             .iter()
-            .map(|&v| v.into())
+            .map(|&v| self.transform.transform_point3(v).into())
             .collect_vec();
 
         let shape = SharedShape::trimesh_with_flags(
@@ -51,24 +45,17 @@ impl AssetDesc<SharedShape> for GltfTriMeshDesc {
 }
 
 /// Create a convex mesh collider from provided primitive
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct GltfConvexMeshDesc {
+    pub transform: Mat4,
     pub primitive: GltfPrimitive,
 }
 
 impl GltfConvexMeshDesc {
-    pub fn new(primitive: GltfPrimitive) -> Self {
-        Self { primitive }
-    }
-}
-
-impl AssetDesc<SharedShape> for GltfConvexMeshDesc {
-    type Error = anyhow::Error;
-
-    fn create(
+    pub fn create(
         &self,
         assets: &ivy_assets::AssetCache,
-    ) -> Result<ivy_assets::Asset<SharedShape>, Self::Error> {
+    ) -> anyhow::Result<ivy_assets::Asset<SharedShape>> {
         let mesh: Asset<MeshData> = assets.try_load(&self.primitive)?;
 
         let positions = mesh

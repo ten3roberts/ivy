@@ -8,7 +8,7 @@ use flax::{
 use glam::{vec3, EulerRot, Mat4, Quat, Vec3};
 use image::{DynamicImage, Rgba};
 use itertools::{Either, Itertools};
-use ivy_assets::{fs::AssetPath, loadable::Load, Asset, AssetCache};
+use ivy_assets::{fs::AssetPath, Asset, AssetCache, AsyncAssetExt};
 use ivy_core::{
     app::PostInitEvent,
     gizmos,
@@ -33,6 +33,7 @@ use ivy_gltf::{
     animation::{
         player::{AnimationPlayer, Animator},
         plugin::AnimationPlugin,
+        AnimationDesc,
     },
     Document,
 };
@@ -192,6 +193,8 @@ impl LogicLayer {
 
             let displacement = AssetPath::new(format!("{texture_group}/displacement.png"));
 
+            use ivy_assets::loadable::ResourceDesc;
+
             let plane_material = MaterialDesc::PbrMaterial(
                 PbrMaterialDesc::new()
                     .with_metallic_factor(0.0)
@@ -251,17 +254,18 @@ impl LogicLayer {
                 ))
                 .spawn_into(&mut cmd.lock());
 
-            let albedo = assets
-                .from_path("textures/BaseCollection/Porcelein/albedo.png")
+            let albedo = AssetPath::new("textures/BaseCollection/Porcelein/albedo.png")
+                .load_async(&assets)
                 .await?;
 
-            let normal = assets
-                .from_path("textures/BaseCollection/Porcelein/normal.png")
+            let normal = AssetPath::new("textures/BaseCollection/Porcelein/normal.png")
+                .load_async(&assets)
                 .await?;
 
-            let roughness: Asset<DynamicImage> = assets
-                .from_path("textures/BaseCollection/Porcelein/roughness.png")
-                .await?;
+            let roughness: Asset<DynamicImage> =
+                AssetPath::new("textures/BaseCollection/Porcelein/roughness.png")
+                    .load_async(&assets)
+                    .await?;
 
             let emissive_material = MaterialData::EmissiveMaterial(PbrEmissiveMaterialData::new(
                 PbrMaterialData::new()
@@ -330,7 +334,11 @@ impl LogicLayer {
                 }
             }
 
-            let document: Asset<Document> = assets.from_path("models/Gears.glb").await.unwrap();
+            let document: Asset<Document> = AssetPath::new("models/Gears.glb")
+                .load_async(&assets)
+                .await
+                .unwrap();
+
             tracing::info!(
                 "{:?}",
                 document
@@ -343,13 +351,18 @@ impl LogicLayer {
                 .context("Missing document node")
                 .unwrap();
 
-            let skin = node.skin().unwrap();
-            let animation = skin.animations()[0].clone();
-
             let mut animator = Animator::new();
+
+            let animation = AnimationDesc {
+                document: "models/Gears.glb".into(),
+                animation: "ArmatureAction.001".into(),
+            }
+            .load(&assets)
+            .await?;
+
             let mut player = AnimationPlayer::new(animation);
             player.set_looping(true);
-            player.set_speed(0.2);
+            player.set_speed(0.5);
             animator.start_animation(player);
 
             node.mount(

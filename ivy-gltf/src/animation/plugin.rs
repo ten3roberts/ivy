@@ -1,14 +1,15 @@
 use std::time::Duration;
 
 use flax::{components::child_of, system, FetchExt, World};
-use glam::{Quat, Vec3};
+use glam::{Mat4, Quat, Vec3};
+use itertools::Itertools;
 use ivy_assets::{Asset, AssetCache};
 use ivy_core::{
     components::{delta_time, engine, position, rotation},
     update_layer::{Plugin, ScheduleSetBuilder},
 };
 
-use crate::components::{animator, skin, track_bone};
+use crate::components::{animator, skin, skin_matrix, track_bone};
 
 use super::{player::Animator, skin::Skin};
 
@@ -24,6 +25,7 @@ impl Plugin for AnimationPlugin {
         schedules
             .per_tick_mut()
             .with_system(animation_step_system())
+            .with_system(computer_skinning_system())
             .with_system(follow_bone_plugin_system());
 
         Ok(())
@@ -35,22 +37,32 @@ fn animation_step(animator: &mut Animator, dt: Duration) {
     animator.step(dt.as_secs_f32());
 }
 
-#[system(args(animator=(animator(), skin()).traverse(child_of)))]
+#[system(args(animator=animator().traverse(child_of).modified()))]
+fn computer_skinning(skin: &Skin, skin_matrix: &mut Vec<Mat4>, animator: &Animator) {
+    skin.update_skinning_matrix(animator, skin_matrix);
+}
+
+#[system(args(skin=(skin(), skin_matrix()).traverse(child_of).expect()))]
 fn follow_bone_plugin(
     position: &mut Vec3,
     rotation: &mut Quat,
-    animator: (&Animator, &Asset<Skin>),
+    skin: (&Asset<Skin>, &Vec<Mat4>),
     track_bone: &String,
-) {
-    let (animator, skin) = animator;
-    if let Some(joint) = skin
+) -> anyhow::Result<()> {
+    if let Some((joint_index, joint)) = skin
+        .0
         .joints()
         .iter()
-        .find(|v| v.name.as_ref() == Some(track_bone))
+        .find_position(|v| v.name.as_ref() == Some(track_bone))
     {
-        if let Some(joint_target) = animator.joint_targets().get(&joint.scene_index) {
-            *position = joint_target.pos;
-            *rotation = joint_target.rotation;
-        }
+        let target = skin.1[joint_index] * joint.inverse_bind_matrix.inverse();
+        let (_, target_rot, target_pos) = target.to_scale_rotation_translation();
+
+        *position = target_pos;
+        *rotation = target_rot;
+    } else {
+        tracing::error!("Failed to find bone {track_bone:?}")
     }
+
+    Ok(())
 }

@@ -334,6 +334,7 @@ impl RenderGraph {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn draw_with_encoder(
         &mut self,
         gpu: &Gpu,

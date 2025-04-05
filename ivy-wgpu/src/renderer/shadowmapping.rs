@@ -1,6 +1,6 @@
 use std::{mem::size_of, sync::Arc};
 
-use flax::{entity_ids, filter::With, Component, EntityIds, Query, World};
+use flax::{entity_ids, filter::With, Component, EntityIds, Query};
 use glam::{vec2, vec3, Mat4, Vec2, Vec3, Vec4Swizzles};
 use itertools::{izip, Itertools};
 use ivy_assets::stored::Handle;
@@ -91,7 +91,6 @@ fn shader_factory(desc: ShaderDesc) -> ShaderDesc {
 
 impl ShadowMapNode {
     pub fn new(
-        _: &mut World,
         gpu: &Gpu,
         shadow_maps: TextureHandle,
         light_camera_buffer: BufferHandle,

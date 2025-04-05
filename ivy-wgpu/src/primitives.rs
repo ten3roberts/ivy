@@ -20,7 +20,8 @@ impl Default for UvSpherePrimitive {
     }
 }
 
-impl AssetDesc<MeshData> for UvSpherePrimitive {
+impl AssetDesc for UvSpherePrimitive {
+    type Output = MeshData;
     type Error = Infallible;
 
     fn create(
@@ -190,7 +191,8 @@ impl Default for CapsulePrimitive {
     }
 }
 
-impl AssetDesc<MeshData> for CapsulePrimitive {
+impl AssetDesc for CapsulePrimitive {
+    type Output = MeshData;
     type Error = Infallible;
 
     fn create(
@@ -217,7 +219,8 @@ impl Default for PlaneDesc {
     }
 }
 
-impl AssetDesc<MeshData> for PlaneDesc {
+impl AssetDesc for PlaneDesc {
+    type Output = MeshData;
     type Error = Infallible;
 
     fn create(
@@ -311,7 +314,8 @@ pub fn generate_cube(halfextent: f32) -> MeshData {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct CubePrimitive;
 
-impl AssetDesc<MeshData> for CubePrimitive {
+impl AssetDesc for CubePrimitive {
+    type Output = MeshData;
     type Error = Infallible;
 
     fn create(

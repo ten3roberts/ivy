@@ -18,8 +18,8 @@ use ivy_core::{
     to_linear_vec3, Color, WorldExt,
 };
 use ivy_gltf::{
-    animation::{player::Animator, skin::Skin},
-    components::{animator, skin},
+    animation::skin::Skin,
+    components::{skin, skin_matrix},
 };
 use ivy_wgpu_types::{
     multi_buffer::{MultiBuffer, SubBuffer},
@@ -71,7 +71,7 @@ type SkinUpdateFetch = (
     Source<
         (
             Component<Asset<Skin>>,
-            <Component<Animator> as TransformFetch<Modified>>::Output,
+            <Component<Vec<Mat4>> as TransformFetch<Modified>>::Output,
         ),
         Traverse,
     >,
@@ -140,7 +140,7 @@ impl ObjectManager {
             skin_query: Query::new((
                 object_buffer_index(),
                 object_skinning_buffer(),
-                (skin(), animator().modified()).traverse(child_of),
+                (skin(), skin_matrix().modified()).traverse(child_of),
             ))
             .with(mesh()),
             skinning_data: vec![Mat4::IDENTITY; skinning_buffer.len()],
@@ -255,15 +255,17 @@ impl ObjectManager {
 
     fn update_skin_data(&mut self, world: &World, gpu: &Gpu) {
         profile_function!();
-        for (&loc, skin_buffer, (skin, animator)) in &mut self.skin_query.borrow(world) {
+        for (&loc, skin_buffer, (skin, skin_matrix)) in &mut self.skin_query.borrow(world) {
             assert_ne!(loc, usize::MAX);
             let object_data = &mut self.object_data[loc];
 
             let data = &mut self.skinning_data[object_data.joint_offset as usize
                 ..object_data.joint_offset as usize + skin.joints().len()];
-            animator.fill_buffer(skin, data);
 
-            self.skinning_buffer.write(&gpu.queue, skin_buffer, data);
+            data.copy_from_slice(skin_matrix);
+
+            self.skinning_buffer
+                .write(&gpu.queue, skin_buffer, skin_matrix);
         }
     }
 

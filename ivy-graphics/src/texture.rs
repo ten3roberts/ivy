@@ -2,7 +2,9 @@ use std::{future::Future, ops::Deref, pin::Pin};
 
 use either::Either;
 use image::{DynamicImage, ImageBuffer};
-use ivy_assets::{fs::AssetPath, loadable::Load, Asset, AssetCache, AssetDesc, DynAsyncAssetDesc};
+use ivy_assets::{
+    fs::AssetPath, loadable::ResourceDesc, Asset, AssetCache, AssetDesc, AsyncAssetExt,
+};
 use ivy_core::palette::Srgba;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -151,7 +153,7 @@ impl TextureDesc {
     }
 }
 
-impl Load for TextureDesc {
+impl ResourceDesc for TextureDesc {
     type Output = TextureData;
 
     type Error = anyhow::Error;
@@ -231,7 +233,8 @@ impl TextureData {
     }
 }
 
-impl AssetDesc<DynamicImage> for TextureData {
+impl AssetDesc for TextureData {
+    type Output = DynamicImage;
     type Error = anyhow::Error;
 
     fn create(&self, assets: &ivy_assets::AssetCache) -> Result<Asset<DynamicImage>, Self::Error> {

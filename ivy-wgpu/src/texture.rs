@@ -1,4 +1,4 @@
-use ivy_assets::{Asset, AssetCache, AssetDesc, DynAssetDesc};
+use ivy_assets::{Asset, AssetCache, AssetDesc, AssetExt};
 use ivy_core::profiling::profile_function;
 use ivy_graphics::texture::TextureData;
 use ivy_wgpu_types::texture::{texture_from_image, TextureFromImageDesc};
@@ -16,14 +16,15 @@ impl TextureWithFormatDesc {
     }
 }
 
-impl AssetDesc<Texture> for TextureWithFormatDesc {
+impl AssetDesc for TextureWithFormatDesc {
+    type Output = Texture;
     type Error = anyhow::Error;
 
     fn create(&self, assets: &AssetCache) -> Result<Asset<Texture>, Self::Error> {
         profile_function!("TextureDesc::load");
         let gpu = assets.service();
 
-        let image = self.texture.try_load(assets)?;
+        let image = self.texture.load(assets)?;
 
         let texture = texture_from_image(
             &gpu,

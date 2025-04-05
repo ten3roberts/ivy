@@ -2003,6 +2003,7 @@ name = "ivy-scene"
 version = "0.1.0"
 dependencies = [
  "flax",
+ "glam",
  "ivy-assets",
  "ivy-core",
  "ivy-gltf",
