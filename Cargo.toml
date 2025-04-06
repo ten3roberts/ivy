@@ -78,6 +78,8 @@ ordered-float = { version = "5.0", features = ["serde"] }
 rapier3d = { version = "0.23", features = ["simd-stable", "parallel"] }
 nalgebra = { version = "0.33", features = ["convert-glam030"] }
 violet = { path = "./violet", version = "*" }
+tynm = "0.2"
+futures-signals = "0.3"
 
 [dependencies]
 ivy-assets = { path = "./ivy-assets", version = "0.10" }

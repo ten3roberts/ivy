@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, future::Future};
+use std::{any::type_name, collections::BTreeMap, future::Future};
 
 use futures::{stream, StreamExt, TryStreamExt};
 use serde::de::DeserializeOwned;
@@ -110,6 +110,14 @@ where
 
     async fn create(&self, assets: &AssetCache) -> Result<Asset<Self::Output>, Self::Error> {
         Ok(assets.insert(T::load(self.clone(), assets).await.map_err(Into::into)?))
+    }
+
+    fn label(&self) -> String {
+        if let Some(filename) = self.path().file_name() {
+            format!("{}({})", tynm::type_name::<T>(), filename.to_string_lossy())
+        } else {
+            format!("{}({})", tynm::type_name::<T>(), self.path().display())
+        }
     }
 }
 

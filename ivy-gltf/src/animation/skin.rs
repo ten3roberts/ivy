@@ -93,8 +93,6 @@ impl Skin {
                     }
                 }
 
-                tracing::info!(?roots, "roots");
-
                 Ok(assets.insert(Self {
                     joints: skin_joints,
                     joint_map: joint_maps[i].clone(),

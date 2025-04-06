@@ -31,9 +31,10 @@ use std::{
     ops::Deref,
     sync::Arc,
     task::Poll,
-    time::Instant,
+    time::Duration,
 };
 
+use async_std::task::sleep;
 use dashmap::DashMap;
 
 pub mod cell;
@@ -43,17 +44,20 @@ pub mod loadable;
 pub mod map;
 pub mod service;
 pub mod stored;
+pub mod timeline;
 use fs::AssetPath;
 use futures::{
     future::{BoxFuture, Shared, WeakShared},
     FutureExt, TryFutureExt,
 };
+use futures_signals::signal::{Mutable, ReadOnlyMutable};
 pub use handle::Asset;
 use image::DynamicImage;
 use ivy_profiling::profile_scope;
 use loadable::ResourceFromPath;
 use parking_lot::{RwLock, RwLockReadGuard};
 use service::{FileSystemMapService, Service};
+use timeline::{AssetInfo, Timelines};
 
 use self::{cell::AssetCell, handle::WeakHandle};
 
@@ -69,6 +73,7 @@ slotmap::new_key_type! {
 #[derive(Clone)]
 pub struct AssetCache {
     inner: Arc<AssetCacheInner>,
+    span: Option<usize>,
 }
 
 impl Debug for AssetCache {
@@ -107,6 +112,7 @@ struct AssetCacheInner {
     keys: DashMap<TypeId, Box<dyn Any + Send + Sync>>,
     cells: DashMap<TypeId, Box<dyn Any + Send + Sync>>,
     services: RwLock<HashMap<TypeId, Box<dyn Service + Send>>>,
+    timelines: Mutable<Timelines>,
 }
 
 impl AssetCache {
@@ -117,7 +123,9 @@ impl AssetCache {
                 cells: DashMap::new(),
                 services: Default::default(),
                 pending_keys: DashMap::new(),
+                timelines: Mutable::new(Timelines::new()),
             }),
+            span: None,
         }
     }
 
@@ -133,8 +141,20 @@ impl AssetCache {
             return Ok(handle);
         }
 
+        // let span_id = self
+        //     .inner
+        //     .timelines
+        //     .lock()
+        //     .open_span(format!("{desc:?}"), self.span);
+
         // Load the asset and insert it to get a handle
-        let value = desc.create(self)?;
+        let value = desc.create(&Self {
+            inner: self.inner.clone(),
+            span: self.span,
+            // span: Some(span_id),
+        })?;
+
+        // self.inner.timelines.lock().close_span(span_id);
 
         self.inner
             .keys
@@ -186,22 +206,44 @@ impl AssetCache {
             }
         }
 
-        // Load the asset and insert it to get a handle
-        let assets = self.clone();
+        let info = AssetInfo {
+            name: desc.label(),
+            asset_type: TypeId::of::<K::Output>(),
+            type_name: tynm::type_name::<K::Output>(),
+        };
+
+        let span_id = self.inner.timelines.lock_mut().open_span(info, self.span);
+
+        let assets = Self {
+            inner: self.inner.clone(),
+            span: Some(span_id),
+        };
+
         let stored = desc.to_stored();
-        let desc_debug = format!("{desc:?}");
         let desc = desc.to_stored();
 
+        // Load the asset and insert it to get a handle
         let fut = async move {
-            let start = Instant::now();
             let assets = assets;
-            let value = desc
+            let value: Result<Asset<K::Output>, _> = desc
                 .borrow()
                 .create(&assets)
                 .await
-                .map_err(|v| SharedError(Arc::new(v)))?;
+                .map_err(|v| SharedError(Arc::new(v)));
 
-            tracing::debug!(duration=?start.elapsed(), desc=%desc_debug, "loaded asset");
+            assets
+                .inner
+                .timelines
+                .lock_mut()
+                .close_span(span_id, value.as_ref().ok().map(|v| v.id()));
+
+            let value = value?;
+
+            let value2 = value.clone();
+            async_std::task::spawn(async move {
+                sleep(Duration::from_secs(1)).await;
+                drop(value2);
+            });
 
             assets
                 .inner
@@ -312,6 +354,11 @@ impl AssetCache {
                 .expect("Service type mismatch")
         })
     }
+
+    /// Returns asset loading timelines
+    pub fn timelines(&self) -> ReadOnlyMutable<Timelines> {
+        self.inner.timelines.read_only()
+    }
 }
 
 impl Default for AssetCache {
@@ -402,6 +449,10 @@ pub trait AsyncAssetDesc: StoredKey + Debug + Send + Sync {
         &self,
         assets: &AssetCache,
     ) -> impl Future<Output = Result<Asset<Self::Output>, Self::Error>> + Send;
+
+    fn label(&self) -> String {
+        format!("{self:?}")
+    }
 }
 
 impl ResourceFromPath for DynamicImage {

@@ -10,8 +10,12 @@ ivy-input = { path = "../ivy-input" }
 ivy-assets = { path = "../ivy-assets" }
 ivy-wgpu = { path = "../ivy-wgpu" }
 ivy-physics = { path = "../ivy-physics" }
+ivy-ui = {path = "../ivy-ui"}
 
+violet.workspace = true
 flax.workspace = true
 glam.workspace = true
 anyhow.workspace = true
 tracing.workspace = true
+futures.workspace = true
+itertools.workspace = true

@@ -9,6 +9,8 @@ license-file.workspace = true
 [dependencies]
 ivy-profiling = { path = "../ivy-profiling/" }
 
+tynm.workspace = true
+slab.workspace = true
 atomic_refcell.workspace = true
 image.workspace = true
 dashmap.workspace = true
@@ -23,6 +25,7 @@ async-std.workspace = true
 serde = { workspace =  true, optional = true }
 serde_json = { workspace =  true, optional =  true }
 derivative.workspace = true
+futures-signals.workspace = true
 
 [features]
 serde = [ "dep:serde", "serde_json" ]

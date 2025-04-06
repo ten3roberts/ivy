@@ -341,7 +341,7 @@ dependencies = [
  "anyhow",
  "arrayvec",
  "log",
- "nom",
+ "nom 7.1.3",
  "num-rational 0.4.2",
  "v_frame",
 ]
@@ -1137,7 +1137,7 @@ dependencies = [
  "rayon",
  "serde",
  "smallvec",
- "tynm",
+ "tynm 0.1.10",
 ]
 
 [[package]]
@@ -1779,14 +1779,17 @@ dependencies = [
  "derivative",
  "flume",
  "futures",
+ "futures-signals",
  "image",
  "ivy-profiling",
  "parking_lot",
  "serde",
  "serde_json",
+ "slab",
  "slotmap",
  "thiserror 2.0.11",
  "tracing",
+ "tynm 0.2.0",
 ]
 
 [[package]]
@@ -1866,13 +1869,17 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "flax",
+ "futures",
  "glam",
+ "itertools 0.14.0",
  "ivy-assets",
  "ivy-core",
  "ivy-input",
  "ivy-physics",
+ "ivy-ui",
  "ivy-wgpu",
  "tracing",
+ "violet",
 ]
 
 [[package]]
@@ -2540,6 +2547,15 @@ checksum = "d273983c5a657a70a3e8f2a01329822f3b8c8172b73826411a55751e404a0a4a"
 dependencies = [
  "memchr",
  "minimal-lexical",
+]
+
+[[package]]
+name = "nom"
+version = "8.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df9761775871bdef83bee530e60050f7e54b1105350d6884eb0fb4f46c2f9405"
+dependencies = [
+ "memchr",
 ]
 
 [[package]]
@@ -4249,7 +4265,16 @@ version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bd30d05e69d1478e13fe3e7a853409cfec82cebc2cf9b8d613b3c6b0081781ed"
 dependencies = [
- "nom",
+ "nom 7.1.3",
+]
+
+[[package]]
+name = "tynm"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a21cdb0fc8f85c98b1ec812bc4cd69faf6c0fa2fc17d44ea3c2cdd38dc08e999"
+dependencies = [
+ "nom 8.0.0",
 ]
 
 [[package]]
@@ -4428,7 +4453,7 @@ dependencies = [
  "slotmap",
  "sync_wrapper",
  "tracing",
- "tynm",
+ "tynm 0.1.10",
  "unicode-segmentation",
  "wasm-bindgen-futures",
  "web-sys",

@@ -25,6 +25,7 @@ use ivy_engine::{
     TransformBundle,
 };
 use ivy_game::{
+    debug::AssetTimelinesWidget,
     orbit_camera::OrbitCameraPlugin,
     ray_picker::RayPickingPlugin,
     viewport_camera::{CameraSettings, ViewportCameraLayer},
@@ -45,6 +46,7 @@ use ivy_postprocessing::preconfigured::{
     SurfacePbrPipelineDesc, SurfacePbrRenderer,
 };
 use ivy_scene::{GltfNodeExt, NodeMountOptions};
+use ivy_ui::layer::{UiInputLayer, UiUpdateLayer};
 use ivy_wgpu::{
     components::{forward_pass, light_kind, light_params, shadow_pass, transparent_pass},
     driver::WinitDriver,
@@ -61,7 +63,13 @@ use rapier3d::prelude::SharedShape;
 use tracing::Instrument;
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
-use violet::palette::{rgb::Rgb, Hsl, IntoColor};
+use violet::{
+    core::{
+        widget::{card, maximized, StreamWidget},
+        Widget,
+    },
+    palette::{rgb::Rgb, Hsl, IntoColor},
+};
 use wgpu::TextureFormat;
 use winit::{dpi::LogicalSize, window::WindowAttributes};
 
@@ -78,6 +86,12 @@ pub fn main() -> anyhow::Result<()> {
         )
         .init();
 
+    let (ui_tx, app_ui_rx) = flume::unbounded::<Box<dyn Widget>>();
+    let ui_input_layer = UiInputLayer::new(StreamWidget::new(app_ui_rx.into_stream()));
+
+    let ui_layer = UiUpdateLayer::new(ui_input_layer.instance().clone());
+    let ui_instance = ui_layer.instance().clone();
+
     if let Err(err) = App::builder()
         .with_driver(WinitDriver::new(
             WindowAttributes::default()
@@ -86,32 +100,36 @@ pub fn main() -> anyhow::Result<()> {
         ))
         .with_layer(EngineLayer::new())
         .with_layer(ProfilingLayer::new())
-        .with_layer(GraphicsLayer::new(|world, assets, store, gpu, surface| {
-            Ok(SurfacePbrRenderer::new(
-                world,
-                assets,
-                store,
-                gpu,
-                surface,
-                SurfacePbrPipelineDesc {
-                    pbr_config: PbrRenderGraphConfig {
-                        label: "basic".into(),
-                        skybox: Some(SkyboxConfig {
-                            hdri: Box::new(AssetPath::new(
-                                "hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
-                            )),
-                            format: TextureFormat::Rgba16Float,
-                        }),
-                        ..Default::default()
+        .with_layer(GraphicsLayer::new(
+            move |world, assets, store, gpu, surface| {
+                Ok(SurfacePbrRenderer::new(
+                    world,
+                    assets,
+                    store,
+                    gpu,
+                    surface,
+                    SurfacePbrPipelineDesc {
+                        pbr_config: PbrRenderGraphConfig {
+                            label: "basic".into(),
+                            skybox: Some(SkyboxConfig {
+                                hdri: Box::new(AssetPath::new(
+                                    "hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
+                                )),
+                                format: TextureFormat::Rgba16Float,
+                            }),
+                            ..Default::default()
+                        },
+                        ui_instance: Some(ui_instance.clone()),
                     },
-                    ..Default::default()
-                },
-            ))
-        }))
+                ))
+            },
+        ))
+        .with_layer(ui_input_layer)
         .with_layer(InputLayer::new())
         .with_layer(LogicLayer::new())
         .with_layer(
             ScheduledLayer::new(FixedTimeStep::new(0.02))
+                .with_plugin(GameUiPlugin { ui_tx })
                 .with_plugin(OrbitCameraPlugin)
                 .with_plugin(GizmosPlugin)
                 .with_plugin(AnimationPlugin)
@@ -132,6 +150,7 @@ pub fn main() -> anyhow::Result<()> {
             ),
             fov: 1.0,
         }))
+        .with_layer(ui_layer)
         .run()
     {
         tracing::error!("{err:?}");
@@ -461,6 +480,27 @@ impl Plugin for RotateSpotlightPlugin {
 
         Ok(())
     }
+}
+
+struct GameUiPlugin {
+    ui_tx: flume::Sender<Box<dyn Widget>>,
+}
+
+impl Plugin for GameUiPlugin {
+    fn install(
+        &self,
+        _: &mut World,
+        assets: &AssetCache,
+        _: &mut ScheduleSetBuilder,
+    ) -> anyhow::Result<()> {
+        self.ui_tx.send(Box::new(app_ui(assets.clone()))).unwrap();
+
+        Ok(())
+    }
+}
+
+fn app_ui(assets: AssetCache) -> impl Widget {
+    maximized(card(AssetTimelinesWidget::new(assets)))
 }
 
 impl Layer for LogicLayer {

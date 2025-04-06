@@ -5,7 +5,7 @@ use std::{borrow::Cow, collections::HashMap, fs, future::Future, io, path::Path,
 
 use animation::skin::Skin;
 use anyhow::Context;
-use futures::{StreamExt, TryStreamExt};
+use futures::{stream, StreamExt, TryStreamExt};
 use glam::{Mat4, Quat, U16Vec4, Vec2, Vec3, Vec4};
 use gltf::{buffer, Gltf};
 use image::{DynamicImage, ImageFormat};
@@ -115,17 +115,23 @@ impl Document {
 
         let buffer_data = Arc::new(buffer_data);
 
-        let mut images: Vec<_> = gltf
-            .images()
-            .enumerate()
-            .par_bridge()
+        let images = gltf.images().collect_vec();
+        let mut images: Vec<_> = stream::iter(images.iter().enumerate())
             .map(|(i, v)| {
-                // let image = gltf::image::Data::from_source(v.source(), None, &buffer_data);
-                let image = load_image_data(v.source(), None, &buffer_data)
-                    .with_context(|| format!("Failed to load image {:?}", v.name()))?;
-                anyhow::Ok((i, assets.insert(image)))
+                let buffer_data = buffer_data.clone();
+                async move {
+                    // let image = gltf::image::Data::from_source(v.source(), None, &buffer_data);
+                    let image = load_image_data(v.source(), None, &buffer_data)
+                        .await
+                        .with_context(|| format!("Failed to load image {:?}", v.name()))?;
+
+                    anyhow::Ok((i, assets.insert(image)))
+                }
             })
-            .collect::<anyhow::Result<_, _>>()?;
+            .boxed()
+            .buffered(8)
+            .try_collect()
+            .await?;
 
         images.sort_by_key(|v| v.0);
         let images = images.into_iter().map(|v| v.1).collect_vec();
@@ -262,13 +268,11 @@ impl Document {
 /// Construct an image data object by reading the given source.
 /// If `base` is provided, then external filesystem references will
 /// be resolved from this directory.
-fn load_image_data(
+async fn load_image_data(
     source: gltf::image::Source<'_>,
     base: Option<&Path>,
     buffer_data: &[buffer::Data],
 ) -> gltf::Result<DynamicImage> {
-    profile_function!();
-
     let guess_format = |encoded_image: &[u8]| match image::guess_format(encoded_image) {
         Ok(ImageFormat::Png) => Some(ImageFormat::Png),
         Ok(ImageFormat::Jpeg) => Some(ImageFormat::Jpeg),
@@ -309,24 +313,31 @@ fn load_image_data(
                         },
                     },
                 };
-                image::load_from_memory_with_format(&encoded_image, encoded_format)?
+
+                async_std::task::spawn_blocking(move || {
+                    image::load_from_memory_with_format(&encoded_image, encoded_format)
+                })
+                .await?
             }
         },
         gltf::image::Source::View { view, mime_type } => {
             let parent_buffer_data = &buffer_data[view.buffer().index()].0;
             let begin = view.offset();
             let end = begin + view.length();
-            let encoded_image = &parent_buffer_data[begin..end];
+            let encoded_image = parent_buffer_data[begin..end].to_vec();
             let encoded_format = match mime_type {
                 "image/png" => ImageFormat::Png,
                 "image/jpeg" => ImageFormat::Jpeg,
-                _ => match guess_format(encoded_image) {
+                _ => match guess_format(&encoded_image) {
                     Some(format) => format,
                     None => return Err(gltf::Error::UnsupportedImageEncoding),
                 },
             };
-            profile_scope!("decode image");
-            image::load_from_memory_with_format(encoded_image, encoded_format)?
+            async_std::task::spawn_blocking(move || {
+                profile_scope!("decode image");
+                image::load_from_memory_with_format(&encoded_image, encoded_format)
+            })
+            .await?
         }
         _ => return Err(gltf::Error::ExternalReferenceInSliceImport),
     };
