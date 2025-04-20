@@ -4,13 +4,16 @@ use itertools::Itertools;
 use ivy_assets::Asset;
 use ivy_gltf::GltfPrimitive;
 use ivy_graphics::mesh::{MeshData, POSITION_ATTRIBUTE};
-use rapier3d::prelude::{SharedShape, TriMeshFlags};
+use rapier3d::{
+    math::Point,
+    prelude::{SharedShape, TriMeshFlags},
+};
 
 /// Create a trimesh collider from provided primitive
 #[derive(Debug, Clone, PartialEq)]
 pub struct GltfTriMeshDesc {
     pub transform: Mat4,
-    pub primitive: GltfPrimitive,
+    pub primitives: Vec<GltfPrimitive>,
 }
 
 impl GltfTriMeshDesc {
@@ -18,27 +21,34 @@ impl GltfTriMeshDesc {
         &self,
         assets: &ivy_assets::AssetCache,
     ) -> anyhow::Result<ivy_assets::Asset<SharedShape>> {
-        let mesh: Asset<MeshData> = assets.try_load(&self.primitive)?;
+        let mut vertices: Vec<Point<f32>> = Vec::new();
+        let mut indices = Vec::new();
 
-        let positions = mesh
-            .get_attribute(POSITION_ATTRIBUTE)
-            .context("Missing attribute")?;
+        for primitive in &self.primitives {
+            let mesh: Asset<MeshData> = assets.try_load(primitive)?;
 
-        let vertices = positions
-            .as_vec3()
-            .context("Expected attribute of type vec3")?
-            .iter()
-            .map(|&v| self.transform.transform_point3(v).into())
-            .collect_vec();
+            let positions = mesh
+                .get_attribute(POSITION_ATTRIBUTE)
+                .context("Missing attribute")?;
 
-        let shape = SharedShape::trimesh_with_flags(
-            vertices,
-            mesh.indices()
-                .chunks(3)
-                .map(|v| [v[0], v[1], v[2]])
-                .collect_vec(),
-            TriMeshFlags::FIX_INTERNAL_EDGES,
-        )?;
+            let base_offset = vertices.len() as u32;
+            indices.extend(
+                mesh.indices()
+                    .chunks(3)
+                    .map(|v| [v[0] + base_offset, v[1] + base_offset, v[2] + base_offset]),
+            );
+
+            vertices.extend(
+                positions
+                    .as_vec3()
+                    .context("Expected attribute of type vec3")?
+                    .iter()
+                    .map(|&v| Point::from(self.transform.transform_point3(v))),
+            );
+        }
+
+        let shape =
+            SharedShape::trimesh_with_flags(vertices, indices, TriMeshFlags::FIX_INTERNAL_EDGES)?;
 
         Ok(assets.insert(shape))
     }

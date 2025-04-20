@@ -8,7 +8,7 @@ use flax::{
 use glam::{vec3, EulerRot, Mat4, Quat, Vec3};
 use image::{DynamicImage, Rgba};
 use itertools::{Either, Itertools};
-use ivy_assets::{fs::AssetPath, Asset, AssetCache, AsyncAssetExt};
+use ivy_assets::{fs::AssetPath, loadable::ResourceDesc, Asset, AssetCache, AsyncAssetExt};
 use ivy_core::{
     app::PostInitEvent,
     gizmos,
@@ -18,7 +18,7 @@ use ivy_core::{
     profiling::ProfilingLayer,
     transforms::TransformUpdatePlugin,
     update_layer::{FixedTimeStep, Plugin, ScheduleSetBuilder, ScheduledLayer},
-    App, EngineLayer, EntityBuilderExt, Layer,
+    App, AsyncCommandBuffer, EngineLayer, EntityBuilderExt, Layer,
 };
 use ivy_engine::{
     async_commandbuffer, elapsed_time, engine, rotation, world_transform, RigidBodyBundle,
@@ -53,18 +53,19 @@ use ivy_wgpu::{
     layer::GraphicsLayer,
     light::{LightBundle, LightKind, LightParams},
     material_desc::{
-        MaterialData, MaterialDesc, PbrEmissiveMaterialData, PbrMaterialData, PbrMaterialDesc,
+        MaterialData, MaterialDesc, PbrEmissiveMaterialData, PbrEmissiveMaterialDesc,
+        PbrMaterialData, PbrMaterialDesc,
     },
     mesh_desc::MeshDesc,
     primitives::{generate_plane, UvSpherePrimitive},
     renderer::{EnvironmentData, RenderObjectBundle},
 };
 use rapier3d::prelude::SharedShape;
-use tracing::Instrument;
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
 use violet::{
     core::{
+        to_owned,
         widget::{card, maximized, StreamWidget},
         Widget,
     },
@@ -198,7 +199,7 @@ impl LogicLayer {
         const FRICTION: f32 = 0.5;
         const RESTITUTION: f32 = 0.1;
 
-        let future = async move {
+        async fn load_objects(assets: AssetCache, cmd: AsyncCommandBuffer) -> anyhow::Result<()> {
             let plane_mesh = MeshDesc::content(assets.insert(generate_plane(8.0, Vec3::Y)));
 
             let texture_group = "textures/BaseCollection/Sand";
@@ -228,6 +229,14 @@ impl LogicLayer {
                     .with_ambient_occlusion(TextureDesc::Path(ao))
                     .with_displacement(TextureDesc::Path(displacement)),
             )
+            .load(&assets)
+            .await?;
+
+            let emissive_material = MaterialDesc::EmissiveMaterial(PbrEmissiveMaterialDesc::new(
+                PbrMaterialDesc::new().with_albedo(TextureDesc::Color(255, 255, 255, 255)),
+                TextureDesc::Color(255, 255, 255, 255),
+                20.0,
+            ))
             .load(&assets)
             .await?;
 
@@ -273,32 +282,6 @@ impl LogicLayer {
                 ))
                 .spawn_into(&mut cmd.lock());
 
-            let albedo = AssetPath::new("textures/BaseCollection/Porcelein/albedo.png")
-                .load_async(&assets)
-                .await?;
-
-            let normal = AssetPath::new("textures/BaseCollection/Porcelein/normal.png")
-                .load_async(&assets)
-                .await?;
-
-            let roughness: Asset<DynamicImage> =
-                AssetPath::new("textures/BaseCollection/Porcelein/roughness.png")
-                    .load_async(&assets)
-                    .await?;
-
-            let emissive_material = MaterialData::EmissiveMaterial(PbrEmissiveMaterialData::new(
-                PbrMaterialData::new()
-                    .with_albedo(TextureData::Content(albedo))
-                    .with_normal(TextureData::Content(normal))
-                    .with_metallic_roughness(TextureData::Content(roughness.clone()).process(
-                        MetallicRoughnessProcessor::new(
-                            Either::Right(0),
-                            Either::Left(ColorChannel::Red),
-                        ),
-                    )),
-                TextureData::Content(roughness),
-                50.0,
-            ));
             Entity::builder()
                 .mount(
                     TransformBundle::default()
@@ -353,6 +336,10 @@ impl LogicLayer {
                 }
             }
 
+            anyhow::Ok(())
+        }
+
+        async fn load_gears(assets: AssetCache, cmd: AsyncCommandBuffer) -> anyhow::Result<()> {
             let document: Asset<Document> = AssetPath::new("models/Gears.glb")
                 .load_async(&assets)
                 .await
@@ -400,9 +387,10 @@ impl LogicLayer {
             .spawn_into(&mut cmd.lock());
 
             anyhow::Ok(())
-        };
+        }
 
-        async_std::task::spawn(future.instrument(tracing::debug_span!("load_assets")));
+        async_std::task::spawn(load_objects(assets.clone(), cmd.clone()));
+        async_std::task::spawn(load_gears(assets, cmd));
 
         Ok(())
     }

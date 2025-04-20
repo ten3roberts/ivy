@@ -1,13 +1,11 @@
-use core::f32;
-
 use anyhow::Context;
 use flax::{
     components::child_of,
     entity_ids,
     events::EventSubscriber,
     fetch::{Copied, Modified, TransformFetch},
-    filter::ChangeFilter,
-    BoxedSystem, CommandBuffer, Component, ComponentMut, EntityIds, FetchExt, Opt, Query,
+    filter::{All, ChangeFilter, ChangeFilterMut, Without},
+    system, BoxedSystem, CommandBuffer, Component, ComponentMut, EntityIds, FetchExt, Opt, Query,
     QueryBorrow, RelationExt, System, World,
 };
 use glam::{Mat4, Vec3};
@@ -29,8 +27,9 @@ use crate::{
     components::*,
     state::{
         BodyDynamicsQuery, BodyDynamicsQueryItem, BodyDynamicsQueryMut, ColliderDynamicsQuery,
-        PhysicsState,
+        ColliderDynamicsQueryItem, PhysicsState,
     },
+    Effector,
 };
 
 #[allow(clippy::type_complexity)]
@@ -68,7 +67,9 @@ pub fn register_bodies_system() -> BoxedSystem {
                                 .gravity_scale(gravity)
                                 .build(),
                         );
-                        cmd.set(id, rb_handle(), rb);
+
+                        let rb_mass = state.rigidbody(rb).mass();
+                        cmd.set(id, rb_handle(), rb).set(id, mass(), rb_mass);
                     }
                 }
 
@@ -246,93 +247,90 @@ type UpdateBodiesFetch = (
     <BodyDynamicsQuery as TransformFetch<Modified>>::Output,
 );
 
-// writes body data into the physics state
-pub fn update_bodies_system() -> BoxedSystem {
-    System::builder()
-        .with_query(Query::new(physics_state().as_mut()))
-        .with_query(Query::new((
-            rb_handle().copied(),
-            BodyDynamicsQuery::new().modified(),
-        )))
-        .build(
-            move |mut state: QueryBorrow<ComponentMut<PhysicsState>>,
-                  mut query: QueryBorrow<UpdateBodiesFetch>| {
-                if let Some(state) = state.first() {
-                    state.update_bodies(query.iter().map(|(rb, v)| {
-                        (
-                            rb,
-                            BodyDynamicsQueryItem {
-                                pos: v.pos,
-                                rotation: v.rotation,
-                                vel: v.vel,
-                                ang_vel: v.ang_vel,
-                            },
-                        )
-                    }));
-                }
+impl PhysicsState {
+    /// writes body data into the physics state
+    #[system(with_query(Query::new((rb_handle(), BodyDynamicsQuery::new().modified()))))]
+    pub(crate) fn update_body_data_system(
+        self: &mut PhysicsState,
+        query: &mut QueryBorrow<(
+            Component<RigidBodyHandle>,
+            <BodyDynamicsQuery as TransformFetch<Modified>>::Output,
+        )>,
+    ) {
+        self.update_bodies(query.iter().map(|(&rb, v)| {
+            (
+                rb,
+                BodyDynamicsQueryItem {
+                    pos: v.pos,
+                    rotation: v.rotation,
+                    vel: v.vel,
+                    ang_vel: v.ang_vel,
+                },
+            )
+        }));
+    }
 
-                anyhow::Ok(())
-            },
-        )
-        .boxed()
-}
+    /// Write collider position data into the physics state
+    #[system(with_query(Query::new((collider_handle(), ColliderDynamicsQuery::new().modified())).without(rb_handle())))]
+    pub(crate) fn update_collider_position_system(
+        self: &mut PhysicsState,
+        query: &mut QueryBorrow<
+            (
+                Component<ColliderHandle>,
+                <ColliderDynamicsQuery as TransformFetch<Modified>>::Output,
+            ),
+            (All, Without),
+        >,
+    ) {
+        self.update_colliders(query.iter().map(|(&handle, v)| {
+            (
+                handle,
+                ColliderDynamicsQueryItem {
+                    pos: v.pos,
+                    rotation: v.rotation,
+                },
+            )
+        }));
+    }
 
-// writes collider position data into the physics state
-pub fn update_colliders_system() -> BoxedSystem {
-    System::builder()
-        .with_query(Query::new(physics_state().as_mut()))
-        .with_query(
-            Query::new((collider_handle().copied(), ColliderDynamicsQuery::new()))
-                .without(rb_handle()),
-        )
-        .build(
-            move |mut state: QueryBorrow<ComponentMut<PhysicsState>>,
-                  mut query: QueryBorrow<
-                (Copied<Component<ColliderHandle>>, ColliderDynamicsQuery),
-                _,
-            >| {
-                if let Some(state) = state.first() {
-                    state.update_colliders(query.iter());
-                }
+    #[system]
+    pub(crate) fn step_system(self: &mut PhysicsState, gravity: Vec3) {
+        self.set_gravity(gravity);
+        self.step();
+    }
 
-                anyhow::Ok(())
-            },
-        )
-        .boxed()
-}
+    #[system(with_query(Query::new(BodyDynamicsQueryMut::new())))]
+    pub(crate) fn sync_bodies_after_step_system(
+        self: &mut PhysicsState,
+        query: &mut QueryBorrow<BodyDynamicsQueryMut>,
+    ) {
+        self.sync_body_velocities(query);
+    }
 
-pub fn physics_step_system() -> BoxedSystem {
-    System::builder()
-        .with_query(Query::new((
-            physics_state().as_mut(),
-            gravity().source(engine()),
-        )))
-        .for_each(|(v, gravity)| {
-            v.set_gravity(*gravity);
-            v.step();
-        })
-        .boxed()
-}
+    #[system(with_query(Query::new((rb_handle(), effector().as_mut().modified()))))]
+    pub(crate) fn apply_effectors_system(
+        self: &mut PhysicsState,
+        query: &mut QueryBorrow<(Component<RigidBodyHandle>, ChangeFilterMut<Effector>)>,
+    ) {
+        for (&rb, effector) in query {
+            let body = self.rigidbody_mut(rb);
 
-pub fn sync_simulation_bodies_system() -> BoxedSystem {
-    System::builder()
-        .with_query(Query::new(physics_state().as_mut()))
-        .with_query(Query::new(BodyDynamicsQueryMut::new()))
-        .build(
-            move |mut state: QueryBorrow<ComponentMut<PhysicsState>>,
-                  mut query: QueryBorrow<BodyDynamicsQueryMut, _>| {
-                if let Some(state) = state.first() {
-                    state.sync_body_velocities(&mut query);
-                }
+            body.add_force(effector.pending_force().into(), effector.should_wake());
+            body.add_torque(effector.pending_torque().into(), effector.should_wake());
 
-                anyhow::Ok(())
-            },
-        )
-        .boxed()
+            body.apply_impulse(effector.pending_impulse().into(), effector.should_wake());
+            body.apply_torque_impulse(
+                effector.pending_torque_impulse().into(),
+                effector.should_wake(),
+            );
+
+            effector.clear();
+        }
+    }
 }
 
 #[allow(clippy::type_complexity)]
-pub fn gizmo_system(dt: f32) -> BoxedSystem {
+pub fn gizmo_system() -> BoxedSystem {
     System::builder()
         .with_query(Query::new(ivy_core::components::gizmos()))
         .with_query(
@@ -362,7 +360,7 @@ pub fn gizmo_system(dt: f32) -> BoxedSystem {
                 for (transform, &velocity, &w, effector) in query.iter() {
                     let origin = transform.transform_point3(Vec3::ZERO);
 
-                    let dv = effector.net_velocity_change(dt);
+                    let dv = effector.pending_force();
                     gizmos.draw(Line::new(origin, dv, DEFAULT_THICKNESS, Color::red()));
                     gizmos.draw(Line::new(
                         origin,
@@ -394,58 +392,5 @@ pub fn gizmo_system(dt: f32) -> BoxedSystem {
                 anyhow::Ok(())
             },
         )
-        .boxed()
-}
-
-#[allow(clippy::type_complexity)]
-pub fn configure_effectors_system() -> BoxedSystem {
-    System::builder()
-        .with_query(Query::new(physics_state()))
-        .with_query(Query::new((
-            effector().as_mut(),
-            (mass(), rb_handle(), inertia_tensor(), center_of_mass()).modified(),
-        )))
-        .build(
-            |mut physics_state: QueryBorrow<'_, Component<PhysicsState>>,
-             mut query: QueryBorrow<
-                '_,
-                (
-                    ComponentMut<crate::Effector>,
-                    flax::filter::Union<(
-                        ChangeFilter<f32>,
-                        ChangeFilter<RigidBodyHandle>,
-                        ChangeFilter<f32>,
-                        ChangeFilter<Vec3>,
-                    )>,
-                ),
-            >| {
-                if let Some(physics_state) = physics_state.first() {
-                    for (effector, (_, &handle, _, _)) in query.iter() {
-                        effector.update_props(physics_state.rigidbody(handle));
-                    }
-                }
-            },
-        )
-        .boxed()
-}
-
-/// Applies effectors to their respective entities and clears the effects.
-pub fn apply_effectors_system(dt: f32) -> BoxedSystem {
-    System::builder()
-        .with_query(Query::new((
-            velocity().as_mut(),
-            angular_velocity().as_mut(),
-            effector().as_mut(),
-        )))
-        .par_for_each(move |(vel, ang_vel, effector)| {
-            if effector.should_wake() {
-                let net_dv = effector.net_velocity_change(dt);
-                *vel += net_dv;
-
-                *ang_vel += effector.net_angular_velocity_change(dt);
-            }
-
-            effector.clear();
-        })
         .boxed()
 }

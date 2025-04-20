@@ -32,6 +32,7 @@ component! {
     pub gravity: Vec3 => [ Debuggable ],
     pub angular_velocity: Vec3 => [ Debuggable ],
 
+    /// Mass of body
     pub mass: f32 => [ Debuggable ],
     pub inertia_tensor: f32 => [ Debuggable ],
     pub gravity_influence: f32 => [ Debuggable ],

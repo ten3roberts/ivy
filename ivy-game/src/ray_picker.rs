@@ -119,7 +119,7 @@ impl PickingState {
     }
 
     #[system(with_world, with_query(Query::new(gizmos().as_mut())))]
-    pub fn draw_gizmos(
+    pub fn draw_gizmos_system(
         self: &mut PickingState,
         world: &World,
         gizmos: &mut QueryBorrow<ComponentMut<Gizmos>>,

@@ -162,6 +162,16 @@ pub struct PbrEmissiveMaterialDesc {
     emissive_factor: NotNan<f32>,
 }
 
+impl PbrEmissiveMaterialDesc {
+    pub fn new(pbr: PbrMaterialDesc, emissive_color: TextureDesc, emissive_factor: f32) -> Self {
+        Self {
+            pbr,
+            emissive_color,
+            emissive_factor: NotNan::new(emissive_factor).unwrap(),
+        }
+    }
+}
+
 impl ResourceDesc for PbrEmissiveMaterialDesc {
     type Output = PbrEmissiveMaterialData;
 

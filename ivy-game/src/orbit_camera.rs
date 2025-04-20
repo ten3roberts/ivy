@@ -87,12 +87,12 @@ impl Bundle for OrbitCameraBundle {
 }
 
 #[system(args(control_active=control_active().modified(), request_capture_mouse=request_capture_mouse().maybe_mut().source(engine())))]
-fn lock_cursor(control_active: &bool, request_capture_mouse: MutGuard<bool>) {
+fn lock_cursor_system(control_active: &bool, request_capture_mouse: MutGuard<bool>) {
     *request_capture_mouse.write() = *control_active;
 }
 
 #[system]
-fn camera_orbit(
+fn camera_orbit_system(
     theta: &mut f32,
     phi: &mut f32,
     distance: &mut f32,
@@ -105,13 +105,13 @@ fn camera_orbit(
 }
 
 #[system]
-fn camera_pan(focus_point: &mut Vec3, rotation: Quat, pan_input: Vec2, distance: f32) {
+fn camera_pan_system(focus_point: &mut Vec3, rotation: Quat, pan_input: Vec2, distance: f32) {
     let delta = rotation * vec3(-pan_input.x, pan_input.y, 0.0) * distance;
     *focus_point += delta;
 }
 
 #[system]
-fn update_camera_position(
+fn update_camera_position_system(
     position: &mut Vec3,
     rotation: &mut Quat,
     focus_point: Vec3,

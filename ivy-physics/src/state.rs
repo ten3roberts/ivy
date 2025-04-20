@@ -254,7 +254,13 @@ impl PhysicsState {
     }
 
     pub fn sync_body_velocities(&mut self, query: &mut QueryBorrow<BodyDynamicsQueryMut>) {
-        for body in self.island_manager.active_dynamic_bodies() {
+        let bodies = self
+            .island_manager
+            .active_dynamic_bodies()
+            .iter()
+            .chain(self.island_manager.active_kinematic_bodies());
+
+        for body in bodies {
             let rb = &self.bodies[*body];
             let id = Entity::try_from_bits(rb.user_data as u64).unwrap();
             let v = query.get(id).unwrap();
@@ -319,6 +325,7 @@ impl Default for BodyDynamicsQuery {
 }
 
 #[derive(Fetch)]
+#[fetch(transforms=[Modified])]
 pub struct ColliderDynamicsQuery {
     pub pos: Component<Vec3>,
     pub rotation: Component<Quat>,

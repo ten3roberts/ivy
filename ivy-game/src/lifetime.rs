@@ -22,7 +22,7 @@ impl Lifetime {
     }
 
     #[system(args(dt=delta_time().source(engine())), with_cmd_mut)]
-    fn update(self: &mut Lifetime, id: Entity, dt: &Duration, cmd: &mut CommandBuffer) {
+    fn update_system(self: &mut Lifetime, id: Entity, dt: &Duration, cmd: &mut CommandBuffer) {
         self.remaining = self.remaining.saturating_sub(*dt);
 
         if self.remaining == Duration::ZERO {

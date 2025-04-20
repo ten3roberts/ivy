@@ -33,17 +33,17 @@ impl Plugin for AnimationPlugin {
 }
 
 #[system(args(dt=delta_time().source(engine()).copied()))]
-fn animation_step(animator: &mut Animator, dt: Duration) {
+fn animation_step_system(animator: &mut Animator, dt: Duration) {
     animator.step(dt.as_secs_f32());
 }
 
 #[system(args(animator=animator().traverse(child_of).modified()))]
-fn computer_skinning(skin: &Skin, skin_matrix: &mut Vec<Mat4>, animator: &Animator) {
+fn computer_skinning_system(skin: &Skin, skin_matrix: &mut Vec<Mat4>, animator: &Animator) {
     skin.update_skinning_matrix(animator, skin_matrix);
 }
 
 #[system(args(skin=(skin(), skin_matrix()).traverse(child_of).expect()))]
-fn follow_bone_plugin(
+fn follow_bone_plugin_system(
     position: &mut Vec3,
     rotation: &mut Quat,
     skin: (&Asset<Skin>, &Vec<Mat4>),

@@ -9,7 +9,7 @@ use rapier3d::prelude::{LockedAxes, RigidBodyType, SharedShape};
 use crate::{
     components::{
         angular_velocity, can_sleep, collider_shape, density, effector, friction, inertia_tensor,
-        locked_axes, mass, restitution, rigid_body_type, velocity,
+        locked_axes, restitution, rigid_body_type, velocity,
     },
     Effector,
 };
@@ -77,21 +77,9 @@ impl RigidBodyBundle {
         self
     }
 
-    /// Set the mass
-    pub fn with_mass(mut self, mass: f32) -> Self {
-        self.mass = mass;
-        self
-    }
-
     /// Set the velocity
     pub fn with_velocity(mut self, velocity: Vec3) -> Self {
         self.velocity = velocity;
-        self
-    }
-
-    /// Set the ang mass
-    pub fn with_angular_mass(mut self, angular_mass: f32) -> Self {
-        self.angular_mass = angular_mass;
         self
     }
 
@@ -113,7 +101,6 @@ impl Bundle for RigidBodyBundle {
         entity
             .set(rigid_body_type(), self.body_type)
             .set(velocity(), self.velocity)
-            .set(mass(), self.mass)
             .set(inertia_tensor(), self.angular_mass)
             .set(angular_velocity(), self.angular_velocity)
             .set(effector(), Effector::new());

@@ -16,7 +16,6 @@ use ivy_assets::{
 use ivy_core::components::TransformBundle;
 use ivy_graphics::mesh::{MeshData, TANGENT_ATTRIBUTE};
 use ivy_profiling::{profile_function, profile_scope};
-use rayon::iter::{ParallelBridge, ParallelIterator};
 
 /// An in memory representation of a gltf document and binary buffer data
 pub struct DocumentData {

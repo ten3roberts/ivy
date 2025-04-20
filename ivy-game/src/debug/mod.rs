@@ -194,13 +194,10 @@ impl Widget for TickMark {
 
         scope.set(offset(), Unit::px2(start, 0.0));
 
-        Stack::new(
-            col((
-                label(format!("{:?}", self.time)).with_wrap(Wrap::None),
-                Rectangle::new(PLATINUM_700).with_exact_size(Unit::px2(2.0, 8.0)),
-            ))
-            .with_cross_align(Align::Center),
-        )
+        Stack::new(col((
+            label(format!("{:?}", self.time)).with_wrap(Wrap::None),
+            Rectangle::new(PLATINUM_700).with_exact_size(Unit::px2(2.0, 8.0)),
+        )))
         .mount(scope);
     }
 }
@@ -214,7 +211,7 @@ struct TimespanWidget {
     padded_end: f32,
 }
 
-pub const TIMELINE_SCALE: f32 = 2400.0;
+pub const TIMELINE_SCALE: f32 = 1200.0;
 pub const CELL_HEIGHT: f32 = 26.0;
 pub const CELL_SPACING: f32 = 4.0;
 

@@ -137,24 +137,41 @@ impl AssetCache {
 
         let _span = tracing::debug_span!("AssetCache::try_load", key = std::any::type_name::<K>())
             .entered();
+
         if let Some(handle) = self.get(desc) {
             return Ok(handle);
         }
 
-        // let span_id = self
-        //     .inner
-        //     .timelines
-        //     .lock()
-        //     .open_span(format!("{desc:?}"), self.span);
+        const ENABLE_SYNC_SPANS: bool = false;
+
+        let span_id = if ENABLE_SYNC_SPANS {
+            let info = AssetInfo {
+                name: desc.label(),
+                asset_type: TypeId::of::<K::Output>(),
+                type_name: tynm::type_name::<K::Output>(),
+            };
+
+            Some(self.inner.timelines.lock_mut().open_span(info, self.span))
+        } else {
+            self.span
+        };
 
         // Load the asset and insert it to get a handle
         let value = desc.create(&Self {
             inner: self.inner.clone(),
-            span: self.span,
-            // span: Some(span_id),
-        })?;
+            span: span_id,
+        });
 
-        // self.inner.timelines.lock().close_span(span_id);
+        if let Some(span_id) = span_id {
+            if ENABLE_SYNC_SPANS {
+                self.inner
+                    .timelines
+                    .lock_mut()
+                    .close_span(span_id, value.as_ref().ok().map(|v| v.id()));
+            }
+        }
+
+        let value = value?;
 
         self.inner
             .keys
@@ -431,6 +448,10 @@ pub trait AssetDesc: StoredKey + Debug {
     type Error: 'static + Debug;
 
     fn create(&self, assets: &AssetCache) -> Result<Asset<Self::Output>, Self::Error>;
+
+    fn label(&self) -> String {
+        format!("{self:?}")
+    }
 }
 
 /// Describes a description that allows loading an asset.
