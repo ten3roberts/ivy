@@ -1,3 +1,4 @@
+pub mod camera;
 pub mod debug;
 pub mod fly_camera;
 pub mod lifetime;

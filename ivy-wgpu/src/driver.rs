@@ -137,7 +137,7 @@ impl ApplicationHandler for WinitEventHandler<'_> {
         self.stats.record_frame(delta);
 
         if let Err(err) = self.app.tick(delta) {
-            tracing::error!("{err:?}");
+            tracing::error!("App tick: {err:?}");
             event_loop.exit();
         }
 

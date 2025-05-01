@@ -14,7 +14,7 @@ use violet::{
         text::Wrap,
         unit::Unit,
         widget::{
-            card, col, interactive::tooltip::Tooltip, label, pill, Float, Rectangle, ScrollArea,
+            card, col, interactive::tooltip::Tooltip, label, pill, Rectangle, ScrollArea,
             SignalWidget, Stack,
         },
         Scope, Widget,

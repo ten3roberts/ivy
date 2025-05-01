@@ -1,23 +1,21 @@
 use flax::{
     component,
     fetch::{entity_refs, EntityRefs, Source},
-    system, BoxedSystem, CommandBuffer, Component, ComponentMut, Entity, Fetch, FetchExt, Query,
+    system, BoxedSystem, CommandBuffer, Component, ComponentMut, Entity, FetchExt, Query,
     QueryBorrow, System, World,
 };
-use glam::{vec2, vec4, Mat4, Vec2, Vec3, Vec4Swizzles};
+use glam::{Vec2, Vec3};
 use ivy_assets::AssetCache;
 use ivy_core::{
-    components::{
-        engine, gizmos, main_camera, position, rotation, world_transform, TransformBundle,
-    },
+    components::{engine, gizmos, main_camera, position, rotation, TransformBundle},
     gizmos::{Gizmos, Sphere},
     update_layer::{Plugin, ScheduleSetBuilder},
     Color, ColorExt, EntityBuilderExt,
 };
 use ivy_input::{
-    components::input_state,
+    components::{cursor_position, input_state},
     types::{Key, MouseButton, NamedKey},
-    Action, BindingExt, CursorPositionBinding, InputState, KeyBinding, MouseButtonBinding,
+    Action, BindingExt, InputState, KeyBinding, MouseButtonBinding,
 };
 use ivy_physics::{
     components::{impulse_joint, physics_state},
@@ -29,7 +27,8 @@ use ivy_physics::{
     state::PhysicsState,
     RigidBodyBundle,
 };
-use ivy_wgpu::components::projection_matrix;
+
+use crate::camera::{screen_to_world_ray, CameraQuery};
 
 pub struct PickingState {
     picked_object: Option<(Entity, Vec3, f32)>,
@@ -141,7 +140,6 @@ impl PickingState {
 
 component! {
     pick_ray_action: bool,
-    cursor_position_action: Vec2,
     picking_state: PickingState,
     ray_distance_modifier: f32,
 }
@@ -157,9 +155,6 @@ impl Plugin for RayPickingPlugin {
     ) -> anyhow::Result<()> {
         let mut left_click_action = Action::new();
         left_click_action.add(MouseButtonBinding::new(MouseButton::Left));
-
-        let mut cursor_position = Action::new();
-        cursor_position.add(CursorPositionBinding::new(true));
 
         let mut ray_distance_action = Action::new();
         ray_distance_action.add(KeyBinding::new(Key::Named(NamedKey::ArrowUp)).analog());
@@ -179,11 +174,9 @@ impl Plugin for RayPickingPlugin {
                 input_state(),
                 InputState::new()
                     .with_action(pick_ray_action(), left_click_action)
-                    .with_action(cursor_position_action(), cursor_position)
                     .with_action(ray_distance_modifier(), ray_distance_action),
             )
             .set_default(pick_ray_action())
-            .set_default(cursor_position_action())
             .set_default(ray_distance_modifier())
             .set(
                 picking_state(),
@@ -205,36 +198,10 @@ impl Plugin for RayPickingPlugin {
     }
 }
 
-#[derive(Fetch)]
-pub struct CameraQuery {
-    transform: Component<Mat4>,
-    projection: Component<Mat4>,
-}
-
-impl CameraQuery {
-    pub fn new() -> Self {
-        Self {
-            transform: world_transform(),
-            projection: projection_matrix(),
-        }
-    }
-}
-
-impl Default for CameraQuery {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-type PickingQuery = (
-    EntityRefs,
-    Component<bool>,
-    Component<Vec2>,
-    ComponentMut<PickingState>,
-);
+type PickingQuery = (EntityRefs, Component<bool>, ComponentMut<PickingState>);
 
 type PickRaySystemQuery = (
-    Source<Component<PhysicsState>, Entity>,
+    Source<(Component<PhysicsState>, Component<Vec2>), Entity>,
     Source<(Component<()>, CameraQuery), ()>,
     PickingQuery,
 );
@@ -257,21 +224,16 @@ pub fn pick_ray_system() -> BoxedSystem {
     System::builder()
         .with_cmd_mut()
         .with_query(Query::new((
-            physics_state().source(engine()),
+            (physics_state(), cursor_position()).source(engine()),
             (main_camera(), CameraQuery::new()).source(()),
-            (
-                entity_refs(),
-                pick_ray_action(),
-                cursor_position_action(),
-                picking_state().as_mut(),
-            ),
+            (entity_refs(), pick_ray_action(), picking_state().as_mut()),
         )))
         .build(
             |cmd: &mut CommandBuffer, mut query: QueryBorrow<'_, PickRaySystemQuery>| {
                 for (
-                    physics_state,
+                    (physics_state, &cursor_pos),
                     (_, camera),
-                    (entity, pick_ray_activation, cursor_pos, state),
+                    (entity, pick_ray_activation, state),
                 ) in query.iter()
                 {
                     let world = entity.world();
@@ -281,17 +243,8 @@ pub fn pick_ray_system() -> BoxedSystem {
                         return Ok(());
                     }
 
-                    let cursor_pos = vec2(cursor_pos.x * 2.0 - 1.0, -(cursor_pos.y * 2.0 - 1.0));
-
-                    let ray_eye =
-                        camera.projection.inverse() * vec4(cursor_pos.x, cursor_pos.y, 1.0, 1.0);
-                    let ray_eye = vec4(ray_eye.x, ray_eye.y, -1.0, 0.0);
-
-                    let world_ray = (*camera.transform * ray_eye).xyz().normalize();
-
-                    let origin = camera.transform.transform_point3(Vec3::ZERO);
-
-                    state.update(world, cmd, physics_state, origin, world_ray)?;
+                    let ray = screen_to_world_ray(cursor_pos, camera);
+                    state.update(world, cmd, physics_state, ray.origin.into(), ray.dir.into())?;
                 }
 
                 anyhow::Ok(())

@@ -10,6 +10,8 @@ ivy-core = { path = "../ivy-core/" }
 ivy-wgpu = { path = "../ivy-wgpu/" }
 ivy-assets = { path = "../ivy-assets/" }
 
+futures.workspace = true
+async-std.workspace = true
 winit.workspace = true
 anyhow.workspace = true
 flax.workspace = true

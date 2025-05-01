@@ -8,7 +8,7 @@ mod vector;
 use std::collections::BTreeSet;
 
 pub use bindings::*;
-use flax::{component::ComponentValue, CommandBuffer, Component, EntityRef};
+use flax::{component::ComponentValue, signal::BoxedSignal, CommandBuffer, Component, EntityRef};
 use glam::{IVec2, IVec3, Vec2, Vec3};
 use types::{InputEvent, InputKind};
 
@@ -42,6 +42,16 @@ impl InputState {
     ) -> Self {
         self.activations
             .push(Box::new(TriggerActionHandler::new(func, action)));
+        self
+    }
+
+    pub fn with_signal_action(
+        mut self,
+        action: Action<bool>,
+        signal: Component<BoxedSignal>,
+    ) -> Self {
+        self.activations
+            .push(Box::new(SignalActionHandler::new(action, signal)));
         self
     }
 
@@ -121,6 +131,41 @@ where
             if !self.active {
                 self.active = true;
                 (self.callback)(entity, cmd)?;
+            }
+        } else {
+            self.active = false
+        }
+
+        Ok(())
+    }
+
+    fn apply_input(&mut self, event: &InputEvent) {
+        self.action.apply(event);
+    }
+}
+
+pub(crate) struct SignalActionHandler {
+    active: bool,
+    signal: Component<BoxedSignal>,
+    action: Action<bool>,
+}
+
+impl SignalActionHandler {
+    pub(crate) fn new(action: Action<bool>, signal: Component<BoxedSignal>) -> Self {
+        Self {
+            action,
+            signal,
+            active: false,
+        }
+    }
+}
+
+impl ActionHandler for SignalActionHandler {
+    fn update(&mut self, entity: &EntityRef, cmd: &mut CommandBuffer) -> anyhow::Result<()> {
+        if self.action.read_stimulus() {
+            if !self.active {
+                self.active = true;
+                (entity.get_mut(self.signal)?).execute(*entity, cmd, ())?;
             }
         } else {
             self.active = false

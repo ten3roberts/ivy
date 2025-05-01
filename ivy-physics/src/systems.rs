@@ -3,7 +3,7 @@ use flax::{
     components::child_of,
     entity_ids,
     events::EventSubscriber,
-    fetch::{Copied, Modified, TransformFetch},
+    fetch::{Modified, TransformFetch},
     filter::{All, ChangeFilter, ChangeFilterMut, Without},
     system, BoxedSystem, CommandBuffer, Component, ComponentMut, EntityIds, FetchExt, Opt, Query,
     QueryBorrow, RelationExt, System, World,
@@ -241,11 +241,6 @@ pub fn attach_joints_system(world: &mut World) -> BoxedSystem {
         )
         .boxed()
 }
-
-type UpdateBodiesFetch = (
-    Copied<Component<RigidBodyHandle>>,
-    <BodyDynamicsQuery as TransformFetch<Modified>>::Output,
-);
 
 impl PhysicsState {
     /// writes body data into the physics state
