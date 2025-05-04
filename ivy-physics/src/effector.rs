@@ -9,24 +9,23 @@ use glam::Vec3;
 /// It is also possible to create a dummy effector to "record" physics effects.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Effector {
-    dv: Vec3,
-
     pending_force: Vec3,
     pending_torque: Vec3,
     pending_impulse: Vec3,
     pending_torque_impulse: Vec3,
+    pending_velocity_change: Vec3,
     wake: bool,
 }
 
 impl Effector {
     pub fn new() -> Self {
         Self {
-            dv: Vec3::ZERO,
             wake: false,
             pending_force: Vec3::ZERO,
             pending_torque: Vec3::ZERO,
             pending_impulse: Vec3::ZERO,
             pending_torque_impulse: Vec3::ZERO,
+            pending_velocity_change: Vec3::ZERO,
         }
     }
 
@@ -41,12 +40,12 @@ impl Effector {
     /// Clears all forces affecting the entity
     pub fn clear(&mut self) {
         *self = Self {
-            dv: Vec3::ZERO,
             wake: false,
             pending_force: Vec3::ZERO,
             pending_torque: Vec3::ZERO,
             pending_impulse: Vec3::ZERO,
             pending_torque_impulse: Vec3::ZERO,
+            pending_velocity_change: Vec3::ZERO,
         }
     }
 
@@ -69,9 +68,9 @@ impl Effector {
         self.wake = self.wake || wake;
     }
 
-    /// Applies a continuous acceleration independent of mass
-    pub fn apply_acceleration(&mut self, dv: Vec3, wake: bool) {
-        self.dv += dv;
+    /// Applies a instantaneous velocity change
+    pub fn apply_velocity_change(&mut self, dv: Vec3, wake: bool) {
+        self.pending_velocity_change += dv;
         self.wake = self.wake || wake
     }
 
@@ -101,6 +100,10 @@ impl Effector {
 
     pub fn pending_torque_impulse(&self) -> Vec3 {
         self.pending_torque_impulse
+    }
+
+    pub fn pending_velocity_change(&self) -> Vec3 {
+        self.pending_velocity_change
     }
 }
 

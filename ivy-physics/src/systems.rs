@@ -3,8 +3,9 @@ use flax::{
     components::child_of,
     entity_ids,
     events::EventSubscriber,
-    fetch::{Modified, TransformFetch},
+    fetch::{entity_refs, EntityRefs, Modified, Source, TransformFetch, Traverse},
     filter::{All, ChangeFilter, ChangeFilterMut, Without},
+    signal::BoxedSignal,
     system, BoxedSystem, CommandBuffer, Component, ComponentMut, EntityIds, FetchExt, Opt, Query,
     QueryBorrow, RelationExt, System, World,
 };
@@ -18,8 +19,8 @@ use ivy_core::{
 use rapier3d::{
     math::Isometry,
     prelude::{
-        ColliderBuilder, ColliderHandle, LockedAxes, RigidBodyBuilder, RigidBodyHandle,
-        RigidBodyType, SharedShape,
+        ColliderBuilder, ColliderHandle, CollisionEvent, LockedAxes, RigidBodyBuilder,
+        RigidBodyHandle, RigidBodyType,
     },
 };
 
@@ -70,62 +71,6 @@ pub fn register_bodies_system() -> BoxedSystem {
 
                         let rb_mass = state.rigidbody(rb).mass();
                         cmd.set(id, rb_handle(), rb).set(id, mass(), rb_mass);
-                    }
-                }
-
-                anyhow::Ok(())
-            },
-        )
-        .boxed()
-}
-
-pub fn register_colliders_system() -> BoxedSystem {
-    System::builder()
-        .with_cmd_mut()
-        .with_query(Query::new(physics_state().as_mut()))
-        .with_query(Query::new((
-            entity_ids(),
-            (collider_shape(), density(), restitution(), friction()).added(),
-            TransformQuery::new(),
-            (entity_ids(), rb_handle()).traverse(child_of),
-        )))
-        .build(
-            move |cmd: &mut CommandBuffer,
-                  mut physics_state: QueryBorrow<ComponentMut<PhysicsState>>,
-                  mut bodies: QueryBorrow<'_, _>| {
-                if let Some(state) = physics_state.first() {
-                    for (
-                        id,
-                        (shape, &density, &restitution, &friction),
-                        transform,
-                        (parent_id, &parent),
-                    ) in bodies.iter()
-                    {
-                        let local_position = if parent_id == id {
-                            Isometry::identity()
-                        } else {
-                            let transform: TransformQueryItem = transform;
-                            Isometry::new(
-                                (*transform.pos).into(),
-                                transform.rotation.to_scaled_axis().into(),
-                            )
-                        };
-
-                        let handle = state.attach_collider(
-                            id,
-                            ColliderBuilder::new(SharedShape::clone(shape))
-                                .density(density)
-                                .restitution(restitution)
-                                .friction(friction)
-                                .position(local_position)
-                                .build(),
-                            parent,
-                        );
-
-                        let rb = state.rigidbody(parent);
-                        cmd.set(id, collider_handle(), handle)
-                            .set(parent_id, mass(), rb.mass())
-                            .set(parent_id, center_of_mass(), (*rb.center_of_mass()).into());
                     }
                 }
 
@@ -243,6 +188,46 @@ pub fn attach_joints_system(world: &mut World) -> BoxedSystem {
 }
 
 impl PhysicsState {
+    #[system(with_query(Query::new((entity_ids(), collider_builder().added(), TransformQuery::new(), (entity_ids(), rb_handle()).traverse(child_of)))), with_cmd_mut)]
+    pub fn register_colliders_system(
+        self: &mut PhysicsState,
+        query: &mut QueryBorrow<(
+            EntityIds,
+            ChangeFilter<ColliderBuilder>,
+            TransformQuery,
+            Source<(EntityIds, Component<RigidBodyHandle>), Traverse>,
+        )>,
+        cmd: &mut CommandBuffer,
+    ) {
+        for (id, collider, transform, (parent_id, &parent)) in query {
+            let local_position = if parent_id == id {
+                Isometry::identity()
+            } else {
+                let transform: TransformQueryItem = transform;
+                Isometry::new(
+                    (*transform.pos).into(),
+                    transform.rotation.to_scaled_axis().into(),
+                )
+            };
+
+            let handle = self.attach_collider(
+                id,
+                collider.clone().position(local_position).build(),
+                parent,
+            );
+
+            self.recompute_mass(parent);
+            let rb = self.rigidbody(parent);
+            tracing::info!(
+                "Attaching collider {collider:?} to {parent:?} with mass {}",
+                rb.mass()
+            );
+            cmd.set(id, collider_handle(), handle)
+                .set(parent_id, mass(), rb.mass())
+                .set(parent_id, center_of_mass(), (*rb.center_of_mass()).into());
+        }
+    }
+
     /// writes body data into the physics state
     #[system(with_query(Query::new((rb_handle(), BodyDynamicsQuery::new().modified()))))]
     pub(crate) fn update_body_data_system(
@@ -294,6 +279,15 @@ impl PhysicsState {
         self.step();
     }
 
+    #[system(with_query(Query::new((entity_refs(), on_collision_signal().as_mut()))), with_cmd_mut)]
+    pub(crate) fn process_events_system(
+        self: &mut PhysicsState,
+        query: &mut QueryBorrow<(EntityRefs, ComponentMut<BoxedSignal<EntityCollisionEvent>>)>,
+        cmd: &mut CommandBuffer,
+    ) -> anyhow::Result<()> {
+        self.process_pending_events(query, cmd)
+    }
+
     #[system(with_query(Query::new(BodyDynamicsQueryMut::new())))]
     pub(crate) fn sync_bodies_after_step_system(
         self: &mut PhysicsState,
@@ -313,7 +307,11 @@ impl PhysicsState {
             body.add_force(effector.pending_force().into(), effector.should_wake());
             body.add_torque(effector.pending_torque().into(), effector.should_wake());
 
-            body.apply_impulse(effector.pending_impulse().into(), effector.should_wake());
+            body.apply_impulse(
+                (effector.pending_impulse() + effector.pending_velocity_change() * body.mass())
+                    .into(),
+                effector.should_wake(),
+            );
             body.apply_torque_impulse(
                 effector.pending_torque_impulse().into(),
                 effector.should_wake(),

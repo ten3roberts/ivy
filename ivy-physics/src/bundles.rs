@@ -4,12 +4,12 @@ use core::f32;
 use flax::EntityBuilder;
 use glam::Vec3;
 use ivy_core::Bundle;
-use rapier3d::prelude::{LockedAxes, RigidBodyType, SharedShape};
+use rapier3d::prelude::{ColliderBuilder, LockedAxes, RigidBodyType, SharedShape};
 
 use crate::{
     components::{
-        angular_velocity, can_sleep, collider_shape, density, effector, friction, inertia_tensor,
-        locked_axes, restitution, rigid_body_type, velocity,
+        angular_velocity, can_sleep, collider_builder, effector, inertia_tensor, locked_axes,
+        rigid_body_type, velocity,
     },
     Effector,
 };
@@ -116,47 +116,41 @@ impl Bundle for RigidBodyBundle {
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ColliderBundle {
-    shape: SharedShape,
-    density: f32,
-    friction: f32,
-    restitution: f32,
+    collider: ColliderBuilder,
 }
 
 impl ColliderBundle {
     pub fn new(shape: SharedShape) -> Self {
         Self {
-            shape,
-            density: 1.0,
-            friction: 0.0,
-            restitution: 0.0,
+            collider: ColliderBuilder::new(shape),
         }
+    }
+
+    pub fn from_builder(builder: ColliderBuilder) -> Self {
+        Self { collider: builder }
     }
 
     /// Set the restitution
     pub fn with_restitution(mut self, restitution: f32) -> Self {
-        self.restitution = restitution;
+        self.collider.restitution = restitution;
         self
     }
 
     /// Set the friction
     pub fn with_friction(mut self, friction: f32) -> Self {
-        self.friction = friction;
+        self.collider.friction = friction;
         self
     }
 
     /// Set the density
     pub fn with_density(mut self, density: f32) -> Self {
-        self.density = density;
+        self.collider = self.collider.density(density);
         self
     }
 }
 
 impl Bundle for ColliderBundle {
     fn mount(self, entity: &mut EntityBuilder) {
-        entity
-            .set(collider_shape(), self.shape)
-            .set(density(), self.density)
-            .set(restitution(), self.restitution)
-            .set(friction(), self.friction);
+        entity.set(collider_builder(), self.collider);
     }
 }

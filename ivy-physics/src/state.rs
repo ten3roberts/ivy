@@ -1,15 +1,21 @@
-use flax::{Component, ComponentMut, Entity, Fetch, QueryBorrow};
+use flax::{
+    fetch::EntityRefs, signal::BoxedSignal, CommandBuffer, Component, ComponentMut, Entity, Fetch,
+    QueryBorrow,
+};
 use glam::{Quat, Vec3};
 use ivy_core::components::{position, rotation};
 use nalgebra::Isometry3;
-use rapier3d::prelude::{
-    CCDSolver, Collider, ColliderHandle, ColliderSet, DefaultBroadPhase, GenericJoint,
-    ImpulseJointHandle, ImpulseJointSet, IntegrationParameters, IslandManager, MultibodyJointSet,
-    NarrowPhase, PhysicsPipeline, QueryFilter, QueryPipeline, Ray, RayIntersection, RigidBody,
-    RigidBodyHandle, RigidBodySet,
+use rapier3d::{
+    crossbeam,
+    prelude::{
+        CCDSolver, ChannelEventCollector, Collider, ColliderHandle, ColliderSet, CollisionEvent,
+        ContactForceEvent, DefaultBroadPhase, GenericJoint, ImpulseJointHandle, ImpulseJointSet,
+        IntegrationParameters, IslandManager, MultibodyJointSet, NarrowPhase, PhysicsPipeline,
+        QueryFilter, QueryPipeline, Ray, RayIntersection, RigidBody, RigidBodyHandle, RigidBodySet,
+    },
 };
 
-use crate::components::{angular_velocity, velocity};
+use crate::components::{angular_velocity, velocity, EntityCollisionEvent};
 
 #[derive(Debug, Clone)]
 pub struct RaycastHit {
@@ -50,11 +56,19 @@ pub struct PhysicsState {
     multibody_joints: MultibodyJointSet,
     ccd_solder: CCDSolver,
     query_pipeline: QueryPipeline,
+    collisions_rx: crossbeam::channel::Receiver<CollisionEvent>,
+    forces_rx: crossbeam::channel::Receiver<ContactForceEvent>,
     dt: f32,
+    event_collector: ChannelEventCollector,
 }
 
 impl PhysicsState {
     pub fn new(_: &PhysicsStateConfiguration, dt: f32) -> Self {
+        let (collisions_tx, collisions_rx) = crossbeam::channel::unbounded();
+        let (forces_tx, forces_rx) = crossbeam::channel::unbounded();
+
+        let event_collector = ChannelEventCollector::new(collisions_tx, forces_tx);
+
         Self {
             dt,
             bodies: RigidBodySet::new(),
@@ -68,6 +82,9 @@ impl PhysicsState {
             ccd_solder: CCDSolver::new(),
             query_pipeline: QueryPipeline::new(),
             gravity: -Vec3::Y * 9.81,
+            collisions_rx,
+            forces_rx,
+            event_collector,
         }
     }
 
@@ -129,6 +146,10 @@ impl PhysicsState {
         collider.user_data = id.as_bits() as u128;
         self.collider_set
             .insert_with_parent(collider, rb, &mut self.bodies)
+    }
+
+    pub fn recompute_mass(&mut self, rb: RigidBodyHandle) {
+        self.bodies[rb].recompute_mass_properties_from_colliders(&self.collider_set);
     }
 
     /// Attach a joint connecting two bodies
@@ -199,6 +220,11 @@ impl PhysicsState {
     }
 
     pub fn step(&mut self) {
+        assert!(
+            self.collisions_rx.is_empty(),
+            "Collision events not processed"
+        );
+
         let params = IntegrationParameters {
             dt: self.dt,
             min_ccd_dt: self.dt / 100.0,
@@ -218,8 +244,45 @@ impl PhysicsState {
             &mut self.ccd_solder,
             Some(&mut self.query_pipeline),
             &(),
-            &(),
+            &self.event_collector,
         );
+    }
+
+    pub fn process_pending_events(
+        &mut self,
+        signals: &mut QueryBorrow<(EntityRefs, ComponentMut<BoxedSignal<EntityCollisionEvent>>)>,
+        cmd: &mut CommandBuffer,
+    ) -> anyhow::Result<()> {
+        for event in self.collisions_rx.try_iter() {
+            for (id1, id2) in [
+                (event.collider1(), event.collider2()),
+                (event.collider2(), event.collider1()),
+            ] {
+                let id1 = Entity::try_from_bits(self.collider_set[id1].user_data as u64).unwrap();
+                let id2 = Entity::try_from_bits(self.collider_set[id2].user_data as u64).unwrap();
+
+                if let Ok((entity, signal)) = signals.get(id1) {
+                    signal.execute(
+                        entity,
+                        cmd,
+                        EntityCollisionEvent::from_collision_event(self, event),
+                    )?;
+                }
+
+                if let Ok((entity, signal)) = signals.get(id2) {
+                    signal.execute(
+                        entity,
+                        cmd,
+                        EntityCollisionEvent::from_collision_event(self, event).swap(),
+                    )?;
+                }
+            }
+        }
+
+        // TODO: force events
+        self.forces_rx.try_iter().for_each(|_| {});
+
+        Ok(())
     }
 
     pub fn update_bodies<'x, I>(&mut self, data: I)

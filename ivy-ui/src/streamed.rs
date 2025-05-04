@@ -214,7 +214,6 @@ where
 {
     fn update(&mut self, world: &World) -> bool {
         if let Ok(value) = self.query.borrow(world).get(self.target) {
-            tracing::info!("{:?} changed", self.component);
             self.state.set(Some(value.clone()));
         }
 

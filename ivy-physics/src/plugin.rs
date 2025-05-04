@@ -13,8 +13,8 @@ use crate::{
     components::{gravity, physics_state},
     state::{PhysicsState, PhysicsStateConfiguration},
     systems::{
-        attach_joints_system, gizmo_system, register_bodies_system, register_colliders_system,
-        unregister_bodies_system, unregister_colliders_system,
+        attach_joints_system, gizmo_system, register_bodies_system, unregister_bodies_system,
+        unregister_colliders_system,
     },
 };
 
@@ -79,14 +79,15 @@ impl Plugin for PhysicsPlugin {
             .with_system(unregister_colliders_system(world))
             .with_system(register_bodies_system())
             .flush()
-            .with_system(register_colliders_system())
+            .with_system(PhysicsState::register_colliders_system())
             .with_system(attach_joints_system(world))
             .flush()
             .with_system(PhysicsState::update_collider_position_system())
             .with_system(PhysicsState::update_body_data_system())
             .with_system(PhysicsState::apply_effectors_system())
             .with_system(PhysicsState::step_system())
-            .with_system(PhysicsState::sync_bodies_after_step_system());
+            .with_system(PhysicsState::sync_bodies_after_step_system())
+            .with_system(PhysicsState::process_events_system());
 
         if self.gizmos.rigidbody {
             schedule.with_system(gizmo_system());
