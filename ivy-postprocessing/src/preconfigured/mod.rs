@@ -5,8 +5,8 @@ use std::sync::Arc;
 use anyhow::Context;
 use flax::World;
 use ivy_assets::{stored::DynamicStore, AssetCache};
-use ivy_core::profiling::profile_scope;
-use ivy_ui::SharedUiInstance;
+use ivy_core::{components::engine, profiling::profile_scope};
+use ivy_ui::components::ui_instance;
 use ivy_wgpu::{
     rendergraph::{self, ExternalResources, RenderGraph, RenderGraphResources, TextureHandle},
     shader_library::{ShaderLibrary, ShaderModuleDesc},
@@ -17,8 +17,6 @@ use pbr::{PbrRenderGraph, PbrRenderGraphConfig};
 
 #[derive(Default)]
 pub struct SurfacePbrPipelineDesc {
-    /// Render Ui if configured
-    pub ui_instance: Option<SharedUiInstance>,
     pub pbr_config: PbrRenderGraphConfig,
 }
 
@@ -66,13 +64,16 @@ impl SurfacePbrRenderer {
             .resources
             .insert_texture(rendergraph::TextureDesc::External);
 
+        let ui_instance = world.get_clone(engine(), ui_instance()).ok();
+        tracing::info!(?ui_instance);
+
         let pbr = desc.pbr_config.configure(
             world,
             gpu,
             assets,
             store,
             &mut render_graph,
-            desc.ui_instance,
+            ui_instance,
             surface_texture,
         );
 
@@ -161,9 +162,7 @@ impl ivy_wgpu::layer::Renderer for SurfacePbrRenderer {
     }
 }
 
-pub struct SurfacePipelineDesc {
-    pub ui_instance: SharedUiInstance,
-}
+pub struct SurfacePipelineDesc {}
 
 /// Uses a rendergraph to render to a surface
 pub struct SurfaceRenderer {

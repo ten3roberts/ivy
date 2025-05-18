@@ -1,18 +1,20 @@
 use flax::{
-    BoxedSystem, Component, ComponentMut, Entity, FetchExt, Query, QueryBorrow, System, World,
+    components::name, BoxedSystem, Component, ComponentMut, Entity, FetchExt, Query, QueryBorrow,
+    System, World,
 };
 use glam::{vec3, EulerRot, Quat, Vec2, Vec3};
-use ivy_assets::AssetCache;
+use ivy_assets::{stored::DynamicStore, AssetCache};
 use ivy_core::{
     components::{main_camera, request_capture_mouse, rotation, TransformBundle},
+    math::{Axis2D, Axis3D},
     update_layer::{Plugin, ScheduleSetBuilder},
     Bundle, EntityBuilderExt, DEG_45,
 };
 use ivy_input::{
     components::input_state,
     types::{Key, NamedKey},
-    Action, Axis2D, Axis3D, BindingExt, CompositeBinding, CursorMoveBinding, InputState,
-    KeyBinding, MouseButtonBinding, ScrollBinding,
+    Action, BindingExt, CompositeBinding, CursorMoveBinding, InputState, KeyBinding,
+    MouseButtonBinding, ScrollBinding,
 };
 use ivy_physics::{
     components::{angular_velocity, velocity},
@@ -37,6 +39,7 @@ impl Plugin for FlyCameraPlugin {
         &self,
         world: &mut World,
         _: &AssetCache,
+        _: &mut DynamicStore,
         schedules: &mut ScheduleSetBuilder,
     ) -> anyhow::Result<()> {
         Entity::builder().mount(FreeCameraBundle).spawn(world);
@@ -115,6 +118,7 @@ impl Bundle for FreeCameraBundle {
             ));
 
         entity
+            .set(name(), "FlyCamera".to_string())
             .mount(TransformBundle::new(
                 vec3(0.0, 10.0, 10.0),
                 Quat::IDENTITY,

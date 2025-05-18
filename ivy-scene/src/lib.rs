@@ -1,3 +1,5 @@
+pub mod editor;
+
 use std::collections::BTreeMap;
 
 use flax::{

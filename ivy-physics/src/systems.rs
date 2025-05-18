@@ -19,8 +19,8 @@ use ivy_core::{
 use rapier3d::{
     math::Isometry,
     prelude::{
-        ColliderBuilder, ColliderHandle, CollisionEvent, LockedAxes, RigidBodyBuilder,
-        RigidBodyHandle, RigidBodyType,
+        ColliderBuilder, ColliderHandle, LockedAxes, RigidBodyBuilder, RigidBodyHandle,
+        RigidBodyType,
     },
 };
 
@@ -218,10 +218,6 @@ impl PhysicsState {
 
             self.recompute_mass(parent);
             let rb = self.rigidbody(parent);
-            tracing::info!(
-                "Attaching collider {collider:?} to {parent:?} with mass {}",
-                rb.mass()
-            );
             cmd.set(id, collider_handle(), handle)
                 .set(parent_id, mass(), rb.mass())
                 .set(parent_id, center_of_mass(), (*rb.center_of_mass()).into());

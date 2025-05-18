@@ -3,7 +3,7 @@ use violet::{
     core::{
         components::{color, draw_shape},
         shape,
-        style::{SizeExt, WidgetSize},
+        style::{SizeExt, WidgetSizeProps},
         Scope, Widget,
     },
     palette::Srgba,
@@ -13,7 +13,7 @@ use violet::{
 use crate::components::texture_dependency;
 
 pub struct RendergraphImage {
-    size: WidgetSize,
+    size: WidgetSizeProps,
     handle: TextureHandle,
 }
 
@@ -38,7 +38,7 @@ impl Widget for RendergraphImage {
 }
 
 impl SizeExt for RendergraphImage {
-    fn size_mut(&mut self) -> &mut WidgetSize {
+    fn size_mut(&mut self) -> &mut WidgetSizeProps {
         &mut self.size
     }
 }

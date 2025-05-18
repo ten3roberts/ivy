@@ -1,6 +1,6 @@
 use flax::{Entity, World};
 use glam::{vec3, EulerRot, Quat, Vec3};
-use ivy_assets::AssetCache;
+use ivy_assets::{stored::DynamicStore, AssetCache};
 use ivy_core::{
     app::PostInitEvent,
     layer::events::EventRegisterContext,
@@ -18,7 +18,7 @@ use ivy_game::{
 use ivy_graphics::texture::TextureData;
 use ivy_input::layer::InputLayer;
 use ivy_physics::{
-    components::{angular_velocity, friction, gravity_influence},
+    components::{angular_velocity, gravity_influence},
     ColliderBundle, PhysicsPlugin,
 };
 use ivy_postprocessing::preconfigured::{
@@ -137,7 +137,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
             .mount(
                 RigidBodyBundle::dynamic()
                     .with_mass(MASS)
-                    .with_angular_mass(INERTIA_TENSOR),
+                    .with_inertia_tensor(INERTIA_TENSOR),
             )
             .mount(
                 ColliderBundle::new(rapier3d::prelude::SharedShape::capsule_y(1.0, 1.0))
@@ -160,7 +160,6 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
         Quat::from_scaled_axis(vec3(0.0, 0.0, 0.1)),
     )
     .set(forward_pass(), red_material.clone())
-    .set(friction(), 0.8)
     .set(angular_velocity(), Vec3::Y * 10.0)
     .set(gravity_influence(), 1.0)
     .spawn(world);
@@ -214,7 +213,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
         .mount(TransformBundle::default().with_rotation(Quat::from_euler(
             EulerRot::YXZ,
             -2.0,
-            1.0,
+            -1.0,
             0.0,
         )))
         .set(
@@ -235,6 +234,7 @@ impl Layer for LogicLayer {
         &mut self,
         _: &mut World,
         _: &AssetCache,
+        _: &mut DynamicStore,
         mut events: EventRegisterContext<Self>,
     ) -> anyhow::Result<()> {
         events.subscribe(|_, ctx, _: &PostInitEvent| {

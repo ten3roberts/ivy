@@ -89,6 +89,17 @@ impl RigidBodyBundle {
         self
     }
 
+    pub fn with_mass(mut self, mass: f32) -> Self {
+        self.mass = mass;
+        self
+    }
+
+    /// Set the inertia tensor
+    pub fn with_inertia_tensor(mut self, inertia_tensor: f32) -> Self {
+        self.angular_mass = inertia_tensor;
+        self
+    }
+
     /// Set the can sleep
     pub fn with_can_sleep(mut self, can_sleep: bool) -> Self {
         self.can_sleep = can_sleep;

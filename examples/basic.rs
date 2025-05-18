@@ -8,7 +8,9 @@ use flax::{
 use glam::{vec3, EulerRot, Mat4, Quat, Vec3};
 use image::{DynamicImage, Rgba};
 use itertools::{Either, Itertools};
-use ivy_assets::{fs::AssetPath, loadable::ResourceDesc, Asset, AssetCache, AsyncAssetExt};
+use ivy_assets::{
+    fs::AssetPath, loadable::ResourceDesc, stored::DynamicStore, Asset, AssetCache, AsyncAssetExt,
+};
 use ivy_core::{
     app::PostInitEvent,
     gizmos,
@@ -46,7 +48,7 @@ use ivy_postprocessing::preconfigured::{
     SurfacePbrPipelineDesc, SurfacePbrRenderer,
 };
 use ivy_scene::{GltfNodeExt, NodeMountOptions};
-use ivy_ui::layer::{UiInputLayer, UiUpdateLayer};
+use ivy_ui::layer::{UiLayer, UiUpdateLayer};
 use ivy_wgpu::{
     components::{forward_pass, light_kind, light_params, shadow_pass, transparent_pass},
     driver::WinitDriver,
@@ -88,10 +90,9 @@ pub fn main() -> anyhow::Result<()> {
         .init();
 
     let (ui_tx, app_ui_rx) = flume::unbounded::<Box<dyn Widget>>();
-    let ui_input_layer = UiInputLayer::new(StreamWidget::new(app_ui_rx.into_stream()));
+    let ui_input_layer = UiLayer::new(StreamWidget::new(app_ui_rx.into_stream()));
 
-    let ui_layer = UiUpdateLayer::new(ui_input_layer.instance().clone());
-    let ui_instance = ui_layer.instance().clone();
+    let ui_layer = UiUpdateLayer::new();
 
     if let Err(err) = App::builder()
         .with_driver(WinitDriver::new(
@@ -120,7 +121,6 @@ pub fn main() -> anyhow::Result<()> {
                             }),
                             ..Default::default()
                         },
-                        ui_instance: Some(ui_instance.clone()),
                     },
                 ))
             },
@@ -168,6 +168,7 @@ impl Plugin for GizmosPlugin {
         &self,
         _: &mut World,
         _: &AssetCache,
+        _: &mut DynamicStore,
         schedules: &mut ScheduleSetBuilder,
     ) -> anyhow::Result<()> {
         schedules
@@ -403,6 +404,7 @@ impl Plugin for RotateSpotlightPlugin {
         &self,
         world: &mut World,
         _: &AssetCache,
+        _: &mut DynamicStore,
         schedules: &mut ScheduleSetBuilder,
     ) -> anyhow::Result<()> {
         flax::component! {
@@ -479,6 +481,7 @@ impl Plugin for GameUiPlugin {
         &self,
         _: &mut World,
         assets: &AssetCache,
+        _: &mut DynamicStore,
         _: &mut ScheduleSetBuilder,
     ) -> anyhow::Result<()> {
         self.ui_tx.send(Box::new(app_ui(assets.clone()))).unwrap();
@@ -496,6 +499,7 @@ impl Layer for LogicLayer {
         &mut self,
         _: &mut World,
         _: &AssetCache,
+        _: &mut DynamicStore,
         mut events: EventRegisterContext<Self>,
     ) -> anyhow::Result<()> {
         events.subscribe(|this, ctx, _: &PostInitEvent| this.setup_assets(ctx.world, ctx.assets));

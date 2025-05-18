@@ -3,7 +3,7 @@ use std::time::Duration;
 use flax::{components::child_of, system, FetchExt, World};
 use glam::{Mat4, Quat, Vec3};
 use itertools::Itertools;
-use ivy_assets::{Asset, AssetCache};
+use ivy_assets::{stored::DynamicStore, Asset, AssetCache};
 use ivy_core::{
     components::{delta_time, engine, position, rotation},
     update_layer::{Plugin, ScheduleSetBuilder},
@@ -20,6 +20,7 @@ impl Plugin for AnimationPlugin {
         &self,
         _: &mut World,
         _: &AssetCache,
+        _: &mut DynamicStore,
         schedules: &mut ScheduleSetBuilder,
     ) -> anyhow::Result<()> {
         schedules

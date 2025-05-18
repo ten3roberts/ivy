@@ -1,3 +1,4 @@
+use ivy_assets::stored::DynamicStore;
 pub use ivy_profiling::*;
 
 use crate::Layer;
@@ -36,6 +37,7 @@ impl Layer for ProfilingLayer {
         &mut self,
         _: &mut flax::World,
         _: &ivy_assets::AssetCache,
+        _: &mut DynamicStore,
         _events: crate::layer::events::EventRegisterContext<Self>,
     ) -> anyhow::Result<()>
     where

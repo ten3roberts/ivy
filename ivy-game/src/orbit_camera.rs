@@ -1,13 +1,14 @@
-use flax::{fetch::MutGuard, system, Entity, FetchExt, World};
+use flax::{components::name, fetch::MutGuard, system, Entity, FetchExt, World};
 use glam::{vec3, EulerRot, Quat, Vec2, Vec3};
-use ivy_assets::AssetCache;
+use ivy_assets::{stored::DynamicStore, AssetCache};
 use ivy_core::{
     components::{engine, main_camera, position, request_capture_mouse, rotation, TransformBundle},
+    math::Axis2D,
     update_layer::{Plugin, ScheduleSetBuilder},
     Bundle, EntityBuilderExt, DEG_90,
 };
 use ivy_input::{
-    components::input_state, types::MouseButton, Action, Axis2D, BindingExt, CompositeBinding,
+    components::input_state, types::MouseButton, Action, BindingExt, CompositeBinding,
     CursorMoveBinding, InputState, MouseButtonBinding, ScrollBinding,
 };
 use ivy_wgpu::components::{environment_data, projection_matrix};
@@ -30,6 +31,7 @@ impl Plugin for OrbitCameraPlugin {
         &self,
         world: &mut World,
         _: &AssetCache,
+        _: &mut DynamicStore,
         schedules: &mut ScheduleSetBuilder,
     ) -> anyhow::Result<()> {
         Entity::builder().mount(OrbitCameraBundle).spawn(world);
@@ -68,6 +70,7 @@ impl Bundle for OrbitCameraBundle {
 
         entity
             .mount(TransformBundle::default())
+            .set(name(), "OrbitCamera".to_string())
             .set(main_camera(), ())
             .set_default(projection_matrix())
             .set_default(environment_data())

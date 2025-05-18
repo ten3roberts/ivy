@@ -1121,7 +1121,7 @@ dependencies = [
 [[package]]
 name = "flax"
 version = "0.8.0"
-source = "git+https://github.com/ten3roberts/flax#2e0658e04523348d0d72a6bb3c0e24e3e00d839b"
+source = "git+https://github.com/ten3roberts/flax?branch=dev#c19bc2b95df7b7a31c392ebe2c9d73e36e2d8c2c"
 dependencies = [
  "anyhow",
  "atomic_refcell",
@@ -1143,7 +1143,7 @@ dependencies = [
 [[package]]
 name = "flax-derive"
 version = "0.8.0"
-source = "git+https://github.com/ten3roberts/flax#2e0658e04523348d0d72a6bb3c0e24e3e00d839b"
+source = "git+https://github.com/ten3roberts/flax?branch=dev#c19bc2b95df7b7a31c392ebe2c9d73e36e2d8c2c"
 dependencies = [
  "heck",
  "itertools 0.14.0",
@@ -2010,10 +2010,15 @@ name = "ivy-scene"
 version = "0.1.0"
 dependencies = [
  "flax",
+ "flume",
+ "futures",
  "glam",
+ "inventory",
+ "itertools 0.14.0",
  "ivy-assets",
  "ivy-core",
  "ivy-gltf",
+ "ivy-ui",
  "ivy-wgpu",
  "tracing",
 ]
@@ -2023,14 +2028,18 @@ name = "ivy-ui"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-std",
  "flax",
  "flume",
+ "futures",
+ "glam",
  "itertools 0.14.0",
  "ivy-assets",
  "ivy-core",
  "ivy-input",
  "ivy-wgpu",
  "parking_lot",
+ "slotmap",
  "tracing",
  "violet",
  "wgpu",
@@ -2205,7 +2214,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
 dependencies = [
  "cfg-if",
- "windows-targets 0.52.6",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -4260,6 +4269,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2df906b07856748fa3f6e0ad0cbaa047052d4a7dd609e231c4f72cee8c36f31"
 
 [[package]]
+name = "tween"
+version = "2.0.4"
+source = "git+https://github.com/ten3roberts/tween#5af61e2537aae963610c29e2ed6ba37127963fc5"
+dependencies = [
+ "glam",
+]
+
+[[package]]
 name = "tynm"
 version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4415,6 +4432,7 @@ dependencies = [
  "lru",
  "palette",
  "violet-core",
+ "violet-lucide",
  "violet-wgpu",
  "web-time",
 ]
@@ -4453,12 +4471,27 @@ dependencies = [
  "slotmap",
  "sync_wrapper",
  "tracing",
+ "tween",
  "tynm 0.1.10",
  "unicode-segmentation",
  "wasm-bindgen-futures",
  "web-sys",
  "web-time",
  "winit",
+]
+
+[[package]]
+name = "violet-lucide"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "flax",
+ "glam",
+ "itertools 0.14.0",
+ "palette",
+ "parking_lot",
+ "tracing",
+ "violet-core",
 ]
 
 [[package]]
@@ -5328,3 +5361,8 @@ checksum = "99a5bab8d7dedf81405c4bb1f2b83ea057643d9cb28778cea9eecddeedd2e028"
 dependencies = [
  "zune-core",
 ]
+
+[[patch.unused]]
+name = "flax"
+version = "0.8.0"
+source = "git+https://github.com/ten3roberts/flax#2e0658e04523348d0d72a6bb3c0e24e3e00d839b"

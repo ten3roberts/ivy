@@ -17,21 +17,21 @@ license-file = "./LICENSE"
 [workspace]
 exclude = ["violet"]
 members = [
-  "ivy-core",
-  "ivy-profiling",
-  "ivy-input",
-  "ivy-postprocessing",
-  "ivy-physics",
-  "ivy-random",
-  "ivy-assets",
-  "ivy-wgpu",
-  "ivy-gltf",
-  "ivy-scene",
-  "ivy-wgpu-types",
-  "ivy-profiling",
-  "ivy-graphics",
-  "ivy-game",
-  "ivy-ui",
+    "ivy-core",
+    "ivy-profiling",
+    "ivy-input",
+    "ivy-postprocessing",
+    "ivy-physics",
+    "ivy-random",
+    "ivy-assets",
+    "ivy-wgpu",
+    "ivy-gltf",
+    "ivy-scene",
+    "ivy-wgpu-types",
+    "ivy-profiling",
+    "ivy-graphics",
+    "ivy-game",
+    "ivy-ui",
 ]
 
 [workspace.dependencies]
@@ -40,17 +40,29 @@ either = { version = "1.13", features = ["serde"] }
 rand_pcg = "0.9"
 naga_oil = "0.15"
 anyhow = { version = "1.0", features = ["backtrace"] }
-async-std = { version = "1.0"}
+async-std = { version = "1.0" }
 atomic_refcell = "0.1"
 bytemuck = { version = "1.21", features = ["derive"] }
 dashmap = "6.0"
-flax = { git = "https://github.com/ten3roberts/flax", features = [ "serde", "derive", "puffin", "rayon", "bytemuck" ] }
+flax = { git = "https://github.com/ten3roberts/flax", branch = "dev", features = [
+    "serde",
+    "derive",
+    "puffin",
+    "rayon",
+    "bytemuck",
+] }
 flume = "0.11"
 futures = "0.3"
 glam = { version = "0.30", features = ["bytemuck", "rand"] }
 derivative = "2.2"
 gltf = "1.0"
-image = { version = "0.25.1", default-features = false, features = ["png", "jpeg", "rayon", "hdr", "exr"] }
+image = { version = "0.25.1", default-features = false, features = [
+    "png",
+    "jpeg",
+    "rayon",
+    "hdr",
+    "exr",
+] }
 itertools = "0.14"
 mikktspace = "0.3"
 once_cell = "1.0"
@@ -69,7 +81,10 @@ thiserror = "2.0"
 base64 = "0.13"
 urlencoding = "2.0"
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "parking_lot"] }
+tracing-subscriber = { version = "0.3", features = [
+    "env-filter",
+    "parking_lot",
+] }
 tracing-tree = "0.4"
 wgpu = "22.1.0"
 winit = "0.30"
@@ -77,9 +92,10 @@ rayon = "1.0"
 ordered-float = { version = "5.0", features = ["serde"] }
 rapier3d = { version = "0.23", features = ["simd-stable", "parallel"] }
 nalgebra = { version = "0.33", features = ["convert-glam030"] }
-violet = { path = "./violet", version = "*" }
+violet = { path = "./violet", features = ["lucide"], version = "*" }
 tynm = "0.2"
 futures-signals = "0.3"
+inventory = "0.3"
 
 [dependencies]
 ivy-assets = { path = "./ivy-assets", version = "0.10" }
@@ -128,16 +144,16 @@ rapier3d.workspace = true
 [features]
 default = []
 serde = [
-  "ivy-core/serde",
-  "ivy-physics/serde",
-  "ivy-wgpu/serde",
-  "ivy-wgpu-types/serde",
-  "ivy-assets/serde",
-  "ivy-input/serde",
-  "ivy-gltf/serde",
-  "ivy-graphics/serde"
+    "ivy-core/serde",
+    "ivy-physics/serde",
+    "ivy-wgpu/serde",
+    "ivy-wgpu-types/serde",
+    "ivy-assets/serde",
+    "ivy-input/serde",
+    "ivy-gltf/serde",
+    "ivy-graphics/serde",
 ]
-profile = [ "ivy-core/profile" ]
+profile = ["ivy-core/profile"]
 
 [profile.dev.package]
 image = { opt-level = 3, debug = true, debug-assertions = false }
@@ -155,3 +171,4 @@ opt-level = 3
 [patch.crates-io]
 flax = { git = "https://github.com/ten3roberts/flax" }
 nalgebra = { git = "https://github.com/ten3roberts/nalgebra" }
+tween = { git = "https://github.com/ten3roberts/tween" }

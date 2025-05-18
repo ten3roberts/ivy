@@ -3,7 +3,7 @@ use flax::{
 };
 use glam::{vec3, EulerRot, Quat, Vec2, Vec3};
 use itertools::Itertools;
-use ivy_assets::{fs::AssetPath, AssetCache};
+use ivy_assets::{fs::AssetPath, stored::DynamicStore, AssetCache};
 use ivy_core::{
     app::PostInitEvent,
     layer::events::EventRegisterContext,
@@ -13,7 +13,9 @@ use ivy_core::{
     update_layer::{FixedTimeStep, Plugin, ScheduleSetBuilder, ScheduledLayer},
     App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer,
 };
-use ivy_engine::{is_static, main_camera, rotation, scale, RigidBodyBundle, TransformBundle};
+use ivy_engine::{
+    engine, is_static, main_camera, rotation, scale, RigidBodyBundle, TransformBundle,
+};
 use ivy_game::{
     fly_camera::{camera_speed, FlyCameraPlugin},
     ray_picker::RayPickingPlugin,
@@ -22,14 +24,19 @@ use ivy_game::{
 use ivy_graphics::texture::TextureData;
 use ivy_input::layer::InputLayer;
 use ivy_physics::{
-    components::{collider_shape, rigid_body_type},
+    components::{collider_builder, rigid_body_type},
     ColliderBundle, PhysicsPlugin,
 };
 use ivy_postprocessing::preconfigured::{
     pbr::{PbrRenderGraphConfig, SkyboxConfig},
     SurfacePbrPipelineDesc, SurfacePbrRenderer,
 };
-use ivy_ui::layer::{UiInputLayer, UiUpdateLayer};
+use ivy_scene::editor::hierarchy_panel::HierarchyPanel;
+use ivy_ui::{
+    layer::{UiLayer, UiUpdateLayer},
+    screens::{screen_state, Screen},
+    streamed::StreamedUiPlugin,
+};
 use ivy_wgpu::{
     components::*,
     driver::WinitDriver,
@@ -40,12 +47,22 @@ use ivy_wgpu::{
     primitives::{CapsulePrimitive, CubePrimitive, UvSpherePrimitive},
     renderer::{EnvironmentData, RenderObjectBundle},
 };
-use rapier3d::prelude::{RigidBodyType, SharedShape};
+use rapier3d::prelude::{ColliderBuilder, RigidBodyType, SharedShape};
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
 use violet::{
-    core::{layout::Align, state::State, style::SizeExt, to_owned, widget::*, Widget},
+    core::{
+        components::LayoutAlignment,
+        layout::Align,
+        state::StateExt,
+        style::{element_accent, SizeExt},
+        to_owned,
+        unit::Unit,
+        widget::*,
+        Widget,
+    },
     futures_signals::signal::Mutable,
+    lucide::icons::{LUCIDE_APP_WINDOW, LUCIDE_LEAF},
     palette::Srgba,
 };
 use wgpu::TextureFormat;
@@ -70,12 +87,6 @@ pub fn main() -> anyhow::Result<()> {
                 .with_span_retrace(true),
         )
         .init();
-
-    let ui_state = Mutable::new(UiState::default());
-    let ui_input_layer = UiInputLayer::new(ui_app(ui_state.clone()));
-
-    let ui_layer = UiUpdateLayer::new(ui_input_layer.instance().clone());
-    let ui_instance = ui_layer.instance().clone();
 
     if let Err(err) = App::builder()
         .with_driver(WinitDriver::new(
@@ -104,20 +115,18 @@ pub fn main() -> anyhow::Result<()> {
                             }),
                             ..Default::default()
                         },
-                        ui_instance: Some(ui_instance.clone()),
                     },
                 ))
             },
         ))
-        .with_layer(ui_input_layer)
+        .with_layer(UiLayer::new())
         .with_layer(InputLayer::new())
         .with_layer(LogicLayer)
         .with_layer(
             ScheduledLayer::new(FixedTimeStep::new(0.02))
                 .with_plugin(FlyCameraPlugin)
-                .with_plugin(UiStatePlugin {
-                    state: ui_state.clone(),
-                })
+                .with_plugin(StreamedUiPlugin)
+                .with_plugin(ExamplePlugin)
                 .with_plugin(PhysicsPlugin::new())
                 .with_plugin(RayPickingPlugin)
                 .with_plugin(TransformUpdatePlugin),
@@ -130,7 +139,7 @@ pub fn main() -> anyhow::Result<()> {
             ),
             fov: 1.0,
         }))
-        .with_layer(ui_layer)
+        .with_layer(UiUpdateLayer::new())
         .run()
     {
         tracing::error!("{err:?}");
@@ -140,40 +149,46 @@ pub fn main() -> anyhow::Result<()> {
     }
 }
 
-pub fn ui_app(state: Mutable<UiState>) -> impl Widget {
-    let input = Mutable::new("This is some text".to_string());
+pub struct MainUi {
+    state: Mutable<UiState>,
+}
 
-    let test = card(SignalWidget(state.signal_ref(move |v| {
-        col((
-            label(format!("camera speed: {:.1}", v.camera_speed)),
-            label(format!("entity count: {}", v.entity_count)),
-        ))
-    })));
+impl Screen for MainUi {
+    fn create(self, scope: &mut violet::core::Scope<'_>, _: ivy_ui::screens::ScreenLifetimeToken) {
+        let input = Mutable::new("This is some text".to_string());
 
-    let state = Mutable::new(0);
-    let radio_buttons = col((0..4)
-        .map(|i| {
-            to_owned!(state);
-            row(Radio::new(
-                label(format!("{i}")),
-                state.map_value(move |v| v == i, move |_| i),
+        let test = card(SignalWidget(self.state.signal_ref(move |v| {
+            col((
+                HierarchyPanel::new(),
+                label(format!("camera speed: {:.1}", v.camera_speed)),
             ))
-        })
-        .collect_vec());
+        })));
 
-    Stack::new((
-        Stack::new(card(col((test, TextInput::new(input.clone())))))
-            .with_maximize(Vec2::ONE)
-            .with_horizontal_alignment(Align::Start),
-        Stack::new(card(radio_buttons))
-            .with_maximize(Vec2::ONE)
-            .with_horizontal_alignment(Align::End)
-            .with_vertical_alignment(Align::End),
-        Stack::new(card(label("Ivy")))
-            .with_maximize(Vec2::ONE)
-            .with_horizontal_alignment(Align::Center),
-    ))
-    .with_maximize(Vec2::ONE)
+        let state = Mutable::new(0);
+        let radio_buttons = col((0..4)
+            .map(|i| {
+                to_owned!(state);
+                row(Radio::new(
+                    label(format!("{i}")),
+                    state.map_value(move |v| v == i, move |_| i),
+                ))
+            })
+            .collect_vec());
+
+        maximized((
+            card(Collapsible::label("Scene", HierarchyPanel::new()))
+                .with_min_size(Unit::px2(200.0, 0.0))
+                .with_item_align(LayoutAlignment::new(Align::Start, Align::Start)),
+            card(radio_buttons).with_item_align(LayoutAlignment::new(Align::End, Align::Start)),
+            card(row((
+                label(LUCIDE_LEAF).with_color(element_accent()),
+                label("UI Example"),
+                label(LUCIDE_APP_WINDOW),
+            )))
+            .with_item_align(LayoutAlignment::new(Align::Center, Align::Start)),
+        ))
+        .mount(scope);
+    }
 }
 
 struct LogicLayer;
@@ -183,6 +198,7 @@ impl Layer for LogicLayer {
         &mut self,
         _: &mut World,
         _: &AssetCache,
+        _: &mut DynamicStore,
         mut events: EventRegisterContext<Self>,
     ) -> anyhow::Result<()> {
         events.subscribe(|_, ctx, _: &PostInitEvent| {
@@ -237,8 +253,8 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
     let cube = |pos: Vec3, size: Vec3| {
         let mut builder = body();
         builder.set(ivy_core::components::position(), pos).set(
-            collider_shape(),
-            SharedShape::cuboid(size.x, size.y, size.z),
+            collider_builder(),
+            ColliderBuilder::cuboid(size.x, size.y, size.z),
         );
         builder
     };
@@ -251,7 +267,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
                 mesh(),
                 MeshDesc::Content(assets.load(&UvSpherePrimitive::default())),
             )
-            .set(collider_shape(), SharedShape::ball(size));
+            .set(collider_builder(), ColliderBuilder::ball(size));
         builder
     };
 
@@ -263,7 +279,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
                 mesh(),
                 MeshDesc::Content(assets.load(&CapsulePrimitive::default())),
             )
-            .set(collider_shape(), SharedShape::capsule_y(1.0, 1.0));
+            .set(collider_builder(), ColliderBuilder::capsule_y(1.0, 1.0));
         builder
     };
 
@@ -314,20 +330,25 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
     Ok(())
 }
 
-struct UiStatePlugin {
-    state: Mutable<UiState>,
-}
+struct ExamplePlugin;
 
-impl Plugin for UiStatePlugin {
+impl Plugin for ExamplePlugin {
     fn install(
         &self,
-        _: &mut World,
+        world: &mut World,
         _: &AssetCache,
+        _: &mut DynamicStore,
         schedules: &mut ScheduleSetBuilder,
     ) -> anyhow::Result<()> {
+        let state = Mutable::new(UiState::default());
+
+        world.get(engine(), screen_state())?.open(MainUi {
+            state: state.clone(),
+        });
+
         schedules
             .per_tick_mut()
-            .with_system(sync_ui_state_system(self.state.clone()));
+            .with_system(sync_ui_state_system(state));
 
         Ok(())
     }

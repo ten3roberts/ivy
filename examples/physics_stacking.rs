@@ -1,6 +1,6 @@
 use flax::{Entity, World};
 use glam::{vec3, EulerRot, Quat, Vec3};
-use ivy_assets::{fs::AssetPath, AssetCache};
+use ivy_assets::{fs::AssetPath, stored::DynamicStore, AssetCache};
 use ivy_core::{
     app::PostInitEvent,
     layer::events::EventRegisterContext,
@@ -19,7 +19,7 @@ use ivy_game::{
 use ivy_graphics::texture::TextureData;
 use ivy_input::layer::InputLayer;
 use ivy_physics::{
-    components::{collider_shape, rigid_body_type},
+    components::{collider_builder, rigid_body_type},
     ColliderBundle, PhysicsPlugin,
 };
 use ivy_postprocessing::preconfigured::{
@@ -36,7 +36,7 @@ use ivy_wgpu::{
     primitives::{CapsulePrimitive, CubePrimitive, UvSpherePrimitive},
     renderer::{EnvironmentData, RenderObjectBundle},
 };
-use rapier3d::prelude::{RigidBodyType, SharedShape};
+use rapier3d::prelude::{ColliderBuilder, RigidBodyType, SharedShape};
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
 use wgpu::TextureFormat;
@@ -154,8 +154,8 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
     let cube = |pos: Vec3, size: Vec3| {
         let mut builder = body();
         builder.set(ivy_core::components::position(), pos).set(
-            collider_shape(),
-            SharedShape::cuboid(size.x, size.y, size.z),
+            collider_builder(),
+            ColliderBuilder::cuboid(size.x, size.y, size.z),
         );
         builder
     };
@@ -168,7 +168,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
                 mesh(),
                 MeshDesc::Content(assets.load(&UvSpherePrimitive::default())),
             )
-            .set(collider_shape(), SharedShape::ball(size));
+            .set(collider_builder(), ColliderBuilder::ball(size));
         builder
     };
 
@@ -180,7 +180,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
                 mesh(),
                 MeshDesc::Content(assets.load(&CapsulePrimitive::default())),
             )
-            .set(collider_shape(), SharedShape::capsule_y(1.0, 1.0));
+            .set(collider_builder(), ColliderBuilder::capsule_y(1.0, 1.0));
         builder
     };
 
@@ -247,6 +247,7 @@ impl Layer for LogicLayer {
         &mut self,
         _: &mut World,
         _: &AssetCache,
+        _: &mut DynamicStore,
         mut events: EventRegisterContext<Self>,
     ) -> anyhow::Result<()> {
         events.subscribe(|_, ctx, _: &PostInitEvent| {

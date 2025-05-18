@@ -1,6 +1,6 @@
 use flax::{Entity, World};
 use glam::{vec3, Quat, Vec3};
-use ivy_assets::AssetCache;
+use ivy_assets::{stored::DynamicStore, AssetCache};
 use ivy_core::{
     components::{main_camera, TransformBundle},
     update_layer::{Plugin, ScheduleSetBuilder},
@@ -16,6 +16,7 @@ impl Plugin for StandaloneCameraPlugin {
         &self,
         world: &mut World,
         _: &AssetCache,
+        _: &mut DynamicStore,
         _: &mut ScheduleSetBuilder,
     ) -> anyhow::Result<()> {
         Entity::builder().mount(StandaloneCameraBundle).spawn(world);

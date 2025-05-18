@@ -1,6 +1,6 @@
 use downcast_rs::{impl_downcast, Downcast};
 use flax::{Entity, Schedule, World};
-use ivy_assets::AssetCache;
+use ivy_assets::{stored::DynamicStore, AssetCache};
 
 use crate::{
     app::TickEvent,
@@ -21,6 +21,7 @@ pub trait Layer: 'static {
         &mut self,
         world: &mut World,
         assets: &AssetCache,
+        store: &mut DynamicStore,
         events: EventRegisterContext<Self>,
     ) -> anyhow::Result<()>
     where
@@ -36,6 +37,7 @@ pub trait LayerDyn: 'static + Downcast {
         &mut self,
         world: &mut World,
         assets: &AssetCache,
+        store: &mut DynamicStore,
         events: &mut EventRegistry,
         index: usize,
     ) -> anyhow::Result<()>;
@@ -48,10 +50,16 @@ impl<T: Layer> LayerDyn for T {
         &mut self,
         world: &mut World,
         assets: &AssetCache,
+        store: &mut DynamicStore,
         events: &mut EventRegistry,
         index: usize,
     ) -> anyhow::Result<()> {
-        self.register(world, assets, EventRegisterContext::new(events, index))
+        self.register(
+            world,
+            assets,
+            store,
+            EventRegisterContext::new(events, index),
+        )
     }
 }
 
@@ -82,6 +90,7 @@ impl Layer for EngineLayer {
         &mut self,
         world: &mut World,
         assets: &AssetCache,
+        store: &mut DynamicStore,
         mut events: EventRegisterContext<Self>,
     ) -> anyhow::Result<()> {
         Entity::builder()

@@ -9,7 +9,7 @@ use std::{
 
 use anyhow::Context;
 use flax::{Schedule, ScheduleBuilder, World};
-use ivy_assets::AssetCache;
+use ivy_assets::{stored::DynamicStore, AssetCache};
 
 use crate::{
     app::{PostInitEvent, TickEvent},
@@ -32,6 +32,7 @@ pub trait Plugin {
         &self,
         world: &mut World,
         assets: &AssetCache,
+        store: &mut DynamicStore,
         schedules: &mut ScheduleSetBuilder,
     ) -> anyhow::Result<()>;
 
@@ -55,9 +56,10 @@ impl<U: Plugin> Plugin for Box<U> {
         &self,
         world: &mut World,
         assets: &AssetCache,
+        store: &mut DynamicStore,
         schedules: &mut ScheduleSetBuilder,
     ) -> Result<(), anyhow::Error> {
-        (**self).install(world, assets, schedules)
+        (**self).install(world, assets, store, schedules)
     }
 }
 
@@ -304,12 +306,17 @@ impl ScheduledLayer {
         self
     }
 
-    pub fn register(&mut self, world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
+    pub fn register(
+        &mut self,
+        world: &mut World,
+        assets: &AssetCache,
+        store: &mut DynamicStore,
+    ) -> anyhow::Result<()> {
         assert!(self.schedules.is_none());
 
         let plugins = mem::take(&mut self.plugins);
         for plugin in Self::sort_plugins(&plugins)? {
-            plugin.install(world, assets, &mut self.builder)?;
+            plugin.install(world, assets, store, &mut self.builder)?;
         }
 
         self.schedules = Some(self.builder.build());
@@ -447,12 +454,15 @@ impl Layer for ScheduledLayer {
         &mut self,
         _: &mut World,
         _: &AssetCache,
+        _: &mut DynamicStore,
         mut events: EventRegisterContext<Self>,
     ) -> anyhow::Result<()>
     where
         Self: Sized,
     {
-        events.subscribe(|this, ctx, _: &PostInitEvent| this.register(ctx.world, ctx.assets));
+        events.subscribe(|this, ctx, _: &PostInitEvent| {
+            this.register(ctx.world, ctx.assets, ctx.store)
+        });
         events.subscribe(|this, ctx, _: &TickEvent| this.tick(ctx.world));
 
         Ok(())

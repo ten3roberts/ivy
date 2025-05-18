@@ -3,7 +3,7 @@ use std::iter::repeat;
 use flax::{component, BatchSpawn, FetchExt, Query, System, World};
 use glam::{vec3, Mat4, Quat, Vec3};
 use itertools::iproduct;
-use ivy_assets::{fs::AssetPath, AssetCache};
+use ivy_assets::{fs::AssetPath, stored::DynamicStore, AssetCache};
 use ivy_core::{
     app::PostInitEvent,
     layer::events::EventRegisterContext,
@@ -178,6 +178,7 @@ impl Layer for LogicLayer {
         &mut self,
         _: &mut World,
         _: &AssetCache,
+        _: &mut DynamicStore,
         mut events: EventRegisterContext<Self>,
     ) -> anyhow::Result<()> {
         events.subscribe(|this, ctx, _: &PostInitEvent| this.setup_objects(ctx.world, ctx.assets));
@@ -197,6 +198,7 @@ impl Plugin for DynamicsPlugin {
         &self,
         _: &mut World,
         _: &AssetCache,
+        _: &mut DynamicStore,
         schedules: &mut ivy_core::update_layer::ScheduleSetBuilder,
     ) -> anyhow::Result<()> {
         let rotate_system = System::builder()

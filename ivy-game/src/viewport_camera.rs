@@ -1,5 +1,6 @@
 use flax::Query;
 use glam::Mat4;
+use ivy_assets::stored::DynamicStore;
 use ivy_core::{components::main_camera, Layer};
 use ivy_wgpu::{components::projection_matrix, events::ResizedEvent, renderer::EnvironmentData};
 
@@ -24,6 +25,7 @@ impl Layer for ViewportCameraLayer {
         &mut self,
         _: &mut flax::World,
         _: &ivy_assets::AssetCache,
+        _: &mut DynamicStore,
         mut events: ivy_core::events::EventRegisterContext<Self>,
     ) -> anyhow::Result<()>
     where

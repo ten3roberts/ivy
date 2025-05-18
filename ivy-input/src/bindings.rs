@@ -1,6 +1,7 @@
 use std::{mem, ops::Mul};
 
 use glam::{vec2, IVec2, IVec3, Vec2, Vec3};
+use ivy_core::math::{Axis2D, Axis3D};
 use winit::{
     event::MouseButton,
     keyboard::{Key, SmolStr},
@@ -579,19 +580,6 @@ impl Binding for ScrollSteppedBinding {
     fn bindings(&self) -> Vec<InputKind> {
         vec![InputKind::Scroll]
     }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Axis2D {
-    X,
-    Y,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Axis3D {
-    X,
-    Y,
-    Z,
 }
 
 pub trait BindingExt

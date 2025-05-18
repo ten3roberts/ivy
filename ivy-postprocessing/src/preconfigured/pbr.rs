@@ -3,8 +3,11 @@ use std::{future::ready, mem::size_of};
 use flax::World;
 use futures::{stream, StreamExt};
 use image::DynamicImage;
-use ivy_assets::{stored::DynamicStore, AssetCache, AsyncAssetExt};
-use ivy_ui::{node::UiRenderNode, SharedUiInstance};
+use ivy_assets::{
+    stored::{DynamicStore, Handle},
+    AssetCache, AsyncAssetExt,
+};
+use ivy_ui::{node::UiRenderNode, violet::wgpu::app::AppInstance};
 use ivy_wgpu::{
     components::{forward_pass, transparent_pass},
     renderer::{
@@ -118,7 +121,7 @@ impl PbrRenderGraphConfig {
         assets: &AssetCache,
         store: &mut DynamicStore,
         render_graph: &mut RenderGraph,
-        ui_instance: Option<SharedUiInstance>,
+        ui_instance: Option<Handle<AppInstance>>,
         destination: TextureHandle,
     ) -> PbrRenderGraph {
         let object_manager = store.insert(ObjectManager::new(world, gpu));

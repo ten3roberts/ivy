@@ -5,7 +5,7 @@ use flax::{
     QueryBorrow, System, World,
 };
 use glam::{Vec2, Vec3};
-use ivy_assets::AssetCache;
+use ivy_assets::{stored::DynamicStore, AssetCache};
 use ivy_core::{
     components::{engine, gizmos, main_camera, position, rotation, TransformBundle},
     gizmos::{Gizmos, Sphere},
@@ -151,6 +151,7 @@ impl Plugin for RayPickingPlugin {
         &self,
         world: &mut World,
         _: &AssetCache,
+        _: &mut DynamicStore,
         schedules: &mut ScheduleSetBuilder,
     ) -> anyhow::Result<()> {
         let mut left_click_action = Action::new();

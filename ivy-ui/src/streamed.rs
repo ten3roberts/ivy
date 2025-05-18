@@ -7,7 +7,7 @@ use flax::{
     BoxedSystem, Component, ComponentMut, Entity, FetchExt, Query, System, World,
 };
 use futures::{FutureExt, Stream};
-use ivy_assets::AssetCache;
+use ivy_assets::{stored::DynamicStore, AssetCache};
 use ivy_core::{
     components::engine,
     update_layer::{Plugin, ScheduleSetBuilder},
@@ -16,6 +16,8 @@ use violet::{
     core::{Scope, ScopeRef},
     futures_signals::signal::{Mutable, MutableSignalCloned, SignalExt, SignalStream},
 };
+
+use crate::components::ui_instance;
 
 flax::component! {
     pub streamed: Vec<Box<dyn Streamed>>,
@@ -338,11 +340,15 @@ impl Plugin for StreamedUiPlugin {
         &self,
         world: &mut World,
         _: &AssetCache,
+        store: &mut DynamicStore,
         schedules: &mut ScheduleSetBuilder,
     ) -> anyhow::Result<()> {
         let (tx, rx) = flume::unbounded();
-        world.set(engine(), streamed_tx(), tx)?;
+        world.set(engine(), streamed_tx(), tx.clone())?;
         world.set(engine(), streamed(), Default::default())?;
+
+        let ui = store.get_mut(&*world.get(engine(), ui_instance())?);
+        ui.root_scope().set_context(streamed_tx(), tx);
 
         schedules
             .per_tick_mut()

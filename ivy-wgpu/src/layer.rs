@@ -175,6 +175,7 @@ impl Layer for GraphicsLayer {
         &mut self,
         world: &mut World,
         _: &AssetCache,
+        _: &mut DynamicStore,
         mut events: ivy_core::layer::events::EventRegisterContext<Self>,
     ) -> anyhow::Result<()>
     where

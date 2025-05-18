@@ -73,6 +73,7 @@ impl App {
             layer.register_dyn(
                 &mut self.world,
                 &self.assets,
+                &mut self.store,
                 &mut self.event_registry,
                 index,
             )?;

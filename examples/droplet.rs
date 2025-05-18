@@ -1,6 +1,6 @@
 use flax::{Entity, World};
 use glam::{Quat, Vec3};
-use ivy_assets::{fs::AssetPath, Asset, AssetCache, AsyncAssetExt};
+use ivy_assets::{fs::AssetPath, stored::DynamicStore, Asset, AssetCache, AsyncAssetExt};
 use ivy_core::{
     app::PostInitEvent,
     layer::events::EventRegisterContext,
@@ -123,6 +123,7 @@ impl Layer for LogicLayer {
         &mut self,
         _: &mut World,
         _: &AssetCache,
+        _: &mut DynamicStore,
         mut events: EventRegisterContext<Self>,
     ) -> anyhow::Result<()> {
         events.subscribe(|_, ctx, _: &PostInitEvent| {

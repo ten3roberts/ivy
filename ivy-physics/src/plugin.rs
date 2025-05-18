@@ -2,7 +2,7 @@ use std::any::type_name;
 
 use flax::World;
 use glam::Vec3;
-use ivy_assets::AssetCache;
+use ivy_assets::{stored::DynamicStore, AssetCache};
 use ivy_core::{
     components::engine,
     transforms::TransformUpdatePlugin,
@@ -62,6 +62,7 @@ impl Plugin for PhysicsPlugin {
         &self,
         world: &mut World,
         _: &AssetCache,
+        _: &mut DynamicStore,
         schedules: &mut ScheduleSetBuilder,
     ) -> anyhow::Result<()> {
         let dt = schedules.fixed_mut().time_step().delta_time() as f32;
