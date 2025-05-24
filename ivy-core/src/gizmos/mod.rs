@@ -1,6 +1,7 @@
 use dashmap::DashMap;
-use glam::{Mat4, Vec3};
+use glam::{Mat4, Vec3, Vec4};
 use itertools::Itertools;
+use palette::Srgba;
 
 use crate::{Color, ColorExt};
 
@@ -344,11 +345,39 @@ impl Gizmos {
 }
 
 #[derive(Default, Debug, Clone)]
+pub struct GizmoVertex {
+    pub pos: Vec3,
+    pub normal: Vec3,
+    pub tangent: Vec4,
+    pub color: Srgba,
+}
+
+impl GizmoVertex {
+    pub fn new(pos: Vec3, normal: Vec3, tangent: Vec4, color: Srgba) -> Self {
+        Self {
+            pos,
+            normal,
+            tangent,
+            color,
+        }
+    }
+}
+
+#[derive(Default, Debug, Clone)]
 pub struct GizmosSection {
+    mesh: Vec<GizmoVertex>,
+    indices: Vec<u32>,
     primitives: Vec<GizmoPrimitive>,
 }
 
 impl GizmosSection {
+    /// Add geometry to the current section
+    pub fn add_geometry(&mut self, vertices: &[GizmoVertex], indices: &[u32]) {
+        self.indices
+            .extend(indices.iter().map(|i| i + self.mesh.len() as u32));
+        self.mesh.extend_from_slice(vertices);
+    }
+
     /// Adds a new gizmos to the current section
     pub fn draw(&mut self, gizmo: impl DrawGizmos) {
         gizmo.draw_primitives(self)
@@ -364,5 +393,13 @@ impl GizmosSection {
 
     pub fn primitives(&self) -> &[GizmoPrimitive] {
         &self.primitives
+    }
+
+    pub fn mesh(&self) -> &[GizmoVertex] {
+        &self.mesh
+    }
+
+    pub fn indices(&self) -> &[u32] {
+        &self.indices
     }
 }

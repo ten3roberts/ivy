@@ -1,23 +1,24 @@
 use anyhow::Context;
 use bytemuck::Zeroable;
-use glam::{Mat4, Vec3, Vec4};
+use glam::{Mat4, Vec2, Vec3, Vec4};
 use ivy_core::{
     components::{self, engine},
     ColorExt,
 };
 use ivy_graphics::mesh::MeshData;
+use ivy_input::Stimulus;
 use ivy_wgpu_types::{
     shader::{ShaderDesc, TargetDesc},
     BindGroupBuilder, BindGroupLayoutBuilder, Gpu, RenderShader, TypedBuffer,
 };
 use wgpu::{
-    BindingType, BufferUsages, RenderPassColorAttachment, RenderPassDescriptor, SamplerBindingType,
-    SamplerDescriptor, ShaderStages, TextureUsages,
+    BindingType, BufferAddress, BufferUsages, RenderPassColorAttachment, RenderPassDescriptor,
+    SamplerBindingType, SamplerDescriptor, ShaderStages, TextureUsages,
 };
 
 use super::{get_main_camera_data, CameraData};
 use crate::{
-    mesh::{Mesh, Vertex, VertexDesc},
+    mesh::{Mesh, MeshDescriptor, Vertex, VertexDesc},
     rendergraph::{
         Dependency, Node, NodeExecutionContext, NodeUpdateContext, TextureHandle, UpdateResult,
     },
@@ -26,6 +27,7 @@ use crate::{
 pub struct GizmosRendererNode {
     mesh: Mesh,
     shader: Option<RenderShader>,
+    geo_shader: Option<RenderShader>,
     buffer: TypedBuffer<Data>,
     camera_buffer: TypedBuffer<CameraData>,
     data: Vec<Data>,
@@ -37,9 +39,15 @@ pub struct GizmosRendererNode {
 
 impl GizmosRendererNode {
     pub fn new(gpu: &Gpu, output: TextureHandle, depth_buffer: TextureHandle) -> Self {
-        let mesh = MeshData::quad();
-
-        let mesh = Mesh::new(gpu, &Vertex::compose_from_mesh(&mesh), mesh.indices());
+        let mesh = Mesh::new(
+            gpu,
+            &[Default::default(); 4],
+            &[0; 6],
+            MeshDescriptor {
+                vertex_buffer_usage: BufferUsages::VERTEX,
+                index_buffer_usage: BufferUsages::INDEX,
+            },
+        );
 
         let layout = BindGroupLayoutBuilder::new("gizmos")
             .bind_uniform_buffer(ShaderStages::VERTEX)
@@ -82,6 +90,7 @@ impl GizmosRendererNode {
             layout,
             mesh,
             shader: None,
+            geo_shader: None,
             buffer,
             data: Vec::new(),
             camera_buffer,
@@ -103,7 +112,24 @@ impl Node for GizmosRendererNode {
 
         self.data.clear();
 
+        let (mut vertices, mut indices) = Vertex::quad();
+
+        self.data.push(Data {
+            world: Mat4::IDENTITY,
+            color: Vec4::ZERO,
+            billboard_axis: Vec3::ZERO,
+            corner_radius: 0.0,
+        });
+
         for section in gizmos.sections() {
+            indices.extend(section.indices().iter().map(|i| i + vertices.len() as u32));
+            vertices.extend(section.mesh().iter().map(|v| Vertex {
+                pos: v.pos,
+                tex_coord: Vec2::ZERO,
+                normal: v.normal,
+                tangent: v.tangent,
+            }));
+
             for primitive in section.primitives() {
                 match primitive {
                     ivy_core::gizmos::GizmoPrimitive::Sphere {
@@ -136,6 +162,31 @@ impl Node for GizmosRendererNode {
                     }
                 }
             }
+        }
+
+        let vertex_buffer_size = (size_of::<Vertex>() * vertices.len()) as BufferAddress;
+        if self.mesh.vertex_buffer().size() >= vertex_buffer_size {
+            // ctx.gpu.queue.write_buffer(
+            //     &self.mesh.vertex_buffer(),
+            //     0,
+            //     bytemuck::cast_slice(&vertices),
+            // );
+
+            // ctx.gpu.queue.write_buffer(
+            //     &self.mesh.index_buffer(),
+            //     0,
+            //     bytemuck::cast_slice(&indices),
+            // );
+        } else {
+            self.mesh = Mesh::new(
+                ctx.gpu,
+                &vertices,
+                &indices,
+                MeshDescriptor {
+                    vertex_buffer_usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
+                    index_buffer_usage: BufferUsages::INDEX | BufferUsages::COPY_DST,
+                },
+            )
         }
 
         self.buffer.write(&ctx.gpu.queue, 0, &self.data);
@@ -177,6 +228,25 @@ impl Node for GizmosRendererNode {
             sample_count: output.sample_count(),
         };
 
+        // let geo_shader = self.geo_shader.get_or_insert_with(|| {
+        //     let shader_module = ctx
+        //         .gpu
+        //         .device
+        //         .create_shader_module(wgpu::ShaderModuleDescriptor {
+        //             label: Some("gizmos"),
+        //             source: wgpu::ShaderSource::Wgsl(
+        //                 include_str!("../../shaders/gizmos_geometry.wgsl").into(),
+        //             ),
+        //         });
+
+        //     RenderShader::new(
+        //         ctx.gpu,
+        //         &ShaderDesc::new("gizmos", &shader_module, &target)
+        //             .with_vertex_layouts(&[Vertex::layout()])
+        //             .with_bind_group_layouts(&[&self.layout]),
+        //     )
+        // });
+
         let shader = self.shader.get_or_insert_with(|| {
             let shader_module = ctx
                 .gpu
@@ -196,15 +266,16 @@ impl Node for GizmosRendererNode {
             )
         });
 
-        render_pass.set_pipeline(shader.pipeline());
-        render_pass.set_vertex_buffer(0, self.mesh.vertex_buffer().slice(..));
-        render_pass.set_index_buffer(
-            self.mesh.index_buffer().slice(..),
-            wgpu::IndexFormat::Uint32,
-        );
+        // render_pass.set_pipeline(shader.pipeline());
+        // render_pass.set_vertex_buffer(0, self.mesh.vertex_buffer().slice(..));
+        // render_pass.set_vertex_buffer(0, self.mesh.vertex_buffer().slice(..));
+        // render_pass.set_index_buffer(
+        //     self.mesh.index_buffer().slice(..),
+        //     wgpu::IndexFormat::Uint32,
+        // );
 
-        render_pass.set_bind_group(0, &bind_group, &[]);
-        render_pass.draw_indexed(0..6, 0, 0..self.data.len() as _);
+        // render_pass.set_bind_group(0, &bind_group, &[]);
+        // render_pass.draw_indexed(0..6, 0, 0..self.data.len() as _);
 
         Ok(())
     }

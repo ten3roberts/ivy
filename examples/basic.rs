@@ -48,7 +48,10 @@ use ivy_postprocessing::preconfigured::{
     SurfacePbrPipelineDesc, SurfacePbrRenderer,
 };
 use ivy_scene::{GltfNodeExt, NodeMountOptions};
-use ivy_ui::layer::{UiLayer, UiUpdateLayer};
+use ivy_ui::{
+    layer::{UiLayer, UiUpdateLayer},
+    screens::{screen_state, Screen},
+};
 use ivy_wgpu::{
     components::{forward_pass, light_kind, light_params, shadow_pass, transparent_pass},
     driver::WinitDriver,
@@ -89,9 +92,7 @@ pub fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    let (ui_tx, app_ui_rx) = flume::unbounded::<Box<dyn Widget>>();
-    let ui_input_layer = UiLayer::new(StreamWidget::new(app_ui_rx.into_stream()));
-
+    let ui_input_layer = UiLayer::new();
     let ui_layer = UiUpdateLayer::new();
 
     if let Err(err) = App::builder()
@@ -130,7 +131,7 @@ pub fn main() -> anyhow::Result<()> {
         .with_layer(LogicLayer::new())
         .with_layer(
             ScheduledLayer::new(FixedTimeStep::new(0.02))
-                .with_plugin(GameUiPlugin { ui_tx })
+                .with_plugin(GameUiPlugin)
                 .with_plugin(OrbitCameraPlugin)
                 .with_plugin(GizmosPlugin)
                 .with_plugin(AnimationPlugin)
@@ -472,26 +473,36 @@ impl Plugin for RotateSpotlightPlugin {
     }
 }
 
-struct GameUiPlugin {
-    ui_tx: flume::Sender<Box<dyn Widget>>,
-}
+struct GameUiPlugin;
 
 impl Plugin for GameUiPlugin {
     fn install(
         &self,
-        _: &mut World,
+        world: &mut World,
         assets: &AssetCache,
         _: &mut DynamicStore,
         _: &mut ScheduleSetBuilder,
     ) -> anyhow::Result<()> {
-        self.ui_tx.send(Box::new(app_ui(assets.clone()))).unwrap();
+        world.get(engine(), screen_state())?.open(MainUI {
+            assets: assets.clone(),
+        });
 
         Ok(())
     }
 }
 
-fn app_ui(assets: AssetCache) -> impl Widget {
-    maximized(card(AssetTimelinesWidget::new(assets)))
+struct MainUI {
+    assets: AssetCache,
+}
+
+impl Screen for MainUI {
+    fn create(
+        self,
+        scope: &mut violet::core::Scope<'_>,
+        token: ivy_ui::screens::ScreenLifetimeToken,
+    ) {
+        maximized(card(AssetTimelinesWidget::new(self.assets))).mount(scope);
+    }
 }
 
 impl Layer for LogicLayer {
