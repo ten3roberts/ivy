@@ -70,7 +70,9 @@ use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt
 use tracing_tree::HierarchicalLayer;
 use violet::{
     core::{
+        style::SizeExt,
         to_owned,
+        unit::Unit,
         widget::{card, maximized, StreamWidget},
         Widget,
     },
@@ -501,7 +503,10 @@ impl Screen for MainUI {
         scope: &mut violet::core::Scope<'_>,
         token: ivy_ui::screens::ScreenLifetimeToken,
     ) {
-        maximized(card(AssetTimelinesWidget::new(self.assets))).mount(scope);
+        maximized(
+            card(AssetTimelinesWidget::new(self.assets)).with_max_size(Unit::rel2(0.25, 1.0)),
+        )
+        .mount(scope);
     }
 }
 
@@ -542,7 +547,7 @@ fn point_light_gizmo_system() -> BoxedSystem {
                 query
                     .iter()
                     .for_each(|(transform, light, kind)| match kind {
-                        LightKind::Point => gizmos.draw(gizmos::Sphere::new(
+                        LightKind::Point => gizmos.draw(gizmos::SphereGizmo::new(
                             transform.transform_point3(Vec3::ZERO),
                             0.1,
                             light.color.with_alpha(1.0),
@@ -551,9 +556,13 @@ fn point_light_gizmo_system() -> BoxedSystem {
                             let pos = transform.transform_point3(Vec3::ZERO);
                             let dir = transform.transform_vector3(Vec3::FORWARD);
 
-                            gizmos.draw(gizmos::Sphere::new(pos, 0.1, light.color.with_alpha(1.0)));
+                            gizmos.draw(gizmos::SphereGizmo::new(
+                                pos,
+                                0.1,
+                                light.color.with_alpha(1.0),
+                            ));
 
-                            gizmos.draw(gizmos::Line::new(
+                            gizmos.draw(gizmos::LineGizmo::new(
                                 pos,
                                 dir,
                                 0.02,

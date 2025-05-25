@@ -1,12 +1,12 @@
 use anyhow::Context;
 use bytemuck::Zeroable;
-use glam::{Mat4, Vec2, Vec3, Vec4};
+use flax::{Component, Query};
+use glam::{Mat3, Mat4, Vec3, Vec4};
 use ivy_core::{
-    components::{self, engine},
-    ColorExt,
+    components::{self, engine, main_camera, world_transform},
+    gizmos::GizmoPrimitive,
+    srgba_to_vec4, to_linear_vec3, ColorExt,
 };
-use ivy_graphics::mesh::MeshData;
-use ivy_input::Stimulus;
 use ivy_wgpu_types::{
     shader::{ShaderDesc, TargetDesc},
     BindGroupBuilder, BindGroupLayoutBuilder, Gpu, RenderShader, TypedBuffer,
@@ -18,7 +18,7 @@ use wgpu::{
 
 use super::{get_main_camera_data, CameraData};
 use crate::{
-    mesh::{Mesh, MeshDescriptor, Vertex, VertexDesc},
+    mesh::{ColoredVertex, Mesh, MeshDescriptor, Vertex, VertexDesc},
     rendergraph::{
         Dependency, Node, NodeExecutionContext, NodeUpdateContext, TextureHandle, UpdateResult,
     },
@@ -27,7 +27,6 @@ use crate::{
 pub struct GizmosRendererNode {
     mesh: Mesh,
     shader: Option<RenderShader>,
-    geo_shader: Option<RenderShader>,
     buffer: TypedBuffer<Data>,
     camera_buffer: TypedBuffer<CameraData>,
     data: Vec<Data>,
@@ -35,17 +34,19 @@ pub struct GizmosRendererNode {
     output: TextureHandle,
     depth_buffer: TextureHandle,
     sampler: wgpu::Sampler,
+    draw_index_count: u32,
+    main_camera_query: Query<(Component<()>, Component<Mat4>)>,
 }
 
 impl GizmosRendererNode {
     pub fn new(gpu: &Gpu, output: TextureHandle, depth_buffer: TextureHandle) -> Self {
         let mesh = Mesh::new(
             gpu,
-            &[Default::default(); 4],
+            &[ColoredVertex::default(); 4],
             &[0; 6],
             MeshDescriptor {
-                vertex_buffer_usage: BufferUsages::VERTEX,
-                index_buffer_usage: BufferUsages::INDEX,
+                vertex_buffer_usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
+                index_buffer_usage: BufferUsages::INDEX | BufferUsages::COPY_DST,
             },
         );
 
@@ -74,7 +75,6 @@ impl GizmosRendererNode {
         );
 
         let sampler = gpu.device.create_sampler(&SamplerDescriptor {
-            label: Some("gizmos_depth_sampler"),
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
@@ -85,18 +85,43 @@ impl GizmosRendererNode {
         });
 
         Self {
+            main_camera_query: Query::new((main_camera(), world_transform())),
             sampler,
             depth_buffer,
             layout,
             mesh,
             shader: None,
-            geo_shader: None,
             buffer,
             data: Vec::new(),
             camera_buffer,
             output,
+            draw_index_count: 0,
         }
     }
+}
+
+fn align_spherical_billboard(world_transform: Mat4, camera_transform: Mat4) -> Mat4 {
+    let camera_rotation = Mat3::from_mat4(camera_transform);
+
+    world_transform * Mat4::from_mat3(camera_rotation)
+}
+
+fn align_cylindrical_billboard(
+    world_transform: Mat4,
+    camera_transform: Mat4,
+    billboard_axis: Vec3,
+) -> Mat4 {
+    let center = world_transform.transform_point3(Vec3::ZERO);
+
+    let to_camera = (center - camera_transform.transform_point3(Vec3::ZERO)).normalize();
+
+    let right = billboard_axis.cross(to_camera).normalize();
+    let forward = right.cross(billboard_axis).normalize();
+
+    let transform = Mat4::from_translation(center)
+        * Mat4::from_mat3(Mat3::from_cols(right, billboard_axis, forward));
+
+    transform
 }
 
 impl Node for GizmosRendererNode {
@@ -112,40 +137,51 @@ impl Node for GizmosRendererNode {
 
         self.data.clear();
 
-        let (mut vertices, mut indices) = Vertex::quad();
-
         self.data.push(Data {
             world: Mat4::IDENTITY,
-            color: Vec4::ZERO,
-            billboard_axis: Vec3::ZERO,
+            color: Vec4::ONE,
             corner_radius: 0.0,
+            _padding: Default::default(),
         });
 
+        let (mut vertices, mut indices) = ColoredVertex::quad();
+
+        self.draw_index_count = 0;
+
+        let Some((_, &main_camera_transform)) = self.main_camera_query.borrow(ctx.world).first()
+        else {
+            tracing::warn!("no main camera");
+            return Ok(UpdateResult::Success);
+        };
+
         for section in gizmos.sections() {
+            self.draw_index_count += section.indices().len() as u32;
             indices.extend(section.indices().iter().map(|i| i + vertices.len() as u32));
-            vertices.extend(section.mesh().iter().map(|v| Vertex {
-                pos: v.pos,
-                tex_coord: Vec2::ZERO,
-                normal: v.normal,
-                tangent: v.tangent,
-            }));
+            vertices.extend(
+                section
+                    .mesh()
+                    .iter()
+                    .map(|v| ColoredVertex::new(v.pos, srgba_to_vec4(v.color))),
+            );
 
             for primitive in section.primitives() {
                 match primitive {
-                    ivy_core::gizmos::GizmoPrimitive::Sphere {
+                    GizmoPrimitive::Sphere {
                         origin,
                         color,
                         radius,
                     } => {
                         self.data.push(Data {
-                            world: Mat4::from_translation(*origin)
-                                * Mat4::from_scale(Vec3::splat(*radius)),
-                            color: color.to_vec4(),
-                            billboard_axis: Vec3::ZERO,
+                            world: align_spherical_billboard(
+                                Mat4::from_translation(*origin),
+                                main_camera_transform,
+                            ) * Mat4::from_scale(Vec3::splat(*radius)),
+                            color: srgba_to_vec4(*color),
                             corner_radius: 1.0,
+                            _padding: Default::default(),
                         });
                     }
-                    ivy_core::gizmos::GizmoPrimitive::Line {
+                    GizmoPrimitive::Line {
                         origin,
                         color,
                         dir,
@@ -153,11 +189,18 @@ impl Node for GizmosRendererNode {
                         corner_radius,
                     } => {
                         self.data.push(Data {
-                            world: Mat4::from_translation(*origin + *dir * 0.5)
-                                * Mat4::from_scale(Vec3::new(*radius, dir.length() * 0.5, *radius)),
-                            color: color.to_vec4(),
-                            billboard_axis: dir.normalize(),
+                            world: align_cylindrical_billboard(
+                                Mat4::from_translation(*origin + *dir * 0.5),
+                                main_camera_transform,
+                                dir.normalize(),
+                            ) * Mat4::from_scale(Vec3::new(
+                                *radius,
+                                dir.length() * 0.5,
+                                *radius,
+                            )),
+                            color: srgba_to_vec4(*color),
                             corner_radius: *corner_radius,
+                            _padding: Default::default(),
                         });
                     }
                 }
@@ -166,17 +209,17 @@ impl Node for GizmosRendererNode {
 
         let vertex_buffer_size = (size_of::<Vertex>() * vertices.len()) as BufferAddress;
         if self.mesh.vertex_buffer().size() >= vertex_buffer_size {
-            // ctx.gpu.queue.write_buffer(
-            //     &self.mesh.vertex_buffer(),
-            //     0,
-            //     bytemuck::cast_slice(&vertices),
-            // );
+            ctx.gpu.queue.write_buffer(
+                &self.mesh.vertex_buffer(),
+                0,
+                bytemuck::cast_slice(&vertices),
+            );
 
-            // ctx.gpu.queue.write_buffer(
-            //     &self.mesh.index_buffer(),
-            //     0,
-            //     bytemuck::cast_slice(&indices),
-            // );
+            ctx.gpu.queue.write_buffer(
+                &self.mesh.index_buffer(),
+                0,
+                bytemuck::cast_slice(&indices),
+            );
         } else {
             self.mesh = Mesh::new(
                 ctx.gpu,
@@ -228,25 +271,6 @@ impl Node for GizmosRendererNode {
             sample_count: output.sample_count(),
         };
 
-        // let geo_shader = self.geo_shader.get_or_insert_with(|| {
-        //     let shader_module = ctx
-        //         .gpu
-        //         .device
-        //         .create_shader_module(wgpu::ShaderModuleDescriptor {
-        //             label: Some("gizmos"),
-        //             source: wgpu::ShaderSource::Wgsl(
-        //                 include_str!("../../shaders/gizmos_geometry.wgsl").into(),
-        //             ),
-        //         });
-
-        //     RenderShader::new(
-        //         ctx.gpu,
-        //         &ShaderDesc::new("gizmos", &shader_module, &target)
-        //             .with_vertex_layouts(&[Vertex::layout()])
-        //             .with_bind_group_layouts(&[&self.layout]),
-        //     )
-        // });
-
         let shader = self.shader.get_or_insert_with(|| {
             let shader_module = ctx
                 .gpu
@@ -261,21 +285,22 @@ impl Node for GizmosRendererNode {
             RenderShader::new(
                 ctx.gpu,
                 &ShaderDesc::new("gizmos", &shader_module, &target)
-                    .with_vertex_layouts(&[Vertex::layout()])
+                    .with_vertex_layouts(&[ColoredVertex::layout()])
                     .with_bind_group_layouts(&[&self.layout]),
             )
         });
 
-        // render_pass.set_pipeline(shader.pipeline());
-        // render_pass.set_vertex_buffer(0, self.mesh.vertex_buffer().slice(..));
-        // render_pass.set_vertex_buffer(0, self.mesh.vertex_buffer().slice(..));
-        // render_pass.set_index_buffer(
-        //     self.mesh.index_buffer().slice(..),
-        //     wgpu::IndexFormat::Uint32,
-        // );
+        // Draw primitives
+        render_pass.set_pipeline(shader.pipeline());
+        render_pass.set_vertex_buffer(0, self.mesh.vertex_buffer().slice(..));
+        render_pass.set_index_buffer(
+            self.mesh.index_buffer().slice(..),
+            wgpu::IndexFormat::Uint32,
+        );
 
-        // render_pass.set_bind_group(0, &bind_group, &[]);
-        // render_pass.draw_indexed(0..6, 0, 0..self.data.len() as _);
+        render_pass.set_bind_group(0, &bind_group, &[]);
+        render_pass.draw_indexed(0..6, 0, 1..1 + self.data.len() as u32);
+        render_pass.draw_indexed(6..(6 + self.draw_index_count), 0, 0..1);
 
         Ok(())
     }
@@ -299,6 +324,6 @@ impl Node for GizmosRendererNode {
 struct Data {
     world: Mat4,
     color: Vec4,
-    billboard_axis: Vec3,
     corner_radius: f32,
+    _padding: [f32; 3],
 }

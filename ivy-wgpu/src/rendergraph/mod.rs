@@ -263,7 +263,6 @@ impl RenderGraph {
                 .max()
                 .unwrap_or(open);
 
-            tracing::info!(?resource, lifetime = ?open..close, "lifetime");
             self.expected_lifetimes
                 .insert(resource, Lifetime::new(open, close + 1));
         }

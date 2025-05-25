@@ -39,10 +39,10 @@ impl Vertex {
     pub fn quad() -> (Vec<Vertex>, Vec<u32>) {
         #[rustfmt::skip]
         let vertices = [
-            Vertex::new(vec3(0.0, 0.0, 0.0), vec2(0.0, 0.0), Vec3::Z, vec4(0.0, 0.0, 1.0, 1.0)),
-            Vertex::new(vec3(1.0, 0.0, 0.0), vec2(1.0, 0.0), Vec3::Z, vec4(0.0, 0.0, 1.0, 1.0)),
+            Vertex::new(vec3(-1.0, -1.0, 0.0), vec2(0.0, 0.0), Vec3::Z, vec4(0.0, 0.0, 1.0, 1.0)),
+            Vertex::new(vec3(1.0, -1.0, 0.0), vec2(1.0, 0.0), Vec3::Z, vec4(0.0, 0.0, 1.0, 1.0)),
             Vertex::new(vec3(1.0, 1.0, 0.0), vec2(1.0, 1.0), Vec3::Z, vec4(0.0, 0.0, 1.0, 1.0)),
-            Vertex::new(vec3(0.0, 1.0, 0.0), vec2(0.0, 1.0), Vec3::Z, vec4(0.0, 0.0, 1.0, 1.0)),
+            Vertex::new(vec3(-1.0, 1.0, 0.0), vec2(0.0, 1.0), Vec3::Z, vec4(0.0, 0.0, 1.0, 1.0)),
         ];
 
         let indices = [0, 1, 2, 2, 3, 0];
@@ -93,6 +93,50 @@ impl VertexDesc for Vertex {
 
         wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: ATTRIBUTES,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(bytemuck::Pod, bytemuck::Zeroable, Default, Copy, Debug, Clone)]
+pub struct ColoredVertex {
+    pub pos: Vec3,
+    pub _padding: f32,
+    pub color: Vec4,
+}
+
+impl ColoredVertex {
+    pub const fn new(pos: Vec3, color: Vec4) -> Self {
+        Self {
+            pos,
+            color,
+            _padding: 0.0,
+        }
+    }
+
+    pub fn quad() -> (Vec<Self>, Vec<u32>) {
+        #[rustfmt::skip]
+        let vertices = [
+            Self::new(vec3(-1.0, -1.0, 0.0), Vec4::ONE),
+            Self::new(vec3(1.0, -1.0, 0.0), Vec4::ONE),
+            Self::new(vec3(1.0, 1.0, 0.0), Vec4::ONE),
+            Self::new(vec3(-1.0, 1.0, 0.0), Vec4::ONE),
+        ];
+
+        let indices = [0, 1, 2, 2, 3, 0];
+
+        (vertices.to_vec(), indices.to_vec())
+    }
+}
+
+impl VertexDesc for ColoredVertex {
+    fn layout() -> VertexBufferLayout<'static> {
+        static ATTRIBUTES: &[VertexAttribute] = &vertex_attr_array![0 => Float32x4, 1 => Float32x4];
+
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Self>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: ATTRIBUTES,
         }
@@ -237,7 +281,12 @@ pub struct Mesh {
 }
 
 impl Mesh {
-    pub fn new(gpu: &Gpu, vertices: &[Vertex], indices: &[u32], desc: MeshDescriptor) -> Self {
+    pub fn new<T: bytemuck::NoUninit + VertexDesc>(
+        gpu: &Gpu,
+        vertices: &[T],
+        indices: &[u32],
+        desc: MeshDescriptor,
+    ) -> Self {
         let vertex_buffer = gpu
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {

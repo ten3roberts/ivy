@@ -1,8 +1,6 @@
 struct VertexInput {
     @location(0) pos: vec3<f32>,
-    @location(1) tex_coord: vec2<f32>,
-    @location(2) normal: vec3<f32>,
-    @location(3) tangent: vec4<f32>,
+    @location(1) color: vec4<f32>,
     @builtin(instance_index) instance: u32,
 }
 
@@ -18,7 +16,6 @@ struct VertexOutput {
 struct Object {
     world: mat4x4<f32>,
     color: vec4<f32>,
-    billboard_axis: vec3<f32>,
     corner_radius: f32,
 }
 
@@ -47,14 +44,6 @@ var depth_texture: texture_2d<f32>;
 @group(0) @binding(3)
 var depth_sampler: sampler;
 
-fn axis_billboard(up: vec3<f32>, view: vec3<f32>) -> mat3x3<f32> {
-    let right = normalize(cross(up, view));
-    let forward = cross(right, up);
-
-    var result = mat3x3(right, up, forward);
-
-    return result;
-}
 
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput {
@@ -62,37 +51,16 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
     let object = objects[in.instance];
 
-    let scale = vec3(object.world[0][0], object.world[1][1], object.world[2][2]);
-
-    if length(object.billboard_axis) > 0f {
-        let center = object.world * vec4(0f, 0f, 0f, 1f);
-        let view = normalize(center.xyz - globals.camera_pos);
-
-        let billboard = axis_billboard(object.billboard_axis, view);
-        let new_pos = billboard * (in.pos * scale);
-
-        out.pos = globals.viewproj * vec4(new_pos + center.xyz, 1f);
-    } else {
-        var model_view = globals.view * object.world;
-
-        model_view[0][0] = object.world[0][0];
-        model_view[0][1] = 0f;
-        model_view[0][2] = 0f;
-
-        model_view[1][0] = 0f;
-        model_view[1][1] = object.world[1][1];
-        model_view[1][2] = 0f;
-
-        model_view[2][0] = 0f;
-        model_view[2][1] = 0f;
-        model_view[2][2] = object.world[2][2];
-
-        out.pos = globals.proj * model_view * vec4(in.pos, 1f);
-    }
+    let scale = vec3(
+        length(object.world[0]),
+        length(object.world[1]),
+        length(object.world[2])
+    );
+    out.pos = globals.viewproj * object.world * vec4(in.pos, 1f);
 
     out.frag_pos = in.pos;
     out.frag_scale = scale;
-    out.color = object.color;
+    out.color = object.color * in.color;
     out.corner_radius = object.corner_radius;
 
     out.clip_pos = out.pos.xyz / out.pos.w;
@@ -101,6 +69,10 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    if in.corner_radius <= 0.0 {
+        return in.color;
+    }
+
     let uv = vec2(in.clip_pos.x + 1.0, -in.clip_pos.y + 1.0) * 0.5;
 
     let depth_at = textureSample(depth_texture, depth_sampler, uv).r;

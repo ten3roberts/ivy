@@ -12,7 +12,10 @@ use flax::{
 use glam::{Mat4, Vec3};
 use ivy_core::{
     components::{engine, main_camera, world_transform, TransformQuery, TransformQueryItem},
-    gizmos::{Gizmos, Line, DEFAULT_THICKNESS},
+    gizmos::{
+        manipulator::{ArrowGizmo, TranslateGizmo},
+        Gizmos, LineGizmo, DEFAULT_THICKNESS,
+    },
     subscribers::{RemovedComponentSubscriber, RemovedRelationSubscriber},
     Color, ColorExt,
 };
@@ -350,32 +353,10 @@ pub fn gizmo_system() -> BoxedSystem {
                     let origin = transform.transform_point3(Vec3::ZERO);
 
                     let dv = effector.pending_force();
-                    gizmos.draw(Line::new(origin, dv, DEFAULT_THICKNESS, Color::red()));
-                    gizmos.draw(Line::new(
-                        origin,
-                        transform.transform_vector3(Vec3::Z),
-                        DEFAULT_THICKNESS,
-                        Color::blue(),
-                    ));
-                    gizmos.draw(Line::new(
-                        origin,
-                        transform.transform_vector3(Vec3::X),
-                        DEFAULT_THICKNESS,
-                        Color::red(),
-                    ));
-                    gizmos.draw(Line::new(
-                        origin,
-                        transform.transform_vector3(Vec3::Y),
-                        DEFAULT_THICKNESS,
-                        Color::green(),
-                    ));
-                    gizmos.draw(Line::new(
-                        origin,
-                        velocity,
-                        DEFAULT_THICKNESS,
-                        Color::cyan(),
-                    ));
-                    gizmos.draw(Line::new(origin, w, DEFAULT_THICKNESS, Color::purple()));
+                    gizmos.draw(TranslateGizmo::new(*transform));
+                    gizmos.draw(ArrowGizmo::new(origin, dv).with_color(Color::red()));
+                    gizmos.draw(ArrowGizmo::new(origin, velocity).with_color(Color::cyan()));
+                    gizmos.draw(ArrowGizmo::new(origin, w).with_color(Color::purple()));
                 }
 
                 anyhow::Ok(())

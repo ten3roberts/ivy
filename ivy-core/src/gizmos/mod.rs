@@ -5,6 +5,7 @@ use palette::Srgba;
 
 use crate::{Color, ColorExt};
 
+pub mod manipulator;
 mod traits;
 pub use traits::*;
 
@@ -13,13 +14,13 @@ pub const DEFAULT_RADIUS: f32 = 0.04;
 pub const DEFAULT_THICKNESS: f32 = 0.02;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub struct Sphere {
+pub struct SphereGizmo {
     pub origin: Vec3,
     pub radius: f32,
     pub color: Color,
 }
 
-impl Sphere {
+impl SphereGizmo {
     pub fn new(origin: Vec3, radius: f32, color: Color) -> Self {
         Self {
             origin,
@@ -35,7 +36,7 @@ impl Sphere {
     }
 }
 
-impl Default for Sphere {
+impl Default for SphereGizmo {
     fn default() -> Self {
         Self {
             origin: Default::default(),
@@ -45,7 +46,7 @@ impl Default for Sphere {
     }
 }
 
-impl DrawGizmos for Sphere {
+impl DrawGizmos for SphereGizmo {
     fn draw_primitives(&self, gizmos: &mut GizmosSection) {
         gizmos.push(GizmoPrimitive::Sphere {
             origin: self.origin,
@@ -56,14 +57,14 @@ impl DrawGizmos for Sphere {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub struct Line {
+pub struct LineGizmo {
     pub origin: Vec3,
     pub dir: Vec3,
     pub radius: f32,
     pub color: Color,
 }
 
-impl Line {
+impl LineGizmo {
     pub fn new(origin: Vec3, dir: Vec3, radius: f32, color: Color) -> Self {
         Self {
             origin,
@@ -89,7 +90,7 @@ impl Line {
     }
 }
 
-impl DrawGizmos for Line {
+impl DrawGizmos for LineGizmo {
     fn draw_primitives(&self, gizmos: &mut GizmosSection) {
         gizmos.push(GizmoPrimitive::Line {
             origin: self.origin,
@@ -101,7 +102,7 @@ impl DrawGizmos for Line {
     }
 }
 
-impl Default for Line {
+impl Default for LineGizmo {
     fn default() -> Self {
         Self {
             origin: Default::default(),
@@ -187,7 +188,7 @@ impl DrawGizmos for Cube {
 
             let end = start + dir;
 
-            Line::from_points(
+            LineGizmo::from_points(
                 self.transform.transform_point3(start),
                 self.transform.transform_point3(end),
                 self.line_radius,
@@ -235,8 +236,13 @@ where
 {
     fn draw_primitives(&self, gizmos: &mut GizmosSection) {
         for (p1, p2) in self.points.clone().into_iter().circular_tuple_windows() {
-            gizmos.draw(Line::from_points(p1, p2, DEFAULT_THICKNESS, self.color));
-            gizmos.draw(Sphere::new(p1, DEFAULT_RADIUS, self.color));
+            gizmos.draw(LineGizmo::from_points(
+                p1,
+                p2,
+                DEFAULT_THICKNESS,
+                self.color,
+            ));
+            gizmos.draw(SphereGizmo::new(p1, DEFAULT_RADIUS, self.color));
         }
     }
 }
@@ -325,7 +331,7 @@ impl Gizmos {
         // } else {
         self.sections
             .entry(key)
-            .and_modify(|v| v.primitives.clear())
+            .and_modify(|v| v.clear())
             .or_default()
         // }
     }
@@ -347,19 +353,12 @@ impl Gizmos {
 #[derive(Default, Debug, Clone)]
 pub struct GizmoVertex {
     pub pos: Vec3,
-    pub normal: Vec3,
-    pub tangent: Vec4,
     pub color: Srgba,
 }
 
 impl GizmoVertex {
-    pub fn new(pos: Vec3, normal: Vec3, tangent: Vec4, color: Srgba) -> Self {
-        Self {
-            pos,
-            normal,
-            tangent,
-            color,
-        }
+    pub fn new(pos: Vec3, color: Srgba) -> Self {
+        Self { pos, color }
     }
 }
 
@@ -401,5 +400,11 @@ impl GizmosSection {
 
     pub fn indices(&self) -> &[u32] {
         &self.indices
+    }
+
+    fn clear(&mut self) {
+        self.mesh.clear();
+        self.indices.clear();
+        self.primitives.clear();
     }
 }

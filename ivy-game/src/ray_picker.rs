@@ -8,7 +8,7 @@ use glam::{Vec2, Vec3};
 use ivy_assets::{stored::DynamicStore, AssetCache};
 use ivy_core::{
     components::{engine, gizmos, main_camera, position, rotation, TransformBundle},
-    gizmos::{Gizmos, Sphere},
+    gizmos::{Gizmos, SphereGizmo},
     update_layer::{Plugin, ScheduleSetBuilder},
     Color, ColorExt, EntityBuilderExt,
 };
@@ -129,7 +129,7 @@ impl PickingState {
         if self.picked_object.is_some() {
             let manipulator = world.entity(self.manipulator).unwrap();
 
-            gizmos.draw(Sphere::new(
+            gizmos.draw(SphereGizmo::new(
                 manipulator.get_copy(position()).unwrap(),
                 0.1,
                 Color::red(),
