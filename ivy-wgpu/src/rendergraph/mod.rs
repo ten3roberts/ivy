@@ -490,7 +490,7 @@ mod test {
     fn write_read() {
         tracing_subscriber::fmt::init();
 
-        let gpu = futures::executor::block_on(Gpu::headless());
+        let gpu = futures::executor::block_on(Gpu::headless(Default::default())).unwrap();
 
         struct WriteToTexture {
             buffer: TypedBuffer<u8>,

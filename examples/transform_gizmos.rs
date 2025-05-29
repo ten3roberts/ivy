@@ -4,28 +4,22 @@ use flax::{
     components::{child_of, name},
     system, Entity, World,
 };
-use glam::{vec3, Mat4, Quat, Vec3};
-use ivy_assets::{fs::AssetPath, stored::DynamicStore, Asset, AssetCache, AssetDesc};
+use glam::{vec3, EulerRot, Mat4, Quat, Vec3};
+use ivy_assets::{fs::AssetPath, stored::DynamicStore, AssetCache};
 use ivy_core::{
-    gizmos::{
-        manipulator::TranslateGizmo, DrawGizmos, GizmoVertex, Gizmos, LineGizmo, SphereGizmo,
-    },
-    math::Axis3D,
+    gizmos::{manipulator::TranslateGizmo, Gizmos},
     palette::Srgb,
     profiling::ProfilingLayer,
     transforms::TransformUpdatePlugin,
     update_layer::{FixedTimeStep, Plugin, ScheduledLayer},
-    App, Color, ColorExt, EngineLayer, EntityBuilderExt, DEG_45,
+    App, EngineLayer, EntityBuilderExt,
 };
 use ivy_engine::{engine, gizmos, RigidBodyBundle, TransformBundle};
 use ivy_game::{
     orbit_camera::OrbitCameraPlugin,
     viewport_camera::{CameraSettings, ViewportCameraLayer},
 };
-use ivy_graphics::{
-    mesh::{MeshData, TANGENT_ATTRIBUTE},
-    texture::TextureData,
-};
+use ivy_graphics::texture::TextureData;
 use ivy_input::layer::InputLayer;
 use ivy_physics::{ColliderBundle, GizmoSettings, PhysicsPlugin};
 use ivy_postprocessing::preconfigured::{
@@ -39,15 +33,16 @@ use ivy_ui::{
     streamed::StreamedUiPlugin,
 };
 use ivy_wgpu::{
-    components::{forward_pass, transparent_pass},
+    components::{cast_shadow, forward_pass, light_kind, light_params},
     driver::WinitDriver,
     layer::GraphicsLayer,
+    light::{LightKind, LightParams},
     material_desc::{MaterialData, PbrMaterialData},
     mesh_desc::MeshDesc,
     primitives::CubePrimitive,
     renderer::{EnvironmentData, RenderObjectBundle},
 };
-use rapier3d::{parry::transformation::utils::push_arc_and_idx, prelude::SharedShape};
+use rapier3d::prelude::SharedShape;
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
 use violet::{
@@ -142,6 +137,21 @@ pub fn main() -> anyhow::Result<()> {
 }
 
 fn setup_objects(world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
+    Entity::builder()
+        .mount(TransformBundle::default().with_rotation(Quat::from_euler(
+            EulerRot::YXZ,
+            -2.0,
+            -1.0,
+            0.0,
+        )))
+        .set(
+            light_params(),
+            LightParams::new(Srgb::new(1.0, 1.0, 1.0), 1.0),
+        )
+        .set(light_kind(), LightKind::Directional)
+        .set_default(cast_shadow())
+        .spawn(world);
+
     let material = MaterialData::PbrMaterial(
         PbrMaterialData::new()
             .with_roughness_factor(0.1)
@@ -183,15 +193,7 @@ fn setup_objects(world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
         builder
     };
 
-    cube(vec3(0.2, 0.0, 0.99), Quat::IDENTITY)
-        .attach(
-            child_of,
-            cube(
-                vec3(0.0, 0.0, -0.99),
-                Quat::from_scaled_axis(vec3(0.0, 0.0, 0.5)),
-            ),
-        )
-        .spawn(world);
+    cube(vec3(0.2, 0.0, 0.99), Quat::IDENTITY).spawn(world);
 
     cube(
         vec3(2.0, 0.0, -0.99),

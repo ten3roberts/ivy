@@ -26,20 +26,20 @@ fn default_true() -> bool {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 /// Bundle for a rigidbody without collider
 pub struct RigidBodyBundle {
-    #[serde(default = "default_fixed")]
+    #[cfg_attr(feature = "serde", serde(default = "default_fixed"))]
     pub body_type: RigidBodyType,
-    #[serde(default = "default_true")]
+    #[cfg_attr(feature = "serde", serde(default = "default_true"))]
     pub can_sleep: bool,
-    #[serde(default)]
+    #[cfg_attr(feature = "serde", serde(default))]
     pub mass: f32,
-    #[serde(default)]
+    #[cfg_attr(feature = "serde", serde(default))]
     pub angular_mass: f32,
-    #[serde(default)]
+    #[cfg_attr(feature = "serde", serde(default))]
     pub locked_axes: Option<LockedAxes>,
 
-    #[serde(default)]
+    #[cfg_attr(feature = "serde", serde(default))]
     pub velocity: Vec3,
-    #[serde(default)]
+    #[cfg_attr(feature = "serde", serde(default))]
     pub angular_velocity: Vec3,
 }
 

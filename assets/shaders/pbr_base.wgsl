@@ -130,7 +130,7 @@ const LIGHT_POINT: u32 = 0;
 const LIGHT_DIRECTIONAL: u32 = 1;
 const LIGHT_SPOTLIGHT: u32 = 2;
 
-const LIGHT_COUNT: u32 = 16;
+const MAX_LIGHT_COUNT: u32 = 16;
 
 fn pbr_luminance(in: PbrLuminance, light: Light) -> vec3<f32> {
     var l: vec3<f32> = vec3(0.0);
@@ -235,7 +235,7 @@ fn brdf_forward(in: PbrLuminance) -> vec3<f32> {
 
     luminance += ambient_light * in.ao;
 
-    for (var i = 0u; i < LIGHT_COUNT; i++) {
+    for (var i = 0u; i < MAX_LIGHT_COUNT; i++) {
         let light = lights[i];
         if light.kind == U32_MAX {
             break;

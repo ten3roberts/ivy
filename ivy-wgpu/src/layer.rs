@@ -130,7 +130,8 @@ impl GraphicsLayer {
         store: &mut DynamicStore,
         window: Arc<Window>,
     ) -> Result<(), anyhow::Error> {
-        let (gpu, surface) = futures::executor::block_on(Gpu::with_surface(window));
+        let (gpu, surface) =
+            futures::executor::block_on(Gpu::with_surface(window, Default::default()))?;
 
         assets.register_service(gpu.clone());
 

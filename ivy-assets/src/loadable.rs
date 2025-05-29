@@ -1,7 +1,6 @@
 use std::{collections::BTreeMap, future::Future};
 
 use futures::{stream, StreamExt, TryStreamExt};
-use serde::de::DeserializeOwned;
 
 use crate::{fs::AssetPath, Asset, AssetCache, AsyncAssetDesc};
 
@@ -125,7 +124,7 @@ where
 impl<T> ResourceFromPath for T
 where
     T: Resource,
-    T::Desc: ResourceDesc<Output = T> + DeserializeOwned,
+    T::Desc: ResourceDesc<Output = T> + serde::DeserializeOwned,
     <T::Desc as ResourceDesc>::Error: Into<anyhow::Error>,
 {
     type Error = anyhow::Error;

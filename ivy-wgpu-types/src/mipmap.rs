@@ -165,7 +165,7 @@ mod test {
             tracing::info!("loading image");
             let image = image::open("../assets/textures/statue.jpg").unwrap();
 
-            let gpu = Gpu::headless().await;
+            let gpu = Gpu::headless(Default::default()).await.unwrap();
 
             let assets = AssetCache::new();
             assets.register_service(gpu.clone());

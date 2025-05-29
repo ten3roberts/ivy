@@ -1,0 +1,23 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "type": "cargo",
+            "command": "run",
+            "args": [
+                "--example",
+                "transform_gizmos"
+            ],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "env": {
+                "RUST_LOG": "wgpu=warn,info"
+            },
+            "group": "test",
+            "label": "example transform_gizmos"
+        }
+    ]
+}
