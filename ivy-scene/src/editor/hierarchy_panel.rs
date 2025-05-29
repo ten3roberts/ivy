@@ -9,16 +9,11 @@ use itertools::Itertools;
 use ivy_core::components::world_transform;
 use ivy_ui::{
     streamed::StreamedUiExt,
-    violet::{
-        core::{
-            state::StateStreamRef,
-            stored::WeakHandle,
+    violet::core::{
             style::{SizeExt, WidgetSizeProps},
-            widget::{card, col, label, Button, Collapsible},
+            widget::{col, label, Button, Collapsible},
             Edges, Scope, Widget,
         },
-        futures_signals::signal::Mutable,
-    },
 };
 
 pub struct HierarchyPanel {

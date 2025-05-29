@@ -14,7 +14,7 @@ use ivy_core::{
     components::{engine, main_camera, world_transform, TransformQuery, TransformQueryItem},
     gizmos::{
         manipulator::{ArrowGizmo, TranslateGizmo},
-        Gizmos, LineGizmo, DEFAULT_THICKNESS,
+        Gizmos,
     },
     subscribers::{RemovedComponentSubscriber, RemovedRelationSubscriber},
     Color, ColorExt,

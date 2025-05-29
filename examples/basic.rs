@@ -6,7 +6,7 @@ use flax::{
     World,
 };
 use glam::{vec3, EulerRot, Mat4, Quat, Vec3};
-use image::{DynamicImage, Rgba};
+use image::Rgba;
 use itertools::{Either, Itertools};
 use ivy_assets::{
     fs::AssetPath, loadable::ResourceDesc, stored::DynamicStore, Asset, AssetCache, AsyncAssetExt,
@@ -58,7 +58,7 @@ use ivy_wgpu::{
     layer::GraphicsLayer,
     light::{LightBundle, LightKind, LightParams},
     material_desc::{
-        MaterialData, MaterialDesc, PbrEmissiveMaterialData, PbrEmissiveMaterialDesc,
+        MaterialData, MaterialDesc, PbrEmissiveMaterialDesc,
         PbrMaterialData, PbrMaterialDesc,
     },
     mesh_desc::MeshDesc,
@@ -71,9 +71,8 @@ use tracing_tree::HierarchicalLayer;
 use violet::{
     core::{
         style::SizeExt,
-        to_owned,
         unit::Unit,
-        widget::{card, maximized, StreamWidget},
+        widget::{card, maximized},
         Widget,
     },
     palette::{rgb::Rgb, Hsl, IntoColor},

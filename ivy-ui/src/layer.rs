@@ -16,7 +16,7 @@ use ivy_wgpu::{
     events::{ApplicationReady, ResizedEvent},
 };
 use violet::{
-    core::{declare_atom, style::StylesheetOptions, widget::col, ScopeRef, Widget},
+    core::{declare_atom, style::StylesheetOptions, widget::col, ScopeRef},
     glam::vec2,
     wgpu::{app::AppInstance, AppBuilder},
 };

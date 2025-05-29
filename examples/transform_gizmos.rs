@@ -1,7 +1,6 @@
-use std::f32::consts::TAU;
 
 use flax::{
-    components::{child_of, name},
+    components::name,
     system, Entity, World,
 };
 use glam::{vec3, EulerRot, Mat4, Quat, Vec3};

@@ -5,7 +5,7 @@ use glam::{Mat3, Mat4, Vec3, Vec4};
 use ivy_core::{
     components::{self, engine, main_camera, world_transform},
     gizmos::GizmoPrimitive,
-    srgba_to_vec4, to_linear_vec3, ColorExt,
+    srgba_to_vec4,
 };
 use ivy_wgpu_types::{
     shader::{ShaderDesc, TargetDesc},

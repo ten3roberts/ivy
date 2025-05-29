@@ -1,4 +1,4 @@
-use std::{mem, ops::Deref};
+use std::mem;
 
 use anyhow::Context;
 use flax::{filter::ChangeFilter, Component, ComponentMut, FetchExt, Query};

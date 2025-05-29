@@ -1,7 +1,7 @@
 use flax::{
     fetch::Copied, BoxedSystem, Component, Entity, FetchExt, Query, QueryBorrow, System, World,
 };
-use glam::{vec3, EulerRot, Quat, Vec2, Vec3};
+use glam::{vec3, EulerRot, Quat, Vec3};
 use itertools::Itertools;
 use ivy_assets::{fs::AssetPath, stored::DynamicStore, AssetCache};
 use ivy_core::{
