@@ -2,7 +2,7 @@ use flax::{
     components::child_of,
     fetch::{entity_refs, EntityRefs},
     filter::All,
-    BoxedSystem, Component, ComponentMut, Dfs, DfsBorrow, FetchExt, Query, QueryBorrow, System,
+    BoxedSystem, Component, ComponentMut, Dfs, DfsBorrow, Query, QueryBorrow, System,
 };
 use glam::{Mat4, Vec3};
 use ivy_assets::stored::DynamicStore;

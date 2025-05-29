@@ -2,7 +2,6 @@ use flax::{
     fetch::{entity_refs, EntityRefs},
     CommandBuffer, ComponentMut, Query,
 };
-use glam::Vec2;
 use ivy_assets::stored::DynamicStore;
 use ivy_core::{app::TickEvent, components::engine, Layer};
 

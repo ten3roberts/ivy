@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use gltf::json::extensions::texture::Info;
 use ivy_assets::service::Service;
 use wgpu::{
     Adapter, Backends, Device, Features, Queue, SurfaceConfiguration, SurfaceError, SurfaceTexture,

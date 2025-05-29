@@ -1,11 +1,11 @@
 use std::f32::consts::TAU;
 
-use glam::{vec3, Mat4, Vec3};
+use glam::{Mat4, Vec3};
 use palette::Srgba;
 
 use crate::{math::Axis3D, Color, ColorExt, DEG_45};
 
-use super::{DrawGizmos, GizmoVertex, GizmosSection, SphereGizmo};
+use super::{DrawGizmos, GizmoVertex, GizmosSection};
 
 pub struct TranslateGizmo {
     pub transform: Mat4,
