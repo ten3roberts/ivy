@@ -38,13 +38,6 @@ var<uniform> globals: Globals;
 @group(0) @binding(1)
 var<storage> objects: array<Object>;
 
-@group(0) @binding(2)
-var depth_texture: texture_2d<f32>;
-
-@group(0) @binding(3)
-var depth_sampler: sampler;
-
-
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput {
     var out: VertexOutput;
@@ -75,13 +68,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     let uv = vec2(in.clip_pos.x + 1.0, -in.clip_pos.y + 1.0) * 0.5;
 
-    let depth_at = textureSample(depth_texture, depth_sampler, uv).r;
-
     var mask = vec4(1f);
-    // if depth_at < in.clip_pos.z {
-    //     mask = vec4(0.2);
-    // } else {
-    // }
 
     let width = in.frag_scale.x;
     let height = in.frag_scale.y;

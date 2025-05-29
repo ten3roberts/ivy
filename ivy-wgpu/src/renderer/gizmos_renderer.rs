@@ -12,8 +12,9 @@ use ivy_wgpu_types::{
     BindGroupBuilder, BindGroupLayoutBuilder, Gpu, RenderShader, TypedBuffer,
 };
 use wgpu::{
-    BindingType, BufferAddress, BufferUsages, RenderPassColorAttachment, RenderPassDescriptor,
-    SamplerBindingType, SamplerDescriptor, ShaderStages, TextureUsages,
+    core::device, BindingType, BufferAddress, BufferUsages, LoadOp, RenderPassColorAttachment,
+    RenderPassDescriptor, SamplerBindingType, SamplerDescriptor, ShaderStages, StoreOp,
+    TextureFormat, TextureUsages,
 };
 
 use super::{get_main_camera_data, CameraData};
@@ -33,7 +34,6 @@ pub struct GizmosRendererNode {
     layout: wgpu::BindGroupLayout,
     output: TextureHandle,
     depth_buffer: TextureHandle,
-    sampler: wgpu::Sampler,
     draw_index_count: u32,
     main_camera_query: Query<(Component<()>, Component<Mat4>)>,
 }
@@ -53,11 +53,6 @@ impl GizmosRendererNode {
         let layout = BindGroupLayoutBuilder::new("gizmos")
             .bind_uniform_buffer(ShaderStages::VERTEX)
             .bind_storage_buffer(ShaderStages::VERTEX)
-            .bind_texture_unfiltered(ShaderStages::FRAGMENT)
-            .bind(
-                ShaderStages::FRAGMENT,
-                BindingType::Sampler(SamplerBindingType::NonFiltering),
-            )
             .build(gpu);
 
         let buffer = TypedBuffer::new_uninit(
@@ -74,19 +69,8 @@ impl GizmosRendererNode {
             &[CameraData::zeroed()],
         );
 
-        let sampler = gpu.device.create_sampler(&SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Nearest,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
-
         Self {
             main_camera_query: Query::new((main_camera(), world_transform())),
-            sampler,
             depth_buffer,
             layout,
             mesh,
@@ -247,27 +231,11 @@ impl Node for GizmosRendererNode {
         let bind_group = BindGroupBuilder::new("gizmos")
             .bind_buffer(&self.camera_buffer)
             .bind_buffer(&self.buffer)
-            .bind_texture(&depth_view)
-            .bind_sampler(&self.sampler)
             .build(ctx.gpu, &self.layout);
-
-        let mut render_pass = ctx.encoder.begin_render_pass(&RenderPassDescriptor {
-            label: Some("gizmos"),
-            color_attachments: &[Some(RenderPassColorAttachment {
-                view: &output_view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Load,
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            ..Default::default()
-        });
 
         let target = TargetDesc {
             formats: &[output.format()],
-            depth_format: None,
+            depth_format: Some(TextureFormat::Depth24Plus),
             sample_count: output.sample_count(),
         };
 
@@ -290,6 +258,27 @@ impl Node for GizmosRendererNode {
             )
         });
 
+        let mut render_pass = ctx.encoder.begin_render_pass(&RenderPassDescriptor {
+            label: Some("gizmos"),
+            color_attachments: &[Some(RenderPassColorAttachment {
+                view: &output_view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: LoadOp::Load,
+                    store: StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: &depth_view,
+                depth_ops: Some(wgpu::Operations {
+                    store: StoreOp::Store,
+                    load: LoadOp::Clear(1.0),
+                }),
+                stencil_ops: None,
+            }),
+            ..Default::default()
+        });
+
         // Draw primitives
         render_pass.set_pipeline(shader.pipeline());
         render_pass.set_vertex_buffer(0, self.mesh.vertex_buffer().slice(..));
@@ -306,14 +295,17 @@ impl Node for GizmosRendererNode {
     }
 
     fn read_dependencies(&self) -> Vec<crate::rendergraph::Dependency> {
-        vec![
-            Dependency::texture(self.output, TextureUsages::RENDER_ATTACHMENT),
-            Dependency::texture(self.depth_buffer, TextureUsages::TEXTURE_BINDING),
-        ]
+        vec![Dependency::texture(
+            self.output,
+            TextureUsages::RENDER_ATTACHMENT,
+        )]
     }
 
     fn write_dependencies(&self) -> Vec<crate::rendergraph::Dependency> {
-        vec![]
+        vec![Dependency::texture(
+            self.depth_buffer,
+            TextureUsages::RENDER_ATTACHMENT,
+        )]
     }
 
     fn on_resource_changed(&mut self, _resource: crate::rendergraph::ResourceHandle) {}

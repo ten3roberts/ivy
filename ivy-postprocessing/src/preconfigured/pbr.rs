@@ -164,7 +164,19 @@ impl PbrRenderGraphConfig {
             persistent: false,
         });
 
+        // separate depth textures to render gizmos on top
+        let gizmos_depth_texture = render_graph.resources.insert_texture(ManagedTextureDesc {
+            label: "gizmos_depth_texture".into(),
+            extent,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Depth24Plus,
+            mip_level_count: 1,
+            sample_count: 1,
+            persistent: false,
+        });
+
         let resolved_depth_texture;
+        // let resolved_gizmos_depth_texture;
         let sampled_target;
 
         if self.msaa.is_some() {
@@ -186,10 +198,22 @@ impl PbrRenderGraphConfig {
                 mip_level_count: 1,
                 sample_count: 1,
                 persistent: false,
-            })
+            });
+
+            // resolved_gizmos_depth_texture =
+            //     render_graph.resources.insert_texture(ManagedTextureDesc {
+            //         label: "gizmos_depth_texture".into(),
+            //         extent,
+            //         dimension: wgpu::TextureDimension::D2,
+            //         format: wgpu::TextureFormat::R32Float,
+            //         mip_level_count: 1,
+            //         sample_count: 1,
+            //         persistent: false,
+            //     })
         } else {
             sampled_target = final_color;
             resolved_depth_texture = depth_texture;
+            // resolved_gizmos_depth_texture = gizmos_depth_texture;
         };
 
         let (shadow_maps, shadow_camera_buffer) = match &self.shadow_map_config {
@@ -380,7 +404,7 @@ impl PbrRenderGraphConfig {
 
         let mut last_output = sampled_target;
 
-        let mut screensized = vec![depth_texture];
+        let mut screensized = vec![depth_texture, gizmos_depth_texture];
 
         if needs_indirection_target {
             screensized.push(final_color);
@@ -389,6 +413,7 @@ impl PbrRenderGraphConfig {
         if self.msaa.is_some() {
             screensized.push(sampled_target);
             screensized.push(resolved_depth_texture);
+            // screensized.push(resolved_gizmos_depth_texture);
         };
 
         if self.msaa.is_some() {
@@ -434,7 +459,7 @@ impl PbrRenderGraphConfig {
         render_graph.add_node(GizmosRendererNode::new(
             gpu,
             destination,
-            resolved_depth_texture,
+            gizmos_depth_texture,
         ));
 
         if let Some(ui) = ui_instance {
