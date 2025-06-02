@@ -13,7 +13,7 @@ use glam::{Mat4, Vec3};
 use ivy_core::{
     components::{engine, main_camera, world_transform, TransformQuery, TransformQueryItem},
     gizmos::{
-        manipulator::{ArrowGizmo, TranslateGizmo},
+        transforms::{ArrowGizmo, TranslateGizmo},
         Gizmos,
     },
     subscribers::{RemovedComponentSubscriber, RemovedRelationSubscriber},

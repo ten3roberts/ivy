@@ -1,31 +1,33 @@
-
+use anyhow::Context;
 use flax::{
     components::name,
-    system, Entity, World,
+    filter::{All, With},
+    system, Entity, Query, QueryBorrow, System, World,
 };
 use glam::{vec3, EulerRot, Mat4, Quat, Vec3};
 use ivy_assets::{fs::AssetPath, stored::DynamicStore, AssetCache};
 use ivy_core::{
-    gizmos::{manipulator::TranslateGizmo, Gizmos},
+    gizmos::{transforms::TranslateGizmo, Gizmos},
     palette::Srgb,
     profiling::ProfilingLayer,
     transforms::TransformUpdatePlugin,
     update_layer::{FixedTimeStep, Plugin, ScheduledLayer},
     App, EngineLayer, EntityBuilderExt,
 };
-use ivy_engine::{engine, gizmos, RigidBodyBundle, TransformBundle};
+use ivy_engine::{engine, gizmos, main_camera, RigidBodyBundle, TransformBundle};
 use ivy_game::{
+    camera::{self, CameraQuery},
     orbit_camera::OrbitCameraPlugin,
     viewport_camera::{CameraSettings, ViewportCameraLayer},
 };
 use ivy_graphics::texture::TextureData;
-use ivy_input::layer::InputLayer;
+use ivy_input::{components::cursor_position, layer::InputLayer, CursorPositionBinding};
 use ivy_physics::{ColliderBundle, GizmoSettings, PhysicsPlugin};
 use ivy_postprocessing::preconfigured::{
     pbr::{PbrRenderGraphConfig, SkyboxConfig},
     SurfacePbrPipelineDesc, SurfacePbrRenderer,
 };
-use ivy_scene::editor::hierarchy_panel::HierarchyPanel;
+use ivy_scene::editor::{hierarchy_panel::HierarchyPanel, manipulator::EntityManipulator};
 use ivy_ui::{
     layer::{UiLayer, UiUpdateLayer},
     screens::{screen_state, Screen, ScreenLifetimeToken},
@@ -50,7 +52,7 @@ use violet::{
         layout::Align,
         style::SizeExt,
         widget::{card, label, maximized},
-        Widget,
+        Scope, Widget,
     },
     palette::Srgba,
 };
@@ -73,7 +75,7 @@ pub fn main() -> anyhow::Result<()> {
     if let Err(err) = App::builder()
         .with_driver(WinitDriver::new(
             WindowAttributes::default()
-                .with_inner_size(LogicalSize::new(1920, 1080))
+                .with_inner_size(LogicalSize::new(1280, 720))
                 .with_title("Ivy"),
         ))
         .with_layer(EngineLayer::new())
@@ -216,25 +218,40 @@ impl Plugin for ExamplePlugin {
         world.get(engine(), screen_state())?.open(MainUi);
 
         setup_objects(world, assets)?;
-        schedules.per_tick_mut().with_system(draw_gizmos_system());
+
+        let manipulator = EntityManipulator::new(Vec3::ZERO, Quat::IDENTITY);
+
+        schedules.per_tick_mut().with_system(
+            System::builder()
+                .with_world()
+                .with_query(Query::new(CameraQuery::new()).with(main_camera()))
+                .build(
+                    move |world: &World, mut camera: QueryBorrow<CameraQuery, (All, With)>| {
+                        let gizmos = world.get(engine(), gizmos())?;
+                        let cursor_pos = world.get_copy(engine(), cursor_position())?;
+
+                        let camera = camera.first().context("No main camera")?;
+                        let ray = camera::screen_to_world_ray(cursor_pos, camera);
+
+                        let mut gizmos = gizmos.begin_section("example_manipulator_system");
+
+                        tracing::info!(?cursor_pos, ?ray);
+                        manipulator.draw(&mut gizmos);
+                        manipulator.intersect(ray.origin.into(), ray.dir.into());
+
+                        anyhow::Ok(())
+                    },
+                ),
+        );
 
         Ok(())
     }
 }
 
-#[system]
-fn draw_gizmos_system(gizmos: &mut Gizmos) {
-    let mut section = gizmos.begin_section("draw_gizmos_system");
-
-    section.draw(TranslateGizmo {
-        transform: Mat4::default(),
-    });
-}
-
 struct MainUi;
 
 impl Screen for MainUi {
-    fn create(self, scope: &mut violet::core::Scope<'_>, _: ScreenLifetimeToken) {
+    fn create(self, scope: &mut Scope<'_>, _: ScreenLifetimeToken) {
         maximized(card((
             label("Transforms").with_item_align(LayoutAlignment::new(Align::Center, Align::Start)),
             HierarchyPanel::new()

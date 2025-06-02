@@ -8,6 +8,7 @@ license-file.workspace = true
 [dependencies]
 ivy-core = { path = "../ivy-core" }
 ivy-wgpu = { path = "../ivy-wgpu" }
+ivy-physics = { path = "../ivy-physics" }
 ivy-gltf = { path = "../ivy-gltf" }
 ivy-assets = { path = "../ivy-assets" }
 ivy-ui = { path = "../ivy-ui" }
@@ -18,4 +19,5 @@ flax.workspace = true
 futures.workspace = true
 glam.workspace = true
 itertools.workspace = true
+ordered-float.workspace = true
 tracing.workspace = true

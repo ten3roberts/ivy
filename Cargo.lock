@@ -2018,8 +2018,10 @@ dependencies = [
  "ivy-assets",
  "ivy-core",
  "ivy-gltf",
+ "ivy-physics",
  "ivy-ui",
  "ivy-wgpu",
+ "ordered-float 5.0.0",
  "tracing",
 ]
 

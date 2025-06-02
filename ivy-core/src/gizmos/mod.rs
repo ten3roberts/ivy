@@ -5,8 +5,8 @@ use palette::Srgba;
 
 use crate::{Color, ColorExt};
 
-pub mod manipulator;
 mod traits;
+pub mod transforms;
 pub use traits::*;
 
 /// A default radius that looks good for small gizmos
