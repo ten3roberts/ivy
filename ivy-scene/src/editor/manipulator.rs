@@ -20,7 +20,7 @@ impl EntityManipulator {
         Self {
             position,
             rotation,
-            interact_width: 0.2,
+            interact_width: 0.05,
         }
     }
 
@@ -40,7 +40,7 @@ impl EntityManipulator {
     pub fn intersect(&self, origin: Vec3, direction: Vec3) {
         assert!(direction.is_normalized());
 
-        let hit = [Axis3D::X, Axis3D::Y, Axis3D::Z]
+        let hit = [Axis3D::X]
             .into_iter()
             .filter_map(|axis| {
                 let dim = axis.to_vec3();
@@ -56,13 +56,14 @@ impl EntityManipulator {
 
                 let hit_point = origin + direction * hit;
 
-                let cross_dist = (hit_point - self.position).dot(up);
+                let cross_dist = (hit_point - self.position).dot(up).abs();
 
                 let dist = (hit_point - self.position).dot(dim);
 
-                if cross_dist > self.interact_width || dist > 1.0 {
+                if cross_dist > self.interact_width || dist > 1.0 || dist < 0.0 {
                     return None;
                 }
+                info!(?axis, cross_dist, dist);
 
                 // tracing::info!(?axis, ?hit, cross_dist);
                 Some((axis, hit, dist))
@@ -73,7 +74,7 @@ impl EntityManipulator {
             return;
         };
 
-        tracing::info!(?origin, ?direction, ?hit);
+        // tracing::info!(?origin, ?direction, ?hit);
         // tracing::info!(?hit);
     }
 }

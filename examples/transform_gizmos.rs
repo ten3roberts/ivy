@@ -235,7 +235,6 @@ impl Plugin for ExamplePlugin {
 
                         let mut gizmos = gizmos.begin_section("example_manipulator_system");
 
-                        tracing::info!(?cursor_pos, ?ray);
                         manipulator.draw(&mut gizmos);
                         manipulator.intersect(ray.origin.into(), ray.dir.into());
 

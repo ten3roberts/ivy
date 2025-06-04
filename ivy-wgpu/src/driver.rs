@@ -209,7 +209,7 @@ impl WinitEventHandler<'_> {
                 device_id: _,
                 position,
             } => {
-                let logical_pos = position.to_logical(1.0);
+                let logical_pos = position.to_logical(self.scale_factor);
                 let window_entity = self.app.world().entity(window_id).unwrap();
 
                 let size;
