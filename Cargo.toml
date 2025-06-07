@@ -38,6 +38,7 @@ members = [
 color-backtrace = "0.7"
 either = { version = "1.13", features = ["serde"] }
 rand_pcg = "0.9"
+rand_distr = "0.5"
 naga_oil = "0.15"
 anyhow = { version = "1.0", features = ["backtrace"] }
 async-std = { version = "1.0" }
@@ -71,7 +72,6 @@ parking_lot = "0.12"
 puffin = "0.19"
 puffin_http = "0.16"
 rand = "0.9"
-rand_distr = "0.5"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 slab = "0.4"
@@ -121,6 +121,7 @@ bytemuck.workspace = true
 violet.workspace = true
 color-backtrace.workspace = true
 rand.workspace = true
+rand_distr.workspace = true
 rand_pcg.workspace = true
 anyhow.workspace = true
 atomic_refcell.workspace = true

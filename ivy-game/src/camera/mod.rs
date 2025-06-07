@@ -23,8 +23,8 @@ pub fn screen_to_world_ray(cursor_pos: Vec2, camera: CameraQueryItem) -> Ray {
 #[derive(Fetch)]
 #[fetch(item_derives=[Clone, Copy, Debug, PartialEq])]
 pub struct CameraQuery {
-    transform: Component<Mat4>,
-    projection: Component<Mat4>,
+    pub transform: Component<Mat4>,
+    pub projection: Component<Mat4>,
 }
 
 impl CameraQuery {

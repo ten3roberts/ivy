@@ -1,3 +1,5 @@
+use std::f32::consts::PI;
+
 use anyhow::Context;
 use flax::{
     component,
@@ -12,7 +14,7 @@ use ivy_core::{
     profiling::ProfilingLayer,
     transforms::TransformUpdatePlugin,
     update_layer::{FixedTimeStep, Plugin, ScheduledLayer},
-    App, EngineLayer, EntityBuilderExt,
+    App, EngineLayer, EntityBuilderExt, DEG_45,
 };
 use ivy_engine::{engine, gizmos, main_camera, RigidBodyBundle, TransformBundle};
 use ivy_game::{
@@ -32,7 +34,7 @@ use ivy_postprocessing::preconfigured::{
 };
 use ivy_scene::editor::{
     hierarchy_panel::HierarchyPanel,
-    manipulator::{ManipulatedEntity, TransformController},
+    manipulator::{ManipulatedEntity, ManipulationSpace, SnapMode, TransformController},
 };
 use ivy_ui::{
     layer::{UiLayer, UiUpdateLayer},
@@ -49,6 +51,8 @@ use ivy_wgpu::{
     primitives::{CapsulePrimitive, CubePrimitive},
     renderer::{EnvironmentData, RenderObjectBundle},
 };
+use rand::{rngs::StdRng, Rng, SeedableRng};
+use rand_distr::UnitSphere;
 use rapier3d::prelude::{QueryFilter, SharedShape};
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
@@ -183,8 +187,8 @@ fn setup_objects(world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
             )
             .mount(
                 RigidBodyBundle::dynamic()
-                    .with_linear_damping(0.2)
-                    .with_angular_damping(0.2),
+                    .with_linear_damping(0.0)
+                    .with_angular_damping(0.1),
             );
 
         builder
@@ -222,7 +226,11 @@ fn setup_objects(world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
         builder
     };
 
-    cube(vec3(0.2, 0.0, 0.99), Quat::IDENTITY).spawn(world);
+    let mut rng = StdRng::seed_from_u64(42);
+    for _ in 0..100 {
+        let v = Vec3::from_array(rng.sample(UnitSphere)) * 20.0;
+        cube(v, Quat::IDENTITY).spawn(world);
+    }
 
     cube(
         vec3(2.0, 0.0, -0.99),
@@ -315,6 +323,60 @@ impl Plugin for ExamplePlugin {
                 Action::new().with_binding(KeyBinding::new(Key::Named(NamedKey::Shift))),
             )
             .with_trigger_action(
+                Action::new().with_binding(KeyBinding::new(Key::Character("g".into()))),
+                |entity: &EntityRef, _: &mut CommandBuffer, pressed: bool| {
+                    if !pressed {
+                        return Ok(());
+                    }
+
+                    let mut manipulator = entity.get_mut(transform_controller())?;
+                    let space = if manipulator.space == ManipulationSpace::Global {
+                        ManipulationSpace::Local
+                    } else {
+                        ManipulationSpace::Global
+                    };
+
+                    manipulator.set_space(space);
+                    Ok(())
+                },
+            )
+            .with_trigger_action(
+                Action::new().with_binding(KeyBinding::new(Key::Character("v".into()))),
+                |entity: &EntityRef, _: &mut CommandBuffer, pressed: bool| {
+                    if !pressed {
+                        return Ok(());
+                    }
+
+                    let mut manipulator = entity.get_mut(transform_controller())?;
+                    manipulator.set_space(ManipulationSpace::View);
+                    Ok(())
+                },
+            )
+            .with_trigger_action(
+                Action::new().with_binding(KeyBinding::new(Key::Character("l".into()))),
+                |entity: &EntityRef, _: &mut CommandBuffer, pressed: bool| {
+                    if !pressed {
+                        return Ok(());
+                    }
+
+                    let mut manipulator = entity.get_mut(transform_controller())?;
+
+                    tracing::info!(current_snap_mode = ?manipulator.snap_mode());
+
+                    if manipulator.snap_mode().is_absolute() {
+                        manipulator.set_snap_mode(SnapMode::None);
+                        manipulator.set_angle_snap(0.0);
+                    } else {
+                        manipulator.set_snap_mode(SnapMode::Absolute(1.0));
+                        manipulator.set_angle_snap(PI / 180.0 * 5.0);
+                    }
+
+                    tracing::info!("New Snap mode: {:?}", manipulator.snap_mode());
+
+                    Ok(())
+                },
+            )
+            .with_trigger_action(
                 Action::new()
                     .with_binding(MouseButtonBinding::new(winit::event::MouseButton::Left)),
                 mouse_button_changed,
@@ -356,7 +418,7 @@ impl Plugin for ExamplePlugin {
                         let mut gizmos = gizmos.begin_section("example_manipulator_system");
                         for (manipulator, cursor_pos) in &mut query {
                             let ray = camera::screen_to_world_ray(*cursor_pos, camera);
-                            manipulator.update(world);
+                            manipulator.update(world, Quat::from_mat4(camera.transform));
                             manipulator.draw(&mut gizmos, ray);
                         }
 
@@ -375,8 +437,8 @@ impl Screen for MainUi {
     fn create(self, scope: &mut Scope<'_>, _: ScreenLifetimeToken) {
         maximized(card((
             label("Transforms").with_item_align(LayoutAlignment::new(Align::Center, Align::Start)),
-            HierarchyPanel::new()
-                .with_item_align(LayoutAlignment::new(Align::Start, Align::Center)),
+            // HierarchyPanel::new()
+            //     .with_item_align(LayoutAlignment::new(Align::Start, Align::Center)),
         )))
         .mount(scope);
     }

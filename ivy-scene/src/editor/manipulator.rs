@@ -26,6 +26,39 @@ pub enum TransformMode {
     // Scale, // TODO
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum SnapMode {
+    None,
+    Absolute(f32),
+    Increment(f32),
+}
+
+impl SnapMode {
+    /// Returns `true` if the snap mode is [`None`].
+    ///
+    /// [`None`]: SnapMode::None
+    #[must_use]
+    pub fn is_none(&self) -> bool {
+        matches!(self, Self::None)
+    }
+
+    /// Returns `true` if the snap mode is [`Absolute`].
+    ///
+    /// [`Absolute`]: SnapMode::Absolute
+    #[must_use]
+    pub fn is_absolute(&self) -> bool {
+        matches!(self, Self::Absolute(..))
+    }
+
+    /// Returns `true` if the snap mode is [`Increment`].
+    ///
+    /// [`Increment`]: SnapMode::Increment
+    #[must_use]
+    pub fn is_increment(&self) -> bool {
+        matches!(self, Self::Increment(..))
+    }
+}
+
 #[derive(Debug)]
 pub struct DragData {
     start_position: Vec3,
@@ -46,10 +79,12 @@ pub struct TransformControls {
     drag_data: Option<DragData>,
     ring_radius: f32,
     dynamic_size: bool,
+    snap_mode: SnapMode,
+    angle_snap: f32,
 }
 
 impl TransformControls {
-    pub fn new(position: Vec3, rotation: Quat) -> Self {
+    pub fn new(position: Vec3, rotation: Quat, snap_mode: SnapMode, angle_snap: f32) -> Self {
         Self {
             position,
             rotation,
@@ -57,7 +92,9 @@ impl TransformControls {
             ring_width: 0.2,
             drag_data: None,
             ring_radius: 1.2,
-            dynamic_size: false,
+            dynamic_size: true,
+            snap_mode,
+            angle_snap,
         }
     }
 
@@ -159,13 +196,13 @@ impl TransformControls {
         if let Some(drag_data) = &mut self.drag_data {
             match drag_data.hit.mode {
                 TransformMode::Rotate => {
-                    let delta = Self::handle_rotate(camera_ray, drag_data);
+                    let delta = Self::handle_rotate(camera_ray, drag_data, self.angle_snap);
                     drag_data.rotation_delta = delta;
                     drag_data.new_rotation = delta * drag_data.start_rotation;
                     self.rotation = drag_data.new_rotation;
                 }
                 TransformMode::Translate => {
-                    let delta = Self::handle_translate(camera_ray, drag_data);
+                    let delta = Self::handle_translate(camera_ray, drag_data, self.snap_mode);
                     drag_data.position_delta = delta;
                     drag_data.new_position = drag_data.start_position + delta;
                     self.position = drag_data.new_position;
@@ -176,31 +213,40 @@ impl TransformControls {
         self.drag_data.as_ref()
     }
 
-    fn handle_translate(camera_ray: Ray, drag_data: &DragData) -> Vec3 {
+    fn handle_translate(camera_ray: Ray, drag_data: &DragData, snap_mode: SnapMode) -> Vec3 {
         let new_hit = drag_data
             .hit
             .plane
             .intersect_ray(camera_ray.origin(), camera_ray.direction());
 
         let Some(hit) = new_hit else {
-            return Vec3::ZERO;
+            return drag_data.position_delta;
         };
 
         let hit_point = camera_ray.at(hit);
 
         let moved_dist = (hit_point - drag_data.start_position).dot(drag_data.hit.dim);
 
-        drag_data.hit.dim * moved_dist - drag_data.hit.interact_point
+        let start_dist = drag_data.hit.interact_point.dot(drag_data.hit.dim);
+        let delta_dist = moved_dist - start_dist;
+
+        let delta_dist = match snap_mode {
+            SnapMode::None => delta_dist,
+            SnapMode::Absolute(snap) => snap_value(start_dist + delta_dist, snap) - start_dist,
+            SnapMode::Increment(snap) => snap_value(delta_dist, snap),
+        };
+
+        drag_data.hit.dim * delta_dist
     }
 
-    fn handle_rotate(camera_ray: Ray, drag_data: &DragData) -> Quat {
+    fn handle_rotate(camera_ray: Ray, drag_data: &DragData, snap: f32) -> Quat {
         let new_hit = drag_data
             .hit
             .plane
             .intersect_ray(camera_ray.origin(), camera_ray.direction());
 
         let Some(hit) = new_hit else {
-            return Quat::IDENTITY;
+            return drag_data.rotation_delta;
         };
 
         let hit_point = (camera_ray.at(hit) - drag_data.start_position).normalize();
@@ -210,7 +256,8 @@ impl TransformControls {
             hit_point.normalize(),
         );
 
-        quat
+        let (axis, angle) = quat.to_axis_angle();
+        Quat::from_axis_angle(axis, snap_value(angle, snap))
     }
 
     pub fn handle_mouse_up(&mut self) {
@@ -348,25 +395,40 @@ impl ManipulatedEntity {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ManipulationSpace {
+    Local,
+    Global,
+    View,
+}
+
 pub struct TransformController {
     pub entities: Vec<ManipulatedEntity>,
     pub manipulator: TransformControls,
-    pub center: Vec3,
+    pub space: ManipulationSpace,
+    pub view_rotation: Quat, // Used for View space manipulation
 }
 
 impl TransformController {
     pub fn new(entities: Vec<ManipulatedEntity>) -> Self {
-        let center =
-            entities.iter().map(|e| e.start_position).sum::<Vec3>() / entities.len().max(1) as f32;
-
         Self {
-            manipulator: TransformControls::new(
-                center,
-                entities.last().map_or(Quat::IDENTITY, |e| e.start_rotation),
-            ),
+            manipulator: TransformControls::new(Vec3::ZERO, Quat::IDENTITY, SnapMode::None, 0.0),
             entities,
-            center,
+            space: ManipulationSpace::Global,
+            view_rotation: Quat::IDENTITY,
         }
+    }
+
+    pub fn set_space(&mut self, space: ManipulationSpace) {
+        self.space = space;
+    }
+
+    pub fn set_snap_mode(&mut self, snap_mode: SnapMode) {
+        self.manipulator.snap_mode = snap_mode;
+    }
+
+    pub fn set_angle_snap(&mut self, angle_snap: f32) {
+        self.manipulator.angle_snap = angle_snap;
     }
 
     pub fn toggle_entity(&mut self, entity: ManipulatedEntity) {
@@ -375,28 +437,28 @@ impl TransformController {
         } else {
             self.entities.push(entity);
         }
-
-        self.update_center();
     }
 
     pub fn add_entity(&mut self, entity: ManipulatedEntity) {
         self.entities.retain(|v| v.id != entity.id);
 
         self.entities.push(entity);
-
-        self.update_center();
     }
 
-    fn update_center(&mut self) {
-        self.center = self.entities.iter().map(|e| e.start_position).sum::<Vec3>()
+    fn update_center(&mut self, view_rotation: Quat) {
+        let center = self.entities.iter().map(|e| e.start_position).sum::<Vec3>()
             / self.entities.len() as f32;
 
-        self.manipulator.update(
-            self.center,
-            self.entities
+        let rotation = match self.space {
+            ManipulationSpace::Local => self
+                .entities
                 .last()
                 .map_or(Quat::IDENTITY, |e| e.start_rotation),
-        );
+            ManipulationSpace::Global => Quat::IDENTITY,
+            ManipulationSpace::View => view_rotation,
+        };
+
+        self.manipulator.update(center, rotation);
     }
 
     pub fn clear_entities(&mut self) {
@@ -411,7 +473,7 @@ impl TransformController {
         &self.entities
     }
 
-    pub fn update(&mut self, world: &World) {
+    pub fn update(&mut self, world: &World, view_rotation: Quat) {
         if self.manipulator.drag_data().is_some() {
             return; // don't update positions while dragging
         }
@@ -423,7 +485,7 @@ impl TransformController {
             }
         }
 
-        self.update_center();
+        self.update_center(view_rotation);
     }
 
     pub fn draw(&self, gizmos: &mut GizmosSection, camera_ray: Ray) {
@@ -523,4 +585,23 @@ impl TransformController {
 
         self.manipulator.handle_mouse_up();
     }
+
+    pub fn space(&self) -> ManipulationSpace {
+        self.space
+    }
+
+    pub fn snap_mode(&self) -> SnapMode {
+        self.manipulator.snap_mode
+    }
+
+    pub fn angle_snap(&self) -> f32 {
+        self.manipulator.angle_snap
+    }
+}
+
+fn snap_value(value: f32, snap: f32) -> f32 {
+    if snap == 0.0 {
+        return value;
+    }
+    (value / snap).round() * snap
 }
