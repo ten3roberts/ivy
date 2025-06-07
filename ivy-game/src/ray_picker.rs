@@ -24,6 +24,7 @@ use ivy_physics::{
         math::Isometry,
         prelude::{FixedJointBuilder, QueryFilter, RigidBodyType},
     },
+    shapes::Ray,
     state::PhysicsState,
     RigidBodyBundle,
 };
@@ -77,13 +78,13 @@ impl PickingState {
         origin: Vec3,
         ray_dir: Vec3,
     ) -> anyhow::Result<()> {
-        let ray = rapier3d::prelude::Ray::new(origin.into(), ray_dir.into());
-        let result = physics_state.cast_ray(&ray, 1e3, true, QueryFilter::exclude_fixed());
+        let ray = Ray::new(origin.into(), ray_dir.into());
+        let result = physics_state.cast_ray(ray, 1e3, true, QueryFilter::exclude_fixed());
 
         if let Some(hit) = result {
             let entity = world.entity(hit.collider_id)?;
 
-            let point: Vec3 = ray.point_at(hit.intersection.time_of_impact).into();
+            let point: Vec3 = ray.at(hit.intersection.time_of_impact).into();
 
             let pos = entity.get_copy(position()).unwrap_or_default();
             let rotation = entity.get_copy(rotation()).unwrap_or_default();
@@ -245,7 +246,7 @@ pub fn pick_ray_system() -> BoxedSystem {
                     }
 
                     let ray = screen_to_world_ray(cursor_pos, camera);
-                    state.update(world, cmd, physics_state, ray.origin.into(), ray.dir.into())?;
+                    state.update(world, cmd, physics_state, ray.origin, ray.direction)?;
                 }
 
                 anyhow::Ok(())

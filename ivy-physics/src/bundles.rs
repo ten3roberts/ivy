@@ -4,13 +4,16 @@ use core::f32;
 use flax::EntityBuilder;
 use glam::Vec3;
 use ivy_core::Bundle;
-use rapier3d::prelude::{ColliderBuilder, LockedAxes, RigidBodyType, SharedShape};
+use rapier3d::prelude::{
+    ColliderBuilder, LockedAxes, RigidBodyBuilder, RigidBodyType, SharedShape,
+};
 
 use crate::{
     components::{
-        angular_velocity, can_sleep, collider_builder, effector, inertia_tensor, locked_axes,
-        rigid_body_type, velocity,
+        angular_velocity, collider_builder, effector, inertia_tensor, rigidbody_builder,
+        rigidbody_flags, velocity,
     },
+    state::RigidBodyFlags,
     Effector,
 };
 
@@ -41,6 +44,12 @@ pub struct RigidBodyBundle {
     pub velocity: Vec3,
     #[cfg_attr(feature = "serde", serde(default))]
     pub angular_velocity: Vec3,
+
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub linear_damping: f32,
+
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub angular_damping: f32,
 }
 
 impl RigidBodyBundle {
@@ -53,6 +62,8 @@ impl RigidBodyBundle {
             angular_mass: 0.0,
             can_sleep: true,
             locked_axes: Default::default(),
+            linear_damping: 0.0,
+            angular_damping: 0.0,
         }
     }
 
@@ -105,22 +116,36 @@ impl RigidBodyBundle {
         self.can_sleep = can_sleep;
         self
     }
+
+    pub fn with_linear_damping(mut self, linear_damping: f32) -> Self {
+        self.linear_damping = linear_damping;
+        self
+    }
+
+    pub fn with_angular_damping(mut self, angular_damping: f32) -> Self {
+        self.angular_damping = angular_damping;
+        self
+    }
 }
 
 impl Bundle for RigidBodyBundle {
     fn mount(self, entity: &mut EntityBuilder) {
         entity
-            .set(rigid_body_type(), self.body_type)
+            .set(
+                rigidbody_builder(),
+                RigidBodyBuilder::new(self.body_type)
+                    .additional_mass(self.mass)
+                    .can_sleep(self.can_sleep)
+                    .gravity_scale(1.0)
+                    .locked_axes(self.locked_axes.unwrap_or(LockedAxes::empty()))
+                    .linear_damping(self.linear_damping)
+                    .angular_damping(self.angular_damping),
+            )
             .set(velocity(), self.velocity)
             .set(inertia_tensor(), self.angular_mass)
             .set(angular_velocity(), self.angular_velocity)
-            .set(effector(), Effector::new());
-
-        entity.set_opt(locked_axes(), self.locked_axes);
-
-        if self.can_sleep {
-            entity.set(can_sleep(), ());
-        }
+            .set(effector(), Effector::new())
+            .set(rigidbody_flags(), RigidBodyFlags::new());
     }
 }
 

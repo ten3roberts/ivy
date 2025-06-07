@@ -13,6 +13,7 @@ ivy-gltf = { path = "../ivy-gltf" }
 ivy-assets = { path = "../ivy-assets" }
 ivy-ui = { path = "../ivy-ui" }
 
+anyhow.workspace = true
 inventory.workspace = true
 flume.workspace = true
 flax.workspace = true

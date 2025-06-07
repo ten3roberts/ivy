@@ -17,10 +17,7 @@ use ivy_game::{
 };
 use ivy_graphics::texture::TextureData;
 use ivy_input::layer::InputLayer;
-use ivy_physics::{
-    components::{angular_velocity, gravity_influence},
-    ColliderBundle, PhysicsPlugin,
-};
+use ivy_physics::{components::angular_velocity, ColliderBundle, PhysicsPlugin};
 use ivy_postprocessing::preconfigured::{
     pbr::PbrRenderGraphConfig, SurfacePbrPipelineDesc, SurfacePbrRenderer,
 };
@@ -161,7 +158,6 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
     )
     .set(forward_pass(), red_material.clone())
     .set(angular_velocity(), Vec3::Y * 10.0)
-    .set(gravity_influence(), 1.0)
     .spawn(world);
 
     Entity::builder()

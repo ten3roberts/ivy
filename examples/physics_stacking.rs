@@ -19,7 +19,7 @@ use ivy_game::{
 use ivy_graphics::texture::TextureData;
 use ivy_input::layer::InputLayer;
 use ivy_physics::{
-    components::{collider_builder, rigid_body_type},
+    components::{collider_builder, rigidbody_builder},
     ColliderBundle, PhysicsPlugin,
 };
 use ivy_postprocessing::preconfigured::{
@@ -185,7 +185,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
     };
 
     cube(Vec3::ZERO, vec3(100.0, 1.0, 100.0))
-        .set(rigid_body_type(), RigidBodyType::Fixed)
+        .mount(RigidBodyBundle::new(RigidBodyType::Fixed))
         .set(scale(), vec3(100.0, 1.0, 100.0))
         .set(is_static(), ())
         .set(forward_pass(), white_material)

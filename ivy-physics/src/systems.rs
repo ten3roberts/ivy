@@ -41,13 +41,7 @@ pub fn register_bodies_system() -> BoxedSystem {
     System::builder()
         .with_cmd_mut()
         .with_query(Query::new(physics_state().as_mut()))
-        .with_query(Query::new((
-            entity_ids(),
-            rigid_body_type().modified(),
-            locked_axes().opt(),
-            can_sleep().satisfied(),
-            gravity_influence().opt_or(1.0),
-        )))
+        .with_query(Query::new((entity_ids(), rigidbody_builder().added())))
         .build(
             move |cmd: &mut CommandBuffer,
                   mut query: QueryBorrow<ComponentMut<PhysicsState>>,
@@ -55,21 +49,14 @@ pub fn register_bodies_system() -> BoxedSystem {
                 '_,
                 (
                     EntityIds,
-                    ChangeFilter<RigidBodyType>,
-                    Opt<Component<LockedAxes>>,
-                    _,
-                    _,
+                    ChangeFilter<RigidBodyBuilder>,
                 ),
             >| {
                 if let Some(state) = query.first() {
-                    for (id, &body_type, locked_axes, can_sleep, &gravity) in bodies.iter() {
+                    for (id, builder) in bodies.iter() {
                         let rb = state.add_body(
                             id,
-                            RigidBodyBuilder::new(body_type)
-                                .can_sleep(can_sleep)
-                                .locked_axes(locked_axes.copied().unwrap_or(LockedAxes::empty()))
-                                .gravity_scale(gravity)
-                                .build(),
+                            builder.build(),
                         );
 
                         let rb_mass = state.rigidbody(rb).mass();
@@ -244,6 +231,7 @@ impl PhysicsState {
                     rotation: v.rotation,
                     vel: v.vel,
                     ang_vel: v.ang_vel,
+                    rigidbody_flags: v.rigidbody_flags,
                 },
             )
         }));
@@ -353,7 +341,6 @@ pub fn gizmo_system() -> BoxedSystem {
                     let origin = transform.transform_point3(Vec3::ZERO);
 
                     let dv = effector.pending_force();
-                    gizmos.draw(TranslateGizmo::new(*transform));
                     gizmos.draw(ArrowGizmo::new(origin, dv).with_color(Color::red()));
                     gizmos.draw(ArrowGizmo::new(origin, velocity).with_color(Color::cyan()));
                     gizmos.draw(ArrowGizmo::new(origin, w).with_color(Color::purple()));

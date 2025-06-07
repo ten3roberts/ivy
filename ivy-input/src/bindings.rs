@@ -9,7 +9,7 @@ use winit::{
 
 use crate::{
     types::{InputEvent, InputKind, KeyboardInput, MouseInput},
-    Stimulus,
+    InputStimulus,
 };
 
 pub trait Binding: Send + Sync {
@@ -283,7 +283,7 @@ impl<T, U> CompositeBinding<T, U> {
 impl<T, U> Binding for CompositeBinding<T, U>
 where
     T: Binding,
-    T::Value: std::fmt::Debug + Stimulus,
+    T::Value: std::fmt::Debug + InputStimulus,
     U: Binding<Value = bool>,
 {
     type Value = T::Value;

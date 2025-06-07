@@ -124,7 +124,7 @@ where
 impl<T> ResourceFromPath for T
 where
     T: Resource,
-    T::Desc: ResourceDesc<Output = T> + serde::DeserializeOwned,
+    T::Desc: ResourceDesc<Output = T> + serde::de::DeserializeOwned,
     <T::Desc as ResourceDesc>::Error: Into<anyhow::Error>,
 {
     type Error = anyhow::Error;

@@ -1,7 +1,7 @@
 use flax::{Component, Fetch};
 use glam::{vec2, vec4, Mat4, Vec2, Vec3, Vec4Swizzles};
 use ivy_core::components::world_transform;
-use ivy_physics::rapier3d::prelude::Ray;
+use ivy_physics::shapes::Ray;
 use ivy_wgpu::components::projection_matrix;
 
 /// Returns a world ray from the given screen coordinates and camera.
@@ -21,6 +21,7 @@ pub fn screen_to_world_ray(cursor_pos: Vec2, camera: CameraQueryItem) -> Ray {
 }
 
 #[derive(Fetch)]
+#[fetch(item_derives=[Clone, Copy, Debug, PartialEq])]
 pub struct CameraQuery {
     transform: Component<Mat4>,
     projection: Component<Mat4>,

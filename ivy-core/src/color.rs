@@ -26,6 +26,8 @@ pub trait ColorExt {
 
     fn white() -> Self;
 
+    fn gray() -> Self;
+
     fn black() -> Self;
 
     fn transparent() -> Self;
@@ -85,6 +87,10 @@ impl ColorExt for Color {
 
     fn white() -> Self {
         Color::new(1.0, 1.0, 1.0, 1.0)
+    }
+
+    fn gray() -> Self {
+        Color::new(0.5, 0.5, 0.5, 1.0)
     }
 
     fn black() -> Self {

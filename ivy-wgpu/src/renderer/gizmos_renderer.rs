@@ -8,13 +8,13 @@ use ivy_core::{
     srgba_to_vec4,
 };
 use ivy_wgpu_types::{
-    shader::{ShaderDesc, TargetDesc},
+    shader::{Culling, ShaderDesc, TargetDesc},
     BindGroupBuilder, BindGroupLayoutBuilder, Gpu, RenderShader, TypedBuffer,
 };
 use wgpu::{
-    core::device, BindingType, BufferAddress, BufferUsages, LoadOp, RenderPassColorAttachment,
-    RenderPassDescriptor, SamplerBindingType, SamplerDescriptor, ShaderStages, StoreOp,
-    TextureFormat, TextureUsages,
+    core::device, BindingType, BufferAddress, BufferUsages, Face, FrontFace, LoadOp,
+    RenderPassColorAttachment, RenderPassDescriptor, SamplerBindingType, SamplerDescriptor,
+    ShaderStages, StoreOp, TextureFormat, TextureUsages,
 };
 
 use super::{get_main_camera_data, CameraData};
@@ -27,7 +27,8 @@ use crate::{
 
 pub struct GizmosRendererNode {
     mesh: Mesh,
-    shader: Option<RenderShader>,
+    rect_shader: Option<RenderShader>,
+    vertex_shader: Option<RenderShader>,
     buffer: TypedBuffer<Data>,
     camera_buffer: TypedBuffer<CameraData>,
     data: Vec<Data>,
@@ -74,7 +75,8 @@ impl GizmosRendererNode {
             depth_buffer,
             layout,
             mesh,
-            shader: None,
+            rect_shader: None,
+            vertex_shader: None,
             buffer,
             data: Vec::new(),
             camera_buffer,
@@ -239,7 +241,26 @@ impl Node for GizmosRendererNode {
             sample_count: output.sample_count(),
         };
 
-        let shader = self.shader.get_or_insert_with(|| {
+        let rect_shader = self.rect_shader.get_or_insert_with(|| -> RenderShader {
+            let shader_module = ctx
+                .gpu
+                .device
+                .create_shader_module(wgpu::ShaderModuleDescriptor {
+                    label: Some("gizmos"),
+                    source: wgpu::ShaderSource::Wgsl(
+                        include_str!("../../shaders/rect_gizmos.wgsl").into(),
+                    ),
+                });
+
+            RenderShader::new(
+                ctx.gpu,
+                &ShaderDesc::new("gizmos", &shader_module, &target)
+                    .with_vertex_layouts(&[ColoredVertex::layout()])
+                    .with_bind_group_layouts(&[&self.layout]),
+            )
+        });
+
+        let shader = self.vertex_shader.get_or_insert_with(|| -> RenderShader {
             let shader_module = ctx
                 .gpu
                 .device
@@ -253,6 +274,10 @@ impl Node for GizmosRendererNode {
             RenderShader::new(
                 ctx.gpu,
                 &ShaderDesc::new("gizmos", &shader_module, &target)
+                    .with_culling_mode(Culling {
+                        cull_mode: Some(Face::Back),
+                        front_face: FrontFace::Ccw,
+                    })
                     .with_vertex_layouts(&[ColoredVertex::layout()])
                     .with_bind_group_layouts(&[&self.layout]),
             )
@@ -280,7 +305,7 @@ impl Node for GizmosRendererNode {
         });
 
         // Draw primitives
-        render_pass.set_pipeline(shader.pipeline());
+        render_pass.set_pipeline(rect_shader.pipeline());
         render_pass.set_vertex_buffer(0, self.mesh.vertex_buffer().slice(..));
         render_pass.set_index_buffer(
             self.mesh.index_buffer().slice(..),
@@ -289,6 +314,8 @@ impl Node for GizmosRendererNode {
 
         render_pass.set_bind_group(0, &bind_group, &[]);
         render_pass.draw_indexed(0..6, 0, 1..1 + self.data.len() as u32);
+
+        render_pass.set_pipeline(shader.pipeline());
         render_pass.draw_indexed(6..(6 + self.draw_index_count), 0, 0..1);
 
         Ok(())

@@ -62,5 +62,27 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return vec4(in.color);
+    if in.corner_radius <= 0.0 {
+        return in.color;
+    }
+
+    let uv = vec2(in.clip_pos.x + 1.0, -in.clip_pos.y + 1.0) * 0.5;
+
+    var mask = vec4(1f);
+
+    let width = in.frag_scale.x;
+    let height = in.frag_scale.y;
+
+    let radius = in.corner_radius * width;
+
+    let midsegment = vec2(1f - radius, height - radius);
+    let cap = vec3(
+        in.frag_pos * in.frag_scale
+    ) - vec3((1f - in.corner_radius) * width * sign(in.frag_pos.x), midsegment.y * sign(in.frag_pos.y), 0f);
+
+    if abs(in.frag_pos * in.frag_scale).y > midsegment.y && cap.x * sign(in.frag_pos.x) > 0f && length(cap) > radius {
+        discard;
+    }
+
+    return vec4(in.color) * mask;
 }
