@@ -1,0 +1,26 @@
+[package]
+name = "ivy-editor"
+description = "editor tools and integration for Ivy"
+version = "0.1.0"
+edition = "2024"
+license-file.workspace = true
+
+[dependencies]
+ivy-core = { path = "../ivy-core" }
+ivy-wgpu = { path = "../ivy-wgpu" }
+ivy-physics = { path = "../ivy-physics" }
+ivy-gltf = { path = "../ivy-gltf" }
+ivy-assets = { path = "../ivy-assets" }
+ivy-ui = { path = "../ivy-ui" }
+ivy-input = { path = "../ivy-input" }
+ivy-scene = { path = "../ivy-scene" }
+
+anyhow.workspace = true
+inventory.workspace = true
+flume.workspace = true
+flax.workspace = true
+futures.workspace = true
+glam.workspace = true
+itertools.workspace = true
+ordered-float.workspace = true
+tracing.workspace = true

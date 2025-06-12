@@ -29,7 +29,7 @@ use ivy_physics::{
     RigidBodyBundle,
 };
 
-use crate::camera::{screen_to_world_ray, CameraQuery};
+use ivy_scene::camera::{screen_to_world_ray, CameraQuery};
 
 pub struct PickingState {
     picked_object: Option<(Entity, Vec3, f32)>,

@@ -261,7 +261,7 @@ impl PhysicsState {
     }
 
     #[system]
-    pub(crate) fn step_system(self: &mut PhysicsState, gravity: Vec3) {
+    pub(crate) fn physics_step_system(self: &mut PhysicsState, gravity: Vec3) {
         self.set_gravity(gravity);
         self.step();
     }
@@ -341,9 +341,9 @@ pub fn gizmo_system() -> BoxedSystem {
                     let origin = transform.transform_point3(Vec3::ZERO);
 
                     let dv = effector.pending_force();
-                    gizmos.draw(ArrowGizmo::new(origin, dv).with_color(Color::red()));
-                    gizmos.draw(ArrowGizmo::new(origin, velocity).with_color(Color::cyan()));
-                    gizmos.draw(ArrowGizmo::new(origin, w).with_color(Color::purple()));
+                    // gizmos.draw(ArrowGizmo::new(origin, dv).with_color(Color::red()));
+                    // gizmos.draw(ArrowGizmo::new(origin, velocity).with_color(Color::cyan()));
+                    // gizmos.draw(ArrowGizmo::new(origin, w).with_color(Color::purple()));
                 }
 
                 anyhow::Ok(())

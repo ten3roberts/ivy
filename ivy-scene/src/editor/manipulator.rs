@@ -76,31 +76,42 @@ pub struct TransformControls {
     ring_width: f32,
     position: Vec3,
     rotation: Quat,
+    view_rotation: Quat, // Used for View space manipulation
     drag_data: Option<DragData>,
+    arrow_length: f32,
     ring_radius: f32,
     dynamic_size: bool,
-    snap_mode: SnapMode,
-    angle_snap: f32,
+    settings: TransformSettings,
 }
 
 impl TransformControls {
-    pub fn new(position: Vec3, rotation: Quat, snap_mode: SnapMode, angle_snap: f32) -> Self {
+    pub fn new(position: Vec3, rotation: Quat, settings: TransformSettings) -> Self {
         Self {
             position,
             rotation,
             arrow_width: 0.1,
             ring_width: 0.2,
             drag_data: None,
-            ring_radius: 1.2,
+            arrow_length: 0.8,
+            ring_radius: 1.0,
             dynamic_size: true,
-            snap_mode,
-            angle_snap,
+            settings,
+            view_rotation: Quat::IDENTITY,
         }
     }
 
-    pub fn update(&mut self, position: Vec3, rotation: Quat) {
+    pub fn update(&mut self, position: Vec3, rotation: Quat, view_rotation: Quat) {
         self.position = position;
         self.rotation = rotation;
+        self.view_rotation = view_rotation;
+    }
+
+    fn get_active_rotation(&self) -> Quat {
+        match self.settings.space {
+            ManipulationSpace::Local => self.rotation,
+            ManipulationSpace::Global => Quat::IDENTITY,
+            ManipulationSpace::View => self.view_rotation,
+        }
     }
 
     pub fn draw(&self, gizmos: &mut GizmosSection, camera_ray: Ray) {
@@ -112,6 +123,7 @@ impl TransformControls {
 
         let gizmo_scale = self.get_size(camera_ray);
 
+        let rotation = self.get_active_rotation();
         for mode in [TransformMode::Translate, TransformMode::Rotate] {
             let colors = self.get_handle_colors(
                 hit.filter(|v| v.mode == mode).map(|v| v.axis),
@@ -120,15 +132,15 @@ impl TransformControls {
             match mode {
                 TransformMode::Translate => {
                     TranslateGizmo::new(
-                        Mat4::from_rotation_translation(self.rotation, self.position),
+                        Mat4::from_rotation_translation(rotation, self.position),
                         colors,
                     )
-                    .with_size(gizmo_scale)
+                    .with_size(self.arrow_length * gizmo_scale)
                     .draw_primitives(gizmos);
                 }
                 TransformMode::Rotate => {
                     RotateGizmo::new(
-                        Mat4::from_rotation_translation(self.rotation, self.position),
+                        Mat4::from_rotation_translation(rotation, self.position),
                         colors,
                     )
                     .with_radius(self.ring_radius * gizmo_scale)
@@ -142,7 +154,7 @@ impl TransformControls {
     fn get_size(&self, camera_ray: Ray) -> f32 {
         if self.dynamic_size {
             let gizmo_distance = (self.position - camera_ray.origin()).length();
-            gizmo_distance * 0.1
+            (gizmo_distance * 0.1).max(1.0)
         } else {
             1.0
         }
@@ -176,12 +188,13 @@ impl TransformControls {
         }
 
         if let Some(hit) = self.intersect(camera_ray) {
+            let rotation = self.get_active_rotation();
             self.drag_data = Some(DragData {
                 start_position: self.position,
-                start_rotation: self.rotation,
+                start_rotation: rotation,
                 hit,
                 new_position: self.position,
-                new_rotation: self.rotation,
+                new_rotation: rotation,
                 position_delta: Vec3::ZERO,
                 rotation_delta: Quat::IDENTITY,
             });
@@ -196,13 +209,15 @@ impl TransformControls {
         if let Some(drag_data) = &mut self.drag_data {
             match drag_data.hit.mode {
                 TransformMode::Rotate => {
-                    let delta = Self::handle_rotate(camera_ray, drag_data, self.angle_snap);
+                    let delta =
+                        Self::handle_rotate(camera_ray, drag_data, self.settings.angle_snap);
                     drag_data.rotation_delta = delta;
                     drag_data.new_rotation = delta * drag_data.start_rotation;
                     self.rotation = drag_data.new_rotation;
                 }
                 TransformMode::Translate => {
-                    let delta = Self::handle_translate(camera_ray, drag_data, self.snap_mode);
+                    let delta =
+                        Self::handle_translate(camera_ray, drag_data, self.settings.snap_mode);
                     drag_data.position_delta = delta;
                     drag_data.new_position = drag_data.start_position + delta;
                     self.position = drag_data.new_position;
@@ -282,7 +297,7 @@ impl TransformControls {
     }
 
     fn hit_test_ring(&self, camera_ray: Ray, axis: Axis3D) -> Option<HitResult> {
-        let dim = self.rotation * axis.to_vec3();
+        let dim = self.get_active_rotation() * axis.to_vec3();
 
         let normal = dim;
         let plane = Plane::from_normal_and_point(normal, self.position);
@@ -311,7 +326,7 @@ impl TransformControls {
     }
 
     fn hit_test_arrow(&self, camera_ray: Ray, axis: Axis3D) -> Option<HitResult> {
-        let dim = self.rotation * axis.to_vec3();
+        let dim = self.get_active_rotation() * axis.to_vec3();
 
         if dim.dot(camera_ray.direction()).abs() > 0.9999 {
             return None;
@@ -331,7 +346,10 @@ impl TransformControls {
 
         let gizmo_scale = self.get_size(camera_ray);
 
-        if cross_dist > self.arrow_width * gizmo_scale || dist > gizmo_scale || dist < 0.0 {
+        if cross_dist > self.arrow_width * gizmo_scale
+            || dist > self.arrow_length * gizmo_scale
+            || dist < 0.0
+        {
             return None;
         }
 
@@ -402,33 +420,60 @@ pub enum ManipulationSpace {
     View,
 }
 
-pub struct TransformController {
-    pub entities: Vec<ManipulatedEntity>,
-    pub manipulator: TransformControls,
+#[derive(PartialEq, Debug, Clone, Copy)]
+pub struct TransformSettings {
     pub space: ManipulationSpace,
-    pub view_rotation: Quat, // Used for View space manipulation
+    pub snap_mode: SnapMode,
+    pub angle_snap: f32,
 }
 
-impl TransformController {
+impl Default for TransformSettings {
+    fn default() -> Self {
+        Self {
+            space: ManipulationSpace::Global,
+            snap_mode: SnapMode::None,
+            angle_snap: 0.0,
+        }
+    }
+}
+
+impl TransformSettings {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+pub struct TransformManipulator {
+    pub entities: Vec<ManipulatedEntity>,
+    manipulator: TransformControls,
+    pub view_rotation: Quat, // Used for View space manipulation
+    camera_ray: Ray,
+}
+
+impl TransformManipulator {
     pub fn new(entities: Vec<ManipulatedEntity>) -> Self {
         Self {
-            manipulator: TransformControls::new(Vec3::ZERO, Quat::IDENTITY, SnapMode::None, 0.0),
+            manipulator: TransformControls::new(
+                Vec3::ZERO,
+                Quat::IDENTITY,
+                TransformSettings::new(),
+            ),
             entities,
-            space: ManipulationSpace::Global,
             view_rotation: Quat::IDENTITY,
+            camera_ray: Default::default(),
         }
     }
 
     pub fn set_space(&mut self, space: ManipulationSpace) {
-        self.space = space;
+        self.manipulator.settings.space = space;
     }
 
     pub fn set_snap_mode(&mut self, snap_mode: SnapMode) {
-        self.manipulator.snap_mode = snap_mode;
+        self.manipulator.settings.snap_mode = snap_mode;
     }
 
     pub fn set_angle_snap(&mut self, angle_snap: f32) {
-        self.manipulator.angle_snap = angle_snap;
+        self.manipulator.settings.angle_snap = angle_snap;
     }
 
     pub fn toggle_entity(&mut self, entity: ManipulatedEntity) {
@@ -448,17 +493,12 @@ impl TransformController {
     fn update_center(&mut self, view_rotation: Quat) {
         let center = self.entities.iter().map(|e| e.start_position).sum::<Vec3>()
             / self.entities.len() as f32;
+        let rotation = self
+            .entities
+            .last()
+            .map_or(Quat::IDENTITY, |e| e.start_rotation);
 
-        let rotation = match self.space {
-            ManipulationSpace::Local => self
-                .entities
-                .last()
-                .map_or(Quat::IDENTITY, |e| e.start_rotation),
-            ManipulationSpace::Global => Quat::IDENTITY,
-            ManipulationSpace::View => view_rotation,
-        };
-
-        self.manipulator.update(center, rotation);
+        self.manipulator.update(center, rotation, view_rotation);
     }
 
     pub fn clear_entities(&mut self) {
@@ -473,7 +513,7 @@ impl TransformController {
         &self.entities
     }
 
-    pub fn update(&mut self, world: &World, view_rotation: Quat) {
+    pub fn update(&mut self, world: &World, view_rotation: Quat, camera_ray: Ray) {
         if self.manipulator.drag_data().is_some() {
             return; // don't update positions while dragging
         }
@@ -485,15 +525,17 @@ impl TransformController {
             }
         }
 
+        self.camera_ray = camera_ray;
+
         self.update_center(view_rotation);
     }
 
-    pub fn draw(&self, gizmos: &mut GizmosSection, camera_ray: Ray) {
+    pub fn draw(&self, gizmos: &mut GizmosSection) {
         if self.entities.is_empty() {
             return;
         }
 
-        self.manipulator.draw(gizmos, camera_ray);
+        self.manipulator.draw(gizmos, self.camera_ray);
     }
 
     pub fn try_start_move(&mut self, camera_ray: Ray, world: &World) -> bool {
@@ -586,16 +628,24 @@ impl TransformController {
         self.manipulator.handle_mouse_up();
     }
 
+    pub fn settings(&self) -> &TransformSettings {
+        &self.manipulator.settings
+    }
+
+    pub fn set_settings(&mut self, settings: TransformSettings) {
+        self.manipulator.settings = settings;
+    }
+
     pub fn space(&self) -> ManipulationSpace {
-        self.space
+        self.manipulator.settings.space
     }
 
     pub fn snap_mode(&self) -> SnapMode {
-        self.manipulator.snap_mode
+        self.manipulator.settings.snap_mode
     }
 
     pub fn angle_snap(&self) -> f32 {
-        self.manipulator.angle_snap
+        self.manipulator.settings.angle_snap
     }
 }
 

@@ -86,7 +86,7 @@ impl Plugin for PhysicsPlugin {
             .with_system(PhysicsState::update_collider_position_system())
             .with_system(PhysicsState::update_body_data_system())
             .with_system(PhysicsState::apply_effectors_system())
-            .with_system(PhysicsState::step_system())
+            .with_system(PhysicsState::physics_step_system())
             .with_system(PhysicsState::sync_bodies_after_step_system())
             .with_system(PhysicsState::process_events_system());
 

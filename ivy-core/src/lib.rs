@@ -40,9 +40,9 @@ pub mod macros;
 pub mod math;
 pub mod subscribers;
 mod systems;
+pub mod transforms;
 mod updatable;
 pub mod update_layer;
-pub mod transforms;
 
 use std::f32::consts::PI;
 

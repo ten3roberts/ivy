@@ -1,45 +1,39 @@
-use std::f32::consts::PI;
+use std::{f32::consts::PI, future::ready, sync::Arc};
 
-use anyhow::Context;
 use flax::{
-    component,
-    components::name,
-    filter::{All, With},
-    CommandBuffer, Component, ComponentMut, Entity, EntityRef, Query, QueryBorrow, System, World,
+    components::{child_of, name},
+    fetch::{FromRelation, Source},
+    system, Component, Entity, FetchExt, Query, QueryBorrow, World,
 };
-use glam::{vec3, EulerRot, Quat, Vec2, Vec3};
+use futures::StreamExt;
+use glam::{EulerRot, Mat4, Quat, Vec3};
 use ivy_assets::{fs::AssetPath, stored::DynamicStore, AssetCache};
 use ivy_core::{
+    gizmos::{Gizmos, LineGizmo},
     palette::Srgb,
     profiling::ProfilingLayer,
     transforms::TransformUpdatePlugin,
     update_layer::{FixedTimeStep, Plugin, ScheduledLayer},
-    App, EngineLayer, EntityBuilderExt, DEG_45,
+    App, Color, ColorExt, EngineLayer, EntityBuilderExt,
 };
-use ivy_engine::{engine, gizmos, main_camera, RigidBodyBundle, TransformBundle};
+use ivy_editor::tools::transform_tool::{settings, TransformToolBundle, TransformToolPlugin};
+use ivy_engine::{engine, gizmos, world_transform, RigidBodyBundle, TransformBundle};
 use ivy_game::{
-    camera::{self, CameraQuery},
     fly_camera::FlyCameraPlugin,
     viewport_camera::{CameraSettings, ViewportCameraLayer},
 };
 use ivy_graphics::texture::TextureData;
-use ivy_input::{
-    components::input_state, layer::InputLayer, Action, CursorPositionBinding, InputState,
-    KeyBinding, MouseButtonBinding,
-};
-use ivy_physics::{components::physics_state, ColliderBundle, GizmoSettings, PhysicsPlugin};
+use ivy_input::layer::InputLayer;
+use ivy_physics::{ColliderBundle, GizmoSettings, PhysicsPlugin};
 use ivy_postprocessing::preconfigured::{
     pbr::{PbrRenderGraphConfig, SkyboxConfig},
     SurfacePbrPipelineDesc, SurfacePbrRenderer,
 };
-use ivy_scene::editor::{
-    hierarchy_panel::HierarchyPanel,
-    manipulator::{ManipulatedEntity, ManipulationSpace, SnapMode, TransformController},
-};
+use ivy_scene::editor::{hierarchy_panel::HierarchyPanel, manipulator::ManipulationSpace};
 use ivy_ui::{
     layer::{UiLayer, UiUpdateLayer},
     screens::{screen_state, Screen, ScreenLifetimeToken},
-    streamed::StreamedUiPlugin,
+    streamed::{StreamedUiExt, StreamedUiPlugin},
 };
 use ivy_wgpu::{
     components::{cast_shadow, forward_pass, light_kind, light_params},
@@ -48,30 +42,31 @@ use ivy_wgpu::{
     light::{LightKind, LightParams},
     material_desc::{MaterialData, PbrMaterialData},
     mesh_desc::MeshDesc,
-    primitives::{CapsulePrimitive, CubePrimitive},
+    primitives::{CubePrimitive, UvSpherePrimitive},
     renderer::{EnvironmentData, RenderObjectBundle},
 };
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use rand_distr::UnitSphere;
-use rapier3d::prelude::{QueryFilter, SharedShape};
+use rapier3d::prelude::SharedShape;
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
 use violet::{
     core::{
         components::LayoutAlignment,
         layout::Align,
-        style::SizeExt,
-        widget::{card, label, maximized},
+        state::StateExt,
+        style::{element_accent, spacing_medium, spacing_small, SizeExt},
+        text::TextSegment,
+        unit::Unit,
+        widget::{card, col, label, maximized, row, Radio, Rectangle, StreamWidget, Text},
         Scope, Widget,
     },
+    futures_signals::signal::{Mutable, SignalExt},
+    lucide::icons::{LUCIDE_GLOBE, LUCIDE_MOVE_3D, LUCIDE_SCAN_EYE},
     palette::Srgba,
 };
 use wgpu::TextureFormat;
-use winit::{
-    dpi::LogicalSize,
-    keyboard::{Key, NamedKey},
-    window::WindowAttributes,
-};
+use winit::{dpi::LogicalSize, window::WindowAttributes};
 
 const ENABLE_SKYBOX: bool = true;
 
@@ -126,6 +121,7 @@ pub fn main() -> anyhow::Result<()> {
                 .with_plugin(FlyCameraPlugin)
                 .with_plugin(StreamedUiPlugin)
                 .with_plugin(ExamplePlugin)
+                .with_plugin(TransformToolPlugin)
                 .with_plugin(
                     PhysicsPlugin::new()
                         .with_gravity(Vec3::ZERO)
@@ -174,8 +170,16 @@ fn setup_objects(world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
             .with_albedo(TextureData::srgba(Srgba::new(1.0, 1.0, 1.0, 1.0))),
     );
 
+    let metal_material = MaterialData::PbrMaterial(
+        PbrMaterialData::new()
+            .with_roughness_factor(0.2)
+            .with_metallic_factor(1.0)
+            // gold
+            .with_albedo(TextureData::srgba(Srgba::new(0.8, 0.4, 0.2, 1.0))),
+    );
+
     let cube_mesh = MeshDesc::Content(assets.load(&CubePrimitive));
-    let capsule_mesh = MeshDesc::Content(assets.load(&CapsulePrimitive::default()));
+    let sphere_mesh = MeshDesc::Content(assets.load(&UvSpherePrimitive::default()));
 
     let body = |position: Vec3, rotation: Quat| {
         let mut builder = Entity::builder();
@@ -210,39 +214,44 @@ fn setup_objects(world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
         builder
     };
 
-    let capsule = |position: Vec3, rotation: Quat| {
-        let mut builder = body(position, rotation);
+    let sphere = |position: Vec3, rotation: Quat| {
+        let mut builder = Entity::builder();
         builder
-            .set(name(), "Capsule".into())
+            .set(name(), "Sphere".into())
             .mount(
-                ColliderBundle::new(SharedShape::cuboid(1.0, 1.0, 1.0))
+                TransformBundle::default()
+                    .with_position(position)
+                    .with_rotation(rotation),
+            )
+            .mount(
+                ColliderBundle::new(SharedShape::ball(1.0))
                     .with_friction(0.7)
                     .with_restitution(0.1),
             )
             .mount(RenderObjectBundle::new(
-                capsule_mesh.clone(),
-                &[(forward_pass(), material.clone())],
+                sphere_mesh.clone(),
+                &[(forward_pass(), metal_material.clone())],
             ));
         builder
     };
 
     let mut rng = StdRng::seed_from_u64(42);
-    for _ in 0..100 {
-        let v = Vec3::from_array(rng.sample(UnitSphere)) * 20.0;
-        cube(v, Quat::IDENTITY).spawn(world);
+    for i in 0..10 {
+        let v = Vec3::from_array(rng.sample(UnitSphere)) * 10.0;
+        let id = cube(v, Quat::IDENTITY)
+            .set(name(), format!("Cube {i}"))
+            .spawn(world);
+
+        if i % 2 == 0 {
+            for _ in 0..i {
+                let v = Vec3::from_array(rng.sample(UnitSphere)) * 5.0;
+                sphere(v, Quat::IDENTITY)
+                    .set_default(child_of(id))
+                    .set(name(), format!("Child {i}"))
+                    .spawn(world);
+            }
+        }
     }
-
-    cube(
-        vec3(2.0, 0.0, -0.99),
-        Quat::from_scaled_axis(vec3(0.0, 0.0, 0.5)),
-    )
-    .spawn(world);
-
-    capsule(
-        vec3(-2.0, 0.0, -0.99),
-        Quat::from_scaled_axis(vec3(0.0, 0.0, -0.5)),
-    )
-    .spawn(world);
 
     Ok(())
 }
@@ -255,177 +264,35 @@ impl Plugin for ExamplePlugin {
         world: &mut World,
         assets: &AssetCache,
         _: &mut DynamicStore,
-        schedules: &mut ivy_core::update_layer::ScheduleSetBuilder,
+        _: &mut ivy_core::update_layer::ScheduleSetBuilder,
     ) -> anyhow::Result<()> {
         world.get(engine(), screen_state())?.open(MainUi);
 
         setup_objects(world, assets)?;
 
-        component! {
-            transform_controller: TransformController,
-            shift_input: bool,
-            cursor_position: Vec2,
-        }
-
-        let mut main_camera_query = Query::new(CameraQuery::new()).with(main_camera());
-        let mouse_button_changed =
-            move |entity: &EntityRef, _: &mut CommandBuffer, pressed: bool| -> anyhow::Result<()> {
-                let mut manipulator = entity.get_mut(transform_controller())?;
-
-                let world = entity.world();
-                if pressed {
-                    let mut camera = main_camera_query.borrow(entity.world());
-                    let camera = camera.first().context("No main camera")?;
-
-                    let cursor_pos = entity.get_copy(cursor_position())?;
-                    let ray = camera::screen_to_world_ray(cursor_pos, camera);
-
-                    if manipulator.try_start_move(ray, world) {
-                        return Ok(());
-                    }
-
-                    let physics = world.get(engine(), physics_state())?;
-
-                    let hit = physics.cast_ray(ray, 100.0, true, QueryFilter::new());
-
-                    if !entity.get_copy(shift_input())? {
-                        manipulator.clear_entities();
-                    }
-
-                    if let Some(hit) = hit {
-                        manipulator.toggle_entity(ManipulatedEntity::from_entity(
-                            world.entity(hit.rigidbody_id)?,
-                        ));
-                    }
-                } else {
-                    manipulator.finish_move(world);
-                }
-
-                anyhow::Ok(())
-            };
-
-        let mut main_camera_query = Query::new(CameraQuery::new()).with(main_camera());
-        let mouse_moved = move |entity: &EntityRef, _: &mut CommandBuffer, pos: Vec2| {
-            let mut manipulator = entity.get_mut(transform_controller())?;
-
-            let mut camera = main_camera_query.borrow(entity.world());
-            let camera = camera.first().context("No main camera")?;
-
-            let ray = camera::screen_to_world_ray(pos, camera);
-
-            manipulator.handle_mouse_move(ray, entity.world())?;
-            anyhow::Ok(())
-        };
-
-        let input = InputState::new()
-            .with_action(
-                shift_input(),
-                Action::new().with_binding(KeyBinding::new(Key::Named(NamedKey::Shift))),
-            )
-            .with_trigger_action(
-                Action::new().with_binding(KeyBinding::new(Key::Character("g".into()))),
-                |entity: &EntityRef, _: &mut CommandBuffer, pressed: bool| {
-                    if !pressed {
-                        return Ok(());
-                    }
-
-                    let mut manipulator = entity.get_mut(transform_controller())?;
-                    let space = if manipulator.space == ManipulationSpace::Global {
-                        ManipulationSpace::Local
-                    } else {
-                        ManipulationSpace::Global
-                    };
-
-                    manipulator.set_space(space);
-                    Ok(())
-                },
-            )
-            .with_trigger_action(
-                Action::new().with_binding(KeyBinding::new(Key::Character("v".into()))),
-                |entity: &EntityRef, _: &mut CommandBuffer, pressed: bool| {
-                    if !pressed {
-                        return Ok(());
-                    }
-
-                    let mut manipulator = entity.get_mut(transform_controller())?;
-                    manipulator.set_space(ManipulationSpace::View);
-                    Ok(())
-                },
-            )
-            .with_trigger_action(
-                Action::new().with_binding(KeyBinding::new(Key::Character("l".into()))),
-                |entity: &EntityRef, _: &mut CommandBuffer, pressed: bool| {
-                    if !pressed {
-                        return Ok(());
-                    }
-
-                    let mut manipulator = entity.get_mut(transform_controller())?;
-
-                    tracing::info!(current_snap_mode = ?manipulator.snap_mode());
-
-                    if manipulator.snap_mode().is_absolute() {
-                        manipulator.set_snap_mode(SnapMode::None);
-                        manipulator.set_angle_snap(0.0);
-                    } else {
-                        manipulator.set_snap_mode(SnapMode::Absolute(1.0));
-                        manipulator.set_angle_snap(PI / 180.0 * 5.0);
-                    }
-
-                    tracing::info!("New Snap mode: {:?}", manipulator.snap_mode());
-
-                    Ok(())
-                },
-            )
-            .with_trigger_action(
-                Action::new()
-                    .with_binding(MouseButtonBinding::new(winit::event::MouseButton::Left)),
-                mouse_button_changed,
-            )
-            .with_action(
-                cursor_position(),
-                Action::new().with_binding(CursorPositionBinding::new(true)),
-            )
-            .with_trigger_action(
-                Action::new().with_binding(CursorPositionBinding::new(true)),
-                mouse_moved,
-            );
-
         let manipulator_entity = Entity::builder()
-            .set(name(), "Manipulator".into())
-            .set(transform_controller(), TransformController::new(vec![]))
-            .set(input_state(), input)
+            .mount(TransformToolBundle::default())
             .spawn(world);
 
-        schedules.per_tick_mut().with_system(
-            System::builder()
-                .with_world()
-                .with_query(Query::new(CameraQuery::new()).with(main_camera()))
-                .with_query(Query::new((
-                    transform_controller().as_mut(),
-                    cursor_position(),
-                )))
-                .build(
-                    move |world: &World,
-                          mut camera_query: QueryBorrow<CameraQuery, (All, With)>,
-                          mut query: QueryBorrow<(
-                        ComponentMut<TransformController>,
-                        Component<Vec2>,
-                    )>| {
-                        let gizmos = world.get(engine(), gizmos())?;
+        world
+            .get(engine(), screen_state())?
+            .open(TransformToolScreen {
+                id: manipulator_entity,
+            });
 
-                        let camera = camera_query.first().context("No main camera")?;
+        #[system(with_query(Query::new((world_transform(), world_transform().relation(child_of)))))]
+        fn hierarchy_relationship_gizmo_system(
+            gizmos: &mut Gizmos,
+            query: &mut QueryBorrow<(Component<Mat4>, Source<Component<Mat4>, FromRelation>)>,
+        ) {
+            let mut section = gizmos.begin_section("hierarchy_relationship_gizmo_system");
+            for (transform, parent) in query.iter() {
+                let start = transform.transform_point3(Vec3::ZERO);
 
-                        let mut gizmos = gizmos.begin_section("example_manipulator_system");
-                        for (manipulator, cursor_pos) in &mut query {
-                            let ray = camera::screen_to_world_ray(*cursor_pos, camera);
-                            manipulator.update(world, Quat::from_mat4(camera.transform));
-                            manipulator.draw(&mut gizmos, ray);
-                        }
-
-                        anyhow::Ok(())
-                    },
-                ),
-        );
+                let end = parent.transform_point3(Vec3::ZERO);
+                section.draw(LineGizmo::from_points(start, end, 0.02, Color::blue()))
+            }
+        }
 
         Ok(())
     }
@@ -435,11 +302,77 @@ struct MainUi;
 
 impl Screen for MainUi {
     fn create(self, scope: &mut Scope<'_>, _: ScreenLifetimeToken) {
-        maximized(card((
-            label("Transforms").with_item_align(LayoutAlignment::new(Align::Center, Align::Start)),
-            // HierarchyPanel::new()
-            //     .with_item_align(LayoutAlignment::new(Align::Start, Align::Center)),
-        )))
+        maximized(col((HierarchyPanel::new().with_item_align(
+            LayoutAlignment::new(Align::Start, Align::Center),
+        ),)))
+        .mount(scope);
+    }
+}
+
+pub struct TransformToolScreen {
+    id: Entity,
+}
+
+impl Screen for TransformToolScreen {
+    fn create(self, scope: &mut Scope<'_>, _: ScreenLifetimeToken) {
+        let state = Mutable::new(None);
+
+        scope.stream_component_duplex(settings(), self.id, state.clone());
+
+        let space_state = Arc::new(
+            state
+                .clone()
+                .lower_option()
+                .memo(Default::default())
+                .map_ref(|v| &v.space, |v| &mut v.space),
+        );
+
+        let settings = state
+            .signal_ref(|s| s.clone())
+            .to_stream()
+            .filter_map(|v| ready(v))
+            .map(move |v| {
+                col((
+                    row((
+                        Radio::new_enum(
+                            label(LUCIDE_GLOBE),
+                            space_state.clone(),
+                            ManipulationSpace::Global,
+                        ),
+                        Radio::new_enum(
+                            label(LUCIDE_MOVE_3D),
+                            space_state.clone(),
+                            ManipulationSpace::Local,
+                        ),
+                        Radio::new_enum(
+                            label(LUCIDE_SCAN_EYE),
+                            space_state.clone(),
+                            ManipulationSpace::View,
+                        ),
+                    )),
+                    label(format!("Snap Mode: {:?}", v.snap_mode)),
+                    label(format!("Angle Snap: {:.2}°", v.angle_snap * 180.0 / PI)),
+                    Rectangle::new(Srgba::new(0.2, 0.2, 0.2, 1.0))
+                        .with_size(Unit::px2(0.0, 2.0))
+                        .with_margin(spacing_medium()),
+                    Text::formatted([
+                        TextSegment::new("G").with_color(element_accent()),
+                        TextSegment::new(" Change Space"),
+                    ])
+                    .with_margin(spacing_small()),
+                    Text::formatted([
+                        TextSegment::new("L").with_color(element_accent()),
+                        TextSegment::new(" Toggle Snap"),
+                    ])
+                    .with_margin(spacing_small()),
+                ))
+                .with_stretch(true)
+            });
+
+        maximized(
+            col(card(col((label("Transform Tool"), StreamWidget(settings)))))
+                .with_item_align(LayoutAlignment::new(Align::End, Align::Start)),
+        )
         .mount(scope);
     }
 }

@@ -36,7 +36,7 @@ impl Plane {
 
 pub use parry::query::Ray as ParryRay;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct Ray {
     pub origin: Vec3,
     pub direction: Vec3,

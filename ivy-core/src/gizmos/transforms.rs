@@ -162,8 +162,7 @@ impl ArrowGizmo {
 
 impl DrawGizmos for ArrowGizmo {
     fn draw_primitives(&self, gizmos: &mut GizmosSection) {
-        let mut vertices = Vec::new();
-        let mut indices = Vec::new();
+        let mut writer = gizmos.add_geometry();
 
         let tan = if self.direction.distance(Vec3::Y) < 0.001 {
             Vec3::Z
@@ -175,7 +174,7 @@ impl DrawGizmos for ArrowGizmo {
         let normalized_direction = self.direction.normalize();
 
         let tip = self.position + (normalized_direction * length) * self.scale;
-        vertices.push(GizmoVertex::new(tip, self.color));
+        writer.add_vertex(GizmoVertex::new(tip, self.color));
 
         let bitan = normalized_direction.cross(tan);
 
@@ -188,24 +187,19 @@ impl DrawGizmos for ArrowGizmo {
             let point = tip
                 - (normalized_direction * self.head_length + (tan * x + bitan * y)) * self.scale;
 
-            vertices.push(GizmoVertex::new(point, self.color));
+            writer.add_vertex(GizmoVertex::new(point, self.color));
         }
 
         // mantel
-        indices.extend(
-            (0..self.segments)
-                .flat_map(|i| [0, i + 1, (i + 1) % self.segments + 1])
-                .collect::<Vec<_>>(),
-        );
+        writer
+            .add_indices((0..self.segments).flat_map(|i| [0, i + 1, (i + 1) % self.segments + 1]));
 
         // bottom
-        indices.extend(
-            (0..self.segments - 1)
-                .flat_map(|i| [(i + 2) % self.segments + 1, i + 2, 1])
-                .collect::<Vec<_>>(),
+        writer.add_indices(
+            (0..self.segments - 1).flat_map(|i| [(i + 2) % self.segments + 1, i + 2, 1]),
         );
 
-        let start_index = vertices.len() as u32;
+        let start_index = self.segments + 1;
 
         // cylinder tail
         for offset in [0.0, 1.0] {
@@ -220,40 +214,30 @@ impl DrawGizmos for ArrowGizmo {
                         + (tan * x + bitan * y))
                         * self.scale;
 
-                vertices.push(GizmoVertex::new(point, self.color));
+                writer.add_vertex(GizmoVertex::new(point, self.color));
             }
         }
 
         // sides
-        indices.extend(
-            (0..self.segments)
-                .flat_map(|i| {
-                    [
-                        start_index + i,
-                        start_index + (i + 1) % self.segments,
-                        start_index + i + self.segments,
-                        start_index + (i + 1) % self.segments,
-                        start_index + (i + 1) % self.segments + self.segments,
-                        start_index + i + self.segments,
-                    ]
-                })
-                .collect::<Vec<_>>(),
-        );
+        writer.add_indices((0..self.segments).flat_map(|i| {
+            [
+                start_index + i,
+                start_index + (i + 1) % self.segments,
+                start_index + i + self.segments,
+                start_index + (i + 1) % self.segments,
+                start_index + (i + 1) % self.segments + self.segments,
+                start_index + i + self.segments,
+            ]
+        }));
 
         // bottom
-        indices.extend(
-            (0..self.segments - 1)
-                .flat_map(|i| {
-                    [
-                        start_index + (i + 2) % self.segments,
-                        start_index + i + 1,
-                        start_index,
-                    ]
-                })
-                .collect::<Vec<_>>(),
-        );
-
-        gizmos.add_geometry(&vertices, &indices);
+        writer.add_indices((0..self.segments - 1).flat_map(|i| {
+            [
+                start_index + (i + 2) % self.segments,
+                start_index + i + 1,
+                start_index,
+            ]
+        }));
     }
 }
 
@@ -308,8 +292,7 @@ impl ToroidGizmo {
 
 impl DrawGizmos for ToroidGizmo {
     fn draw_primitives(&self, gizmos: &mut GizmosSection) {
-        let mut vertices = Vec::new();
-        let mut indices = Vec::new();
+        let mut writer = gizmos.add_geometry();
 
         let rotation = Quat::from_rotation_arc(Vec3::Y, self.up).normalize();
 
@@ -325,7 +308,7 @@ impl DrawGizmos for ToroidGizmo {
 
                 let point = self.position + rotation * vec3(x, y, z);
 
-                vertices.push(GizmoVertex::new(point, self.color));
+                writer.add_vertex(GizmoVertex::new(point, self.color));
             }
         }
 
@@ -334,16 +317,15 @@ impl DrawGizmos for ToroidGizmo {
                 let next_phi = (phi + 1) % self.sections;
                 let next_theta = (theta + 1) % self.segments;
 
-                indices.push(phi * self.segments + next_theta);
-                indices.push(next_phi * self.segments + theta);
-                indices.push(phi * self.segments + theta);
-
-                indices.push(phi * self.segments + next_theta);
-                indices.push(next_phi * self.segments + next_theta);
-                indices.push(next_phi * self.segments + theta);
+                writer.add_indices([
+                    (phi * self.segments + next_theta),
+                    (next_phi * self.segments + theta),
+                    (phi * self.segments + theta),
+                    (phi * self.segments + next_theta),
+                    (next_phi * self.segments + next_theta),
+                    (next_phi * self.segments + theta),
+                ]);
             }
         }
-
-        gizmos.add_geometry(&vertices, &indices);
     }
 }

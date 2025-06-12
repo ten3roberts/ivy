@@ -32,6 +32,7 @@ members = [
     "ivy-graphics",
     "ivy-game",
     "ivy-ui",
+    "ivy-editor",
 ]
 
 [workspace.dependencies]
@@ -111,6 +112,7 @@ ivy-scene = { path = "./ivy-scene", version = "0.1.0" }
 ivy-ui = { path = "./ivy-ui", version = "*" }
 ivy-wgpu = { path = "./ivy-wgpu", version = "0.10" }
 ivy-wgpu-types = { path = "./ivy-wgpu-types", version = "0.1.0" }
+ivy-editor = { path = "./ivy-editor", version = "0.1.0" }
 
 regex = "1.0"
 flax.workspace = true
@@ -168,7 +170,9 @@ debug = true
 [profile.dev.package.rapier3d]
 opt-level = 3
 
+[patch.'https://github.com/ten3roberts/flax']
+flax = { path = "../flax" }
+
 [patch.crates-io]
-flax = { git = "https://github.com/ten3roberts/flax" }
 nalgebra = { git = "https://github.com/ten3roberts/nalgebra" }
 tween = { git = "https://github.com/ten3roberts/tween" }

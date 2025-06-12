@@ -6,14 +6,30 @@ use flax::{
 };
 use futures::StreamExt;
 use itertools::Itertools;
-use ivy_core::components::world_transform;
+use ivy_core::{
+    components::world_transform,
+    palette::{named::BLACK, WithAlpha},
+};
+use ivy_physics::rapier3d::na::inf;
 use ivy_ui::{
     streamed::StreamedUiExt,
-    violet::core::{
-            style::{SizeExt, WidgetSizeProps},
-            widget::{col, label, Button, Collapsible},
+    violet::{
+        core::{
+            style::{
+                surface_interactive, surface_interactive_warning, SizeExt, StyleExt,
+                WidgetSizeProps,
+            },
+            unit::Unit,
+            widget::{
+                card, col, label, panel, row, Button, ButtonStyle, Collapsible, CollapsibleStyle,
+                EmptyWidget, Rectangle, ScrollArea,
+            },
             Edges, Scope, Widget,
         },
+        lucide::icons::{
+            LUCIDE_BOX, LUCIDE_CIRCLE, LUCIDE_CIRCLE_SMALL, LUCIDE_CUBOID, LUCIDE_DOT, LUCIDE_MINUS,
+        },
+    },
 };
 
 pub struct HierarchyPanel {
@@ -53,20 +69,27 @@ impl Widget for HierarchyPanel {
             Ok(())
         });
 
-        scope.spawn_stream(rx.into_stream(), |scope, hierarchy| {
-            let roots = hierarchy
-                .get(&None)
-                .into_iter()
-                .flatten()
-                .map(|roots| SubtreeWidget {
-                    entity: roots.clone(),
-                    hierarchy: &hierarchy,
-                });
+        let inner = |scope: &mut Scope<'_>| {
+            scope.spawn_stream(rx.into_stream(), |scope, hierarchy| {
+                let mut roots = hierarchy
+                    .get(&None)
+                    .into_iter()
+                    .flatten()
+                    .map(|roots| SubtreeWidget {
+                        entity: roots.clone(),
+                        hierarchy: &hierarchy,
+                    })
+                    .collect_vec();
 
-            scope.detach_all();
+                roots.sort_by(|a, b| a.entity.name.cmp(&b.entity.name));
 
-            scope.attach(col(roots.collect_vec()).with_stretch(true));
-        });
+                scope.detach_all();
+
+                scope.attach(col(roots).with_stretch(true));
+            });
+        };
+
+        card(ScrollArea::vertical(inner).with_min_size(Unit::px2(160.0, 400.0))).mount(scope)
     }
 }
 
@@ -86,31 +109,32 @@ impl Widget for SubtreeWidget<'_> {
         // let children = scope.read(&self.hierarchy).borrow();
 
         let children = self.hierarchy.get(&Some(self.entity.id));
-        let label = label(
+        let name = label(
             self.entity
                 .name
                 .clone()
                 .unwrap_or_else(|| self.entity.id.to_string()),
         );
 
-        if let Some(children) = children {
-            let widget = Collapsible::new(
-                label,
-                col(children
-                    .iter()
-                    .map(|child| SubtreeWidget {
-                        entity: child.clone(),
-                        hierarchy: self.hierarchy,
-                    })
-                    .collect_vec())
-                .with_padding(Edges::new(16.0, 0.0, 0.0, 0.0))
-                .with_stretch(true),
-            );
+        let can_collapse = children.map(|children| children.len() > 0).unwrap_or(false);
 
-            widget.mount(scope);
-        } else {
-            Button::new(label).mount(scope);
-        }
+        let widget = Collapsible::new(
+            name,
+            col(children
+                .iter()
+                .flat_map(|children| children.iter())
+                .map(|child| SubtreeWidget {
+                    entity: child.clone(),
+                    hierarchy: self.hierarchy,
+                })
+                .collect_vec())
+            .with_padding(Edges::new(16.0, 0.0, 0.0, 0.0))
+            .with_stretch(true),
+        )
+        .can_collapse(can_collapse)
+        .with_style(CollapsibleStyle::default().with_button_style(ButtonStyle::selectable_entry()));
+
+        widget.mount(scope);
     }
 }
 

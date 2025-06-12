@@ -1,3 +1,4 @@
+pub mod camera;
 pub mod editor;
 
 use std::collections::BTreeMap;

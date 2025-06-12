@@ -37,6 +37,7 @@ pub struct UiRenderNode {
     texture_deps: Query<TextureDepFetch>,
     update_texture_deps: bool,
     ui_deps: Vec<Dependency>,
+    ui_deps_query: Query<Component<TextureHandle>>,
 }
 
 impl UiRenderNode {
@@ -54,6 +55,7 @@ impl UiRenderNode {
             texture_deps: Query::new((texture_dependency(), texture_handle().as_mut())),
             update_texture_deps: true,
             ui_deps: Vec::new(),
+            ui_deps_query: Query::new(texture_dependency()),
         }
     }
 }
@@ -65,14 +67,13 @@ impl Node for UiRenderNode {
     ) -> anyhow::Result<UpdateResult> {
         let instance = ctx.store.get(&self.instance);
 
-        let ui_deps = Query::new(
-            texture_dependency()
-                .copied()
-                .map(|v| Dependency::texture(v, TextureUsages::TEXTURE_BINDING)),
-        )
-        .collect_vec(instance.frame.world());
+        let mut ui_deps = self.ui_deps_query.borrow(&ctx.world);
+        let ui_deps = ui_deps
+            .iter()
+            .map(|&handle| Dependency::texture(handle, TextureUsages::TEXTURE_BINDING));
 
-        self.ui_deps = ui_deps;
+        self.ui_deps.clear();
+        self.ui_deps.extend(ui_deps);
 
         let new = self
             .modified_deps

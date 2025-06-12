@@ -362,6 +362,36 @@ impl GizmoVertex {
     }
 }
 
+pub struct GizmoGeometryWriter<'a> {
+    vertices: &'a mut Vec<GizmoVertex>,
+    indices: &'a mut Vec<u32>,
+    offset: usize,
+}
+
+impl<'a> GizmoGeometryWriter<'a> {
+    pub fn add_vertex(&mut self, vertex: GizmoVertex) -> u32 {
+        let index = self.vertices.len() as u32 + self.offset as u32;
+        self.vertices.push(vertex);
+        index
+    }
+
+    pub fn add_vertices<I: IntoIterator<Item = GizmoVertex>>(&mut self, vertices: I) {
+        let offset = self.offset as u32;
+        for vertex in vertices {
+            self.vertices.push(vertex);
+        }
+        // Update the offset to the new length
+        self.offset += self.vertices.len() - offset as usize;
+    }
+
+    pub fn add_indices<I: IntoIterator<Item = u32>>(&mut self, indices: I) {
+        let offset = self.offset as u32;
+        for index in indices {
+            self.indices.push(index + offset);
+        }
+    }
+}
+
 #[derive(Default, Debug, Clone)]
 pub struct GizmosSection {
     mesh: Vec<GizmoVertex>,
@@ -371,10 +401,12 @@ pub struct GizmosSection {
 
 impl GizmosSection {
     /// Add geometry to the current section
-    pub fn add_geometry(&mut self, vertices: &[GizmoVertex], indices: &[u32]) {
-        self.indices
-            .extend(indices.iter().map(|i| i + self.mesh.len() as u32));
-        self.mesh.extend_from_slice(vertices);
+    pub fn add_geometry(&mut self) -> GizmoGeometryWriter {
+        GizmoGeometryWriter {
+            offset: self.mesh.len(),
+            vertices: &mut self.mesh,
+            indices: &mut self.indices,
+        }
     }
 
     /// Adds a new gizmos to the current section
