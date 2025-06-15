@@ -28,7 +28,7 @@ impl Plugin for StandaloneCameraPlugin {
 struct StandaloneCameraBundle;
 
 impl Bundle for StandaloneCameraBundle {
-    fn mount(self, entity: &mut flax::EntityBuilder) {
+    fn mount(&self, entity: &mut flax::EntityBuilder) {
         entity
             .mount(TransformBundle::new(
                 vec3(0.0, 10.0, 10.0),

@@ -105,7 +105,7 @@ fn one_scale() -> Vec3 {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct TransformBundle {
     #[cfg_attr(feature = "serde", serde(default))]
-    pub pos: Vec3,
+    pub position: Vec3,
     #[cfg_attr(feature = "serde", serde(default))]
     pub rotation: Quat,
     #[cfg_attr(feature = "serde", serde(default = "one_scale"))]
@@ -115,7 +115,7 @@ pub struct TransformBundle {
 impl TransformBundle {
     pub fn new(pos: Vec3, rotation: Quat, scale: Vec3) -> Self {
         Self {
-            pos,
+            position: pos,
             rotation,
             scale,
         }
@@ -123,7 +123,7 @@ impl TransformBundle {
 
     /// Set the position
     pub fn with_position(mut self, position: Vec3) -> Self {
-        self.pos = position;
+        self.position = position;
         self
     }
 
@@ -140,14 +140,14 @@ impl TransformBundle {
     }
 
     pub fn to_mat4(&self) -> Mat4 {
-        Mat4::from_scale_rotation_translation(self.scale, self.rotation, self.pos)
+        Mat4::from_scale_rotation_translation(self.scale, self.rotation, self.position)
     }
 }
 
 impl Default for TransformBundle {
     fn default() -> Self {
         Self {
-            pos: Vec3::ZERO,
+            position: Vec3::ZERO,
             rotation: Quat::IDENTITY,
             scale: Vec3::ONE,
         }
@@ -155,14 +155,14 @@ impl Default for TransformBundle {
 }
 
 impl Bundle for TransformBundle {
-    fn mount(self, entity: &mut EntityBuilder) {
+    fn mount(&self, entity: &mut EntityBuilder) {
         entity
-            .set(position(), self.pos)
+            .set(position(), self.position)
             .set(rotation(), self.rotation)
             .set(scale(), self.scale)
             .set(
                 world_transform(),
-                Mat4::from_scale_rotation_translation(self.scale, self.rotation, self.pos),
+                Mat4::from_scale_rotation_translation(self.scale, self.rotation, self.position),
             )
             .set(parent_transform(), Default::default());
     }

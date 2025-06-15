@@ -2,8 +2,9 @@ use std::convert::identity;
 
 use flax::{Entity, EntityRef, World};
 use glam::{Mat4, Quat, Vec3};
+use itertools::Itertools;
 use ivy_core::{
-    components::{self, position, rotation},
+    components::{self, position, rotation, TransformBundle},
     gizmos::{
         transforms::{RotateGizmo, TranslateGizmo},
         DrawGizmos, GizmosSection,
@@ -626,6 +627,38 @@ impl TransformManipulator {
         }
 
         self.manipulator.handle_mouse_up();
+    }
+
+    pub fn finish_move_cmd(&mut self, world: &World) -> Option<Vec<(Entity, Vec3, Quat)>> {
+        if self.entities.is_empty() {
+            return None;
+        }
+
+        if self.manipulator.drag_data().is_some() {
+            let manipulation = self
+                .entities
+                .iter_mut()
+                .filter_map(|manipulated| {
+                    let Some(entity) = world.entity(manipulated.id).ok() else {
+                        return None;
+                    };
+
+                    manipulated.start_position = manipulated.position;
+                    manipulated.start_rotation = manipulated.rotation;
+
+                    // Restore previous rigidbody flags if available
+                    if let Some(previous_flags) = manipulated.previous_flags {
+                        entity.update_dedup(rigidbody_flags(), previous_flags);
+                    }
+
+                    Some((entity.id(), manipulated.position, manipulated.rotation))
+                })
+                .collect_vec();
+            self.manipulator.handle_mouse_up();
+            return Some(manipulation);
+        } else {
+            None
+        }
     }
 
     pub fn settings(&self) -> &TransformSettings {

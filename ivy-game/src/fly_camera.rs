@@ -58,7 +58,7 @@ impl Plugin for FlyCameraPlugin {
 struct FreeCameraBundle;
 
 impl Bundle for FreeCameraBundle {
-    fn mount(self, entity: &mut flax::EntityBuilder) {
+    fn mount(&self, entity: &mut flax::EntityBuilder) {
         let mut speed_action = Action::new();
         speed_action.add(
             CompositeBinding::new(ScrollBinding::new(), [KeyBinding::new(NamedKey::Shift)])

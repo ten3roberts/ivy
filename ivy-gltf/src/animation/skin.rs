@@ -68,7 +68,7 @@ impl Skin {
                             ),
 
                             local_bind_transform: TransformBundle {
-                                pos: transform.0.into(),
+                                position: transform.0.into(),
                                 rotation: Quat::from_array(transform.1),
                                 scale: transform.2.into(),
                             },

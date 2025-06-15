@@ -12,9 +12,8 @@ use ivy_wgpu_types::{
     BindGroupBuilder, BindGroupLayoutBuilder, Gpu, RenderShader, TypedBuffer,
 };
 use wgpu::{
-    core::device, BindingType, BufferAddress, BufferUsages, Face, FrontFace, LoadOp,
-    RenderPassColorAttachment, RenderPassDescriptor, SamplerBindingType, SamplerDescriptor,
-    ShaderStages, StoreOp, TextureFormat, TextureUsages,
+    BufferAddress, BufferUsages, Face, FrontFace, LoadOp, RenderPassColorAttachment,
+    RenderPassDescriptor, ShaderStages, StoreOp, TextureFormat, TextureUsages,
 };
 
 use super::{get_main_camera_data, CameraData};

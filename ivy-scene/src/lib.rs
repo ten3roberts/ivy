@@ -1,5 +1,7 @@
 pub mod camera;
 pub mod editor;
+pub mod ray_picker;
+pub mod template;
 
 use std::collections::BTreeMap;
 

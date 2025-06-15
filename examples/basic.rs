@@ -29,7 +29,6 @@ use ivy_engine::{
 use ivy_game::{
     debug::AssetTimelinesWidget,
     orbit_camera::OrbitCameraPlugin,
-    ray_picker::RayPickingPlugin,
     viewport_camera::{CameraSettings, ViewportCameraLayer},
 };
 use ivy_gltf::{
@@ -58,8 +57,7 @@ use ivy_wgpu::{
     layer::GraphicsLayer,
     light::{LightBundle, LightKind, LightParams},
     material_desc::{
-        MaterialData, MaterialDesc, PbrEmissiveMaterialDesc,
-        PbrMaterialData, PbrMaterialDesc,
+        MaterialData, MaterialDesc, PbrEmissiveMaterialDesc, PbrMaterialData, PbrMaterialDesc,
     },
     mesh_desc::MeshDesc,
     primitives::{generate_plane, UvSpherePrimitive},
@@ -142,7 +140,6 @@ pub fn main() -> anyhow::Result<()> {
                         .with_gizmos(GizmoSettings { rigidbody: true }),
                 )
                 .with_plugin(RotateSpotlightPlugin)
-                .with_plugin(RayPickingPlugin)
                 .with_plugin(TransformUpdatePlugin),
         )
         .with_layer(ViewportCameraLayer::new(CameraSettings {
@@ -497,11 +494,7 @@ struct MainUI {
 }
 
 impl Screen for MainUI {
-    fn create(
-        self,
-        scope: &mut violet::core::Scope<'_>,
-        token: ivy_ui::screens::ScreenLifetimeToken,
-    ) {
+    fn create(self, scope: &mut violet::core::Scope<'_>, _: ivy_ui::screens::ScreenLifetimeToken) {
         maximized(
             card(AssetTimelinesWidget::new(self.assets)).with_max_size(Unit::rel2(0.25, 1.0)),
         )

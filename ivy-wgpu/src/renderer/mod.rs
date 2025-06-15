@@ -595,8 +595,10 @@ impl<'a> RenderObjectBundle<'a> {
 }
 
 impl Bundle for RenderObjectBundle<'_> {
-    fn mount(self, entity: &mut flax::EntityBuilder) {
-        entity.set(mesh(), self.mesh).set(color(), self.color);
+    fn mount(&self, entity: &mut flax::EntityBuilder) {
+        entity
+            .set(mesh(), self.mesh.clone())
+            .set(color(), self.color);
 
         for (pass, material) in self.materials {
             entity.set(*pass, material.clone());

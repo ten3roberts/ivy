@@ -18,7 +18,6 @@ use ivy_engine::{
 };
 use ivy_game::{
     fly_camera::{camera_speed, FlyCameraPlugin},
-    ray_picker::RayPickingPlugin,
     viewport_camera::{CameraSettings, ViewportCameraLayer},
 };
 use ivy_graphics::texture::TextureData;
@@ -125,7 +124,6 @@ pub fn main() -> anyhow::Result<()> {
                 .with_plugin(StreamedUiPlugin)
                 .with_plugin(ExamplePlugin)
                 .with_plugin(PhysicsPlugin::new())
-                .with_plugin(RayPickingPlugin)
                 .with_plugin(TransformUpdatePlugin),
         )
         .with_layer(ViewportCameraLayer::new(CameraSettings {
@@ -152,8 +150,6 @@ pub struct MainUi {
 
 impl Screen for MainUi {
     fn create(self, scope: &mut violet::core::Scope<'_>, _: ivy_ui::screens::ScreenLifetimeToken) {
-        let input = Mutable::new("This is some text".to_string());
-
         let test = card(SignalWidget(self.state.signal_ref(move |v| {
             col((
                 HierarchyPanel::new(),

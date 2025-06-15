@@ -6,25 +6,19 @@ use flax::{
     fetch::{entity_refs, EntityRefs, Modified, Source, TransformFetch, Traverse},
     filter::{All, ChangeFilter, ChangeFilterMut, Without},
     signal::BoxedSignal,
-    system, BoxedSystem, CommandBuffer, Component, ComponentMut, EntityIds, FetchExt, Opt, Query,
+    system, BoxedSystem, CommandBuffer, Component, ComponentMut, EntityIds, FetchExt, Query,
     QueryBorrow, RelationExt, System, World,
 };
 use glam::{Mat4, Vec3};
 use ivy_core::{
     components::{engine, main_camera, world_transform, TransformQuery, TransformQueryItem},
-    gizmos::{
-        transforms::{ArrowGizmo, TranslateGizmo},
-        Gizmos,
-    },
+    gizmos::{transforms::ArrowGizmo, Gizmos},
     subscribers::{RemovedComponentSubscriber, RemovedRelationSubscriber},
     Color, ColorExt,
 };
 use rapier3d::{
     math::Isometry,
-    prelude::{
-        ColliderBuilder, ColliderHandle, LockedAxes, RigidBodyBuilder, RigidBodyHandle,
-        RigidBodyType,
-    },
+    prelude::{ColliderBuilder, ColliderHandle, RigidBodyBuilder, RigidBodyHandle},
 };
 
 use crate::{
@@ -325,13 +319,14 @@ pub fn gizmo_system() -> BoxedSystem {
         .build(
             move |mut gizmos: QueryBorrow<Component<Gizmos>>,
                   mut query: QueryBorrow<
+                '_,
                 (
                     Component<Mat4>,
                     Component<Vec3>,
                     Component<Vec3>,
-                    Component<crate::Effector>,
+                    Component<Effector>,
                 ),
-                _,
+                (All, Without),
             >| {
                 let mut gizmos = gizmos
                     .get(engine())?
@@ -341,9 +336,17 @@ pub fn gizmo_system() -> BoxedSystem {
                     let origin = transform.transform_point3(Vec3::ZERO);
 
                     let dv = effector.pending_force();
-                    // gizmos.draw(ArrowGizmo::new(origin, dv).with_color(Color::red()));
-                    // gizmos.draw(ArrowGizmo::new(origin, velocity).with_color(Color::cyan()));
-                    // gizmos.draw(ArrowGizmo::new(origin, w).with_color(Color::purple()));
+                    if dv.length() > 0.01 {
+                        gizmos.draw(ArrowGizmo::new(origin, dv).with_color(Color::red()));
+                    }
+
+                    if velocity.length() > 0.01 {
+                        gizmos.draw(ArrowGizmo::new(origin, velocity).with_color(Color::green()));
+                    }
+
+                    if w.length() > 0.01 {
+                        gizmos.draw(ArrowGizmo::new(origin, w).with_color(Color::blue()));
+                    }
                 }
 
                 anyhow::Ok(())

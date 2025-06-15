@@ -4,6 +4,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use anyhow::Context;
 use atomic_refcell::AtomicRefCell;
 use flax::{components::name, Entity};
 use glam::{vec2, Vec2};
@@ -100,7 +101,11 @@ impl ApplicationHandler for WinitEventHandler<'_> {
 
         self.scale_factor = window.scale_factor();
 
-        self.app.init().unwrap();
+        if let Err(err) = self.app.init().context("Failed to initialize app") {
+            tracing::error!("{err:?}");
+            event_loop.exit();
+            return;
+        }
 
         if let Err(err) = self.app.emit_event(ApplicationReady(window.clone())) {
             tracing::error!("Error emitting window created event: {:?}", err);

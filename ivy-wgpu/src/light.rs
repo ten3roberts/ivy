@@ -72,9 +72,9 @@ pub struct LightBundle {
 }
 
 impl Bundle for LightBundle {
-    fn mount(self, entity: &mut flax::EntityBuilder) {
+    fn mount(&self, entity: &mut flax::EntityBuilder) {
         entity
-            .set(light_params(), self.params)
+            .set(light_params(), self.params.clone())
             .set(light_kind(), self.kind);
 
         if self.cast_shadow {

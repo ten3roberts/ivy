@@ -2,7 +2,7 @@ use flax::{component, signal::BoxedSignal, Debuggable, Entity};
 use glam::Vec3;
 use rapier3d::prelude::{
     ColliderBuilder, ColliderHandle, CollisionEvent, CollisionEventFlags, GenericJoint,
-    ImpulseJointHandle, LockedAxes, RigidBodyBuilder, RigidBodyHandle, RigidBodyType,
+    ImpulseJointHandle, RigidBodyBuilder, RigidBodyHandle,
 };
 
 use crate::{

@@ -10,21 +10,28 @@ use ivy_core::{
     update_layer::{FixedTimeStep, ScheduledLayer},
     App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer,
 };
+use ivy_editor::{
+    plugin::EditorPlugin,
+    tools::{physics_tool::PhysicsToolPlugin, transform_tool::TransformToolPlugin},
+    tools_controller::ToolsControllerPlugin,
+};
 use ivy_engine::{is_static, rotation, scale, RigidBodyBundle, TransformBundle};
 use ivy_game::{
     fly_camera::FlyCameraPlugin,
-    ray_picker::RayPickingPlugin,
     viewport_camera::{CameraSettings, ViewportCameraLayer},
 };
 use ivy_graphics::texture::TextureData;
 use ivy_input::layer::InputLayer;
-use ivy_physics::{
-    components::{collider_builder, rigidbody_builder},
-    ColliderBundle, PhysicsPlugin,
-};
+use ivy_physics::{components::collider_builder, ColliderBundle, PhysicsPlugin};
 use ivy_postprocessing::preconfigured::{
     pbr::{PbrRenderGraphConfig, SkyboxConfig},
     SurfacePbrPipelineDesc, SurfacePbrRenderer,
+};
+use ivy_scene::ray_picker::RayPickingPlugin;
+use ivy_ui::{
+    layer::{UiLayer, UiUpdateLayer},
+    screens::ScreenPlugin,
+    streamed::StreamedUiPlugin,
 };
 use ivy_wgpu::{
     components::*,
@@ -86,15 +93,22 @@ pub fn main() -> anyhow::Result<()> {
                 },
             ))
         }))
+        .with_layer(UiLayer::new())
         .with_layer(InputLayer::new())
         .with_layer(LogicLayer)
-        .with_layer(ScheduledLayer::new(FixedTimeStep::new(0.02)).with_plugin(FlyCameraPlugin))
         .with_layer(
             ScheduledLayer::new(FixedTimeStep::new(0.02))
+                .with_plugin(StreamedUiPlugin)
+                .with_plugin(FlyCameraPlugin)
                 .with_plugin(PhysicsPlugin::new().with_gravity(-Vec3::Y * 9.81))
+                .with_plugin(TransformToolPlugin)
+                .with_plugin(PhysicsToolPlugin)
+                .with_plugin(ToolsControllerPlugin)
                 .with_plugin(RayPickingPlugin)
+                .with_plugin(EditorPlugin)
                 .with_plugin(TransformUpdatePlugin),
         )
+        .with_layer(UiUpdateLayer::new())
         .with_layer(ViewportCameraLayer::new(CameraSettings {
             environment_data: EnvironmentData::new(
                 Srgb::new(0.2, 0.2, 0.3),

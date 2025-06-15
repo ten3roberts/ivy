@@ -1,5 +1,5 @@
 use std::{
-    any,
+    any::TypeId,
     collections::BTreeMap,
     fmt::Display,
     mem,
@@ -23,6 +23,11 @@ pub enum TimeStepKind {
     FixedTimeStep,
 }
 
+pub struct PluginKey {
+    ty: TypeId,
+    name: &'static str,
+}
+
 /// A plugin is added to a layer and allows logic to be added using the ECS
 ///
 /// For full control of events and update frequency, use [crate::layer::Layer].
@@ -37,7 +42,7 @@ pub trait Plugin {
     ) -> anyhow::Result<()>;
 
     fn key(&self) -> &'static str {
-        any::type_name::<Self>()
+        std::any::type_name::<Self>()
     }
 
     // Plugin runs before other plugin
@@ -326,22 +331,43 @@ impl ScheduledLayer {
 
     fn collect_dependencies(
         plugins: &[Box<dyn Plugin>],
-    ) -> anyhow::Result<BTreeMap<String, String>> {
-        let mut dependencies = BTreeMap::new();
+    ) -> anyhow::Result<BTreeMap<usize, Vec<usize>>> {
+        let plugin_map: BTreeMap<_, _> = plugins
+            .iter()
+            .enumerate()
+            .map(|(i, p)| (p.key().to_string(), i))
+            .collect();
 
-        for plugin in plugins {
+        let mut dependencies: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+
+        for (index, plugin) in plugins.iter().enumerate() {
             let name = plugin.key();
-            let before = plugin.before();
-            let after = plugin.after();
+            let runs_before = plugin.before();
+            let runs_after = plugin.after();
 
-            tracing::info!(?name, ?before, ?after);
+            let entry = dependencies.entry(index).or_default();
 
-            for b in before {
-                dependencies.insert(b.to_string(), name.to_string());
+            for dependency in runs_after {
+                let dep_index = plugin_map
+                    .get(dependency)
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("Plugin {} depends on unknown plugin {}", name, dependency)
+                    })?
+                    .to_owned();
+
+                entry.push(dep_index);
             }
+            // for dependency in before {}
+            // for b in before {
+            //     dependencies.insert(b.to_string(), name.to_string());
+            // }
 
-            for a in after {
-                dependencies.insert(name.to_string(), a.to_string());
+            for dependent in runs_before {
+                let dependent = *plugin_map.get(dependent).ok_or_else(|| {
+                    anyhow::anyhow!("Plugin {} depends on unknown plugin {}", name, dependent)
+                })?;
+
+                dependencies.entry(dependent).or_default().push(index);
             }
         }
 
@@ -351,59 +377,46 @@ impl ScheduledLayer {
     // Sort plugins based on dependencies using topological sort
     fn sort_plugins(plugins: &[Box<dyn Plugin>]) -> anyhow::Result<Vec<&dyn Plugin>> {
         fn visit<'a>(
-            plugin: &'a dyn Plugin,
-            dependencies: &BTreeMap<String, String>,
+            index: usize,
+            plugins: &'a [Box<dyn Plugin>],
+            dependencies: &BTreeMap<usize, Vec<usize>>,
             sorted: &mut Vec<&'a dyn Plugin>,
-            visited: &mut BTreeMap<String, bool>,
+            visited: &mut BTreeMap<usize, bool>,
         ) -> anyhow::Result<()> {
+            let plugin = &*plugins[index];
             let name = plugin.key();
-            let before = plugin.before();
-            let after = plugin.after();
 
-            if let Some(visited) = visited.get(name) {
+            if let Some(visited) = visited.get(&index) {
                 if *visited {
                     return Ok(());
                 }
             }
 
-            visited.insert(name.to_string(), false);
+            visited.insert(index, false);
 
-            for b in before {
-                if let Some(dependency) = dependencies.get(b) {
-                    if !visited.get(dependency).unwrap_or(&false) {
-                        return Err(anyhow::anyhow!(
+            for &dependency in dependencies.get(&index).into_iter().flatten() {
+                match visited.get(&dependency) {
+                    Some(&true) => {
+                        // Dependency already visited and is sorted, skip it
+                        continue;
+                    }
+                    Some(&false) => {
+                        // Dependency is currently being visited, indicating a cycle
+                        anyhow::bail!(
                             "Plugin {} has a circular dependency with {}",
                             name,
                             dependency
-                        ));
+                        );
                     }
-
-                    visit(plugin, dependencies, sorted, visited)?;
-                } else {
-                    return Err(anyhow::anyhow!(
-                        "Plugin {} has a dependency on {} which does not exist",
-                        name,
-                        b
-                    ));
+                    None => {
+                        visit(dependency, plugins, dependencies, sorted, visited)?;
+                        // Dependency not found, continue to visit it
+                    }
                 }
             }
 
             sorted.push(plugin);
-            visited.insert(name.to_string(), true);
-
-            for a in after {
-                if let Some(dependency) = dependencies.get(a) {
-                    if !visited.get(dependency).unwrap_or(&false) {
-                        return Err(anyhow::anyhow!(
-                            "Plugin {} has a circular dependency with {}",
-                            name,
-                            dependency
-                        ));
-                    }
-
-                    visit(plugin, dependencies, sorted, visited)?;
-                }
-            }
+            visited.insert(index, true);
 
             Ok(())
         }
@@ -413,9 +426,14 @@ impl ScheduledLayer {
         let mut sorted = Vec::new();
         let mut visited = BTreeMap::new();
 
-        for plugin in plugins {
-            visit(&**plugin, &dependencies, &mut sorted, &mut visited)?;
+        for plugin in 0..plugins.len() {
+            visit(plugin, plugins, &dependencies, &mut sorted, &mut visited)?;
         }
+
+        tracing::info!(
+            "Sorted plugins: {:?}",
+            sorted.iter().map(|p| p.key()).collect::<Vec<_>>()
+        );
 
         Ok(sorted)
     }

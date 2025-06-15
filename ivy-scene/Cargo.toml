@@ -12,6 +12,7 @@ ivy-physics = { path = "../ivy-physics" }
 ivy-gltf = { path = "../ivy-gltf" }
 ivy-assets = { path = "../ivy-assets" }
 ivy-ui = { path = "../ivy-ui" }
+ivy-input = { path = "../ivy-input" }
 
 anyhow.workspace = true
 inventory.workspace = true

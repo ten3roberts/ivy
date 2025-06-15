@@ -97,6 +97,7 @@ violet = { path = "./violet", features = ["lucide"], version = "*" }
 tynm = "0.2"
 futures-signals = "0.3"
 inventory = "0.3"
+enum_dispatch = "0.3"
 
 [dependencies]
 ivy-assets = { path = "./ivy-assets", version = "0.10" }

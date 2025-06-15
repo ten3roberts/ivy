@@ -4,31 +4,15 @@ use flax::{
     components::{child_of, name},
     entity_ids, Dfs, Entity, FetchExt, Query,
 };
-use futures::StreamExt;
 use itertools::Itertools;
-use ivy_core::{
-    components::world_transform,
-    palette::{named::BLACK, WithAlpha},
-};
-use ivy_physics::rapier3d::na::inf;
+use ivy_core::components::world_transform;
 use ivy_ui::{
     streamed::StreamedUiExt,
-    violet::{
-        core::{
-            style::{
-                surface_interactive, surface_interactive_warning, SizeExt, StyleExt,
-                WidgetSizeProps,
-            },
-            unit::Unit,
-            widget::{
-                card, col, label, panel, row, Button, ButtonStyle, Collapsible, CollapsibleStyle,
-                EmptyWidget, Rectangle, ScrollArea,
-            },
-            Edges, Scope, Widget,
-        },
-        lucide::icons::{
-            LUCIDE_BOX, LUCIDE_CIRCLE, LUCIDE_CIRCLE_SMALL, LUCIDE_CUBOID, LUCIDE_DOT, LUCIDE_MINUS,
-        },
+    violet::core::{
+        style::{SizeExt, StyleExt, WidgetSizeProps},
+        unit::Unit,
+        widget::{card, col, label, ButtonStyle, Collapsible, CollapsibleStyle, ScrollArea},
+        Edges, Scope, Widget,
     },
 };
 

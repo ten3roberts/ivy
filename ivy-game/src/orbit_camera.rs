@@ -50,7 +50,7 @@ impl Plugin for OrbitCameraPlugin {
 struct OrbitCameraBundle;
 
 impl Bundle for OrbitCameraBundle {
-    fn mount(self, entity: &mut flax::EntityBuilder) {
+    fn mount(&self, entity: &mut flax::EntityBuilder) {
         let control_action = Action::new()
             .with_binding(MouseButtonBinding::new(MouseButton::Left))
             .with_binding(MouseButtonBinding::new(MouseButton::Right));

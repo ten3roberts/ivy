@@ -15,6 +15,7 @@ ivy-ui = { path = "../ivy-ui" }
 ivy-input = { path = "../ivy-input" }
 ivy-scene = { path = "../ivy-scene" }
 
+enum_dispatch.workspace = true
 anyhow.workspace = true
 inventory.workspace = true
 flume.workspace = true

@@ -114,7 +114,7 @@ impl Default for LineGizmo {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub struct Cube {
+pub struct CuboidGizmo {
     pub min: Vec3,
     pub max: Vec3,
     pub line_radius: f32,
@@ -122,7 +122,7 @@ pub struct Cube {
     pub transform: Mat4,
 }
 
-impl Cube {
+impl CuboidGizmo {
     pub fn new(min: Vec3, max: Vec3, line_radius: f32, color: Color) -> Self {
         Self {
             min,
@@ -146,7 +146,7 @@ impl Cube {
     }
 }
 
-impl Default for Cube {
+impl Default for CuboidGizmo {
     fn default() -> Self {
         Self {
             min: Vec3::ZERO,
@@ -158,7 +158,7 @@ impl Default for Cube {
     }
 }
 
-impl DrawGizmos for Cube {
+impl DrawGizmos for CuboidGizmo {
     fn draw_primitives(&self, gizmos: &mut GizmosSection) {
         let sides = [
             (Vec3::X, Vec3::Y),

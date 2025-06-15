@@ -129,7 +129,7 @@ impl RigidBodyBundle {
 }
 
 impl Bundle for RigidBodyBundle {
-    fn mount(self, entity: &mut EntityBuilder) {
+    fn mount(&self, entity: &mut EntityBuilder) {
         entity
             .set(
                 rigidbody_builder(),
@@ -186,7 +186,7 @@ impl ColliderBundle {
 }
 
 impl Bundle for ColliderBundle {
-    fn mount(self, entity: &mut EntityBuilder) {
-        entity.set(collider_builder(), self.collider);
+    fn mount(&self, entity: &mut EntityBuilder) {
+        entity.set(collider_builder(), self.collider.clone());
     }
 }

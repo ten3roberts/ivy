@@ -91,8 +91,9 @@ impl WorldExt for World {
     }
 }
 
+/// A bundle describes a set of related components mounted to an entity.
 pub trait Bundle {
-    fn mount(self, entity: &mut EntityBuilder);
+    fn mount(&self, entity: &mut EntityBuilder);
 }
 
 pub trait EntityBuilderExt {
