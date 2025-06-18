@@ -304,7 +304,7 @@ impl Node for GizmosRendererNode {
         });
 
         // Draw primitives
-        render_pass.set_pipeline(rect_shader.pipeline());
+        render_pass.set_pipeline(shader.pipeline());
         render_pass.set_vertex_buffer(0, self.mesh.vertex_buffer().slice(..));
         render_pass.set_index_buffer(
             self.mesh.index_buffer().slice(..),
@@ -312,10 +312,11 @@ impl Node for GizmosRendererNode {
         );
 
         render_pass.set_bind_group(0, &bind_group, &[]);
-        render_pass.draw_indexed(0..6, 0, 1..1 + self.data.len() as u32);
-
-        render_pass.set_pipeline(shader.pipeline());
         render_pass.draw_indexed(6..(6 + self.draw_index_count), 0, 0..1);
+
+        render_pass.set_pipeline(rect_shader.pipeline());
+        render_pass.set_bind_group(0, &bind_group, &[]);
+        render_pass.draw_indexed(0..6, 0, 1..1 + (self.data.len() - 1) as u32);
 
         Ok(())
     }

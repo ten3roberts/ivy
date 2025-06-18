@@ -20,7 +20,8 @@ component! {
     tools_controller: ToolsController,
     pub(crate) current_tool: Option<usize>,
     pub(crate) tools: Vec<Tool>,
-    unequip_signal: BoxedSignal<()>,
+    pub equip_signal: BoxedSignal<()>,
+    pub unequip_signal: BoxedSignal<()>,
 }
 
 /// Defines a tool
@@ -45,7 +46,6 @@ impl std::fmt::Debug for Tool {
 impl Tool {}
 
 pub struct EquippedTool {
-    name: String,
     id: Entity,
     template: Asset<Template>,
 }
@@ -111,7 +111,15 @@ impl ToolsController {
 
         cmd.defer(move |world| {
             builder.append_to(world, tool_entity)?;
+
             let _ = sender.send(widget);
+
+            let entity = world.entity(tool_entity)?;
+            let mut cmd = CommandBuffer::new();
+            if let Ok(mut equip_signal) = entity.get_mut(equip_signal()) {
+                equip_signal.execute(entity, &mut cmd, ())?;
+            }
+            cmd.apply(world)?;
 
             Ok(())
         });
@@ -119,7 +127,6 @@ impl ToolsController {
         self.current_tool = Some(EquippedTool {
             id: tool_entity,
             template: tool.template.clone(),
-            name: tool.name.clone(),
         });
 
         Ok(())

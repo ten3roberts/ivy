@@ -22,7 +22,7 @@ use ivy_game::{
 };
 use ivy_graphics::texture::TextureData;
 use ivy_input::layer::InputLayer;
-use ivy_physics::{components::collider_builder, ColliderBundle, PhysicsPlugin};
+use ivy_physics::{components::collider_builder, ColliderBundle, GizmoSettings, PhysicsPlugin};
 use ivy_postprocessing::preconfigured::{
     pbr::{PbrRenderGraphConfig, SkyboxConfig},
     SurfacePbrPipelineDesc, SurfacePbrRenderer,
@@ -100,7 +100,11 @@ pub fn main() -> anyhow::Result<()> {
             ScheduledLayer::new(FixedTimeStep::new(0.02))
                 .with_plugin(StreamedUiPlugin)
                 .with_plugin(FlyCameraPlugin)
-                .with_plugin(PhysicsPlugin::new().with_gravity(-Vec3::Y * 9.81))
+                .with_plugin(
+                    PhysicsPlugin::new()
+                        .with_gravity(-Vec3::Y * 9.81)
+                        .with_gizmos(GizmoSettings { rigidbody: true }),
+                )
                 .with_plugin(TransformToolPlugin)
                 .with_plugin(PhysicsToolPlugin)
                 .with_plugin(ToolsControllerPlugin)

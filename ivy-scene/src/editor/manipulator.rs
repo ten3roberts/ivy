@@ -24,6 +24,7 @@ use ordered_float::NotNan;
 pub enum TransformMode {
     Translate,
     Rotate,
+    None,
     // Scale, // TODO
 }
 
@@ -148,6 +149,7 @@ impl TransformControls {
                     .with_tube_radius(0.02 * gizmo_scale)
                     .draw_primitives(gizmos);
                 }
+                TransformMode::None => {}
             }
         }
     }
@@ -223,6 +225,7 @@ impl TransformControls {
                     drag_data.new_position = drag_data.start_position + delta;
                     self.position = drag_data.new_position;
                 }
+                TransformMode::None => {}
             }
         }
 
@@ -289,6 +292,7 @@ impl TransformControls {
                 [
                     self.hit_test_arrow(camera_ray, axis),
                     self.hit_test_ring(camera_ray, axis),
+                    self.hit_test_sphere(camera_ray, axis),
                 ]
             })
             .filter_map(identity)
@@ -323,6 +327,30 @@ impl TransformControls {
             interact_point: hit_radius.normalize() * self.ring_radius,
             plane,
             dim,
+        })
+    }
+
+    fn hit_test_sphere(&self, camera_ray: Ray, axis: Axis3D) -> Option<HitResult> {
+        let plane = Plane::from_normal_and_point(-camera_ray.direction, self.position);
+
+        let hit = plane.intersect_ray(camera_ray.origin(), camera_ray.direction())?;
+
+        let hit_point = camera_ray.at(hit);
+
+        let hit_radius = hit_point - self.position;
+
+        let gizmo_scale = self.get_size(camera_ray);
+        if hit_radius.length() > self.ring_radius * gizmo_scale {
+            return None;
+        }
+
+        Some(HitResult {
+            mode: TransformMode::None,
+            axis,
+            hit_distance: hit,
+            interact_point: hit_radius.normalize() * self.ring_radius,
+            plane,
+            dim: Vec3::ZERO,
         })
     }
 

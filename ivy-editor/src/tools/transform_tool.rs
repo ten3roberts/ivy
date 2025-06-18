@@ -23,7 +23,10 @@ use ivy_input::{
     components::input_state,
     types::{Key, MouseButton, NamedKey},
 };
-use ivy_physics::{components::physics_state, rapier3d::prelude::QueryFilter};
+use ivy_physics::{
+    components::physics_state,
+    rapier3d::{crossbeam::channel::Select, prelude::QueryFilter},
+};
 use ivy_scene::{
     camera::{self, CameraQuery},
     editor::manipulator::{
@@ -49,7 +52,10 @@ use ivy_ui::{
     },
 };
 
-use crate::plugin::{EditCommand, MoveEntities, Selection, SetSelection, edit_commands, selection};
+use crate::{
+    plugin::{EditCommand, MoveEntities, Selection, SetSelection, edit_commands, selection},
+    tools_controller::equip_signal,
+};
 
 pub struct TransformTool {
     manipulator: TransformManipulator,
@@ -175,6 +181,11 @@ impl Bundle for TransformToolBundle {
 
                             edit_commands
                                 .send(EditCommand::SetSelection(SetSelection { new_selection }))?;
+                        } else if !selection.entities().is_empty() {
+                            // If we clicked outside of any entity, clear the selection
+                            edit_commands.send(EditCommand::SetSelection(SetSelection {
+                                new_selection: Selection::default(),
+                            }))?;
                         }
                     } else if let Some(cmd) = tool.manipulator.finish_move_cmd(world) {
                         if !cmd.is_empty() {
@@ -274,6 +285,24 @@ impl Bundle for TransformToolBundle {
                 mouse_moved_signal(),
             );
 
+        let on_equip = Signal::builder("TransformTool::equip_signal")
+            .with_world()
+            .with(Query::new((
+                transform_tool().as_mut(),
+                selection().relation(child_of),
+            )))
+            .build(|id, world: &World, mut query: QueryBorrow<_>, ()| {
+                let (tool, selection): (&mut TransformTool, &Selection) = query.get(id)?;
+
+                for &entity in selection.entities().iter() {
+                    let entity = world.entity(entity)?;
+                    let manipulated = ManipulatedEntity::from_entity(entity);
+                    tool.manipulator.add_entity(manipulated);
+                }
+
+                anyhow::Ok(())
+            });
+
         entity
             .set(name(), "TransformTool".into())
             .set(
@@ -287,6 +316,7 @@ impl Bundle for TransformToolBundle {
             .set(mouse_button_changed_signal(), mouse_button_changed)
             .set(switch_modes_signal(), switch_modes)
             .set(switch_snap_mode_signal(), snap_modes)
+            .set(equip_signal(), on_equip)
             .set(settings(), self.settings);
     }
 }
