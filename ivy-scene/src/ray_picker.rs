@@ -78,7 +78,7 @@ impl RayPickingTool {
 
             cmd.set(
                 manipulator.id(),
-                impulse_joint(hit.collider_id),
+                impulse_joint(hit.rigidbody_id),
                 joint.into(),
             );
 

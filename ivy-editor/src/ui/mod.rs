@@ -1,27 +1,37 @@
+pub mod entity_editor;
+
 use flax::Entity;
 use futures::StreamExt;
 use glam::Vec2;
 use itertools::Itertools;
+use ivy_input::InputStimulus;
 use ivy_ui::{
     screens::Screen,
     streamed::StreamedUiExt,
     violet::{
         core::{
             Widget,
-            components::LayoutAlignment,
+            components::{LayoutAlignment, translation},
             layout::Align,
             state::StateExt,
             style::SizeExt,
             to_owned,
+            unit::Unit,
             widget::{
-                Radio, StreamWidget, bold, card, col, interactive::base::TooltipOptions, label, row,
+                Radio, Stack, StreamWidget, bold, card, col, interactive::base::TooltipOptions,
+                label, maximized, row,
             },
         },
         futures_signals::signal::Mutable,
     },
 };
+use tween::{Tween, Tweener};
 
-use crate::tools_controller::{current_tool, tools};
+use crate::{
+    plugin::selection,
+    tools_controller::{current_tool, tools},
+    ui::entity_editor::{Animate, EntityComponentEditor},
+};
 
 pub struct EditorUi {
     editor: Entity,
@@ -46,7 +56,12 @@ impl Screen for EditorUi {
             EditorMenuBar {
                 editor: self.editor,
             },
-            StreamWidget::new(self.tool_ui.into_stream()),
+            maximized((
+                StreamWidget::new(self.tool_ui.into_stream()),
+                InspectorUI {
+                    editor: self.editor,
+                },
+            )),
         ))
         .with_item_align(LayoutAlignment::new(Align::Start, Align::Start))
         .mount(scope);
@@ -102,5 +117,28 @@ impl Widget for ToolSelectionWidget {
         };
 
         (StreamWidget::new(item_column)).mount(scope);
+    }
+}
+
+pub struct InspectorUI {
+    editor: Entity,
+}
+
+impl Widget for InspectorUI {
+    fn mount(self, scope: &mut ivy_ui::violet::core::Scope<'_>) {
+        let selection = scope.stream_component(selection(), self.editor);
+
+        let editor = selection.into_stream().map(move |selection| {
+            if let Some(&entity) = selection.entities().first() {
+                let editor = EntityComponentEditor::new(entity);
+                Some(card(editor).with_min_size(Unit::px2(300.0, 200.0)))
+            } else {
+                None
+            }
+        });
+
+        Stack::new(StreamWidget::new(editor))
+            .with_item_align(LayoutAlignment::new(Align::End, Align::Start))
+            .mount(scope);
     }
 }

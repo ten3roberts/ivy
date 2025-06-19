@@ -4,7 +4,7 @@ use flax::{Entity, EntityRef, World};
 use glam::{Mat4, Quat, Vec3};
 use itertools::Itertools;
 use ivy_core::{
-    components::{self, position, rotation, TransformBundle},
+    components::{self, position, rotation},
     gizmos::{
         transforms::{RotateGizmo, TranslateGizmo},
         DrawGizmos, GizmosSection,
@@ -92,7 +92,7 @@ impl TransformControls {
             position,
             rotation,
             arrow_width: 0.1,
-            ring_width: 0.2,
+            ring_width: 0.3,
             drag_data: None,
             arrow_length: 0.8,
             ring_radius: 1.0,
@@ -290,15 +290,15 @@ impl TransformControls {
             .into_iter()
             .flat_map(|axis| {
                 [
-                    self.hit_test_arrow(camera_ray, axis),
-                    self.hit_test_ring(camera_ray, axis),
-                    self.hit_test_sphere(camera_ray, axis),
+                    self.hit_test_arrow(camera_ray, axis).map(|v| (0, v)),
+                    self.hit_test_ring(camera_ray, axis).map(|v| (1, v)),
+                    self.hit_test_sphere(camera_ray, axis).map(|v| (2, v)),
                 ]
             })
             .filter_map(identity)
-            .min_by_key(|v| NotNan::new(v.hit_distance).unwrap());
+            .min_by_key(|(prio, v)| (*prio, NotNan::new(v.hit_distance).unwrap()));
 
-        return hit;
+        return Some(hit?.1);
     }
 
     fn hit_test_ring(&self, camera_ray: Ray, axis: Axis3D) -> Option<HitResult> {
@@ -308,6 +308,7 @@ impl TransformControls {
         let plane = Plane::from_normal_and_point(normal, self.position);
 
         let hit = plane.intersect_ray(camera_ray.origin(), camera_ray.direction())?;
+        assert!(!hit.is_nan());
 
         let hit_point = camera_ray.at(hit);
 
@@ -333,22 +334,19 @@ impl TransformControls {
     fn hit_test_sphere(&self, camera_ray: Ray, axis: Axis3D) -> Option<HitResult> {
         let plane = Plane::from_normal_and_point(-camera_ray.direction, self.position);
 
-        let hit = plane.intersect_ray(camera_ray.origin(), camera_ray.direction())?;
-
-        let hit_point = camera_ray.at(hit);
-
-        let hit_radius = hit_point - self.position;
-
         let gizmo_scale = self.get_size(camera_ray);
-        if hit_radius.length() > self.ring_radius * gizmo_scale {
+        let hit = ray_sphere_intersect(camera_ray, self.position, self.ring_radius * gizmo_scale)?;
+
+        if hit.is_nan() {
             return None;
         }
+        let hit_point = camera_ray.at(hit);
 
         Some(HitResult {
             mode: TransformMode::None,
             axis,
             hit_distance: hit,
-            interact_point: hit_radius.normalize() * self.ring_radius,
+            interact_point: hit_point - self.position,
             plane,
             dim: Vec3::ZERO,
         })
@@ -366,6 +364,7 @@ impl TransformControls {
         let plane = Plane::from_normal_and_point(normal, self.position);
 
         let hit = plane.intersect_ray(camera_ray.origin(), camera_ray.direction())?;
+        assert!(!hit.is_nan());
 
         let hit_point = camera_ray.at(hit);
 
@@ -657,7 +656,7 @@ impl TransformManipulator {
         self.manipulator.handle_mouse_up();
     }
 
-    pub fn finish_move_cmd(&mut self, world: &World) -> Option<Vec<(Entity, Vec3, Quat)>> {
+    pub fn finish_move_cmd(&mut self, world: &World) -> Option<Vec<EntityManipulation>> {
         if self.entities.is_empty() {
             return None;
         }
@@ -671,6 +670,14 @@ impl TransformManipulator {
                         return None;
                     };
 
+                    let manipulation = EntityManipulation {
+                        entity: manipulated.id,
+                        original_position: manipulated.start_position,
+                        original_rotation: manipulated.start_rotation,
+                        new_position: manipulated.position,
+                        new_rotation: manipulated.rotation,
+                    };
+
                     manipulated.start_position = manipulated.position;
                     manipulated.start_rotation = manipulated.rotation;
 
@@ -679,9 +686,10 @@ impl TransformManipulator {
                         entity.update_dedup(rigidbody_flags(), previous_flags);
                     }
 
-                    Some((entity.id(), manipulated.position, manipulated.rotation))
+                    Some(manipulation)
                 })
                 .collect_vec();
+
             self.manipulator.handle_mouse_up();
             return Some(manipulation);
         } else {
@@ -710,9 +718,32 @@ impl TransformManipulator {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct EntityManipulation {
+    pub entity: Entity,
+    pub original_position: Vec3,
+    pub original_rotation: Quat,
+    pub new_position: Vec3,
+    pub new_rotation: Quat,
+}
+
 fn snap_value(value: f32, snap: f32) -> f32 {
     if snap == 0.0 {
         return value;
     }
     (value / snap).round() * snap
+}
+
+fn ray_sphere_intersect(ray: Ray, center: Vec3, radius: f32) -> Option<f32> {
+    let oc = ray.origin() - center;
+    let a = ray.direction().length_squared();
+    let b = 2.0 * oc.dot(ray.direction());
+    let c = oc.length_squared() - radius * radius;
+    let discriminant = b * b - 4.0 * a * c;
+
+    if discriminant <= 0.0001 || a <= 0.0 {
+        None
+    } else {
+        Some((-b - discriminant.sqrt()) / (2.0 * a))
+    }
 }

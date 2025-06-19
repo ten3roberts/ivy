@@ -98,6 +98,7 @@ tynm = "0.2"
 futures-signals = "0.3"
 inventory = "0.3"
 enum_dispatch = "0.3"
+tween = { version = "2.0.4", features = ["glam"] }
 
 [dependencies]
 ivy-assets = { path = "./ivy-assets", version = "0.10" }

@@ -7,13 +7,13 @@ use std::{
 use flax::{component::ComponentDesc, EntityRef};
 use futures::StreamExt;
 use ivy_ui::{
-    streamed::{DuplexComponentStream, Streamed},
+    streamed::{ComponentSink, DuplexComponentStream, Streamed},
     violet::{
         core::{
             state::{State, StateExt, StateSink, StateStream},
             Widget,
         },
-        futures_signals::signal::Mutable,
+        futures_signals::signal::{Mutable, SignalExt},
     },
 };
 
@@ -109,12 +109,15 @@ impl EditableRegistration {
             create_editor: |entity, component, streamed| {
                 let component = component.downcast::<T>();
                 let value = entity.get_clone(component).expect("Missing component");
-                let state: Mutable<Option<T>> = Mutable::new(Some(value));
-                let stream = DuplexComponentStream::new(component, entity.id(), state.clone());
+                let state: Mutable<T> = Mutable::new(value);
 
-                let _ = streamed.send(Box::new(stream));
+                let _ = streamed.send(Box::new(ComponentSink::new(
+                    component,
+                    entity.id(),
+                    state.signal_cloned().to_stream(),
+                )));
 
-                T::create_editor(state.lower_option())
+                T::create_editor(state)
             },
         }
     }

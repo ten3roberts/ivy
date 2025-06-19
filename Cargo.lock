@@ -1813,6 +1813,7 @@ dependencies = [
  "ivy-wgpu",
  "ordered-float 5.0.0",
  "tracing",
+ "tween",
 ]
 
 [[package]]

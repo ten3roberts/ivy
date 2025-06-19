@@ -149,15 +149,12 @@ impl ToolsControllerBundle {
 
 impl Bundle for ToolsControllerBundle {
     fn mount(&self, entity: &mut flax::EntityBuilder) {
-        let input = InputState::new();
-
         entity
             .set(
                 tools_controller(),
                 ToolsController::new(self.open_tool_ui.clone()),
             )
             .set(tools(), self.tools.clone())
-            .set(input_state(), input)
             .set(current_tool(), Some(0));
     }
 }

@@ -4,23 +4,29 @@ use enum_dispatch::enum_dispatch;
 use flax::{Component, Entity, Query, QueryBorrow, System, World, component, system};
 use glam::{Quat, Vec3};
 use ivy_core::{
-    EntityBuilderExt,
+    EngineLayer, EntityBuilderExt,
     components::{TransformBundle, engine, gizmos, position, rotation, scale, world_transform},
     gizmos::{CuboidGizmo, DEFAULT_THICKNESS, Gizmos},
     update_layer::Plugin,
+};
+use ivy_input::{
+    Action, CompositeBinding, InputState, KeyBinding,
+    components::input_state,
+    types::{Key, NamedKey},
 };
 use ivy_physics::{
     components::{collider_handle, physics_state},
     state::PhysicsState,
 };
 use ivy_scene::{
+    editor::manipulator::EntityManipulation,
     ray_picker::{RayPickerBundle, RayPickingPlugin},
     template::Template,
 };
 use ivy_ui::{
     screens::screen_state,
     violet::{
-        core::style::base_colors::EMERALD_400,
+        core::{editor, style::base_colors::EMERALD_400},
         lucide::icons::{
             LUCIDE_MOUSE_POINTER_2, LUCIDE_MOUSE_POINTER_CLICK, LUCIDE_MOVE, LUCIDE_MOVE_3D,
             LUCIDE_TORNADO,
@@ -38,7 +44,7 @@ use crate::{
     ui::EditorUi,
 };
 
-#[enum_dispatch(Command)]
+#[enum_dispatch(CommandExt)]
 pub enum EditCommand {
     SetSelection(SetSelection),
     MoveEntities(MoveEntities),
@@ -51,40 +57,127 @@ pub struct SetSelection {
 
 #[derive(Clone)]
 pub struct MoveEntities {
-    pub items: Vec<(Entity, Vec3, Quat)>,
+    pub items: Vec<EntityManipulation>,
 }
 
 impl MoveEntities {
-    pub fn new(items: Vec<(Entity, Vec3, Quat)>) -> Self {
+    pub fn new(items: Vec<EntityManipulation>) -> Self {
         Self { items }
     }
 }
 
 /// Transactional commands for performing an action on the world
-#[enum_dispatch]
 pub trait Command {
-    fn execute(&mut self, editor: Entity, world: &mut World) -> anyhow::Result<()>;
+    type Undo: 'static + Send + Sync + Command;
+    fn execute(&self, editor: Entity, world: &mut World) -> anyhow::Result<Self::Undo>;
+}
+
+#[enum_dispatch]
+pub trait CommandExt: Send + Sync {
+    fn execute_dyn(&self, editor: Entity, world: &mut World)
+    -> anyhow::Result<Box<dyn CommandExt>>;
+}
+
+impl<T> CommandExt for T
+where
+    T: Send + Sync + Command,
+{
+    fn execute_dyn(
+        &self,
+        editor: Entity,
+        world: &mut World,
+    ) -> anyhow::Result<Box<dyn CommandExt>> {
+        Ok(Box::new(self.execute(editor, world)?) as Box<dyn CommandExt>)
+    }
 }
 
 impl Command for SetSelection {
-    fn execute(&mut self, editor: Entity, world: &mut World) -> anyhow::Result<()> {
+    type Undo = Self;
+    fn execute(&self, editor: Entity, world: &mut World) -> anyhow::Result<Self> {
+        let old_selection = world.get_clone(editor, selection()).unwrap_or_default();
+
         world.set(editor, selection(), self.new_selection.clone())?;
 
-        Ok(())
+        Ok(SetSelection {
+            new_selection: old_selection,
+        })
     }
 }
 
 impl Command for MoveEntities {
-    fn execute(&mut self, _: Entity, world: &mut World) -> anyhow::Result<()> {
-        for &(entity, pos, rot) in &self.items {
-            let Ok(entity) = world.entity(entity) else {
+    type Undo = Self;
+    fn execute(&self, _: Entity, world: &mut World) -> anyhow::Result<Self> {
+        let mut undo = Vec::new();
+        for manipulation in &self.items {
+            undo.push(EntityManipulation {
+                entity: manipulation.entity,
+                original_position: manipulation.new_position,
+                original_rotation: manipulation.new_rotation,
+                new_position: manipulation.original_position,
+                new_rotation: manipulation.original_rotation,
+            });
+
+            let Ok(entity) = world.entity(manipulation.entity) else {
                 continue;
             };
 
-            entity.update_dedup(position(), pos);
-            entity.update_dedup(rotation(), rot);
+            entity.update_dedup(position(), manipulation.new_position);
+            entity.update_dedup(rotation(), manipulation.new_rotation);
         }
 
+        Ok(Self::new(undo))
+    }
+}
+
+pub struct HistoryManager {
+    command_stack: Vec<Box<dyn CommandExt>>,
+    redo_stack: Vec<Box<dyn CommandExt>>,
+}
+
+impl HistoryManager {
+    pub fn new() -> Self {
+        Self {
+            command_stack: Vec::new(),
+            redo_stack: Vec::new(),
+        }
+    }
+
+    pub fn execute(
+        editor: Entity,
+        world: &mut World,
+        command: impl CommandExt,
+    ) -> anyhow::Result<()> {
+        let undo_command = command.execute_dyn(editor, world)?;
+
+        let editor = &mut *world.get_mut(editor, editor_host())?;
+        editor.history.command_stack.push(undo_command);
+        editor.history.redo_stack.clear();
+        Ok(())
+    }
+
+    pub fn undo(editor_id: Entity, world: &mut World) -> anyhow::Result<()> {
+        let mut editor = world.get_mut(editor_id, editor_host())?;
+        let command = editor.history.command_stack.pop();
+        drop(editor);
+
+        if let Some(command) = command {
+            let undo_command = command.execute_dyn(editor_id, world)?;
+            let editor = &mut world.get_mut(editor_id, editor_host())?;
+            editor.history.redo_stack.push(undo_command);
+        }
+        Ok(())
+    }
+
+    pub fn redo(editor_id: Entity, world: &mut World) -> anyhow::Result<()> {
+        let mut editor = world.get_mut(editor_id, editor_host())?;
+        let command = editor.history.redo_stack.pop();
+        drop(editor);
+
+        if let Some(command) = command {
+            let command = command.execute_dyn(editor_id, world)?;
+            let editor = &mut world.get_mut(editor_id, editor_host())?;
+            editor.history.command_stack.push(command);
+        }
         Ok(())
     }
 }
@@ -138,10 +231,41 @@ impl Plugin for EditorPlugin {
             },
         ];
 
+        let input = InputState::new()
+            .with_trigger_action(
+                Action::new().with_binding(CompositeBinding::new(
+                    KeyBinding::new(Key::Character("z".into())),
+                    vec![KeyBinding::new(Key::Named(NamedKey::Control))],
+                )),
+                |entity, cmd, pressed| {
+                    let id = entity.id();
+                    if pressed {
+                        cmd.defer(move |world| HistoryManager::undo(id, world));
+                    }
+
+                    Ok(())
+                },
+            )
+            .with_trigger_action(
+                Action::new().with_binding(CompositeBinding::new(
+                    KeyBinding::new(Key::Character("y".into())),
+                    vec![KeyBinding::new(Key::Named(NamedKey::Control))],
+                )),
+                |entity, cmd, pressed| {
+                    let id = entity.id();
+                    if pressed {
+                        cmd.defer(move |world| HistoryManager::redo(id, world));
+                    }
+
+                    Ok(())
+                },
+            );
+
         let editor = Entity::builder()
             .set(selection(), Selection::new(vec![]))
             .set(editor_host(), host)
             .set(edit_commands(), tx)
+            .set(input_state(), input)
             .mount(ToolsControllerBundle::new(tools, tool_ui_tx))
             .spawn(world);
 
@@ -149,8 +273,8 @@ impl Plugin for EditorPlugin {
             .with_name("process_commands")
             .with_world_mut()
             .build(move |world: &mut World| -> anyhow::Result<()> {
-                for mut command in rx.try_iter() {
-                    command.execute(editor, world)?;
+                for command in rx.try_iter() {
+                    HistoryManager::execute(editor, world, command);
                 }
 
                 Ok(())
@@ -187,11 +311,15 @@ component! {
     editor_host: EditorHost,
 }
 
-pub struct EditorHost {}
+pub struct EditorHost {
+    history: HistoryManager,
+}
 
 impl EditorHost {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            history: HistoryManager::new(),
+        }
     }
 }
 
