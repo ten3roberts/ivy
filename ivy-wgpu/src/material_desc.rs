@@ -29,7 +29,7 @@ impl ResourceDesc for MaterialDesc {
 
     type Error = anyhow::Error;
 
-    async fn load(self, assets: &AssetCache) -> Result<Self::Output, Self::Error> {
+    async fn load(&self, assets: &AssetCache) -> Result<Self::Output, Self::Error> {
         match self {
             MaterialDesc::PbrMaterial(desc) => {
                 Ok(MaterialData::PbrMaterial(desc.load(assets).await?))
@@ -71,9 +71,9 @@ impl ResourceDesc for PbrMaterialDesc {
 
     type Error = anyhow::Error;
 
-    async fn load(self, assets: &AssetCache) -> Result<Self::Output, Self::Error> {
+    async fn load(&self, assets: &AssetCache) -> Result<Self::Output, Self::Error> {
         Ok(Self::Output {
-            label: self.label,
+            label: self.label.clone(),
             albedo: self.albedo.load(assets).await?,
             normal: self.normal.load(assets).await?,
             metallic_roughness: self.metallic_roughness.load(assets).await?,
@@ -177,7 +177,7 @@ impl ResourceDesc for PbrEmissiveMaterialDesc {
 
     type Error = anyhow::Error;
 
-    async fn load(self, assets: &AssetCache) -> Result<Self::Output, Self::Error> {
+    async fn load(&self, assets: &AssetCache) -> Result<Self::Output, Self::Error> {
         Ok(Self::Output {
             pbr: self.pbr.load(assets).await?,
             emissive_color: self.emissive_color.load(assets).await?,

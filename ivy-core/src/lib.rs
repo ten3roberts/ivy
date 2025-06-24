@@ -29,6 +29,7 @@
 pub mod profiling;
 
 pub mod app;
+pub mod bundle;
 mod color;
 pub mod components;
 mod dir;
@@ -40,6 +41,7 @@ pub mod macros;
 pub mod math;
 pub mod subscribers;
 mod systems;
+pub mod template;
 pub mod transforms;
 mod updatable;
 pub mod update_layer;
@@ -47,6 +49,7 @@ pub mod update_layer;
 use std::f32::consts::PI;
 
 pub use app::{driver, App, AppBuilder, AppEvent};
+pub use bundle::*;
 pub use color::*;
 pub use dir::*;
 pub use extensions::*;

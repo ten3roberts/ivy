@@ -7,6 +7,7 @@ use ivy_core::{
     EngineLayer, EntityBuilderExt,
     components::{TransformBundle, engine, gizmos, position, rotation, scale, world_transform},
     gizmos::{CuboidGizmo, DEFAULT_THICKNESS, Gizmos},
+    template::Template,
     update_layer::Plugin,
 };
 use ivy_input::{
@@ -21,7 +22,6 @@ use ivy_physics::{
 use ivy_scene::{
     editor::manipulator::EntityManipulation,
     ray_picker::{RayPickerBundle, RayPickingPlugin},
-    template::Template,
 };
 use ivy_ui::{
     screens::screen_state,

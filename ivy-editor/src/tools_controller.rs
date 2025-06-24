@@ -7,10 +7,10 @@ use flax::{
 use ivy_assets::{Asset, AssetCache};
 use ivy_core::{
     Bundle,
+    template::Template,
     update_layer::{Plugin, ScheduleSetBuilder},
 };
 use ivy_input::{InputState, components::input_state};
-use ivy_scene::template::Template;
 use ivy_ui::violet::core::{
     Widget,
     widget::{card, col, label, row},

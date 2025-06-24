@@ -12,6 +12,7 @@ use ivy_core::{
     components::engine,
     update_layer::{Plugin, ScheduleSetBuilder},
 };
+use sync_wrapper::SyncStream;
 use violet::{
     core::{Scope, ScopeRef},
     futures_signals::signal::{Mutable, MutableSignalCloned, SignalExt, SignalStream},
@@ -132,22 +133,20 @@ impl<F: 'static + Send + Sync + FnOnce(&World) -> anyhow::Result<()>> Streamed
 pub struct ComponentSink<T, S> {
     target: Entity,
     component: Component<T>,
-    tx: Pin<Box<S>>,
+    tx: Pin<Box<SyncStream<S>>>,
 }
 
-impl<T: ComponentValue, S: 'static + Send + Sync + Stream<Item = T>> ComponentSink<T, S> {
+impl<T: ComponentValue, S: 'static + Send + Stream<Item = T>> ComponentSink<T, S> {
     pub fn new(component: Component<T>, target: Entity, tx: S) -> Self {
         Self {
             target,
             component,
-            tx: Box::pin(tx),
+            tx: (Box::pin(SyncStream::new(tx))),
         }
     }
 }
 
-impl<T: ComponentValue, S: 'static + Send + Sync + Stream<Item = T>> Streamed
-    for ComponentSink<T, S>
-{
+impl<T: ComponentValue, S: 'static + Send + Stream<Item = T>> Streamed for ComponentSink<T, S> {
     fn update(&mut self, world: &World) -> bool {
         if !world.is_alive(self.target) {
             return false;

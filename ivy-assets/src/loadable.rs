@@ -16,7 +16,7 @@ pub trait ResourceDesc: 'static + Send + Sync + Sized {
     type Error: Send + Sync;
 
     fn load(
-        self,
+        &self,
         assets: &AssetCache,
     ) -> impl Send + Future<Output = Result<Self::Output, Self::Error>>;
 }
@@ -41,7 +41,7 @@ where
 
     type Error = T::Error;
 
-    async fn load(self, assets: &AssetCache) -> Result<Self::Output, Self::Error> {
+    async fn load(&self, assets: &AssetCache) -> Result<Self::Output, Self::Error> {
         stream::iter(self)
             .then(|item| item.load(assets))
             .try_collect()
@@ -51,16 +51,16 @@ where
 
 impl<K, V> ResourceDesc for BTreeMap<K, V>
 where
-    K: 'static + Send + Sync + Ord,
+    K: 'static + Send + Sync + Ord + Clone,
     V: ResourceDesc,
 {
     type Output = BTreeMap<K, V::Output>;
 
     type Error = V::Error;
 
-    async fn load(self, assets: &AssetCache) -> Result<Self::Output, Self::Error> {
-        stream::iter(self)
-            .then(|(k, v)| async move { Ok((k, v.load(assets).await?)) })
+    async fn load(&self, assets: &AssetCache) -> Result<Self::Output, Self::Error> {
+        stream::iter(self.iter())
+            .then(|(k, v)| async move { Ok((k.clone(), v.load(assets).await?)) })
             .try_collect()
             .await
     }
@@ -74,7 +74,7 @@ where
 
     type Error = T::Error;
 
-    async fn load(self, assets: &AssetCache) -> Result<Self::Output, Self::Error> {
+    async fn load(&self, assets: &AssetCache) -> Result<Self::Output, Self::Error> {
         if let Some(val) = self {
             Ok(Some(val.load(assets).await?))
         } else {
@@ -91,8 +91,8 @@ where
 
     type Error = anyhow::Error;
 
-    async fn load(self, assets: &AssetCache) -> Result<Self::Output, Self::Error> {
-        let v = assets.try_load_async(&self).await?;
+    async fn load(&self, assets: &AssetCache) -> Result<Self::Output, Self::Error> {
+        let v = assets.try_load_async(self).await?;
 
         Ok(v)
     }

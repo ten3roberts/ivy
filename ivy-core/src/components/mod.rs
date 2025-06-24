@@ -4,7 +4,7 @@ use flax::{Component, ComponentMut, Debuggable, EntityBuilder, Fetch};
 use glam::{Mat4, Quat, Vec2, Vec3};
 use ivy_assets::AssetCache;
 
-use crate::{gizmos::Gizmos, AsyncCommandBuffer, Bundle, Color};
+use crate::{bundle::Bundle, gizmos::Gizmos, AsyncCommandBuffer, Color};
 
 flax::component! {
     pub position: Vec3 => [Debuggable],

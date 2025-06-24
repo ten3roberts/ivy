@@ -20,7 +20,7 @@ use ivy_ui::{
                     overlay::{overlay_state, Overlay},
                     select_list::SelectList,
                 },
-                label, row, Button, FutureWidget, SignalWidget, StreamWidget, TextInput,
+                label, row, Button, FutureWidget, InputBox, SignalWidget, StreamWidget,
             },
             Scope, Widget,
         },
@@ -43,7 +43,7 @@ impl Editable for String {
     fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         value: S,
     ) -> Box<dyn Send + Widget> {
-        Box::new(TextInput::new(value))
+        Box::new(InputBox::new(value))
     }
 }
 
@@ -51,7 +51,7 @@ impl Editable for i32 {
     fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         value: S,
     ) -> Box<dyn Send + Widget> {
-        Box::new(TextInput::new_parsed(value))
+        Box::new(InputBox::new(value))
     }
 }
 
@@ -59,7 +59,7 @@ impl Editable for f32 {
     fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         value: S,
     ) -> Box<dyn Send + Widget> {
-        Box::new(TextInput::new_parsed(value))
+        Box::new(InputBox::new(value))
     }
 }
 
@@ -72,7 +72,7 @@ impl Editable for Vec2 {
 
         let y = value.clone().map_ref(|v| &v.y, |v| &mut v.y);
 
-        Box::new(row((TextInput::new_parsed(x), TextInput::new_parsed(y))))
+        Box::new(row((InputBox::new(x), InputBox::new(y))))
     }
 }
 
@@ -86,11 +86,7 @@ impl Editable for Vec3 {
         let y = value.clone().map_ref(|v| &v.y, |v| &mut v.y);
         let z = value.clone().map_ref(|v| &v.z, |v| &mut v.z);
 
-        Box::new(row((
-            TextInput::new_parsed(x),
-            TextInput::new_parsed(y),
-            TextInput::new_parsed(z),
-        )))
+        Box::new(row((InputBox::new(x), InputBox::new(y), InputBox::new(z))))
     }
 }
 

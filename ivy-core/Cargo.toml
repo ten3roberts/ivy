@@ -36,8 +36,9 @@ serde = { workspace = true, optional = true }
 thiserror.workspace = true
 tracing.workspace = true
 slab.workspace = true
+futures.workspace = true
 
 [features]
-profile = [ "ivy-profiling/profile_with_puffin", "puffin", "puffin_http" ]
+profile = ["ivy-profiling/profile_with_puffin", "puffin", "puffin_http"]
 default = []
 serde = ["dep:serde", "glam/serde", "palette/serializing"]

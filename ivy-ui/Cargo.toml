@@ -23,3 +23,4 @@ wgpu.workspace = true
 itertools.workspace = true
 slotmap.workspace = true
 glam.workspace = true
+sync_wrapper.workspace = true

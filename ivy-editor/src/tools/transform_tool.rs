@@ -23,10 +23,7 @@ use ivy_input::{
     components::input_state,
     types::{Key, MouseButton, NamedKey},
 };
-use ivy_physics::{
-    components::physics_state,
-    rapier3d::{crossbeam::channel::Select, prelude::QueryFilter},
-};
+use ivy_physics::{components::physics_state, rapier3d::prelude::QueryFilter};
 use ivy_scene::{
     camera::{self, CameraQuery},
     editor::manipulator::{
@@ -43,8 +40,8 @@ use ivy_ui::{
             text::TextSegment,
             unit::Unit,
             widget::{
-                Radio, Rectangle, StreamWidget, Text, col, interactive::base::TooltipOptions,
-                label, row,
+                Radio, Rectangle, Selectable, StreamWidget, Text, col,
+                interactive::base::TooltipOptions, label, row,
             },
         },
         futures_signals::signal::{Mutable, SignalExt},
@@ -372,19 +369,19 @@ impl Widget for TransformToolWidget {
             .map(move |v| {
                 col((
                     row((
-                        Radio::new_enum(
+                        Selectable::new_value(
                             label(LUCIDE_GLOBE),
                             space_state.clone(),
                             ManipulationSpace::Global,
                         )
                         .with_tooltip(TooltipOptions::label("Align to World")),
-                        Radio::new_enum(
+                        Selectable::new_value(
                             label(LUCIDE_BOX),
                             space_state.clone(),
                             ManipulationSpace::Local,
                         )
                         .with_tooltip(TooltipOptions::label("Align to Object")),
-                        Radio::new_enum(
+                        Selectable::new_value(
                             label(LUCIDE_VIEW),
                             space_state.clone(),
                             ManipulationSpace::View,

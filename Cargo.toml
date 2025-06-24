@@ -99,6 +99,7 @@ futures-signals = "0.3"
 inventory = "0.3"
 enum_dispatch = "0.3"
 tween = { version = "2.0.4", features = ["glam"] }
+sync_wrapper = { version = "1.0", features = ["futures"] }
 
 [dependencies]
 ivy-assets = { path = "./ivy-assets", version = "0.10" }
@@ -178,3 +179,6 @@ flax = { path = "../flax" }
 [patch.crates-io]
 nalgebra = { git = "https://github.com/ten3roberts/nalgebra" }
 tween = { git = "https://github.com/ten3roberts/tween" }
+
+[profile.dev.package.'*']
+opt-level = 1

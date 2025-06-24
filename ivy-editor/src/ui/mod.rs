@@ -18,8 +18,8 @@ use ivy_ui::{
             to_owned,
             unit::Unit,
             widget::{
-                Radio, Stack, StreamWidget, bold, card, col, interactive::base::TooltipOptions,
-                label, maximized, row,
+                Selectable, Stack, StreamWidget, bold, card, col,
+                interactive::base::TooltipOptions, label, maximized, row,
             },
         },
         futures_signals::signal::Mutable,
@@ -30,7 +30,7 @@ use tween::{Tween, Tweener};
 use crate::{
     plugin::selection,
     tools_controller::{current_tool, tools},
-    ui::entity_editor::{Animate, EntityComponentEditor},
+    ui::entity_editor::EntityComponentEditor,
 };
 
 pub struct EditorUi {
@@ -104,7 +104,7 @@ impl Widget for ToolSelectionWidget {
                 let items = tools.iter().enumerate().map(move |(i, v)| {
                     let name = v.name.to_string();
 
-                    Radio::new_indexed(
+                    Selectable::new_value(
                         label(&v.icon),
                         selection.clone().lower_option().lower_option(),
                         i,

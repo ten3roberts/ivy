@@ -158,10 +158,10 @@ impl ResourceDesc for TextureDesc {
 
     type Error = anyhow::Error;
 
-    async fn load(self, assets: &ivy_assets::AssetCache) -> Result<Self::Output, Self::Error> {
+    async fn load(&self, assets: &ivy_assets::AssetCache) -> Result<Self::Output, Self::Error> {
         let texture = match self {
             TextureDesc::Path(path) => TextureData::Content(path.load_async(assets).await?),
-            TextureDesc::Color(r, g, b, a) => TextureData::Color(image::Rgba([r, g, b, a])),
+            &TextureDesc::Color(r, g, b, a) => TextureData::Color(image::Rgba([r, g, b, a])),
             TextureDesc::Processed(v) => {
                 // NOTE: ensure we don't recurse with assets here, and use raw uncached images on
                 // the way down (and only loading the base image into the asset cache)

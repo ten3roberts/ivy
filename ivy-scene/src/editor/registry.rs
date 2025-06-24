@@ -1,17 +1,19 @@
 use std::{
     any::{Any, TypeId},
     collections::BTreeMap,
-    sync::LazyLock,
+    sync::{Arc, LazyLock},
+    time::Duration,
 };
 
+use async_std::task::sleep;
 use flax::{component::ComponentDesc, EntityRef};
-use futures::StreamExt;
+use futures::{stream::BoxStream, StreamExt};
 use ivy_ui::{
-    streamed::{ComponentSink, DuplexComponentStream, Streamed},
+    streamed::{ComponentSink, DuplexComponentStream, Streamed, StreamedComponent, StreamedUiExt},
     violet::{
         core::{
             state::{State, StateExt, StateSink, StateStream},
-            Widget,
+            Scope, Widget,
         },
         futures_signals::signal::{Mutable, SignalExt},
     },
@@ -103,21 +105,42 @@ pub struct EditableRegistration {
 }
 
 impl EditableRegistration {
-    pub const fn new<T: Clone + Editable + PartialEq>() -> Self {
+    pub const fn new<T: std::fmt::Debug + Clone + Editable + PartialEq>() -> Self {
         Self {
             type_id: || TypeId::of::<T>(),
             create_editor: |entity, component, streamed| {
                 let component = component.downcast::<T>();
                 let value = entity.get_clone(component).expect("Missing component");
-                let state: Mutable<T> = Mutable::new(value);
 
-                let _ = streamed.send(Box::new(ComponentSink::new(
-                    component,
-                    entity.id(),
-                    state.signal_cloned().to_stream(),
-                )));
+                let entity = entity.id();
+                let scope = move |scope: &mut Scope| {
+                    let state = Mutable::new(value);
+                    let new_state = scope.stream_component(component, entity);
+                    let feedback_state = Arc::new(state.clone().prevent_feedback());
+                    scope.spawn({
+                        // Use the feedback preventing state here to avoid sent values from being
+                        // sent back to the editor
+                        let state = feedback_state.clone();
+                        new_state.into_stream().for_each(move |value| {
+                            state.send(value);
+                            async {}
+                        })
+                    });
 
-                T::create_editor(state)
+                    let msg = Box::new(ComponentSink::new(
+                        component,
+                        entity,
+                        feedback_state.stream().inspect(move |v| {
+                            tracing::info!("Sending value {component} {v:?}");
+                        }),
+                    )) as Box<dyn Streamed>;
+
+                    let _ = streamed.send(msg);
+
+                    T::create_editor(state).mount(scope);
+                };
+
+                Box::new(scope)
             },
         }
     }
