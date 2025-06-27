@@ -1,13 +1,12 @@
 use flax::{Entity, EntityBuilder};
 use futures::{future::BoxFuture, FutureExt};
 use ivy_assets::{loadable::ResourceDesc, AssetCache};
-use serde::Deserialize;
 
 use crate::bundle::Bundle;
 
 /// Defines an entity template to construct an entity using [[Bundle]]s
 pub struct Template {
-    bundles: Vec<Box<dyn Send + Sync + Bundle>>,
+    bundles: Vec<Box<dyn Bundle>>,
 }
 
 impl Template {
@@ -17,7 +16,7 @@ impl Template {
         }
     }
 
-    pub fn with_bundle<B: 'static + Send + Sync + Bundle>(mut self, bundle: B) -> Self {
+    pub fn with_bundle<B: 'static + Bundle>(mut self, bundle: B) -> Self {
         self.bundles.push(Box::new(bundle));
         self
     }
@@ -31,7 +30,7 @@ impl Template {
     }
 }
 
-/// Offline bundle describtor
+/// Offline bundle descriptor
 pub trait BundleDesc:
     Clone + ResourceDesc<Error = anyhow::Error> + serde::Serialize + serde::de::DeserializeOwned
 where
@@ -39,9 +38,11 @@ where
 {
 }
 
-pub trait BundleDescDyn {
-    fn load<'a>(&'a self, assets: &'a AssetCache)
-        -> BoxFuture<'a, anyhow::Result<Box<dyn Bundle>>>;
+pub trait BundleDescDyn: 'static + Send + Sync {
+    fn load_dyn<'a>(
+        &'a self,
+        assets: &'a AssetCache,
+    ) -> BoxFuture<'a, anyhow::Result<Box<dyn Bundle>>>;
 }
 
 impl<T> BundleDescDyn for T
@@ -49,7 +50,7 @@ where
     T: BundleDesc,
     T::Output: Bundle + 'static,
 {
-    fn load<'a>(
+    fn load_dyn<'a>(
         &'a self,
         assets: &'a AssetCache,
     ) -> BoxFuture<'a, anyhow::Result<Box<dyn Bundle>>> {
@@ -64,4 +65,33 @@ where
 }
 
 /// Offline descriptor of a template that is serializable
-pub struct TemplateDesc {}
+pub struct TemplateDesc {
+    bundles: Vec<Box<dyn BundleDescDyn>>,
+}
+
+impl TemplateDesc {
+    pub fn new() -> Self {
+        Self {
+            bundles: Vec::new(),
+        }
+    }
+
+    pub fn with_bundle<B: 'static + BundleDescDyn>(mut self, bundle: B) -> Self {
+        self.bundles.push(Box::new(bundle));
+        self
+    }
+}
+
+impl ResourceDesc for TemplateDesc {
+    type Output = Template;
+    type Error = anyhow::Error;
+
+    async fn load(&self, assets: &AssetCache) -> Result<Self::Output, Self::Error> {
+        let mut bundles = Vec::new();
+        for bundle in &self.bundles {
+            let loaded_bundle = bundle.load_dyn(assets).await?;
+            bundles.push(loaded_bundle);
+        }
+        Ok(Template { bundles })
+    }
+}

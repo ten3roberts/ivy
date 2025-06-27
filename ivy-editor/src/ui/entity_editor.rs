@@ -7,16 +7,15 @@ use ivy_scene::editor::registry;
 use ivy_ui::streamed::{StreamedUiExt, streamed_tx};
 use ivy_ui::violet;
 use ivy_ui::violet::core::components::{local_position, transform_origin, translation, visible};
-use ivy_ui::violet::core::style::base_colors::{STONE_700, STONE_800, ZINC_700, ZINC_800};
 use ivy_ui::violet::core::style::{surface_primary, surface_success};
 use ivy_ui::violet::core::tweens;
 use ivy_ui::violet::core::widget::Stack;
 use tween::{Tween, TweenValue, Tweener};
 use violet::core::{
     Widget,
-    style::{SizeExt, StyleExt, spacing_large, surface_tertiary},
+    style::{SizeExt, surface_tertiary},
     unit::Unit,
-    widget::{Collapsible, CollapsibleStyle, FutureWidget, bold, card, col, label},
+    widget::{Collapsible, FutureWidget, card, col},
 };
 
 use registry::EDITABLE_REGISTRY;

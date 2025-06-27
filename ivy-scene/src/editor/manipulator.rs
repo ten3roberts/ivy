@@ -28,7 +28,7 @@ pub enum TransformMode {
     // Scale, // TODO
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum SnapMode {
     None,
     Absolute(f32),
@@ -441,14 +441,14 @@ impl ManipulatedEntity {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ManipulationSpace {
     Local,
     Global,
     View,
 }
 
-#[derive(PartialEq, Debug, Clone, Copy)]
+#[derive(PartialEq, Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub struct TransformSettings {
     pub space: ManipulationSpace,
     pub snap_mode: SnapMode,

@@ -10,11 +10,13 @@ use flax::{
 };
 use futures::StreamExt;
 use glam::{Quat, Vec2};
+use ivy_assets::loadable::ResourceDesc;
 use ivy_core::{
     Bundle,
     components::{engine, gizmos, main_camera},
     gizmos::Gizmos,
     palette::Srgba,
+    template::BundleDesc,
     update_layer::Plugin,
 };
 
@@ -40,14 +42,15 @@ use ivy_ui::{
             text::TextSegment,
             unit::Unit,
             widget::{
-                Radio, Rectangle, Selectable, StreamWidget, Text, col,
-                interactive::base::TooltipOptions, label, row,
+                Rectangle, Selectable, StreamWidget, Text, col, interactive::base::TooltipOptions,
+                label, row,
             },
         },
         futures_signals::signal::{Mutable, SignalExt},
         lucide::icons::{LUCIDE_BOX, LUCIDE_GLOBE, LUCIDE_VIEW},
     },
 };
+use serde::{Deserialize, Serialize};
 
 use crate::{
     plugin::{EditCommand, MoveEntities, Selection, SetSelection, edit_commands, selection},
@@ -417,3 +420,21 @@ impl Widget for TransformToolWidget {
         StreamWidget::new(settings).mount(scope);
     }
 }
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TransformToolBundleDesc {
+    pub settings: TransformSettings,
+}
+
+impl ResourceDesc for TransformToolBundleDesc {
+    type Output = TransformToolBundle;
+    type Error = anyhow::Error;
+
+    async fn load(&self, _assets: &ivy_assets::AssetCache) -> anyhow::Result<Self::Output> {
+        Ok(TransformToolBundle {
+            settings: self.settings.clone(),
+        })
+    }
+}
+
+impl BundleDesc for TransformToolBundleDesc {}

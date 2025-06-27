@@ -2,9 +2,9 @@ use std::time::Duration;
 
 use flax::{Component, ComponentMut, Debuggable, EntityBuilder, Fetch};
 use glam::{Mat4, Quat, Vec2, Vec3};
-use ivy_assets::AssetCache;
+use ivy_assets::{loadable::ResourceDesc, AssetCache};
 
-use crate::{bundle::Bundle, gizmos::Gizmos, AsyncCommandBuffer, Color};
+use crate::{bundle::Bundle, gizmos::Gizmos, template::BundleDesc, AsyncCommandBuffer, Color};
 
 flax::component! {
     pub position: Vec3 => [Debuggable],
@@ -167,3 +167,14 @@ impl Bundle for TransformBundle {
             .set(parent_transform(), Default::default());
     }
 }
+
+impl ResourceDesc for TransformBundle {
+    type Output = TransformBundle;
+    type Error = anyhow::Error;
+
+    async fn load(&self, _assets: &AssetCache) -> anyhow::Result<Self::Output> {
+        Ok(self.clone())
+    }
+}
+
+impl BundleDesc for TransformBundle {}

@@ -1,7 +1,7 @@
 use flax::EntityBuilder;
 
 /// A bundle describes a set of related components mounted to an entity.
-pub trait Bundle {
+pub trait Bundle: Send + Sync {
     fn mount(&self, entity: &mut EntityBuilder);
 }
 

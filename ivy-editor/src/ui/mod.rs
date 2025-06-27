@@ -1,3 +1,4 @@
+pub mod browser;
 pub mod entity_editor;
 
 use flax::Entity;
@@ -30,7 +31,10 @@ use tween::{Tween, Tweener};
 use crate::{
     plugin::selection,
     tools_controller::{current_tool, tools},
-    ui::entity_editor::EntityComponentEditor,
+    ui::{
+        browser::{DirectoryBrowser, DirectoryTree},
+        entity_editor::EntityComponentEditor,
+    },
 };
 
 pub struct EditorUi {
@@ -62,6 +66,7 @@ impl Screen for EditorUi {
                     editor: self.editor,
                 },
             )),
+            DirectoryBrowser::new("./assets"),
         ))
         .with_item_align(LayoutAlignment::new(Align::Start, Align::Start))
         .mount(scope);

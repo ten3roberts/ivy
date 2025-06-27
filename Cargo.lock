@@ -1797,6 +1797,7 @@ name = "ivy-editor"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-std",
  "enum_dispatch",
  "flax",
  "flume",
@@ -1813,6 +1814,7 @@ dependencies = [
  "ivy-ui",
  "ivy-wgpu",
  "ordered-float 5.0.0",
+ "serde",
  "tracing",
  "tween",
 ]
@@ -2025,6 +2027,7 @@ dependencies = [
  "ivy-ui",
  "ivy-wgpu",
  "ordered-float 5.0.0",
+ "serde",
  "tracing",
 ]
 

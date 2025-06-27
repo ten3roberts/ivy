@@ -14,6 +14,7 @@ ivy-assets = { path = "../ivy-assets" }
 ivy-ui = { path = "../ivy-ui" }
 ivy-input = { path = "../ivy-input" }
 
+serde.workspace = true
 async-std.workspace = true
 anyhow.workspace = true
 inventory.workspace = true
