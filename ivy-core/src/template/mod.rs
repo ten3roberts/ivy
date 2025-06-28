@@ -1,3 +1,4 @@
+use facet::Facet;
 use flax::{Entity, EntityBuilder};
 use futures::{future::BoxFuture, FutureExt};
 use ivy_assets::{loadable::ResourceDesc, AssetCache};
@@ -30,24 +31,20 @@ impl Template {
     }
 }
 
-/// Offline bundle descriptor
-pub trait BundleDesc:
-    Clone + ResourceDesc<Error = anyhow::Error> + serde::Serialize + serde::de::DeserializeOwned
-where
-    <Self as ResourceDesc>::Output: Bundle + 'static,
-{
-}
-
-pub trait BundleDescDyn: 'static + Send + Sync {
+pub trait LoadableBundle {
     fn load_dyn<'a>(
         &'a self,
         assets: &'a AssetCache,
     ) -> BoxFuture<'a, anyhow::Result<Box<dyn Bundle>>>;
 }
 
-impl<T> BundleDescDyn for T
+/// Offline bundle descriptor
+#[typetag::serde(tag = "type")]
+pub trait BundleDesc: 'static + Send + Sync + LoadableBundle {}
+
+impl<T> LoadableBundle for T
 where
-    T: BundleDesc,
+    T: 'static + ResourceDesc<Error = anyhow::Error>,
     T::Output: Bundle + 'static,
 {
     fn load_dyn<'a>(
@@ -66,7 +63,7 @@ where
 
 /// Offline descriptor of a template that is serializable
 pub struct TemplateDesc {
-    bundles: Vec<Box<dyn BundleDescDyn>>,
+    bundles: Vec<Box<dyn BundleDesc>>,
 }
 
 impl TemplateDesc {
@@ -76,7 +73,7 @@ impl TemplateDesc {
         }
     }
 
-    pub fn with_bundle<B: 'static + BundleDescDyn>(mut self, bundle: B) -> Self {
+    pub fn with_bundle<B: 'static + BundleDesc>(mut self, bundle: B) -> Self {
         self.bundles.push(Box::new(bundle));
         self
     }

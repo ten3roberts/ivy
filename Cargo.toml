@@ -100,6 +100,10 @@ inventory = "0.3"
 enum_dispatch = "0.3"
 tween = { version = "2.0.4", features = ["glam"] }
 sync_wrapper = { version = "1.0", features = ["futures"] }
+typetag = "0.2"
+facet = "0.27"
+facet-reflect = "0.27"
+bevy_reflect = { path = "../../bevy/crates/bevy_reflect/", features = ["glam"] }
 
 [dependencies]
 ivy-assets = { path = "./ivy-assets", version = "0.10" }
@@ -145,6 +149,7 @@ itertools.workspace = true
 winit.workspace = true
 async-std.workspace = true
 rapier3d.workspace = true
+bevy_reflect.workspace = true
 
 [features]
 default = []

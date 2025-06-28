@@ -25,3 +25,5 @@ glam.workspace = true
 itertools.workspace = true
 ordered-float.workspace = true
 tracing.workspace = true
+bevy_reflect.workspace = true
+downcast-rs = "2.0.1"

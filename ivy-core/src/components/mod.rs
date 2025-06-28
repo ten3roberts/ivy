@@ -177,4 +177,5 @@ impl ResourceDesc for TransformBundle {
     }
 }
 
+#[typetag::serde]
 impl BundleDesc for TransformBundle {}

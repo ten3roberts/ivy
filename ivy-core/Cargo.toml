@@ -37,6 +37,10 @@ thiserror.workspace = true
 tracing.workspace = true
 slab.workspace = true
 futures.workspace = true
+typetag.workspace = true
+facet.workspace = true
+facet-reflect.workspace = true
+bevy_reflect.workspace = true
 
 [features]
 profile = ["ivy-profiling/profile_with_puffin", "puffin", "puffin_http"]

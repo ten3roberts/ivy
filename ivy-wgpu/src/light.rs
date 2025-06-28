@@ -106,4 +106,5 @@ impl ResourceDesc for LightBundleDesc {
     }
 }
 
+#[typetag::serde]
 impl BundleDesc for LightBundleDesc {}

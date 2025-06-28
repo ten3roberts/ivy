@@ -437,4 +437,5 @@ impl ResourceDesc for TransformToolBundleDesc {
     }
 }
 
+#[typetag::serde]
 impl BundleDesc for TransformToolBundleDesc {}

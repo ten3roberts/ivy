@@ -6,18 +6,21 @@ use std::{
 };
 
 use async_std::task::sleep;
+use bevy_reflect::{PartialReflect, TypeInfo};
 use flax::{component::ComponentDesc, EntityRef};
 use futures::{stream::BoxStream, StreamExt};
 use ivy_ui::{
     streamed::{ComponentSink, DuplexComponentStream, Streamed, StreamedComponent, StreamedUiExt},
     violet::{
         core::{
-            state::{State, StateExt, StateSink, StateStream},
+            state::{State, StateDuplex, StateExt, StateSink, StateStream},
             Scope, Widget,
         },
         futures_signals::signal::{Mutable, SignalExt},
     },
 };
+
+use crate::editor::editable::Project;
 
 use super::editable::Editable;
 
@@ -36,6 +39,16 @@ impl EditableRegistry {
         }
     }
 
+    pub fn try_create_editor(
+        &self,
+        type_id: TypeId,
+        state: Project,
+    ) -> Option<Box<dyn Send + Widget>> {
+        let registration = EDITABLE_REGISTRY.registrations.get(&type_id)?;
+
+        Some((registration.create_editor)(state))
+    }
+
     pub fn create_component_editor(
         &self,
         entity: EntityRef,
@@ -44,7 +57,7 @@ impl EditableRegistry {
     ) -> Option<Box<dyn Send + Widget>> {
         self.registrations
             .get(&component.type_id())
-            .map(|registration| (registration.create_editor)(entity, component, streamed))
+            .map(|registration| (registration.create_component_editor)(entity, component, streamed))
     }
 
     pub fn contains(&self, type_id: TypeId) -> bool {
@@ -95,20 +108,27 @@ where
     }
 }
 
-type CreateEditorFunc =
+type CreateComponentEditorFunc =
     fn(EntityRef, ComponentDesc, flume::Sender<Box<dyn Streamed>>) -> Box<dyn Send + Widget>;
+type CreateEditorFunc = fn(Project) -> Box<dyn Send + Widget>;
 
 #[derive(Clone, Copy)]
 pub struct EditableRegistration {
     type_id: fn() -> TypeId,
     create_editor: CreateEditorFunc,
+    create_component_editor: CreateComponentEditorFunc,
 }
 
 impl EditableRegistration {
     pub const fn new<T: std::fmt::Debug + Clone + Editable + PartialEq>() -> Self {
         Self {
             type_id: || TypeId::of::<T>(),
-            create_editor: |entity, component, streamed| {
+            create_editor: |project| {
+                let concrete = project.downcast::<T>();
+
+                T::create_editor(concrete)
+            },
+            create_component_editor: |entity, component, streamed| {
                 let component = component.downcast::<T>();
                 let value = entity.get_clone(component).expect("Missing component");
 

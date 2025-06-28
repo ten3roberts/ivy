@@ -28,3 +28,5 @@ itertools.workspace = true
 ordered-float.workspace = true
 tracing.workspace = true
 tween.workspace = true
+typetag.workspace = true
+bevy_reflect.workspace = true

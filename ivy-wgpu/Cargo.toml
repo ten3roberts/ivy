@@ -19,7 +19,7 @@ async-std.workspace = true
 parking_lot.workspace = true
 naga_oil.workspace = true
 winit.workspace = true
-wgpu = { workspace = true, features = [ "naga-ir" ]}
+wgpu = { workspace = true, features = ["naga-ir"] }
 bytemuck.workspace = true
 glam.workspace = true
 flax.workspace = true
@@ -36,9 +36,10 @@ mikktspace.workspace = true
 rayon.workspace = true
 ordered-float.workspace = true
 serde = { workspace = true, optional = true }
+typetag = { workspace = true }
 
 [dev-dependencies]
 tracing-subscriber.workspace = true
 
 [features]
-serde = [ "dep:serde", "wgpu/serde" ]
+serde = ["dep:serde", "wgpu/serde"]
