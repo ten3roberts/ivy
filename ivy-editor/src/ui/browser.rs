@@ -16,7 +16,9 @@ use ivy_core::palette::Srgba;
 use ivy_ui::violet::{
     core::{
         Edges, Scope, ScopeRef, Widget,
+        components::LayoutAlignment,
         layout::Align,
+        state::StateStream,
         stored::WeakHandle,
         style::{
             SizeExt, StyleExt, base_colors::*, element_pressed, element_primary, surface_danger,
@@ -25,84 +27,89 @@ use ivy_ui::violet::{
         time::sleep,
         unit::Unit,
         widget::{
-            Button, ButtonStyle, Collapsible, CollapsibleStyle, DeferWidget, FutureWidget, Image,
-            IterWidgetCollection, ScrollArea, Selectable, SignalWidget, TextInput, TextInputStyle,
-            card, col,
+            Button, ButtonStyle, Collapsible, CollapsibleStyle, FutureWidget, Image,
+            IterWidgetCollection, LoadingSpinner, ScrollArea, Selectable, SignalWidget, Stack,
+            StreamWidget, SuspenseWidget, TextInput, TextInputStyle, Throbber, WidgetExt, card,
+            col,
             interactive::{base::InteractiveWidget, tooltip::Tooltip},
             label, pill, row,
         },
     },
     futures_signals::signal::{Mutable, SignalExt},
     lucide::icons::{
-        LUCIDE_ELLIPSIS, LUCIDE_FILE, LUCIDE_FILE_ARCHIVE, LUCIDE_FILE_BOX, LUCIDE_FILE_CODE,
-        LUCIDE_FILE_IMAGE, LUCIDE_FILE_JSON, LUCIDE_FILE_QUESTION, LUCIDE_FILE_TEXT, LUCIDE_FOLDER,
-        LUCIDE_FOLDER_OPEN, LUCIDE_IMAGE,
+        LUCIDE_BOX, LUCIDE_CLOUD_SUN, LUCIDE_ELLIPSIS, LUCIDE_FILE, LUCIDE_FILE_ARCHIVE,
+        LUCIDE_FILE_BOX, LUCIDE_FILE_CODE, LUCIDE_FILE_IMAGE, LUCIDE_FILE_JSON,
+        LUCIDE_FILE_QUESTION, LUCIDE_FILE_TEXT, LUCIDE_FOLDER, LUCIDE_FOLDER_OPEN, LUCIDE_IMAGE,
+        LUCIDE_PACKAGE, LUCIDE_SQUARE_LIBRARY,
     },
 };
+use tracing::info;
+
+const PANEL_HEIGHT: f32 = 300.0;
 
 pub struct DirectoryTree {
     selection: WeakHandle<Mutable<Option<PathBuf>>>,
     path: PathBuf,
-    max_depth: usize,
+    expand_depth: usize,
 }
 
 impl Widget for DirectoryTree {
     fn mount(self, scope: &mut Scope<'_>) {
         let path = self.path;
-        let name = path.file_name().unwrap().to_owned();
-
-        if self.max_depth == 0 {
-            Tooltip::label(label(LUCIDE_ELLIPSIS), "Maximum depth reached").mount(scope);
-            return;
-        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
 
         let selection = scope.read(&self.selection).clone();
-        DeferWidget::new(label("Loading"), async move {
-            sleep(Duration::from_millis(100)).await;
 
-            let mut item_count = 0;
-            let subdirs = std::fs::read_dir(&path)
-                .unwrap()
-                .filter_map(Result::ok)
-                .filter_map(|entry| {
-                    let entry_path = entry.path();
-                    let entry_name = entry_path.file_name().unwrap();
+        let mut item_count = 0;
+        let subdirs = std::fs::read_dir(&path)
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter_map(|entry| {
+                let entry_path = entry.path();
+                let entry_name = entry_path.file_name().unwrap();
 
-                    item_count += 1;
+                item_count += 1;
 
-                    if entry_path.is_dir() {
-                        tracing::info!("Directory: {}", entry_path.display());
-                        Some(DirectoryTree {
-                            path: entry_path,
-                            max_depth: self.max_depth - 1,
-                            selection: self.selection,
-                        })
-                    } else {
-                        None
-                    }
-                })
-                .collect_vec();
+                if entry_path.is_dir() {
+                    Some(DirectoryTree {
+                        path: entry_path,
+                        expand_depth: self.expand_depth.saturating_sub(1),
+                        selection: self.selection,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect_vec();
 
-            let subdir_count = subdirs.len();
-            let subdirs = col(subdirs)
-                .with_padding(Edges::new(8.0, 0.0, 0.0, 0.0))
-                .with_stretch(true);
+        let subdir_count = subdirs.len();
+        let subdirs = col(subdirs)
+            .with_padding(Edges::new(8.0, 0.0, 0.0, 0.0))
+            .with_stretch(true);
 
-            let icon = match item_count {
-                0 => LUCIDE_FOLDER_OPEN,
-                _ => LUCIDE_FOLDER,
-            };
+        let icon = match item_count {
+            0 => LUCIDE_FOLDER_OPEN,
+            _ => LUCIDE_FOLDER,
+        };
 
-            let header = Selectable::new_value(
-                row((label(icon), label(name.to_string_lossy()))).with_stretch(true),
-                selection,
-                Some(path),
-            )
-            .with_style(ButtonStyle::hidden());
+        let header = Selectable::new_value(
+            row((
+                // label(special_folder_icon(&name).unwrap_or(icon)),
+                label(icon),
+                label(name),
+            ))
+            .with_stretch(true),
+            selection,
+            Some(path.clone()),
+        )
+        .with_style(ButtonStyle::hidden().with_align(LayoutAlignment::left_center()))
+        .with_maximize(Vec2::X);
 
-            Collapsible::new(header, subdirs).can_collapse(subdir_count > 0)
-        })
-        .mount(scope);
+        Collapsible::deferred(header, || subdirs)
+            .can_collapse(subdir_count > 0)
+            .collapsed(self.expand_depth == 0)
+            .with_name(path.display().to_string())
+            .mount(scope);
     }
 }
 
@@ -118,7 +125,6 @@ impl Widget for DirectoryListing {
             .unwrap()
             .filter_map(Result::ok)
             .map(|entry| {
-                tracing::info!("Listing entry: {}", entry.path().display());
                 let entry_path = entry.path();
                 let entry_name = entry_path.file_name().unwrap();
 
@@ -128,18 +134,9 @@ impl Widget for DirectoryListing {
                     selected: self.selected_file,
                     selected_dir: self.selected_dir,
                 }
-                // if entry_path.is_dir() {
-                //     tracing::info!("Directory: {}", entry_path.display());
-                //     Some(DirectoryTree {
-                //         path: entry_path,
-                //         max_depth: self.max_depth - 1,
-                //     })
-                // } else {
-                //     None
-                // }
             });
 
-        let lines = items.chunks(6);
+        let lines = items.chunks(8);
         let cols = lines
             .into_iter()
             .map(|line| row(IterWidgetCollection::new(line)));
@@ -149,9 +146,22 @@ impl Widget for DirectoryListing {
                 path: &self.path,
                 selection: self.selected_dir,
             },
-            ScrollArea::vertical(col(IterWidgetCollection::new(cols)).with_maximize(Vec2::X)),
+            ScrollArea::vertical(col(IterWidgetCollection::new(cols))),
         ))
+        .with_stretch(true)
         .mount(scope)
+    }
+}
+
+fn special_folder_icon(name: &str) -> Option<&'static str> {
+    match name {
+        "textures" => Some(LUCIDE_IMAGE),
+        "models" => Some(LUCIDE_BOX),
+        "scripts" => Some(LUCIDE_FILE_CODE),
+        "shaders" => Some(LUCIDE_FILE_CODE),
+        "assets" => Some(LUCIDE_SQUARE_LIBRARY),
+        "docs" => Some(LUCIDE_FILE_TEXT),
+        _ => None,
     }
 }
 
@@ -193,9 +203,11 @@ impl Widget for Item {
         Selectable::new_value(
             col((
                 FileIcon { path: &self.path },
-                label(self.name)
-                    .with_wrap(Wrap::WordOrGlyph)
-                    .with_font_size(12.0),
+                RenamableItem {
+                    path: self.path.clone(),
+                    selected: self.selected,
+                    selected_dir: self.selected_dir,
+                },
             ))
             .with_cross_align(Align::Center)
             .with_exact_size(ITEM_SIZE),
@@ -212,6 +224,71 @@ impl Widget for Item {
     }
 }
 
+struct RenamableItem {
+    path: PathBuf,
+    selected: WeakHandle<Mutable<Option<PathBuf>>>,
+    selected_dir: WeakHandle<Mutable<Option<PathBuf>>>,
+}
+
+impl Widget for RenamableItem {
+    fn mount(mut self, scope: &mut Scope<'_>) {
+        let renaming = Mutable::new(false);
+
+        let mut edit_state = None as Option<Mutable<String>>;
+
+        let selected = scope.read(&self.selected).clone();
+        let selected_dir = scope.read(&self.selected_dir).clone();
+
+        let renaming = scope.store(renaming);
+        let controls = scope.read(&renaming).stream().map(move |v| {
+            if !v {
+                if let Some(edit_state) = edit_state.take() {
+                    let new_path = self.path.with_file_name(edit_state.get_cloned().trim());
+                    std::fs::rename(&self.path, new_path.clone()).unwrap_or_else(|err| {
+                        tracing::error!("Failed to rename file: {}", err);
+                    });
+                    self.path = new_path;
+
+                    selected.set(Some(self.path.clone()));
+                    selected_dir.set(Some(
+                        self.path
+                            .parent()
+                            .unwrap_or_else(|| Path::new("."))
+                            .to_owned(),
+                    ));
+                }
+            }
+
+            let name = self.path.file_name().unwrap_or_default().to_string_lossy();
+
+            if v {
+                Box::new(
+                    TextInput::new(
+                        edit_state
+                            .get_or_insert_with(|| Mutable::new(name.to_string()))
+                            .clone(),
+                    )
+                    .on_focus_lost(move |scope: &ScopeRef| {
+                        scope.read(renaming).set(false);
+                    })
+                    .with_style(TextInputStyle::default().with_font_family(FontFamily::Monospace)),
+                ) as Box<dyn Widget>
+            } else {
+                // Otherwise, show a label
+                Box::new(
+                    label(name)
+                        .with_wrap(Wrap::WordOrGlyph)
+                        .with_font_size(12.0),
+                )
+            }
+        });
+
+        InteractiveWidget::new(StreamWidget::new(controls))
+            .on_double_click(move |scope| scope.read(renaming).set(true))
+            .mount(scope)
+    }
+}
+
 pub struct DirectoryBrowser {
     path: PathBuf,
 }
@@ -224,8 +301,8 @@ impl DirectoryBrowser {
 
 impl Widget for DirectoryBrowser {
     fn mount(self, scope: &mut Scope<'_>) {
-        let selected_dir = Mutable::new(None as Option<PathBuf>);
-        let selected_file = Mutable::new(None as Option<PathBuf>);
+        let selected_dir = Mutable::new(Some(self.path.clone()));
+        let selected_file = Mutable::new(Some(self.path.clone()));
 
         let selected_dir = scope.store(selected_dir);
         let selected_file = scope.store(selected_file);
@@ -242,7 +319,7 @@ impl Widget for DirectoryBrowser {
                 ScrollArea::vertical(DirectoryTree {
                     selection: selected_dir,
                     path: self.path,
-                    max_depth: 4,
+                    expand_depth: 1,
                 }),
                 SignalWidget::new(scope.read(&selected_dir).signal_ref(move |selected| {
                     selected.as_ref().map(|v| DirectoryListing {
@@ -252,7 +329,8 @@ impl Widget for DirectoryBrowser {
                     })
                 })),
             )))
-            .with_max_size(Unit::px2(f32::MAX, 300.0))
+            .with_min_size(Unit::px2(100.0, PANEL_HEIGHT))
+            .with_max_size(Unit::px2(f32::MAX, PANEL_HEIGHT))
             .with_maximize(Vec2::X),
             details_panel,
         ))
@@ -279,7 +357,6 @@ impl Widget for Breadcrumbs<'_> {
                     .with_wrap(Wrap::None),
             ))
             .on_click(move |scope: &ScopeRef| {
-                tracing::info!("Breadcrumb clicked: {}", full_path.display());
                 scope.read(self.selection).set(Some(full_path.clone()));
             });
 
@@ -309,11 +386,7 @@ fn bytes_to_human_readable(size: u64) -> String {
     }
 }
 
-enum FileType {
-    Directory,
-    Text,
-    Image,
-    Archive,
+enum Code {
     Json,
     Rust,
     C,
@@ -322,7 +395,17 @@ enum FileType {
     Js,
     Wgsl,
     Wasm,
+}
+
+enum FileType {
+    Directory,
+    Code(Code),
+    Text,
+    Image,
+    Hdri,
+    Archive,
     Blend,
+    Gltf,
     Other,
 }
 
@@ -336,18 +419,20 @@ impl FileType {
                     "txt" | "md" | "markdown" => FileType::Text,
                     // "rs" | "py" | "js" | "ts" | "c" | "cpp" | "h" | "hpp" => FileType::Code,
                     "png" | "jpg" | "jpeg" | "gif" | "webp" => FileType::Image,
+                    "hdr" | "exr" => FileType::Hdri,
                     "zip" | "tar" | "gz" | "rar" => FileType::Archive,
-                    "json" | "yaml" | "yml" => FileType::Json,
-                    "rs" => FileType::Rust,
-                    "c" => FileType::C,
-                    "cpp" => FileType::Cpp,
-                    "py" => FileType::Python,
-                    "js" => FileType::Js,
-                    "wgsl" => FileType::Wgsl,
-                    "wasm" => FileType::Wasm,
                     "blend" => FileType::Blend,
                     "blend1" => FileType::Blend, // Blender backup files
                     "blend2" => FileType::Blend, // Blender backup files
+                    "json" | "yaml" | "yml" => FileType::Code(Code::Json),
+                    "glb" | "gltf" => FileType::Gltf,
+                    "rs" => FileType::Code(Code::Rust),
+                    "c" => FileType::Code(Code::C),
+                    "cpp" => FileType::Code(Code::Cpp),
+                    "py" => FileType::Code(Code::Python),
+                    "js" => FileType::Code(Code::Js),
+                    "wgsl" => FileType::Code(Code::Wgsl),
+                    "wasm" => FileType::Code(Code::Wasm),
                     _ => FileType::Other,
                 },
                 _ => FileType::Other,
@@ -355,21 +440,8 @@ impl FileType {
         }
     }
 
-    fn is_code(&self) -> bool {
-        matches!(
-            self,
-            FileType::Rust
-                | FileType::C
-                | FileType::Cpp
-                | FileType::Python
-                | FileType::Js
-                | FileType::Wgsl
-                | FileType::Wasm
-        )
-    }
-
     fn is_text(&self) -> bool {
-        matches!(self, FileType::Text | FileType::Json) || self.is_code()
+        matches!(self, FileType::Text | FileType::Code(_))
     }
 
     fn icon(&self) -> &'static str {
@@ -377,17 +449,19 @@ impl FileType {
             FileType::Directory => LUCIDE_FOLDER,
             FileType::Text => LUCIDE_FILE_TEXT,
             FileType::Image => LUCIDE_FILE_IMAGE,
-            FileType::Rust => LUCIDE_FILE_CODE,
-            FileType::C => LUCIDE_FILE_CODE,
-            FileType::Cpp => LUCIDE_FILE_CODE,
-            FileType::Python => LUCIDE_FILE_CODE,
-            FileType::Js => LUCIDE_FILE_CODE,
-            FileType::Wgsl => LUCIDE_FILE_CODE,
-            FileType::Wasm => LUCIDE_FILE_CODE,
+            FileType::Code(Code::Rust) => LUCIDE_FILE_CODE,
+            FileType::Code(Code::C) => LUCIDE_FILE_CODE,
+            FileType::Code(Code::Cpp) => LUCIDE_FILE_CODE,
+            FileType::Code(Code::Python) => LUCIDE_FILE_CODE,
+            FileType::Code(Code::Js) => LUCIDE_FILE_CODE,
+            FileType::Code(Code::Wgsl) => LUCIDE_FILE_CODE,
+            FileType::Code(Code::Wasm) => LUCIDE_FILE_CODE,
+            FileType::Code(Code::Json) => LUCIDE_FILE_JSON,
             FileType::Blend => LUCIDE_FILE_BOX,
+            FileType::Gltf => LUCIDE_BOX,
             FileType::Archive => LUCIDE_FILE_ARCHIVE,
-            FileType::Json => LUCIDE_FILE_JSON,
             FileType::Other => LUCIDE_FILE_QUESTION,
+            FileType::Hdri => LUCIDE_CLOUD_SUN,
         }
     }
 
@@ -396,17 +470,19 @@ impl FileType {
             FileType::Directory => OCEAN_200,
             FileType::Text => PLATINUM_50,
             FileType::Image => CHERRY_400,
-            FileType::Rust => AMBER_400,
-            FileType::C => OCEAN_400,
-            FileType::Cpp => OCEAN_400,
-            FileType::Python => CITRUS_400,
-            FileType::Js => CITRUS_400,
-            FileType::Wgsl => AMETHYST_400,
-            FileType::Wasm => AMETHYST_400,
+            FileType::Code(Code::Rust) => AMBER_400,
+            FileType::Code(Code::C) => OCEAN_400,
+            FileType::Code(Code::Cpp) => OCEAN_400,
+            FileType::Code(Code::Python) => CITRUS_400,
+            FileType::Code(Code::Js) => CITRUS_400,
+            FileType::Code(Code::Wgsl) => AMETHYST_400,
+            FileType::Code(Code::Wasm) => AMETHYST_400,
+            FileType::Code(Code::Json) => FOREST_400,
             FileType::Archive => PLATINUM_500,
-            FileType::Json => FOREST_400,
             FileType::Other => PLATINUM_50,
             FileType::Blend => AMBER_400,
+            FileType::Gltf => TEAL_400,
+            FileType::Hdri => CITRUS_400,
         }
     }
 
@@ -430,18 +506,17 @@ impl Widget for FileDetailsPanel {
         let file_size = path.metadata().map(|m| m.len()).unwrap_or(0);
         let file_size_str = bytes_to_human_readable(file_size);
 
-        card(
-            col((
-                FilePreview { path: &self.path },
-                label("File Details")
-                    .with_font_size(16.0)
-                    .with_color(OCEAN_200),
-                label(format!("Name: {}", file_name)),
-                label(format!("Size: {}", file_size_str)),
-                // label(format!("Path: {}", path.display())),
-            ))
-            .with_max_size(Unit::px2(500.0, 500.0)),
-        )
+        card(col((
+            FilePreview { path: &self.path },
+            label("File Details")
+                .with_font_size(16.0)
+                .with_color(OCEAN_200),
+            label(format!("Name: {}", file_name)),
+            label(format!("Size: {}", file_size_str)),
+            // label(format!("Path: {}", path.display())),
+        )))
+        .with_min_size(Unit::px2(200.0, PANEL_HEIGHT))
+        // .with_max_size(Unit::px2(f32::MAX, PANEL_HEIGHT))
         .mount(scope);
     }
 }
@@ -459,11 +534,12 @@ impl Widget for FilePreview<'_> {
 
         if ty.is_image() {
             Image::new(self.path.canonicalize().unwrap())
-                .with_exact_size(Unit::px2(256.0, 256.0))
+                .with_exact_size(Unit::px2(200.0, 200.0))
                 .mount(scope);
         } else if ty.is_text() {
             let path = self.path.to_owned();
             let async_load = async {
+                sleep(Duration::from_millis(500)).await;
                 let path = path;
                 let content = async_std::fs::read_to_string(&path).await;
                 |scope: &mut Scope<'_>| match content {
@@ -474,38 +550,11 @@ impl Widget for FilePreview<'_> {
                 }
             };
 
-            DeferWidget::new(
-                label("Loading file preview...").with_wrap(Wrap::WordOrGlyph),
-                async_load,
-            )
-            .mount(scope);
+            SuspenseWidget::new(LoadingSpinner::new("Loading Text"), async_load).mount(scope);
         } else {
             icon.mount(scope);
         }
     }
-}
-
-async fn read_file_chunked(path: &Path, max_size: usize) -> Result<String, std::io::Error> {
-    let file = async_std::fs::File::open(path).await?;
-
-    let mut reader = BufReader::new(file);
-    let mut content = String::new();
-    let mut buf = [0; 1024];
-
-    loop {
-        if content.len() >= max_size {
-            break;
-        }
-
-        let read = reader.read(&mut buf).await?;
-        if read == 0 {
-            break;
-        }
-
-        content.push_str(&String::from_utf8_lossy(&buf[..read]));
-    }
-
-    Ok(content)
 }
 
 struct FileEditor {

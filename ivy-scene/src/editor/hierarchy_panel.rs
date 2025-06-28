@@ -1,17 +1,21 @@
-use std::collections::BTreeMap;
+use std::{cell::RefCell, collections::BTreeMap};
 
 use flax::{
     components::{child_of, name},
     entity_ids, Dfs, Entity, FetchExt, Query,
 };
+use futures::StreamExt;
 use itertools::Itertools;
 use ivy_core::components::world_transform;
 use ivy_ui::{
     streamed::StreamedUiExt,
     violet::core::{
+        stored::WeakHandle,
         style::{SizeExt, StyleExt, WidgetSizeProps},
         unit::Unit,
-        widget::{card, col, label, ButtonStyle, Collapsible, CollapsibleStyle, ScrollArea},
+        widget::{
+            card, col, label, ButtonStyle, Collapsible, CollapsibleStyle, ScrollArea, StreamWidget,
+        },
         Edges, Scope, Widget,
     },
 };
@@ -53,24 +57,28 @@ impl Widget for HierarchyPanel {
             Ok(())
         });
 
-        let inner = |scope: &mut Scope<'_>| {
-            scope.spawn_stream(rx.into_stream(), |scope, hierarchy| {
-                let mut roots = hierarchy
-                    .get(&None)
-                    .into_iter()
-                    .flatten()
-                    .map(|roots| SubtreeWidget {
-                        entity: roots.clone(),
-                        hierarchy: &hierarchy,
-                    })
-                    .collect_vec();
+        let inner = {
+            let contents = rx.into_stream().map(|new_hierarchy| {
+                |scope: &mut Scope<'_>| {
+                    let hierarchy = scope.store(new_hierarchy);
+                    let mut roots = scope
+                        .read(&hierarchy)
+                        .get(&None)
+                        .into_iter()
+                        .flatten()
+                        .map(|roots| SubtreeWidget {
+                            entity: roots.clone(),
+                            hierarchy: hierarchy,
+                        })
+                        .collect_vec();
 
-                roots.sort_by(|a, b| a.entity.name.cmp(&b.entity.name));
+                    roots.sort_by(|a, b| a.entity.name.cmp(&b.entity.name));
 
-                scope.detach_all();
-
-                scope.attach(col(roots).with_stretch(true));
+                    col(roots).with_stretch(true).mount(scope);
+                }
             });
+
+            StreamWidget::new(contents)
         };
 
         card(ScrollArea::vertical(inner).with_min_size(Unit::px2(160.0, 400.0))).mount(scope)
@@ -83,16 +91,20 @@ struct EntityHandle {
     name: Option<String>,
 }
 
-struct SubtreeWidget<'a> {
+struct SubtreeWidget {
     entity: EntityHandle,
-    hierarchy: &'a BTreeMap<Option<Entity>, Vec<EntityHandle>>,
+    hierarchy: WeakHandle<BTreeMap<Option<Entity>, Vec<EntityHandle>>>,
 }
 
-impl Widget for SubtreeWidget<'_> {
+impl Widget for SubtreeWidget {
     fn mount(self, scope: &mut Scope<'_>) {
         // let children = scope.read(&self.hierarchy).borrow();
 
-        let children = self.hierarchy.get(&Some(self.entity.id));
+        let children = scope
+            .read(&self.hierarchy)
+            .get(&Some(self.entity.id))
+            .cloned();
+
         let name = label(
             self.entity
                 .name
@@ -100,7 +112,10 @@ impl Widget for SubtreeWidget<'_> {
                 .unwrap_or_else(|| self.entity.id.to_string()),
         );
 
-        let can_collapse = children.map(|children| children.len() > 0).unwrap_or(false);
+        let can_collapse = children
+            .as_ref()
+            .map(|children| children.len() > 0)
+            .unwrap_or(false);
 
         let widget = Collapsible::new(
             name,
