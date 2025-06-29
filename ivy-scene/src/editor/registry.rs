@@ -1,8 +1,7 @@
 use std::{
-    any::{Any, TypeId},
+    any::TypeId,
     collections::BTreeMap,
     sync::{Arc, LazyLock},
-    time::Duration,
 };
 
 use async_std::task::sleep;
@@ -10,17 +9,17 @@ use bevy_reflect::{PartialReflect, TypeInfo};
 use flax::{component::ComponentDesc, EntityRef};
 use futures::{stream::BoxStream, StreamExt};
 use ivy_ui::{
-    streamed::{ComponentSink, DuplexComponentStream, Streamed, StreamedComponent, StreamedUiExt},
+    streamed::{ComponentSink, Streamed, StreamedUiExt},
     violet::{
         core::{
-            state::{State, StateDuplex, StateExt, StateSink, StateStream},
+            state::{StateExt, StateSink, StateStream},
             Scope, Widget,
         },
-        futures_signals::signal::{Mutable, SignalExt},
+        futures_signals::signal::Mutable,
     },
 };
 
-use crate::editor::editable::Project;
+use crate::editor::editable::{DowncastProject, Projection};
 
 use super::editable::Editable;
 
@@ -42,7 +41,7 @@ impl EditableRegistry {
     pub fn try_create_editor(
         &self,
         type_id: TypeId,
-        state: Project,
+        state: ProjectedState,
     ) -> Option<Box<dyn Send + Widget>> {
         let registration = EDITABLE_REGISTRY.registrations.get(&type_id)?;
 
@@ -73,44 +72,12 @@ impl Default for EditableRegistry {
 
 pub static EDITABLE_REGISTRY: LazyLock<EditableRegistry> = LazyLock::new(EditableRegistry::new);
 
-/// State which yields Box<dyn Value>
-pub struct ErasedState<S> {
-    state: S,
-}
-
-impl<S: State> State for ErasedState<S> {
-    type Item = Box<dyn Send + Sync + Any>;
-}
-
-impl<S: StateStream> StateStream for ErasedState<S>
-where
-    S::Item: 'static + Send + Sync,
-{
-    fn stream(&self) -> futures::stream::BoxStream<'static, Self::Item> {
-        Box::pin(
-            self.state
-                .stream()
-                .map(|item| Box::new(item) as Box<dyn Send + Sync + Any>),
-        )
-    }
-}
-
-impl<S: StateSink> StateSink for ErasedState<S>
-where
-    S::Item: 'static + Send + Sync,
-{
-    fn send(&self, value: Self::Item) {
-        if let Ok(value) = value.downcast::<S::Item>() {
-            self.state.send(*value);
-        } else {
-            panic!("Attempt to send a value of the wrong type");
-        }
-    }
-}
-
+type ProjectedState = Box<dyn Projection<Item = dyn PartialReflect>>;
 type CreateComponentEditorFunc =
     fn(EntityRef, ComponentDesc, flume::Sender<Box<dyn Streamed>>) -> Box<dyn Send + Widget>;
-type CreateEditorFunc = fn(Project) -> Box<dyn Send + Widget>;
+type CreateEditorFunc = fn(ProjectedState) -> Box<dyn Send + Widget>;
+
+pub trait DowncastableProject {}
 
 #[derive(Clone, Copy)]
 pub struct EditableRegistration {
@@ -124,7 +91,7 @@ impl EditableRegistration {
         Self {
             type_id: || TypeId::of::<T>(),
             create_editor: |project| {
-                let concrete = project.downcast::<T>();
+                let concrete = DowncastProject::new(project);
 
                 T::create_editor(concrete)
             },

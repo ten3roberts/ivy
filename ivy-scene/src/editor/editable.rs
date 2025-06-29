@@ -1,9 +1,10 @@
-use std::{future::ready, marker::Sized, sync::Arc};
-
-use bevy_reflect::{
-    DynamicStruct, PartialReflect, Reflect, ReflectMut, ReflectRef, Struct, TypeInfo,
+use std::{
+    future::ready,
+    marker::Sized,
+    sync::{Arc, Mutex},
 };
-use downcast_rs::Downcast;
+
+use bevy_reflect::{PartialReflect, TypeInfo};
 use flax::{component::ComponentValue, entity_ids, Entity, Query};
 use futures::{channel::oneshot, stream::BoxStream, FutureExt, StreamExt};
 use glam::{Quat, Vec2, Vec3};
@@ -13,10 +14,10 @@ use ivy_ui::{
     violet::{
         self,
         core::{
-            components::LayoutAlignment,
             layout::Align,
             state::{
-                State, StateDuplex, StateExt, StateMut, StateSink, StateStream, StateStreamRef,
+                Project, State, StateDuplex, StateExt, StateMut, StateSink, StateStream,
+                StateStreamRef,
             },
             style::{SizeExt, StyleExt},
             to_owned,
@@ -27,24 +28,17 @@ use ivy_ui::{
                     overlay::{overlay_state, Overlay},
                     select_list::SelectList,
                 },
-                label, row, Button, ButtonStyle, FutureWidget, InputBox, SignalWidget, Stack,
+                label, row, Button, ButtonStyle, FutureWidget, InputBox, SignalWidget,
                 StreamWidget, TextInput,
             },
             Scope, Widget,
         },
         futures_signals::signal::{Mutable, SignalExt},
-        lucide::icons::{LUCIDE_CHECK, LUCIDE_CROSS, LUCIDE_PLUS, LUCIDE_TRASH_2, LUCIDE_X},
+        lucide::icons::{LUCIDE_CHECK, LUCIDE_PLUS, LUCIDE_TRASH_2, LUCIDE_X},
     },
 };
-use ivy_wgpu::types::typed_buffer;
 
-use crate::{
-    editor::{
-        manipulator::SnapMode,
-        registry::{EditableRegistry, EDITABLE_REGISTRY},
-    },
-    register_editable,
-};
+use crate::{editor::registry::EDITABLE_REGISTRY, register_editable};
 
 /// A trait for components that can be edited in the editor.
 pub trait Editable: 'static + Send + Sync {
@@ -230,58 +224,18 @@ impl Overlay for EntityPicker {
     }
 }
 
-pub struct Project {
-    value: Mutable<Box<dyn PartialReflect>>,
-    map_ref: Arc<dyn Send + Sync + for<'a> Fn(&'a dyn PartialReflect) -> &'a dyn PartialReflect>,
-    map_mut:
-        Arc<dyn Send + Sync + for<'a> Fn(&'a mut dyn PartialReflect) -> &'a mut dyn PartialReflect>,
+pub struct DowncastProject<U> {
+    value: Box<dyn Projection<Item = dyn PartialReflect>>,
+    _marker: std::marker::PhantomData<U>,
 }
 
-impl Clone for Project {
-    fn clone(&self) -> Self {
-        Self {
-            value: self.value.clone(),
-            map_ref: self.map_ref.clone(),
-            map_mut: self.map_mut.clone(),
-        }
-    }
-}
-
-impl Project {
-    pub fn new(value: Mutable<Box<dyn PartialReflect>>) -> Self {
+impl<U> DowncastProject<U> {
+    pub fn new(value: Box<dyn Projection<Item = dyn PartialReflect>>) -> Self {
         Self {
             value,
-            map_ref: Arc::new(|v| v),
-            map_mut: Arc::new(|v| v),
-        }
-    }
-
-    pub fn project(
-        self,
-        map_ref: impl 'static + Send + Sync + Fn(&dyn PartialReflect) -> &dyn PartialReflect,
-        map_mut: impl 'static + Send + Sync + Fn(&mut dyn PartialReflect) -> &mut dyn PartialReflect,
-    ) -> Project {
-        Project {
-            value: self.value,
-            map_ref: Arc::new(move |v| map_ref((self.map_ref)(v))),
-            map_mut: Arc::new(move |v| map_mut((self.map_mut)(v))),
-        }
-    }
-
-    pub fn downcast<V>(self) -> DowncastProject<V>
-    where
-        V: 'static + Send + Sync,
-    {
-        DowncastProject {
-            value: self,
             _marker: std::marker::PhantomData,
         }
     }
-}
-
-pub struct DowncastProject<U> {
-    value: Project,
-    _marker: std::marker::PhantomData<U>,
 }
 
 impl<U> State for DowncastProject<U>
@@ -296,15 +250,17 @@ where
     U: 'static + Send + Sync + Clone,
 {
     fn stream(&self) -> BoxStream<'static, U> {
-        let map_ref = self.value.map_ref.clone();
+        let value = Arc::new(Mutex::new(None));
+
         Box::pin(
             self.value
-                .value
-                .signal_ref(move |v| {
-                    // let value = (map_ref)(v);
-                    (map_ref)(&**v).try_downcast_ref::<U>().unwrap().clone()
+                .project_stream({
+                    let value = value.clone();
+                    Box::new(move |v: &dyn PartialReflect| {
+                        *value.lock().unwrap() = Some(v.try_downcast_ref::<U>().unwrap().clone());
+                    })
                 })
-                .to_stream(),
+                .map(move |()| value.lock().unwrap().take().unwrap()),
         )
     }
 }
@@ -314,26 +270,184 @@ where
     U: 'static + Send + Sync + Clone,
 {
     fn send(&self, new_value: U) {
-        let mut v = self.value.value.lock_mut();
-        let value = (self.value.map_mut)(&mut **v);
-        if let Some(v) = value.try_downcast_mut::<U>() {
-            *v = new_value;
-        } else {
-            panic!("Attempt to send a value of the wrong type");
-        }
+        let mut new_value = Some(new_value);
+        self.value.write(&mut |v| {
+            if let Some(v) = v.try_downcast_mut::<U>() {
+                *v = new_value.take().unwrap();
+            } else {
+                panic!("Failed to downcast value to the expected type");
+            }
+        });
     }
 }
 
-pub fn edit_reflect(type_info: &TypeInfo, value: Project) -> Box<dyn Widget> {
+/// Represents any type of underlying state projected to a specific type `T`.
+pub trait Projection: State + Send + Sync {
+    /// Projects this type into another by reference
+    fn project<U: ?Sized + 'static>(
+        self,
+        map_ref: impl 'static + Send + Sync + Fn(&Self::Item) -> &U,
+        map_mut: impl 'static + Send + Sync + Fn(&mut Self::Item) -> &mut U,
+    ) -> Project<Self, U>
+    where
+        Self: Sized;
+
+    /// Stream projected values
+    fn project_stream(
+        &self,
+        map_ref: Box<dyn 'static + Send + Sync + Fn(&Self::Item)>,
+    ) -> BoxStream<'static, ()>;
+
+    /// Writ a new value directly to the projection of the underlying state.
+    fn write(&self, writer: &mut dyn FnMut(&mut Self::Item));
+}
+
+impl<T: Send + Sync> Projection for Mutable<T>
+where
+    T: 'static + Send + Sync,
+{
+    fn project<U: ?Sized + 'static>(
+        self,
+        map_ref: impl 'static + Send + Sync + Fn(&T) -> &U,
+        map_mut: impl 'static + Send + Sync + Fn(&mut T) -> &mut U,
+    ) -> Project<Self, U>
+    where
+        Self: Sized,
+    {
+        Project::new_dyn(self, map_ref, map_mut)
+    }
+
+    fn project_stream(
+        &self,
+        func: Box<dyn 'static + Send + Sync + Fn(&Self::Item)>,
+    ) -> BoxStream<'static, ()> {
+        self.stream_ref(func).boxed()
+    }
+
+    fn write(&self, writer: &mut dyn FnMut(&mut Self::Item)) {
+        self.write_mut(writer);
+    }
+}
+
+impl<C, T, F, G> Projection for Project<C, T, F, G>
+where
+    C: Send + Sync + StateMut + StateStreamRef,
+    T: ?Sized + 'static + Send + Sync,
+    F: ?Sized + 'static + Send + Sync + Fn(&C::Item) -> &T,
+    G: ?Sized + 'static + Send + Sync + Fn(&mut C::Item) -> &mut T,
+{
+    fn project<V: ?Sized + 'static>(
+        self,
+        map_ref: impl 'static + Send + Sync + Fn(&T) -> &V,
+        map_mut: impl 'static + Send + Sync + Fn(&mut T) -> &mut V,
+    ) -> Project<Self, V>
+    where
+        Self: Sized,
+    {
+        Project::new_dyn(self, map_ref, map_mut)
+    }
+
+    fn project_stream(
+        &self,
+        func: Box<dyn 'static + Send + Sync + Fn(&Self::Item)>,
+    ) -> BoxStream<'static, ()>
+    where
+        Self: Sized,
+    {
+        self.stream_ref(func).boxed()
+    }
+
+    fn write(&self, writer: &mut dyn FnMut(&mut Self::Item))
+    where
+        Self: Sized,
+    {
+        self.write_mut(writer)
+    }
+}
+
+impl Projection for Box<dyn Projection<Item = dyn PartialReflect>> {
+    fn project<V: ?Sized + 'static>(
+        self,
+        map_ref: impl 'static + Send + Sync + Fn(&Self::Item) -> &V,
+        map_mut: impl 'static + Send + Sync + Fn(&mut Self::Item) -> &mut V,
+    ) -> Project<Self, V>
+    where
+        Self: Sized,
+    {
+        Project::new_dyn(self, map_ref, map_mut)
+    }
+
+    fn project_stream(
+        &self,
+        func: Box<dyn 'static + Send + Sync + Fn(&Self::Item)>,
+    ) -> BoxStream<'static, ()> {
+        (**self).project_stream(func)
+    }
+
+    fn write(&self, writer: &mut dyn FnMut(&mut Self::Item)) {
+        (**self).write(writer);
+    }
+}
+
+impl<T: Projection> Projection for Arc<T> {
+    fn project<V: ?Sized + 'static>(
+        self,
+        map_ref: impl 'static + Send + Sync + Fn(&Self::Item) -> &V,
+        map_mut: impl 'static + Send + Sync + Fn(&mut Self::Item) -> &mut V,
+    ) -> Project<Self, V>
+    where
+        Self: Sized,
+    {
+        Project::new_dyn(self, map_ref, map_mut)
+    }
+
+    fn project_stream(
+        &self,
+        func: Box<dyn 'static + Send + Sync + Fn(&Self::Item)>,
+    ) -> BoxStream<'static, ()> {
+        (**self).project_stream(func)
+    }
+
+    fn write(&self, writer: &mut dyn FnMut(&mut Self::Item)) {
+        (**self).write(writer);
+    }
+}
+
+/// Creates an editor from a type using type reflection.
+pub fn create_reflected_editor<T>(type_info: &TypeInfo, state: T) -> Box<dyn Widget>
+where
+    T: 'static + Send + Sync + StateMut + StateStreamRef,
+    <T as State>::Item: PartialReflect,
+    <T as State>::Item: 'static + Send + Sync + Sized,
+{
+    let state = Project::<Arc<T>, dyn PartialReflect>::new_dyn(
+        Arc::new(state),
+        |v| v as &dyn PartialReflect,
+        |v| v as &mut dyn PartialReflect,
+    );
+
+    reflection_editor(type_info, state)
+}
+
+fn reflection_editor<T>(
+    type_info: &TypeInfo,
+    value: Project<T, dyn PartialReflect>,
+) -> Box<dyn Widget>
+where
+    T: StateMut + StateStreamRef + Clone,
+    T: 'static + Send + Sync,
+{
     // Always prefer concrete editors
-    if let Some(editor) = EDITABLE_REGISTRY.try_create_editor(type_info.type_id(), value.clone()) {
+    if let Some(editor) =
+        EDITABLE_REGISTRY.try_create_editor(type_info.type_id(), Box::new(value.clone()))
+    {
         return editor;
     }
     match type_info {
         TypeInfo::Struct(struct_info) => {
             let fields = struct_info.field_names().iter().map(|field_name| {
                 let ty = struct_info.field(&field_name).unwrap();
-                let field_value = value.clone().project(
+                let field_value = value.clone().flat_project(
                     |v| {
                         v.reflect_ref()
                             .as_struct()
@@ -352,7 +466,7 @@ pub fn edit_reflect(type_info: &TypeInfo, value: Project) -> Box<dyn Widget> {
 
                 row((
                     bold(format!("{field_name}:")),
-                    edit_reflect(ty.type_info().unwrap(), field_value),
+                    reflection_editor(ty.type_info().unwrap(), field_value),
                 ))
             });
 
@@ -365,9 +479,7 @@ pub fn edit_reflect(type_info: &TypeInfo, value: Project) -> Box<dyn Widget> {
         TypeInfo::Map(_map_info) => todo!(),
         TypeInfo::Set(_set_info) => todo!(),
         TypeInfo::Enum(_enum_info) => todo!(),
-        TypeInfo::Opaque(_opaque_info) => EDITABLE_REGISTRY
-            .try_create_editor(_opaque_info.type_id(), value)
-            .unwrap_or_else(|| Box::new(label(_opaque_info.type_path()))),
+        TypeInfo::Opaque(_opaque_info) => Box::new(label(_opaque_info.type_path())),
     }
 }
 

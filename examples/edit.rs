@@ -1,4 +1,7 @@
-use std::f32::consts::{PI, TAU};
+use std::{
+    f32::consts::{PI, TAU},
+    sync::Arc,
+};
 
 use anyhow::Context;
 use bevy_reflect::{DynamicTyped, PartialReflect, Reflect, Typed};
@@ -47,10 +50,7 @@ use ivy_postprocessing::preconfigured::{
     pbr::{PbrRenderGraphConfig, SkyboxConfig},
     SurfacePbrPipelineDesc, SurfacePbrRenderer,
 };
-use ivy_scene::{
-    editor::editable::{edit_reflect, Project},
-    GltfNodeExt, NodeMountOptions,
-};
+use ivy_scene::{editor::editable::create_reflected_editor, GltfNodeExt, NodeMountOptions};
 use ivy_ui::{
     layer::{UiLayer, UiUpdateLayer},
     screens::{screen_state, Screen},
@@ -72,6 +72,7 @@ use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt
 use tracing_tree::HierarchicalLayer;
 use violet::{
     core::{
+        state::Project,
         style::SizeExt,
         unit::Unit,
         widget::{card, maximized},
@@ -193,7 +194,7 @@ struct InnerStruct {
 
 impl Screen for MainUI {
     fn create(self, scope: &mut violet::core::Scope<'_>, _: ivy_ui::screens::ScreenLifetimeToken) {
-        let value = Mutable::new(Box::new(ExampleStruct {
+        let value = Mutable::new(ExampleStruct {
             a: 42,
             name: "Example".to_string(),
             inner: InnerStruct {
@@ -201,11 +202,11 @@ impl Screen for MainUI {
                 rotation: Quat::from_euler(EulerRot::YXZ, -PI / 4.0, -PI / 6.0, 0.0),
                 values: vec![1.0, 5.7, 3.14, 2.718],
             },
-        }) as Box<dyn PartialReflect>);
+        });
 
-        maximized(card(edit_reflect(
+        maximized(card(create_reflected_editor(
             ExampleStruct::type_info(),
-            Project::new(value.clone()),
+            value,
         )))
         .mount(scope);
     }
