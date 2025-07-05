@@ -2,30 +2,31 @@ use std::{ffi::OsStr, future::Future, marker::PhantomData, path::PathBuf};
 
 use derivative::Derivative;
 
-use crate::{loadable::Resource, service::FsAssetError, Asset, AssetCache, AsyncAssetDesc};
+use crate::{
+    loadable::{LoadFromPath, Loadable, Resource},
+    service::FsAssetError,
+    Asset, AssetCache, AsyncAssetDesc, AsyncAssetExt,
+};
 
 /// Describes an asset loaded from a relative filesystem path
 #[derive(Derivative)]
 #[derivative(Clone, Debug = "transparent", Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(transparent))]
-pub struct AssetPath<T>
-where
-    T: Resource,
-{
+pub struct AssetPath<T> {
     path: PathBuf,
     #[derivative(Debug = "ignore")]
     #[cfg_attr(feature = "serde", serde(skip))]
     _marker: PhantomData<T>,
 }
 
-impl<T: Resource, P: Into<PathBuf>> From<P> for AssetPath<T> {
+impl<T, P: Into<PathBuf>> From<P> for AssetPath<T> {
     fn from(value: P) -> Self {
         Self::new(value)
     }
 }
 
-impl<T: Resource> AssetPath<T> {
+impl<T> AssetPath<T> {
     pub fn new(path: impl Into<PathBuf>) -> Self {
         Self {
             path: path.into(),
@@ -51,21 +52,36 @@ impl<T: Resource> AssetPath<T> {
 
 impl<T> AsyncAssetDesc for AssetPath<T>
 where
-    T: Resource<Desc = AssetPath<T>>,
+    T: LoadFromPath,
 {
     type Output = T;
 
     type Error = anyhow::Error;
 
     async fn create(&self, assets: &AssetCache) -> Result<Asset<Self::Output>, Self::Error> {
-        Ok(assets.insert(T::load(self.clone(), assets).await?))
+        Ok(assets.insert(T::load_from_file(self.clone(), assets).await?))
     }
 
     fn label(&self) -> String {
-        if let Some(filename) = self.path().file_name() {
+        if let Some(filename) = self.path.file_name() {
             format!("{}({})", tynm::type_name::<T>(), filename.to_string_lossy())
         } else {
             format!("{}({})", tynm::type_name::<T>(), self.path().display())
         }
     }
+}
+
+impl<T: AsyncAssetDesc> Loadable for T
+// where
+//     T::Output: Resource,
+{
+    type Resource = Asset<T::Output>;
+
+    async fn load(self, assets: &AssetCache) -> anyhow::Result<Self::Resource> {
+        Ok(AsyncAssetExt::load_async(&self, assets).await?)
+    }
+}
+
+impl<T: LoadFromPath> Resource for Asset<T> {
+    type Desc = AssetPath<T>;
 }

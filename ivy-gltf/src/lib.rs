@@ -10,7 +10,10 @@ use glam::{Mat4, Quat, U16Vec4, Vec2, Vec3, Vec4};
 use gltf::{buffer, Gltf};
 use image::{DynamicImage, ImageFormat};
 use itertools::Itertools;
-use ivy_assets::{loadable::Resource, Asset, AssetCache, AssetDesc, AssetPath};
+use ivy_assets::{
+    loadable::{LoadFromPath, Resource},
+    Asset, AssetCache, AssetDesc, AssetPath,
+};
 use ivy_core::components::TransformBundle;
 use ivy_graphics::mesh::{MeshData, TANGENT_ATTRIBUTE};
 use ivy_profiling::{profile_function, profile_scope};
@@ -242,9 +245,8 @@ async fn load_image_data(
     Ok(decoded_image)
 }
 
-impl Resource for Document {
-    type Desc = AssetPath<Self>;
-    async fn load(path: AssetPath<Self>, assets: &AssetCache) -> anyhow::Result<Self> {
+impl LoadFromPath for Document {
+    async fn load_from_file(path: AssetPath<Self>, assets: &AssetCache) -> anyhow::Result<Self> {
         let content = path.load_file_content(assets).await?;
 
         let mut gltf = Gltf::from_slice(&content)?;

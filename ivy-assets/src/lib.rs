@@ -58,6 +58,7 @@ use parking_lot::{RwLock, RwLockReadGuard};
 use service::{FileSystemMapService, Service};
 use timeline::{AssetInfo, Timelines};
 
+use crate::loadable::LoadFromPath;
 pub use crate::loadable::Resource;
 
 use self::{cell::AssetCell, handle::WeakHandle};
@@ -501,10 +502,8 @@ pub trait AsyncAssetDesc: StoredKey + Debug + Send + Sync {
 //     }
 // }
 
-impl Resource for DynamicImage {
-    type Desc = AssetPath<DynamicImage>;
-
-    async fn load(
+impl LoadFromPath for DynamicImage {
+    async fn load_from_file(
         path: AssetPath<DynamicImage>,
         assets: &AssetCache,
     ) -> Result<Self, anyhow::Error> {
