@@ -1,12 +1,12 @@
 use std::convert::identity;
 
 use flax::{Entity, EntityRef, World};
-use glam::{Mat4, Quat, Vec3};
+use glam::{vec3, Mat4, Quat, Vec3};
 use itertools::Itertools;
 use ivy_core::{
     components::{self, position, rotation},
     gizmos::{
-        transforms::{RotateGizmo, TranslateGizmo},
+        transforms::{RotateGizmo, TranslateGizmo, TranslatePlaneGizmo},
         DrawGizmos, GizmosSection,
     },
     math::Axis3D,
@@ -23,6 +23,7 @@ use ordered_float::NotNan;
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum TransformMode {
     Translate,
+    TranslatePlane,
     Rotate,
     None,
     // Scale, // TODO
@@ -81,6 +82,8 @@ pub struct TransformControls {
     view_rotation: Quat, // Used for View space manipulation
     drag_data: Option<DragData>,
     arrow_length: f32,
+    corner_size: f32,
+    corner_offset: f32,
     ring_radius: f32,
     dynamic_size: bool,
     settings: TransformSettings,
@@ -97,6 +100,8 @@ impl TransformControls {
             arrow_length: 0.8,
             ring_radius: 1.0,
             dynamic_size: true,
+            corner_size: 0.3,
+            corner_offset: 0.1,
             settings,
             view_rotation: Quat::IDENTITY,
         }
@@ -126,7 +131,11 @@ impl TransformControls {
         let gizmo_scale = self.get_size(camera_ray);
 
         let rotation = self.get_active_rotation();
-        for mode in [TransformMode::Translate, TransformMode::Rotate] {
+        for mode in [
+            TransformMode::Translate,
+            TransformMode::TranslatePlane,
+            TransformMode::Rotate,
+        ] {
             let colors = self.get_handle_colors(
                 hit.filter(|v| v.mode == mode).map(|v| v.axis),
                 self.drag_data.is_some(),
@@ -138,6 +147,15 @@ impl TransformControls {
                         colors,
                     )
                     .with_size(self.arrow_length * gizmo_scale)
+                    .draw_primitives(gizmos);
+                }
+                TransformMode::TranslatePlane => {
+                    TranslatePlaneGizmo::new(
+                        Mat4::from_rotation_translation(rotation, self.position),
+                        colors,
+                    )
+                    .with_size(self.corner_size * gizmo_scale)
+                    .with_offset(self.corner_offset * gizmo_scale)
                     .draw_primitives(gizmos);
                 }
                 TransformMode::Rotate => {
@@ -225,6 +243,16 @@ impl TransformControls {
                     drag_data.new_position = drag_data.start_position + delta;
                     self.position = drag_data.new_position;
                 }
+                TransformMode::TranslatePlane => {
+                    let delta = Self::handle_translate_plane(
+                        camera_ray,
+                        drag_data,
+                        self.settings.snap_mode,
+                    );
+                    drag_data.position_delta = delta;
+                    drag_data.new_position = drag_data.start_position + delta;
+                    self.position = drag_data.new_position;
+                }
                 TransformMode::None => {}
             }
         }
@@ -256,6 +284,37 @@ impl TransformControls {
         };
 
         drag_data.hit.dim * delta_dist
+    }
+
+    fn handle_translate_plane(camera_ray: Ray, drag_data: &DragData, snap_mode: SnapMode) -> Vec3 {
+        let new_hit = drag_data
+            .hit
+            .plane
+            .intersect_ray(camera_ray.origin(), camera_ray.direction());
+
+        let Some(hit) = new_hit else {
+            return drag_data.position_delta;
+        };
+
+        let hit_point = camera_ray.at(hit);
+
+        let moved_dist =
+            (hit_point - drag_data.start_position).reject_from_normalized(drag_data.hit.dim);
+
+        let start_dist = drag_data
+            .hit
+            .interact_point
+            .reject_from_normalized(drag_data.hit.dim);
+
+        let delta_dist = moved_dist - start_dist;
+
+        let delta_dist = match snap_mode {
+            SnapMode::None => delta_dist,
+            SnapMode::Absolute(snap) => snap_value3(start_dist + delta_dist, snap) - start_dist,
+            SnapMode::Increment(snap) => snap_value3(delta_dist, snap),
+        };
+
+        delta_dist
     }
 
     fn handle_rotate(camera_ray: Ray, drag_data: &DragData, snap: f32) -> Quat {
@@ -291,8 +350,9 @@ impl TransformControls {
             .flat_map(|axis| {
                 [
                     self.hit_test_arrow(camera_ray, axis).map(|v| (0, v)),
-                    self.hit_test_ring(camera_ray, axis).map(|v| (1, v)),
-                    self.hit_test_sphere(camera_ray, axis).map(|v| (2, v)),
+                    self.hit_test_corner(camera_ray, axis).map(|v| (0, v)),
+                    self.hit_test_ring(camera_ray, axis).map(|v| (0, v)),
+                    self.hit_test_sphere(camera_ray, axis).map(|v| (1, v)),
                 ]
             })
             .filter_map(identity)
@@ -328,6 +388,53 @@ impl TransformControls {
             interact_point: hit_radius.normalize() * self.ring_radius,
             plane,
             dim,
+        })
+    }
+
+    fn hit_test_corner(&self, camera_ray: Ray, axis: Axis3D) -> Option<HitResult> {
+        let rot = self.get_active_rotation();
+        let normal = rot * axis.to_vec3();
+
+        let (tan, bitan) = match axis {
+            Axis3D::X => (Vec3::Y, Vec3::Z),
+            Axis3D::Y => (Vec3::X, Vec3::Z),
+            Axis3D::Z => (Vec3::X, Vec3::Y),
+        };
+
+        let tan = rot * tan;
+        let bitan = rot * bitan;
+
+        if normal.dot(camera_ray.direction()).abs() > 0.9999 {
+            return None; // ray is parallel to the axis
+        }
+
+        let plane = Plane::from_normal_and_point(normal, self.position);
+
+        // Test for hit on the plane between the axis
+        let hit = plane.intersect_ray(camera_ray.origin(), camera_ray.direction())?;
+        assert!(!hit.is_nan());
+
+        let hit_point = camera_ray.at(hit);
+
+        let dist_tan = (hit_point - self.position).dot(tan);
+        let dist_bitan = (hit_point - self.position).dot(bitan);
+
+        let gizmo_scale = self.get_size(camera_ray);
+        if dist_tan < self.corner_offset * gizmo_scale
+            || dist_bitan < self.corner_offset * gizmo_scale
+            || dist_tan > (self.corner_offset + self.corner_size) * gizmo_scale
+            || dist_bitan > (self.corner_offset + self.corner_size) * gizmo_scale
+        {
+            return None; // hit is outside the corner area
+        }
+
+        Some(HitResult {
+            mode: TransformMode::TranslatePlane,
+            axis,
+            hit_distance: hit,
+            interact_point: hit_point - self.position,
+            plane,
+            dim: normal,
         })
     }
 
@@ -732,6 +839,14 @@ fn snap_value(value: f32, snap: f32) -> f32 {
         return value;
     }
     (value / snap).round() * snap
+}
+
+fn snap_value3(value: Vec3, snap: f32) -> Vec3 {
+    vec3(
+        snap_value(value.x, snap),
+        snap_value(value.y, snap),
+        snap_value(value.z, snap),
+    )
 }
 
 fn ray_sphere_intersect(ray: Ray, center: Vec3, radius: f32) -> Option<f32> {

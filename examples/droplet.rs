@@ -1,6 +1,6 @@
 use flax::{Entity, World};
 use glam::{Quat, Vec3};
-use ivy_assets::{fs::AssetPath, stored::DynamicStore, Asset, AssetCache, AsyncAssetExt};
+use ivy_assets::{stored::DynamicStore, Asset, AssetCache, AssetPath, AsyncAssetExt};
 use ivy_core::{
     app::PostInitEvent,
     layer::events::EventRegisterContext,

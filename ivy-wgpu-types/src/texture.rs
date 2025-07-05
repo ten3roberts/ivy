@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use anyhow::Context;
 use image::{ColorType, DynamicImage, GenericImageView, ImageBuffer, Rgba};
 use itertools::Itertools;
-use ivy_assets::fs::AssetPath;
+use ivy_assets::AssetPath;
 use ivy_core::profiling::{profile_function, profile_scope};
 use wgpu::{
     BufferUsages, Extent3d, ImageCopyBuffer, ImageCopyTexture, ImageDataLayout, Origin3d, Texture,

@@ -4,7 +4,7 @@ use anyhow::Context;
 use glam::{Mat4, Quat};
 use gltf::buffer;
 use itertools::Itertools;
-use ivy_assets::{fs::AssetPath, Asset, AssetCache, AsyncAssetDesc, AsyncAssetExt};
+use ivy_assets::{Asset, AssetCache, AssetPath, AsyncAssetDesc, AsyncAssetExt};
 use ivy_core::components::TransformBundle;
 
 use crate::Document;

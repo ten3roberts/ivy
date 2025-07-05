@@ -3,7 +3,7 @@ use std::iter::repeat;
 use flax::{component, BatchSpawn, FetchExt, Query, System, World};
 use glam::{vec3, Mat4, Quat, Vec3};
 use itertools::iproduct;
-use ivy_assets::{fs::AssetPath, stored::DynamicStore, AssetCache};
+use ivy_assets::{stored::DynamicStore, AssetCache, AssetPath};
 use ivy_core::{
     app::PostInitEvent,
     layer::events::EventRegisterContext,

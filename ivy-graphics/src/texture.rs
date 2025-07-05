@@ -2,9 +2,7 @@ use std::{future::Future, ops::Deref, pin::Pin};
 
 use either::Either;
 use image::{DynamicImage, ImageBuffer};
-use ivy_assets::{
-    fs::AssetPath, loadable::ResourceDesc, Asset, AssetCache, AssetDesc, AsyncAssetExt,
-};
+use ivy_assets::{loadable::ResourceDesc, Asset, AssetCache, AssetDesc, AssetPath, AsyncAssetExt};
 use ivy_core::palette::Srgba;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

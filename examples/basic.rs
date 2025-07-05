@@ -9,7 +9,7 @@ use glam::{vec3, EulerRot, Mat4, Quat, Vec3};
 use image::Rgba;
 use itertools::{Either, Itertools};
 use ivy_assets::{
-    fs::AssetPath, loadable::ResourceDesc, stored::DynamicStore, Asset, AssetCache, AsyncAssetExt,
+    loadable::ResourceDesc, stored::DynamicStore, Asset, AssetCache, AssetPath, AsyncAssetExt,
 };
 use ivy_core::{
     app::PostInitEvent,

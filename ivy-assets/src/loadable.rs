@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, future::Future};
 
 use futures::{stream, StreamExt, TryStreamExt};
 
-use crate::{fs::AssetPath, Asset, AssetCache, AsyncAssetDesc};
+use crate::{Asset, AssetCache, AssetPath, AsyncAssetDesc};
 
 pub trait Resource: 'static + Send + Sync + Sized {
     type Desc: ResourceDesc;
@@ -95,28 +95,6 @@ where
         let v = assets.try_load_async(self).await?;
 
         Ok(v)
-    }
-}
-
-impl<T> AsyncAssetDesc for AssetPath<T>
-where
-    T: ResourceFromPath,
-    T::Error: Into<anyhow::Error>,
-{
-    type Output = T;
-
-    type Error = anyhow::Error;
-
-    async fn create(&self, assets: &AssetCache) -> Result<Asset<Self::Output>, Self::Error> {
-        Ok(assets.insert(T::load(self.clone(), assets).await.map_err(Into::into)?))
-    }
-
-    fn label(&self) -> String {
-        if let Some(filename) = self.path().file_name() {
-            format!("{}({})", tynm::type_name::<T>(), filename.to_string_lossy())
-        } else {
-            format!("{}({})", tynm::type_name::<T>(), self.path().display())
-        }
     }
 }
 

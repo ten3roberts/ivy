@@ -103,6 +103,103 @@ impl DrawGizmos for TranslateGizmo {
     }
 }
 
+pub struct TranslatePlaneGizmo {
+    pub transform: Mat4,
+    pub size: f32,
+    pub offset: f32,
+    pub colors: [Srgba; 3],
+}
+
+impl TranslatePlaneGizmo {
+    pub fn new(transform: Mat4, colors: [Srgba; 3]) -> Self {
+        Self {
+            transform,
+            colors,
+            size: 0.5,
+            offset: 0.1,
+        }
+    }
+
+    pub fn with_size(mut self, size: f32) -> Self {
+        self.size = size;
+        self
+    }
+
+    pub fn with_offset(mut self, offset: f32) -> Self {
+        self.offset = offset;
+        self
+    }
+}
+
+impl DrawGizmos for TranslatePlaneGizmo {
+    fn draw_primitives(&self, gizmos: &mut GizmosSection) {
+        let axes = [
+            (Axis3D::X, self.colors[0]),
+            (Axis3D::Y, self.colors[1]),
+            (Axis3D::Z, self.colors[2]),
+        ];
+
+        for (axis, color) in axes.iter() {
+            let (tan, bitan) = match axis {
+                Axis3D::X => (Vec3::Y, Vec3::Z),
+                Axis3D::Y => (Vec3::Z, Vec3::X),
+                Axis3D::Z => (Vec3::X, Vec3::Y),
+            };
+
+            gizmos.draw(TranslateCornerGizmo {
+                transform: self.transform,
+                tan,
+                bitan,
+                size: self.size,
+                offset: self.offset,
+                color: *color,
+            });
+        }
+    }
+}
+pub struct TranslateCornerGizmo {
+    pub transform: Mat4,
+    pub tan: Vec3,
+    pub bitan: Vec3,
+    pub size: f32,
+    pub offset: f32,
+    pub color: Srgba,
+}
+
+impl TranslateCornerGizmo {
+    pub fn with_size(mut self, size: f32) -> Self {
+        self.size = size;
+        self
+    }
+}
+
+impl DrawGizmos for TranslateCornerGizmo {
+    fn draw_primitives(&self, gizmos: &mut GizmosSection) {
+        // let up = self.tan.cross(self.bitan);
+        let corners = [Vec3::ZERO, self.tan, self.tan + self.bitan, self.bitan];
+
+        let vertices = corners
+            .iter()
+            .map(|&corner| {
+                self.transform
+                    .transform_point3((corner * self.size) + self.offset * (self.tan + self.bitan))
+            })
+            .map(|corner| GizmoVertex::new(corner, self.color));
+
+        let indices = [
+            0, 1, 2, // first triangle
+            0, 2, 3, // second triangle
+            // backside
+            0, 3, 1, // third triangle
+            1, 3, 2, // fourth triangle
+        ];
+
+        let mut geo = gizmos.add_geometry();
+        geo.add_vertices(vertices);
+        geo.add_indices(indices);
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ArrowGizmo {
     position: Vec3,

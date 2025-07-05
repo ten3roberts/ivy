@@ -37,6 +37,7 @@ use std::{
 use async_std::task::sleep;
 use dashmap::DashMap;
 
+mod asset_path;
 pub mod cell;
 pub mod fs;
 mod handle;
@@ -45,7 +46,6 @@ pub mod map;
 pub mod service;
 pub mod stored;
 pub mod timeline;
-use fs::AssetPath;
 use futures::{
     future::{BoxFuture, Shared, WeakShared},
     FutureExt, TryFutureExt,
@@ -60,6 +60,8 @@ use service::{FileSystemMapService, Service};
 use timeline::{AssetInfo, Timelines};
 
 use self::{cell::AssetCell, handle::WeakHandle};
+
+pub use asset_path::*;
 
 slotmap::new_key_type! {
     pub struct AssetId;

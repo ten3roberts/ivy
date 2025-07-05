@@ -11,7 +11,7 @@ use gltf::{buffer, Gltf};
 use image::{DynamicImage, ImageFormat};
 use itertools::Itertools;
 use ivy_assets::{
-    fs::AssetPath, loadable::ResourceFromPath, Asset, AssetCache, AssetDesc, AsyncAssetExt,
+    loadable::ResourceFromPath, Asset, AssetCache, AssetDesc, AssetPath, AsyncAssetExt,
 };
 use ivy_core::components::TransformBundle;
 use ivy_graphics::mesh::{MeshData, TANGENT_ATTRIBUTE};

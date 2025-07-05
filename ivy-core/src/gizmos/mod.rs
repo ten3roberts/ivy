@@ -377,18 +377,14 @@ impl<'a> GizmoGeometryWriter<'a> {
 
     pub fn add_vertices<I: IntoIterator<Item = GizmoVertex>>(&mut self, vertices: I) {
         let offset = self.offset as u32;
-        for vertex in vertices {
-            self.vertices.push(vertex);
-        }
+        self.vertices.extend(vertices);
         // Update the offset to the new length
-        self.offset += self.vertices.len() - offset as usize;
+        // self.offset += self.vertices.len() - offset as usize;
     }
 
     pub fn add_indices<I: IntoIterator<Item = u32>>(&mut self, indices: I) {
         let offset = self.offset as u32;
-        for index in indices {
-            self.indices.push(index + offset);
-        }
+        self.indices.extend(indices.into_iter().map(|v| v + offset));
     }
 }
 

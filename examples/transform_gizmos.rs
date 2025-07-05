@@ -4,7 +4,7 @@ use flax::{
     system, Component, Entity, FetchExt, Query, QueryBorrow, World,
 };
 use glam::{EulerRot, Mat4, Quat, Vec3};
-use ivy_assets::{fs::AssetPath, stored::DynamicStore, AssetCache};
+use ivy_assets::{stored::DynamicStore, AssetCache, AssetPath};
 use ivy_core::{
     gizmos::{Gizmos, LineGizmo},
     palette::Srgb,

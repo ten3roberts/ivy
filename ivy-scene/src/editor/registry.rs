@@ -2,9 +2,9 @@ use std::{
     any::TypeId,
     collections::BTreeMap,
     sync::{Arc, LazyLock},
+    time::Duration,
 };
 
-use async_std::task::sleep;
 use bevy_reflect::{PartialReflect, TypeInfo};
 use flax::{component::ComponentDesc, EntityRef};
 use futures::{stream::BoxStream, StreamExt};
@@ -13,6 +13,8 @@ use ivy_ui::{
     violet::{
         core::{
             state::{StateExt, StateSink, StateStream},
+            time::sleep,
+            utils::throttle_skip,
             Scope, Widget,
         },
         futures_signals::signal::Mutable,
@@ -108,7 +110,10 @@ impl EditableRegistration {
                         // Use the feedback preventing state here to avoid sent values from being
                         // sent back to the editor
                         let state = feedback_state.clone();
-                        new_state.into_stream().for_each(move |value| {
+                        throttle_skip(new_state.into_stream(), || {
+                            sleep(Duration::from_millis(1000))
+                        })
+                        .for_each(move |value| {
                             state.send(value);
                             async {}
                         })
