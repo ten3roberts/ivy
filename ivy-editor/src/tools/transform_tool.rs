@@ -10,7 +10,7 @@ use flax::{
 };
 use futures::StreamExt;
 use glam::{Quat, Vec2};
-use ivy_assets::loadable::ResourceDesc;
+use ivy_assets::loadable::Loadable;
 use ivy_core::{
     Bundle,
     components::{engine, gizmos, main_camera},
@@ -426,9 +426,8 @@ pub struct TransformToolBundleDesc {
     pub settings: TransformSettings,
 }
 
-impl ResourceDesc for TransformToolBundleDesc {
+impl Loadable for TransformToolBundleDesc {
     type Output = TransformToolBundle;
-    type Error = anyhow::Error;
 
     async fn load(&self, _assets: &ivy_assets::AssetCache) -> anyhow::Result<Self::Output> {
         Ok(TransformToolBundle {

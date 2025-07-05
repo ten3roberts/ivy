@@ -1,4 +1,4 @@
-use std::{ffi::OsStr, future::Future, marker::PhantomData, path::PathBuf};
+use std::{ffi::OsStr, marker::PhantomData, path::PathBuf};
 
 use derivative::Derivative;
 
@@ -71,17 +71,14 @@ where
     }
 }
 
-impl<T: AsyncAssetDesc> Loadable for T
-// where
-//     T::Output: Resource,
-{
-    type Resource = Asset<T::Output>;
-
-    async fn load(self, assets: &AssetCache) -> anyhow::Result<Self::Resource> {
-        Ok(AsyncAssetExt::load_async(&self, assets).await?)
-    }
-}
-
 impl<T: LoadFromPath> Resource for Asset<T> {
     type Desc = AssetPath<T>;
+}
+
+impl<T: LoadFromPath> Loadable for AssetPath<T> {
+    type Output = Asset<T>;
+
+    async fn load(&self, assets: &AssetCache) -> anyhow::Result<Self::Output> {
+        Ok(AsyncAssetExt::load_async(self, assets).await?)
+    }
 }

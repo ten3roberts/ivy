@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use flax::{Component, ComponentMut, Debuggable, EntityBuilder, Fetch};
 use glam::{Mat4, Quat, Vec2, Vec3};
-use ivy_assets::{loadable::ResourceDesc, AssetCache, Resource};
+use ivy_assets::{loadable::Loadable, AssetCache, Resource};
 
 use crate::{bundle::Bundle, gizmos::Gizmos, template::BundleDesc, AsyncCommandBuffer, Color};
 
@@ -168,14 +168,5 @@ impl Bundle for TransformBundle {
     }
 }
 
-impl ResourceDesc for TransformBundle {
-    type Output = TransformBundle;
-    type Error = anyhow::Error;
-
-    async fn load(&self, _assets: &AssetCache) -> anyhow::Result<Self::Output> {
-        Ok(self.clone())
-    }
-}
-
 #[typetag::serde]
-impl BundleDesc for TransformBundle {}
+impl BundleDesc for TransformBundleDesc {}

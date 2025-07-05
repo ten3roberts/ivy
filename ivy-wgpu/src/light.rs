@@ -1,4 +1,4 @@
-use ivy_assets::{loadable::ResourceDesc, AssetCache};
+use ivy_assets::{loadable::Loadable, AssetCache, Resource};
 use ivy_core::{palette::Srgb, template::BundleDesc, Bundle};
 
 use crate::components::{cast_shadow, light_kind, light_params};
@@ -64,7 +64,7 @@ impl LightKind {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Resource)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct LightBundle {
     pub params: LightParams,
@@ -84,27 +84,13 @@ impl Bundle for LightBundle {
     }
 }
 
-#[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct LightBundleDesc {
-    pub params: LightParams,
-    pub kind: LightKind,
-    pub cast_shadow: bool,
-}
-
-impl ResourceDesc for LightBundleDesc {
-    type Output = LightBundle;
-
-    type Error = anyhow::Error;
-
-    async fn load(&self, _assets: &AssetCache) -> anyhow::Result<Self::Output> {
-        Ok(LightBundle {
-            params: self.params.clone(),
-            kind: self.kind,
-            cast_shadow: self.cast_shadow,
-        })
-    }
-}
+// #[derive(Debug, Clone)]
+// #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+// pub struct LightBundleDesc {
+//     pub params: LightParams,
+//     pub kind: LightKind,
+//     pub cast_shadow: bool,
+// }
 
 #[typetag::serde]
 impl BundleDesc for LightBundleDesc {}

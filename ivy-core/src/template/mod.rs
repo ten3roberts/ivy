@@ -1,10 +1,9 @@
+use std::any;
+
 use facet::Facet;
 use flax::{Entity, EntityBuilder};
 use futures::{future::BoxFuture, FutureExt};
-use ivy_assets::{
-    loadable::{Resource, ResourceDesc},
-    AssetCache,
-};
+use ivy_assets::{loadable::Loadable, AssetCache, Resource};
 
 use crate::bundle::Bundle;
 
@@ -34,7 +33,7 @@ impl Template {
     }
 }
 
-pub trait LoadableBundle {
+trait LoadableBundle {
     fn load_dyn<'a>(
         &'a self,
         assets: &'a AssetCache,
@@ -45,9 +44,9 @@ pub trait LoadableBundle {
 #[typetag::serde(tag = "type")]
 pub trait BundleDesc: 'static + Send + Sync + LoadableBundle {}
 
-impl<T> LoadableBundle for T::Desc
+impl<T> LoadableBundle for T
 where
-    T: 'static + Resource,
+    T: 'static + Loadable,
     T::Output: Bundle + 'static,
 {
     fn load_dyn<'a>(
@@ -55,7 +54,7 @@ where
         assets: &'a AssetCache,
     ) -> BoxFuture<'a, anyhow::Result<Box<dyn Bundle>>> {
         async move {
-            match ResourceDesc::load(self, assets).await {
+            match Loadable::load(self, assets).await {
                 Ok(bundle) => Ok(Box::new(bundle) as Box<dyn Bundle>),
                 Err(e) => Err(e),
             }
@@ -82,11 +81,14 @@ impl TemplateDesc {
     }
 }
 
-impl ResourceDesc for TemplateDesc {
-    type Output = Template;
-    type Error = anyhow::Error;
+impl Resource for Template {
+    type Desc = TemplateDesc;
+}
 
-    async fn load(&self, assets: &AssetCache) -> Result<Self::Output, Self::Error> {
+impl Loadable for TemplateDesc {
+    type Output = Template;
+
+    async fn load(&self, assets: &AssetCache) -> Result<Self::Output, anyhow::Error> {
         let mut bundles = Vec::new();
         for bundle in &self.bundles {
             let loaded_bundle = bundle.load_dyn(assets).await?;

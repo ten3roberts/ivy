@@ -2,7 +2,7 @@ use std::{future::Future, ops::Deref, pin::Pin};
 
 use either::Either;
 use image::{DynamicImage, ImageBuffer};
-use ivy_assets::{loadable::ResourceDesc, Asset, AssetCache, AssetDesc, AssetPath, AsyncAssetExt};
+use ivy_assets::{loadable::Loadable, Asset, AssetCache, AssetDesc, AssetPath, AsyncAssetExt};
 use ivy_core::palette::Srgba;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -151,12 +151,10 @@ impl TextureDesc {
     }
 }
 
-impl ResourceDesc for TextureDesc {
+impl Loadable for TextureDesc {
     type Output = TextureData;
 
-    type Error = anyhow::Error;
-
-    async fn load(&self, assets: &ivy_assets::AssetCache) -> Result<Self::Output, Self::Error> {
+    async fn load(&self, assets: &ivy_assets::AssetCache) -> Result<Self::Output, anyhow::Error> {
         let texture = match self {
             TextureDesc::Path(path) => TextureData::Content(path.load_async(assets).await?),
             &TextureDesc::Color(r, g, b, a) => TextureData::Color(image::Rgba([r, g, b, a])),

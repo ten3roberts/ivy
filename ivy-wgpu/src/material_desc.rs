@@ -1,4 +1,4 @@
-use ivy_assets::{loadable::ResourceDesc, Asset, AssetCache, AssetDesc};
+use ivy_assets::{loadable::Loadable, Asset, AssetCache, AssetDesc};
 use ivy_gltf::GltfMaterial;
 use ivy_graphics::texture::{TextureData, TextureDesc};
 use ordered_float::NotNan;
@@ -24,12 +24,10 @@ pub enum MaterialDesc {
     WireframeMaterial(PbrMaterialDesc),
 }
 
-impl ResourceDesc for MaterialDesc {
+impl Loadable for MaterialDesc {
     type Output = MaterialData;
 
-    type Error = anyhow::Error;
-
-    async fn load(&self, assets: &AssetCache) -> Result<Self::Output, Self::Error> {
+    async fn load(&self, assets: &AssetCache) -> Result<Self::Output, anyhow::Error> {
         match self {
             MaterialDesc::PbrMaterial(desc) => {
                 Ok(MaterialData::PbrMaterial(desc.load(assets).await?))
@@ -66,12 +64,10 @@ pub struct PbrMaterialDesc {
     metallic_factor: NotNan<f32>,
 }
 
-impl ResourceDesc for PbrMaterialDesc {
+impl Loadable for PbrMaterialDesc {
     type Output = PbrMaterialData;
 
-    type Error = anyhow::Error;
-
-    async fn load(&self, assets: &AssetCache) -> Result<Self::Output, Self::Error> {
+    async fn load(&self, assets: &AssetCache) -> Result<Self::Output, anyhow::Error> {
         Ok(Self::Output {
             label: self.label.clone(),
             albedo: self.albedo.load(assets).await?,
@@ -172,12 +168,10 @@ impl PbrEmissiveMaterialDesc {
     }
 }
 
-impl ResourceDesc for PbrEmissiveMaterialDesc {
+impl Loadable for PbrEmissiveMaterialDesc {
     type Output = PbrEmissiveMaterialData;
 
-    type Error = anyhow::Error;
-
-    async fn load(&self, assets: &AssetCache) -> Result<Self::Output, Self::Error> {
+    async fn load(&self, assets: &AssetCache) -> Result<Self::Output, anyhow::Error> {
         Ok(Self::Output {
             pbr: self.pbr.load(assets).await?,
             emissive_color: self.emissive_color.load(assets).await?,

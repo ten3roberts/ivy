@@ -8,9 +8,7 @@ use flax::{
 use glam::{vec3, EulerRot, Mat4, Quat, Vec3};
 use image::Rgba;
 use itertools::{Either, Itertools};
-use ivy_assets::{
-    loadable::ResourceDesc, stored::DynamicStore, Asset, AssetCache, AssetPath, AsyncAssetExt,
-};
+use ivy_assets::{stored::DynamicStore, Asset, AssetCache, AssetPath, AsyncAssetExt};
 use ivy_core::{
     app::PostInitEvent,
     gizmos,
@@ -213,7 +211,7 @@ impl LogicLayer {
 
             let displacement = AssetPath::new(format!("{texture_group}/displacement.png"));
 
-            use ivy_assets::loadable::ResourceDesc;
+            use ivy_assets::loadable::Loadable;
 
             let plane_material = MaterialDesc::PbrMaterial(
                 PbrMaterialDesc::new()
