@@ -1,7 +1,10 @@
 use facet::Facet;
 use flax::{Entity, EntityBuilder};
 use futures::{future::BoxFuture, FutureExt};
-use ivy_assets::{loadable::ResourceDesc, AssetCache};
+use ivy_assets::{
+    loadable::{Resource, ResourceDesc},
+    AssetCache,
+};
 
 use crate::bundle::Bundle;
 
@@ -42,9 +45,9 @@ pub trait LoadableBundle {
 #[typetag::serde(tag = "type")]
 pub trait BundleDesc: 'static + Send + Sync + LoadableBundle {}
 
-impl<T> LoadableBundle for T
+impl<T> LoadableBundle for T::Desc
 where
-    T: 'static + ResourceDesc<Error = anyhow::Error>,
+    T: 'static + Resource,
     T::Output: Bundle + 'static,
 {
     fn load_dyn<'a>(

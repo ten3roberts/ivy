@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use flax::{Component, ComponentMut, Debuggable, EntityBuilder, Fetch};
 use glam::{Mat4, Quat, Vec2, Vec3};
-use ivy_assets::{loadable::ResourceDesc, AssetCache};
+use ivy_assets::{loadable::ResourceDesc, AssetCache, Resource};
 
 use crate::{bundle::Bundle, gizmos::Gizmos, template::BundleDesc, AsyncCommandBuffer, Color};
 
@@ -101,7 +101,7 @@ fn one_scale() -> Vec3 {
     Vec3::ONE
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Resource)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct TransformBundle {
     #[cfg_attr(feature = "serde", serde(default))]

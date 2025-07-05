@@ -4,13 +4,11 @@ use futures::{stream, StreamExt, TryStreamExt};
 
 use crate::{Asset, AssetCache, AssetPath, AsyncAssetDesc};
 
-pub trait Resource: 'static + Send + Sync + Sized {
-    type Desc: ResourceDesc;
-}
-
-/// Represents an owned resource that needs to be initialized from its descriptor.
+/// Generic loading mechanism.
 ///
-/// Resources can *access* and load assets, but are themselves not assets.
+/// Allow converting a plain-description type into a loaded resource.
+///
+/// Further implementations for Vec, Option, and BTreeMap are provided.
 pub trait ResourceDesc: 'static + Send + Sync + Sized {
     type Output: Send + Sync;
     type Error: Send + Sync;
@@ -21,17 +19,109 @@ pub trait ResourceDesc: 'static + Send + Sync + Sized {
     ) -> impl Send + Future<Output = Result<Self::Output, Self::Error>>;
 }
 
-/// Allows a resource to load itself directly from a path, for example a png image.
+/// Signifies a type is a endpoint of a resource loading chain.
 ///
-/// Any implementation will also implement [`AsyncAssetDesc`] for `AssetPath<Self>`
-pub trait ResourceFromPath: 'static + Send + Sync + Sized {
-    type Error: Send + Sync;
+/// Many `AsyncAssetDesc` implementations can load to the same type, but this allows a type to
+/// prefer one asset implementation over another.
+pub trait Resource: 'static + Send + Sync {
+    type Desc: 'static + Send + Sync;
 
     fn load(
-        path: AssetPath<Self>,
+        desc: Self::Desc,
         assets: &AssetCache,
-    ) -> impl Send + Future<Output = Result<Self, Self::Error>>;
+    ) -> impl Send + Future<Output = Result<Self, anyhow::Error>>
+    where
+        Self: Sized;
 }
+
+pub trait Loadable: 'static + Send + Sync {
+    /// The type of the resource that this can load.
+    type Output: Resource;
+}
+
+/// Base type for any resource that is serializeable from disk.
+///
+/// Serialized assets have a plain-data json representation, along with metadata.
+///
+/// Implementing this type will make [`AssetPath<Self>`] an Asset
+pub trait SerializableResource: 'static + Send + Sync {
+    /// Representation of the resource as serialized data. This data subsequently loads to `Self`
+    type Desc: ResourceDesc + serde::Serialize + serde::de::DeserializeOwned;
+
+    fn tag_name() -> String;
+    fn load(
+        payload: AssetPayload<Self::Desc>,
+        assets: &AssetCache,
+    ) -> impl Send + Future<Output = Result<Self, anyhow::Error>>
+    where
+        Self: Sized;
+}
+
+/// SerializableResources load from a file on the filesystem.
+impl<T: SerializableResource> Resource for T {
+    type Desc = AssetPath<T>;
+
+    async fn load(path: AssetPath<T>, assets: &AssetCache) -> Result<Self, anyhow::Error>
+    where
+        Self: Sized,
+    {
+        let content = path.load_file_content(assets).await?;
+
+        let payload: AssetPayload<T::Desc> = serde_json::from_slice(&content[..])?;
+
+        if payload.meta.ty != T::tag_name() {
+            return Err(anyhow::anyhow!(
+                "Asset type mismatch: expected {}, found {}",
+                payload.meta.ty,
+                T::tag_name()
+            ));
+        }
+
+        let asset = T::load(payload, assets).await?;
+        Ok(asset)
+    }
+}
+
+// Cached version
+impl<T> Resource for Asset<T>
+where
+    T: Resource<Desc = AssetPath<T>>,
+{
+    type Desc = AssetPath<T>;
+
+    async fn load(desc: Self::Desc, assets: &AssetCache) -> Result<Self, anyhow::Error>
+    where
+        Self: Sized,
+    {
+        let asset = assets.try_load_async(&desc).await?;
+
+        Ok(asset)
+    }
+}
+
+impl<T> ResourceDesc for AssetPath<T>
+where
+    T: Resource,
+{
+    type Output = Asset<T>;
+
+    type Error = anyhow::Error;
+
+    async fn load(&self, assets: &AssetCache) -> Result<Self::Output, Self::Error> {
+        todo!()
+    }
+}
+
+// /// Consumed by [`AssetPath`] and signifies that this resource can be loaded from the filesystem as
+// /// an *Asset*.
+// pub trait LoadFromPath: 'static + Send + Sync + Sized {
+//     type Error: Send + Sync;
+
+//     fn load(
+//         path: AssetPath<Self>,
+//         assets: &AssetCache,
+//     ) -> impl Send + Future<Output = Result<Self, Self::Error>>;
+// }
 
 impl<T> ResourceDesc for Vec<T>
 where
@@ -83,38 +173,56 @@ where
     }
 }
 
-impl<T> ResourceDesc for T
-where
-    T: AsyncAssetDesc,
-{
-    type Output = Asset<T::Output>;
-
-    type Error = anyhow::Error;
-
-    async fn load(&self, assets: &AssetCache) -> Result<Self::Output, Self::Error> {
-        let v = assets.try_load_async(self).await?;
-
-        Ok(v)
-    }
+#[derive(serde::Serialize, serde::Deserialize)]
+struct AssetMeta {
+    pub ty: String,
 }
 
-#[cfg(feature = "serde")]
-impl<T> ResourceFromPath for T
-where
-    T: Resource,
-    T::Desc: ResourceDesc<Output = T> + serde::de::DeserializeOwned,
-    <T::Desc as ResourceDesc>::Error: Into<anyhow::Error>,
-{
-    type Error = anyhow::Error;
-
-    async fn load(path: AssetPath<Self>, assets: &AssetCache) -> Result<Self, Self::Error> {
-        let content = assets
-            .service::<crate::service::FileSystemMapService>()
-            .load_bytes_async(path.path())
-            .await?;
-
-        let desc: T::Desc = serde_json::from_slice(&content[..])?;
-
-        desc.load(assets).await.map_err(Into::into)
-    }
+#[derive(serde::Serialize, serde::Deserialize)]
+struct AssetPayload<T> {
+    meta: AssetMeta,
+    desc: T,
 }
+
+// impl<T> ResourceDesc for T
+// where
+//     T: AsyncAssetDesc,
+// {
+//     type Output = Asset<T::Output>;
+
+//     type Error = anyhow::Error;
+
+//     async fn load(&self, assets: &AssetCache) -> Result<Self::Output, Self::Error> {
+//         let v = assets.try_load_async(self).await?;
+
+//         Ok(v)
+//     }
+// }
+
+// #[cfg(feature = "serde")]
+// impl<T> LoadFromPath for T
+// where
+//     T: SerializableResource,
+// {
+//     type Error = anyhow::Error;
+
+//     async fn load(path: AssetPath<Self>, assets: &AssetCache) -> Result<Self, Self::Error> {
+//         let content = assets
+//             .service::<crate::service::FileSystemMapService>()
+//             .load_bytes_async(path.path())
+//             .await?;
+
+//         let payload: AssetPayload<T::Desc> = serde_json::from_slice(&content[..])?;
+
+//         if payload.meta.ty != T::tag_name() {
+//             return Err(anyhow::anyhow!(
+//                 "Asset type mismatch: expected {}, found {}",
+//                 payload.meta.ty,
+//                 T::tag_name()
+//             ));
+//         }
+
+//         let asset = T::load(payload, assets).await?;
+//         Ok(asset)
+//     }
+// }

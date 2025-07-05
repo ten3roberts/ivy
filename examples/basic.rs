@@ -359,12 +359,12 @@ impl LogicLayer {
 
             let mut animator = Animator::new();
 
-            let animation = AnimationDesc {
-                document: "models/Gears.glb".into(),
-                animation: "ArmatureAction.001".into(),
-            }
-            .load(&assets)
-            .await?;
+            let animation = assets
+                .try_load_async(&AnimationDesc {
+                    document: "models/Gears.glb".into(),
+                    animation: "ArmatureAction.001".into(),
+                })
+                .await?;
 
             let mut player = AnimationPlayer::new(animation);
             player.set_looping(true);

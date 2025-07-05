@@ -1952,6 +1952,8 @@ dependencies = [
  "futures",
  "futures-signals",
  "image",
+ "inventory",
+ "ivy-derive",
  "ivy-profiling",
  "parking_lot",
  "serde",
@@ -1961,6 +1963,7 @@ dependencies = [
  "thiserror 2.0.12",
  "tracing",
  "tynm 0.2.0",
+ "typetag",
 ]
 
 [[package]]
@@ -1993,6 +1996,18 @@ dependencies = [
  "thiserror 2.0.12",
  "tracing",
  "typetag",
+]
+
+[[package]]
+name = "ivy-derive"
+version = "0.1.0"
+dependencies = [
+ "heck",
+ "itertools 0.14.0",
+ "proc-macro-crate 2.0.0",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.101",
 ]
 
 [[package]]

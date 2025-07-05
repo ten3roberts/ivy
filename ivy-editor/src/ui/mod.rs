@@ -5,36 +5,31 @@ use flax::Entity;
 use futures::StreamExt;
 use glam::Vec2;
 use itertools::Itertools;
-use ivy_input::InputStimulus;
 use ivy_ui::{
     screens::Screen,
     streamed::StreamedUiExt,
     violet::{
         core::{
             Widget,
-            components::{LayoutAlignment, translation},
+            components::LayoutAlignment,
             layout::Align,
             state::StateExt,
             style::SizeExt,
             to_owned,
             unit::Unit,
             widget::{
-                Selectable, Stack, StreamWidget, bold, card, col,
-                interactive::base::TooltipOptions, label, maximized, row,
+                Selectable, Stack, StreamWidget, card, col, interactive::base::TooltipOptions,
+                label, maximized, row,
             },
         },
         futures_signals::signal::Mutable,
     },
 };
-use tween::{Tween, Tweener};
 
 use crate::{
     plugin::selection,
     tools_controller::{current_tool, tools},
-    ui::{
-        browser::{DirectoryBrowser, DirectoryTree},
-        entity_editor::EntityComponentEditor,
-    },
+    ui::{browser::DirectoryBrowser, entity_editor::EntityComponentEditor},
 };
 
 pub struct EditorUi {

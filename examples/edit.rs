@@ -1,85 +1,39 @@
-use std::{
-    f32::consts::{PI, TAU},
-    sync::Arc,
-};
+use std::f32::consts::PI;
 
-use anyhow::Context;
-use bevy_reflect::{DynamicTyped, PartialReflect, Reflect, Typed};
-use flax::{
-    components::child_of, BoxedSystem, Component, Entity, FetchExt, Query, QueryBorrow, System,
-    World,
-};
-use glam::{vec3, EulerRot, Mat4, Quat, Vec3};
-use image::Rgba;
-use itertools::{Either, Itertools};
-use ivy_assets::{
-    loadable::ResourceDesc, stored::DynamicStore, Asset, AssetCache, AssetPath, AsyncAssetExt,
-};
+use bevy_reflect::{Reflect, Typed};
+use flax::World;
+use glam::{vec3, EulerRot, Quat, Vec3};
+use ivy_assets::{stored::DynamicStore, AssetCache, AssetPath};
 use ivy_core::{
-    app::PostInitEvent,
-    gizmos,
-    layer::events::EventRegisterContext,
-    math::Vec3Ext,
-    palette::{Srgb, WithAlpha},
+    palette::Srgb,
     profiling::ProfilingLayer,
-    transforms::TransformUpdatePlugin,
     update_layer::{FixedTimeStep, Plugin, ScheduleSetBuilder, ScheduledLayer},
-    App, AsyncCommandBuffer, EngineLayer, EntityBuilderExt, Layer,
+    App, EngineLayer,
 };
-use ivy_engine::{
-    async_commandbuffer, elapsed_time, engine, rotation, world_transform, RigidBodyBundle,
-    TransformBundle,
-};
+use ivy_engine::engine;
 use ivy_game::{
-    debug::AssetTimelinesWidget,
     orbit_camera::OrbitCameraPlugin,
     viewport_camera::{CameraSettings, ViewportCameraLayer},
 };
-use ivy_gltf::{
-    animation::{
-        player::{AnimationPlayer, Animator},
-        plugin::AnimationPlugin,
-        AnimationDesc,
-    },
-    Document,
-};
-use ivy_graphics::texture::{ColorChannel, MetallicRoughnessProcessor, TextureData, TextureDesc};
 use ivy_input::layer::InputLayer;
-use ivy_physics::{ColliderBundle, GizmoSettings, PhysicsPlugin};
 use ivy_postprocessing::preconfigured::{
     pbr::{PbrRenderGraphConfig, SkyboxConfig},
     SurfacePbrPipelineDesc, SurfacePbrRenderer,
 };
-use ivy_scene::{editor::editable::create_reflected_editor, GltfNodeExt, NodeMountOptions};
+use ivy_scene::editor::editable::create_reflected_editor;
 use ivy_ui::{
     layer::{UiLayer, UiUpdateLayer},
     screens::{screen_state, Screen},
 };
-use ivy_wgpu::{
-    components::{forward_pass, light_kind, light_params, shadow_pass, transparent_pass},
-    driver::WinitDriver,
-    layer::GraphicsLayer,
-    light::{LightBundle, LightKind, LightParams},
-    material_desc::{
-        MaterialData, MaterialDesc, PbrEmissiveMaterialDesc, PbrMaterialData, PbrMaterialDesc,
-    },
-    mesh_desc::MeshDesc,
-    primitives::{generate_plane, UvSpherePrimitive},
-    renderer::{EnvironmentData, RenderObjectBundle},
-};
-use rapier3d::prelude::SharedShape;
+use ivy_wgpu::{driver::WinitDriver, layer::GraphicsLayer, renderer::EnvironmentData};
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
 use violet::{
     core::{
-        state::Project,
-        style::SizeExt,
-        unit::Unit,
         widget::{card, maximized},
         Widget,
     },
     futures_signals::signal::Mutable,
-    palette::{rgb::Rgb, Hsl, IntoColor},
 };
 use wgpu::TextureFormat;
 use winit::{dpi::LogicalSize, window::WindowAttributes};
@@ -162,21 +116,17 @@ impl Plugin for GameUiPlugin {
     fn install(
         &self,
         world: &mut World,
-        assets: &AssetCache,
+        _: &AssetCache,
         _: &mut DynamicStore,
         _: &mut ScheduleSetBuilder,
     ) -> anyhow::Result<()> {
-        world.get(engine(), screen_state())?.open(MainUI {
-            assets: assets.clone(),
-        });
+        world.get(engine(), screen_state())?.open(MainUI {});
 
         Ok(())
     }
 }
 
-struct MainUI {
-    assets: AssetCache,
-}
+struct MainUI {}
 
 #[derive(Reflect)]
 struct ExampleStruct {

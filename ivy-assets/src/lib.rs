@@ -54,14 +54,16 @@ use futures_signals::signal::{Mutable, ReadOnlyMutable};
 pub use handle::Asset;
 use image::DynamicImage;
 use ivy_profiling::profile_scope;
-use loadable::ResourceFromPath;
 use parking_lot::{RwLock, RwLockReadGuard};
 use service::{FileSystemMapService, Service};
 use timeline::{AssetInfo, Timelines};
 
+pub use crate::loadable::Resource;
+
 use self::{cell::AssetCell, handle::WeakHandle};
 
 pub use asset_path::*;
+pub use ivy_derive::Resource;
 
 slotmap::new_key_type! {
     pub struct AssetId;
@@ -478,10 +480,34 @@ pub trait AsyncAssetDesc: StoredKey + Debug + Send + Sync {
     }
 }
 
-impl ResourceFromPath for DynamicImage {
-    type Error = anyhow::Error;
+/// We implement `LoadFromPath` for `DynamicImage`, which causes `AssetPath<DynamicImage>` to be
+/// an `AsyncAssetDesc` that can be used to load images and cache images from the filesystem.
+// impl LoadFromPath for DynamicImage {
+//     type Error = anyhow::Error;
 
-    async fn load(path: AssetPath<Self>, assets: &AssetCache) -> anyhow::Result<Self> {
+//     async fn load(path: AssetPath<Self>, assets: &AssetCache) -> anyhow::Result<Self> {
+//         let format = image::ImageFormat::from_path(path.path())?;
+//         let data = assets
+//             .service::<FileSystemMapService>()
+//             .load_bytes_async(path.path())
+//             .await?;
+
+//         let image = async_std::task::spawn_blocking(move || {
+//             profile_scope!("load_image_blocking");
+//             image::load_from_memory_with_format(&data, format)
+//         })
+//         .await?;
+//         Ok(image)
+//     }
+// }
+
+impl Resource for DynamicImage {
+    type Desc = AssetPath<DynamicImage>;
+
+    async fn load(
+        path: AssetPath<DynamicImage>,
+        assets: &AssetCache,
+    ) -> Result<Self, anyhow::Error> {
         let format = image::ImageFormat::from_path(path.path())?;
         let data = assets
             .service::<FileSystemMapService>()

@@ -8,6 +8,7 @@ license-file.workspace = true
 
 [dependencies]
 ivy-profiling = { path = "../ivy-profiling/" }
+ivy-derive = { path = "../ivy-derive/" }
 
 tynm.workspace = true
 slab.workspace = true
@@ -16,16 +17,18 @@ image.workspace = true
 dashmap.workspace = true
 slotmap.workspace = true
 tracing.workspace = true
-parking_lot = { workspace = true, features = ["send_guard"]}
+parking_lot = { workspace = true, features = ["send_guard"] }
 flume.workspace = true
 thiserror.workspace = true
 anyhow.workspace = true
 futures.workspace = true
 async-std.workspace = true
-serde = { workspace =  true, optional = true }
-serde_json = { workspace =  true, optional =  true }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
 derivative.workspace = true
 futures-signals.workspace = true
+typetag.workspace = true
+inventory.workspace = true
 
 [features]
-serde = [ "dep:serde", "serde_json" ]
+serde = ["dep:serde", "serde_json"]
