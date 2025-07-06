@@ -10,7 +10,7 @@ use flax::{
 };
 use futures::StreamExt;
 use glam::{Quat, Vec2};
-use ivy_assets::loadable::Loadable;
+use ivy_assets::{Resource, loadable::Loadable};
 use ivy_core::{
     Bundle,
     components::{engine, gizmos, main_camera},
@@ -116,6 +116,7 @@ pub fn draw_system(gizmos: &mut Gizmos, query: &mut QueryBorrow<Component<Transf
     }
 }
 
+#[derive(Resource)]
 pub struct TransformToolBundle {
     settings: TransformSettings,
 }
@@ -418,21 +419,6 @@ impl Widget for TransformToolWidget {
             });
 
         StreamWidget::new(settings).mount(scope);
-    }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct TransformToolBundleDesc {
-    pub settings: TransformSettings,
-}
-
-impl Loadable for TransformToolBundleDesc {
-    type Output = TransformToolBundle;
-
-    async fn load(&self, _assets: &ivy_assets::AssetCache) -> anyhow::Result<Self::Output> {
-        Ok(TransformToolBundle {
-            settings: self.settings.clone(),
-        })
     }
 }
 

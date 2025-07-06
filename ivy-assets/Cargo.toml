@@ -28,6 +28,8 @@ serde_json = { workspace = true, optional = true }
 derivative.workspace = true
 futures-signals.workspace = true
 typetag.workspace = true
+erased-serde.workspace = true
+downcast-rs.workspace = true
 inventory.workspace = true
 
 [features]

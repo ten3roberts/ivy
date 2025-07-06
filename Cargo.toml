@@ -110,6 +110,8 @@ proc-macro-crate = "2.0.0"
 syn = { version = "2.0.38", features = ["parsing", "full"] }
 quote = "1.0.33"
 heck = "0.5"
+erased-serde = "0.4"
+downcast-rs = "2.0"
 
 
 [dependencies]

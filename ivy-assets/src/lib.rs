@@ -25,6 +25,7 @@ use std::{
     any::{Any, TypeId},
     borrow::Borrow,
     collections::HashMap,
+    error::Error,
     fmt::{Debug, Display},
     future::Future,
     hash::Hash,
@@ -43,6 +44,8 @@ pub mod fs;
 mod handle;
 pub mod loadable;
 pub mod map;
+pub mod meta;
+pub mod registry;
 pub mod service;
 pub mod stored;
 pub mod timeline;
@@ -87,18 +90,27 @@ impl Debug for AssetCache {
     }
 }
 
-#[derive(Debug)]
-pub struct SharedError<E>(Arc<E>);
+pub struct SharedError(Arc<anyhow::Error>);
 
-impl<E: Display> Display for SharedError<E> {
+impl Display for SharedError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Display::fmt(&self.0, f)
     }
 }
 
-impl<E: Debug + Display> std::error::Error for SharedError<E> {}
+impl std::error::Error for SharedError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.0.source()
+    }
+}
 
-impl<E> Clone for SharedError<E> {
+impl Debug for SharedError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(&self.0, f)
+    }
+}
+
+impl Clone for SharedError {
     #[cold]
     fn clone(&self) -> Self {
         Self(self.0.clone())
@@ -108,7 +120,7 @@ impl<E> Clone for SharedError<E> {
 type KeyMap<K, V> = DashMap<K, WeakHandle<V>>;
 type PendingKeyMap<K, V> = DashMap<
     <K as StoredKey>::Stored,
-    WeakShared<BoxFuture<'static, Result<Asset<V>, SharedError<<K as AsyncAssetDesc>::Error>>>>,
+    WeakShared<BoxFuture<'static, Result<Asset<V>, SharedError>>>,
 >;
 
 /// Stores assets which are accessible through handles
@@ -202,7 +214,7 @@ impl AssetCache {
         }
     }
 
-    pub fn try_load_async<K>(&self, desc: &K) -> AssetLoadFuture<K::Output, K::Error>
+    pub fn try_load_async<K>(&self, desc: &K) -> AssetLoadFuture<K::Output>
     where
         K: ?Sized + AsyncAssetDesc,
     {
@@ -251,7 +263,7 @@ impl AssetCache {
                 .borrow()
                 .create(&assets)
                 .await
-                .map_err(|v| SharedError(Arc::new(v)));
+                .map_err(|v| SharedError(Arc::new(v.into())));
 
             assets
                 .inner
@@ -421,7 +433,7 @@ where
 }
 
 pub trait AsyncAssetExt<V>: 'static + Send + Sync {
-    fn load_async(&self, assets: &AssetCache) -> AssetLoadFuture<V, anyhow::Error>;
+    fn load_async(&self, assets: &AssetCache) -> AssetLoadFuture<V>;
 }
 
 impl<T, V> AsyncAssetExt<V> for T
@@ -430,7 +442,7 @@ where
     T::Error: Debug + Display,
     V: 'static + Send + Sync,
 {
-    fn load_async(&self, assets: &AssetCache) -> AssetLoadFuture<V, anyhow::Error> {
+    fn load_async(&self, assets: &AssetCache) -> AssetLoadFuture<V> {
         let fut = assets.try_load_async(self);
         let inner = match fut.inner {
             Ok(v) => Ok(v.map_err(|v| SharedError(Arc::new(anyhow::Error::from(v))))),
@@ -522,16 +534,16 @@ impl LoadFromPath for DynamicImage {
     }
 }
 
-type SharedLoadFuture<T, E> = Shared<BoxFuture<'static, Result<Asset<T>, SharedError<E>>>>;
+type SharedLoadFuture<T> = Shared<BoxFuture<'static, Result<Asset<T>, SharedError>>>;
 
-pub struct AssetLoadFuture<T, E> {
-    inner: Result<Result<Asset<T>, SharedError<E>>, SharedLoadFuture<T, E>>,
+pub struct AssetLoadFuture<T> {
+    inner: Result<Result<Asset<T>, SharedError>, SharedLoadFuture<T>>,
 }
 
-impl<T, E> AssetLoadFuture<T, E> {
+impl<T> AssetLoadFuture<T> {
     /// Returns the value if loaded
     /// Can be called multiple times until loaded
-    pub fn try_get(&self) -> Option<Result<Asset<T>, SharedError<E>>> {
+    pub fn try_get(&self) -> Option<Result<Asset<T>, SharedError>> {
         match &self.inner {
             Ok(v) => Some(v.clone()),
             Err(v) => v.peek().cloned(),
@@ -539,8 +551,8 @@ impl<T, E> AssetLoadFuture<T, E> {
     }
 }
 
-impl<T, E> Future for AssetLoadFuture<T, E> {
-    type Output = Result<Asset<T>, SharedError<E>>;
+impl<T> Future for AssetLoadFuture<T> {
+    type Output = Result<Asset<T>, SharedError>;
 
     fn poll(
         mut self: std::pin::Pin<&mut Self>,

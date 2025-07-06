@@ -288,9 +288,11 @@ impl Plugin for EditorPlugin {
             .with_system(process_commands_system)
             .with_system(draw_selection_system());
 
-        world
-            .get(engine(), screen_state())?
-            .open(EditorUi::new(editor, tool_ui_rx));
+        world.get(engine(), screen_state())?.open(EditorUi::new(
+            assets.clone(),
+            editor,
+            tool_ui_rx,
+        ));
 
         Ok(())
     }

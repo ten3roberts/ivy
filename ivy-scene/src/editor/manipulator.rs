@@ -100,7 +100,7 @@ impl TransformControls {
             arrow_length: 0.8,
             ring_radius: 1.0,
             dynamic_size: true,
-            corner_size: 0.3,
+            corner_size: 0.2,
             corner_offset: 0.1,
             settings,
             view_rotation: Quat::IDENTITY,

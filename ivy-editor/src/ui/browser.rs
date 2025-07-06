@@ -12,6 +12,7 @@ use flax::Component;
 use futures::AsyncReadExt;
 use glam::{BVec2, Vec2};
 use itertools::Itertools;
+use ivy_assets::AssetCache;
 use ivy_core::palette::Srgba;
 use ivy_ui::violet::{
     core::{
@@ -25,6 +26,7 @@ use ivy_ui::violet::{
         },
         text::{FontFamily, Wrap},
         time::sleep,
+        to_owned,
         unit::Unit,
         widget::{
             Button, ButtonStyle, Collapsible, CollapsibleStyle, FutureWidget, Image,
@@ -44,6 +46,8 @@ use ivy_ui::violet::{
     },
 };
 use tracing::info;
+
+use crate::ui::asset_inspector::AssetInspector;
 
 const PANEL_HEIGHT: f32 = 300.0;
 
@@ -290,12 +294,16 @@ impl Widget for RenamableItem {
 }
 
 pub struct DirectoryBrowser {
+    assets: AssetCache,
     path: PathBuf,
 }
 
 impl DirectoryBrowser {
-    pub fn new(path: impl Into<PathBuf>) -> Self {
-        Self { path: path.into() }
+    pub fn new(assets: AssetCache, path: impl Into<PathBuf>) -> Self {
+        Self {
+            assets,
+            path: path.into(),
+        }
     }
 }
 
@@ -309,9 +317,11 @@ impl Widget for DirectoryBrowser {
 
         let details_panel =
             SignalWidget::new(scope.read(&selected_file).signal_ref(move |selected| {
-                selected
-                    .as_ref()
-                    .map(|v| FileDetailsPanel { path: v.to_owned() })
+                to_owned!(assets = self.assets);
+                selected.as_ref().map(move |v| FileDetailsPanel {
+                    assets: assets.clone(),
+                    path: v.to_owned(),
+                })
             }));
 
         row((
@@ -335,6 +345,7 @@ impl Widget for DirectoryBrowser {
             details_panel,
         ))
         .with_cross_align(Align::End)
+        .with_item_align(LayoutAlignment::bottom_left())
         .mount(scope)
     }
 }
@@ -371,6 +382,7 @@ impl Widget for Breadcrumbs<'_> {
 }
 
 pub struct FileDetailsPanel {
+    assets: AssetCache,
     path: PathBuf,
 }
 
@@ -400,6 +412,7 @@ enum Code {
 enum FileType {
     Directory,
     Code(Code),
+    Asset,
     Text,
     Image,
     Hdri,
@@ -416,6 +429,7 @@ impl FileType {
         } else {
             match path.extension().and_then(|s| s.to_str()) {
                 Some(ext) => match ext {
+                    "asset" => FileType::Asset,
                     "txt" | "md" | "markdown" => FileType::Text,
                     // "rs" | "py" | "js" | "ts" | "c" | "cpp" | "h" | "hpp" => FileType::Code,
                     "png" | "jpg" | "jpeg" | "gif" | "webp" => FileType::Image,
@@ -462,6 +476,7 @@ impl FileType {
             FileType::Archive => LUCIDE_FILE_ARCHIVE,
             FileType::Other => LUCIDE_FILE_QUESTION,
             FileType::Hdri => LUCIDE_CLOUD_SUN,
+            FileType::Asset => LUCIDE_PACKAGE,
         }
     }
 
@@ -483,6 +498,7 @@ impl FileType {
             FileType::Blend => AMBER_400,
             FileType::Gltf => TEAL_400,
             FileType::Hdri => CITRUS_400,
+            FileType::Asset => CITRUS_400,
         }
     }
 
@@ -492,6 +508,14 @@ impl FileType {
     #[must_use]
     fn is_image(&self) -> bool {
         matches!(self, Self::Image)
+    }
+
+    /// Returns `true` if the file type is [`Asset`].
+    ///
+    /// [`Asset`]: FileType::Asset
+    #[must_use]
+    fn is_asset(&self) -> bool {
+        matches!(self, Self::Asset)
     }
 }
 
@@ -507,7 +531,10 @@ impl Widget for FileDetailsPanel {
         let file_size_str = bytes_to_human_readable(file_size);
 
         card(col((
-            FilePreview { path: &self.path },
+            FilePreview {
+                assets: &self.assets,
+                path: &self.path,
+            },
             label("File Details")
                 .with_font_size(16.0)
                 .with_color(OCEAN_200),
@@ -522,6 +549,7 @@ impl Widget for FileDetailsPanel {
 }
 
 struct FilePreview<'a> {
+    assets: &'a AssetCache,
     path: &'a Path,
 }
 
@@ -536,6 +564,9 @@ impl Widget for FilePreview<'_> {
             Image::new(self.path.canonicalize().unwrap())
                 .with_exact_size(Unit::px2(200.0, 200.0))
                 .mount(scope);
+        } else if ty.is_asset() {
+            tracing::info!("Inspecting asset: {}", self.path.display());
+            AssetInspector::new(self.assets.clone(), self.path.to_owned()).mount(scope)
         } else if ty.is_text() {
             let path = self.path.to_owned();
             let async_load = async {

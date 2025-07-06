@@ -38,10 +38,17 @@ use ivy_ui::{
     },
 };
 
+pub use ivy_derive::Editable;
+
 use crate::{editor::registry::EDITABLE_REGISTRY, register_editable};
+
+// pub trait StateDuplex: StateMut + StateStream + StateDuplex {}
+
+// impl<T> StateDuplex for T where T: StateMut + StateStream + StateSink {}
 
 /// A trait for components that can be edited in the editor.
 pub trait Editable: 'static + Send + Sync {
+    const INLINE: bool;
     fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         state: S,
     ) -> Box<dyn Send + Widget>
@@ -50,6 +57,8 @@ pub trait Editable: 'static + Send + Sync {
 }
 
 impl Editable for String {
+    const INLINE: bool = true;
+
     fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         value: S,
     ) -> Box<dyn Send + Widget> {
@@ -58,6 +67,8 @@ impl Editable for String {
 }
 
 impl Editable for i32 {
+    const INLINE: bool = true;
+
     fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         value: S,
     ) -> Box<dyn Send + Widget> {
@@ -66,6 +77,8 @@ impl Editable for i32 {
 }
 
 impl Editable for f32 {
+    const INLINE: bool = true;
+
     fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         value: S,
     ) -> Box<dyn Send + Widget> {
@@ -74,6 +87,8 @@ impl Editable for f32 {
 }
 
 impl Editable for Vec2 {
+    const INLINE: bool = true;
+
     fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         value: S,
     ) -> Box<dyn Send + Widget> {
@@ -87,6 +102,8 @@ impl Editable for Vec2 {
 }
 
 impl Editable for Vec3 {
+    const INLINE: bool = true;
+
     fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         value: S,
     ) -> Box<dyn Send + Widget> {
@@ -101,6 +118,8 @@ impl Editable for Vec3 {
 }
 
 impl Editable for Quat {
+    const INLINE: bool = true;
+
     fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         value: S,
     ) -> Box<dyn Send + Widget> {
@@ -151,6 +170,8 @@ impl Widget for EntityDisplay {
 }
 
 impl Editable for Entity {
+    const INLINE: bool = true;
+
     fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         value: S,
     ) -> Box<dyn Send + Widget> {
@@ -487,6 +508,8 @@ impl<T> Editable for Vec<T>
 where
     T: ComponentValue + Editable + Clone,
 {
+    const INLINE: bool = false;
+
     fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         value: S,
     ) -> Box<dyn Send + Widget>
@@ -579,3 +602,8 @@ where
 }
 
 register_editable!(String, f32, i32, Entity, Vec2, Vec3, Quat);
+
+#[doc(hidden)]
+pub mod __private {
+    pub use ivy_ui::violet;
+}

@@ -1,9 +1,10 @@
 use std::{ffi::OsStr, marker::PhantomData, path::PathBuf};
 
 use derivative::Derivative;
+use futures::future::BoxFuture;
 
 use crate::{
-    loadable::{LoadFromPath, Loadable, Resource},
+    loadable::{LoadFromPath, Loadable, Resource, ResourceDyn},
     service::FsAssetError,
     Asset, AssetCache, AsyncAssetDesc, AsyncAssetExt,
 };
@@ -73,6 +74,10 @@ where
 
 impl<T: LoadFromPath> Resource for Asset<T> {
     type Desc = AssetPath<T>;
+
+    fn type_name() -> &'static str {
+        "Asset"
+    }
 }
 
 impl<T: LoadFromPath> Loadable for AssetPath<T> {
@@ -80,5 +85,15 @@ impl<T: LoadFromPath> Loadable for AssetPath<T> {
 
     async fn load(&self, assets: &AssetCache) -> anyhow::Result<Self::Output> {
         Ok(AsyncAssetExt::load_async(self, assets).await?)
+    }
+}
+
+trait AssetPathExt {
+    fn load_dyn(&self, assets: &AssetCache) -> BoxFuture<anyhow::Result<Box<dyn ResourceDyn>>>;
+}
+
+impl<T: LoadFromPath> AssetPathExt for AssetPath<T> {
+    fn load_dyn(&self, assets: &AssetCache) -> BoxFuture<anyhow::Result<Box<dyn ResourceDyn>>> {
+        todo!()
     }
 }

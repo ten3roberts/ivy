@@ -1,3 +1,4 @@
+pub mod asset_inspector;
 pub mod browser;
 pub mod entity_editor;
 
@@ -5,6 +6,7 @@ use flax::Entity;
 use futures::StreamExt;
 use glam::Vec2;
 use itertools::Itertools;
+use ivy_assets::AssetCache;
 use ivy_ui::{
     screens::Screen,
     streamed::StreamedUiExt,
@@ -33,13 +35,22 @@ use crate::{
 };
 
 pub struct EditorUi {
+    assets: AssetCache,
     editor: Entity,
     tool_ui: flume::Receiver<Box<dyn Widget + Send>>,
 }
 
 impl EditorUi {
-    pub fn new(editor: Entity, tool_ui: flume::Receiver<Box<dyn Send + Widget>>) -> Self {
-        Self { editor, tool_ui }
+    pub fn new(
+        assets: AssetCache,
+        editor: Entity,
+        tool_ui: flume::Receiver<Box<dyn Send + Widget>>,
+    ) -> Self {
+        Self {
+            assets,
+            editor,
+            tool_ui,
+        }
     }
 }
 
@@ -51,19 +62,20 @@ impl Screen for EditorUi {
     ) {
         scope.monitor_entity_lifetime(self.editor, move || token.close_screen());
 
-        col((
-            EditorMenuBar {
-                editor: self.editor,
-            },
-            maximized((
-                StreamWidget::new(self.tool_ui.into_stream()),
-                InspectorUI {
+        Stack::new((
+            col((
+                EditorMenuBar {
                     editor: self.editor,
                 },
+                maximized((
+                    StreamWidget::new(self.tool_ui.into_stream()),
+                    InspectorUI {
+                        editor: self.editor,
+                    },
+                )),
             )),
-            DirectoryBrowser::new("./assets"),
+            DirectoryBrowser::new(self.assets, "./assets"),
         ))
-        .with_item_align(LayoutAlignment::new(Align::Start, Align::Start))
         .mount(scope);
     }
 }

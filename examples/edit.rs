@@ -1,5 +1,6 @@
-use std::f32::consts::PI;
+use std::{f32::consts::PI, sync::Arc};
 
+use async_std::stream::StreamExt;
 use bevy_reflect::{Reflect, Typed};
 use flax::World;
 use glam::{vec3, EulerRot, Quat, Vec3};
@@ -20,7 +21,7 @@ use ivy_postprocessing::preconfigured::{
     pbr::{PbrRenderGraphConfig, SkyboxConfig},
     SurfacePbrPipelineDesc, SurfacePbrRenderer,
 };
-use ivy_scene::editor::editable::create_reflected_editor;
+use ivy_scene::editor::editable::{create_reflected_editor, Editable};
 use ivy_ui::{
     layer::{UiLayer, UiUpdateLayer},
     screens::{screen_state, Screen},
@@ -30,7 +31,8 @@ use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt
 use tracing_tree::HierarchicalLayer;
 use violet::{
     core::{
-        widget::{card, maximized},
+        state::{StateExt, StateStream},
+        widget::{bold, card, col, label, maximized, row, InputBox, StreamWidget},
         Widget,
     },
     futures_signals::signal::Mutable,
@@ -128,35 +130,37 @@ impl Plugin for GameUiPlugin {
 
 struct MainUI {}
 
-#[derive(Reflect)]
+#[derive(Clone, Debug, Editable)]
 struct ExampleStruct {
     a: i32,
     name: String,
     inner: InnerStruct,
 }
 
-#[derive(Reflect)]
+#[derive(Clone, Debug, Editable)]
 struct InnerStruct {
     position: Vec3,
     rotation: Quat,
     values: Vec<f32>,
 }
-
 impl Screen for MainUI {
     fn create(self, scope: &mut violet::core::Scope<'_>, _: ivy_ui::screens::ScreenLifetimeToken) {
-        let value = Mutable::new(ExampleStruct {
+        let value = Mutable::new(Some(ExampleStruct {
             a: 42,
             name: "Example".to_string(),
             inner: InnerStruct {
-                position: vec3(0.5, -7.8, 3.7),
-                rotation: Quat::from_euler(EulerRot::YXZ, -PI / 4.0, -PI / 6.0, 0.0),
-                values: vec![1.0, 5.7, 3.14, 2.718],
+                position: vec3(1.0, 2.0, 3.0),
+                rotation: Quat::from_euler(EulerRot::XYZ, PI / 4.0, PI / 4.0, PI / 4.0),
+                values: vec![1.0, 2.0, 3.0],
             },
-        });
+        }));
 
-        maximized(card(create_reflected_editor(
-            ExampleStruct::type_info(),
-            value,
+        maximized(col((
+            card(ExampleStruct::create_editor(value.clone().lower_option())),
+            card(StreamWidget::new(value.stream().map(|v| {
+                v.map(|v| label(format!("{v:#?}")))
+                    .unwrap_or(bold("No Value"))
+            }))),
         )))
         .mount(scope);
     }
