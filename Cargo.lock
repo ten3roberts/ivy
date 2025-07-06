@@ -1966,6 +1966,7 @@ dependencies = [
  "tracing",
  "tynm 0.2.0",
  "typetag",
+ "violet",
 ]
 
 [[package]]
@@ -1985,6 +1986,7 @@ dependencies = [
  "glam",
  "itertools 0.14.0",
  "ivy-assets",
+ "ivy-editable",
  "ivy-profiling",
  "ivy-random",
  "palette",
@@ -2013,6 +2015,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "ivy-editable"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy_reflect",
+ "downcast-rs 2.0.1",
+ "flax",
+ "flume",
+ "futures",
+ "glam",
+ "inventory",
+ "itertools 0.14.0",
+ "ivy-assets",
+ "ivy-derive",
+ "ordered-float 5.0.0",
+ "serde",
+ "violet",
+]
+
+[[package]]
 name = "ivy-editor"
 version = "0.1.0"
 dependencies = [
@@ -2028,6 +2050,7 @@ dependencies = [
  "itertools 0.14.0",
  "ivy-assets",
  "ivy-core",
+ "ivy-editable",
  "ivy-gltf",
  "ivy-input",
  "ivy-physics",
@@ -2059,6 +2082,7 @@ dependencies = [
  "itertools 0.14.0",
  "ivy-assets",
  "ivy-core",
+ "ivy-editable",
  "ivy-editor",
  "ivy-game",
  "ivy-gltf",
@@ -2298,6 +2322,7 @@ dependencies = [
  "itertools 0.14.0",
  "ivy-assets",
  "ivy-core",
+ "ivy-editable",
  "ivy-gltf",
  "ivy-graphics",
  "ivy-input",
@@ -2313,6 +2338,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "typetag",
+ "violet",
  "wgpu",
  "winit",
 ]

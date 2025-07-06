@@ -3,15 +3,15 @@ use std::{f32::consts::PI, sync::Arc};
 use async_std::stream::StreamExt;
 use bevy_reflect::{Reflect, Typed};
 use flax::World;
-use glam::{vec3, EulerRot, Quat, Vec3};
-use ivy_assets::{stored::DynamicStore, AssetCache, AssetPath};
+use ivy_assets::{stored::DynamicStore, AssetCache, AssetPath, Resource};
 use ivy_core::{
     palette::Srgb,
     profiling::ProfilingLayer,
     update_layer::{FixedTimeStep, Plugin, ScheduleSetBuilder, ScheduledLayer},
     App, EngineLayer,
 };
-use ivy_engine::engine;
+use ivy_editable::Editable;
+use ivy_engine::{engine, TransformBundle, TransformBundleDesc};
 use ivy_game::{
     orbit_camera::OrbitCameraPlugin,
     viewport_camera::{CameraSettings, ViewportCameraLayer},
@@ -21,7 +21,6 @@ use ivy_postprocessing::preconfigured::{
     pbr::{PbrRenderGraphConfig, SkyboxConfig},
     SurfacePbrPipelineDesc, SurfacePbrRenderer,
 };
-use ivy_scene::editor::editable::{create_reflected_editor, Editable};
 use ivy_ui::{
     layer::{UiLayer, UiUpdateLayer},
     screens::{screen_state, Screen},
@@ -32,7 +31,7 @@ use tracing_tree::HierarchicalLayer;
 use violet::{
     core::{
         state::{StateExt, StateStream},
-        widget::{bold, card, col, label, maximized, row, InputBox, StreamWidget},
+        widget::{bold, card, col, label, maximized, StreamWidget},
         Widget,
     },
     futures_signals::signal::Mutable,
@@ -134,25 +133,15 @@ struct MainUI {}
 struct ExampleStruct {
     a: i32,
     name: String,
-    inner: InnerStruct,
+    transform: TransformBundleDesc,
 }
 
-#[derive(Clone, Debug, Editable)]
-struct InnerStruct {
-    position: Vec3,
-    rotation: Quat,
-    values: Vec<f32>,
-}
 impl Screen for MainUI {
     fn create(self, scope: &mut violet::core::Scope<'_>, _: ivy_ui::screens::ScreenLifetimeToken) {
         let value = Mutable::new(Some(ExampleStruct {
             a: 42,
             name: "Example".to_string(),
-            inner: InnerStruct {
-                position: vec3(1.0, 2.0, 3.0),
-                rotation: Quat::from_euler(EulerRot::XYZ, PI / 4.0, PI / 4.0, PI / 4.0),
-                values: vec![1.0, 2.0, 3.0],
-            },
+            transform: Default::default(),
         }));
 
         maximized(col((

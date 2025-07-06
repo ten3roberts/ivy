@@ -131,14 +131,17 @@ impl Widget for DirectoryListing {
             .map(|entry| {
                 let entry_path = entry.path();
                 let entry_name = entry_path.file_name().unwrap();
+                let is_dir = entry_path.is_dir();
 
                 Item {
+                    is_dir,
                     name: entry_name.to_string_lossy().to_string(),
                     path: entry_path,
                     selected: self.selected_file,
                     selected_dir: self.selected_dir,
                 }
-            });
+            })
+            .sorted_by_key(|item| (!item.is_dir, item.name.clone()));
 
         let lines = items.chunks(8);
         let cols = lines
@@ -198,12 +201,12 @@ pub struct Item {
     path: PathBuf,
     selected: WeakHandle<Mutable<Option<PathBuf>>>,
     selected_dir: WeakHandle<Mutable<Option<PathBuf>>>,
+    is_dir: bool,
 }
 
 impl Widget for Item {
     fn mount(self, scope: &mut Scope<'_>) {
         let path = self.path.clone();
-        let is_dir = path.is_dir();
         Selectable::new_value(
             col((
                 FileIcon { path: &self.path },
@@ -219,7 +222,7 @@ impl Widget for Item {
             Some(self.path.clone()),
         )
         .on_double_click(move |scope: &ScopeRef| {
-            if is_dir {
+            if self.is_dir {
                 scope.read(self.selected_dir).set(Some(path.clone()));
             }
         })

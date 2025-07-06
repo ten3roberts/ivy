@@ -15,6 +15,7 @@ readme = "./README.md"
 
 [dependencies]
 ivy-assets = { path = "../ivy-assets", version = "0.10.0" }
+ivy-editable = { path = "../ivy-editable", version = "0.1.0" }
 ivy-random = { path = "../ivy-random", version = "0.10.0" }
 ivy-profiling = { path = "../ivy-profiling" }
 

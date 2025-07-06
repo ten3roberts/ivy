@@ -1,15 +1,12 @@
 use itertools::Itertools;
 use proc_macro_crate::FoundCrate;
 use proc_macro2::{Span, TokenStream};
-use quote::{format_ident, quote};
-use syn::{
-    Attribute, DeriveInput, Error, Field, Ident, PatIdent, Result, Type, Visibility,
-    spanned::Spanned,
-};
+use quote::quote;
+use syn::{Attribute, DeriveInput, Error, Field, Ident, Result, Type, spanned::Spanned};
 
 pub fn editable_impl(input: DeriveInput) -> Result<TokenStream> {
     let ident = input.ident.clone();
-    let crate_name = proc_macro_crate::crate_name("ivy-scene")
+    let crate_name = proc_macro_crate::crate_name("ivy-editable")
         .map_err(|_| syn::Error::new_spanned(ident, "Could not find crate `ivy-assets`"))?;
 
     let crate_name = match crate_name {
@@ -62,7 +59,7 @@ fn expand_struct(
 
         let i = syn::Index::from(i);
         quote! {
-            let #ident = value.clone().map_ref(|v| &v.#i, |v| &mut v.#i).lower_option();
+            let #ident = value.clone().project_ref(|v| &v.#i, |v| &mut v.#i).lower_option();
         }
     });
 
@@ -71,24 +68,26 @@ fn expand_struct(
 
         let ty = &f.ty;
         let label = quote! {
-            #crate_name::editor::editable::__private::violet::core::widget::interactive::base::InteractiveWidget::new(
-                #crate_name::editor::editable::__private::violet::core::widget::label(format!("{}", stringify!(#ident)))
+            #crate_name::__private::violet::core::widget::interactive::base::InteractiveWidget::new(
+                #crate_name::__private::violet::core::widget::label(stringify!(#ident))
             ).with_tooltip_text(stringify!(#ty))
         };
 
         let editor = quote! {
-            <#ty as #crate_name::editor::editable::Editable>::create_editor(#ident)
+            <#ty as #crate_name::Editable>::create_editor(#ident)
         };
 
         quote! {
-            |scope: &mut #crate_name::editor::editable::__private::violet::core::Scope<'_>| {
-                if <#ty as #crate_name::editor::editable::Editable>::INLINE {
-                    #crate_name::editor::editable::__private::violet::core::widget::row((
-                        #label,
+            |scope: &mut #crate_name::__private::violet::core::Scope<'_>| {
+                if <#ty as #crate_name::Editable>::INLINE {
+                    #crate_name::__private::violet::core::widget::row((
+                        #crate_name::__private::violet::core::widget::Stack::new(#label).with_min_size(
+                            #crate_name::__private::violet::core::unit::Unit::px2(100.0, 0.0)
+                        ),
                         #editor
                     )).mount(scope);
                 } else {
-                    #crate_name::editor::editable::__private::violet::core::widget::Collapsible::new(
+                    #crate_name::__private::violet::core::widget::Collapsible::new(
                         #label,
                         #editor
                     ).indent(true).mount(scope);
@@ -98,23 +97,27 @@ fn expand_struct(
     });
 
     let expanded = quote! {
-        impl #crate_name::editor::editable::Editable for #ident {
+        impl #crate_name::Editable for #ident {
             const INLINE: bool = false;
 
-            fn create_editor<S: 'static + Send + Sync + #crate_name::editor::editable::__private::violet::core::state::StateDuplex<Item = Self>>(
+            fn create_editor<S: 'static + Send + Sync + #crate_name::__private::violet::core::state::StateDuplex<Item = Self>>(
                 value: S,
-            ) -> Box<dyn Send + Widget> {
-                use #crate_name::editor::editable::__private::violet::core::state::StateExt;
+            ) -> Box<dyn Send + #crate_name::__private::violet::core::widget::Widget> {
+                use #crate_name::__private::violet::core::widget::Widget;
+                use #crate_name::__private::violet::core::style::SizeExt;
+                use #crate_name::__private::violet::core::state::StateExt;
 
                 #field_flatten
 
                 #(#field_lower)*
 
                 Box::new(
-                    #crate_name::editor::editable::__private::violet::core::widget::col( (#(#field_edit),*))
+                    #crate_name::__private::violet::core::widget::col( (#(#field_edit),*))
                 )
             }
         }
+
+        #crate_name::register_editable!(#ident);
 
     };
 
@@ -123,7 +126,6 @@ fn expand_struct(
 
 #[derive(Clone)]
 struct ParsedField<'a> {
-    vis: &'a Visibility,
     ty: &'a Type,
     ident: &'a Ident,
     attrs: FieldAttrs,
@@ -139,7 +141,6 @@ impl<'a> ParsedField<'a> {
         let attrs = FieldAttrs::get(&field.attrs)?;
 
         Ok(Self {
-            vis: &field.vis,
             ty: &field.ty,
             ident,
             attrs,
@@ -157,7 +158,7 @@ impl FieldAttrs {
         let mut res = Self::default();
 
         for attr in input {
-            if !attr.path().is_ident("resource") {
+            if !attr.path().is_ident("editable") {
                 continue;
             }
 

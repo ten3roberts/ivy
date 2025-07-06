@@ -14,6 +14,7 @@ ivy-assets = { path = "../ivy-assets" }
 ivy-ui = { path = "../ivy-ui" }
 ivy-input = { path = "../ivy-input" }
 ivy-scene = { path = "../ivy-scene" }
+ivy-editable = { path = "../ivy-editable" }
 
 serde.workspace = true
 async-std.workspace = true

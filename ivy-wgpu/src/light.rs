@@ -1,15 +1,34 @@
+use std::sync::Arc;
+
 use ivy_assets::{loadable::Loadable, AssetCache, Resource};
 use ivy_core::{palette::Srgb, template::BundleDesc, Bundle};
+use ivy_editable::Editable;
+use violet::core::{
+    state::StateDuplex,
+    widget::{col, label, row, Checkbox, Radio, WidgetExt},
+    Widget,
+};
 
 use crate::components::{cast_shadow, light_kind, light_params};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Editable)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct LightParams {
     pub color: Srgb,
     pub intensity: f32,
     pub inner_theta: f32,
     pub outer_theta: f32,
+}
+
+impl Default for LightParams {
+    fn default() -> Self {
+        Self {
+            color: Srgb::new(1.0, 1.0, 1.0),
+            intensity: 1.0,
+            inner_theta: Default::default(),
+            outer_theta: Default::default(),
+        }
+    }
 }
 
 impl LightParams {
@@ -30,12 +49,40 @@ impl LightParams {
 }
 
 #[repr(u32)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum LightKind {
+    #[default]
     Point,
     Directional,
     Spotlight,
+}
+
+impl Editable for LightKind {
+    const INLINE: bool = false;
+
+    fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
+        state: S,
+    ) -> Box<dyn Send + Widget>
+    where
+        Self: Sized,
+    {
+        let state = Arc::new(state);
+        Box::new(col((
+            row((
+                Radio::new_value(state.clone(), LightKind::Point),
+                label("Point"),
+            )),
+            row((
+                Radio::new_value(state.clone(), LightKind::Directional),
+                label("Directional"),
+            )),
+            row((
+                Radio::new_value(state, LightKind::Spotlight),
+                label("Spotlight"),
+            )),
+        )))
+    }
 }
 
 impl LightKind {
@@ -64,8 +111,8 @@ impl LightKind {
     }
 }
 
-#[derive(Debug, Clone, Resource)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Resource, Editable)]
+#[resource(derives = [Editable])]
 pub struct LightBundle {
     pub params: LightParams,
     pub kind: LightKind,
@@ -83,14 +130,6 @@ impl Bundle for LightBundle {
         }
     }
 }
-
-// #[derive(Debug, Clone)]
-// #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-// pub struct LightBundleDesc {
-//     pub params: LightParams,
-//     pub kind: LightKind,
-//     pub cast_shadow: bool,
-// }
 
 #[typetag::serde]
 impl BundleDesc for LightBundleDesc {}

@@ -3,6 +3,7 @@ use std::time::Duration;
 use flax::{Component, ComponentMut, Debuggable, EntityBuilder, Fetch};
 use glam::{Mat4, Quat, Vec2, Vec3};
 use ivy_assets::{loadable::Loadable, AssetCache, Resource};
+use ivy_editable::Editable;
 
 use crate::{bundle::Bundle, gizmos::Gizmos, template::BundleDesc, AsyncCommandBuffer, Color};
 
@@ -101,14 +102,14 @@ fn one_scale() -> Vec3 {
     Vec3::ONE
 }
 
-#[derive(Debug, Clone, Copy, Resource)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Copy, Resource, PartialEq)]
+#[resource(derives = [Default, Editable])]
 pub struct TransformBundle {
-    #[cfg_attr(feature = "serde", serde(default))]
+    // #[cfg_attr(feature = "serde", resource(serde(default)))]
     pub position: Vec3,
-    #[cfg_attr(feature = "serde", serde(default))]
+    // #[cfg_attr(feature = "serde", resource(serde(default)))]
     pub rotation: Quat,
-    #[cfg_attr(feature = "serde", serde(default = "one_scale"))]
+    // #[cfg_attr(feature = "serde", resource(serde(default = "one_scale")))]
     pub scale: Vec3,
 }
 

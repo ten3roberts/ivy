@@ -5,42 +5,39 @@ use std::{
 };
 
 use bevy_reflect::{PartialReflect, TypeInfo};
-use flax::{component::ComponentValue, entity_ids, Entity, Query};
-use futures::{channel::oneshot, stream::BoxStream, FutureExt, StreamExt};
+use flax::{Entity, Query, component::ComponentValue, entity_ids};
+use futures::{FutureExt, StreamExt, channel::oneshot, stream::BoxStream};
 use glam::{Quat, Vec2, Vec3};
 use itertools::Itertools;
-use ivy_ui::{
-    streamed::StreamedUiExt,
-    violet::{
-        self,
-        core::{
-            layout::Align,
-            state::{
-                Project, State, StateDuplex, StateExt, StateMut, StateSink, StateStream,
-                StateStreamRef,
-            },
-            style::{SizeExt, StyleExt},
-            to_owned,
-            unit::Unit,
-            widget::{
-                bold, card, col,
-                interactive::{
-                    overlay::{overlay_state, Overlay},
-                    select_list::SelectList,
-                },
-                label, row, Button, ButtonStyle, FutureWidget, InputBox, SignalWidget,
-                StreamWidget, TextInput,
-            },
-            Scope, Widget,
+use violet::{
+    self,
+    core::{
+        Scope, Widget,
+        layout::Align,
+        state::{
+            Project, State, StateDuplex, StateExt, StateMut, StateSink, StateStream, StateStreamRef,
         },
-        futures_signals::signal::{Mutable, SignalExt},
-        lucide::icons::{LUCIDE_CHECK, LUCIDE_PLUS, LUCIDE_TRASH_2, LUCIDE_X},
+        style::{SizeExt, StyleExt},
+        to_owned,
+        unit::Unit,
+        widget::{
+            Button, ButtonStyle, Checkbox, FutureWidget, InputBox, Rectangle, SignalWidget, Slider,
+            SliderWithLabel, StreamWidget, TextInput, bold, card, col,
+            interactive::{
+                overlay::{Overlay, overlay_state},
+                select_list::SelectList,
+            },
+            label, row,
+        },
     },
+    futures_signals::signal::{Mutable, SignalExt},
+    lucide::icons::{LUCIDE_CHECK, LUCIDE_PLUS, LUCIDE_TRASH_2, LUCIDE_X},
+    palette::{Srgb, Srgba, WithAlpha},
 };
 
-pub use ivy_derive::Editable;
+pub mod registry;
 
-use crate::{editor::registry::EDITABLE_REGISTRY, register_editable};
+use crate::registry::EDITABLE_REGISTRY;
 
 // pub trait StateDuplex: StateMut + StateStream + StateDuplex {}
 
@@ -56,13 +53,15 @@ pub trait Editable: 'static + Send + Sync {
         Self: Sized;
 }
 
+pub use ivy_derive::Editable;
+
 impl Editable for String {
     const INLINE: bool = true;
 
     fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         value: S,
     ) -> Box<dyn Send + Widget> {
-        Box::new(TextInput::new(value))
+        Box::new(TextInput::new(value.dedup()))
     }
 }
 
@@ -73,6 +72,16 @@ impl Editable for i32 {
         value: S,
     ) -> Box<dyn Send + Widget> {
         Box::new(InputBox::new(value))
+    }
+}
+
+impl Editable for bool {
+    const INLINE: bool = true;
+
+    fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
+        value: S,
+    ) -> Box<dyn Send + Widget> {
+        Box::new(Checkbox::new(value))
     }
 }
 
@@ -93,9 +102,9 @@ impl Editable for Vec2 {
         value: S,
     ) -> Box<dyn Send + Widget> {
         let value = Arc::new(value.memo(Default::default()));
-        let x = value.clone().map_ref(|v| &v.x, |v| &mut v.x);
+        let x = value.clone().project_ref(|v| &v.x, |v| &mut v.x);
 
-        let y = value.clone().map_ref(|v| &v.y, |v| &mut v.y);
+        let y = value.clone().project_ref(|v| &v.y, |v| &mut v.y);
 
         Box::new(row((InputBox::new(x), InputBox::new(y))))
     }
@@ -109,11 +118,84 @@ impl Editable for Vec3 {
     ) -> Box<dyn Send + Widget> {
         let value = Arc::new(value.memo(Default::default()));
 
-        let x = value.clone().map_ref(|v| &v.x, |v| &mut v.x);
-        let y = value.clone().map_ref(|v| &v.y, |v| &mut v.y);
-        let z = value.clone().map_ref(|v| &v.z, |v| &mut v.z);
+        let x = value.clone().project_ref(|v| &v.x, |v| &mut v.x);
+        let y = value.clone().project_ref(|v| &v.y, |v| &mut v.y);
+        let z = value.clone().project_ref(|v| &v.z, |v| &mut v.z);
 
         Box::new(row((InputBox::new(x), InputBox::new(y), InputBox::new(z))))
+    }
+}
+
+impl Editable for Srgb {
+    const INLINE: bool = false;
+
+    fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
+        value: S,
+    ) -> Box<dyn Send + Widget> {
+        let value = Arc::new(value.memo(Default::default()));
+
+        let red = value.clone().project_ref(|v| &v.red, |v| &mut v.red);
+        let green = value.clone().project_ref(|v| &v.green, |v| &mut v.green);
+        let blue = value.clone().project_ref(|v| &v.blue, |v| &mut v.blue);
+
+        Box::new(col((
+            StreamWidget::new(
+                value.stream().map(|v| {
+                    Rectangle::new(v.with_alpha(1.0)).with_exact_size(Unit::px2(24.0, 24.0))
+                }),
+            ),
+            row((
+                label("R"),
+                SliderWithLabel::input(red, 0.0, 1.0).precision(2),
+            )),
+            row((
+                label("G"),
+                SliderWithLabel::input(green, 0.0, 1.0).precision(2),
+            )),
+            row((
+                label("B"),
+                SliderWithLabel::input(blue, 0.0, 1.0).precision(2),
+            )),
+        )))
+    }
+}
+
+impl Editable for Srgba {
+    const INLINE: bool = false;
+
+    fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
+        value: S,
+    ) -> Box<dyn Send + Widget> {
+        let value = Arc::new(value.memo(Default::default()));
+
+        let red = value.clone().project_ref(|v| &v.red, |v| &mut v.red);
+        let green = value.clone().project_ref(|v| &v.green, |v| &mut v.green);
+        let blue = value.clone().project_ref(|v| &v.blue, |v| &mut v.blue);
+        let alpha = value.clone().project_ref(|v| &v.alpha, |v| &mut v.alpha);
+
+        Box::new(col((
+            StreamWidget::new(
+                value
+                    .stream()
+                    .map(|v| Rectangle::new(v).with_exact_size(Unit::px2(24.0, 24.0))),
+            ),
+            row((
+                label("R"),
+                SliderWithLabel::input(red, 0.0, 1.0).precision(2),
+            )),
+            row((
+                label("G"),
+                SliderWithLabel::input(green, 0.0, 1.0).precision(2),
+            )),
+            row((
+                label("B"),
+                SliderWithLabel::input(blue, 0.0, 1.0).precision(2),
+            )),
+            row((
+                label("A"),
+                SliderWithLabel::input(alpha, 0.0, 1.0).precision(2),
+            )),
+        )))
     }
 }
 
@@ -126,17 +208,33 @@ impl Editable for Quat {
         let value = Arc::new(
             value
                 .map_value(
-                    |v| v.to_euler(glam::EulerRot::YXZ),
+                    |v| {
+                        let (a, b, c) = v.to_euler(glam::EulerRot::YXZ);
+                        (to_degrees(a), to_degrees(b), to_degrees(c))
+                    },
                     |new_value| {
-                        Quat::from_euler(glam::EulerRot::YXZ, new_value.0, new_value.1, new_value.2)
+                        Quat::from_euler(
+                            glam::EulerRot::YXZ,
+                            to_radians(new_value.0),
+                            to_radians(new_value.1),
+                            to_radians(new_value.2),
+                        )
                     },
                 )
                 .memo(Default::default()),
         );
 
-        let yaw = value.clone().map_ref(|v| &v.0, |v| &mut v.0);
-        let pitch = value.clone().map_ref(|v| &v.1, |v| &mut v.1);
-        let roll = value.clone().map_ref(|v| &v.2, |v| &mut v.2);
+        fn to_degrees(radians: f32) -> f32 {
+            radians.to_degrees()
+        }
+
+        fn to_radians(degrees: f32) -> f32 {
+            degrees.to_radians()
+        }
+
+        let yaw = value.clone().project_ref(|v| &v.0, |v| &mut v.0);
+        let pitch = value.clone().project_ref(|v| &v.1, |v| &mut v.1);
+        let roll = value.clone().project_ref(|v| &v.2, |v| &mut v.2);
 
         Box::new(row((
             InputBox::new(pitch),
@@ -151,21 +249,22 @@ pub struct EntityDisplay(pub Entity);
 impl Widget for EntityDisplay {
     fn mount(self, scope: &mut Scope<'_>) {
         let id = self.0;
-        let (name_tx, name_rx) = oneshot::channel();
+        todo!()
+        // let (name_tx, name_rx) = oneshot::channel();
 
-        scope.apply({
-            move |world| {
-                if let Ok(entity) = world.entity(self.0) {
-                    let _ = name_tx.send(format!("{entity}"));
-                } else {
-                    let _ = name_tx.send(format!("{id} <dead>"));
-                }
+        // scope.apply({
+        //     move |world| {
+        //         if let Ok(entity) = world.entity(self.0) {
+        //             let _ = name_tx.send(format!("{entity}"));
+        //         } else {
+        //             let _ = name_tx.send(format!("{id} <dead>"));
+        //         }
 
-                Ok(())
-            }
-        });
+        //         Ok(())
+        //     }
+        // });
 
-        FutureWidget::new(name_rx.map(|v| v.ok().map(label))).mount(scope);
+        // FutureWidget::new(name_rx.map(|v| v.ok().map(label))).mount(scope);
     }
 }
 
@@ -211,16 +310,16 @@ impl Overlay for EntityPicker {
     ) {
         let entities = Mutable::new(Vec::new());
 
-        scope.apply({
-            to_owned!(entities);
-            move |world| {
-                let ids = Query::new(entity_ids()).borrow(world).iter().collect_vec();
+        // scope.apply({
+        //     to_owned!(entities);
+        //     move |world| {
+        //         let ids = Query::new(entity_ids()).borrow(world).iter().collect_vec();
 
-                entities.set(ids);
+        //         entities.set(ids);
 
-                Ok(())
-            }
-        });
+        //         Ok(())
+        //     }
+        // });
 
         let selection: Mutable<Option<usize>> = Mutable::new(None);
 
@@ -307,7 +406,7 @@ pub trait Projection: State + Send + Sync {
     /// Projects this type into another by reference
     fn project<U: ?Sized + 'static>(
         self,
-        map_ref: impl 'static + Send + Sync + Fn(&Self::Item) -> &U,
+        project_ref: impl 'static + Send + Sync + Fn(&Self::Item) -> &U,
         map_mut: impl 'static + Send + Sync + Fn(&mut Self::Item) -> &mut U,
     ) -> Project<Self, U>
     where
@@ -316,7 +415,7 @@ pub trait Projection: State + Send + Sync {
     /// Stream projected values
     fn project_stream(
         &self,
-        map_ref: Box<dyn 'static + Send + Sync + Fn(&Self::Item)>,
+        project_ref: Box<dyn 'static + Send + Sync + Fn(&Self::Item)>,
     ) -> BoxStream<'static, ()>;
 
     /// Writ a new value directly to the projection of the underlying state.
@@ -329,13 +428,13 @@ where
 {
     fn project<U: ?Sized + 'static>(
         self,
-        map_ref: impl 'static + Send + Sync + Fn(&T) -> &U,
+        project_ref: impl 'static + Send + Sync + Fn(&T) -> &U,
         map_mut: impl 'static + Send + Sync + Fn(&mut T) -> &mut U,
     ) -> Project<Self, U>
     where
         Self: Sized,
     {
-        Project::new_dyn(self, map_ref, map_mut)
+        Project::new_dyn(self, project_ref, map_mut)
     }
 
     fn project_stream(
@@ -359,13 +458,13 @@ where
 {
     fn project<V: ?Sized + 'static>(
         self,
-        map_ref: impl 'static + Send + Sync + Fn(&T) -> &V,
+        project_ref: impl 'static + Send + Sync + Fn(&T) -> &V,
         map_mut: impl 'static + Send + Sync + Fn(&mut T) -> &mut V,
     ) -> Project<Self, V>
     where
         Self: Sized,
     {
-        Project::new_dyn(self, map_ref, map_mut)
+        Project::new_dyn(self, project_ref, map_mut)
     }
 
     fn project_stream(
@@ -389,13 +488,13 @@ where
 impl Projection for Box<dyn Projection<Item = dyn PartialReflect>> {
     fn project<V: ?Sized + 'static>(
         self,
-        map_ref: impl 'static + Send + Sync + Fn(&Self::Item) -> &V,
+        project_ref: impl 'static + Send + Sync + Fn(&Self::Item) -> &V,
         map_mut: impl 'static + Send + Sync + Fn(&mut Self::Item) -> &mut V,
     ) -> Project<Self, V>
     where
         Self: Sized,
     {
-        Project::new_dyn(self, map_ref, map_mut)
+        Project::new_dyn(self, project_ref, map_mut)
     }
 
     fn project_stream(
@@ -413,13 +512,13 @@ impl Projection for Box<dyn Projection<Item = dyn PartialReflect>> {
 impl<T: Projection> Projection for Arc<T> {
     fn project<V: ?Sized + 'static>(
         self,
-        map_ref: impl 'static + Send + Sync + Fn(&Self::Item) -> &V,
+        project_ref: impl 'static + Send + Sync + Fn(&Self::Item) -> &V,
         map_mut: impl 'static + Send + Sync + Fn(&mut Self::Item) -> &mut V,
     ) -> Project<Self, V>
     where
         Self: Sized,
     {
-        Project::new_dyn(self, map_ref, map_mut)
+        Project::new_dyn(self, project_ref, map_mut)
     }
 
     fn project_stream(
@@ -605,5 +704,6 @@ register_editable!(String, f32, i32, Entity, Vec2, Vec3, Quat);
 
 #[doc(hidden)]
 pub mod __private {
-    pub use ivy_ui::violet;
+    pub use inventory;
+    pub use violet;
 }

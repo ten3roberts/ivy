@@ -363,7 +363,7 @@ impl Widget for TransformToolWidget {
                 .clone()
                 .lower_option()
                 .memo(Default::default())
-                .map_ref(|v| &v.space, |v| &mut v.space),
+                .project_ref(|v| &v.space, |v| &mut v.space),
         );
 
         let settings = state

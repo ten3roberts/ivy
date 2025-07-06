@@ -2,9 +2,7 @@ use std::{any::Any, collections::BTreeMap, sync::LazyLock};
 
 pub(crate) type DeserializeFn =
     fn(&mut dyn erased_serde::Deserializer) -> erased_serde::Result<Box<dyn LoadableDyn>>;
-
-// type SerializeFn =
-//     fn(&dyn Box<dyn Resource>, &mut dyn erased_serde::Serializer) -> erased_serde::Result<()>;
+type SerializeFn = fn(&dyn LoadableDyn) -> &dyn erased_serde::Serialize;
 
 /// Global registry of all implementors of [`Resource`].
 pub struct ResourceRegistry {
@@ -31,12 +29,13 @@ pub static RESOURCE_REGISTRY: LazyLock<ResourceRegistry> = LazyLock::new(Resourc
 pub struct ResourceRegistration {
     pub type_name: &'static str,
     pub deserialize_fn: DeserializeFn,
+    pub serialize_fn: SerializeFn,
 }
 
 impl ResourceRegistration {
     pub const fn new<T: Resource>(type_name: &'static str) -> Self
     where
-        T::Desc: DeserializeOwned,
+        T::Desc: serde::Serialize + DeserializeOwned,
         T::Desc: LoadableDyn + 'static,
     {
         Self {
@@ -44,6 +43,13 @@ impl ResourceRegistration {
             deserialize_fn: |de| {
                 erased_serde::deserialize::<T::Desc>(de)
                     .map(|v| Box::new(v) as Box<dyn LoadableDyn>)
+            },
+            serialize_fn: |value| {
+                let value = value
+                    .downcast_ref::<T::Desc>()
+                    .expect("Failed to downcast LoadableDyn");
+
+                value
             },
         }
     }

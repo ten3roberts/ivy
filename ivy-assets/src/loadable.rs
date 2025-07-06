@@ -1,4 +1,6 @@
-use std::{collections::BTreeMap, future::Future};
+use futures_signals::signal::Mutable;
+use std::{any::Any, collections::BTreeMap, future::Future};
+use violet::core::state::{StateDuplex, StateExt};
 
 use downcast_rs::{impl_downcast, Downcast, DowncastSync};
 use futures::{future::BoxFuture, stream, FutureExt, StreamExt, TryStreamExt};
@@ -20,6 +22,8 @@ pub trait ResourceDyn: Downcast {}
 
 pub trait LoadableDyn: 'static + Send + Sync + DowncastSync {
     fn load_dyn(&self, assets: &AssetCache) -> BoxFuture<anyhow::Result<Box<dyn ResourceDyn>>>;
+    fn upcast(&self) -> fn(Box<dyn Send + Sync + Any>) -> Box<dyn LoadableDyn>;
+
     fn clone_dyn(&self) -> Box<dyn LoadableDyn>;
 }
 
@@ -41,6 +45,10 @@ where
 
     fn clone_dyn(&self) -> Box<dyn LoadableDyn> {
         Box::new(self.clone())
+    }
+
+    fn upcast(&self) -> fn(Box<dyn Send + Sync + Any>) -> Box<dyn LoadableDyn> {
+        move |value: Box<dyn Send + Sync + Any>| value.downcast::<T>().expect("Failed to downcast")
     }
 }
 

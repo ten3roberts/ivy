@@ -1,0 +1,19 @@
+{
+  "meta": {
+    "type_name": "LightBundle"
+  },
+  "desc": {
+    "params": {
+      "color": {
+        "red": 0.0,
+        "green": 0.49,
+        "blue": 0.47
+      },
+      "intensity": 5.0,
+      "inner_theta": 0.8,
+      "outer_theta": 0.7
+    },
+    "kind": "Point",
+    "cast_shadow": true
+  }
+}

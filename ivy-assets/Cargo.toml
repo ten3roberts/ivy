@@ -31,6 +31,7 @@ typetag.workspace = true
 erased-serde.workspace = true
 downcast-rs.workspace = true
 inventory.workspace = true
+violet.workspace = true
 
 [features]
 serde = ["dep:serde", "serde_json"]

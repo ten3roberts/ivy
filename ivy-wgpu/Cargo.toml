@@ -13,7 +13,9 @@ ivy-assets = { path = "../ivy-assets" }
 ivy-input = { path = "../ivy-input" }
 ivy-gltf = { path = "../ivy-gltf" }
 ivy-graphics = { path = "../ivy-graphics" }
+ivy-editable = { path = "../ivy-editable" }
 
+violet.workspace = true
 atomic_refcell.workspace = true
 async-std.workspace = true
 parking_lot.workspace = true

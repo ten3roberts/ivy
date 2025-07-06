@@ -1,9 +1,10 @@
 use itertools::Itertools;
 use proc_macro_crate::FoundCrate;
 use proc_macro2::{Span, TokenStream};
-use quote::{format_ident, quote};
+use quote::{ToTokens, format_ident, quote};
 use syn::{
-    Attribute, DeriveInput, Error, Field, Ident, Result, Type, Visibility, spanned::Spanned,
+    Attribute, DeriveInput, Error, Field, Ident, Result, Token, Type, Visibility, bracketed,
+    meta::ParseNestedMeta, parenthesized, parse::Parse, punctuated::Punctuated, spanned::Spanned,
 };
 
 pub fn resource_impl(input: DeriveInput) -> Result<TokenStream> {
@@ -28,6 +29,8 @@ fn expand_struct(
     input: &DeriveInput,
     data_struct: &syn::DataStruct,
 ) -> Result<TokenStream> {
+    let attrs = Attrs::get(&input.attrs)?;
+
     let named_fields = match &data_struct.fields {
         syn::Fields::Named(fields) => fields,
         _ => {
@@ -45,10 +48,21 @@ fn expand_struct(
         let ident = &f.ident;
         let vis = &f.vis;
         let ty = f.ty;
+        let extras = match &f.attrs.extras[..] {
+            [] => quote! {},
+            extras => quote! { #[#(#extras),*] },
+        };
+
         if f.attrs.load {
-            quote! { #vis #ident: <#ty as #crate_name::loadable::Resource>::Desc }
+            quote! {
+                // #extras
+                #vis #ident: <#ty as #crate_name::loadable::Resource>::Desc
+            }
         } else {
-            quote! { #vis #ident: #ty }
+            quote! {
+                // #extras
+                #vis #ident: #ty
+            }
         }
     });
 
@@ -73,8 +87,15 @@ fn expand_struct(
     let desc_name = format_ident!("{}Desc", input.ident);
 
     let name_str = ident.to_string();
+    let extras = match &attrs.derives {
+        Some(extras) => {
+            quote! { #[derive(#extras)]}
+        }
+        None => quote! {},
+    };
     let expanded = quote! {
         #[derive(Debug, Clone, #crate_name::registry::serde::Serialize, #crate_name::registry::serde::Deserialize)]
+        #extras
         #vis struct #desc_name {
             #(#desc_fields),*
         }
@@ -101,10 +122,23 @@ fn expand_struct(
         }
     };
 
+    eprintln!(
+        "Expanded resource: {}\n\n\n\nAttributes: {}",
+        expanded,
+        fields
+            .iter()
+            .map(|v| v
+                .attrs
+                .extras
+                .iter()
+                .map(|e| e.to_string())
+                .collect::<Vec<_>>()
+                .join(", "))
+            .join(", ")
+    );
     Ok(expanded)
 }
 
-#[derive(Clone)]
 struct ParsedField<'a> {
     vis: &'a Visibility,
     ty: &'a Type,
@@ -130,9 +164,10 @@ impl<'a> ParsedField<'a> {
     }
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default)]
 struct FieldAttrs {
     load: bool,
+    extras: Vec<TokenStream>,
 }
 
 impl FieldAttrs {
@@ -154,17 +189,68 @@ impl FieldAttrs {
                             res.load = true;
                             Ok(())
                         } else {
-                            Err(Error::new(
-                                meta.path.span(),
-                                "Unknown fetch field attribute",
-                            ))
+                            // Strip outer `resource` attribute and feed forward
+                            // let value = meta.value()?;
+                            // let content;
+                            // parenthesized!(content in meta.input);
+                            // let content = TokenStream::parse(&content)?;
+                            // res.extras.push(list.to_token_stream());
+
+                            Ok(())
                         }
                     })?;
                 }
                 _ => {
                     return Err(Error::new(
                         Span::call_site(),
-                        "Expected a MetaList for `fetch`",
+                        "Expected a MetaList for `resource`",
+                    ));
+                }
+            };
+        }
+
+        Ok(res)
+    }
+}
+
+#[derive(Default)]
+struct Attrs {
+    derives: Option<Punctuated<Ident, Token![,]>>,
+}
+
+impl Attrs {
+    fn get(input: &[Attribute]) -> Result<Self> {
+        let mut res = Self::default();
+
+        for attr in input {
+            if !attr.path().is_ident("resource") {
+                continue;
+            }
+
+            match &attr.meta {
+                syn::Meta::List(list) => {
+                    // Parse list
+
+                    list.parse_nested_meta(|meta| {
+                        // item = [Debug, PartialEq]
+                        if meta.path.is_ident("derives") {
+                            let value = meta.value()?;
+                            let content;
+                            bracketed!(content in value);
+                            let content =
+                                <Punctuated<Ident, Token![,]>>::parse_terminated(&content)?;
+
+                            res.derives = Some(content);
+                            Ok(())
+                        } else {
+                            Err(Error::new(meta.path.span(), "Unknown resource attribute"))
+                        }
+                    })?;
+                }
+                _ => {
+                    return Err(Error::new(
+                        Span::call_site(),
+                        "Expected a MetaList for `resource`",
                     ));
                 }
             };

@@ -3,7 +3,7 @@ use flax::{Component, Entity};
 use futures::{FutureExt, channel::oneshot};
 use glam::Vec2;
 use itertools::Itertools;
-use ivy_scene::editor::registry;
+use ivy_editable::registry;
 use ivy_ui::streamed::{StreamedUiExt, streamed_tx};
 use ivy_ui::violet;
 use ivy_ui::violet::core::components::{local_position, transform_origin, translation, visible};
@@ -46,20 +46,21 @@ impl Widget for EntityComponentEditor {
 
             let editors = components
                 .filter_map(|desc| {
-                    let editor = EDITABLE_REGISTRY.create_component_editor(
-                        entity,
-                        desc,
-                        streamed.clone(),
-                    )?;
+                    None as Option<Box<dyn Widget + Send>>
+                    // let editor = EDITABLE_REGISTRY.create_component_editor(
+                    //     entity,
+                    //     desc,
+                    //     streamed.clone(),
+                    // )?;
 
-                    Some(
-                        card(
-                            Collapsible::label(desc.name(), editor)
-                                .with_min_size(Unit::px2(300.0, 0.0))
-                                .with_max_size(Unit::px2(300.0, 200.0)),
-                        )
-                        .with_background(surface_tertiary()),
-                    )
+                    // Some(
+                    //     card(
+                    //         Collapsible::label(desc.name(), editor)
+                    //             .with_min_size(Unit::px2(300.0, 0.0))
+                    //             .with_max_size(Unit::px2(300.0, 200.0)),
+                    //     )
+                    //     .with_background(surface_tertiary()),
+                    // )
                 })
                 .collect_vec();
 

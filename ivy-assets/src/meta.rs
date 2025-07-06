@@ -1,8 +1,8 @@
-use std::any::Any;
-
+use anyhow::Context;
 use serde::{
     de::{self, DeserializeSeed, Visitor},
-    Deserialize,
+    ser::SerializeStruct,
+    Deserialize, Serialize,
 };
 
 use crate::{
@@ -25,6 +25,17 @@ pub struct AssetPayload<T> {
 pub struct AssetPayloadUntyped {
     pub meta: AssetMeta,
     pub desc: Box<dyn LoadableDyn>,
+}
+
+impl AssetPayloadUntyped {
+    pub fn new(meta: AssetMeta, desc: Box<dyn LoadableDyn>) -> Self {
+        Self { meta, desc }
+    }
+
+    pub fn serialize_json(&self) -> anyhow::Result<String> {
+        serde_json::to_string_pretty(self)
+            .with_context(|| format!("Failed to serialize asset: {}", self.meta.type_name))
+    }
 }
 
 impl<'de> Deserialize<'de> for AssetPayloadUntyped {
@@ -116,6 +127,25 @@ impl<'de> Visitor<'de> for PayloadVisitor {
         let desc = desc.ok_or_else(|| serde::de::Error::missing_field("desc"))?;
 
         Ok(AssetPayloadUntyped { meta, desc })
+    }
+}
+
+impl Serialize for AssetPayloadUntyped {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut state = serializer.serialize_struct("AssetPayload", 2)?;
+
+        let serialize_fn = RESOURCE_REGISTRY
+            .get(&self.meta.type_name)
+            .ok_or_else(|| serde::ser::Error::custom("Unknown type name"))?
+            .serialize_fn;
+
+        let desc = serialize_fn(&*self.desc);
+        state.serialize_field("meta", &self.meta)?;
+        state.serialize_field("desc", desc)?;
+        state.end()
     }
 }
 
