@@ -387,6 +387,7 @@ checksum = "9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8"
 [[package]]
 name = "bevy_macro_utils"
 version = "0.17.0-dev"
+source = "git+https://github.com/ten3roberts/bevy#0e949acb8ba970e236cc0e80b8c0b0df61c10cf1"
 dependencies = [
  "parking_lot",
  "proc-macro2",
@@ -398,6 +399,7 @@ dependencies = [
 [[package]]
 name = "bevy_platform"
 version = "0.17.0-dev"
+source = "git+https://github.com/ten3roberts/bevy#0e949acb8ba970e236cc0e80b8c0b0df61c10cf1"
 dependencies = [
  "critical-section",
  "foldhash",
@@ -411,10 +413,12 @@ dependencies = [
 [[package]]
 name = "bevy_ptr"
 version = "0.17.0-dev"
+source = "git+https://github.com/ten3roberts/bevy#0e949acb8ba970e236cc0e80b8c0b0df61c10cf1"
 
 [[package]]
 name = "bevy_reflect"
 version = "0.17.0-dev"
+source = "git+https://github.com/ten3roberts/bevy#0e949acb8ba970e236cc0e80b8c0b0df61c10cf1"
 dependencies = [
  "assert_type_match",
  "bevy_platform",
@@ -439,6 +443,7 @@ dependencies = [
 [[package]]
 name = "bevy_reflect_derive"
 version = "0.17.0-dev"
+source = "git+https://github.com/ten3roberts/bevy#0e949acb8ba970e236cc0e80b8c0b0df61c10cf1"
 dependencies = [
  "bevy_macro_utils",
  "proc-macro2",
@@ -450,6 +455,7 @@ dependencies = [
 [[package]]
 name = "bevy_utils"
 version = "0.17.0-dev"
+source = "git+https://github.com/ten3roberts/bevy#0e949acb8ba970e236cc0e80b8c0b0df61c10cf1"
 dependencies = [
  "bevy_platform",
  "disqualified",
