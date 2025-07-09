@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use flax::{Component, ComponentMut, Debuggable, EntityBuilder, Fetch};
+use flax::{components::name, Component, ComponentMut, Debuggable, EntityBuilder, Fetch};
 use glam::{Mat4, Quat, Vec2, Vec3};
 use ivy_assets::{loadable::Loadable, AssetCache, Resource};
 use ivy_editable::Editable;
@@ -171,3 +171,24 @@ impl Bundle for TransformBundle {
 
 #[typetag::serde]
 impl BundleDesc for TransformBundleDesc {}
+
+#[derive(Debug, Clone, Resource, PartialEq)]
+#[resource(derives = [Default, Editable])]
+pub struct NameBundle {
+    name: String,
+}
+
+impl NameBundle {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self { name: name.into() }
+    }
+}
+
+impl Bundle for NameBundle {
+    fn mount(&self, entity: &mut EntityBuilder) {
+        entity.set(name(), self.name.clone());
+    }
+}
+
+#[typetag::serde]
+impl BundleDesc for NameBundleDesc {}

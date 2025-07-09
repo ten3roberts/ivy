@@ -22,7 +22,7 @@ pub trait ResourceDyn: Downcast {}
 
 pub trait LoadableDyn: 'static + Send + Sync + DowncastSync {
     fn load_dyn(&self, assets: &AssetCache) -> BoxFuture<anyhow::Result<Box<dyn ResourceDyn>>>;
-    fn upcast(&self) -> fn(Box<dyn Send + Sync + Any>) -> Box<dyn LoadableDyn>;
+    fn upcast_boxed_any(&self) -> fn(Box<dyn Send + Sync + Any>) -> Box<dyn LoadableDyn>;
 
     fn clone_dyn(&self) -> Box<dyn LoadableDyn>;
 }
@@ -47,7 +47,7 @@ where
         Box::new(self.clone())
     }
 
-    fn upcast(&self) -> fn(Box<dyn Send + Sync + Any>) -> Box<dyn LoadableDyn> {
+    fn upcast_boxed_any(&self) -> fn(Box<dyn Send + Sync + Any>) -> Box<dyn LoadableDyn> {
         move |value: Box<dyn Send + Sync + Any>| value.downcast::<T>().expect("Failed to downcast")
     }
 }

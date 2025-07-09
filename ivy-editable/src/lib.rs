@@ -344,12 +344,12 @@ impl Overlay for EntityPicker {
     }
 }
 
-pub struct DowncastProject<U> {
+pub struct DowncastPartialReflect<U> {
     value: Box<dyn Projection<Item = dyn PartialReflect>>,
     _marker: std::marker::PhantomData<U>,
 }
 
-impl<U> DowncastProject<U> {
+impl<U> DowncastPartialReflect<U> {
     pub fn new(value: Box<dyn Projection<Item = dyn PartialReflect>>) -> Self {
         Self {
             value,
@@ -358,14 +358,14 @@ impl<U> DowncastProject<U> {
     }
 }
 
-impl<U> State for DowncastProject<U>
+impl<U> State for DowncastPartialReflect<U>
 where
     U: 'static + Send + Sync,
 {
     type Item = U;
 }
 
-impl<U> StateStream for DowncastProject<U>
+impl<U> StateStream for DowncastPartialReflect<U>
 where
     U: 'static + Send + Sync + Clone,
 {
@@ -385,7 +385,7 @@ where
     }
 }
 
-impl<U> StateSink for DowncastProject<U>
+impl<U> StateSink for DowncastPartialReflect<U>
 where
     U: 'static + Send + Sync + Clone,
 {

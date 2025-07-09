@@ -47,11 +47,11 @@ fn expand_struct(
 
     let field_flatten = quote! {
         let value = std::sync::Arc::new(value.filter_map(
-                |v| Some((#(Some(v.#field_names)),*)),
-                |(#(#field_names),*)| Some(#ident {
+                |v| Some((#(Some(v.#field_names),)*)),
+                |(#(#field_names,)*)| Some(#ident {
                     #(#field_names: #field_names?),*
                 })
-            ).memo((#(#default),*)));
+            ).memo((#(#default,)*)));
     };
 
     let field_lower = fields.iter().enumerate().map(|(i, f)| {

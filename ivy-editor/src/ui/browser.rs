@@ -9,10 +9,10 @@ use async_std::{
     stream::StreamExt,
 };
 use flax::Component;
-use futures::AsyncReadExt;
+use futures::{AsyncReadExt, FutureExt};
 use glam::{BVec2, Vec2};
 use itertools::Itertools;
-use ivy_assets::AssetCache;
+use ivy_assets::{AssetCache, AssetPath, meta::AssetPayloadUntyped};
 use ivy_core::palette::Srgba;
 use ivy_ui::violet::{
     core::{
@@ -39,10 +39,10 @@ use ivy_ui::violet::{
     },
     futures_signals::signal::{Mutable, SignalExt},
     lucide::icons::{
-        LUCIDE_BOX, LUCIDE_CLOUD_SUN, LUCIDE_ELLIPSIS, LUCIDE_FILE, LUCIDE_FILE_ARCHIVE,
-        LUCIDE_FILE_BOX, LUCIDE_FILE_CODE, LUCIDE_FILE_IMAGE, LUCIDE_FILE_JSON,
-        LUCIDE_FILE_QUESTION, LUCIDE_FILE_TEXT, LUCIDE_FOLDER, LUCIDE_FOLDER_OPEN, LUCIDE_IMAGE,
-        LUCIDE_PACKAGE, LUCIDE_SQUARE_LIBRARY,
+        LUCIDE_BOX, LUCIDE_BOXES, LUCIDE_CLOUD_SUN, LUCIDE_ECLIPSE, LUCIDE_ELLIPSIS, LUCIDE_FILE,
+        LUCIDE_FILE_ARCHIVE, LUCIDE_FILE_BOX, LUCIDE_FILE_CODE, LUCIDE_FILE_IMAGE,
+        LUCIDE_FILE_JSON, LUCIDE_FILE_QUESTION, LUCIDE_FILE_TEXT, LUCIDE_FILE_WARNING,
+        LUCIDE_FOLDER, LUCIDE_FOLDER_OPEN, LUCIDE_IMAGE, LUCIDE_PACKAGE, LUCIDE_SQUARE_LIBRARY,
     },
 };
 use tracing::info;
@@ -118,6 +118,7 @@ impl Widget for DirectoryTree {
 }
 
 pub struct DirectoryListing {
+    assets: AssetCache,
     path: PathBuf,
     selected_file: WeakHandle<Mutable<Option<PathBuf>>>,
     selected_dir: WeakHandle<Mutable<Option<PathBuf>>>,
@@ -139,6 +140,7 @@ impl Widget for DirectoryListing {
                     path: entry_path,
                     selected: self.selected_file,
                     selected_dir: self.selected_dir,
+                    assets: self.assets.clone(),
                 }
             })
             .sorted_by_key(|item| (!item.is_dir, item.name.clone()));
@@ -176,29 +178,39 @@ pub const ITEM_SIZE: Unit<Vec2> = Unit::px2(120.0, 100.0);
 
 pub struct FileIcon<'a> {
     path: &'a Path,
+    assets: &'a AssetCache,
 }
 
 impl Widget for FileIcon<'_> {
     fn mount(self, scope: &mut Scope<'_>) {
-        let ty = FileType::from_path(self.path);
+        to_owned!(path = self.path, assets = self.assets);
+        SuspenseWidget::new(Throbber::new(ITEM_SIZE.px.x), async move {
+            let path = path;
+            let ty = FileType::from_path(&path, &assets).await;
 
-        if ty.is_image() {
-            // If the file is an image, we can display it directly
-            let image = Image::new(self.path.canonicalize().unwrap().to_owned());
-            image.with_exact_size(Unit::px2(64.0, 64.0)).mount(scope);
-            return;
-        }
+            move |scope: &mut Scope<'_>| {
+                // Load the file type asynchronously
+                if ty.is_image() {
+                    // If the file is an image, we can display it directly
+                    let image = Image::new(path.canonicalize().unwrap().to_owned());
+                    image.with_exact_size(Unit::px2(64.0, 64.0)).mount(scope);
+                    return;
+                }
 
-        label(ty.icon())
-            .with_color(ty.color())
-            .with_font_size(48.0)
-            .mount(scope);
+                label(ty.icon())
+                    .with_color(ty.color())
+                    .with_font_size(48.0)
+                    .mount(scope);
+            }
+        })
+        .mount(scope)
     }
 }
 
 pub struct Item {
     name: String,
     path: PathBuf,
+    assets: AssetCache,
     selected: WeakHandle<Mutable<Option<PathBuf>>>,
     selected_dir: WeakHandle<Mutable<Option<PathBuf>>>,
     is_dir: bool,
@@ -209,7 +221,10 @@ impl Widget for Item {
         let path = self.path.clone();
         Selectable::new_value(
             col((
-                FileIcon { path: &self.path },
+                FileIcon {
+                    path: &self.path,
+                    assets: &self.assets,
+                },
                 RenamableItem {
                     path: self.path.clone(),
                     selected: self.selected,
@@ -318,14 +333,16 @@ impl Widget for DirectoryBrowser {
         let selected_dir = scope.store(selected_dir);
         let selected_file = scope.store(selected_file);
 
-        let details_panel =
-            SignalWidget::new(scope.read(&selected_file).signal_ref(move |selected| {
-                to_owned!(assets = self.assets);
+        let details_panel = SignalWidget::new(scope.read(&selected_file).signal_ref({
+            to_owned!(assets = self.assets);
+            move |selected| {
+                to_owned!(assets);
                 selected.as_ref().map(move |v| FileDetailsPanel {
                     assets: assets.clone(),
                     path: v.to_owned(),
                 })
-            }));
+            }
+        }));
 
         row((
             card(row((
@@ -334,12 +351,16 @@ impl Widget for DirectoryBrowser {
                     path: self.path,
                     expand_depth: 1,
                 }),
-                SignalWidget::new(scope.read(&selected_dir).signal_ref(move |selected| {
-                    selected.as_ref().map(|v| DirectoryListing {
-                        path: v.clone(),
-                        selected_file,
-                        selected_dir,
-                    })
+                SignalWidget::new(scope.read(&selected_dir).signal_ref({
+                    to_owned!(assets = self.assets);
+                    move |selected| {
+                        selected.as_ref().map(|v| DirectoryListing {
+                            path: v.clone(),
+                            selected_file,
+                            selected_dir,
+                            assets: assets.clone(),
+                        })
+                    }
                 })),
             )))
             .with_min_size(Unit::px2(100.0, PANEL_HEIGHT))
@@ -412,10 +433,16 @@ enum Code {
     Wasm,
 }
 
+enum AssetType {
+    Asset,
+    Template,
+    Material,
+}
+
 enum FileType {
     Directory,
     Code(Code),
-    Asset,
+    Asset(AssetType),
     Text,
     Image,
     Hdri,
@@ -423,16 +450,20 @@ enum FileType {
     Blend,
     Gltf,
     Other,
+    Error,
 }
 
 impl FileType {
-    fn from_path(path: &Path) -> Self {
+    async fn from_path(path: &Path, assets: &AssetCache) -> Self {
         if path.is_dir() {
             FileType::Directory
         } else {
             match path.extension().and_then(|s| s.to_str()) {
                 Some(ext) => match ext {
-                    "asset" => FileType::Asset,
+                    "asset" => Self::determine_asset_type(path, assets)
+                        .await
+                        .map(FileType::Asset)
+                        .unwrap_or(FileType::Error),
                     "txt" | "md" | "markdown" => FileType::Text,
                     // "rs" | "py" | "js" | "ts" | "c" | "cpp" | "h" | "hpp" => FileType::Code,
                     "png" | "jpg" | "jpeg" | "gif" | "webp" => FileType::Image,
@@ -457,6 +488,17 @@ impl FileType {
         }
     }
 
+    async fn determine_asset_type(path: &Path, assets: &AssetCache) -> anyhow::Result<AssetType> {
+        let path = AssetPath::new(path.canonicalize()?);
+        let meta = AssetPayloadUntyped::load_meta_from_file(&path, assets).await?;
+
+        match meta.type_name.as_str() {
+            "Template" => Ok(AssetType::Template),
+            "MaterialData" => Ok(AssetType::Material),
+            _ => Ok(AssetType::Asset),
+        }
+    }
+
     fn is_text(&self) -> bool {
         matches!(self, FileType::Text | FileType::Code(_))
     }
@@ -478,8 +520,11 @@ impl FileType {
             FileType::Gltf => LUCIDE_BOX,
             FileType::Archive => LUCIDE_FILE_ARCHIVE,
             FileType::Other => LUCIDE_FILE_QUESTION,
+            FileType::Error => LUCIDE_FILE_WARNING,
             FileType::Hdri => LUCIDE_CLOUD_SUN,
-            FileType::Asset => LUCIDE_PACKAGE,
+            FileType::Asset(AssetType::Asset) => LUCIDE_PACKAGE,
+            FileType::Asset(AssetType::Template) => LUCIDE_BOXES,
+            FileType::Asset(AssetType::Material) => LUCIDE_ECLIPSE,
         }
     }
 
@@ -498,10 +543,13 @@ impl FileType {
             FileType::Code(Code::Json) => FOREST_400,
             FileType::Archive => PLATINUM_500,
             FileType::Other => PLATINUM_50,
+            FileType::Error => RUBY_400,
             FileType::Blend => AMBER_400,
             FileType::Gltf => TEAL_400,
             FileType::Hdri => CITRUS_400,
-            FileType::Asset => CITRUS_400,
+            FileType::Asset(AssetType::Asset) => CITRUS_400,
+            FileType::Asset(AssetType::Template) => OCEAN_400,
+            FileType::Asset(AssetType::Material) => RUBY_400,
         }
     }
 
@@ -518,7 +566,7 @@ impl FileType {
     /// [`Asset`]: FileType::Asset
     #[must_use]
     fn is_asset(&self) -> bool {
-        matches!(self, Self::Asset)
+        matches!(self, Self::Asset(_))
     }
 }
 
@@ -558,36 +606,43 @@ struct FilePreview<'a> {
 
 impl Widget for FilePreview<'_> {
     fn mount(self, scope: &mut Scope<'_>) {
-        let ty = FileType::from_path(&self.path);
-        let icon = label(ty.icon())
-            .with_color(ty.color())
-            .with_font_size(256.0);
+        to_owned!(assets = self.assets, path = self.path);
+        SuspenseWidget::new(Throbber::new(ITEM_SIZE.px.x), async move {
+            let path = path;
+            let ty = FileType::from_path(&path, &assets).await;
+            let icon = label(ty.icon())
+                .with_color(ty.color())
+                .with_font_size(256.0);
 
-        if ty.is_image() {
-            Image::new(self.path.canonicalize().unwrap())
-                .with_exact_size(Unit::px2(200.0, 200.0))
-                .mount(scope);
-        } else if ty.is_asset() {
-            tracing::info!("Inspecting asset: {}", self.path.display());
-            AssetInspector::new(self.assets.clone(), self.path.to_owned()).mount(scope)
-        } else if ty.is_text() {
-            let path = self.path.to_owned();
-            let async_load = async {
-                sleep(Duration::from_millis(500)).await;
-                let path = path;
-                let content = async_std::fs::read_to_string(&path).await;
-                |scope: &mut Scope<'_>| match content {
-                    Ok(v) => FileEditor::new(Mutable::new(v), path).mount(scope),
-                    Err(err) => label("Could not read file")
-                        .with_color(surface_danger())
-                        .mount(scope),
+            move |scope: &mut Scope| {
+                if ty.is_image() {
+                    Image::new(path.canonicalize().unwrap())
+                        .with_exact_size(Unit::px2(200.0, 200.0))
+                        .mount(scope);
+                } else if ty.is_asset() {
+                    tracing::info!("Inspecting asset: {}", path.display());
+                    AssetInspector::new(assets.clone(), path.to_owned()).mount(scope)
+                } else if ty.is_text() {
+                    let async_load = async {
+                        sleep(Duration::from_millis(500)).await;
+                        let path = path;
+                        let content = async_std::fs::read_to_string(&path).await;
+                        |scope: &mut Scope<'_>| match content {
+                            Ok(v) => FileEditor::new(Mutable::new(v), path).mount(scope),
+                            Err(_) => label("Could not read file")
+                                .with_color(surface_danger())
+                                .mount(scope),
+                        }
+                    };
+
+                    SuspenseWidget::new(LoadingSpinner::new("Loading Text"), async_load)
+                        .mount(scope);
+                } else {
+                    icon.mount(scope);
                 }
-            };
-
-            SuspenseWidget::new(LoadingSpinner::new("Loading Text"), async_load).mount(scope);
-        } else {
-            icon.mount(scope);
-        }
+            }
+        })
+        .mount(scope)
     }
 }
 

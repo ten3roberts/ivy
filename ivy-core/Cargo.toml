@@ -19,6 +19,7 @@ ivy-editable = { path = "../ivy-editable", version = "0.1.0" }
 ivy-random = { path = "../ivy-random", version = "0.10.0" }
 ivy-profiling = { path = "../ivy-profiling" }
 
+violet.workspace = true
 anyhow.workspace = true
 dashmap.workspace = true
 downcast-rs = "1.2.0"

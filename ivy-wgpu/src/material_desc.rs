@@ -1,4 +1,4 @@
-use ivy_assets::{loadable::Loadable, Asset, AssetCache, AssetDesc};
+use ivy_assets::{declare_resource, loadable::Loadable, Asset, AssetCache, AssetDesc};
 use ivy_gltf::GltfMaterial;
 use ivy_graphics::texture::{TextureData, TextureDesc};
 use ordered_float::NotNan;
@@ -12,6 +12,8 @@ use crate::{
     shaders::{PbrEmissiveShaderDesc, PbrShaderDesc, ShadowShaderDesc},
     texture::TextureWithFormatDesc,
 };
+
+use ivy_assets::loadable::Resource;
 
 /// Asynchronously loadable material, e.g; from json and texture file paths
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -45,6 +47,8 @@ impl Loadable for MaterialDesc {
         }
     }
 }
+
+declare_resource!(MaterialData, MaterialDesc);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

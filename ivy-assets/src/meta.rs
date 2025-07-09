@@ -22,6 +22,11 @@ pub struct AssetPayload<T> {
     pub desc: T,
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct AssetPayloadMeta {
+    pub meta: AssetMeta,
+}
+
 pub struct AssetPayloadUntyped {
     pub meta: AssetMeta,
     pub desc: Box<dyn LoadableDyn>,
@@ -35,6 +40,16 @@ impl AssetPayloadUntyped {
     pub fn serialize_json(&self) -> anyhow::Result<String> {
         serde_json::to_string_pretty(self)
             .with_context(|| format!("Failed to serialize asset: {}", self.meta.type_name))
+    }
+
+    pub async fn load_meta_from_file(
+        path: &AssetPath<Self>,
+        assets: &AssetCache,
+    ) -> anyhow::Result<AssetMeta> {
+        let content = path.load_file_content(assets).await?;
+
+        let payload: AssetPayloadMeta = serde_json::from_slice(&content[..])?;
+        Ok(payload.meta)
     }
 }
 

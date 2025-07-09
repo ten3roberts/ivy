@@ -78,7 +78,7 @@ impl Widget for AssetInspector {
 
             |scope: &mut Scope| match editor {
                 Ok((path, payload)) => {
-                    let upcast = payload.desc.upcast();
+                    let upcast = payload.desc.upcast_boxed_any();
                     let value = Mutable::new(ErasedAssetDesc::new(payload.desc.clone_dyn()));
                     let stream = value.clone().map_value(
                         |v| v.desc.into_any_sync(),
