@@ -33,9 +33,9 @@
         "LightBundleDesc": {
           "params": {
             "color": {
-              "red": 0.0,
-              "green": 0.52,
-              "blue": 0.82
+              "red": 0.47,
+              "green": 0.57,
+              "blue": 0.4
             },
             "intensity": 5.0,
             "inner_theta": 0.8,

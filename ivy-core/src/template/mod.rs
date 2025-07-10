@@ -6,7 +6,11 @@ use std::{
 use downcast_rs::{impl_downcast, DowncastSync};
 use facet::Facet;
 use flax::{Entity, EntityBuilder};
-use futures::{future::BoxFuture, FutureExt};
+use futures::{
+    future::{ready, BoxFuture},
+    FutureExt, StreamExt,
+};
+use glam::Vec2;
 use itertools::Itertools;
 use ivy_assets::{
     declare_resource,
@@ -14,12 +18,23 @@ use ivy_assets::{
     AssetCache, Resource,
 };
 use ivy_editable::{register_editable, registry::EDITABLE_REGISTRY, Editable, Projection};
-use violet::core::{
-    state::{Project, StateDuplex, StateExt, StateMut, StateSink, StateStreamRef},
-    style::surface_tertiary,
-    to_owned,
-    widget::{card, col, label, Collapsible, StreamWidget},
-    Widget,
+use palette::Srgba;
+use violet::{
+    core::{
+        layout::Align,
+        state::{
+            Project, State, StateDuplex, StateExt, StateMut, StateRef, StateSink, StateStream,
+            StateStreamRef,
+        },
+        style::{surface_tertiary, SizeExt, StyleExt},
+        to_owned,
+        widget::{
+            bold, card, col, label, row, Button, ButtonStyle, Collapsible, Rectangle, StreamWidget,
+        },
+        Scope, Widget,
+    },
+    futures_signals::signal_vec::{MutableVec, SignalVecExt, VecDiff},
+    lucide::icons::{LUCIDE_PLUS, LUCIDE_TRASH_2},
 };
 
 use crate::bundle::Bundle;
@@ -131,10 +146,7 @@ impl ErasedBundleDesc {
                     state.project_ref(|v| v.bundle.as_sync_any(), |v| v.bundle.as_sync_any_mut()),
                 ));
 
-                Box::new(
-                    card(Collapsible::label(self.bundle.typetag_name(), editor))
-                        .with_background(surface_tertiary()),
-                )
+                Box::new(editor)
             }
             None => Box::new(label(self.bundle.type_name())),
         }
@@ -176,6 +188,74 @@ impl TemplateDesc {
     }
 }
 
+struct MutableVecItem<T> {
+    inner: MutableVec<T>,
+    index: usize,
+}
+
+impl<T> MutableVecItem<T> {
+    fn new(inner: MutableVec<T>, index: usize) -> Self {
+        Self { inner, index }
+    }
+}
+
+impl<T> State for MutableVecItem<T> {
+    type Item = T;
+}
+
+impl<T: 'static + Send + Sync + Clone> StateStreamRef for MutableVecItem<T> {
+    fn stream_ref<F: 'static + Send + Sync + FnMut(&Self::Item) -> V, V: 'static + Send>(
+        &self,
+        mut func: F,
+    ) -> impl 'static + Send + futures::Stream<Item = V>
+    where
+        Self: Sized,
+    {
+        let index = self.index;
+
+        self.inner
+            .signal_vec_cloned()
+            .to_stream()
+            .filter_map(move |diff| {
+                let res = match diff {
+                    VecDiff::Replace { values } => values.get(index).cloned(),
+                    VecDiff::InsertAt { .. } => todo!(),
+                    VecDiff::UpdateAt { index: at, value } => (at == index).then_some(value),
+                    VecDiff::RemoveAt { .. } => todo!(),
+                    VecDiff::Move { .. } => todo!(),
+                    VecDiff::Push { .. } => todo!(),
+                    VecDiff::Pop {} => todo!(),
+                    VecDiff::Clear {} => todo!(),
+                };
+
+                futures::future::ready(res.map(|v| func(&v)))
+            })
+    }
+}
+
+impl<T: 'static + Send + Sync + Clone> StateRef for MutableVecItem<T> {
+    fn read_ref<F: FnOnce(&Self::Item) -> V, V>(&self, f: F) -> V
+    where
+        Self: Sized,
+    {
+        todo!()
+    }
+}
+
+impl<T: 'static + Send + Sync + Clone> StateMut for MutableVecItem<T> {
+    fn write_mut<F: FnOnce(&mut Self::Item) -> V, V>(&self, f: F) -> V
+    where
+        Self: Sized,
+    {
+        let mut lock = self.inner.lock_mut();
+
+        let mut value = lock[self.index].clone();
+        let res = f(&mut value);
+        lock.set_cloned(self.index, value);
+        res
+    }
+}
+
 impl Editable for TemplateDesc {
     const INLINE: bool = true;
 
@@ -185,33 +265,72 @@ impl Editable for TemplateDesc {
     where
         Self: Sized,
     {
-        // let bundles = state.transform(|v| v.bundles, |v, new_value| v.bundles = new_value);
-
+        let original_state = Arc::new(state);
         let bundles = Arc::new(
-            state
+            original_state
+                .clone()
                 .map_value(|v| v.bundles, |v| TemplateDesc { bundles: v })
                 .memo(Vec::new()),
         );
 
-        let bundles_editor = bundles.clone().stream_ref(move |v| {
-            to_owned!(bundles);
-            let bundles = v
-                .iter()
-                .enumerate()
-                .map(move |(i, bundle)| {
-                    let item_state = bundles
-                        .clone()
-                        .project_ref(move |v| &v[i], move |v| &mut v[i]);
-                    // .transform(|v| v[i].clone(), |v, new| v[i] = new);
+        let widget = move |scope: &mut Scope| {
+            // let mut attached_editors = Vec::new();
 
-                    bundle.editor(item_state)
-                })
-                .collect_vec();
+            // Create initial editors
 
-            col(bundles).with_stretch(true)
-        });
+            let deduped = bundles
+                .stream()
+                .scan(None as Option<Vec<_>>, |state, item| {
+                    let emit = match state {
+                        Some(prev) if prev.len() == item.len() => None,
+                        _ => {
+                            *state = Some(item.clone());
+                            Some(item)
+                        }
+                    };
+                    futures::future::ready(emit)
+                });
 
-        Box::new(StreamWidget::new(bundles_editor))
+            scope.spawn_stream(deduped, move |scope, values| {
+                values
+                    .iter()
+                    .enumerate()
+                    .map(|(i, bundle)| {
+                        let item_state = bundles
+                            .clone()
+                            .project_ref(move |v| &v[i], move |v| &mut v[i]);
+
+                        let text = bundle.bundle.typetag_name();
+                        to_owned!(bundles);
+                        let discard = Button::label(LUCIDE_TRASH_2)
+                            .with_style(ButtonStyle::hidden())
+                            .with_tooltip_text("Remove Bundle")
+                            .on_click(move |_| {
+                                bundles.write_mut(|v| v.remove(i));
+                            });
+
+                        scope.attach(
+                            card(Collapsible::new(
+                                row((
+                                    bold(text),
+                                    Rectangle::new(Srgba::new(0.0, 0.0, 0.0, 0.0))
+                                        .with_maximize(Vec2::X),
+                                    discard,
+                                ))
+                                .with_cross_align(Align::Center),
+                                bundle.editor(item_state),
+                            ))
+                            .with_background(surface_tertiary()),
+                        )
+                    })
+                    .collect_vec();
+
+                col(()).with_stretch(true).mount(scope);
+            });
+        };
+
+        let add_new = Button::label("Add Bundle").with_tooltip_text("Add new bundle");
+        Box::new(col((widget, add_new)).with_stretch(true))
     }
 }
 
