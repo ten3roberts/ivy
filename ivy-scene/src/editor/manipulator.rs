@@ -13,6 +13,7 @@ use ivy_core::{
     palette::{IntoColor, Srgba, WithAlpha},
     Color, ColorExt,
 };
+use ivy_editable::Editable;
 use ivy_physics::{
     components::rigidbody_flags,
     shapes::{Plane, Ray},
@@ -555,7 +556,68 @@ pub enum ManipulationSpace {
     View,
 }
 
-#[derive(PartialEq, Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+impl Editable for ManipulationSpace {
+    const INLINE: bool = false;
+
+    fn create_editor<
+        S: 'static + Send + Sync + ivy_ui::violet::core::state::StateDuplex<Item = Self>,
+    >(
+        _state: S,
+    ) -> Box<dyn Send + ivy_ui::violet::core::Widget>
+    where
+        Self: Sized,
+    {
+        todo!()
+    }
+
+    fn create_editor_project<
+        S: 'static
+            + Send
+            + Sync
+            + Clone
+            + ivy_ui::violet::core::state::StateStreamRef<Item = Self>
+            + ivy_ui::violet::core::state::StateWrite,
+    >(
+        _state: S,
+    ) -> Box<dyn Send + ivy_ui::violet::core::Widget>
+    where
+        Self: Sized,
+    {
+        todo!()
+    }
+}
+impl Editable for SnapMode {
+    const INLINE: bool = false;
+
+    fn create_editor<
+        S: 'static + Send + Sync + ivy_ui::violet::core::state::StateDuplex<Item = Self>,
+    >(
+        _state: S,
+    ) -> Box<dyn Send + ivy_ui::violet::core::Widget>
+    where
+        Self: Sized,
+    {
+        todo!()
+    }
+
+    fn create_editor_project<
+        S: 'static
+            + Send
+            + Sync
+            + Clone
+            + ivy_ui::violet::core::state::StateStreamRef<Item = Self>
+            + ivy_ui::violet::core::state::StateWrite,
+    >(
+        _state: S,
+    ) -> Box<dyn Send + ivy_ui::violet::core::Widget>
+    where
+        Self: Sized,
+    {
+        todo!()
+    }
+}
+
+#[derive(PartialEq, Debug, Clone, Copy, serde::Serialize, serde::Deserialize, Editable)]
 pub struct TransformSettings {
     pub space: ManipulationSpace,
     pub snap_mode: SnapMode,

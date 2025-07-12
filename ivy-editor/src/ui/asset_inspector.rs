@@ -94,48 +94,50 @@ impl Widget for AssetInspector {
 
                     let type_name = payload.meta.type_name.clone();
 
-                    let save_status = value
-                        .signal_ref(move |v| AssetPayloadUntyped {
-                            meta: payload.meta.clone(),
-                            desc: v.desc.clone_dyn(),
-                        })
-                        .throttle(|| sleep(Duration::from_secs(1)))
-                        .to_stream()
-                        .skip(1)
-                        .map(move |payload| {
-                            to_owned!(path);
-                            SuspenseWidget::new(Throbber::new(12.0), async move {
-                                to_owned!(path);
-                                let result = async move {
-                                    sleep(Duration::from_millis(500)).await;
-                                    let payload = payload.serialize_json()?;
-                                    async_std::fs::write(path.path(), payload).await?;
-                                    anyhow::Ok(())
-                                }
-                                .await;
+                    // let save_status = value
+                    //     .signal_ref(move |v| AssetPayloadUntyped {
+                    //         meta: payload.meta.clone(),
+                    //         desc: v.desc.clone_dyn(),
+                    //     })
+                    //     .throttle(|| sleep(Duration::from_secs(1)))
+                    //     .to_stream()
+                    //     .skip(1)
+                    //     .map(move |payload| {
+                    //         to_owned!(path);
+                    //         SuspenseWidget::new(Throbber::new(12.0), async move {
+                    //             to_owned!(path);
+                    //             let result = async move {
+                    //                 sleep(Duration::from_millis(500)).await;
+                    //                 let payload = payload.serialize_json()?;
+                    //                 async_std::fs::write(path.path(), payload).await?;
+                    //                 anyhow::Ok(())
+                    //             }
+                    //             .await;
 
-                                |scope: &mut Scope| match result {
-                                    Ok(()) => InteractiveWidget::new(label(LUCIDE_CHECK))
-                                        .with_tooltip_text("Saved")
-                                        .mount(scope),
-                                    Err(e) => {
-                                        col((
-                                            label(LUCIDE_TRIANGLE_ALERT)
-                                                .with_color(surface_danger())
-                                                .with_font_size(48.0),
-                                            bold(format!("Failed to save asset: {e:?}"))
-                                                .with_wrap(Wrap::Word),
-                                        ))
-                                        .with_cross_align(Align::Center)
-                                        .mount(scope);
-                                    }
-                                }
-                            })
-                        });
+                    //             |scope: &mut Scope| match result {
+                    //                 Ok(()) => InteractiveWidget::new(label(LUCIDE_CHECK))
+                    //                     .with_tooltip_text("Saved")
+                    //                     .mount(scope),
+                    //                 Err(e) => {
+                    //                     col((
+                    //                         label(LUCIDE_TRIANGLE_ALERT)
+                    //                             .with_color(surface_danger())
+                    //                             .with_font_size(48.0),
+                    //                         bold(format!("Failed to save asset: {e:?}"))
+                    //                             .with_wrap(Wrap::Word),
+                    //                     ))
+                    //                     .with_cross_align(Align::Center)
+                    //                     .mount(scope);
+                    //                 }
+                    //             }
+                    //         })
+                    //     });
 
                     col((
-                        row((subtitle(&type_name), StreamWidget::new(save_status)))
-                            .with_cross_align(Align::Center),
+                        row((
+                            subtitle(&type_name), /* StreamWidget::new(save_status) */
+                        ))
+                        .with_cross_align(Align::Center),
                         editor,
                     ))
                     .mount(scope);

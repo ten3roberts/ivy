@@ -4,7 +4,8 @@ use proc_macro2::{Span, TokenStream};
 use quote::{ToTokens, format_ident, quote};
 use syn::{
     Attribute, DeriveInput, Error, Field, Ident, Result, Token, Type, Visibility, bracketed,
-    meta::ParseNestedMeta, parenthesized, parse::Parse, punctuated::Punctuated, spanned::Spanned,
+    meta::ParseNestedMeta, parenthesized, parse::Parse, parse_quote_spanned,
+    punctuated::Punctuated, spanned::Spanned,
 };
 
 pub fn resource_impl(input: DeriveInput) -> Result<TokenStream> {
@@ -48,19 +49,16 @@ fn expand_struct(
         let ident = &f.ident;
         let vis = &f.vis;
         let ty = f.ty;
-        let extras = match &f.attrs.extras[..] {
-            [] => quote! {},
-            extras => quote! { #[#(#extras),*] },
-        };
+        let field_attrs = &f.attrs.attrs;
 
         if f.attrs.load {
             quote! {
-                // #extras
+                #(#field_attrs)*
                 #vis #ident: <#ty as #crate_name::loadable::Resource>::Desc
             }
         } else {
             quote! {
-                // #extras
+                #(#field_attrs)*
                 #vis #ident: #ty
             }
         }
@@ -102,7 +100,7 @@ fn expand_struct(
         impl #crate_name::loadable::Resource for #ident {
             type Desc = #desc_name;
 
-            fn type_name() -> &'static str {
+            fn tag_name() -> &'static str {
                 #name_str
             }
         }
@@ -129,9 +127,9 @@ fn expand_struct(
             .iter()
             .map(|v| v
                 .attrs
-                .extras
+                .attrs
                 .iter()
-                .map(|e| e.to_string())
+                .map(|e| e.into_token_stream().to_string())
                 .collect::<Vec<_>>()
                 .join(", "))
             .join(", ")
@@ -167,7 +165,7 @@ impl<'a> ParsedField<'a> {
 #[derive(Default)]
 struct FieldAttrs {
     load: bool,
-    extras: Vec<TokenStream>,
+    attrs: Vec<syn::Attribute>,
 }
 
 impl FieldAttrs {
@@ -175,6 +173,26 @@ impl FieldAttrs {
         let mut res = Self::default();
 
         for attr in input {
+            if !attr.path().is_ident("resource_attr") {
+                match &attr.meta {
+                    syn::Meta::List(meta_list) => {
+                        // Parse into a syn::Attribute
+                        let inner = &meta_list.tokens;
+                        let original_span = attr.span();
+                        let pound = attr.pound_token;
+                        let inner_attr = parse_quote_spanned!(original_span=> #pound [ #inner ]);
+                        res.attrs.push(inner_attr);
+                    }
+                    _ => {
+                        return Err(Error::new(
+                            Span::call_site(),
+                            "Expected a MetaList for `resource_attr`",
+                        ));
+                    }
+                }
+                continue;
+            }
+
             if !attr.path().is_ident("resource") {
                 continue;
             }
@@ -189,14 +207,7 @@ impl FieldAttrs {
                             res.load = true;
                             Ok(())
                         } else {
-                            // Strip outer `resource` attribute and feed forward
-                            // let value = meta.value()?;
-                            // let content;
-                            // parenthesized!(content in meta.input);
-                            // let content = TokenStream::parse(&content)?;
-                            // res.extras.push(list.to_token_stream());
-
-                            Ok(())
+                            Err(Error::new(attr.span(), "Unknown resource attribute"))
                         }
                     })?;
                 }
@@ -233,7 +244,7 @@ impl Attrs {
 
                     list.parse_nested_meta(|meta| {
                         // item = [Debug, PartialEq]
-                        if meta.path.is_ident("derives") {
+                        if meta.path.is_ident("derive") {
                             let value = meta.value()?;
                             let content;
                             bracketed!(content in value);

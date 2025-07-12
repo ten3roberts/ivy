@@ -30,6 +30,7 @@ pub mod profiling;
 
 pub mod app;
 pub mod bundle;
+pub mod bundle_registry;
 mod color;
 pub mod components;
 mod dir;

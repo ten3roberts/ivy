@@ -20,6 +20,7 @@ use ivy_core::{
     update_layer::Plugin,
 };
 
+use ivy_editable::Editable;
 use ivy_input::{
     Action, CursorPositionBinding, InputState, KeyBinding, MouseButtonBinding,
     components::input_state,
@@ -116,7 +117,8 @@ pub fn draw_system(gizmos: &mut Gizmos, query: &mut QueryBorrow<Component<Transf
     }
 }
 
-#[derive(Resource)]
+#[derive(Resource, Bundle)]
+#[resource(derive = [Editable])]
 pub struct TransformToolBundle {
     settings: TransformSettings,
 }
@@ -421,6 +423,3 @@ impl Widget for TransformToolWidget {
         StreamWidget::new(settings).mount(scope);
     }
 }
-
-#[typetag::serde]
-impl BundleDesc for TransformToolBundleDesc {}

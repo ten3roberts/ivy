@@ -1,6 +1,4 @@
-use futures_signals::signal::Mutable;
 use std::{any::Any, collections::BTreeMap, future::Future};
-use violet::core::state::{StateDuplex, StateExt};
 
 use downcast_rs::{impl_downcast, Downcast, DowncastSync};
 use futures::{future::BoxFuture, stream, FutureExt, StreamExt, TryStreamExt};
@@ -15,7 +13,7 @@ use crate::{meta::AssetPayload, AssetCache, AssetPath};
 pub trait Resource: 'static + Send + Sync {
     type Desc: Loadable<Output = Self>;
 
-    fn type_name() -> &'static str;
+    fn tag_name() -> &'static str;
 }
 
 pub trait ResourceDyn: Downcast {}
@@ -97,11 +95,11 @@ where
 
         let payload: AssetPayload<T::Desc> = serde_json::from_slice(&content[..])?;
 
-        if payload.meta.type_name != T::type_name() {
+        if payload.meta.type_name != T::tag_name() {
             return Err(anyhow::anyhow!(
                 "Asset type mismatch: expected {}, found {}",
                 payload.meta.type_name,
-                T::type_name()
+                T::tag_name()
             ));
         }
 

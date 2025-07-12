@@ -22,7 +22,8 @@ use ivy_ui::violet::{
         state::StateStream,
         stored::WeakHandle,
         style::{
-            SizeExt, StyleExt, base_colors::*, element_pressed, element_primary, surface_danger,
+            SizeExt, StyleExt, base_colors::*, default_corner_radius, element_pressed,
+            element_primary, surface_danger,
         },
         text::{FontFamily, Wrap},
         time::sleep,
@@ -184,7 +185,7 @@ pub struct FileIcon<'a> {
 impl Widget for FileIcon<'_> {
     fn mount(self, scope: &mut Scope<'_>) {
         to_owned!(path = self.path, assets = self.assets);
-        SuspenseWidget::new(Throbber::new(ITEM_SIZE.px.x), async move {
+        SuspenseWidget::new(Throbber::new(48.0), async move {
             let path = path;
             let ty = FileType::from_path(&path, &assets).await;
 
@@ -193,7 +194,10 @@ impl Widget for FileIcon<'_> {
                 if ty.is_image() {
                     // If the file is an image, we can display it directly
                     let image = Image::new(path.canonicalize().unwrap().to_owned());
-                    image.with_exact_size(Unit::px2(64.0, 64.0)).mount(scope);
+                    image
+                        .with_exact_size(Unit::px2(64.0, 64.0))
+                        .with_corner_radius(default_corner_radius())
+                        .mount(scope);
                     return;
                 }
 
@@ -607,7 +611,7 @@ struct FilePreview<'a> {
 impl Widget for FilePreview<'_> {
     fn mount(self, scope: &mut Scope<'_>) {
         to_owned!(assets = self.assets, path = self.path);
-        SuspenseWidget::new(Throbber::new(ITEM_SIZE.px.x), async move {
+        SuspenseWidget::new(Throbber::new(45.0), async move {
             let path = path;
             let ty = FileType::from_path(&path, &assets).await;
             let icon = label(ty.icon())

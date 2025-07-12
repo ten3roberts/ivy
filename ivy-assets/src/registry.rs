@@ -77,7 +77,7 @@ macro_rules! declare_resource {
         impl Resource for $name {
             type Desc = $desc;
 
-            fn type_name() -> &'static str {
+            fn tag_name() -> &'static str {
                 stringify!($name)
             }
         }

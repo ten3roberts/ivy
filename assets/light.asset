@@ -5,9 +5,9 @@
   "desc": {
     "params": {
       "color": {
-        "red": 0.47,
-        "green": 0.15,
-        "blue": 0.23
+        "red": 0.4,
+        "green": 0.50980395,
+        "blue": 0.43
       },
       "intensity": 5.0,
       "inner_theta": 0.8,

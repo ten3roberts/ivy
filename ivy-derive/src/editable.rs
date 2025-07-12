@@ -45,13 +45,14 @@ fn expand_struct(
     let field_names = fields.iter().map(|f| &f.ident).collect_vec();
     let default = (0..field_names.len()).map(|_| quote! { None });
 
-    let field_flatten = quote! {
-        let value = std::sync::Arc::new(value.filter_map(
-                |v| Some((#(Some(v.#field_names),)*)),
-                |(#(#field_names,)*)| Some(#ident {
-                    #(#field_names: #field_names?),*
-                })
-            ).memo((#(#default,)*)));
+    let field_default = quote! {
+        value.filter_map(
+            |v| Some((#(Some(v.#field_names),)*)),
+            |(#(#field_names,)*)| Some(#ident {
+                #(#field_names: #field_names?),*
+            })
+        )
+        .memo((#(#default,)*))
     };
 
     let field_lower = fields.iter().enumerate().map(|(i, f)| {
@@ -59,7 +60,15 @@ fn expand_struct(
 
         let i = syn::Index::from(i);
         quote! {
-            let #ident = value.clone().project_ref(|v| &v.#i, |v| &mut v.#i).lower_option();
+            let #ident = state.clone().project_ref(|v| &v.#i, |v| &mut v.#i).lower_option();
+        }
+    });
+
+    let field_project = fields.iter().map(|f| {
+        let ident = &f.ident;
+
+        quote! {
+            let #ident = state.clone().project_ref(|v| &v.#ident, |v| &mut v.#ident);
         }
     });
 
@@ -81,11 +90,9 @@ fn expand_struct(
             |scope: &mut #crate_name::__private::violet::core::Scope<'_>| {
                 if <#ty as #crate_name::Editable>::INLINE {
                     #crate_name::__private::violet::core::widget::row((
-                        #crate_name::__private::violet::core::widget::Stack::new(#label).with_min_size(
-                            #crate_name::__private::violet::core::unit::Unit::px2(100.0, 0.0)
-                        ),
+                        #crate_name::__private::violet::core::widget::Stack::new(#label).with_maximize(#crate_name::__private::violet::glam::Vec2::X),
                         #editor
-                    )).mount(scope);
+                    )).with_cross_align(#crate_name::__private::violet::core::layout::Align::Center).mount(scope);
                 } else {
                     #crate_name::__private::violet::core::widget::Collapsible::new(
                         #label,
@@ -94,7 +101,7 @@ fn expand_struct(
                 }
             }
         }
-    });
+    }).collect_vec();
 
     let expanded = quote! {
         impl #crate_name::Editable for #ident {
@@ -107,9 +114,23 @@ fn expand_struct(
                 use #crate_name::__private::violet::core::style::SizeExt;
                 use #crate_name::__private::violet::core::state::StateExt;
 
-                #field_flatten
+                let state = ::std::sync::Arc::new(#field_default);
 
                 #(#field_lower)*
+
+                Box::new(
+                    #crate_name::__private::violet::core::widget::col( (#(#field_edit),*))
+                )
+            }
+
+            fn create_editor_project<S: 'static + Send + Sync + Clone + #crate_name::__private::violet::core::state::StateStreamRef<Item = Self> + #crate_name::__private::violet::core::state::StateWrite<Item = Self>>(
+                state: S,
+            ) -> Box<dyn Send + #crate_name::__private::violet::core::widget::Widget> {
+                use #crate_name::__private::violet::core::widget::Widget;
+                use #crate_name::__private::violet::core::style::SizeExt;
+                use #crate_name::__private::violet::core::state::StateExt;
+
+                #(#field_project)*
 
                 Box::new(
                     #crate_name::__private::violet::core::widget::col( (#(#field_edit),*))

@@ -2,10 +2,10 @@ use std::time::Duration;
 
 use flax::{components::name, Component, ComponentMut, Debuggable, EntityBuilder, Fetch};
 use glam::{Mat4, Quat, Vec2, Vec3};
-use ivy_assets::{loadable::Loadable, AssetCache, Resource};
+use ivy_assets::{AssetCache, Resource};
 use ivy_editable::Editable;
 
-use crate::{bundle::Bundle, gizmos::Gizmos, template::BundleDesc, AsyncCommandBuffer, Color};
+use crate::{bundle::Bundle, gizmos::Gizmos, AsyncCommandBuffer, Color};
 
 flax::component! {
     pub position: Vec3 => [Debuggable],
@@ -102,14 +102,14 @@ fn one_scale() -> Vec3 {
     Vec3::ONE
 }
 
-#[derive(Debug, Clone, Copy, Resource, PartialEq)]
-#[resource(derives = [Default, Editable])]
+#[derive(Debug, Clone, Copy, PartialEq, Resource, Bundle)]
+#[resource(derive = [Default, Editable])]
 pub struct TransformBundle {
-    // #[cfg_attr(feature = "serde", resource(serde(default)))]
+    #[cfg_attr(feature = "serde", resource_attr(serde(default)))]
     pub position: Vec3,
-    // #[cfg_attr(feature = "serde", resource(serde(default)))]
+    #[cfg_attr(feature = "serde", resource(serde(default)))]
     pub rotation: Quat,
-    // #[cfg_attr(feature = "serde", resource(serde(default = "one_scale")))]
+    #[cfg_attr(feature = "serde", resource(serde(default = "one_scale")))]
     pub scale: Vec3,
 }
 
@@ -169,11 +169,8 @@ impl Bundle for TransformBundle {
     }
 }
 
-#[typetag::serde]
-impl BundleDesc for TransformBundleDesc {}
-
-#[derive(Debug, Clone, Resource, PartialEq)]
-#[resource(derives = [Default, Editable])]
+#[derive(Debug, Clone, PartialEq, Resource, Bundle)]
+#[resource(derive = [Default, Editable])]
 pub struct NameBundle {
     name: String,
 }
@@ -189,6 +186,3 @@ impl Bundle for NameBundle {
         entity.set(name(), self.name.clone());
     }
 }
-
-#[typetag::serde]
-impl BundleDesc for NameBundleDesc {}

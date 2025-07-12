@@ -16,6 +16,7 @@ readme = "./README.md"
 [dependencies]
 ivy-assets = { path = "../ivy-assets", version = "0.10.0" }
 ivy-editable = { path = "../ivy-editable", version = "0.1.0" }
+ivy-derive = { path = "../ivy-derive", version = "0.1.0" }
 ivy-random = { path = "../ivy-random", version = "0.10.0" }
 ivy-profiling = { path = "../ivy-profiling" }
 
@@ -43,6 +44,8 @@ typetag.workspace = true
 facet.workspace = true
 facet-reflect.workspace = true
 bevy_reflect.workspace = true
+inventory.workspace = true
+erased-serde.workspace = true
 
 [features]
 profile = ["ivy-profiling/profile_with_puffin", "puffin", "puffin_http"]

@@ -75,7 +75,7 @@ where
 impl<T: LoadFromPath> Resource for Asset<T> {
     type Desc = AssetPath<T>;
 
-    fn type_name() -> &'static str {
+    fn tag_name() -> &'static str {
         "Asset"
     }
 }

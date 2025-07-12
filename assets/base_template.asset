@@ -3,48 +3,6 @@
     "type_name": "Template"
   },
   "desc": {
-    "bundles": [
-      {
-        "NameBundleDesc": {
-          "name": "LightTemplate"
-        }
-      },
-      {
-        "TransformBundleDesc": {
-          "position": [
-            5.0,
-            0.0,
-            0.0
-          ],
-          "rotation": [
-            0.05547957,
-            0.7049266,
-            -0.055478342,
-            0.7049274
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ]
-        }
-      },
-      {
-        "LightBundleDesc": {
-          "params": {
-            "color": {
-              "red": 0.47,
-              "green": 0.57,
-              "blue": 0.4
-            },
-            "intensity": 5.0,
-            "inner_theta": 0.8,
-            "outer_theta": 0.7
-          },
-          "kind": "Point",
-          "cast_shadow": true
-        }
-      }
-    ]
+    "bundles": []
   }
 }

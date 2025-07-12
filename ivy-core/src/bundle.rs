@@ -1,4 +1,5 @@
 use flax::EntityBuilder;
+pub use ivy_derive::Bundle;
 
 /// A bundle describes a set of related components mounted to an entity.
 pub trait Bundle: Send + Sync {

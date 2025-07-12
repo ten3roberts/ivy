@@ -4,8 +4,8 @@ use ivy_assets::{loadable::Loadable, AssetCache, Resource};
 use ivy_core::{palette::Srgb, template::BundleDesc, Bundle};
 use ivy_editable::Editable;
 use violet::core::{
-    state::StateDuplex,
-    widget::{col, label, row, Checkbox, Radio, WidgetExt},
+    state::{StateDuplex, StateExt, StateStreamRef, StateWrite},
+    widget::{col, label, row, Checkbox, Radio, Selectable, WidgetExt},
     Widget,
 };
 
@@ -59,7 +59,7 @@ pub enum LightKind {
 }
 
 impl Editable for LightKind {
-    const INLINE: bool = false;
+    const INLINE: bool = true;
 
     fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         state: S,
@@ -68,20 +68,22 @@ impl Editable for LightKind {
         Self: Sized,
     {
         let state = Arc::new(state);
-        Box::new(col((
-            row((
-                Radio::new_value(state.clone(), LightKind::Point),
-                label("Point"),
-            )),
-            row((
-                Radio::new_value(state.clone(), LightKind::Directional),
-                label("Directional"),
-            )),
-            row((
-                Radio::new_value(state, LightKind::Spotlight),
-                label("Spotlight"),
-            )),
+        Box::new(row((
+            Selectable::new_value(label("Point"), state.clone(), LightKind::Point),
+            Selectable::new_value(label("Directional"), state.clone(), LightKind::Directional),
+            Selectable::new_value(label("Spotlight"), state, LightKind::Spotlight),
         )))
+    }
+
+    fn create_editor_project<
+        S: 'static + Send + Sync + Clone + StateStreamRef<Item = Self> + StateWrite,
+    >(
+        state: S,
+    ) -> Box<dyn Send + Widget>
+    where
+        Self: Sized,
+    {
+        Self::create_editor(state.project_ref(|v| v, |v| v))
     }
 }
 
@@ -111,8 +113,8 @@ impl LightKind {
     }
 }
 
-#[derive(Debug, Clone, Resource, Editable)]
-#[resource(derives = [Editable])]
+#[derive(Debug, Clone, Resource, Editable, Bundle)]
+#[resource(derive = [Editable])]
 pub struct LightBundle {
     pub params: LightParams,
     pub kind: LightKind,
@@ -130,6 +132,3 @@ impl Bundle for LightBundle {
         }
     }
 }
-
-#[typetag::serde]
-impl BundleDesc for LightBundleDesc {}
