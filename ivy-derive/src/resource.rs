@@ -3,8 +3,8 @@ use proc_macro_crate::FoundCrate;
 use proc_macro2::{Span, TokenStream};
 use quote::{ToTokens, format_ident, quote};
 use syn::{
-    Attribute, DeriveInput, Error, Field, Ident, Result, Token, Type, Visibility, bracketed,
-    meta::ParseNestedMeta, parenthesized, parse::Parse, parse_quote_spanned,
+    Attribute, DataEnum, DeriveInput, Error, Field, Ident, Result, Token, Type, Visibility,
+    bracketed, meta::ParseNestedMeta, parenthesized, parse::Parse, parse_quote_spanned,
     punctuated::Punctuated, spanned::Spanned,
 };
 
@@ -20,9 +20,150 @@ pub fn resource_impl(input: DeriveInput) -> Result<TokenStream> {
 
     match &input.data {
         syn::Data::Struct(data_struct) => expand_struct(crate_name, &input, data_struct),
-        syn::Data::Enum(_data_enum) => todo!(),
+        syn::Data::Enum(data_enum) => expand_enum(crate_name, &input, data_enum),
         syn::Data::Union(_data_union) => todo!(),
     }
+}
+
+fn expand_enum(
+    crate_name: Ident,
+    input: &DeriveInput,
+    data_enum: &DataEnum,
+) -> Result<TokenStream> {
+    let attrs = Attrs::get(&input.attrs)?;
+    let ident = &input.ident;
+    let enum_ident = ident;
+
+    let desc_name = format_ident!("{}Desc", input.ident);
+
+    let variant_names: Vec<_> = data_enum.variants.iter().map(|v| &v.ident).collect();
+
+    let desc_variants = data_enum
+        .variants
+        .iter()
+        .map(|variant| {
+            let ident = &variant.ident;
+            let attrs = Attrs::get(&variant.attrs)?;
+
+            let desc_fields = match &variant.fields {
+                syn::Fields::Named(fields) => {
+                    let fields: Vec<ParsedField> = fields
+                        .named
+                        .iter()
+                        .map(ParsedField::get)
+                        .collect::<Result<_>>()?;
+
+                    let desc_fields = expand_fields(&crate_name, ident, &fields, &attrs)?;
+                    let load_fields = expand_load(&crate_name, &fields)?;
+                    let field_names = fields.iter().map(|v| &v.ident);
+
+                    (
+                        quote! {
+                            #ident { #(#desc_fields),* }
+                        },
+                        quote! {
+                            Self::#ident { #(#field_names),* } => #enum_ident::#ident { #(#load_fields),* }
+                        },
+                    )
+                }
+                syn::Fields::Unit => (quote! { #ident }, quote! { Self::#ident => #enum_ident::#ident }),
+                _ => {
+                    return Err(Error::new_spanned(
+                        variant,
+                        "Expected named fields for enum variant",
+                    ));
+                }
+            };
+
+            Ok(desc_fields)
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    let (desc_variants, desc_loads): (Vec<_>, Vec<_>) = desc_variants.into_iter().unzip();
+
+    let extras = match &attrs.derives {
+        Some(extras) => {
+            quote! { #[derive(#extras)]}
+        }
+        None => quote! {},
+    };
+
+    let expanded = quote! {
+        #[derive(Debug, Clone, #crate_name::registry::serde::Serialize, #crate_name::registry::serde::Deserialize)]
+        #extras
+        pub enum #desc_name {
+            #(#desc_variants),*
+        }
+
+        impl #crate_name::loadable::Resource for #ident {
+            type Desc = #desc_name;
+
+            fn tag_name() -> &'static str {
+                stringify!(#ident)
+            }
+        }
+
+        impl #crate_name::loadable::Loadable for #desc_name {
+            type Output = #ident;
+
+            async fn load(&self, assets: &#crate_name::AssetCache) -> anyhow::Result<Self::Output> {
+                Ok(match self {
+                    #(#desc_loads),*
+                })
+            }
+        }
+    };
+
+    Ok(expanded)
+}
+
+fn expand_fields(
+    crate_name: &Ident,
+    ident: &Ident,
+    fields: &[ParsedField],
+    attrs: &Attrs,
+) -> Result<Vec<TokenStream>> {
+    fields
+        .iter()
+        .map(|field| {
+            let vis = &field.vis;
+            let ty = &field.ty;
+            let ident = &field.ident;
+            let field_attrs = &field.attrs.attrs;
+
+            if field.attrs.load {
+                Ok(quote! {
+                    #(#field_attrs)*
+                    #ident: <#ty as #crate_name::loadable::Resource>::Desc
+                })
+            } else {
+                Ok(quote! {
+                    #(#field_attrs)*
+                    #ident: #ty
+                })
+            }
+        })
+        .collect()
+}
+
+fn expand_load(crate_name: &Ident, fields: &[ParsedField]) -> Result<Vec<TokenStream>> {
+    fields
+        .iter()
+        .map(|f| {
+            let ident = &f.ident;
+            let ty = f.ty;
+
+            if f.attrs.load {
+                Ok(quote! {
+                    #ident: #crate_name::loadable::Loadable::load(#ident, assets).await?
+                })
+            } else {
+                Ok(quote! {
+                    #ident: #ident.clone()
+                })
+            }
+        })
+        .collect()
 }
 
 fn expand_struct(
@@ -120,20 +261,6 @@ fn expand_struct(
         }
     };
 
-    eprintln!(
-        "Expanded resource: {}\n\n\n\nAttributes: {}",
-        expanded,
-        fields
-            .iter()
-            .map(|v| v
-                .attrs
-                .attrs
-                .iter()
-                .map(|e| e.into_token_stream().to_string())
-                .collect::<Vec<_>>()
-                .join(", "))
-            .join(", ")
-    );
     Ok(expanded)
 }
 
@@ -173,7 +300,7 @@ impl FieldAttrs {
         let mut res = Self::default();
 
         for attr in input {
-            if !attr.path().is_ident("resource_attr") {
+            if attr.path().is_ident("resource_attr") {
                 match &attr.meta {
                     syn::Meta::List(meta_list) => {
                         // Parse into a syn::Attribute

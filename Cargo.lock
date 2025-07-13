@@ -1190,69 +1190,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "facet"
-version = "0.27.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a219b97d2f75648ed5470f9efaed7fac98b0f5218d701e305444578cfbb33d3b"
-dependencies = [
- "facet-core",
- "facet-macros",
- "static_assertions",
-]
-
-[[package]]
-name = "facet-core"
-version = "0.27.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea8f4f44d3904eb16187e3c0d93c1f6eed2d5f5e5532fb3cbf60a0849fdae726"
-dependencies = [
- "bitflags 2.9.1",
- "impls",
-]
-
-[[package]]
-name = "facet-macros"
-version = "0.27.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41934d083cf0dab2dc480d9c69240448478f06455c69a738833dbe8ef244efbe"
-dependencies = [
- "facet-core",
- "facet-macros-emit",
-]
-
-[[package]]
-name = "facet-macros-emit"
-version = "0.27.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e390d85bbdd57eb8ef7f7b10254feaf9727f77cf4312722cd8f030a8c182491e"
-dependencies = [
- "facet-macros-parse",
- "quote",
-]
-
-[[package]]
-name = "facet-macros-parse"
-version = "0.27.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76290ce9f9701d81b4c2d4b819a64caea9334056d2fb5c5f8c88b24afd9b6dc1"
-dependencies = [
- "proc-macro2",
- "quote",
- "unsynn",
-]
-
-[[package]]
-name = "facet-reflect"
-version = "0.27.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5633f35296f3413116b3381929732b98798536dd28d5576f99f2a78ff3368cd7"
-dependencies = [
- "bitflags 2.9.1",
- "facet-core",
- "owo-colors",
-]
-
-[[package]]
 name = "fast-srgb8"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1532,15 +1469,6 @@ dependencies = [
  "pin-project-lite",
  "pin-utils",
  "slab",
-]
-
-[[package]]
-name = "fxhash"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c31b6d751ae2c7f11320402d34e41349dd1016f8d5d45e48c4312bc8625af50c"
-dependencies = [
- "byteorder",
 ]
 
 [[package]]
@@ -1871,12 +1799,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0263a3d970d5c054ed9312c0057b4f3bde9c0b33836d3637361d4a9e6e7a408"
 
 [[package]]
-name = "impls"
-version = "1.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a46645bbd70538861a90d0f26c31537cdf1e44aae99a794fb75a664b70951bc"
-
-[[package]]
 name = "indexmap"
 version = "2.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1985,8 +1907,6 @@ dependencies = [
  "downcast-rs 1.2.1",
  "erased-serde",
  "ezy",
- "facet",
- "facet-reflect",
  "flax",
  "flume",
  "futures",
@@ -2682,12 +2602,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1fafa6961cabd9c63bcd77a45d7e3b7f3b552b70417831fb0f56db717e72407e"
 
 [[package]]
-name = "mutants"
-version = "0.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc0287524726960e07b119cebd01678f852f147742ae0d925e6a520dca956126"
-
-[[package]]
 name = "naga"
 version = "22.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3308,12 +3222,6 @@ checksum = "22ec719bbf3b2a81c109a4e20b1f129b5566b7dce654bc3872f6a05abf82b2c4"
 dependencies = [
  "ttf-parser 0.25.1",
 ]
-
-[[package]]
-name = "owo-colors"
-version = "4.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48dd4f4a2c8405440fd0462561f0e5806bd0f77e86f51c761481bdd4018b545e"
 
 [[package]]
 name = "palette"
@@ -4148,12 +4056,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "shadow_counted"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "65da48d447333cebe1aadbdd3662f3ba56e76e67f53bc46f3dd5f67c74629d6b"
-
-[[package]]
 name = "sharded-slab"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4792,18 +4694,6 @@ name = "unicode-xid"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
-
-[[package]]
-name = "unsynn"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7940603a9e25cf11211cc43b81f4fcad2b8ab4df291ca855f32c40e1ac22d5bc"
-dependencies = [
- "fxhash",
- "mutants",
- "proc-macro2",
- "shadow_counted",
-]
 
 [[package]]
 name = "urlencoding"

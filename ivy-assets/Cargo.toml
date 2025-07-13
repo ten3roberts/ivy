@@ -23,8 +23,8 @@ thiserror.workspace = true
 anyhow.workspace = true
 futures.workspace = true
 async-std.workspace = true
-serde = { workspace = true, optional = true }
-serde_json = { workspace = true, optional = true }
+serde = { workspace = true, optional = false }
+serde_json = { workspace = true, optional = false }
 derivative.workspace = true
 futures-signals.workspace = true
 typetag.workspace = true
@@ -32,6 +32,3 @@ erased-serde.workspace = true
 downcast-rs.workspace = true
 inventory.workspace = true
 violet.workspace = true
-
-[features]
-serde = ["dep:serde", "serde_json"]
