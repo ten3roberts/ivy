@@ -1,7 +1,4 @@
-use std::{
-    any::{self, Any},
-    sync::Arc,
-};
+use std::{any::Any, sync::Arc};
 
 use downcast_rs::{impl_downcast, DowncastSync};
 use flax::{Entity, EntityBuilder};
@@ -84,7 +81,7 @@ impl_downcast!(BundleDesc);
 impl<T> BundleDescDyn for T
 where
     T: BundleDesc + Loadable + Clone,
-    T::Output: Bundle + 'static,
+    T::Output: Resource + Bundle + 'static,
 {
     fn load_as_bundle<'a>(
         &'a self,
@@ -100,7 +97,7 @@ where
     }
 
     fn tag_name(&self) -> &'static str {
-        any::type_name::<T>()
+        <T::Output as Resource>::tag_name()
     }
 
     fn clone_bundle(&self) -> Box<dyn BundleDesc> {
@@ -208,7 +205,7 @@ impl Editable for TemplateDesc {
 
         let bundles1 = bundles.clone();
 
-        let widget = move |scope: &mut Scope| {
+        let editors = move |scope: &mut Scope| {
             let deduped = bundles
                 .stream()
                 .scan(None as Option<Vec<_>>, |state, item| {
@@ -279,7 +276,9 @@ impl Editable for TemplateDesc {
                             move |new_bundle| {
                                 add_tx.send(None).ok();
                                 tracing::info!("Writing to bundle");
-                                state.write_mut(|v| v.bundles.push(new_bundle));
+                                if let Some(new_bundle) = new_bundle {
+                                    state.write_mut(|v| v.bundles.push(new_bundle));
+                                }
                             }
                         }),
                     };
@@ -290,7 +289,7 @@ impl Editable for TemplateDesc {
 
         Box::new(
             col((
-                widget,
+                editors,
                 StreamWidget::new(
                     add_rx
                         .into_stream()
@@ -303,7 +302,7 @@ impl Editable for TemplateDesc {
 }
 
 struct BundleCreationWidget {
-    on_add: Box<dyn Fn(ErasedBundleDesc) + Send + Sync>,
+    on_add: Box<dyn Fn(Option<ErasedBundleDesc>) + Send + Sync>,
 }
 
 impl Widget for BundleCreationWidget {
@@ -322,7 +321,7 @@ impl Widget for BundleCreationWidget {
 
         impl Widget for BundleEntry {
             fn mount(self, scope: &mut Scope<'_>) {
-                row((label(LUCIDE_PACKAGE), label(self.registration.tag))).mount(scope)
+                row((label(LUCIDE_PACKAGE), label((self.registration.tag)()))).mount(scope)
             }
         }
 
@@ -341,18 +340,27 @@ impl Widget for BundleCreationWidget {
                 let value = Mutable::new(None as Option<ErasedBundleDesc>);
                 let upcast = entry.registration.upcast_any;
 
-                let add_controls = value.stream().map(move |v| match v {
-                    Some(bundle) => {
-                        let bundle = bundle.clone();
-                        let widget = Button::label("Add")
-                            .success()
-                            .on_click(move |scope| (scope.read(on_add)(bundle.clone())));
+                let add_controls = value.stream().map(move |v| {
+                    let add = match v {
+                        Some(bundle) => {
+                            let bundle = bundle.clone();
+                            let widget = Button::label("Add")
+                                .success()
+                                .on_click(move |scope| (scope.read(on_add)(Some(bundle.clone()))));
 
-                        widget
-                    }
-                    None => Button::label("Add")
-                        .disabled()
-                        .with_tooltip_text("Missing fields"),
+                            widget
+                        }
+                        None => Button::label("Add")
+                            .disabled()
+                            .with_tooltip_text("Missing fields"),
+                    };
+
+                    row((
+                        add.with_maximize(Vec2::X),
+                        Button::label("Cancel")
+                            .with_maximize(Vec2::X)
+                            .on_click(move |scope| scope.read(on_add)(None)),
+                    ))
                 });
 
                 let widget = if let Some(editor) = editor {
@@ -375,12 +383,11 @@ impl Widget for BundleCreationWidget {
         let selection_widget = raised_card(ScrollArea::vertical(SelectList::new(
             selected,
             available_bundles.clone(),
-        )))
-        .with_exact_size(Unit::px2(400.0, 200.0));
+        )));
 
         col((
             selection_widget,
-            raised_card(ScrollArea::vertical(StreamWidget::new(value_editor))),
+            raised_card(StreamWidget::new(value_editor)),
         ))
         .with_stretch(true)
         .mount(scope);

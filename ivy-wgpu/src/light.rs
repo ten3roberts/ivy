@@ -67,7 +67,8 @@ impl Editable for LightKind {
     where
         Self: Sized,
     {
-        let state = Arc::new(state);
+        let state = Arc::new(state.memo(Default::default()));
+        state.sync_initial();
         Box::new(row((
             Selectable::new_value(label("Point"), state.clone(), LightKind::Point),
             Selectable::new_value(label("Directional"), state.clone(), LightKind::Directional),

@@ -5,7 +5,7 @@ use std::{
 };
 
 use bevy_reflect::{PartialReflect, TypeInfo};
-use flax::{Entity, Query, component::ComponentValue, entity_ids};
+use flax::{Entity, component::ComponentValue};
 use futures::{FutureExt, StreamExt, channel::oneshot, stream::BoxStream};
 use glam::{Quat, Vec2, Vec3};
 use itertools::Itertools;
@@ -22,8 +22,8 @@ use violet::{
         to_owned,
         unit::Unit,
         widget::{
-            Button, ButtonStyle, Checkbox, FutureWidget, InputBox, Rectangle, SignalWidget, Slider,
-            StreamWidget, TextInput, bold, card, col,
+            Button, ButtonStyle, Checkbox, InputBox, SignalWidget, StreamWidget, TextInput, bold,
+            card, col,
             interactive::{
                 colorpicker::RgbColorPicker,
                 overlay::{Overlay, overlay_state},
@@ -70,7 +70,7 @@ impl Editable for String {
     fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         state: S,
     ) -> Box<dyn Send + Widget> {
-        Box::new(TextInput::new(state.dedup()))
+        Box::new(TextInput::new(state.memo(Default::default()).dedup()))
     }
 
     fn create_editor_project<S: 'static + Send + Sync + StateStreamRef<Item = Self> + StateWrite>(
@@ -89,7 +89,7 @@ impl Editable for i32 {
     fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         state: S,
     ) -> Box<dyn Send + Widget> {
-        Box::new(InputBox::new(state))
+        Box::new(InputBox::new(state.memo(Default::default()).dedup()))
     }
 
     fn create_editor_project<S: 'static + Send + Sync + StateStreamRef<Item = Self> + StateWrite>(
@@ -98,7 +98,7 @@ impl Editable for i32 {
     where
         Self: Sized,
     {
-        Self::create_editor(state.project_ref(|v| v, |v| v))
+        Box::new(InputBox::new(state.project_ref(|v| v, |v| v)))
     }
 }
 
@@ -108,7 +108,7 @@ impl Editable for bool {
     fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         state: S,
     ) -> Box<dyn Send + Widget> {
-        Box::new(Checkbox::new(state))
+        Box::new(Checkbox::new(state.memo(false).dedup()))
     }
 
     fn create_editor_project<S: 'static + Send + Sync + StateStreamRef<Item = Self> + StateWrite>(
@@ -117,7 +117,7 @@ impl Editable for bool {
     where
         Self: Sized,
     {
-        Self::create_editor(state.project_ref(|v| v, |v| v))
+        Box::new(Checkbox::new(state.project_ref(|v| v, |v| v)))
     }
 }
 
@@ -127,7 +127,7 @@ impl Editable for f32 {
     fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         state: S,
     ) -> Box<dyn Send + Widget> {
-        Box::new(InputBox::new(state))
+        Box::new(InputBox::new(state.memo(Default::default()).dedup()))
     }
 
     fn create_editor_project<S: 'static + Send + Sync + StateStreamRef<Item = Self> + StateWrite>(
@@ -136,7 +136,7 @@ impl Editable for f32 {
     where
         Self: Sized,
     {
-        Self::create_editor(state.project_ref(|v| v, |v| v))
+        Box::new(InputBox::new(state.project_ref(|v| v, |v| v)))
     }
 }
 
@@ -158,7 +158,6 @@ impl Editable for Vec2 {
         Self: Sized,
     {
         let x = state.clone().project_ref(|v| &v.x, |v| &mut v.x);
-
         let y = state.clone().project_ref(|v| &v.y, |v| &mut v.y);
 
         Box::new(row((InputBox::new(x), InputBox::new(y))))
@@ -289,7 +288,6 @@ pub struct EntityDisplay(pub Entity);
 
 impl Widget for EntityDisplay {
     fn mount(self, _: &mut Scope<'_>) {
-        let id = self.0;
         todo!()
         // let (name_tx, name_rx) = oneshot::channel();
 
@@ -676,7 +674,6 @@ where
                     .map(|(i, _)| {
                         let element = state
                             .clone()
-                            .memo(Default::default())
                             .transform(move |v| v[i].clone(), move |v, new_value| v[i] = new_value);
 
                         let state = state.clone();

@@ -105,10 +105,13 @@ fn one_scale() -> Vec3 {
 #[derive(Debug, Clone, Copy, PartialEq, Resource, Bundle)]
 #[resource(derive = [Default, Editable])]
 pub struct TransformBundle {
+    #[resource(editable(default))]
     #[cfg_attr(feature = "serde", resource_attr(serde(default)))]
     pub position: Vec3,
+    #[resource(editable(default))]
     #[cfg_attr(feature = "serde", resource(serde(default)))]
     pub rotation: Quat,
+    #[resource(editable(default = Vec3::ONE))]
     #[cfg_attr(feature = "serde", resource(serde(default = "one_scale")))]
     pub scale: Vec3,
 }
@@ -172,7 +175,7 @@ impl Bundle for TransformBundle {
 #[derive(Debug, Clone, PartialEq, Resource, Bundle)]
 #[resource(derive = [Default, Editable])]
 pub struct NameBundle {
-    name: String,
+    pub name: String,
 }
 
 impl NameBundle {

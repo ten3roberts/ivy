@@ -50,7 +50,9 @@ use tracing::info;
 
 use crate::ui::asset_inspector::AssetInspector;
 
-const PANEL_HEIGHT: f32 = 300.0;
+pub const BROWSER_PANEL_HEIGHT: f32 = 300.0;
+pub const INSPECTOR_PANEL_HEIGHT: f32 = 500.0;
+pub const INSPECTOR_PANEL_WIDTH: f32 = 600.0;
 
 pub struct DirectoryTree {
     selection: WeakHandle<Mutable<Option<PathBuf>>>,
@@ -367,8 +369,8 @@ impl Widget for DirectoryBrowser {
                     }
                 })),
             )))
-            .with_min_size(Unit::px2(100.0, PANEL_HEIGHT))
-            .with_max_size(Unit::px2(f32::MAX, PANEL_HEIGHT))
+            .with_min_size(Unit::px2(100.0, BROWSER_PANEL_HEIGHT))
+            .with_max_size(Unit::px2(f32::MAX, BROWSER_PANEL_HEIGHT))
             .with_maximize(Vec2::X),
             details_panel,
         ))
@@ -597,8 +599,8 @@ impl Widget for FileDetailsPanel {
             label(format!("Size: {}", file_size_str)),
             // label(format!("Path: {}", path.display())),
         )))
-        .with_min_size(Unit::px2(200.0, PANEL_HEIGHT))
-        // .with_max_size(Unit::px2(f32::MAX, PANEL_HEIGHT))
+        .with_min_size(Unit::px2(INSPECTOR_PANEL_WIDTH, 200.0))
+        .with_max_size(Unit::px2(INSPECTOR_PANEL_WIDTH, INSPECTOR_PANEL_HEIGHT))
         .mount(scope);
     }
 }
@@ -621,6 +623,7 @@ impl Widget for FilePreview<'_> {
             move |scope: &mut Scope| {
                 if ty.is_image() {
                     Image::new(path.canonicalize().unwrap())
+                        .with_corner_radius(default_corner_radius())
                         .with_exact_size(Unit::px2(200.0, 200.0))
                         .mount(scope);
                 } else if ty.is_asset() {

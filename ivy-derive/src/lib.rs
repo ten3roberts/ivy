@@ -43,7 +43,7 @@ pub fn bundle(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         .into()
 }
 
-#[proc_macro_derive(Editable)]
+#[proc_macro_derive(Editable, attributes(editable))]
 pub fn editable(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = syn::parse_macro_input!(input as syn::DeriveInput);
 

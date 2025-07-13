@@ -13,7 +13,7 @@
       "inner_theta": 0.8,
       "outer_theta": 0.7
     },
-    "kind": "Point",
+    "kind": "Directional",
     "cast_shadow": true
   }
 }

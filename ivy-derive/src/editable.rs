@@ -2,7 +2,7 @@ use itertools::Itertools;
 use proc_macro_crate::FoundCrate;
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
-use syn::{Attribute, DeriveInput, Error, Field, Ident, Result, Type, spanned::Spanned};
+use syn::{Attribute, DeriveInput, Error, Field, Ident, Result, Token, Type, spanned::Spanned};
 
 pub fn editable_impl(input: DeriveInput) -> Result<TokenStream> {
     let ident = input.ident.clone();
@@ -43,7 +43,13 @@ fn expand_struct(
     let ident = &input.ident;
 
     let field_names = fields.iter().map(|f| &f.ident).collect_vec();
-    let default = (0..field_names.len()).map(|_| quote! { None });
+    let default = fields.iter().map(|f| {
+        if let Some(default_expr) = &f.attrs.default {
+            quote! { Some(#default_expr) }
+        } else {
+            quote! { None }
+        }
+    });
 
     let field_default = quote! {
         value.filter_map(
@@ -101,6 +107,37 @@ fn expand_struct(
                 }
             }
         }
+    });
+
+    let field_edit_project = fields.iter().map(|f| {
+        let ident = &f.ident;
+
+        let ty = &f.ty;
+        let label = quote! {
+            #crate_name::__private::violet::core::widget::interactive::base::InteractiveWidget::new(
+                #crate_name::__private::violet::core::widget::label(stringify!(#ident))
+            ).with_tooltip_text(stringify!(#ty))
+        };
+
+        let editor = quote! {
+            <#ty as #crate_name::Editable>::create_editor_project(#ident)
+        };
+
+        quote! {
+            |scope: &mut #crate_name::__private::violet::core::Scope<'_>| {
+                if <#ty as #crate_name::Editable>::INLINE {
+                    #crate_name::__private::violet::core::widget::row((
+                        #crate_name::__private::violet::core::widget::Stack::new(#label).with_maximize(#crate_name::__private::violet::glam::Vec2::X),
+                        #editor
+                    )).with_cross_align(#crate_name::__private::violet::core::layout::Align::Center).mount(scope);
+                } else {
+                    #crate_name::__private::violet::core::widget::Collapsible::new(
+                        #label,
+                        #editor
+                    ).indent(true).mount(scope);
+                }
+            }
+        }
     }).collect_vec();
 
     let expanded = quote! {
@@ -115,6 +152,8 @@ fn expand_struct(
                 use #crate_name::__private::violet::core::state::StateExt;
 
                 let state = ::std::sync::Arc::new(#field_default);
+
+                state.sync_initial();
 
                 #(#field_lower)*
 
@@ -133,7 +172,7 @@ fn expand_struct(
                 #(#field_project)*
 
                 Box::new(
-                    #crate_name::__private::violet::core::widget::col( (#(#field_edit),*))
+                    #crate_name::__private::violet::core::widget::col( (#(#field_edit_project),*))
                 )
             }
         }
@@ -141,6 +180,8 @@ fn expand_struct(
         #crate_name::register_editable!(#ident);
 
     };
+
+    eprintln!("Expanded editable for {}: {}", ident, expanded);
 
     Ok(expanded)
 }
@@ -172,6 +213,7 @@ impl<'a> ParsedField<'a> {
 #[derive(Default, Debug, Clone)]
 struct FieldAttrs {
     skip: bool,
+    default: Option<syn::Expr>,
 }
 
 impl FieldAttrs {
@@ -192,6 +234,16 @@ impl FieldAttrs {
                         if meta.path.is_ident("skip") {
                             res.skip = true;
                             Ok(())
+                        } else if meta.path.is_ident("default") {
+                            if meta.input.peek(Token![=]) {
+                                meta.value()?;
+                                let expr = meta.input.parse()?;
+                                res.default = Some(expr);
+                            } else {
+                                res.default = Some(syn::parse_quote! { Default::default() });
+                            }
+
+                            Ok(())
                         } else {
                             Err(Error::new(
                                 meta.path.span(),
@@ -209,6 +261,7 @@ impl FieldAttrs {
             };
         }
 
+        eprintln!("Parsed field attributes: {:?}", res);
         Ok(res)
     }
 }

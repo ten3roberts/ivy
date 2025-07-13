@@ -72,7 +72,7 @@ pub fn main() -> anyhow::Result<()> {
     if let Err(err) = App::builder()
         .with_driver(WinitDriver::new(
             WindowAttributes::default()
-                .with_inner_size(LogicalSize::new(1280, 720))
+                .with_inner_size(LogicalSize::new(1920, 1080))
                 .with_title("Ivy"),
         ))
         .with_layer(EngineLayer::new())

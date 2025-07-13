@@ -15,13 +15,12 @@ use crate::{template::BundleDesc, Bundle};
 
 type DeserializeFn =
     fn(&mut dyn erased_serde::Deserializer) -> erased_serde::Result<Box<dyn BundleDesc>>;
-type SerializeFn =
-    fn(&dyn BundleDesc, &mut dyn erased_serde::Serializer) -> erased_serde::Result<()>;
+type SerializeFn = fn(&dyn BundleDesc) -> &dyn erased_serde::Serialize;
 
 /// Statically typed registered bundle
 #[derive(Clone, Copy)]
 pub struct BundleRegistration {
-    pub tag: &'static str,
+    pub tag: fn() -> &'static str,
     pub type_id: fn() -> TypeId,
     pub desc_type_id: fn() -> TypeId,
     pub deserialize_fn: DeserializeFn,
@@ -30,21 +29,21 @@ pub struct BundleRegistration {
 }
 
 impl BundleRegistration {
-    pub const fn new<T>(tag: &'static str) -> Self
+    pub const fn new<T>() -> Self
     where
         T: Bundle + Resource,
         T::Desc: BundleDesc + Serialize + DeserializeOwned,
     {
         Self {
-            tag,
+            tag: <T as Resource>::tag_name,
             type_id: || TypeId::of::<T>(),
             desc_type_id: || TypeId::of::<T::Desc>(),
             deserialize_fn: |de| {
                 erased_serde::deserialize::<T::Desc>(de).map(|v| Box::new(v) as Box<dyn BundleDesc>)
             },
-            serialize_fn: |this, serializer| {
-                let this = this.downcast_ref::<T::Desc>().unwrap();
-                erased_serde::Serialize::erased_serialize(this, serializer)
+            serialize_fn: |this| {
+                tracing::info!(tag = this.tag_name(), "Serializing bundle");
+                this.downcast_ref::<T::Desc>().unwrap()
             },
             upcast_any: |v| {
                 let v = v.downcast::<T::Desc>().expect("Invalid bundle type");
@@ -158,7 +157,7 @@ impl<'de> DeserializeSeed<'de> for DeserializeWithFunction {
 pub static BUNDLE_REGISTRY: LazyLock<BundleRegistry> = LazyLock::new(|| {
     let bundles = inventory::iter::<BundleRegistration>();
     let bundles = bundles
-        .map(|v| (v.tag, *v))
+        .map(|v| ((v.tag)(), *v))
         .collect::<BTreeMap<&'static str, _>>();
 
     let names = bundles.keys().copied().collect::<Vec<&'static str>>();
@@ -172,23 +171,18 @@ impl Serialize for dyn BundleDesc {
         S: serde::Serializer,
     {
         let mut ser = serializer.serialize_map(Some(1))?;
+        let serialize_fn = BUNDLE_REGISTRY
+            .by_tag(self.tag_name())
+            .ok_or_else(|| {
+                serde::ser::Error::custom(format!(
+                    "No serializer found for bundle of type {}",
+                    self.tag_name()
+                ))
+            })?
+            .serialize_fn;
 
-        ser.serialize_entry(self.tag_name(), &WrapErased(self))?;
+        ser.serialize_entry(self.tag_name(), serialize_fn(self))?;
         ser.end()
-    }
-}
-
-struct WrapErased<'a, T: ?Sized>(pub &'a T);
-
-impl<'a, T> Serialize for WrapErased<'a, T>
-where
-    T: ?Sized + BundleDesc + 'a + Serialize,
-{
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        erased_serde::serialize(self.0, serializer)
     }
 }
 

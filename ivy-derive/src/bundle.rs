@@ -34,7 +34,7 @@ fn expand_struct(
         impl #crate_name::template::BundleDesc for #desc_name {}
 
         #crate_name::bundle_registry::__private::inventory::submit! {
-            #crate_name::bundle_registry::BundleRegistration::new::<#ident>(#name_str)
+            #crate_name::bundle_registry::BundleRegistration::new::<#ident>()
         }
     };
 

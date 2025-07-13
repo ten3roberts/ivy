@@ -3,6 +3,43 @@
     "type_name": "Template"
   },
   "desc": {
-    "bundles": []
+    "bundles": [
+      {
+        "TransformBundle": {
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      {
+        "LightBundle": {
+          "params": {
+            "color": {
+              "red": 1.0,
+              "green": 0.35,
+              "blue": 0.26
+            },
+            "intensity": 0.0,
+            "inner_theta": 0.0,
+            "outer_theta": 0.0
+          },
+          "kind": "Point",
+          "cast_shadow": false
+        }
+      }
+    ]
   }
 }
