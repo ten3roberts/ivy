@@ -1,9 +1,6 @@
-use std::{f32::consts::PI, sync::Arc};
-
 use async_std::stream::StreamExt;
-use bevy_reflect::{Reflect, Typed};
 use flax::World;
-use ivy_assets::{stored::DynamicStore, AssetCache, AssetPath, Resource};
+use ivy_assets::{stored::DynamicStore, AssetCache, AssetPath};
 use ivy_core::{
     palette::Srgb,
     profiling::ProfilingLayer,
@@ -11,7 +8,7 @@ use ivy_core::{
     App, EngineLayer,
 };
 use ivy_editable::Editable;
-use ivy_engine::{engine, TransformBundle, TransformBundleDesc};
+use ivy_engine::{engine, TransformBundleDesc};
 use ivy_game::{
     orbit_camera::OrbitCameraPlugin,
     viewport_camera::{CameraSettings, ViewportCameraLayer},

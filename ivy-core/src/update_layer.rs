@@ -24,8 +24,8 @@ pub enum TimeStepKind {
 }
 
 pub struct PluginKey {
-    ty: TypeId,
-    name: &'static str,
+    pub ty: TypeId,
+    pub name: &'static str,
 }
 
 /// A plugin is added to a layer and allows logic to be added using the ECS

@@ -4,8 +4,8 @@ use enum_dispatch::enum_dispatch;
 use flax::{Component, Entity, Query, QueryBorrow, System, World, component, system};
 use glam::{Quat, Vec3};
 use ivy_core::{
-    EngineLayer, EntityBuilderExt,
-    components::{TransformBundle, engine, gizmos, position, rotation, scale, world_transform},
+    EntityBuilderExt,
+    components::{engine, gizmos, position, rotation, world_transform},
     gizmos::{CuboidGizmo, DEFAULT_THICKNESS, Gizmos},
     template::Template,
     update_layer::Plugin,
@@ -26,10 +26,9 @@ use ivy_scene::{
 use ivy_ui::{
     screens::screen_state,
     violet::{
-        core::{editor, style::base_colors::EMERALD_400},
+        core::style::base_colors::EMERALD_400,
         lucide::icons::{
-            LUCIDE_MOUSE_POINTER_2, LUCIDE_MOUSE_POINTER_CLICK, LUCIDE_MOVE, LUCIDE_MOVE_3D,
-            LUCIDE_TORNADO,
+            LUCIDE_MOUSE_POINTER_2, LUCIDE_MOUSE_POINTER_CLICK, LUCIDE_MOVE_3D, LUCIDE_TORNADO,
         },
     },
 };
@@ -274,7 +273,7 @@ impl Plugin for EditorPlugin {
             .with_world_mut()
             .build(move |world: &mut World| -> anyhow::Result<()> {
                 for command in rx.try_iter() {
-                    HistoryManager::execute(editor, world, command);
+                    HistoryManager::execute(editor, world, command)?;
                 }
 
                 Ok(())

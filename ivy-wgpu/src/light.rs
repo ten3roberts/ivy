@@ -5,7 +5,7 @@ use ivy_core::{palette::Srgb, template::BundleDesc, Bundle};
 use ivy_editable::Editable;
 use violet::core::{
     state::{StateDuplex, StateExt, StateStreamRef, StateWrite},
-    widget::{col, label, row, Checkbox, Radio, Selectable, WidgetExt},
+    widget::{label, row, Selectable},
     Widget,
 };
 

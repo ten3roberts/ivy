@@ -6,7 +6,7 @@ use std::{
 
 use bevy_reflect::{PartialReflect, TypeInfo};
 use flax::{Entity, component::ComponentValue};
-use futures::{FutureExt, StreamExt, channel::oneshot, stream::BoxStream};
+use futures::{StreamExt, stream::BoxStream};
 use glam::{Quat, Vec2, Vec3};
 use itertools::Itertools;
 use violet::{

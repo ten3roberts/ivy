@@ -1,15 +1,9 @@
 use std::{
-    future::ready,
     path::{Path, PathBuf},
     time::Duration,
 };
 
-use async_std::{
-    io::{BufReadExt, BufReader},
-    stream::StreamExt,
-};
-use flax::Component;
-use futures::{AsyncReadExt, FutureExt};
+use async_std::stream::StreamExt;
 use glam::{BVec2, Vec2};
 use itertools::Itertools;
 use ivy_assets::{AssetCache, AssetPath, meta::AssetPayloadUntyped};
@@ -21,32 +15,26 @@ use ivy_ui::violet::{
         layout::Align,
         state::StateStream,
         stored::WeakHandle,
-        style::{
-            SizeExt, StyleExt, base_colors::*, default_corner_radius, element_pressed,
-            element_primary, surface_danger,
-        },
+        style::{SizeExt, StyleExt, base_colors::*, default_corner_radius, surface_danger},
         text::{FontFamily, Wrap},
         time::sleep,
         to_owned,
         unit::Unit,
         widget::{
-            Button, ButtonStyle, Collapsible, CollapsibleStyle, FutureWidget, Image,
-            IterWidgetCollection, LoadingSpinner, ScrollArea, Selectable, SignalWidget, Stack,
-            StreamWidget, SuspenseWidget, TextInput, TextInputStyle, Throbber, WidgetExt, card,
-            col,
-            interactive::{base::InteractiveWidget, tooltip::Tooltip},
+            Button, ButtonStyle, Collapsible, Image, IterWidgetCollection, LoadingSpinner,
+            ScrollArea, Selectable, SignalWidget, StreamWidget, SuspenseWidget, TextInput,
+            TextInputStyle, Throbber, WidgetExt, card, col, interactive::base::InteractiveWidget,
             label, pill, row,
         },
     },
-    futures_signals::signal::{Mutable, SignalExt},
+    futures_signals::signal::Mutable,
     lucide::icons::{
-        LUCIDE_BOX, LUCIDE_BOXES, LUCIDE_CLOUD_SUN, LUCIDE_ECLIPSE, LUCIDE_ELLIPSIS, LUCIDE_FILE,
-        LUCIDE_FILE_ARCHIVE, LUCIDE_FILE_BOX, LUCIDE_FILE_CODE, LUCIDE_FILE_IMAGE,
-        LUCIDE_FILE_JSON, LUCIDE_FILE_QUESTION, LUCIDE_FILE_TEXT, LUCIDE_FILE_WARNING,
-        LUCIDE_FOLDER, LUCIDE_FOLDER_OPEN, LUCIDE_IMAGE, LUCIDE_PACKAGE, LUCIDE_SQUARE_LIBRARY,
+        LUCIDE_BOX, LUCIDE_BOXES, LUCIDE_CLOUD_SUN, LUCIDE_ECLIPSE, LUCIDE_FILE_ARCHIVE,
+        LUCIDE_FILE_BOX, LUCIDE_FILE_CODE, LUCIDE_FILE_IMAGE, LUCIDE_FILE_JSON,
+        LUCIDE_FILE_QUESTION, LUCIDE_FILE_TEXT, LUCIDE_FILE_WARNING, LUCIDE_FOLDER,
+        LUCIDE_FOLDER_OPEN, LUCIDE_PACKAGE,
     },
 };
-use tracing::info;
 
 use crate::ui::asset_inspector::AssetInspector;
 
@@ -73,7 +61,6 @@ impl Widget for DirectoryTree {
             .filter_map(Result::ok)
             .filter_map(|entry| {
                 let entry_path = entry.path();
-                let entry_name = entry_path.file_name().unwrap();
 
                 item_count += 1;
 
@@ -162,18 +149,6 @@ impl Widget for DirectoryListing {
         ))
         .with_stretch(true)
         .mount(scope)
-    }
-}
-
-fn special_folder_icon(name: &str) -> Option<&'static str> {
-    match name {
-        "textures" => Some(LUCIDE_IMAGE),
-        "models" => Some(LUCIDE_BOX),
-        "scripts" => Some(LUCIDE_FILE_CODE),
-        "shaders" => Some(LUCIDE_FILE_CODE),
-        "assets" => Some(LUCIDE_SQUARE_LIBRARY),
-        "docs" => Some(LUCIDE_FILE_TEXT),
-        _ => None,
     }
 }
 
@@ -667,7 +642,6 @@ impl FileEditor {
 impl Widget for FileEditor {
     fn mount(self, scope: &mut Scope<'_>) {
         let content = self.content.clone();
-        let path = self.path.clone();
 
         col((
             ScrollArea::new(

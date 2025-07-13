@@ -29,15 +29,29 @@
           "params": {
             "color": {
               "red": 1.0,
-              "green": 0.35,
-              "blue": 0.26
+              "green": 0.39,
+              "blue": 0.399
             },
             "intensity": 0.0,
             "inner_theta": 0.0,
             "outer_theta": 0.0
           },
-          "kind": "Point",
-          "cast_shadow": false
+          "kind": "Spotlight",
+          "cast_shadow": true
+        }
+      },
+      {
+        "TransformToolBundle": {
+          "settings": {
+            "space": "Global",
+            "snap_mode": "None",
+            "angle_snap": 0.0
+          }
+        }
+      },
+      {
+        "NameBundle": {
+          "name": "This is a name"
         }
       }
     ]

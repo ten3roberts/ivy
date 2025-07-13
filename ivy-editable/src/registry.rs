@@ -2,21 +2,13 @@ use std::{
     any::{Any, TypeId},
     collections::BTreeMap,
     sync::{Arc, LazyLock, Mutex},
-    time::Duration,
 };
 
-use bevy_reflect::{PartialReflect, TypeInfo};
-use flax::{EntityRef, component::ComponentDesc};
+use bevy_reflect::PartialReflect;
 use futures::{StreamExt, stream::BoxStream};
-use ivy_assets::loadable::LoadableDyn;
-use violet::{
-    core::{
-        Scope, Widget,
-        state::{State, StateDuplex, StateExt, StateSink, StateStream},
-        time::sleep,
-        utils::throttle_skip,
-    },
-    futures_signals::signal::Mutable,
+use violet::core::{
+    Widget,
+    state::{State, StateDuplex, StateExt, StateSink, StateStream},
 };
 
 use crate::{DowncastPartialReflect, Editable, Projection};

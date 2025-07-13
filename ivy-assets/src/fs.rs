@@ -1,6 +1,4 @@
-use std::{ffi::OsStr, fmt::Debug, marker::PhantomData, path::PathBuf};
-
-use derivative::Derivative;
+use std::{fmt::Debug, path::PathBuf};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BytesFromPath(pub PathBuf);

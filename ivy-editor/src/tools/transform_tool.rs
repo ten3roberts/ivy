@@ -120,6 +120,7 @@ pub fn draw_system(gizmos: &mut Gizmos, query: &mut QueryBorrow<Component<Transf
 #[derive(Resource, Bundle)]
 #[resource(derive = [Editable])]
 pub struct TransformToolBundle {
+    #[resource_attr(serde(default))]
     settings: TransformSettings,
 }
 

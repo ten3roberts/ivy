@@ -1,6 +1,7 @@
-use std::convert::identity;
+use std::{convert::identity, sync::Arc};
 
 use flax::{Entity, EntityRef, World};
+use futures::StreamExt;
 use glam::{vec3, Mat4, Quat, Vec3};
 use itertools::Itertools;
 use ivy_core::{
@@ -19,6 +20,11 @@ use ivy_physics::{
     shapes::{Plane, Ray},
     state::RigidBodyFlags,
 };
+use ivy_ui::violet::core::{
+    state::{StateExt, StateStream, StateStreamRef},
+    widget::{col, label, row, Selectable},
+    Widget,
+};
 use ordered_float::NotNan;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -30,8 +36,9 @@ pub enum TransformMode {
     // Scale, // TODO
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Default, Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum SnapMode {
+    #[default]
     None,
     Absolute(f32),
     Increment(f32),
@@ -549,9 +556,10 @@ impl ManipulatedEntity {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Default, Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ManipulationSpace {
     Local,
+    #[default]
     Global,
     View,
 }
@@ -567,7 +575,7 @@ impl Editable for ManipulationSpace {
     where
         Self: Sized,
     {
-        todo!()
+        Box::new(row(label("TODO")))
     }
 
     fn create_editor_project<
@@ -583,21 +591,81 @@ impl Editable for ManipulationSpace {
     where
         Self: Sized,
     {
-        todo!()
+        Box::new(row(label("TODO")))
     }
 }
+
 impl Editable for SnapMode {
     const INLINE: bool = false;
 
     fn create_editor<
         S: 'static + Send + Sync + ivy_ui::violet::core::state::StateDuplex<Item = Self>,
     >(
-        _state: S,
+        state: S,
     ) -> Box<dyn Send + ivy_ui::violet::core::Widget>
     where
         Self: Sized,
     {
-        todo!()
+        let state = Arc::new(state);
+        let discriminant = Arc::new(
+            state
+                .clone()
+                .filter_map(
+                    |v| {
+                        Some(Some(match v {
+                            SnapMode::None => "None",
+                            SnapMode::Absolute(_) => "Absolute",
+                            SnapMode::Increment(_) => "Increment",
+                        }))
+                    },
+                    |_| None,
+                )
+                .memo(None)
+                .lower_option()
+                .dedup(),
+        );
+
+        let kind = row((
+            Selectable::new_value(label("None"), discriminant.clone(), "None"),
+            Selectable::new_value(label("Absolute"), discriminant.clone(), "Absolute"),
+        ));
+
+        let editor = discriminant.stream().map(move |disc| {
+            tracing::info!("New discriminant");
+            match disc {
+                "None" => Box::new(row(())) as Box<dyn Send + Widget>,
+                "Absolute" => {
+                    tracing::info!("Configuring editor for Absolute");
+                    let state = Arc::new(
+                        state
+                            .clone()
+                            .filter_map(
+                                |v| {
+                                    if let Self::Absolute(value) = v {
+                                        Some(value)
+                                    } else {
+                                        None
+                                    }
+                                },
+                                |v| Some(Self::Absolute(v)),
+                            )
+                            .memo(f32::default()),
+                    );
+
+                    let field_0 = f32::create_editor(state.clone());
+                    Box::new(row((field_0,)))
+                }
+                "Increment" => {
+                    todo!()
+                }
+                _ => unreachable!(),
+            }
+        });
+
+        Box::new(col((
+            kind,
+            ivy_ui::violet::core::widget::StreamWidget::new(editor),
+        )))
     }
 
     fn create_editor_project<
@@ -608,30 +676,22 @@ impl Editable for SnapMode {
             + ivy_ui::violet::core::state::StateStreamRef<Item = Self>
             + ivy_ui::violet::core::state::StateWrite,
     >(
-        _state: S,
+        state: S,
     ) -> Box<dyn Send + ivy_ui::violet::core::Widget>
     where
         Self: Sized,
     {
-        todo!()
+        Self::create_editor(state.project_ref(|v| v, |v| v))
     }
 }
 
-#[derive(PartialEq, Debug, Clone, Copy, serde::Serialize, serde::Deserialize, Editable)]
+#[derive(
+    PartialEq, Debug, Clone, Copy, serde::Serialize, serde::Deserialize, Editable, Default,
+)]
 pub struct TransformSettings {
     pub space: ManipulationSpace,
     pub snap_mode: SnapMode,
     pub angle_snap: f32,
-}
-
-impl Default for TransformSettings {
-    fn default() -> Self {
-        Self {
-            space: ManipulationSpace::Global,
-            snap_mode: SnapMode::None,
-            angle_snap: 0.0,
-        }
-    }
 }
 
 impl TransformSettings {

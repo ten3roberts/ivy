@@ -1,11 +1,9 @@
-use itertools::Itertools;
 use proc_macro_crate::FoundCrate;
 use proc_macro2::{Span, TokenStream};
-use quote::{ToTokens, format_ident, quote};
+use quote::{format_ident, quote};
 use syn::{
     Attribute, DataEnum, DeriveInput, Error, Field, Ident, Result, Token, Type, Visibility,
-    bracketed, meta::ParseNestedMeta, parenthesized, parse::Parse, parse_quote_spanned,
-    punctuated::Punctuated, spanned::Spanned,
+    bracketed, parse_quote_spanned, punctuated::Punctuated, spanned::Spanned,
 };
 
 pub fn resource_impl(input: DeriveInput) -> Result<TokenStream> {
@@ -35,8 +33,6 @@ fn expand_enum(
     let enum_ident = ident;
 
     let desc_name = format_ident!("{}Desc", input.ident);
-
-    let variant_names: Vec<_> = data_enum.variants.iter().map(|v| &v.ident).collect();
 
     let desc_variants = data_enum
         .variants
@@ -119,14 +115,13 @@ fn expand_enum(
 
 fn expand_fields(
     crate_name: &Ident,
-    ident: &Ident,
+    _: &Ident,
     fields: &[ParsedField],
-    attrs: &Attrs,
+    _attrs: &Attrs,
 ) -> Result<Vec<TokenStream>> {
     fields
         .iter()
         .map(|field| {
-            let vis = &field.vis;
             let ty = &field.ty;
             let ident = &field.ident;
             let field_attrs = &field.attrs.attrs;
@@ -151,7 +146,6 @@ fn expand_load(crate_name: &Ident, fields: &[ParsedField]) -> Result<Vec<TokenSt
         .iter()
         .map(|f| {
             let ident = &f.ident;
-            let ty = f.ty;
 
             if f.attrs.load {
                 Ok(quote! {
@@ -207,7 +201,6 @@ fn expand_struct(
 
     let field_load = fields.iter().map(|f| {
         let ident = &f.ident;
-        let ty = f.ty;
 
         if f.attrs.load {
             quote! {

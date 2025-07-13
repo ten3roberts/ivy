@@ -2,14 +2,6 @@ mod bundle;
 mod editable;
 mod resource;
 
-use itertools::Itertools;
-use proc_macro_crate::FoundCrate;
-use proc_macro2::{Span, TokenStream};
-use quote::{format_ident, quote};
-use syn::{
-    Attribute, DeriveInput, Error, Field, Ident, Result, Type, Visibility, spanned::Spanned,
-};
-
 use crate::{bundle::bundle_impl, resource::resource_impl};
 
 /// Derives `Resource` and load for a type.

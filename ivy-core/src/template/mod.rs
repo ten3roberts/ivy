@@ -203,8 +203,6 @@ impl Editable for TemplateDesc {
             .clone()
             .project_ref(|v| &v.bundles, |v| &mut v.bundles);
 
-        let bundles1 = bundles.clone();
-
         let editors = move |scope: &mut Scope| {
             let deduped = bundles
                 .stream()
@@ -267,6 +265,7 @@ impl Editable for TemplateDesc {
         let add_new = move || {
             to_owned!(add_tx, state);
             Button::label("Add Bundle")
+                .with_maximize(Vec2::X)
                 .with_tooltip_text("Add new bundle")
                 .on_click(move |_| {
                     to_owned!(add_tx);
@@ -296,6 +295,7 @@ impl Editable for TemplateDesc {
                         .map(move |v| v.unwrap_or_else(|| Box::new(add_new()))),
                 ),
             ))
+            .with_cross_align(Align::Center)
             .with_stretch(true),
         )
     }

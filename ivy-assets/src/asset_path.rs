@@ -12,12 +12,12 @@ use crate::{
 /// Describes an asset loaded from a relative filesystem path
 #[derive(Derivative)]
 #[derivative(Clone, Debug = "transparent", Hash, PartialEq, Eq, PartialOrd, Ord)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(transparent))]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(transparent)]
 pub struct AssetPath<T> {
     path: PathBuf,
     #[derivative(Debug = "ignore")]
-    #[cfg_attr(feature = "serde", serde(skip))]
+    #[serde(skip)]
     _marker: PhantomData<T>,
 }
 

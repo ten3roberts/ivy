@@ -1,37 +1,28 @@
-use std::{any::Any, path::PathBuf, time::Duration};
+use std::{path::PathBuf, time::Duration};
 
-use anyhow::Context;
 use async_std::stream::StreamExt;
 use ivy_assets::{
-    Asset, AssetCache, AssetPath,
+    AssetCache, AssetPath,
     loadable::{Loadable, LoadableDyn},
     meta::AssetPayloadUntyped,
 };
-use ivy_core::components::NameBundleDesc;
-use ivy_editable::{Editable, registry::EDITABLE_REGISTRY};
+use ivy_editable::registry::EDITABLE_REGISTRY;
 use ivy_ui::violet::{
     core::{
         Scope, Widget,
         layout::Align,
-        state::{StateDuplex, StateExt},
-        style::{SizeExt, base_colors::OCEAN_400, element_danger, surface_danger},
+        state::StateExt,
+        style::surface_danger,
         text::Wrap,
         time::sleep,
         to_owned,
-        unit::Unit,
         widget::{
-            LoadingSpinner, SignalWidget, StreamWidget, SuspenseWidget, Text, Throbber, bold, col,
+            LoadingSpinner, StreamWidget, SuspenseWidget, Throbber, bold, col,
             interactive::base::InteractiveWidget, label, row, subtitle,
         },
     },
     futures_signals::signal::{Mutable, SignalExt},
-    lucide::{
-        self,
-        icons::{
-            LUCIDE_BOLT, LUCIDE_CHECK, LUCIDE_HARD_DRIVE_DOWNLOAD, LUCIDE_SAVE,
-            LUCIDE_TRIANGLE_ALERT, LUCIDE_ZAP,
-        },
-    },
+    lucide::icons::{LUCIDE_CHECK, LUCIDE_TRIANGLE_ALERT},
 };
 
 pub struct AssetInspector {
@@ -67,8 +58,6 @@ impl Clone for ErasedAssetDesc {
 impl Widget for AssetInspector {
     fn mount(self, scope: &mut ivy_ui::violet::core::Scope<'_>) {
         let editor = async move {
-            sleep(Duration::from_millis(500)).await;
-
             let path = AssetPath::<AssetPayloadUntyped>::new(self.path.canonicalize()?);
             let payload = path.load(&self.assets).await?;
             anyhow::Ok((path, payload))
@@ -141,13 +130,6 @@ impl Widget for AssetInspector {
                     ))
                     .mount(scope);
                 }
-                // Ok((payload, None)) => {
-                //     bold(format!(
-                //         "No editor available for this asset\n\n{:?}",
-                //         payload.meta
-                //     ))
-                //     .mount(scope);
-                // }
                 Err(e) => {
                     col((
                         label(LUCIDE_TRIANGLE_ALERT)
