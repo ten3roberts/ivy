@@ -31,7 +31,16 @@ fn expand_enum(
     let disc_selection = data_enum.variants.iter().map(|v| {
         let ident = &v.ident;
         let ident_s = ident.to_string();
-        quote! { Self::#ident => #ident_s }
+
+        let pat = match &v.fields {
+            syn::Fields::Named(named) => quote! { {..} },
+            syn::Fields::Unnamed(fields_unnamed) => {
+                let repeat = (0..fields_unnamed.unnamed.len()).map(|_| quote! { _ });
+                quote! { (#(#repeat),*) }
+            }
+            syn::Fields::Unit => quote! {},
+        };
+        quote! { Self::#ident #pat => #ident_s }
     });
 
     let disc_selection = quote! {
@@ -64,7 +73,8 @@ fn expand_enum(
 
                     let field_names = fields.iter().map(|v| v.ident).collect_vec();
 
-                    let field_editors = expand_field_editors(&crate_name, &[]);
+                    // TODO: lower field states
+                    let field_editors = expand_field_editors(&crate_name, &fields);
 
                     (
                         quote! { { #(#field_names),* } },
@@ -89,11 +99,7 @@ fn expand_enum(
                 ) as Box<dyn Send+Widget>
             };
 
-            syn::Result::Ok(quote! {
-                #ident_s => {
-                    #body
-                }
-            })
+            syn::Result::Ok(quote! { #ident_s => { #body } })
         })
         .try_collect()?;
 
@@ -113,7 +119,7 @@ fn expand_enum(
             fn create_editor<S: 'static + Send + Sync + #crate_name::__private::violet::core::state::StateDuplex<Item = Self>>(
                 state: S,
             ) -> Box<dyn Send + #crate_name::__private::violet::core::widget::Widget> {
-                use #crate_name::__private::violet::core::widget::{ Widget, label, col, row, Selectable };
+                use #crate_name::__private::violet::core::widget::{ Widget, label, col, row, Selectable, StreamWidget };
                 use #crate_name::__private::violet::core::style::SizeExt;
                 use #crate_name::__private::violet::core::state::StateExt;
                 use ::std::sync::Arc;
@@ -124,7 +130,7 @@ fn expand_enum(
                 let discriminant = #disc_selection;
                 let kind_selection = #kind_selection;
                 let value_editor = #value_editor;
-                Box::new(col((kind_selection, value_editor)))
+                Box::new(col((kind_selection, StreamWidget::new(value_editor))))
             }
 
             fn create_editor_project<S: 'static + Send + Sync + Clone + #crate_name::__private::violet::core::state::StateStreamRef<Item = Self> + #crate_name::__private::violet::core::state::StateWrite<Item = Self>>(

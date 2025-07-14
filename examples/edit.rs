@@ -28,6 +28,8 @@ use tracing_tree::HierarchicalLayer;
 use violet::{
     core::{
         state::{StateExt, StateStream},
+        style::SizeExt,
+        unit::Unit,
         widget::{bold, card, col, label, maximized, StreamWidget},
         Widget,
     },
@@ -124,13 +126,19 @@ impl Plugin for GameUiPlugin {
     }
 }
 
+#[derive(Clone, Debug, Editable)]
+enum MyEnum {
+    Variant1 { name: String, value: i32 },
+    Variant2 { value: f32 },
+}
+
 struct MainUI {}
 
 #[derive(Clone, Debug, Editable)]
 struct ExampleStruct {
     a: i32,
     name: String,
-    transform: TransformBundleDesc,
+    my_enum: MyEnum,
 }
 
 impl Screen for MainUI {
@@ -138,16 +146,22 @@ impl Screen for MainUI {
         let value = Mutable::new(Some(ExampleStruct {
             a: 42,
             name: "Example".to_string(),
-            transform: Default::default(),
+            my_enum: MyEnum::Variant1 {
+                name: "Variant".to_string(),
+                value: 100,
+            },
         }));
 
-        maximized(col((
-            card(ExampleStruct::create_editor(value.clone().lower_option())),
-            card(StreamWidget::new(value.stream().map(|v| {
-                v.map(|v| label(format!("{v:#?}")))
-                    .unwrap_or(bold("No Value"))
-            }))),
-        )))
+        maximized(
+            col((
+                card(ExampleStruct::create_editor(value.clone().lower_option())),
+                card(StreamWidget::new(value.stream().map(|v| {
+                    v.map(|v| label(format!("{v:#?}")))
+                        .unwrap_or(bold("No Value"))
+                }))),
+            ))
+            .with_max_size(Unit::px2(400.0, 600.0)),
+        )
         .mount(scope);
     }
 }
