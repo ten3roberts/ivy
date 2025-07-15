@@ -33,7 +33,14 @@ fn expand_enum(
         let ident_s = ident.to_string();
 
         let pat = match &v.fields {
-            syn::Fields::Named(named) => quote! { {..} },
+            syn::Fields::Named(named) => {
+                let names = named.named.iter().map(|v| {
+                    let ident = &v.ident;
+                    quote! {#ident: _}
+                });
+
+                quote! { { #(#names),* } }
+            }
             syn::Fields::Unnamed(fields_unnamed) => {
                 let repeat = (0..fields_unnamed.unnamed.len()).map(|_| quote! { _ });
                 quote! { (#(#repeat),*) }
@@ -63,7 +70,7 @@ fn expand_enum(
             let ident = &v.ident;
             let ident_s = ident.to_string();
 
-            let (destruct, assemble, field_editors) = match &v.fields {
+            let (destruct, assemble, field_default, field_lower, field_editors) = match &v.fields {
                 syn::Fields::Named(fields_named) => {
                     let fields: Vec<ParsedField> = fields_named
                         .named
@@ -73,12 +80,30 @@ fn expand_enum(
 
                     let field_names = fields.iter().map(|v| v.ident).collect_vec();
 
-                    // TODO: lower field states
+                    let default = fields.iter().map(|f| {
+                        if let Some(default_expr) = &f.attrs.default {
+                            quote! { Some(#default_expr) }
+                        } else {
+                            quote! { None }
+                        }
+                    }).collect_vec();
+
+                    let field_lower = fields.iter().enumerate().map(|(i, f)| {
+                        let ident = &f.ident;
+
+                        let i = syn::Index::from(i);
+                        quote! {
+                            let #ident = state.clone().project_ref(|v| &v.#i, |v| &mut v.#i).lower_option();
+                        }
+                    }).collect_vec();
+
                     let field_editors = expand_field_editors(&crate_name, &fields);
 
                     (
-                        quote! { { #(#field_names),* } },
+                        quote! { { #(#field_names?,)* } },
                         quote! {  (#(#field_names,)*) },
+                        default,
+                        field_lower,
                         field_editors,
                     )
                 }
@@ -87,12 +112,17 @@ fn expand_enum(
             };
 
             let body = quote! {
+
+
+
                 let state = Arc::new(state.clone()
+                        // Try and destructure this variant
                         .filter_map(
-                            |v| if let Self::#ident #destruct = v { Some(#assemble) } else { None },
+                            |v| if let Self::#ident #destruct = v { Some(Some(#assemble)) } else { None },
                             |#assemble| Some(Self::#ident #destruct))
-                    )
-                    .memo(Default::default());
+                        .memo((#(#field_default,)*)));
+
+                #(#field_lower)*
 
                 Box::new(
                     #crate_name::__private::violet::core::widget::col( (#(#field_editors),*))
