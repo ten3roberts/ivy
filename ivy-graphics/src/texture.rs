@@ -4,8 +4,9 @@ use either::Either;
 use image::{DynamicImage, ImageBuffer};
 use ivy_assets::{loadable::Loadable, Asset, AssetCache, AssetDesc, AssetPath, AsyncAssetExt};
 use ivy_core::palette::Srgba;
+use ivy_editable::Editable;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Editable)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ProcessedTextureDesc {
     texture: Box<TextureDesc>,
@@ -18,7 +19,7 @@ pub struct ProcessedTexture {
     processor: StaticTextureProcessor,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Editable)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum StaticTextureProcessor {
     MetallicRoughness(MetallicRoughnessProcessor),
@@ -42,7 +43,7 @@ pub trait TextureProcessor {
     fn process(&self, image: DynamicImage) -> DynamicImage;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Editable)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ColorChannel {
     Red,
@@ -50,17 +51,24 @@ pub enum ColorChannel {
     Blue,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Editable)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum ColorChannelOrValue {
+    Channel(ColorChannel),
+    Value(u8),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Editable)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MetallicRoughnessProcessor {
-    metallic_channel: Either<ColorChannel, u8>,
-    roughness_channel: Either<ColorChannel, u8>,
+    metallic_channel: ColorChannelOrValue,
+    roughness_channel: ColorChannelOrValue,
 }
 
 impl MetallicRoughnessProcessor {
     pub fn new(
-        metallic_channel: Either<ColorChannel, u8>,
-        roughness_channel: Either<ColorChannel, u8>,
+        metallic_channel: ColorChannelOrValue,
+        roughness_channel: ColorChannelOrValue,
     ) -> Self {
         Self {
             metallic_channel,
@@ -75,17 +83,17 @@ impl TextureProcessor for MetallicRoughnessProcessor {
 
         for pixel in image.pixels_mut() {
             let roughness = match self.roughness_channel {
-                Either::Left(ColorChannel::Red) => pixel[0],
-                Either::Left(ColorChannel::Green) => pixel[0],
-                Either::Left(ColorChannel::Blue) => pixel[0],
-                Either::Right(v) => v,
+                ColorChannelOrValue::Channel(ColorChannel::Red) => pixel[0],
+                ColorChannelOrValue::Channel(ColorChannel::Green) => pixel[0],
+                ColorChannelOrValue::Channel(ColorChannel::Blue) => pixel[0],
+                ColorChannelOrValue::Value(v) => v,
             };
 
             let metallic = match self.metallic_channel {
-                Either::Left(ColorChannel::Red) => pixel[0],
-                Either::Left(ColorChannel::Green) => pixel[0],
-                Either::Left(ColorChannel::Blue) => pixel[0],
-                Either::Right(v) => v,
+                ColorChannelOrValue::Channel(ColorChannel::Red) => pixel[0],
+                ColorChannelOrValue::Channel(ColorChannel::Green) => pixel[0],
+                ColorChannelOrValue::Channel(ColorChannel::Blue) => pixel[0],
+                ColorChannelOrValue::Value(v) => v,
             };
 
             *pixel = image::Rgba([0, roughness, metallic, 255]);
@@ -96,7 +104,7 @@ impl TextureProcessor for MetallicRoughnessProcessor {
 }
 
 /// Describes a loadable texture
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Editable)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum TextureDesc {
     Path(AssetPath<DynamicImage>),

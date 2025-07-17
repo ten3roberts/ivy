@@ -37,7 +37,9 @@ use ivy_gltf::{
     },
     Document,
 };
-use ivy_graphics::texture::{ColorChannel, MetallicRoughnessProcessor, TextureData, TextureDesc};
+use ivy_graphics::texture::{
+    ColorChannel, ColorChannelOrValue, MetallicRoughnessProcessor, TextureData, TextureDesc,
+};
 use ivy_input::layer::InputLayer;
 use ivy_physics::{ColliderBundle, GizmoSettings, PhysicsPlugin};
 use ivy_postprocessing::preconfigured::{
@@ -220,8 +222,8 @@ impl LogicLayer {
                     .with_normal(TextureDesc::Path(normal))
                     .with_metallic_roughness(TextureDesc::Path(roughness).process(
                         MetallicRoughnessProcessor::new(
-                            Either::Right(0),
-                            Either::Left(ColorChannel::Red),
+                            ColorChannelOrValue::Value(0),
+                            ColorChannelOrValue::Channel(ColorChannel::Red),
                         ),
                     ))
                     .with_ambient_occlusion(TextureDesc::Path(ao))

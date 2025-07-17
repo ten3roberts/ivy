@@ -2,7 +2,7 @@ use proc_macro_crate::FoundCrate;
 use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote};
 use syn::{
-    Attribute, DataEnum, DeriveInput, Error, Field, Ident, Result, Token, Type, Visibility,
+    Attribute, DataEnum, DeriveInput, Error, Field, Ident, Index, Result, Token, Type, Visibility,
     bracketed, parse_quote_spanned, punctuated::Punctuated, spanned::Spanned,
 };
 
@@ -62,13 +62,54 @@ fn expand_enum(
                         },
                     )
                 }
-                syn::Fields::Unit => (quote! { #ident }, quote! { Self::#ident => #enum_ident::#ident }),
-                _ => {
-                    return Err(Error::new_spanned(
-                        variant,
-                        "Expected named fields for enum variant",
-                    ));
+                syn::Fields::Unnamed(fields) => {
+                    let fields: Vec<IndexedField> = fields
+                        .unnamed
+                        .iter()
+                        .enumerate()
+                        .map(|(i, f)| IndexedField::get(i, f))
+                        .collect::<Result<_>>()?;
+
+                    let desc_fields = fields.iter().map(|f| {
+                        let ty = &f.ty;
+                        let named_ident = &f.named_ident;
+                        let field_attrs = &f.attrs.attrs;
+
+                        if f.attrs.load {
+                            quote! {
+                                #(#field_attrs)*
+                                #named_ident: <#ty as #crate_name::loadable::Resource>::Desc
+                            }
+                        } else {
+                            quote! {
+                                #(#field_attrs)*
+                                #named_ident: #ty
+                            }
+                        }
+                    });
+
+                    let load_fields = fields.iter().map(|f| {
+                        let named_ident = &f.named_ident;
+
+                        if f.attrs.load {
+                            quote! {
+                                #named_ident: Loadable::load(&self.#named_ident, assets).await?
+                            }
+                        } else {
+                            quote! {
+                                #named_ident: self.#named_ident.clone()
+                            }
+                        }
+                    });
+
+                    let named_ident = fields.iter().map(|f| &f.named_ident);
+
+                    (
+                        quote! { #ident(#(#desc_fields),*) },
+                        quote! { Self::#ident(#(#named_ident),*) => #enum_ident::#ident(#(#load_fields),*) },
+                    )
                 }
+                syn::Fields::Unit => (quote! { #ident }, quote! { Self::#ident => #enum_ident::#ident }),
             };
 
             Ok(desc_fields)
@@ -277,6 +318,27 @@ impl<'a> ParsedField<'a> {
             vis: &field.vis,
             ty: &field.ty,
             ident,
+            attrs,
+        })
+    }
+}
+
+struct IndexedField<'a> {
+    ty: &'a Type,
+    index: Index,
+    attrs: FieldAttrs,
+    named_ident: Ident,
+}
+
+impl<'a> IndexedField<'a> {
+    fn get(index: usize, field: &'a Field) -> Result<Self> {
+        let attrs = FieldAttrs::get(&field.attrs)?;
+
+        let named_ident = Ident::new(&format!("field_{index}"), Span::call_site());
+        Ok(Self {
+            ty: &field.ty,
+            index: Index::from(index),
+            named_ident,
             attrs,
         })
     }

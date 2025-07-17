@@ -49,43 +49,13 @@ impl LightParams {
 }
 
 #[repr(u32)]
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Editable)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum LightKind {
     #[default]
     Point,
     Directional,
     Spotlight,
-}
-
-impl Editable for LightKind {
-    const INLINE: bool = true;
-
-    fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
-        state: S,
-    ) -> Box<dyn Send + Widget>
-    where
-        Self: Sized,
-    {
-        let state = Arc::new(state.memo(Default::default()));
-        state.sync_initial();
-        Box::new(row((
-            Selectable::new_value(label("Point"), state.clone(), LightKind::Point),
-            Selectable::new_value(label("Directional"), state.clone(), LightKind::Directional),
-            Selectable::new_value(label("Spotlight"), state, LightKind::Spotlight),
-        )))
-    }
-
-    fn create_editor_project<
-        S: 'static + Send + Sync + Clone + StateStreamRef<Item = Self> + StateWrite,
-    >(
-        state: S,
-    ) -> Box<dyn Send + Widget>
-    where
-        Self: Sized,
-    {
-        Self::create_editor(state.project_ref(|v| v, |v| v))
-    }
 }
 
 impl LightKind {

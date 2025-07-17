@@ -23,7 +23,10 @@ use ivy_ui::{
     layer::{UiLayer, UiUpdateLayer},
     screens::{screen_state, Screen},
 };
-use ivy_wgpu::{driver::WinitDriver, layer::GraphicsLayer, renderer::EnvironmentData};
+use ivy_wgpu::{
+    driver::WinitDriver, layer::GraphicsLayer, material_desc::MaterialDesc,
+    renderer::EnvironmentData,
+};
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
 use violet::{
@@ -143,10 +146,7 @@ enum MyEnum {
         #[editable(default = EMERALD_400.without_alpha())]
         favorite_color: Srgb,
     },
-    Variant3(
-        #[editable(default = "Hello".into())] String,
-        #[editable(default = Vec3::new(1.0, 7.0, -3.0))] Vec3,
-    ),
+    Variant3(#[editable(default = "Hello".into())] String),
     Variant4,
 }
 
@@ -156,6 +156,7 @@ struct MyStruct {
     #[editable(default = "Hello".into())]
     name: String,
     kind: MyEnum,
+    material: MaterialDesc,
 }
 
 impl Screen for MainUI {

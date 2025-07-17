@@ -49,6 +49,10 @@ impl<T> AssetPath<T> {
             .load_bytes_async(&self.path)
             .await
     }
+
+    pub fn path_mut(&mut self) -> &mut PathBuf {
+        &mut self.path
+    }
 }
 
 impl<T> AsyncAssetDesc for AssetPath<T>

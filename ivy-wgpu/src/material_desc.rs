@@ -1,4 +1,5 @@
 use ivy_assets::{declare_resource, loadable::Loadable, Asset, AssetCache, AssetDesc};
+use ivy_editable::Editable;
 use ivy_gltf::GltfMaterial;
 use ivy_graphics::texture::{TextureData, TextureDesc};
 use ordered_float::NotNan;
@@ -16,7 +17,7 @@ use crate::{
 use ivy_assets::loadable::Resource;
 
 /// Asynchronously loadable material, e.g; from json and texture file paths
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Editable)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum MaterialDesc {
     PbrMaterial(PbrMaterialDesc),
@@ -50,7 +51,7 @@ impl Loadable for MaterialDesc {
 
 declare_resource!(MaterialData, MaterialDesc);
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Editable)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PbrMaterialDesc {
     label: String,
@@ -154,7 +155,7 @@ impl Default for PbrMaterialDesc {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Editable)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PbrEmissiveMaterialDesc {
     pbr: PbrMaterialDesc,

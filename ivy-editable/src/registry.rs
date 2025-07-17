@@ -11,7 +11,7 @@ use violet::core::{
     state::{State, StateDuplex, StateExt, StateSink, StateStream},
 };
 
-use crate::{DowncastPartialReflect, Editable, Projection};
+use crate::{Editable, Projection};
 
 pub struct EditableRegistry {
     registrations: BTreeMap<TypeId, EditableRegistration>,
@@ -45,15 +45,15 @@ impl EditableRegistry {
         self.registrations.get(&type_id)
     }
 
-    pub fn try_create_editor(
-        &self,
-        type_id: TypeId,
-        state: ProjectedState,
-    ) -> Option<Box<dyn Send + Widget>> {
-        let registration = EDITABLE_REGISTRY.registrations.get(&type_id)?;
+    // pub fn try_create_editor(
+    //     &self,
+    //     type_id: TypeId,
+    //     state: ProjectedState,
+    // ) -> Option<Box<dyn Send + Widget>> {
+    //     let registration = EDITABLE_REGISTRY.registrations.get(&type_id)?;
 
-        Some((registration.create_editor_reflected)(state))
-    }
+    //     Some((registration.create_editor_reflected)(state))
+    // }
 
     pub fn contains(&self, type_id: TypeId) -> bool {
         self.registrations.contains_key(&type_id)
@@ -82,7 +82,7 @@ pub trait DowncastableProject {}
 pub struct EditableRegistration {
     type_name: Option<&'static str>,
     type_id: fn() -> TypeId,
-    create_editor_reflected: CreateEditorFunc,
+    // create_editor_reflected: CreateEditorFunc,
     pub create_editor_projected: CreateEditorDyn,
     create_editor_boxed: CreateEditorAny,
 }
@@ -92,11 +92,11 @@ impl EditableRegistration {
         Self {
             type_name: name,
             type_id: || TypeId::of::<T>(),
-            create_editor_reflected: |project| {
-                let concrete = DowncastPartialReflect::new(project);
+            // create_editor_reflected: |project| {
+            //     let concrete = DowncastPartialReflect::new(project);
 
-                T::create_editor(concrete)
-            },
+            //     T::create_editor(concrete)
+            // },
             create_editor_boxed: |value| {
                 let concrete = value.map_value(
                     |v| -> T { *v.downcast::<T>().unwrap() },
