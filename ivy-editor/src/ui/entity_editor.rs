@@ -59,6 +59,6 @@ impl Widget for EntityComponentEditor {
             Ok(())
         });
 
-        FutureWidget::new(rx.map(move |v| v.ok().map(|editors| col(editors)))).mount(scope)
+        FutureWidget::new(rx.map(move |v| v.ok().map(col))).mount(scope)
     }
 }

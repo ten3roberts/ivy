@@ -30,7 +30,7 @@ impl EditableRegistry {
             named: registrations
                 .iter()
                 .filter_map(|(_, registration)| {
-                    Some((registration.type_name?, registration.clone()))
+                    Some((registration.type_name?, *registration))
                 })
                 .collect(),
             registrations,

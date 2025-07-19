@@ -60,7 +60,7 @@ impl RayPickingTool {
         if let Some(hit) = result {
             let entity = world.entity(hit.collider_id)?;
 
-            let point: Vec3 = ray.at(hit.intersection.time_of_impact).into();
+            let point: Vec3 = ray.at(hit.intersection.time_of_impact);
 
             let pos = entity.get_copy(position()).unwrap_or_default();
             let rotation = entity.get_copy(rotation()).unwrap_or_default();
@@ -182,6 +182,12 @@ component! {
 }
 
 pub struct RayPickerBundle {}
+
+impl Default for RayPickerBundle {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl RayPickerBundle {
     pub fn new() -> Self {

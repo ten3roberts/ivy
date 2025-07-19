@@ -26,7 +26,7 @@ fn test_resource_derive() {
 
         use ivy_assets::loadable::Loadable;
         let result = resource.load(&assets).await.unwrap();
-        eprintln!("Loaded resource: {:?}", result);
+        eprintln!("Loaded resource: {result:?}");
     })
 }
 
@@ -46,6 +46,6 @@ fn test_resource_derive_enum() {
 
         use ivy_assets::loadable::Loadable;
         let result = resource.load(&assets).await.unwrap();
-        eprintln!("Loaded resource: {:#?}", result);
+        eprintln!("Loaded resource: {result:#?}");
     })
 }

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use flax::{
     component::ComponentValue, components::child_of, entity_ids, fetch::entity_refs, CommandBuffer,
-    Component, Entity, EntityBuilder, EntityRef, Query, World,
+    Component, Entity, EntityRef, Query, World,
 };
 use parking_lot::{Mutex, MutexGuard};
 

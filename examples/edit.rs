@@ -1,6 +1,6 @@
 use async_std::stream::StreamExt;
 use flax::World;
-use glam::{Quat, Vec3};
+use glam::Quat;
 use ivy_assets::{stored::DynamicStore, AssetCache, AssetPath};
 use ivy_core::{
     palette::Srgb,
@@ -9,7 +9,7 @@ use ivy_core::{
     App, EngineLayer,
 };
 use ivy_editable::Editable;
-use ivy_engine::{engine, TransformBundleDesc};
+use ivy_engine::engine;
 use ivy_game::{
     orbit_camera::OrbitCameraPlugin,
     viewport_camera::{CameraSettings, ViewportCameraLayer},

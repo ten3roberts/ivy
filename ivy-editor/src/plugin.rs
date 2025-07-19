@@ -2,7 +2,6 @@ use std::{any::type_name, sync::Arc};
 
 use enum_dispatch::enum_dispatch;
 use flax::{Component, Entity, Query, QueryBorrow, System, World, component, system};
-use glam::{Quat, Vec3};
 use ivy_core::{
     EntityBuilderExt,
     components::{engine, gizmos, position, rotation, world_transform},
@@ -131,6 +130,12 @@ impl Command for MoveEntities {
 pub struct HistoryManager {
     command_stack: Vec<Box<dyn CommandExt>>,
     redo_stack: Vec<Box<dyn CommandExt>>,
+}
+
+impl Default for HistoryManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl HistoryManager {
@@ -314,6 +319,12 @@ component! {
 
 pub struct EditorHost {
     history: HistoryManager,
+}
+
+impl Default for EditorHost {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl EditorHost {

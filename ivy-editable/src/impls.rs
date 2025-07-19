@@ -1,12 +1,11 @@
 use std::{
     future::ready,
     marker::Sized,
-    sync::{Arc, Mutex},
+    sync::Arc,
 };
 
-use bevy_reflect::{PartialReflect, TypeInfo};
-use flax::{Entity, component::ComponentValue};
-use futures::{StreamExt, stream::BoxStream};
+use flax::Entity;
+use futures::StreamExt;
 use glam::{Quat, Vec2, Vec3, Vec4};
 use itertools::Itertools;
 use ivy_assets::AssetPath;
@@ -16,7 +15,7 @@ use violet::{
     core::{
         Scope, Widget,
         layout::Align,
-        state::{State, StateDuplex, StateExt, StateSink, StateStream, StateStreamRef, StateWrite},
+        state::{StateDuplex, StateExt, StateSink, StateStream, StateStreamRef, StateWrite},
         style::SizeExt,
         to_owned,
         unit::Unit,

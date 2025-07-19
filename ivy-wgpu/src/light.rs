@@ -1,11 +1,9 @@
-use std::sync::Arc;
 
-use ivy_assets::{loadable::Loadable, AssetCache, Resource};
-use ivy_core::{palette::Srgb, template::BundleDesc, Bundle};
+use ivy_assets::Resource;
+use ivy_core::{palette::Srgb, Bundle};
 use ivy_editable::Editable;
 use violet::core::{
-    state::{StateDuplex, StateExt, StateStreamRef, StateWrite},
-    widget::{label, row, Selectable},
+    state::StateExt,
     Widget,
 };
 

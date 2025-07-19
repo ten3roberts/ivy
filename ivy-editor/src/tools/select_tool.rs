@@ -1,4 +1,3 @@
-use std::{f32::consts::PI, future::ready};
 
 use anyhow::Context;
 use flax::{
@@ -31,6 +30,7 @@ component! {
     shift_input: bool,
 }
 
+#[derive(Default)]
 pub struct SelectToolBundle {}
 
 impl SelectToolBundle {
@@ -39,11 +39,6 @@ impl SelectToolBundle {
     }
 }
 
-impl Default for SelectToolBundle {
-    fn default() -> Self {
-        Self {}
-    }
-}
 
 impl Bundle for SelectToolBundle {
     fn mount(&self, entity: &mut flax::EntityBuilder) {

@@ -4,7 +4,6 @@ use serde::{
     ser::SerializeStruct,
     Deserialize, Serialize,
 };
-use tracing::info_span;
 
 use crate::{
     loadable::{LoadFromPath, LoadableDyn},

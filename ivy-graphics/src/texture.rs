@@ -1,6 +1,5 @@
-use std::{future::Future, ops::Deref, pin::Pin};
+use std::{future::Future, ops::Deref};
 
-use either::Either;
 use image::{DynamicImage, ImageBuffer};
 use ivy_assets::{loadable::Loadable, Asset, AssetCache, AssetDesc, AssetPath, AsyncAssetExt};
 use ivy_core::palette::Srgba;
@@ -58,7 +57,6 @@ pub enum ColorChannelOrValue {
     Value(u8),
 }
 
-use ivy_editable::__private::violet;
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Editable)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MetallicRoughnessProcessor {

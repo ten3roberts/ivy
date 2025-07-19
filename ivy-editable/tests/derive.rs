@@ -1,7 +1,7 @@
-use futures::{Stream, StreamExt};
+use futures::StreamExt;
 use ivy_editable::Editable;
 use violet::{
-    core::{state::StateStream, widget::StreamWidget},
+    core::state::StateStream,
     futures_signals::signal::Mutable,
 };
 

@@ -67,7 +67,7 @@ impl Node for UiRenderNode {
     ) -> anyhow::Result<UpdateResult> {
         let instance = ctx.store.get(&self.instance);
 
-        let mut ui_deps = self.ui_deps_query.borrow(&ctx.world);
+        let mut ui_deps = self.ui_deps_query.borrow(ctx.world);
         let ui_deps = ui_deps
             .iter()
             .map(|&handle| Dependency::texture(handle, TextureUsages::TEXTURE_BINDING));

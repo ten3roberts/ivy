@@ -3,7 +3,7 @@ use proc_macro_crate::FoundCrate;
 use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote};
 use syn::{
-    bracketed, parenthesized, spanned::Spanned, Attribute, DeriveInput, Error, Field, Ident, Index, Result, Token, Type
+    parenthesized, spanned::Spanned, Attribute, DeriveInput, Error, Field, Ident, Index, Result, Token, Type
 };
 
 pub fn editable_impl(input: DeriveInput) -> Result<TokenStream> {

@@ -1,11 +1,10 @@
-use std::{marker::Sized, ops::RangeInclusive, sync::Arc};
+use std::{marker::Sized, sync::Arc};
 
 use bevy_reflect::PartialReflect;
 use flax::{Entity, component::ComponentValue};
 use futures::{StreamExt, stream::BoxStream};
 use glam::{Quat, Vec2, Vec3};
 use itertools::Itertools;
-use ordered_float::NotNan;
 use violet::{
     core::{
         Widget,

@@ -641,10 +641,10 @@ mod tests {
             type Error = Infallible;
 
             async fn create(&self, assets: &AssetCache) -> Result<Asset<()>, Infallible> {
-                eprintln!("Loading {:?}", self);
+                eprintln!("Loading {self:?}");
                 YieldOnce { yielded: false }.await;
 
-                eprintln!("Finished {:?}", self);
+                eprintln!("Finished {self:?}");
                 Ok(assets.insert(()))
             }
         }

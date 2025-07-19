@@ -54,6 +54,12 @@ pub struct UiLayer {
     screens: ScreenState,
 }
 
+impl Default for UiLayer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl UiLayer {
     pub fn new() -> Self {
         let screens = ScreenState::new();

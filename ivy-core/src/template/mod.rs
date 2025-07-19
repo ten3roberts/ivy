@@ -18,7 +18,6 @@ use violet::{
         state::{StateExt, StateStream, StateStreamRef, StateWrite},
         style::{element_warning, surface_tertiary, SizeExt, StyleExt},
         to_owned,
-        unit::Unit,
         widget::{
             bold, card, col, interactive::select_list::SelectList, label, raised_card, row, Button,
             ButtonStyle, Collapsible, Rectangle, ScrollArea, StreamWidget,
@@ -37,6 +36,12 @@ use crate::{
 /// Defines an entity template to construct an entity using [[Bundle]]s
 pub struct Template {
     bundles: Vec<Box<dyn Bundle>>,
+}
+
+impl Default for Template {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Template {
@@ -163,6 +168,12 @@ impl Clone for ErasedBundleDesc {
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct TemplateDesc {
     bundles: Vec<ErasedBundleDesc>,
+}
+
+impl Default for TemplateDesc {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TemplateDesc {

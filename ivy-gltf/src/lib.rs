@@ -11,7 +11,7 @@ use gltf::{buffer, Gltf};
 use image::{DynamicImage, ImageFormat};
 use itertools::Itertools;
 use ivy_assets::{
-    loadable::{LoadFromPath, Resource},
+    loadable::LoadFromPath,
     Asset, AssetCache, AssetDesc, AssetPath,
 };
 use ivy_core::components::TransformBundle;

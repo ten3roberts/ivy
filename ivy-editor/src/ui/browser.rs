@@ -393,7 +393,7 @@ pub struct FileDetailsPanel {
 
 fn bytes_to_human_readable(size: u64) -> String {
     if size < 1024 {
-        format!("{} bytes", size)
+        format!("{size} bytes")
     } else if size < 1024 * 1024 {
         format!("{:.2} KB", size as f64 / 1024.0)
     } else if size < 1024 * 1024 * 1024 {
@@ -570,8 +570,8 @@ impl Widget for FileDetailsPanel {
             label("File Details")
                 .with_font_size(16.0)
                 .with_color(OCEAN_200),
-            label(format!("Name: {}", file_name)),
-            label(format!("Size: {}", file_size_str)),
+            label(format!("Name: {file_name}")),
+            label(format!("Size: {file_size_str}")),
             // label(format!("Path: {}", path.display())),
         )))
         .with_min_size(Unit::px2(INSPECTOR_PANEL_WIDTH, 200.0))

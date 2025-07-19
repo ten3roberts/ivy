@@ -7,7 +7,7 @@ use flax::{
 };
 use glam::{vec3, EulerRot, Mat4, Quat, Vec3};
 use image::{DynamicImage, Rgba};
-use itertools::{Either, Itertools};
+use itertools::Itertools;
 use ivy_assets::{stored::DynamicStore, Asset, AssetCache, AssetPath, AsyncAssetExt};
 use ivy_core::{
     app::PostInitEvent,
@@ -38,7 +38,7 @@ use ivy_gltf::{
     Document,
 };
 use ivy_graphics::texture::{
-    ColorChannel, ColorChannelOrValue, MetallicRoughnessProcessor, TextureData, TextureDesc,
+    TextureData, TextureDesc,
 };
 use ivy_input::layer::InputLayer;
 use ivy_physics::{ColliderBundle, GizmoSettings, PhysicsPlugin};

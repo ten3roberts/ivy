@@ -30,7 +30,6 @@ use ivy_postprocessing::preconfigured::{
 use ivy_scene::ray_picker::RayPickingPlugin;
 use ivy_ui::{
     layer::{UiLayer, UiUpdateLayer},
-    screens::ScreenPlugin,
     streamed::StreamedUiPlugin,
 };
 use ivy_wgpu::{
