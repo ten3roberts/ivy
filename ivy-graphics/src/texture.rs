@@ -6,7 +6,7 @@ use ivy_assets::{loadable::Loadable, Asset, AssetCache, AssetDesc, AssetPath, As
 use ivy_core::palette::Srgba;
 use ivy_editable::Editable;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Editable)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ProcessedTextureDesc {
     texture: Box<TextureDesc>,
@@ -58,6 +58,7 @@ pub enum ColorChannelOrValue {
     Value(u8),
 }
 
+use ivy_editable::__private::violet;
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Editable)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MetallicRoughnessProcessor {
@@ -109,7 +110,6 @@ impl TextureProcessor for MetallicRoughnessProcessor {
 pub enum TextureDesc {
     Path(AssetPath<DynamicImage>),
     Color(u8, u8, u8, u8),
-    Processed(ProcessedTextureDesc),
 }
 
 impl TextureDesc {
@@ -126,12 +126,12 @@ impl TextureDesc {
         Self::Color(127, 127, 255, 255)
     }
 
-    pub fn process(self, processor: impl Into<StaticTextureProcessor>) -> Self {
-        Self::Processed(ProcessedTextureDesc {
-            texture: Box::new(self),
-            processor: processor.into(),
-        })
-    }
+    // pub fn process(self, processor: impl Into<StaticTextureProcessor>) -> Self {
+    //     Self::Processed(ProcessedTextureDesc {
+    //         texture: Box::new(self),
+    //         processor: processor.into(),
+    //     })
+    // }
 
     // Ah, the beauty of rust at times. It can not figure out the send bound if I use the
     // `async-fn` sugar
@@ -145,15 +145,14 @@ impl TextureDesc {
                 Self::Path(v) => Ok(v.load_async(assets).await?.deref().clone()),
                 &Self::Color(r, g, b, a) => {
                     Ok(ImageBuffer::from_pixel(1, 1, image::Rgba([r, g, b, a])).into())
-                }
-                Self::Processed(v) => {
-                    // NOTE: load_image, and not load here
-                    let original = (Box::pin(async { v.texture.load_image(assets).await })
-                        as Pin<Box<dyn Future<Output = anyhow::Result<DynamicImage>> + Send>>)
-                        .await?;
-                    let processed = v.processor.process(original);
-                    Ok(processed)
-                }
+                } // Self::Processed(v) => {
+                  //     // NOTE: load_image, and not load here
+                  //     let original = (Box::pin(async { v.texture.load_image(assets).await })
+                  //         as Pin<Box<dyn Future<Output = anyhow::Result<DynamicImage>> + Send>>)
+                  //         .await?;
+                  //     let processed = v.processor.process(original);
+                  //     Ok(processed)
+                  // }
             }
         }
     }
@@ -166,12 +165,12 @@ impl Loadable for TextureDesc {
         let texture = match self {
             TextureDesc::Path(path) => TextureData::Content(path.load_async(assets).await?),
             &TextureDesc::Color(r, g, b, a) => TextureData::Color(image::Rgba([r, g, b, a])),
-            TextureDesc::Processed(v) => {
-                // NOTE: ensure we don't recurse with assets here, and use raw uncached images on
-                // the way down (and only loading the base image into the asset cache)
-                let image = v.texture.load_image(assets).await?;
-                TextureData::Content(assets.insert(v.processor.process(image)))
-            }
+            // TextureDesc::Processed(v) => {
+            //     // NOTE: ensure we don't recurse with assets here, and use raw uncached images on
+            //     // the way down (and only loading the base image into the asset cache)
+            //     let image = v.texture.load_image(assets).await?;
+            //     TextureData::Content(assets.insert(v.processor.process(image)))
+            // }
         };
 
         Ok(texture)

@@ -6,7 +6,7 @@ use flax::{
     World,
 };
 use glam::{vec3, EulerRot, Mat4, Quat, Vec3};
-use image::Rgba;
+use image::{DynamicImage, Rgba};
 use itertools::{Either, Itertools};
 use ivy_assets::{stored::DynamicStore, Asset, AssetCache, AssetPath, AsyncAssetExt};
 use ivy_core::{
@@ -207,7 +207,8 @@ impl LogicLayer {
 
             let normal = AssetPath::new(format!("{texture_group}/normal.png"));
 
-            let roughness = AssetPath::new(format!("{texture_group}/roughness.png"));
+            let roughness: AssetPath<DynamicImage> =
+                AssetPath::new(format!("{texture_group}/roughness.png"));
 
             let ao = AssetPath::new(format!("{texture_group}/ao.png"));
 
@@ -220,12 +221,12 @@ impl LogicLayer {
                     .with_metallic_factor(0.0)
                     .with_albedo(TextureDesc::Path(albedo))
                     .with_normal(TextureDesc::Path(normal))
-                    .with_metallic_roughness(TextureDesc::Path(roughness).process(
-                        MetallicRoughnessProcessor::new(
-                            ColorChannelOrValue::Value(0),
-                            ColorChannelOrValue::Channel(ColorChannel::Red),
-                        ),
-                    ))
+                    // .with_metallic_roughness(TextureDesc::Path(roughness).process(
+                    //     MetallicRoughnessProcessor::new(
+                    //         ColorChannelOrValue::Value(0),
+                    //         ColorChannelOrValue::Channel(ColorChannel::Red),
+                    //     ),
+                    // ))
                     .with_ambient_occlusion(TextureDesc::Path(ao))
                     .with_displacement(TextureDesc::Path(displacement)),
             )

@@ -17,8 +17,8 @@ use violet::{
         Scope, Widget,
         layout::Align,
         state::{
-            Project, State, StateDuplex, StateExt, StateSink, StateStream, StateStreamRef,
-            StateWrite,
+            Project, State, StateDuplex, StateExt, StateProjected, StateSink, StateStream,
+            StateStreamRef, StateWrite,
         },
         style::{SizeExt, StyleExt},
         to_owned,
@@ -41,8 +41,6 @@ use violet::{
 
 pub mod registry;
 
-use crate::registry::EDITABLE_REGISTRY;
-
 /// A trait for components that can be edited in the editor.
 pub trait Editable: 'static + Send + Sync {
     const INLINE: bool;
@@ -55,9 +53,7 @@ pub trait Editable: 'static + Send + Sync {
 
     /// Reference projection variant of [`create_editor`] which allows direct access to state and
     /// further subprojection without cloning.
-    fn create_editor_project<
-        S: 'static + Send + Sync + Clone + StateStreamRef<Item = Self> + StateWrite,
-    >(
+    fn create_editor_project<S: 'static + Send + Sync + Clone + StateProjected<Item = Self>>(
         state: S,
     ) -> Box<dyn Send + Widget>
     where
@@ -784,27 +780,27 @@ where
     }
 }
 
-impl<T> Editable for Box<T>
-where
-    T: Editable,
-{
-    const INLINE: bool = true;
+// impl<T> Editable for Box<T>
+// where
+//     T: Editable,
+// {
+//     const INLINE: bool = true;
 
-    fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
-        state: S,
-    ) -> Box<dyn Send + Widget> {
-        T::create_editor(state.map_value(|v| *v, |v| Box::new(v)))
-    }
+//     fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
+//         state: S,
+//     ) -> Box<dyn Send + Widget> {
+//         T::create_editor(state.map_value(|v| *v, |v| Box::new(v)))
+//     }
 
-    fn create_editor_project<S: 'static + Send + Sync + StateStreamRef<Item = Self> + StateWrite>(
-        state: S,
-    ) -> Box<dyn Send + Widget>
-    where
-        Self: Sized,
-    {
-        T::create_editor_project(Arc::new(state.project_ref(|v| &**v, |v| &mut **v)))
-    }
-}
+//     fn create_editor_project<S: 'static + Send + Sync + StateStreamRef<Item = Self> + StateWrite>(
+//         state: S,
+//     ) -> Box<dyn Send + Widget>
+//     where
+//         Self: Sized,
+//     {
+//         T::create_editor_project(Arc::new(state.project_ref(|v| &**v, |v| &mut **v)))
+//     }
+// }
 
 impl Editable for NotNan<f32> {
     const INLINE: bool = true;

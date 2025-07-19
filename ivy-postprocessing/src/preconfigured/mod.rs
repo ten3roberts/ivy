@@ -62,7 +62,7 @@ impl SurfacePbrRenderer {
 
         let surface_texture = render_graph
             .resources
-            .insert_texture(rendergraph::TextureDesc::External);
+            .insert_texture(rendergraph::RenderGraphImageDesc::External);
 
         let ui_instance = world.get_clone(engine(), ui_instance()).ok();
         tracing::info!(?ui_instance);
@@ -198,7 +198,7 @@ impl SurfaceRenderer {
 
         let surface_texture = render_graph
             .resources
-            .insert_texture(rendergraph::TextureDesc::External);
+            .insert_texture(rendergraph::RenderGraphImageDesc::External);
 
         Self {
             render_graph,
