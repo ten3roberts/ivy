@@ -3,7 +3,7 @@ use proc_macro_crate::FoundCrate;
 use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote};
 use syn::{
-    Attribute, DeriveInput, Error, Field, Ident, Index, Result, Token, Type, spanned::Spanned,
+    bracketed, parenthesized, spanned::Spanned, Attribute, DeriveInput, Error, Field, Ident, Index, Result, Token, Type
 };
 
 pub fn editable_impl(input: DeriveInput) -> Result<TokenStream> {
@@ -67,7 +67,6 @@ fn expand_enum(
 
     let kind_selection = quote! { #violet::widget::row((#(#kind_selection),*)); };
 
-    let create_editor_ident = format_ident!("create_editor");
     let create_editor_project_ident = format_ident!("create_editor_project");
 
     let variant_editors = |project| -> syn::Result<Vec<TokenStream>> {
@@ -98,11 +97,7 @@ fn expand_enum(
                         }
                     }).collect_vec();
 
-                    let field_editors = expand_field_editors(&crate_name, &fields, if project {
-                        &create_editor_project_ident
-                    } else {
-                        &create_editor_ident
-                    });
+                    let field_editors = expand_field_editors(&crate_name, &fields, project);
 
                     let destruct =quote! { { #(#field_names,)* } };
                     let destruct_tuple =quote! { ( #(#field_names,)* ) };
@@ -202,7 +197,7 @@ fn expand_enum(
                         }
                     }).collect_vec();
 
-                    let field_editors = expand_field_editors_indexed(&crate_name, &fields, &create_editor_ident);
+                    let field_editors = expand_field_editors_indexed(&crate_name, &fields, false);
 
                     quote! [
                         #matched_state
@@ -222,7 +217,6 @@ fn expand_enum(
         .try_collect()
     };
 
-    let variant_editors_project = variant_editors(true)?;
     let variant_editors = variant_editors(false)?;
 
     let value_editor = quote! {
@@ -268,7 +262,7 @@ fn expand_enum(
 fn expand_field_editors(
     crate_name: &Ident,
     fields: &[ParsedField],
-    method: &Ident,
+    project: bool,
 ) -> Vec<TokenStream> {
     let violet = quote! { #crate_name::__private::violet::core };
     fields.iter().map(|f| {
@@ -281,8 +275,24 @@ fn expand_field_editors(
             ).with_tooltip_text(stringify!(#ty))
         };
 
-        let editor = quote! {
-            Editable::#method(#ident)
+        let editor = if let Some(opts) = f.attrs.opts_tokens(crate_name) {
+            let method = if project {
+                format_ident!("create_editor_project_opts")
+            } else {
+                format_ident!("create_editor_opts")
+            };
+            quote! {
+                <#ty as #crate_name::EditableWithOpts>::#method(#ident, #opts)
+            }   
+        } else {
+            let method = if project {
+                format_ident!("create_editor_project")
+            } else {
+                format_ident!("create_editor")
+            };
+            quote! {
+                <#ty as #crate_name::Editable>::#method(#ident)
+            }
         };
 
         quote! {
@@ -303,24 +313,10 @@ fn expand_field_editors(
     }).collect_vec()
 }
 
-fn ty_to_str(ty: &Type) -> String {
-    match ty {
-        Type::Path(type_path) => type_path
-            .path
-            .segments
-            .iter()
-            .map(|s| s.ident.to_string())
-            .join("::"),
-        Type::Reference(type_ref) => format!("&{}", ty_to_str(&type_ref.elem)),
-        Type::Tuple(tuple) => format!("({})", tuple.elems.iter().map(ty_to_str).join(", ")),
-        _ => format!("{ty:?}"),
-    }
-}
-
 fn expand_field_editors_indexed(
     crate_name: &Ident,
     fields: &[IndexedField],
-    method: &Ident,
+    project: bool,
 ) -> Vec<TokenStream> {
     let violet = quote! { #crate_name::__private::violet::core };
 
@@ -330,10 +326,25 @@ fn expand_field_editors_indexed(
             let ty = &f.ty;
 
             let named_ident = &f.named_ident;
-            let editor = quote! {
 
-                <#ty as #crate_name::Editable>::#method(#named_ident)
-
+            let editor = if let Some(opts) = f.attrs.opts_tokens(crate_name) {
+                let method = if project {
+                    format_ident!("create_editor_project_opts")
+                } else {
+                    format_ident!("create_editor_opts")
+                };
+                quote! {
+                    <#ty as #crate_name::EditableWithOpts>::#method(#named_ident, #opts)
+                }   
+            } else {
+                let method = if project {
+                    format_ident!("create_editor_project")
+                } else {
+                    format_ident!("create_editor")
+                };
+                quote! {
+                    <#ty as #crate_name::Editable>::#method(#named_ident)
+                }
             };
 
             quote! {
@@ -413,12 +424,8 @@ fn expand_struct(
         }
     });
 
-    let field_edit = expand_field_editors(&crate_name, &fields, &format_ident!("create_editor"));
-    let field_edit_project = expand_field_editors(
-        &crate_name,
-        &fields,
-        &format_ident!("create_editor_project"),
-    );
+    let field_edit = expand_field_editors(&crate_name, &fields, false);
+    let field_edit_project = expand_field_editors(&crate_name, &fields, true);
 
     let expanded = quote! {
         impl #crate_name::Editable for #ident {
@@ -505,6 +512,7 @@ impl<'a> IndexedField<'a> {
 #[derive(Default, Debug, Clone)]
 struct FieldAttrs {
     skip: bool,
+    range: Option<(syn::Expr, syn::Expr)>,
     default: Option<syn::Expr>,
 }
 
@@ -536,10 +544,20 @@ impl FieldAttrs {
                             }
 
                             Ok(())
+                        }
+                        else if meta.path.is_ident("range") {
+                            let content;
+
+                            parenthesized!(content in meta.input);
+                            let start = content.parse()?;
+                            content.parse::<Token![,]>()?;
+                            let end = content.parse()?;
+                            res.range = Some((start, end));
+                            Ok(())
                         } else {
                             Err(Error::new(
                                 meta.path.span(),
-                                "Unknown fetch field attribute",
+                                "Unknown editable field attribute",
                             ))
                         }
                     })?;
@@ -554,5 +572,17 @@ impl FieldAttrs {
         }
 
         Ok(res)
+    }
+
+    fn opts_tokens(&self, crate_name: &Ident) -> Option<TokenStream> {
+        if let Some((start, end)) = &self.range {
+            Some(quote! {
+                #crate_name::EditorOpts {
+                    range: Some((#start, #end)),
+                }
+            })
+        } else {
+            None
+        }
     }
 }

@@ -143,6 +143,7 @@ enum MyEnum {
     },
     Variant2 {
         #[editable(default = 6.4)]
+        #[editable(range(0.0, 10.0))]
         value: f32,
         #[editable(default = EMERALD_400.without_alpha())]
         favorite_color: Srgb,

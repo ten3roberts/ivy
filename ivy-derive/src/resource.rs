@@ -3,7 +3,7 @@ use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote};
 use syn::{
     Attribute, DataEnum, DeriveInput, Error, Field, Ident, Index, Result, Token, Type, Visibility,
-    bracketed, parse_quote_spanned, punctuated::Punctuated, spanned::Spanned,
+    bracketed, parenthesized, parse_quote_spanned, punctuated::Punctuated, spanned::Spanned,
 };
 
 pub fn resource_impl(input: DeriveInput) -> Result<TokenStream> {

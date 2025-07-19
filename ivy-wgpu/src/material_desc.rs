@@ -65,7 +65,9 @@ pub struct PbrMaterialDesc {
     ambient_occlusion: TextureDesc,
     #[cfg_attr(feature = "serde", serde(default = "TextureDesc::white"))]
     displacement: TextureDesc,
+    #[editable(range(0.0, 1.0))]
     roughness_factor: NotNan<f32>,
+    #[editable(range(0.0, 1.0))]
     metallic_factor: NotNan<f32>,
 }
 
@@ -160,6 +162,7 @@ impl Default for PbrMaterialDesc {
 pub struct PbrEmissiveMaterialDesc {
     pbr: PbrMaterialDesc,
     emissive_color: TextureDesc,
+    #[editable(range(0.0, 1.0))]
     emissive_factor: NotNan<f32>,
 }
 
