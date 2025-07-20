@@ -29,8 +29,8 @@
           "params": {
             "color": {
               "red": 1.0,
-              "green": 0.39,
-              "blue": 0.399
+              "green": 0.415,
+              "blue": 0.795
             },
             "intensity": 0.0,
             "inner_theta": 0.0,
@@ -52,6 +52,66 @@
       {
         "NameBundle": {
           "name": "This is a name"
+        }
+      },
+      {
+        "RigidBodyBundle": {
+          "body_type": "Dynamic",
+          "can_sleep": true,
+          "mass": 0.0,
+          "angular_mass": 0.0,
+          "constraints": {
+            "lock_translation": [
+              false,
+              false,
+              false
+            ],
+            "lock_rotation": [
+              false,
+              false,
+              false
+            ]
+          },
+          "velocity": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "angular_velocity": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "linear_damping": 0.0,
+          "angular_damping": 0.0
+        }
+      },
+      {
+        "GltfColliderBundle": {
+          "shape": {
+            "Cuboid": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          "restitution": 0.7428436,
+          "friction": 0.72377014,
+          "density": 658.1607
+        }
+      },
+      {
+        "GltfColliderBundle": {
+          "shape": {
+            "Cuboid": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          "restitution": 0.32826567,
+          "friction": 1.0,
+          "density": 1.0
         }
       }
     ]

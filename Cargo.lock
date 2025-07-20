@@ -2099,6 +2099,7 @@ dependencies = [
  "itertools 0.14.0",
  "ivy-assets",
  "ivy-core",
+ "ivy-editable",
  "ivy-graphics",
  "ivy-profiling",
  "ordered-float 5.0.0",
@@ -2157,6 +2158,7 @@ dependencies = [
  "itertools 0.14.0",
  "ivy-assets",
  "ivy-core",
+ "ivy-editable",
  "ivy-gltf",
  "ivy-graphics",
  "ivy-random",
@@ -2168,6 +2170,7 @@ dependencies = [
  "smallvec",
  "thiserror 2.0.12",
  "tracing",
+ "violet",
 ]
 
 [[package]]

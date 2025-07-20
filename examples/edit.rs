@@ -157,8 +157,8 @@ struct MyStruct {
     rotation: Quat,
     #[editable(default = "Hello".into())]
     name: String,
-    kind: MyEnum,
-    material: MaterialDesc,
+    kind: Option<MyEnum>,
+    material: Option<MaterialDesc>,
 }
 
 impl Screen for MainUI {
@@ -173,7 +173,7 @@ impl Screen for MainUI {
                         .unwrap_or(bold("No Value"))
                 }))),
             ))
-            .with_max_size(Unit::px2(400.0, 600.0)),
+            .with_max_size(Unit::px2(600.0, 600.0)),
         )
         .mount(scope);
     }

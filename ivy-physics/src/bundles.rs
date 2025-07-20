@@ -2,11 +2,11 @@
 use core::f32;
 
 use flax::EntityBuilder;
-use glam::Vec3;
+use glam::{BVec3, Vec3};
+use ivy_assets::Resource;
 use ivy_core::Bundle;
-use rapier3d::prelude::{
-    ColliderBuilder, LockedAxes, RigidBodyBuilder, RigidBodyType, SharedShape,
-};
+use ivy_editable::Editable;
+use rapier3d::prelude::{ColliderBuilder, LockedAxes, RigidBodyBuilder, SharedShape};
 
 use crate::{
     components::{
@@ -17,43 +17,143 @@ use crate::{
     Effector,
 };
 
-fn default_fixed() -> RigidBodyType {
-    RigidBodyType::Fixed
+fn default_fixed() -> RigidBodyKind {
+    RigidBodyKind::Fixed
 }
 
 fn default_true() -> bool {
     true
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Resource, Bundle)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[resource(derive = [Editable])]
 /// Bundle for a rigidbody without collider
 pub struct RigidBodyBundle {
+    #[resource_attr(editable(default = RigidBodyKind::Dynamic))]
     #[cfg_attr(feature = "serde", serde(default = "default_fixed"))]
-    pub body_type: RigidBodyType,
+    pub body_type: RigidBodyKind,
     #[cfg_attr(feature = "serde", serde(default = "default_true"))]
+    #[resource_attr(editable(default = true))]
     pub can_sleep: bool,
     #[cfg_attr(feature = "serde", serde(default))]
+    #[resource_attr(editable(default))]
     pub mass: f32,
     #[cfg_attr(feature = "serde", serde(default))]
+    #[resource_attr(editable(default))]
     pub angular_mass: f32,
     #[cfg_attr(feature = "serde", serde(default))]
-    pub locked_axes: Option<LockedAxes>,
+    #[resource_attr(editable(default))]
+    pub constraints: AxisContraints,
 
     #[cfg_attr(feature = "serde", serde(default))]
+    #[resource_attr(editable(default))]
     pub velocity: Vec3,
     #[cfg_attr(feature = "serde", serde(default))]
+    #[resource_attr(editable(default))]
     pub angular_velocity: Vec3,
 
     #[cfg_attr(feature = "serde", serde(default))]
+    #[resource_attr(editable(default))]
     pub linear_damping: f32,
 
     #[cfg_attr(feature = "serde", serde(default))]
+    #[resource_attr(editable(default))]
     pub angular_damping: f32,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Editable)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+/// The status of a body, governing the way it is affected by external forces.
+pub enum RigidBodyKind {
+    /// A `RigidBodyType::Dynamic` body can be affected by all external forces.
+    Dynamic = 0,
+    /// A `RigidBodyType::Fixed` body cannot be affected by external forces.
+    Fixed = 1,
+    /// A `RigidBodyType::KinematicPositionBased` body cannot be affected by any external forces but can be controlled
+    /// by the user at the position level while keeping realistic one-way interaction with dynamic bodies.
+    ///
+    /// One-way interaction means that a kinematic body can push a dynamic body, but a kinematic body
+    /// cannot be pushed by anything. In other words, the trajectory of a kinematic body can only be
+    /// modified by the user and is independent from any contact or joint it is involved in.
+    KinematicPositionBased = 2,
+    /// A `RigidBodyType::KinematicVelocityBased` body cannot be affected by any external forces but can be controlled
+    /// by the user at the velocity level while keeping realistic one-way interaction with dynamic bodies.
+    ///
+    /// One-way interaction means that a kinematic body can push a dynamic body, but a kinematic body
+    /// cannot be pushed by anything. In other words, the trajectory of a kinematic body can only be
+    /// modified by the user and is independent from any contact or joint it is involved in.
+    KinematicVelocityBased = 3,
+    // Semikinematic, // A kinematic that performs automatic CCD with the fixed environment to avoid traversing it?
+    // Disabled,
+}
+
+#[derive(Debug, Clone, Copy, Editable)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct AxisContraints {
+    lock_translation: BVec3,
+    lock_rotation: BVec3,
+}
+
+impl Default for AxisContraints {
+    fn default() -> Self {
+        Self {
+            lock_translation: BVec3::FALSE,
+            lock_rotation: BVec3::FALSE,
+        }
+    }
+}
+
+impl AxisContraints {
+    pub fn new(translation: BVec3, rotation: BVec3) -> Self {
+        Self {
+            lock_translation: translation,
+            lock_rotation: rotation,
+        }
+    }
+}
+
+impl From<AxisContraints> for LockedAxes {
+    fn from(value: AxisContraints) -> Self {
+        LockedAxes::from_bits(
+            (value.lock_translation.bitmask() | (value.lock_rotation.bitmask() << 3)) as u8,
+        )
+        .expect("Invalid LockedAxes bits")
+    }
+}
+
+impl From<RigidBodyKind> for rapier3d::prelude::RigidBodyType {
+    fn from(value: RigidBodyKind) -> Self {
+        match value {
+            RigidBodyKind::Dynamic => rapier3d::prelude::RigidBodyType::Dynamic,
+            RigidBodyKind::Fixed => rapier3d::prelude::RigidBodyType::Fixed,
+            RigidBodyKind::KinematicPositionBased => {
+                rapier3d::prelude::RigidBodyType::KinematicPositionBased
+            }
+            RigidBodyKind::KinematicVelocityBased => {
+                rapier3d::prelude::RigidBodyType::KinematicVelocityBased
+            }
+        }
+    }
+}
+
+impl From<rapier3d::prelude::RigidBodyType> for RigidBodyKind {
+    fn from(value: rapier3d::prelude::RigidBodyType) -> Self {
+        match value {
+            rapier3d::prelude::RigidBodyType::Dynamic => RigidBodyKind::Dynamic,
+            rapier3d::prelude::RigidBodyType::Fixed => RigidBodyKind::Fixed,
+            rapier3d::prelude::RigidBodyType::KinematicPositionBased => {
+                RigidBodyKind::KinematicPositionBased
+            }
+            rapier3d::prelude::RigidBodyType::KinematicVelocityBased => {
+                RigidBodyKind::KinematicVelocityBased
+            }
+        }
+    }
+}
+
 impl RigidBodyBundle {
-    pub fn new(body_type: RigidBodyType) -> Self {
+    pub fn new(body_type: RigidBodyKind) -> Self {
         Self {
             body_type,
             velocity: Vec3::ZERO,
@@ -61,30 +161,30 @@ impl RigidBodyBundle {
             angular_velocity: Vec3::ZERO,
             angular_mass: 0.0,
             can_sleep: true,
-            locked_axes: Default::default(),
+            constraints: Default::default(),
             linear_damping: 0.0,
             angular_damping: 0.0,
         }
     }
 
     pub fn dynamic() -> Self {
-        Self::new(RigidBodyType::Dynamic)
+        Self::new(RigidBodyKind::Dynamic)
     }
 
     pub fn kinematic_position() -> Self {
-        Self::new(RigidBodyType::KinematicPositionBased)
+        Self::new(RigidBodyKind::KinematicPositionBased)
     }
 
     pub fn kinematic_velocity() -> Self {
-        Self::new(RigidBodyType::KinematicVelocityBased)
+        Self::new(RigidBodyKind::KinematicVelocityBased)
     }
 
     pub fn fixed() -> Self {
-        Self::new(RigidBodyType::Fixed)
+        Self::new(RigidBodyKind::Fixed)
     }
 
-    pub fn with_locked_axes(mut self, axes: LockedAxes) -> Self {
-        self.locked_axes = Some(axes);
+    pub fn with_axis_constraints(mut self, constraints: AxisContraints) -> Self {
+        self.constraints = constraints;
         self
     }
 
@@ -133,11 +233,11 @@ impl Bundle for RigidBodyBundle {
         entity
             .set(
                 rigidbody_builder(),
-                RigidBodyBuilder::new(self.body_type)
+                RigidBodyBuilder::new(self.body_type.into())
                     .additional_mass(self.mass)
                     .can_sleep(self.can_sleep)
                     .gravity_scale(1.0)
-                    .locked_axes(self.locked_axes.unwrap_or(LockedAxes::empty()))
+                    .locked_axes(self.constraints.into())
                     .linear_damping(self.linear_damping)
                     .angular_damping(self.angular_damping),
             )

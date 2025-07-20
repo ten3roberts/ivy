@@ -13,6 +13,7 @@ readme = "../README.md"
 
 [dependencies]
 ivy-core = { path = "../ivy-core", version = "0.10.0" }
+ivy-editable = { path = "../ivy-editable", version = "0.1.0" }
 
 # TODO: move MeshData to ivy-gltf
 ivy-graphics = { path = "../ivy-graphics", version = "*" }
@@ -20,6 +21,7 @@ ivy-gltf = { path = "../ivy-gltf", version = "*" }
 ivy-random = { path = "../ivy-random", version = "0.10.0" }
 ivy-assets = { path = "../ivy-assets", version = "0.10.0" }
 
+violet.workspace = true
 anyhow.workspace = true
 flax.workspace = true
 flume.workspace = true

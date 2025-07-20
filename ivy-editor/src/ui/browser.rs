@@ -39,7 +39,7 @@ use ivy_ui::violet::{
 use crate::ui::asset_inspector::AssetInspector;
 
 pub const BROWSER_PANEL_HEIGHT: f32 = 300.0;
-pub const INSPECTOR_PANEL_HEIGHT: f32 = 500.0;
+pub const INSPECTOR_PANEL_MAX_HEIGHT: f32 = 800.0;
 pub const INSPECTOR_PANEL_WIDTH: f32 = 600.0;
 
 pub struct DirectoryTree {
@@ -575,7 +575,7 @@ impl Widget for FileDetailsPanel {
             // label(format!("Path: {}", path.display())),
         )))
         .with_min_size(Unit::px2(INSPECTOR_PANEL_WIDTH, 200.0))
-        .with_max_size(Unit::px2(INSPECTOR_PANEL_WIDTH, INSPECTOR_PANEL_HEIGHT))
+        .with_max_size(Unit::px2(INSPECTOR_PANEL_WIDTH, INSPECTOR_PANEL_MAX_HEIGHT))
         .mount(scope);
     }
 }

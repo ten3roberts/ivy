@@ -80,7 +80,7 @@ macro_rules! declare_resource {
             $crate::registry::ResourceRegistration::new::<$name>(stringify!($name))
         }
 
-        impl Resource for $name {
+        impl $crate::Resource for $name {
             type Desc = $desc;
 
             fn tag_name() -> &'static str {

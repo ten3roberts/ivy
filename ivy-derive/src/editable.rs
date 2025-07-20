@@ -54,8 +54,10 @@ fn expand_enum(
 
     let violet = quote! { #crate_name::__private::violet::core };
 
+    let default_variant = data_enum.variants.first().map(|v| &v.ident).ok_or_else(|| syn::Error::new_spanned(ident, "No variants found in enum"))?.to_string();
+
     let disc_selection = quote! {
-        ::std::sync::Arc::new(state.clone().filter_map(|v| Some(Some( match v { #(#disc_selection),* })), |_| None).memo(None).dedup().lower_option()) as ::std::sync::Arc<dyn Send + Sync + #violet::state::StateDuplex<Item = &'static str>>;
+        ::std::sync::Arc::new(state.clone().filter_map(|v| Some( match v { #(#disc_selection),* }), |_| None).memo(#default_variant).dedup()) as ::std::sync::Arc<dyn Send + Sync + #violet::state::StateDuplex<Item = &'static str>>;
     };
 
     let kind_selection = data_enum.variants.iter().map(|v| {

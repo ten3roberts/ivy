@@ -93,7 +93,7 @@ fn expand_enum(
 
                         if f.attrs.load {
                             quote! {
-                                #named_ident: Loadable::load(&self.#named_ident, assets).await?
+                                #named_ident: <#crate_name::loadable::Loadable>::load(&self.#named_ident, assets).await?
                             }
                         } else {
                             quote! {
@@ -245,7 +245,7 @@ fn expand_struct(
 
         if f.attrs.load {
             quote! {
-                #ident: Loadable::load(&self.#ident, assets).await?
+                #ident: #crate_name::loadable::Loadable::load(&self.#ident, assets).await?
             }
         } else {
             quote! {

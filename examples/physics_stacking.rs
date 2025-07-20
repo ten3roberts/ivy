@@ -22,7 +22,9 @@ use ivy_game::{
 };
 use ivy_graphics::texture::TextureData;
 use ivy_input::layer::InputLayer;
-use ivy_physics::{components::collider_builder, ColliderBundle, GizmoSettings, PhysicsPlugin};
+use ivy_physics::{
+    components::collider_builder, ColliderBundle, GizmoSettings, PhysicsPlugin, RigidBodyKind,
+};
 use ivy_postprocessing::preconfigured::{
     pbr::{PbrRenderGraphConfig, SkyboxConfig},
     SurfacePbrPipelineDesc, SurfacePbrRenderer,
@@ -42,7 +44,7 @@ use ivy_wgpu::{
     primitives::{CapsulePrimitive, CubePrimitive, UvSpherePrimitive},
     renderer::{EnvironmentData, RenderObjectBundle},
 };
-use rapier3d::prelude::{ColliderBuilder, RigidBodyType, SharedShape};
+use rapier3d::prelude::{ColliderBuilder, SharedShape};
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
 use wgpu::TextureFormat;
@@ -151,7 +153,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
         let mut builder = Entity::builder();
         builder
             .mount(TransformBundle::default())
-            .mount(RigidBodyBundle::new(RigidBodyType::Dynamic))
+            .mount(RigidBodyBundle::new(RigidBodyKind::Dynamic))
             .mount(
                 ColliderBundle::new(SharedShape::cuboid(1.0, 1.0, 1.0))
                     .with_restitution(RESTITUTION)
@@ -202,7 +204,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
     };
 
     cube(Vec3::ZERO, vec3(100.0, 1.0, 100.0))
-        .mount(RigidBodyBundle::new(RigidBodyType::Fixed))
+        .mount(RigidBodyBundle::new(RigidBodyKind::Fixed))
         .set(scale(), vec3(100.0, 1.0, 100.0))
         .set(is_static(), ())
         .set(forward_pass(), white_material)

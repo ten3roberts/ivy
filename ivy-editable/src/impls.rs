@@ -1,12 +1,8 @@
-use std::{
-    future::ready,
-    marker::Sized,
-    sync::Arc,
-};
+use std::{future::ready, marker::Sized, sync::Arc};
 
 use flax::Entity;
 use futures::StreamExt;
-use glam::{Quat, Vec2, Vec3, Vec4};
+use glam::{BVec3, Quat, Vec2, Vec3, Vec4};
 use itertools::Itertools;
 use ivy_assets::AssetPath;
 use ordered_float::NotNan;
@@ -30,6 +26,7 @@ use violet::{
         },
     },
     futures_signals::signal::{Mutable, SignalExt},
+    lucide::icons::{LUCIDE_PLUS, LUCIDE_TRASH_2},
     palette::{Srgb, Srgba, WithAlpha},
 };
 
@@ -259,6 +256,90 @@ impl EditableWithOpts for Vec4 {
     }
 }
 
+impl Editable for BVec3 {
+    const INLINE: bool = true;
+
+    fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
+        state: S,
+    ) -> Box<dyn Send + Widget> {
+        Self::create_editor_project(Arc::new(state.memo(Default::default())))
+    }
+
+    fn create_editor_project<
+        S: 'static + Send + Sync + Clone + StateStreamRef<Item = Self> + StateWrite,
+    >(
+        state: S,
+    ) -> Box<dyn Send + Widget>
+    where
+        Self: Sized,
+    {
+        let x = state.clone().project_ref(|v| &v.x, |v| &mut v.x);
+        let y = state.clone().project_ref(|v| &v.y, |v| &mut v.y);
+        let z = state.clone().project_ref(|v| &v.z, |v| &mut v.z);
+
+        Box::new(row((
+            bool::create_editor_project(x),
+            bool::create_editor_project(y),
+            bool::create_editor_project(z),
+        )))
+    }
+}
+
+impl<T: Clone + Editable> Editable for Option<T> {
+    const INLINE: bool = T::INLINE;
+
+    fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
+        state: S,
+    ) -> Box<dyn Send + Widget>
+    where
+        Self: Sized,
+    {
+        let state = Arc::new(state);
+        let has_value = Arc::new(
+            state
+                .clone()
+                .filter_map(|v| Some(v.is_some()), |_| None)
+                .dedup()
+                .memo(false),
+        );
+
+        has_value.sync_initial();
+
+        let inner_value = Arc::new(state.clone().lower_option());
+
+        let inner_value = has_value.stream().map(move |has_value| {
+            if has_value {
+                Some(T::create_editor(inner_value.clone()))
+            } else {
+                None
+            }
+        });
+
+        let add_remove = has_value.stream().map(move |v| {
+            to_owned!(has_value);
+            Button::label(if v { LUCIDE_TRASH_2 } else { LUCIDE_PLUS }).on_click(move |_| {
+                has_value.send(!v);
+            })
+        });
+
+        Box::new(row((
+            StreamWidget::new(inner_value),
+            StreamWidget::new(add_remove),
+        )))
+    }
+
+    fn create_editor_project<
+        S: 'static + Send + Sync + Clone + violet::core::state::StateProjected<Item = Self>,
+    >(
+        state: S,
+    ) -> Box<dyn Send + Widget>
+    where
+        Self: Sized,
+    {
+        Self::create_editor(state.project_ref(|v| v, |v| v))
+    }
+}
+
 impl Editable for Srgb {
     const INLINE: bool = false;
 
@@ -354,6 +435,7 @@ impl Editable for Quat {
     }
 }
 
+#[allow(dead_code)]
 pub struct EntityDisplay(pub Entity);
 
 impl Widget for EntityDisplay {

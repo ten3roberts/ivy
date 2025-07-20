@@ -1,4 +1,5 @@
 pub mod camera;
+mod collider;
 pub mod editor;
 pub mod ray_picker;
 
@@ -6,16 +7,21 @@ use std::collections::BTreeMap;
 
 use flax::{
     components::{child_of, name},
+    query::Node,
     Entity, EntityBuilder,
 };
 use glam::Mat4;
-use ivy_core::{components::color, Color, ColorExt, EntityBuilderExt};
+use ivy_core::{components::color, Bundle, Color, ColorExt, EntityBuilderExt};
+use ivy_derive::Resource;
+use ivy_editable::Editable;
 use ivy_gltf::GltfNode;
 use ivy_wgpu::{
     components::{forward_pass, shadow_pass},
     material_desc::{MaterialData, PbrMaterialData},
     renderer::RenderObjectBundle,
 };
+
+pub use collider::*;
 
 #[derive(Debug)]
 pub struct NodeMountOptions<'a> {
@@ -94,5 +100,24 @@ impl GltfNodeExt for GltfNode {
         }
 
         mount(self, entity, opts)
+    }
+}
+
+#[derive(Clone, Bundle, Resource)]
+#[resource(derive = [Editable])]
+pub struct NodeBundle {
+    #[resource(load)]
+    node: GltfNode,
+}
+
+impl Bundle for NodeBundle {
+    fn mount(&self, entity: &mut EntityBuilder) {
+        self.node.mount(
+            entity,
+            &NodeMountOptions {
+                skip_empty_children: true,
+                material_overrides: &Default::default(),
+            },
+        );
     }
 }

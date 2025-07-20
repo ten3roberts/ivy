@@ -299,7 +299,7 @@ impl Editable for TemplateDesc {
 
         Box::new(
             col((
-                editors,
+                ScrollArea::vertical(editors),
                 StreamWidget::new(
                     add_rx
                         .into_stream()

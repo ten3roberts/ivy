@@ -10,6 +10,7 @@ ivy-core = { path = "../ivy-core" }
 ivy-assets = { path = "../ivy-assets" }
 ivy-profiling = { path = "../ivy-profiling" }
 ivy-graphics = { path = "../ivy-graphics" }
+ivy-editable = { path = "../ivy-editable" }
 
 anyhow.workspace = true
 gltf.workspace = true
@@ -25,4 +26,4 @@ base64.workspace = true
 urlencoding.workspace = true
 rayon.workspace = true
 
-serde = { workspace =  true, optional = true }
+serde = { workspace = true, optional = true }

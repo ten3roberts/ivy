@@ -18,8 +18,7 @@ use ivy_input::{
 };
 use ivy_physics::{
     components::{angular_velocity, velocity},
-    rapier3d::prelude::RigidBodyType,
-    RigidBodyBundle,
+    RigidBodyBundle, RigidBodyKind,
 };
 use ivy_wgpu::components::{environment_data, projection_matrix};
 
@@ -124,7 +123,7 @@ impl Bundle for FreeCameraBundle {
                 Quat::IDENTITY,
                 Vec3::ONE,
             ))
-            .mount(RigidBodyBundle::new(RigidBodyType::Dynamic).with_can_sleep(false))
+            .mount(RigidBodyBundle::new(RigidBodyKind::Dynamic).with_can_sleep(false))
             .set(main_camera(), ())
             .set_default(projection_matrix())
             .set_default(environment_data())
