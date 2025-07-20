@@ -28,9 +28,9 @@
         "LightBundle": {
           "params": {
             "color": {
-              "red": 1.0,
-              "green": 0.415,
-              "blue": 0.795
+              "red": 0.159,
+              "green": 0.675,
+              "blue": 0.62
             },
             "intensity": 0.0,
             "inner_theta": 0.0,
@@ -95,7 +95,7 @@
               1.0
             ]
           },
-          "restitution": 0.7428436,
+          "restitution": 0.6161685,
           "friction": 0.72377014,
           "density": 658.1607
         }

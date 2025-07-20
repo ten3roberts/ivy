@@ -91,13 +91,3 @@ impl<T: LoadFromPath> Loadable for AssetPath<T> {
         Ok(AsyncAssetExt::load_async(self, assets).await?)
     }
 }
-
-trait AssetPathExt {
-    fn load_dyn(&self, assets: &AssetCache) -> BoxFuture<anyhow::Result<Box<dyn ResourceDyn>>>;
-}
-
-impl<T: LoadFromPath> AssetPathExt for AssetPath<T> {
-    fn load_dyn(&self, assets: &AssetCache) -> BoxFuture<anyhow::Result<Box<dyn ResourceDyn>>> {
-        todo!()
-    }
-}

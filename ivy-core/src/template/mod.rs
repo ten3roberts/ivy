@@ -1,4 +1,12 @@
-use std::{any::Any, sync::Arc};
+use std::{
+    any::Any,
+    collections::BTreeMap,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Weak,
+    },
+    task::{Context, Waker},
+};
 
 use downcast_rs::{impl_downcast, DowncastSync};
 use flax::{Entity, EntityBuilder};
@@ -12,10 +20,11 @@ use ivy_assets::{
 };
 use ivy_editable::{register_editable, registry::EDITABLE_REGISTRY, Editable};
 use palette::Srgba;
+use parking_lot::{Mutex, RwLock};
 use violet::{
     core::{
         layout::Align,
-        state::{StateExt, StateStream, StateStreamRef, StateWrite},
+        state::{StateExt, StateSink, StateStream, StateStreamRef, StateWrite},
         style::{element_warning, surface_tertiary, SizeExt, StyleExt},
         to_owned,
         widget::{
@@ -240,6 +249,13 @@ impl Editable for TemplateDesc {
                             .clone()
                             .project_ref(move |v| &v[i], move |v| &mut v[i]);
 
+                        let state = Mutable::new(bundle.clone());
+
+                        scope.spawn(state.signal_cloned().for_each(move |new_value| {
+                            item_state.send(new_value);
+                            async {}
+                        }));
+
                         let text = bundle.bundle.tag_name();
                         to_owned!(bundles);
                         let discard = Button::label(LUCIDE_TRASH_2)
@@ -258,7 +274,7 @@ impl Editable for TemplateDesc {
                                     discard,
                                 ))
                                 .with_cross_align(Align::Center),
-                                bundle.editor(item_state),
+                                bundle.editor(state),
                             ))
                             .with_background(surface_tertiary()),
                         );

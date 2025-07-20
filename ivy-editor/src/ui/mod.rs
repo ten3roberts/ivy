@@ -1,5 +1,6 @@
 pub mod asset_inspector;
 pub mod browser;
+mod drop;
 pub mod entity_editor;
 
 use flax::Entity;
@@ -31,7 +32,7 @@ use ivy_ui::{
 use crate::{
     plugin::selection,
     tools_controller::{current_tool, tools},
-    ui::{browser::DirectoryBrowser, entity_editor::EntityComponentEditor},
+    ui::{browser::DirectoryBrowser, drop::WorldDropArea, entity_editor::EntityComponentEditor},
 };
 
 pub struct EditorUi {
@@ -63,6 +64,7 @@ impl Screen for EditorUi {
         scope.monitor_entity_lifetime(self.editor, move || token.close_screen());
 
         Stack::new((
+            WorldDropArea {},
             col((
                 EditorMenuBar {
                     editor: self.editor,

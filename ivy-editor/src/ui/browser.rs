@@ -3,40 +3,53 @@ use std::{
     time::Duration,
 };
 
+use anyhow::Context;
 use async_std::stream::StreamExt;
+use flax::Query;
 use glam::{BVec2, Vec2};
 use itertools::Itertools;
 use ivy_assets::{AssetCache, AssetPath, meta::AssetPayloadUntyped};
-use ivy_core::palette::Srgba;
-use ivy_ui::violet::{
-    core::{
-        Edges, Scope, ScopeRef, Widget,
-        components::LayoutAlignment,
-        layout::Align,
-        state::StateStream,
-        stored::WeakHandle,
-        style::{SizeExt, StyleExt, base_colors::*, default_corner_radius, surface_danger},
-        text::{FontFamily, Wrap},
-        time::sleep,
-        to_owned,
-        unit::Unit,
-        widget::{
-            Button, ButtonStyle, Collapsible, Image, IterWidgetCollection, LoadingSpinner,
-            ScrollArea, Selectable, SignalWidget, StreamWidget, SuspenseWidget, TextInput,
-            TextInputStyle, Throbber, WidgetExt, card, col, interactive::base::InteractiveWidget,
-            label, pill, row,
+use ivy_core::{
+    components::{engine, main_camera},
+    palette::Srgba,
+};
+use ivy_physics::{components::physics_state, rapier3d::prelude::QueryFilter};
+use ivy_scene::camera::{CameraQuery, screen_to_world_ray};
+use ivy_ui::{
+    streamed::StreamedUiExt,
+    violet::{
+        core::{
+            Edges, Scope, ScopeRef, Widget,
+            components::{LayoutAlignment, rect},
+            layout::Align,
+            state::StateStream,
+            stored::WeakHandle,
+            style::{SizeExt, StyleExt, base_colors::*, default_corner_radius, surface_danger},
+            text::{FontFamily, Wrap},
+            time::sleep,
+            to_owned,
+            unit::Unit,
+            widget::{
+                Button, ButtonStyle, Collapsible, Draggable, Image, IterWidgetCollection,
+                LoadingSpinner, ScrollArea, Selectable, SignalWidget, Stack, StreamWidget,
+                SuspenseWidget, TextInput, TextInputStyle, Throbber, WidgetExt, card, col,
+                interactive::base::InteractiveWidget, label, pill, row,
+            },
         },
-    },
-    futures_signals::signal::Mutable,
-    lucide::icons::{
-        LUCIDE_BOX, LUCIDE_BOXES, LUCIDE_CLOUD_SUN, LUCIDE_ECLIPSE, LUCIDE_FILE_ARCHIVE,
-        LUCIDE_FILE_BOX, LUCIDE_FILE_CODE, LUCIDE_FILE_IMAGE, LUCIDE_FILE_JSON,
-        LUCIDE_FILE_QUESTION, LUCIDE_FILE_TEXT, LUCIDE_FILE_WARNING, LUCIDE_FOLDER,
-        LUCIDE_FOLDER_OPEN, LUCIDE_PACKAGE,
+        futures_signals::signal::Mutable,
+        lucide::icons::{
+            LUCIDE_BOX, LUCIDE_BOXES, LUCIDE_CLOUD_SUN, LUCIDE_ECLIPSE, LUCIDE_FILE_ARCHIVE,
+            LUCIDE_FILE_BOX, LUCIDE_FILE_CODE, LUCIDE_FILE_IMAGE, LUCIDE_FILE_JSON,
+            LUCIDE_FILE_QUESTION, LUCIDE_FILE_TEXT, LUCIDE_FILE_WARNING, LUCIDE_FOLDER,
+            LUCIDE_FOLDER_OPEN, LUCIDE_PACKAGE,
+        },
     },
 };
 
-use crate::ui::asset_inspector::AssetInspector;
+use crate::ui::{
+    asset_inspector::AssetInspector,
+    drop::{WorldDropArea, world_drop_area},
+};
 
 pub const BROWSER_PANEL_HEIGHT: f32 = 300.0;
 pub const INSPECTOR_PANEL_MAX_HEIGHT: f32 = 800.0;
@@ -154,12 +167,12 @@ impl Widget for DirectoryListing {
 
 pub const ITEM_SIZE: Unit<Vec2> = Unit::px2(120.0, 100.0);
 
-pub struct FileIcon<'a> {
-    path: &'a Path,
-    assets: &'a AssetCache,
+pub struct FileIcon {
+    path: PathBuf,
+    assets: AssetCache,
 }
 
-impl Widget for FileIcon<'_> {
+impl Widget for FileIcon {
     fn mount(self, scope: &mut Scope<'_>) {
         to_owned!(path = self.path, assets = self.assets);
         SuspenseWidget::new(Throbber::new(48.0), async move {
@@ -200,26 +213,71 @@ pub struct Item {
 impl Widget for Item {
     fn mount(self, scope: &mut Scope<'_>) {
         let path = self.path.clone();
+        let preview = {
+            to_owned!(path, assets = self.assets);
+            move || label(path.file_name().unwrap_or_default().to_string_lossy())
+        };
+
         Selectable::new_value(
-            col((
-                FileIcon {
-                    path: &self.path,
-                    assets: &self.assets,
+            Draggable::new(
+                col((
+                    FileIcon {
+                        path: path.clone(),
+                        assets: self.assets,
+                    },
+                    RenamableItem {
+                        path: self.path.clone(),
+                        selected: self.selected,
+                        selected_dir: self.selected_dir,
+                    },
+                ))
+                .with_cross_align(Align::Center)
+                .with_exact_size(ITEM_SIZE),
+                preview,
+                {
+                    to_owned!(path);
+                    move |_scope: &ScopeRef, target| {
+                        tracing::info!(?path, "Dropping file to {:?}", target);
+
+                        if let Some((widget, pos)) = target {
+                            if (widget.has(world_drop_area())) {
+                                let screen_pos = pos / widget.get(rect()).unwrap().size();
+                                _scope.apply(move |world| {
+                                    let mut main_camera =
+                                        Query::new(CameraQuery::new()).with(main_camera());
+
+                                    let mut main_camera = main_camera.borrow(world);
+
+                                    let main_camera =
+                                        main_camera.first().context("No main camera")?;
+
+                                    let physics = world.get(engine(), physics_state()).unwrap();
+
+                                    let ray = screen_to_world_ray(screen_pos, main_camera);
+                                    let hit = physics.cast_ray(
+                                        ray,
+                                        1000.0,
+                                        false,
+                                        QueryFilter::default(),
+                                    );
+
+                                    tracing::info!(?hit, "Raycast hit");
+
+                                    Ok(())
+                                });
+                            }
+                        }
+                    }
                 },
-                RenamableItem {
-                    path: self.path.clone(),
-                    selected: self.selected,
-                    selected_dir: self.selected_dir,
-                },
-            ))
-            .with_cross_align(Align::Center)
-            .with_exact_size(ITEM_SIZE),
+            ),
             scope.read(&self.selected).clone(),
             Some(self.path.clone()),
         )
-        .on_double_click(move |scope: &ScopeRef| {
-            if self.is_dir {
-                scope.read(self.selected_dir).set(Some(path.clone()));
+        .on_double_click({
+            move |scope: &ScopeRef| {
+                if self.is_dir {
+                    scope.read(self.selected_dir).set(Some(path.clone()));
+                }
             }
         })
         .with_style(ButtonStyle::hidden())
