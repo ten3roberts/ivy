@@ -8,10 +8,12 @@ use async_std::stream::StreamExt;
 use flax::Query;
 use glam::{BVec2, Vec2};
 use itertools::Itertools;
-use ivy_assets::{AssetCache, AssetPath, meta::AssetPayloadUntyped};
+use ivy_assets::{AssetCache, AssetPath, loadable::Loadable, meta::AssetPayloadUntyped};
 use ivy_core::{
-    components::{engine, main_camera},
+    AsyncCommandBuffer, EntityBuilderExt,
+    components::{TransformBundle, async_commandbuffer, engine, main_camera},
     palette::Srgba,
+    template::Template,
 };
 use ivy_physics::{components::physics_state, rapier3d::prelude::QueryFilter};
 use ivy_scene::camera::{CameraQuery, screen_to_world_ray};
@@ -30,10 +32,10 @@ use ivy_ui::{
             to_owned,
             unit::Unit,
             widget::{
-                Button, ButtonStyle, Collapsible, Draggable, Image, IterWidgetCollection,
-                LoadingSpinner, ScrollArea, Selectable, SignalWidget, Stack, StreamWidget,
-                SuspenseWidget, TextInput, TextInputStyle, Throbber, WidgetExt, card, col,
-                interactive::base::InteractiveWidget, label, pill, row,
+                Button, ButtonStyle, Collapsible, Draggable, FutureWidget, Image,
+                IterWidgetCollection, LoadingSpinner, ScrollArea, Selectable, SignalWidget, Stack,
+                StreamWidget, SuspenseWidget, TextInput, TextInputStyle, Throbber, WidgetExt, card,
+                col, interactive::base::InteractiveWidget, label, pill, row,
             },
         },
         futures_signals::signal::Mutable,
@@ -212,77 +214,136 @@ pub struct Item {
 
 impl Widget for Item {
     fn mount(self, scope: &mut Scope<'_>) {
-        let path = self.path.clone();
-        let preview = {
-            to_owned!(path, assets = self.assets);
-            move || label(path.file_name().unwrap_or_default().to_string_lossy())
-        };
+        let selected = scope.read(&self.selected).clone();
+        let widget = async move {
+            let path = self.path.clone();
+            let assets = self.assets.clone();
+            let filetype = FileType::from_path(&path, &assets).await;
+            let preview = {
+                to_owned!(path, assets = self.assets);
+                move || label(path.file_name().unwrap_or_default().to_string_lossy())
+            };
 
-        Selectable::new_value(
-            Draggable::new(
-                col((
-                    FileIcon {
-                        path: path.clone(),
-                        assets: self.assets,
-                    },
-                    RenamableItem {
-                        path: self.path.clone(),
-                        selected: self.selected,
-                        selected_dir: self.selected_dir,
-                    },
-                ))
-                .with_cross_align(Align::Center)
-                .with_exact_size(ITEM_SIZE),
-                preview,
-                {
-                    to_owned!(path);
-                    move |_scope: &ScopeRef, target| {
-                        tracing::info!(?path, "Dropping file to {:?}", target);
+            Selectable::new_value(
+                Draggable::new(
+                    col((
+                        FileIcon {
+                            path: path.clone(),
+                            assets: self.assets,
+                        },
+                        RenamableItem {
+                            path: self.path.clone(),
+                            selected: self.selected,
+                            selected_dir: self.selected_dir,
+                        },
+                    ))
+                    .with_cross_align(Align::Center)
+                    .with_exact_size(ITEM_SIZE),
+                    preview,
+                    {
+                        to_owned!(path);
+                        move |_scope: &ScopeRef, target| {
+                            tracing::info!(?path, "Dropping file to {:?}", target);
 
-                        if let Some((widget, pos)) = target {
-                            if (widget.has(world_drop_area())) {
-                                let screen_pos = pos / widget.get(rect()).unwrap().size();
-                                _scope.apply(move |world| {
-                                    let mut main_camera =
-                                        Query::new(CameraQuery::new()).with(main_camera());
+                            if let Some((widget, pos)) = target {
+                                if widget.has(world_drop_area()) {
+                                    let screen_pos = pos / widget.get(rect()).unwrap().size();
+                                    to_owned!(path, assets, filetype);
+                                    _scope.apply(move |world| {
+                                        let mut main_camera =
+                                            Query::new(CameraQuery::new()).with(main_camera());
 
-                                    let mut main_camera = main_camera.borrow(world);
+                                        let mut main_camera = main_camera.borrow(world);
 
-                                    let main_camera =
-                                        main_camera.first().context("No main camera")?;
+                                        let main_camera =
+                                            main_camera.first().context("No main camera")?;
 
-                                    let physics = world.get(engine(), physics_state()).unwrap();
+                                        let physics = world.get(engine(), physics_state()).unwrap();
 
-                                    let ray = screen_to_world_ray(screen_pos, main_camera);
-                                    let hit = physics.cast_ray(
-                                        ray,
-                                        1000.0,
-                                        false,
-                                        QueryFilter::default(),
-                                    );
+                                        let ray = screen_to_world_ray(screen_pos, main_camera);
+                                        let hit = physics.cast_ray(
+                                            ray,
+                                            1000.0,
+                                            false,
+                                            QueryFilter::default(),
+                                        );
 
-                                    tracing::info!(?hit, "Raycast hit");
+                                        match filetype {
+                                            FileType::Asset(AssetType::Template) => {
+                                                if let Some(hit) = hit {
+                                                    tracing::info!(
+                                                        "Dropping template at {:?}",
+                                                        hit
+                                                    );
+                                                    let asset_path = AssetPath::<Template>::new(
+                                                        path.canonicalize()?,
+                                                    );
 
-                                    Ok(())
-                                });
+                                                    let async_cmd = world
+                                                        .get_clone(engine(), async_commandbuffer())
+                                                        .unwrap();
+
+                                                    async_std::task::spawn(async move {
+                                                        let fut = spawn_template(
+                                                            assets, ray, asset_path, hit, async_cmd,
+                                                        )
+                                                        .await;
+
+                                                        if let Err(err) = fut {
+                                                            tracing::error!("{err:?}");
+                                                        }
+                                                    });
+                                                } else {
+                                                    tracing::warn!(
+                                                        "No hit detected for template drop"
+                                                    );
+                                                }
+                                            }
+                                            _ => {
+                                                tracing::info!("Dropping file at {:?}", pos);
+                                            }
+                                        }
+
+                                        Ok(())
+                                    });
+                                }
                             }
                         }
+                    },
+                ),
+                selected,
+                Some(self.path.clone()),
+            )
+            .on_double_click({
+                move |scope: &ScopeRef| {
+                    if self.is_dir {
+                        scope.read(self.selected_dir).set(Some(path.clone()));
                     }
-                },
-            ),
-            scope.read(&self.selected).clone(),
-            Some(self.path.clone()),
-        )
-        .on_double_click({
-            move |scope: &ScopeRef| {
-                if self.is_dir {
-                    scope.read(self.selected_dir).set(Some(path.clone()));
                 }
-            }
-        })
-        .with_style(ButtonStyle::hidden())
-        .mount(scope);
+            })
+            .with_style(ButtonStyle::hidden())
+        };
+
+        FutureWidget::new(widget).mount(scope);
     }
+}
+
+async fn spawn_template(
+    assets: AssetCache,
+    ray: ivy_physics::shapes::Ray,
+    asset_path: AssetPath<Template>,
+    hit: ivy_physics::state::RaycastHit,
+    cmd: AsyncCommandBuffer,
+) -> anyhow::Result<()> {
+    let template = asset_path.load(&assets).await?;
+
+    tracing::info!("Loded template: {:?}", asset_path);
+    template
+        .build()
+        .mount(TransformBundle::default().with_position(ray.at(hit.intersection.time_of_impact)))
+        .spawn_into(&mut *cmd.lock());
+
+    Ok(())
 }
 
 struct RenamableItem {
@@ -461,6 +522,7 @@ fn bytes_to_human_readable(size: u64) -> String {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Code {
     Json,
     Rust,
@@ -472,12 +534,14 @@ enum Code {
     Wasm,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum AssetType {
     Asset,
     Template,
     Material,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum FileType {
     Directory,
     Code(Code),
