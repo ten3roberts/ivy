@@ -25,9 +25,29 @@
               ]
             }
           },
-          "restitution": 1.0,
-          "friction": 1.0,
-          "density": 1.0
+          "restitution": 0.651001,
+          "friction": 0.5125427,
+          "density": 1000.0
+        }
+      },
+      {
+        "TransformBundle": {
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
         }
       }
     ]

@@ -30,8 +30,8 @@ use ivy_postprocessing::preconfigured::{
 use ivy_wgpu::{
     components::{forward_pass, shadow_pass},
     driver::WinitDriver,
+    effect_desc::{PbrRenderEffect, RenderEffect},
     layer::GraphicsLayer,
-    material_desc::{MaterialData, PbrMaterialData},
     mesh_desc::MeshDesc,
     primitives::CubePrimitive,
     renderer::EnvironmentData,
@@ -134,8 +134,8 @@ impl LogicLayer {
     fn setup_objects(&mut self, world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
         let sphere_mesh = MeshDesc::content(assets.load(&CubePrimitive));
 
-        let plastic_material = MaterialData::PbrMaterial(
-            PbrMaterialData::new()
+        let plastic_material = RenderEffect::Pbr(
+            PbrRenderEffect::new()
                 .with_metallic_factor(1.0)
                 .with_roughness_factor(0.4),
         );
@@ -163,7 +163,7 @@ impl LogicLayer {
         builder.set(ivy_wgpu::components::mesh(), repeat(sphere_mesh))?;
         builder.set(color(), repeat(Color::white()))?;
         builder.set(forward_pass(), repeat(plastic_material))?;
-        builder.set(shadow_pass(), repeat(MaterialData::ShadowMaterial))?;
+        builder.set(shadow_pass(), repeat(RenderEffect::OpaqueShadow))?;
 
         tracing::info!("spawning {} objects", builder.len());
         builder.spawn(world);

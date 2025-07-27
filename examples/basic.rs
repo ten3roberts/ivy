@@ -37,9 +37,7 @@ use ivy_gltf::{
     },
     Document,
 };
-use ivy_graphics::texture::{
-    TextureData, TextureDesc,
-};
+use ivy_graphics::texture::{TextureData, TextureDesc};
 use ivy_input::layer::InputLayer;
 use ivy_physics::{ColliderBundle, GizmoSettings, PhysicsPlugin};
 use ivy_postprocessing::preconfigured::{
@@ -54,11 +52,12 @@ use ivy_ui::{
 use ivy_wgpu::{
     components::{forward_pass, light_kind, light_params, shadow_pass, transparent_pass},
     driver::WinitDriver,
+    effect_desc::{
+        PbrEmissiveRenderEffectDesc, PbrRenderEffect, PbrRenderEffectDesc, RenderEffect,
+        RenderEffectDesc,
+    },
     layer::GraphicsLayer,
     light::{LightBundle, LightKind, LightParams},
-    material_desc::{
-        MaterialData, MaterialDesc, PbrEmissiveMaterialDesc, PbrMaterialData, PbrMaterialDesc,
-    },
     mesh_desc::MeshDesc,
     primitives::{generate_plane, UvSpherePrimitive},
     renderer::{EnvironmentData, RenderObjectBundle},
@@ -216,8 +215,8 @@ impl LogicLayer {
 
             use ivy_assets::loadable::Loadable;
 
-            let plane_material = MaterialDesc::PbrMaterial(
-                PbrMaterialDesc::new()
+            let plane_material = RenderEffectDesc::Pbr(
+                PbrRenderEffectDesc::new()
                     .with_metallic_factor(0.0)
                     .with_albedo(TextureDesc::Path(albedo))
                     .with_normal(TextureDesc::Path(normal))
@@ -233,8 +232,8 @@ impl LogicLayer {
             .load(&assets)
             .await?;
 
-            let emissive_material = MaterialDesc::EmissiveMaterial(PbrEmissiveMaterialDesc::new(
-                PbrMaterialDesc::new().with_albedo(TextureDesc::Color(255, 255, 255, 255)),
+            let emissive_material = RenderEffectDesc::Emissive(PbrEmissiveRenderEffectDesc::new(
+                PbrRenderEffectDesc::new().with_albedo(TextureDesc::Color(255, 255, 255, 255)),
                 TextureDesc::Color(255, 255, 255, 255),
                 20.0,
             ))
@@ -252,7 +251,7 @@ impl LogicLayer {
                         plane_mesh.clone(),
                         &[
                             (forward_pass(), plane_material),
-                            (shadow_pass(), MaterialData::ShadowMaterial),
+                            (shadow_pass(), RenderEffect::OpaqueShadow),
                         ],
                     ))
                     .mount(RigidBodyBundle::fixed())
@@ -266,8 +265,8 @@ impl LogicLayer {
 
             let sphere_mesh = MeshDesc::content(assets.load(&UvSpherePrimitive::default()));
 
-            let unlit_material = MaterialData::PbrMaterial(
-                PbrMaterialData::new()
+            let unlit_material = RenderEffect::Pbr(
+                PbrRenderEffect::new()
                     .with_metallic_factor(1.0)
                     .with_roughness_factor(0.1)
                     .with_albedo(TextureData::Color(Rgba([255, 255, 255, 128]))),
@@ -278,7 +277,7 @@ impl LogicLayer {
                     sphere_mesh.clone(),
                     &[
                         (transparent_pass(), unlit_material.clone()),
-                        (shadow_pass(), MaterialData::ShadowMaterial),
+                        (shadow_pass(), RenderEffect::OpaqueShadow),
                     ],
                 ))
                 .spawn_into(&mut cmd.lock());
@@ -293,7 +292,7 @@ impl LogicLayer {
                     sphere_mesh.clone(),
                     &[
                         (forward_pass(), emissive_material.clone()),
-                        (shadow_pass(), MaterialData::ShadowMaterial),
+                        (shadow_pass(), RenderEffect::OpaqueShadow),
                     ],
                 ))
                 .mount(LightBundle {
@@ -309,8 +308,8 @@ impl LogicLayer {
                 for j in 0..2 {
                     let metallic = j as f32;
 
-                    let plastic_material = MaterialData::PbrMaterial(
-                        PbrMaterialData::new()
+                    let plastic_material = RenderEffect::Pbr(
+                        PbrRenderEffect::new()
                             .with_metallic_factor(metallic)
                             .with_roughness_factor(roughness),
                     );
@@ -330,7 +329,7 @@ impl LogicLayer {
                                 sphere_mesh.clone(),
                                 &[
                                     (forward_pass(), plastic_material.clone()),
-                                    (shadow_pass(), MaterialData::ShadowMaterial),
+                                    (shadow_pass(), RenderEffect::OpaqueShadow),
                                 ],
                             )),
                     );

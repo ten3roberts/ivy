@@ -1,5 +1,6 @@
 pub mod asset_inspector;
 pub mod browser;
+pub mod context_menu;
 mod drop;
 pub mod entity_editor;
 

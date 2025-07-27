@@ -6,73 +6,72 @@ use ordered_float::NotNan;
 use wgpu::{PolygonMode, TextureFormat};
 
 use crate::{
-    material::{
-        emissive::PbrEmissiveMaterialParams, PbrMaterialParams, RenderMaterial, ShadowMaterialDesc,
+    effect::{
+        emissive::PbrEmissiveMaterialParams, EffectPass, PbrMaterialParams, ShadowMaterialDesc,
     },
     shader::ShaderPass,
     shaders::{PbrEmissiveShaderDesc, PbrShaderDesc, ShadowShaderDesc},
     texture::TextureWithFormatDesc,
 };
 
-use ivy_assets::loadable::Resource;
-
 /// Asynchronously loadable material, e.g; from json and texture file paths
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Editable)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub enum MaterialDesc {
-    PbrMaterial(PbrMaterialDesc),
-    UnlitMaterial(PbrMaterialDesc),
-    EmissiveMaterial(PbrEmissiveMaterialDesc),
-    ShadowMaterial,
-    WireframeMaterial(PbrMaterialDesc),
+pub enum RenderEffectDesc {
+    Pbr(PbrRenderEffectDesc),
+    Unlit(PbrRenderEffectDesc),
+    Emissive(PbrEmissiveRenderEffectDesc),
+    OpaqueShadow,
+    Wireframe(PbrRenderEffectDesc),
 }
 
-impl Loadable for MaterialDesc {
-    type Output = MaterialData;
+impl Loadable for RenderEffectDesc {
+    type Output = RenderEffect;
 
     async fn load(&self, assets: &AssetCache) -> Result<Self::Output, anyhow::Error> {
         match self {
-            MaterialDesc::PbrMaterial(desc) => {
-                Ok(MaterialData::PbrMaterial(desc.load(assets).await?))
+            RenderEffectDesc::Pbr(desc) => Ok(RenderEffect::Pbr(desc.load(assets).await?)),
+            RenderEffectDesc::Unlit(desc) => Ok(RenderEffect::Unlit(desc.load(assets).await?)),
+            RenderEffectDesc::Emissive(desc) => {
+                Ok(RenderEffect::Emissive(desc.load(assets).await?))
             }
-            MaterialDesc::UnlitMaterial(desc) => {
-                Ok(MaterialData::UnlitMaterial(desc.load(assets).await?))
-            }
-            MaterialDesc::EmissiveMaterial(desc) => {
-                Ok(MaterialData::EmissiveMaterial(desc.load(assets).await?))
-            }
-            MaterialDesc::ShadowMaterial => Ok(MaterialData::ShadowMaterial),
-            MaterialDesc::WireframeMaterial(desc) => {
-                Ok(MaterialData::WireframeMaterial(desc.load(assets).await?))
+            RenderEffectDesc::OpaqueShadow => Ok(RenderEffect::OpaqueShadow),
+            RenderEffectDesc::Wireframe(desc) => {
+                Ok(RenderEffect::Wireframe(desc.load(assets).await?))
             }
         }
     }
 }
 
-declare_resource!(MaterialData, MaterialDesc);
+declare_resource!(RenderEffect, RenderEffectDesc);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Editable)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct PbrMaterialDesc {
+pub struct PbrRenderEffectDesc {
     label: String,
     #[cfg_attr(feature = "serde", serde(default = "TextureDesc::white"))]
+    #[editable(default = TextureDesc::white())]
     albedo: TextureDesc,
     #[cfg_attr(feature = "serde", serde(default = "TextureDesc::default_normal"))]
+    #[editable(default = TextureDesc::default_normal())]
     normal: TextureDesc,
     #[cfg_attr(feature = "serde", serde(default = "TextureDesc::white"))]
+    #[editable(default = TextureDesc::white())]
     metallic_roughness: TextureDesc,
     #[cfg_attr(feature = "serde", serde(default = "TextureDesc::white"))]
+    #[editable(default = TextureDesc::white())]
     ambient_occlusion: TextureDesc,
     #[cfg_attr(feature = "serde", serde(default = "TextureDesc::white"))]
+    #[editable(default = TextureDesc::white())]
     displacement: TextureDesc,
-    #[editable(range(0.0, 1.0))]
+    #[editable(default = NotNan::new(0.0).unwrap(), range(0.0, 1.0))]
     roughness_factor: NotNan<f32>,
-    #[editable(range(0.0, 1.0))]
+    #[editable(default = NotNan::new(0.0).unwrap(), range(0.0, 1.0))]
     metallic_factor: NotNan<f32>,
 }
 
-impl Loadable for PbrMaterialDesc {
-    type Output = PbrMaterialData;
+impl Loadable for PbrRenderEffectDesc {
+    type Output = PbrRenderEffect;
 
     async fn load(&self, assets: &AssetCache) -> Result<Self::Output, anyhow::Error> {
         Ok(Self::Output {
@@ -88,7 +87,7 @@ impl Loadable for PbrMaterialDesc {
     }
 }
 
-impl PbrMaterialDesc {
+impl PbrRenderEffectDesc {
     pub fn new() -> Self {
         Self {
             albedo: TextureDesc::white(),
@@ -151,7 +150,7 @@ impl PbrMaterialDesc {
     }
 }
 
-impl Default for PbrMaterialDesc {
+impl Default for PbrRenderEffectDesc {
     fn default() -> Self {
         Self::new()
     }
@@ -159,15 +158,19 @@ impl Default for PbrMaterialDesc {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Editable)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct PbrEmissiveMaterialDesc {
-    pbr: PbrMaterialDesc,
+pub struct PbrEmissiveRenderEffectDesc {
+    pbr: PbrRenderEffectDesc,
     emissive_color: TextureDesc,
     #[editable(range(0.0, 1.0))]
     emissive_factor: NotNan<f32>,
 }
 
-impl PbrEmissiveMaterialDesc {
-    pub fn new(pbr: PbrMaterialDesc, emissive_color: TextureDesc, emissive_factor: f32) -> Self {
+impl PbrEmissiveRenderEffectDesc {
+    pub fn new(
+        pbr: PbrRenderEffectDesc,
+        emissive_color: TextureDesc,
+        emissive_factor: f32,
+    ) -> Self {
         Self {
             pbr,
             emissive_color,
@@ -176,8 +179,8 @@ impl PbrEmissiveMaterialDesc {
     }
 }
 
-impl Loadable for PbrEmissiveMaterialDesc {
-    type Output = PbrEmissiveMaterialData;
+impl Loadable for PbrEmissiveRenderEffectDesc {
+    type Output = PbrEmissiveRenderEffect;
 
     async fn load(&self, assets: &AssetCache) -> Result<Self::Output, anyhow::Error> {
         Ok(Self::Output {
@@ -189,22 +192,22 @@ impl Loadable for PbrEmissiveMaterialDesc {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum MaterialData {
-    PbrMaterial(PbrMaterialData),
-    UnlitMaterial(PbrMaterialData),
-    EmissiveMaterial(PbrEmissiveMaterialData),
-    WireframeMaterial(PbrMaterialData),
-    ShadowMaterial,
+pub enum RenderEffect {
+    Pbr(PbrRenderEffect),
+    Unlit(PbrRenderEffect),
+    Emissive(PbrEmissiveRenderEffect),
+    Wireframe(PbrRenderEffect),
+    OpaqueShadow,
 }
 
-impl From<PbrMaterialData> for MaterialData {
-    fn from(v: PbrMaterialData) -> Self {
-        Self::PbrMaterial(v)
+impl From<PbrRenderEffect> for RenderEffect {
+    fn from(v: PbrRenderEffect) -> Self {
+        Self::Pbr(v)
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct PbrMaterialData {
+pub struct PbrRenderEffect {
     label: String,
     albedo: TextureData,
     normal: TextureData,
@@ -215,7 +218,7 @@ pub struct PbrMaterialData {
     metallic_factor: NotNan<f32>,
 }
 
-impl PbrMaterialData {
+impl PbrRenderEffect {
     pub fn new() -> Self {
         Self {
             albedo: TextureData::white(),
@@ -235,7 +238,7 @@ impl PbrMaterialData {
         let material = material.material();
         let pbr = material.pbr_metallic_roughness();
 
-        let mut material_data = PbrMaterialData::new();
+        let mut material_data = PbrRenderEffect::new();
 
         if let Some(albedo) = pbr.base_color_texture() {
             let texture = textures[albedo.texture().index()].clone();
@@ -263,7 +266,7 @@ impl PbrMaterialData {
         &self,
         assets: &AssetCache,
         shader: Asset<ShaderPass>,
-    ) -> anyhow::Result<Asset<RenderMaterial>> {
+    ) -> anyhow::Result<Asset<EffectPass>> {
         let albedo = assets.try_load(&TextureWithFormatDesc::new(
             self.albedo.clone(),
             TextureFormat::Rgba8UnormSrgb,
@@ -354,14 +357,14 @@ impl PbrMaterialData {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct PbrEmissiveMaterialData {
-    pbr: PbrMaterialData,
+pub struct PbrEmissiveRenderEffect {
+    pbr: PbrRenderEffect,
     emissive_color: TextureData,
     emissive_factor: NotNan<f32>,
 }
 
-impl PbrEmissiveMaterialData {
-    pub fn new(pbr: PbrMaterialData, emissive_color: TextureData, emissive_factor: f32) -> Self {
+impl PbrEmissiveRenderEffect {
+    pub fn new(pbr: PbrRenderEffect, emissive_color: TextureData, emissive_factor: f32) -> Self {
         Self {
             pbr,
             emissive_color,
@@ -373,7 +376,7 @@ impl PbrEmissiveMaterialData {
         &self,
         assets: &AssetCache,
         shader: Asset<ShaderPass>,
-    ) -> anyhow::Result<Asset<RenderMaterial>> {
+    ) -> anyhow::Result<Asset<EffectPass>> {
         let albedo = assets.try_load(&TextureWithFormatDesc::new(
             self.pbr.albedo.clone(),
             TextureFormat::Rgba8UnormSrgb,
@@ -424,7 +427,7 @@ impl PbrEmissiveMaterialData {
     }
 }
 
-impl Default for PbrMaterialData {
+impl Default for PbrRenderEffect {
     fn default() -> Self {
         Self::new()
     }
@@ -432,20 +435,17 @@ impl Default for PbrMaterialData {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct RenderMaterialDesc {
-    pub material: MaterialData,
+    pub material: RenderEffect,
     pub skinned: bool,
 }
 
 impl AssetDesc for RenderMaterialDesc {
-    type Output = RenderMaterial;
+    type Output = EffectPass;
     type Error = anyhow::Error;
 
-    fn create(
-        &self,
-        assets: &ivy_assets::AssetCache,
-    ) -> Result<Asset<RenderMaterial>, Self::Error> {
+    fn create(&self, assets: &ivy_assets::AssetCache) -> Result<Asset<EffectPass>, Self::Error> {
         match &self.material {
-            MaterialData::PbrMaterial(v) => v.create(
+            RenderEffect::Pbr(v) => v.create(
                 assets,
                 assets.load(&PbrShaderDesc {
                     skinned: self.skinned,
@@ -453,7 +453,7 @@ impl AssetDesc for RenderMaterialDesc {
                     polygon_mode: PolygonMode::Fill,
                 }),
             ),
-            MaterialData::UnlitMaterial(v) => v.create(
+            RenderEffect::Unlit(v) => v.create(
                 assets,
                 assets.load(&PbrShaderDesc {
                     skinned: self.skinned,
@@ -461,14 +461,14 @@ impl AssetDesc for RenderMaterialDesc {
                     polygon_mode: PolygonMode::Fill,
                 }),
             ),
-            MaterialData::EmissiveMaterial(v) => v.create(
+            RenderEffect::Emissive(v) => v.create(
                 assets,
                 assets.load(&PbrEmissiveShaderDesc {
                     skinned: self.skinned,
                     lit: true,
                 }),
             ),
-            MaterialData::WireframeMaterial(v) => v.create(
+            RenderEffect::Wireframe(v) => v.create(
                 assets,
                 assets.load(&PbrShaderDesc {
                     skinned: self.skinned,
@@ -476,14 +476,12 @@ impl AssetDesc for RenderMaterialDesc {
                     polygon_mode: PolygonMode::Line,
                 }),
             ),
-            MaterialData::ShadowMaterial => {
-                Ok(assets.insert(ShadowMaterialDesc {}.create_material(
-                    "shadow".into(),
-                    assets.load(&ShadowShaderDesc {
-                        skinned: self.skinned,
-                    }),
-                )))
-            }
+            RenderEffect::OpaqueShadow => Ok(assets.insert(ShadowMaterialDesc {}.create_material(
+                "shadow".into(),
+                assets.load(&ShadowShaderDesc {
+                    skinned: self.skinned,
+                }),
+            ))),
         }
     }
 }

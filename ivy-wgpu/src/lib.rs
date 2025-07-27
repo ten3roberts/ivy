@@ -1,10 +1,11 @@
 pub mod components;
 pub mod driver;
+pub mod effect;
+pub mod effect_desc;
 pub mod events;
 pub mod layer;
 pub mod light;
 pub mod material;
-pub mod material_desc;
 pub mod mesh;
 pub mod mesh_buffer;
 pub mod mesh_desc;

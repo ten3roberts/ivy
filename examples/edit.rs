@@ -25,7 +25,7 @@ use ivy_ui::{
     screens::{screen_state, Screen},
 };
 use ivy_wgpu::{
-    driver::WinitDriver, layer::GraphicsLayer, material_desc::MaterialDesc,
+    driver::WinitDriver, effect_desc::RenderEffectDesc, layer::GraphicsLayer,
     renderer::EnvironmentData,
 };
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
@@ -158,7 +158,7 @@ struct MyStruct {
     #[editable(default = "Hello".into())]
     name: String,
     kind: Option<MyEnum>,
-    material: Option<MaterialDesc>,
+    material: Option<RenderEffectDesc>,
 }
 
 impl Screen for MainUI {

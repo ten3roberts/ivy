@@ -113,6 +113,7 @@ quote = "1.0.33"
 heck = "0.5"
 erased-serde = "0.4"
 downcast-rs = "2.0"
+notify = "5.0"
 
 
 [dependencies]

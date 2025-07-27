@@ -227,44 +227,22 @@ impl Editable for TemplateDesc {
             .project_ref(|v| &v.bundles, |v| &mut v.bundles);
 
         let editors = move |scope: &mut Scope| {
-            scope.spawn(bundles.stream().for_each(|v| {
-                tracing::info!("Bundles changed: {:?}", v);
-                async {}
-            }));
             let mut prev_len = usize::MAX;
             let deduped = bundles.stream().filter(move |item| {
                 let len = item.len();
                 let result = if len == prev_len {
-                    tracing::info!("Same length {prev_len}");
                     false
                 } else {
-                    tracing::info!(len, "Bundles changes");
                     prev_len = len;
                     true
                 };
 
                 ready(result)
             });
-            // let deduped = bundles.stream().scan(None as Option<usize>, |state, item| {
-            //     let emit = match state {
-            //         Some(prev) if *prev == item.len() => {
-            //             tracing::info!("Same length {prev}");
-            //             None
-            //         }
-            //         _ => {
-            //             tracing::info!(len = item.len(), "Bundles changes");
-            //             *state = Some(item.len());
-            //             Some(item)
-            //         }
-            //     };
-            //     futures::future::ready(emit)
-            // });
 
             // Create initial editors
             scope.spawn_stream(deduped, {
                 move |scope, values| {
-                    tracing::info!("Creating editors");
-
                     scope.detach_all();
 
                     values.iter().enumerate().for_each(|(i, bundle)| {

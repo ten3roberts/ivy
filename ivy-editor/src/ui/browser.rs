@@ -4,8 +4,8 @@ use std::{
 };
 
 use anyhow::Context;
-use async_std::stream::StreamExt;
-use flax::Query;
+use flax::{EntityRef, Query};
+use futures::StreamExt;
 use glam::{BVec2, Vec2};
 use itertools::Itertools;
 use ivy_assets::{AssetCache, AssetPath, loadable::Loadable, meta::AssetPayloadUntyped};
@@ -15,6 +15,7 @@ use ivy_core::{
     palette::Srgba,
     template::Template,
 };
+use ivy_input::types::MouseButton;
 use ivy_physics::{components::physics_state, rapier3d::prelude::QueryFilter};
 use ivy_scene::camera::{CameraQuery, screen_to_world_ray};
 use ivy_ui::{
@@ -35,22 +36,26 @@ use ivy_ui::{
                 Button, ButtonStyle, Collapsible, Draggable, FutureWidget, Image,
                 IterWidgetCollection, LoadingSpinner, ScrollArea, Selectable, SignalWidget, Stack,
                 StreamWidget, SuspenseWidget, TextInput, TextInputStyle, Throbber, WidgetExt, card,
-                col, interactive::base::InteractiveWidget, label, pill, row,
+                col,
+                interactive::{base::InteractiveWidget, overlay::overlay_state},
+                label, pill, row,
             },
         },
         futures_signals::signal::Mutable,
         lucide::icons::{
-            LUCIDE_BOX, LUCIDE_BOXES, LUCIDE_CLOUD_SUN, LUCIDE_ECLIPSE, LUCIDE_FILE_ARCHIVE,
-            LUCIDE_FILE_BOX, LUCIDE_FILE_CODE, LUCIDE_FILE_IMAGE, LUCIDE_FILE_JSON,
-            LUCIDE_FILE_QUESTION, LUCIDE_FILE_TEXT, LUCIDE_FILE_WARNING, LUCIDE_FOLDER,
-            LUCIDE_FOLDER_OPEN, LUCIDE_PACKAGE,
+            LUCIDE_BOX, LUCIDE_BOXES, LUCIDE_CLOUD_SUN, LUCIDE_CROSS, LUCIDE_ECLIPSE,
+            LUCIDE_FILE_ARCHIVE, LUCIDE_FILE_BOX, LUCIDE_FILE_CODE, LUCIDE_FILE_IMAGE,
+            LUCIDE_FILE_JSON, LUCIDE_FILE_QUESTION, LUCIDE_FILE_TEXT, LUCIDE_FILE_WARNING,
+            LUCIDE_FOLDER, LUCIDE_FOLDER_OPEN, LUCIDE_PACKAGE, LUCIDE_TRASH_2, LUCIDE_X,
         },
     },
 };
+use notify::Watcher;
 
 use crate::ui::{
     asset_inspector::AssetInspector,
-    drop::{WorldDropArea, world_drop_area},
+    context_menu::{ContextMenu, ContextMenuItem, ContextMenuPanel},
+    drop::world_drop_area,
 };
 
 pub const BROWSER_PANEL_HEIGHT: f32 = 300.0;
@@ -131,40 +136,168 @@ pub struct DirectoryListing {
 
 impl Widget for DirectoryListing {
     fn mount(self, scope: &mut Scope<'_>) {
-        let items = std::fs::read_dir(&self.path)
-            .unwrap()
-            .filter_map(Result::ok)
-            .map(|entry| {
-                let entry_path = entry.path();
-                let entry_name = entry_path.file_name().unwrap();
-                let is_dir = entry_path.is_dir();
+        let path = self.path.clone();
+        let read_dir = move || {
+            let items = std::fs::read_dir(&path)
+                .unwrap()
+                .filter_map(Result::ok)
+                .map(|entry| {
+                    let entry_path = entry.path();
+                    let entry_name = entry_path.file_name().unwrap();
+                    let is_dir = entry_path.is_dir();
 
-                Item {
-                    is_dir,
-                    name: entry_name.to_string_lossy().to_string(),
-                    path: entry_path,
-                    selected: self.selected_file,
-                    selected_dir: self.selected_dir,
-                    assets: self.assets.clone(),
-                }
-            })
-            .sorted_by_key(|item| (!item.is_dir, item.name.clone()));
+                    FileItem {
+                        is_dir,
+                        name: entry_name.to_string_lossy().to_string(),
+                        path: entry_path,
+                        selected: self.selected_file,
+                        selected_dir: self.selected_dir,
+                        assets: self.assets.clone(),
+                    }
+                })
+                .sorted_by_key(|item| (!item.is_dir, item.name.clone()));
 
-        let lines = items.chunks(8);
-        let cols = lines
-            .into_iter()
-            .map(|line| row(IterWidgetCollection::new(line)));
+            let lines = items.chunks(8);
+            lines
+                .into_iter()
+                .map(|line| row(line.collect_vec()))
+                .collect_vec()
+        };
 
-        col((
-            Breadcrumbs {
-                path: &self.path,
-                selection: self.selected_dir,
-            },
-            ScrollArea::vertical(col(IterWidgetCollection::new(cols))),
-        ))
-        .with_stretch(true)
+        let path = self.path.clone();
+        let open_context_menu = {
+            move |scope: &ScopeRef, pos| {
+                open_context_menu(scope, pos, populate_menu(path.clone(), self.selected_file))
+            }
+        };
+
+        let refresh_state = Mutable::new(());
+
+        if let Err(err) = watch_directory(scope, &self.path, refresh_state.clone()) {
+            tracing::error!("Failed to watch directory {}: {}", self.path.display(), err);
+        }
+
+        InteractiveWidget::new(
+            col((
+                Breadcrumbs {
+                    path: &self.path,
+                    selection: self.selected_dir,
+                },
+                ScrollArea::vertical(StreamWidget::new(
+                    refresh_state.stream().map(move |()| col(read_dir())),
+                )),
+            ))
+            .with_stretch(true),
+        )
+        .on_mouse_input(move |scope, input| {
+            if input.state.is_pressed() && input.button == MouseButton::Right {
+                let pos = input.cursor.absolute_pos;
+                open_context_menu(scope, pos);
+                return None;
+            }
+
+            Some(input)
+        })
         .mount(scope)
     }
+}
+
+fn open_context_menu(scope: &ScopeRef, position: Vec2, menu: ContextMenu) {
+    scope
+        .get_context(overlay_state())
+        .open(ContextMenuPanel::new(position, menu));
+}
+
+fn watch_directory(
+    scope: &mut Scope<'_>,
+    path: &Path,
+    refresh_state: Mutable<()>,
+) -> anyhow::Result<()> {
+    let mut watcher = notify::recommended_watcher({
+        to_owned!(refresh_state);
+        move |event: notify::Result<notify::Event>| {
+            let Ok(event) = event else {
+                tracing::error!("Failed to receive file system event");
+                return;
+            };
+
+            match event.kind {
+                notify::EventKind::Create(_) | notify::EventKind::Remove(_) => {
+                    refresh_state.set(())
+                }
+                _ => {}
+            }
+        }
+    })?;
+
+    watcher.watch(path, notify::RecursiveMode::NonRecursive)?;
+    scope.store(watcher); // drop on detach
+    Ok(())
+}
+
+pub fn find_next_filename(name: &str, dir: &Path) -> String {
+    let mut counter = 1;
+    let mut new_name = name.to_string();
+    let mut path = dir.join(&new_name);
+
+    while path.exists() {
+        new_name = format!("{} ({})", name, counter);
+        path = dir.join(&new_name);
+        counter += 1;
+    }
+
+    new_name
+}
+
+pub fn populate_item_menu(
+    selected_item: WeakHandle<Mutable<Option<PathBuf>>>,
+    path: PathBuf,
+) -> ContextMenu {
+    ContextMenu::new(vec![
+        ContextMenuItem::new(LUCIDE_TRASH_2, "Delete File", move |scope| {
+            if let Err(err) = std::fs::remove_file(&path) {
+                tracing::error!("Failed to delete file: {}", err);
+            } else {
+                tracing::info!("File deleted: {}", path.display());
+                scope.read(selected_item).set(None);
+            }
+        }),
+        ContextMenuItem::new(LUCIDE_X, "Close", move |_| {}),
+    ])
+}
+
+pub fn populate_menu(
+    dir: PathBuf,
+    selected_item: WeakHandle<Mutable<Option<PathBuf>>>,
+) -> ContextMenu {
+    ContextMenu::new(vec![
+        ContextMenuItem {
+            icon: LUCIDE_FILE_TEXT.to_string(),
+            label: "New File".to_string(),
+            action: Box::new(move |scope| {
+                tracing::info!("Creating new file");
+                let new_path = dir.join(find_next_filename("New File", &dir));
+                if let Err(err) = std::fs::write(&new_path, "") {
+                    tracing::error!("Failed to create file: {}", err);
+                    return;
+                } else {
+                    tracing::info!("File created: {}", new_path.display());
+                }
+
+                scope.read(selected_item).set(Some(new_path));
+                // Implement file creation logic here
+            }),
+        },
+        ContextMenuItem {
+            icon: LUCIDE_FOLDER.to_string(),
+            label: "New Folder".to_string(),
+            action: Box::new(|_| {
+                tracing::info!("Creating new folder");
+                // Implement folder creation logic here
+            }),
+        },
+        ContextMenuItem::new(LUCIDE_X, "Close", move |_| {}),
+    ])
 }
 
 pub const ITEM_SIZE: Unit<Vec2> = Unit::px2(120.0, 100.0);
@@ -203,7 +336,7 @@ impl Widget for FileIcon {
     }
 }
 
-pub struct Item {
+pub struct FileItem {
     name: String,
     path: PathBuf,
     assets: AssetCache,
@@ -212,18 +345,77 @@ pub struct Item {
     is_dir: bool,
 }
 
-impl Widget for Item {
+impl Widget for FileItem {
     fn mount(self, scope: &mut Scope<'_>) {
-        let selected = scope.read(&self.selected).clone();
+        let is_selected = scope.read(&self.selected).clone();
         let widget = async move {
             let path = self.path.clone();
             let assets = self.assets.clone();
             let filetype = FileType::from_path(&path, &assets).await;
             let preview = {
-                to_owned!(path, assets = self.assets);
+                to_owned!(path);
                 move || label(path.file_name().unwrap_or_default().to_string_lossy())
             };
 
+            let on_drop = {
+                to_owned!(path);
+                move |_scope: &ScopeRef, target: Option<(EntityRef, Vec2)>| {
+                    tracing::info!(?path, "Dropping file to {:?}", target);
+
+                    if let Some((widget, pos)) = target {
+                        if widget.has(world_drop_area()) {
+                            let screen_pos = pos / widget.get(rect()).unwrap().size();
+                            to_owned!(path, assets, filetype);
+                            _scope.apply(move |world| {
+                                let mut main_camera =
+                                    Query::new(CameraQuery::new()).with(main_camera());
+
+                                let mut main_camera = main_camera.borrow(world);
+
+                                let main_camera = main_camera.first().context("No main camera")?;
+
+                                let physics = world.get(engine(), physics_state()).unwrap();
+
+                                let ray = screen_to_world_ray(screen_pos, main_camera);
+                                let hit =
+                                    physics.cast_ray(ray, 1000.0, false, QueryFilter::default());
+
+                                match filetype {
+                                    FileType::Asset(AssetType::Template) => {
+                                        if let Some(hit) = hit {
+                                            tracing::info!("Dropping template at {:?}", hit);
+                                            let asset_path =
+                                                AssetPath::<Template>::new(path.canonicalize()?);
+
+                                            let async_cmd = world
+                                                .get_clone(engine(), async_commandbuffer())
+                                                .unwrap();
+
+                                            async_std::task::spawn(async move {
+                                                let fut = spawn_template(
+                                                    assets, ray, asset_path, hit, async_cmd,
+                                                )
+                                                .await;
+
+                                                if let Err(err) = fut {
+                                                    tracing::error!("{err:?}");
+                                                }
+                                            });
+                                        } else {
+                                            tracing::warn!("No hit detected for template drop");
+                                        }
+                                    }
+                                    _ => {
+                                        tracing::info!("Dropping file at {:?}", pos);
+                                    }
+                                }
+
+                                Ok(())
+                            });
+                        }
+                    }
+                }
+            };
             Selectable::new_value(
                 Draggable::new(
                     col((
@@ -240,78 +432,9 @@ impl Widget for Item {
                     .with_cross_align(Align::Center)
                     .with_exact_size(ITEM_SIZE),
                     preview,
-                    {
-                        to_owned!(path);
-                        move |_scope: &ScopeRef, target| {
-                            tracing::info!(?path, "Dropping file to {:?}", target);
-
-                            if let Some((widget, pos)) = target {
-                                if widget.has(world_drop_area()) {
-                                    let screen_pos = pos / widget.get(rect()).unwrap().size();
-                                    to_owned!(path, assets, filetype);
-                                    _scope.apply(move |world| {
-                                        let mut main_camera =
-                                            Query::new(CameraQuery::new()).with(main_camera());
-
-                                        let mut main_camera = main_camera.borrow(world);
-
-                                        let main_camera =
-                                            main_camera.first().context("No main camera")?;
-
-                                        let physics = world.get(engine(), physics_state()).unwrap();
-
-                                        let ray = screen_to_world_ray(screen_pos, main_camera);
-                                        let hit = physics.cast_ray(
-                                            ray,
-                                            1000.0,
-                                            false,
-                                            QueryFilter::default(),
-                                        );
-
-                                        match filetype {
-                                            FileType::Asset(AssetType::Template) => {
-                                                if let Some(hit) = hit {
-                                                    tracing::info!(
-                                                        "Dropping template at {:?}",
-                                                        hit
-                                                    );
-                                                    let asset_path = AssetPath::<Template>::new(
-                                                        path.canonicalize()?,
-                                                    );
-
-                                                    let async_cmd = world
-                                                        .get_clone(engine(), async_commandbuffer())
-                                                        .unwrap();
-
-                                                    async_std::task::spawn(async move {
-                                                        let fut = spawn_template(
-                                                            assets, ray, asset_path, hit, async_cmd,
-                                                        )
-                                                        .await;
-
-                                                        if let Err(err) = fut {
-                                                            tracing::error!("{err:?}");
-                                                        }
-                                                    });
-                                                } else {
-                                                    tracing::warn!(
-                                                        "No hit detected for template drop"
-                                                    );
-                                                }
-                                            }
-                                            _ => {
-                                                tracing::info!("Dropping file at {:?}", pos);
-                                            }
-                                        }
-
-                                        Ok(())
-                                    });
-                                }
-                            }
-                        }
-                    },
+                    on_drop,
                 ),
-                selected,
+                is_selected,
                 Some(self.path.clone()),
             )
             .on_double_click({
@@ -319,6 +442,20 @@ impl Widget for Item {
                     if self.is_dir {
                         scope.read(self.selected_dir).set(Some(path.clone()));
                     }
+                }
+            })
+            .on_mouse_input({
+                to_owned!(path = self.path);
+                move |scope, input| {
+                    if input.state.is_pressed() && input.button == MouseButton::Right {
+                        open_context_menu(
+                            scope,
+                            input.cursor.absolute_pos,
+                            populate_item_menu(self.selected.clone(), path.clone()),
+                        );
+                    }
+
+                    Some(input)
                 }
             })
             .with_style(ButtonStyle::hidden())

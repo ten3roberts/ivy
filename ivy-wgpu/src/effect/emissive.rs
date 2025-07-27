@@ -2,7 +2,7 @@ use ivy_assets::{Asset, AssetCache};
 use ivy_wgpu_types::{BindGroupBuilder, BindGroupLayoutBuilder, TypedBuffer};
 use wgpu::{BufferUsages, SamplerDescriptor, ShaderStages, Texture};
 
-use super::{PbrMaterialParams, RenderMaterial};
+use super::{EffectPass, PbrMaterialParams};
 
 pub struct PbrEmissiveMaterialParams {
     pub pbr: PbrMaterialParams,
@@ -11,7 +11,7 @@ pub struct PbrEmissiveMaterialParams {
 }
 
 impl PbrEmissiveMaterialParams {
-    pub fn create_material(self, label: String, assets: &AssetCache) -> RenderMaterial {
+    pub fn create_material(self, label: String, assets: &AssetCache) -> EffectPass {
         let gpu = &assets.service();
         let layout = BindGroupLayoutBuilder::new(label.clone())
             .bind_sampler(ShaderStages::FRAGMENT)
@@ -53,7 +53,7 @@ impl PbrEmissiveMaterialParams {
             .bind_buffer(&buffer)
             .build(gpu, &layout);
 
-        RenderMaterial {
+        EffectPass {
             label,
             bind_group: Some(bind_group),
             layout: Some(layout),

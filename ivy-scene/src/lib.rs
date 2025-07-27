@@ -17,7 +17,7 @@ use ivy_editable::Editable;
 use ivy_gltf::GltfNode;
 use ivy_wgpu::{
     components::{forward_pass, shadow_pass},
-    material_desc::{MaterialData, PbrMaterialData},
+    effect_desc::{PbrRenderEffect, RenderEffect},
     renderer::RenderObjectBundle,
 };
 
@@ -26,7 +26,7 @@ pub use collider::*;
 #[derive(Debug)]
 pub struct NodeMountOptions<'a> {
     pub skip_empty_children: bool,
-    pub material_overrides: &'a BTreeMap<String, MaterialData>,
+    pub material_overrides: &'a BTreeMap<String, RenderEffect>,
 }
 
 pub trait GltfNodeExt {
@@ -54,24 +54,22 @@ impl GltfNodeExt for GltfNode {
                 for primitive in mesh.primitives() {
                     let gltf_material = primitive.material();
 
-                    let material = gltf_material
+                    let forward_effect = gltf_material
                         .name()
                         .and_then(|name| opts.material_overrides.get(name).cloned())
                         .unwrap_or_else(|| {
-                            MaterialData::PbrMaterial(PbrMaterialData::from_gltf_material(
-                                gltf_material,
-                            ))
+                            RenderEffect::Pbr(PbrRenderEffect::from_gltf_material(gltf_material))
                         });
 
-                    let materials = [
-                        (forward_pass(), material),
-                        (shadow_pass(), MaterialData::ShadowMaterial),
+                    let effects = [
+                        (forward_pass(), forward_effect),
+                        (shadow_pass(), RenderEffect::OpaqueShadow),
                     ];
 
                     let mut child = Entity::builder();
 
                     child
-                        .mount(RenderObjectBundle::new(primitive.into(), &materials))
+                        .mount(RenderObjectBundle::new(primitive.into(), &effects))
                         .set_opt(name(), mesh.name().map(ToOwned::to_owned));
 
                     entity.attach(child_of, child);
