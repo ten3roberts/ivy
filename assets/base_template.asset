@@ -5,111 +5,27 @@
   "desc": {
     "bundles": [
       {
-        "TransformBundle": {
-          "position": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "rotation": [
-            0.0,
-            0.0,
-            0.0,
-            1.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ]
-        }
-      },
-      {
-        "LightBundle": {
-          "params": {
-            "color": {
-              "red": 0.159,
-              "green": 0.675,
-              "blue": 0.62
-            },
-            "intensity": 0.0,
-            "inner_theta": 0.0,
-            "outer_theta": 0.0
-          },
-          "kind": "Spotlight",
-          "cast_shadow": true
-        }
-      },
-      {
-        "TransformToolBundle": {
-          "settings": {
-            "space": "Global",
-            "snap_mode": "None",
-            "angle_snap": 0.0
-          }
-        }
-      },
-      {
         "NameBundle": {
           "name": "This is a name"
         }
       },
       {
-        "RigidBodyBundle": {
-          "body_type": "Dynamic",
-          "can_sleep": true,
-          "mass": 0.0,
-          "angular_mass": 0.0,
-          "constraints": {
-            "lock_translation": [
-              false,
-              false,
-              false
-            ],
-            "lock_rotation": [
-              false,
-              false,
-              false
-            ]
-          },
-          "velocity": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "angular_velocity": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "linear_damping": 0.0,
-          "angular_damping": 0.0
+        "NameBundle": {
+          "name": "e"
         }
       },
       {
         "GltfColliderBundle": {
           "shape": {
-            "Cuboid": [
-              1.0,
-              1.0,
-              1.0
-            ]
+            "Cuboid": {
+              "size": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
           },
-          "restitution": 0.6161685,
-          "friction": 0.72377014,
-          "density": 658.1607
-        }
-      },
-      {
-        "GltfColliderBundle": {
-          "shape": {
-            "Cuboid": [
-              1.0,
-              1.0,
-              1.0
-            ]
-          },
-          "restitution": 0.32826567,
+          "restitution": 1.0,
           "friction": 1.0,
           "density": 1.0
         }

@@ -135,7 +135,9 @@ impl Editable for bool {
     fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         state: S,
     ) -> Box<dyn Send + Widget> {
-        Box::new(Checkbox::new(state.memo(false).dedup()))
+        let state = state.memo(false);
+        state.sync_initial();
+        Box::new(Checkbox::new(state.dedup()))
     }
 
     fn create_editor_project<S: 'static + Send + Sync + StateStreamRef<Item = Self> + StateWrite>(

@@ -211,7 +211,19 @@ fn expand_enum(
                     ) as Box<dyn Send + Widget>
                     ]
                 },
-                syn::Fields::Unit => quote! { Box::new(#violet::widget::EmptyWidget) as Box<dyn Send + Widget> },
+                syn::Fields::Unit => {
+
+                    quote! {
+                        let state = ::std::sync::Arc::new(state.clone()
+                            // Try and destructure this variant
+                            .filter_map(
+                                |v| if let Self::#ident = v { Some(()) } else { None },
+                                |()| Some(Self::#ident))
+                            .memo(()));
+
+                        state.sync_initial();
+                        Box::new(#violet::widget::EmptyWidget) as Box<dyn Send + Widget> }
+                },
             };
 
             syn::Result::Ok(quote! { #ident_s => { #body } })

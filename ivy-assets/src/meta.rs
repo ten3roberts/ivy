@@ -38,7 +38,6 @@ impl AssetPayloadUntyped {
     }
 
     pub fn serialize_json(&self) -> anyhow::Result<String> {
-        tracing::info!("Serializing asset: {}", self.meta.type_name);
         serde_json::to_string_pretty(self)
             .with_context(|| format!("Failed to serialize asset: {}", self.meta.type_name))
     }

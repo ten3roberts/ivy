@@ -1,11 +1,7 @@
-
 use ivy_assets::Resource;
 use ivy_core::{palette::Srgb, Bundle};
 use ivy_editable::Editable;
-use violet::core::{
-    state::StateExt,
-    Widget,
-};
+use violet::core::{state::StateExt, Widget};
 
 use crate::components::{cast_shadow, light_kind, light_params};
 
@@ -13,8 +9,11 @@ use crate::components::{cast_shadow, light_kind, light_params};
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct LightParams {
     pub color: Srgb,
+    #[editable(range(0.0, 100.0))]
     pub intensity: f32,
+    #[editable(range(0.0, 1.5708))]
     pub inner_theta: f32,
+    #[editable(range(0.0, 1.5708))]
     pub outer_theta: f32,
 }
 

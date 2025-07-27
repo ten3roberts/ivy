@@ -32,10 +32,20 @@ pub struct GltfColliderBundle {
 
 #[derive(Clone, Debug, Editable, serde::Serialize, serde::Deserialize)]
 pub enum ColliderShapeDesc {
-    Cuboid(#[editable(default = Vec3::ONE)] Vec3),
-    Sphere(#[editable(default = 1.0)] f32),
-    GltfTriMesh { node: GltfNodeDesc },
-    GltfConvexMesh { node: GltfNodeDesc },
+    Cuboid {
+        #[editable(default = Vec3::ONE)]
+        size: Vec3,
+    },
+    Sphere {
+        #[editable(default = 1.0)]
+        radius: f32,
+    },
+    GltfTriMesh {
+        node: GltfNodeDesc,
+    },
+    GltfConvexMesh {
+        node: GltfNodeDesc,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -89,8 +99,8 @@ impl Loadable for ColliderShapeDesc {
                     .create(assets)?,
                 )
             }
-            Self::Cuboid(extent) => ColliderShape::Cuboid(Cuboid::new((*extent).into())),
-            Self::Sphere(radius) => ColliderShape::Sphere(Ball::new(*radius)),
+            Self::Cuboid { size } => ColliderShape::Cuboid(Cuboid::new((*size).into())),
+            Self::Sphere { radius } => ColliderShape::Sphere(Ball::new(*radius)),
         };
 
         Ok(shape)
