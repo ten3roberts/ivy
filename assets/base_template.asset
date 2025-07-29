@@ -10,19 +10,10 @@
         }
       },
       {
-        "NameBundle": {
-          "name": "e"
-        }
-      },
-      {
         "GltfColliderBundle": {
           "shape": {
-            "Cuboid": {
-              "size": [
-                1.0,
-                1.0,
-                1.0
-              ]
+            "Sphere": {
+              "radius": 1.0
             }
           },
           "restitution": 0.651001,
@@ -48,6 +39,48 @@
             1.0,
             1.0
           ]
+        }
+      },
+      {
+        "PrimitiveBundle": {
+          "kind": "Sphere"
+        }
+      },
+      {
+        "MaterialBundle": {
+          "material": "./Material.asset"
+        }
+      },
+      {
+        "RigidBodyBundle": {
+          "body_type": "Dynamic",
+          "can_sleep": true,
+          "mass": 0.0,
+          "angular_mass": 0.0,
+          "constraints": {
+            "lock_translation": [
+              false,
+              false,
+              false
+            ],
+            "lock_rotation": [
+              false,
+              false,
+              false
+            ]
+          },
+          "velocity": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "angular_velocity": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "linear_damping": 0.0,
+          "angular_damping": 0.0
         }
       }
     ]

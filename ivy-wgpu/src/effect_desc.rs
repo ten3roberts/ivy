@@ -25,6 +25,12 @@ pub enum RenderEffectDesc {
     Wireframe(PbrRenderEffectDesc),
 }
 
+impl Default for RenderEffectDesc {
+    fn default() -> Self {
+        Self::Pbr(PbrRenderEffectDesc::default())
+    }
+}
+
 impl Loadable for RenderEffectDesc {
     type Output = RenderEffect;
 

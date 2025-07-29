@@ -8,7 +8,11 @@ use flax::{EntityRef, Query};
 use futures::StreamExt;
 use glam::{BVec2, Vec2};
 use itertools::Itertools;
-use ivy_assets::{AssetCache, AssetPath, loadable::Loadable, meta::AssetPayloadUntyped};
+use ivy_assets::{
+    AssetCache, AssetPath, Resource,
+    loadable::Loadable,
+    meta::{AssetMeta, AssetPayload, AssetPayloadUntyped},
+};
 use ivy_core::{
     AsyncCommandBuffer, EntityBuilderExt,
     components::{TransformBundle, async_commandbuffer, engine, main_camera},
@@ -35,22 +39,25 @@ use ivy_ui::{
             widget::{
                 Button, ButtonStyle, Collapsible, Draggable, FutureWidget, Image,
                 IterWidgetCollection, LoadingSpinner, ScrollArea, Selectable, SignalWidget, Stack,
-                StreamWidget, SuspenseWidget, TextInput, TextInputStyle, Throbber, WidgetExt, card,
-                col,
+                StreamWidget, SuspenseWidget, Text, TextInput, TextInputStyle, Throbber, WidgetExt,
+                card, col,
                 interactive::{base::InteractiveWidget, overlay::overlay_state},
                 label, pill, row,
             },
         },
         futures_signals::signal::Mutable,
         lucide::icons::{
-            LUCIDE_BOX, LUCIDE_BOXES, LUCIDE_CLOUD_SUN, LUCIDE_CROSS, LUCIDE_ECLIPSE,
-            LUCIDE_FILE_ARCHIVE, LUCIDE_FILE_BOX, LUCIDE_FILE_CODE, LUCIDE_FILE_IMAGE,
-            LUCIDE_FILE_JSON, LUCIDE_FILE_QUESTION, LUCIDE_FILE_TEXT, LUCIDE_FILE_WARNING,
-            LUCIDE_FOLDER, LUCIDE_FOLDER_OPEN, LUCIDE_PACKAGE, LUCIDE_TRASH_2, LUCIDE_X,
+            LUCIDE_BOX, LUCIDE_BOXES, LUCIDE_CLOUD_SUN, LUCIDE_CROSS, LUCIDE_DROPLET,
+            LUCIDE_ECLIPSE, LUCIDE_FILE_ARCHIVE, LUCIDE_FILE_BOX, LUCIDE_FILE_CODE,
+            LUCIDE_FILE_IMAGE, LUCIDE_FILE_JSON, LUCIDE_FILE_QUESTION, LUCIDE_FILE_TEXT,
+            LUCIDE_FILE_WARNING, LUCIDE_FOLDER, LUCIDE_FOLDER_OPEN, LUCIDE_PACKAGE, LUCIDE_TRASH_2,
+            LUCIDE_X,
         },
     },
 };
+use ivy_wgpu::material::{Material, MaterialDesc};
 use notify::Watcher;
+use serde::Serialize;
 
 use crate::ui::{
     asset_inspector::AssetInspector,
@@ -235,18 +242,27 @@ fn watch_directory(
     Ok(())
 }
 
-pub fn find_next_filename(name: &str, dir: &Path) -> String {
+pub fn find_next_filename(name: impl AsRef<Path>, dir: &Path) -> PathBuf {
+    let name = name.as_ref();
+    let base_name = name.file_stem().unwrap_or_default().to_string_lossy();
+    let extension = name.extension().unwrap_or_default();
+    tracing::info!(
+        "Finding next filename for {} {:?} in {}",
+        base_name,
+        extension,
+        dir.display()
+    );
     let mut counter = 1;
-    let mut new_name = name.to_string();
-    let mut path = dir.join(&new_name);
+    let mut new_name = base_name.to_string();
+    let mut path = dir.join(&new_name).with_extension(extension);
 
     while path.exists() {
-        new_name = format!("{} ({})", name, counter);
-        path = dir.join(&new_name);
+        new_name = format!("{} ({})", base_name, counter);
+        path = dir.join(&new_name).with_extension(extension);
         counter += 1;
     }
 
-    new_name
+    path
 }
 
 pub fn populate_item_menu(
@@ -254,16 +270,39 @@ pub fn populate_item_menu(
     path: PathBuf,
 ) -> ContextMenu {
     ContextMenu::new(vec![
-        ContextMenuItem::new(LUCIDE_TRASH_2, "Delete File", move |scope| {
+        ContextMenuItem::new(label(LUCIDE_TRASH_2), "Delete File", move |scope| {
             if let Err(err) = std::fs::remove_file(&path) {
                 tracing::error!("Failed to delete file: {}", err);
             } else {
                 tracing::info!("File deleted: {}", path.display());
                 scope.read(selected_item).set(None);
             }
+            Ok(())
         }),
-        ContextMenuItem::new(LUCIDE_X, "Close", move |_| {}),
+        ContextMenuItem::new(label(LUCIDE_X), "Close", move |_| Ok(())),
     ])
+}
+
+pub fn create_asset<T>(
+    dir: &Path,
+    new_name: impl AsRef<Path>,
+    content: T::Desc,
+) -> anyhow::Result<PathBuf>
+where
+    T: Resource,
+    T::Desc: serde::Serialize,
+{
+    let new_name = new_name.as_ref();
+    let new_path = find_next_filename(new_name, &dir);
+    let content =
+        AssetPayload::new(AssetMeta::new(T::tag_name().into()), content).serialize_json()?;
+
+    std::fs::write(&new_path, content).context(format!(
+        "Failed to create asset file at {}",
+        new_path.display()
+    ))?;
+    tracing::info!("Asset created: {}", new_path.display());
+    Ok(new_path)
 }
 
 pub fn populate_menu(
@@ -271,32 +310,47 @@ pub fn populate_menu(
     selected_item: WeakHandle<Mutable<Option<PathBuf>>>,
 ) -> ContextMenu {
     ContextMenu::new(vec![
-        ContextMenuItem {
-            icon: LUCIDE_FILE_TEXT.to_string(),
-            label: "New File".to_string(),
-            action: Box::new(move |scope| {
+        ContextMenuItem::new(label(LUCIDE_FILE_TEXT), "New File", {
+            to_owned!(dir);
+            move |scope| {
                 tracing::info!("Creating new file");
-                let new_path = dir.join(find_next_filename("New File", &dir));
-                if let Err(err) = std::fs::write(&new_path, "") {
-                    tracing::error!("Failed to create file: {}", err);
-                    return;
-                } else {
-                    tracing::info!("File created: {}", new_path.display());
-                }
+                let new_path = find_next_filename("New File", &dir);
+                std::fs::write(&new_path, "")?;
+                tracing::info!("File created: {}", new_path.display());
 
                 scope.read(selected_item).set(Some(new_path));
                 // Implement file creation logic here
-            }),
-        },
+                Ok(())
+            }
+        }),
+        ContextMenuItem::new(
+            FileType::Asset(AssetType::Template).label(),
+            "New Template",
+            |_| Ok(()),
+        ),
+        ContextMenuItem::new(
+            FileType::Asset(AssetType::Material).label(),
+            "New Material",
+            {
+                to_owned!(dir);
+                move |scope| {
+                    let new_path =
+                        create_asset::<Material>(&dir, "Material.asset", MaterialDesc::default())?;
+                    scope.read(selected_item).set(Some(new_path));
+                    Ok(())
+                }
+            },
+        ),
         ContextMenuItem {
-            icon: LUCIDE_FOLDER.to_string(),
+            icon: FileType::Directory.label(),
             label: "New Folder".to_string(),
             action: Box::new(|_| {
                 tracing::info!("Creating new folder");
                 // Implement folder creation logic here
+                Ok(())
             }),
         },
-        ContextMenuItem::new(LUCIDE_X, "Close", move |_| {}),
+        ContextMenuItem::new(label(LUCIDE_X), "Close", move |_| Ok(())),
     ])
 }
 
@@ -734,7 +788,7 @@ impl FileType {
 
         match meta.type_name.as_str() {
             "Template" => Ok(AssetType::Template),
-            "MaterialData" => Ok(AssetType::Material),
+            "Material" => Ok(AssetType::Material),
             _ => Ok(AssetType::Asset),
         }
     }
@@ -764,7 +818,7 @@ impl FileType {
             FileType::Hdri => LUCIDE_CLOUD_SUN,
             FileType::Asset(AssetType::Asset) => LUCIDE_PACKAGE,
             FileType::Asset(AssetType::Template) => LUCIDE_BOXES,
-            FileType::Asset(AssetType::Material) => LUCIDE_ECLIPSE,
+            FileType::Asset(AssetType::Material) => LUCIDE_DROPLET,
         }
     }
 
@@ -791,6 +845,10 @@ impl FileType {
             FileType::Asset(AssetType::Template) => OCEAN_400,
             FileType::Asset(AssetType::Material) => RUBY_400,
         }
+    }
+
+    fn label(&self) -> Text {
+        label(self.icon()).with_color(self.color())
     }
 
     /// Returns `true` if the file type is [`Image`].

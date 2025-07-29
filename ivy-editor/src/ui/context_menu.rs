@@ -7,7 +7,7 @@ use ivy_ui::violet::core::{
     style::{StyleExt, base_colors::OCEAN_400, element_accent, surface_tertiary},
     unit::Unit,
     widget::{
-        Button, ButtonStyle, IterWidgetCollection, Stack, card, col,
+        Button, ButtonStyle, IterWidgetCollection, Stack, Text, card, col,
         interactive::{
             base::InteractiveWidget,
             overlay::{Overlay, OverlayHandle},
@@ -27,16 +27,16 @@ impl ContextMenu {
 }
 
 pub struct ContextMenuItem {
-    pub icon: String,
+    pub icon: Text,
     pub label: String,
-    pub action: Box<dyn Fn(&ScopeRef) + Send + Sync>,
+    pub action: Box<dyn Fn(&ScopeRef) -> anyhow::Result<()> + Send + Sync>,
 }
 
 impl ContextMenuItem {
     pub fn new(
-        icon: impl Into<String>,
+        icon: Text,
         label: impl Into<String>,
-        action: impl 'static + Send + Sync + Fn(&ScopeRef),
+        action: impl 'static + Send + Sync + Fn(&ScopeRef) -> anyhow::Result<()>,
     ) -> Self {
         Self {
             icon: icon.into(),
@@ -78,15 +78,14 @@ impl Overlay for ContextMenuPanel {
                 col(IterWidgetCollection::new(self.menu.items.into_iter().map(
                     |item| {
                         Button::new(
-                            row((
-                                label(item.icon).with_color(element_accent()),
-                                label(item.label),
-                            ))
-                            .with_cross_align(Align::Center),
+                            row((item.icon, label(item.label))).with_cross_align(Align::Center),
                         )
                         .with_style(ButtonStyle::selectable_entry())
                         .on_click(move |scope| {
-                            (item.action)(scope);
+                            if let Err(err) = (item.action)(scope) {
+                                tracing::error!("Error executing context menu action: {:?}", err);
+                            }
+
                             scope.read(token).close()
                         })
                     },
