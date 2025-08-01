@@ -4,6 +4,7 @@ use derivative::Derivative;
 use futures::future::BoxFuture;
 
 use crate::{
+    hotreload::FileReloadService,
     loadable::{LoadFromPath, Loadable, Resource, ResourceDyn},
     service::FsAssetError,
     Asset, AssetCache, AsyncAssetDesc, AsyncAssetExt,
@@ -64,6 +65,9 @@ where
     type Error = anyhow::Error;
 
     async fn create(&self, assets: &AssetCache) -> Result<Asset<Self::Output>, Self::Error> {
+        if let Some(reload) = assets.try_get_service::<FileReloadService>() {
+            reload.track_path(self.clone())?;
+        }
         Ok(assets.insert(T::load_from_file(self.clone(), assets).await?))
     }
 

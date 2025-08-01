@@ -35,13 +35,14 @@ use std::{
     time::Duration,
 };
 
-use async_std::task::sleep;
-use dashmap::DashMap;
+use async_std::{path::PathBuf, task::sleep};
+use dashmap::{mapref::one::{MappedRef, MappedRefMut}, DashMap};
 
 mod asset_path;
 pub mod cell;
 pub mod fs;
 mod handle;
+pub mod hotreload;
 pub mod loadable;
 pub mod map;
 pub mod meta;
@@ -123,11 +124,58 @@ type PendingKeyMap<K, V> = DashMap<
     WeakShared<BoxFuture<'static, Result<Asset<V>, SharedError>>>,
 >;
 
+struct TypeMap {
+    inner: DashMap<TypeId, Box<dyn Any + Send + Sync>>,
+}
+
+impl TypeMap {
+    pub fn new() -> Self {
+        Self {
+            inner: DashMap::new(),
+        }
+    }
+
+    pub fn insert<T: 'static + Send + Sync>(&self, value: T) {
+        self.inner.insert(TypeId::of::<T>(), Box::new(value));
+    }
+
+    pub fn get<T: 'static + Send + Sync>(&self) -> std::option::Option<MappedRef<'_, TypeId, Box<dyn Any + Send + Sync>, T>> {
+        self.inner
+            .get(&TypeId::of::<T>())
+            .map(|v| dashmap::mapref::one::Ref::map(v, |v| {
+                v.downcast_ref::<T>().expect("Type mismatch")
+            }))
+    }
+
+    pub fn entry<T: 'static + Send + Sync>(&self) -> dashmap::Entry<'_, TypeId, Box<dyn Any + Send + Sync>> {
+        self.inner
+            .entry(TypeId::of::<T>())
+    }
+
+    pub fn entry_or_default<T: 'static + Send + Sync + Default>(&self) -> MappedRefMut<'_, TypeId, Box<dyn Any + Send + Sync>, T> {
+        match self.entry::<T>() {
+            dashmap::Entry::Occupied(occupied_entry) => occupied_entry.into_ref().map(|v| {
+                v.downcast_mut::<T>()
+                    .expect("Type mismatch")
+            }),
+            dashmap::Entry::Vacant(vacant_entry) => {
+                let value = Box::new(T::default());
+                vacant_entry.insert(value).map(|v| {
+                    v.downcast_mut::<T>()
+                        .expect("Type mismatch")
+                })
+
+            },
+        }
+            
+    }
+}
+
 /// Stores assets which are accessible through handles
 struct AssetCacheInner {
     pending_keys: DashMap<TypeId, Box<dyn Any + Send + Sync>>,
-    keys: DashMap<TypeId, Box<dyn Any + Send + Sync>>,
-    cells: DashMap<TypeId, Box<dyn Any + Send + Sync>>,
+    keys: TypeMap,
+    cells: TypeMap,
     services: RwLock<HashMap<TypeId, Box<dyn Service + Send>>>,
     timelines: Mutable<Timelines>,
 }
@@ -136,8 +184,8 @@ impl AssetCache {
     pub fn new() -> Self {
         Self {
             inner: Arc::new(AssetCacheInner {
-                keys: DashMap::new(),
-                cells: DashMap::new(),
+                keys: TypeMap::new(),
+                cells: TypeMap::new(),
                 services: Default::default(),
                 pending_keys: DashMap::new(),
                 timelines: Mutable::new(Timelines::new()),
@@ -192,10 +240,7 @@ impl AssetCache {
 
         self.inner
             .keys
-            .entry(TypeId::of::<(K::Stored, K::Output)>())
-            .or_insert_with(|| Box::<KeyMap<K::Stored, K::Output>>::default())
-            .downcast_mut::<KeyMap<K::Stored, K::Output>>()
-            .unwrap()
+            .entry_or_default::<KeyMap<K::Stored, K::Output>>()
             .insert(desc.to_stored(), value.downgrade());
 
         Ok(value)
@@ -372,7 +417,20 @@ impl AssetCache {
             .insert(value)
     }
 
+    pub fn reload<K: AsyncAssetDesc>(&self, key: &K) -> AssetLoadFuture<K::Output> {
+        // Remove the key from the pending keys
+        self.inner
+            .pending_keys
+            .get(&TypeId::of::<(K::Stored, K::Output)>()).map(|v| v.downcast::<PendingKeyMap<K, K::Output>>().unwrap().remove(key));
+
+        self.inner.cells.get(TypeId::of::<K::Output>)
+
+        // Try to load the asset again
+        self.try_load_async(key)
+    }
+
     pub fn register_service<S: Service>(&self, service: S) {
+        service.register(self);
         self.inner
             .services
             .write()
@@ -387,6 +445,18 @@ impl AssetCache {
                 .downcast_ref::<S>()
                 .expect("Service type mismatch")
         })
+    }
+
+    pub fn try_get_service<S: Service>(&self) -> Option<impl Deref<Target = S> + '_ + Send> {
+        RwLockReadGuard::try_map(self.inner.services.read(), |v| {
+            Some(
+                v.get(&TypeId::of::<S>())?
+                    .as_any()
+                    .downcast_ref::<S>()
+                    .expect("Service type mismatch"),
+            )
+        })
+        .ok()
     }
 
     /// Returns asset loading timelines

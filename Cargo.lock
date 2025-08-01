@@ -1949,6 +1949,7 @@ dependencies = [
  "inventory",
  "ivy-derive",
  "ivy-profiling",
+ "notify",
  "parking_lot",
  "serde",
  "serde_json",
