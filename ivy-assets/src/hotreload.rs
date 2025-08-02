@@ -1,29 +1,27 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    path::PathBuf,
-    sync::Arc,
-};
+use std::{path::PathBuf, sync::Arc};
 
-use crate::{loadable::LoadFromPath, service::Service, AssetCache, AssetPath, Resource};
+use crate::{loadable::LoadFromPath, service::Service, AssetCache, AssetPath};
 use async_std::stream::StreamExt;
 use dashmap::DashMap;
 use notify::Watcher;
+use parking_lot::Mutex;
 
 pub struct FileReloadService {
     tracked_paths: Arc<DashMap<PathBuf, Box<dyn Send + Sync + Fn(&AssetCache)>>>,
 
-    notify: notify::RecommendedWatcher,
-    tx: flume::Sender<notify::Result<notify::Event>>,
-    rx: flume::Receiver<notify::Result<notify::Event>>,
+    notify: Mutex<notify::RecommendedWatcher>,
+    rx: flume::Receiver<notify::Event>,
 }
 
 impl FileReloadService {
-    fn new() -> anyhow::Result<Self> {
-        let watcher = notify::recommended_watcher(|res: notify::Result<notify::Event>| {
+    pub fn new() -> anyhow::Result<Self> {
+        let (tx, rx) = flume::unbounded();
+
+        let watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
             match res {
                 Ok(event) => {
                     // Handle the event, e.g., log it or trigger a reload
-                    tracing::info!("File change detected: {:?}", event);
+                    let _ = tx.send(event);
                 }
                 Err(e) => {
                     tracing::error!("Error watching file changes: {}", e);
@@ -31,12 +29,9 @@ impl FileReloadService {
             }
         })?;
 
-        let (tx, rx) = flume::unbounded();
-
         Ok(Self {
             tracked_paths: Arc::new(DashMap::new()),
-            notify: watcher,
-            tx,
+            notify: Mutex::new(watcher),
             rx,
         })
     }
@@ -46,6 +41,7 @@ impl FileReloadService {
             dashmap::Entry::Occupied(_) => {}
             dashmap::Entry::Vacant(vacant_entry) => {
                 self.notify
+                    .lock()
                     .watch(path.path(), notify::RecursiveMode::NonRecursive)?;
 
                 let path = path;
@@ -54,6 +50,7 @@ impl FileReloadService {
                     let assets = assets.clone();
                     async_std::task::spawn({
                         async move {
+                            tracing::info!("Reloading asset {:?}", path);
                             let _ = assets.reload(&path).await;
                         }
                     });
@@ -73,35 +70,24 @@ impl Service for FileReloadService {
         let tracked_paths = self.tracked_paths.clone();
         async_std::task::spawn(async move {
             while let Some(event) = rx.next().await {
-                match event {
-                    Ok(event) => {
-                        // Process the event, e.g., reload the asset
-                        tracing::info!("File change event: {:?}", event);
-                        match event.kind {
-                            notify::EventKind::Modify(_) => {
-                                for path in &event.paths {
-                                    if let Some(callback) = tracked_paths.get(path) {
-                                        (callback.value())(&assets);
-                                    } else {
-                                        tracing::warn!(
-                                            "No callback registered for path: {:?}",
-                                            path
-                                        );
-                                    }
-                                }
+                // Process the event, e.g., reload the asset
+                match event.kind {
+                    notify::EventKind::Modify(_) => {
+                        for path in &event.paths {
+                            if let Some(callback) = tracked_paths.get(path) {
+                                (callback.value())(&assets);
+                            } else {
+                                tracing::warn!("No callback registered for path: {:?}", path);
                             }
-                            notify::EventKind::Create(_) => {
-                                tracing::info!("File created: {:?}", event.paths);
-                            }
-                            notify::EventKind::Remove(_) => {
-                                tracing::info!("File removed: {:?}", event.paths);
-                            }
-                            _ => {}
                         }
                     }
-                    Err(e) => {
-                        tracing::error!("Error receiving file change event: {}", e);
+                    notify::EventKind::Create(_) => {
+                        tracing::info!("File created: {:?}", event.paths);
                     }
+                    notify::EventKind::Remove(_) => {
+                        tracing::info!("File removed: {:?}", event.paths);
+                    }
+                    _ => {}
                 }
             }
         });

@@ -16,9 +16,9 @@
               "radius": 1.0
             }
           },
-          "restitution": 0.651001,
-          "friction": 0.5125427,
-          "density": 1000.0
+          "restitution": 0.5311432,
+          "friction": 0.576828,
+          "density": 0.0
         }
       },
       {
@@ -43,7 +43,7 @@
       },
       {
         "PrimitiveBundle": {
-          "kind": "Sphere"
+          "kind": "Cube"
         }
       },
       {

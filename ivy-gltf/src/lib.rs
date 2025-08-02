@@ -13,7 +13,7 @@ use itertools::Itertools;
 use ivy_assets::{
     declare_resource,
     loadable::{LoadFromPath, Loadable},
-    Asset, AssetCache, AssetDesc, AssetPath, AsyncAssetDesc,
+    Asset, AssetCache, AssetDesc, AssetPath, AsyncAssetKey,
 };
 use ivy_core::components::TransformBundle;
 use ivy_editable::Editable;
