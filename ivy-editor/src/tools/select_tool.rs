@@ -1,4 +1,3 @@
-
 use anyhow::Context;
 use flax::{
     FetchExt, Query, QueryBorrow, World, component,
@@ -39,7 +38,6 @@ impl SelectToolBundle {
     }
 }
 
-
 impl Bundle for SelectToolBundle {
     fn mount(&self, entity: &mut flax::EntityBuilder) {
         let mouse_button_changed = Signal::builder("SelectTool::mouse_button")
@@ -59,7 +57,7 @@ impl Bundle for SelectToolBundle {
                  mut camera: QueryBorrow<CameraQuery, _>,
                  world: &World,
                  pressed: bool| {
-                    let (tool, &cursor_pos, &shift_input, (selection, edit_commands)): (
+                    let (_tool, &cursor_pos, &shift_input, (selection, edit_commands)): (
                         &mut SelectTool,
                         &Vec2,
                         &bool,

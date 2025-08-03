@@ -38,7 +38,7 @@ use ivy_ui::{
             unit::Unit,
             widget::{
                 Button, ButtonStyle, Collapsible, Draggable, FutureWidget, Image,
-                IterWidgetCollection, LoadingSpinner, ScrollArea, Selectable, SignalWidget, Stack,
+                IterWidgetCollection, LoadingSpinner, ScrollArea, Selectable, SignalWidget,
                 StreamWidget, SuspenseWidget, Text, TextInput, TextInputStyle, Throbber, WidgetExt,
                 card, col,
                 interactive::{base::InteractiveWidget, overlay::overlay_state},
@@ -47,17 +47,15 @@ use ivy_ui::{
         },
         futures_signals::signal::Mutable,
         lucide::icons::{
-            LUCIDE_BOX, LUCIDE_BOXES, LUCIDE_CLOUD_SUN, LUCIDE_CROSS, LUCIDE_DROPLET,
-            LUCIDE_ECLIPSE, LUCIDE_FILE_ARCHIVE, LUCIDE_FILE_BOX, LUCIDE_FILE_CODE,
-            LUCIDE_FILE_IMAGE, LUCIDE_FILE_JSON, LUCIDE_FILE_QUESTION, LUCIDE_FILE_TEXT,
-            LUCIDE_FILE_WARNING, LUCIDE_FOLDER, LUCIDE_FOLDER_OPEN, LUCIDE_PACKAGE, LUCIDE_TRASH_2,
-            LUCIDE_X,
+            LUCIDE_BOX, LUCIDE_BOXES, LUCIDE_CLOUD_SUN, LUCIDE_DROPLET, LUCIDE_FILE_ARCHIVE,
+            LUCIDE_FILE_BOX, LUCIDE_FILE_CODE, LUCIDE_FILE_IMAGE, LUCIDE_FILE_JSON,
+            LUCIDE_FILE_QUESTION, LUCIDE_FILE_TEXT, LUCIDE_FILE_WARNING, LUCIDE_FOLDER,
+            LUCIDE_FOLDER_OPEN, LUCIDE_PACKAGE, LUCIDE_TRASH_2,
         },
     },
 };
 use ivy_wgpu::material::{Material, MaterialDesc};
 use notify::Watcher;
-use serde::Serialize;
 
 use crate::ui::{
     asset_inspector::AssetInspector,
@@ -269,18 +267,18 @@ pub fn populate_item_menu(
     selected_item: WeakHandle<Mutable<Option<PathBuf>>>,
     path: PathBuf,
 ) -> ContextMenu {
-    ContextMenu::new(vec![
-        ContextMenuItem::new(label(LUCIDE_TRASH_2), "Delete File", move |scope| {
+    ContextMenu::new(vec![ContextMenuItem::new(
+        label(LUCIDE_TRASH_2),
+        "Delete File",
+        move |scope| {
             if let Err(err) = std::fs::remove_file(&path) {
                 tracing::error!("Failed to delete file: {}", err);
             } else {
-                tracing::info!("File deleted: {}", path.display());
                 scope.read(selected_item).set(None);
             }
             Ok(())
-        }),
-        ContextMenuItem::new(label(LUCIDE_X), "Close", move |_| Ok(())),
-    ])
+        },
+    )])
 }
 
 pub fn create_asset<T>(
@@ -301,7 +299,6 @@ where
         "Failed to create asset file at {}",
         new_path.display()
     ))?;
-    tracing::info!("Asset created: {}", new_path.display());
     Ok(new_path)
 }
 
@@ -341,16 +338,19 @@ pub fn populate_menu(
                 }
             },
         ),
-        ContextMenuItem {
-            icon: FileType::Directory.label(),
-            label: "New Folder".to_string(),
-            action: Box::new(|_| {
-                tracing::info!("Creating new folder");
-                // Implement folder creation logic here
+        ContextMenuItem::new(FileType::Directory.label(), "New Asset Folder", {
+            to_owned!(dir);
+            move |scope| {
+                tracing::info!("Creating new asset folder");
+                let new_path = find_next_filename("Assets", &dir);
+                std::fs::create_dir(&new_path).context(format!(
+                    "Failed to create directory at {}",
+                    new_path.display()
+                ))?;
+                scope.read(selected_item).set(Some(new_path));
                 Ok(())
-            }),
-        },
-        ContextMenuItem::new(label(LUCIDE_X), "Close", move |_| Ok(())),
+            }
+        }),
     ])
 }
 

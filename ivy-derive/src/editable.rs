@@ -69,8 +69,6 @@ fn expand_enum(
 
     let kind_selection = quote! { #violet::widget::row((#(#kind_selection),*)); };
 
-    let create_editor_project_ident = format_ident!("create_editor_project");
-
     let variant_editors = |project| -> syn::Result<Vec<TokenStream>> {
         data_enum
         .variants

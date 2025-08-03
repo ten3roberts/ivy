@@ -15,7 +15,10 @@ ivy-assets = { path = "../ivy-assets" }
 ivy-ui = { path = "../ivy-ui" }
 ivy-input = { path = "../ivy-input" }
 ivy-derive = { path = "../ivy-derive" }
+ivy-postprocessing = { path = "../ivy-postprocessing" }
 
+wgpu.workspace = true
+serde_json.workspace = true
 serde.workspace = true
 async-std.workspace = true
 anyhow.workspace = true

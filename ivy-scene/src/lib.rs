@@ -2,6 +2,7 @@ pub mod camera;
 mod collider;
 pub mod editor;
 pub mod ray_picker;
+mod scene;
 
 use std::collections::BTreeMap;
 
@@ -20,6 +21,7 @@ use ivy_wgpu::{
     effect_desc::{PbrRenderEffect, RenderEffect},
     renderer::RenderObjectBundle,
 };
+pub use scene::*;
 
 pub use collider::*;
 

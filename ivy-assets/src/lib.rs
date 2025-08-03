@@ -138,10 +138,6 @@ impl TypeMap {
         }
     }
 
-    pub fn insert<T: 'static + Send + Sync>(&self, value: T) {
-        self.inner.insert(TypeId::of::<T>(), Box::new(value));
-    }
-
     pub fn get<T: 'static + Send + Sync>(
         &self,
     ) -> std::option::Option<MappedRef<'_, TypeId, Box<dyn Any + Send + Sync>, T>> {

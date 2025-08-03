@@ -8,7 +8,7 @@ use ivy_assets::Resource;
 use serde::{
     de::{self, DeserializeOwned, DeserializeSeed, Visitor},
     ser::SerializeMap,
-    Deserialize, Serialize, Serializer,
+    Deserialize, Serialize,
 };
 
 use crate::{template::BundleDesc, Bundle};

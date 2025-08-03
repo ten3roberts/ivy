@@ -1,9 +1,6 @@
 use futures::StreamExt;
 use ivy_editable::Editable;
-use violet::{
-    core::state::StateStream,
-    futures_signals::signal::Mutable,
-};
+use violet::futures_signals::signal::Mutable;
 
 #[derive(Clone, Debug, PartialEq, Eq, Editable)]
 pub struct MyStruct {
@@ -23,7 +20,7 @@ fn editable_derive_struct() {
         value: 42,
     });
 
-    let editor = Editable::create_editor(s.clone());
+    let _editor = Editable::create_editor(s.clone());
 }
 
 #[test]
@@ -33,5 +30,5 @@ fn editable_derive_enum() {
         value: 42,
     });
 
-    let editor = Editable::create_editor(s.clone());
+    let _editor = Editable::create_editor(s.clone());
 }

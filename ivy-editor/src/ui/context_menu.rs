@@ -4,10 +4,10 @@ use ivy_ui::violet::core::{
     Scope, ScopeRef, Widget,
     components::{offset, opacity},
     layout::Align,
-    style::{StyleExt, base_colors::OCEAN_400, element_accent, surface_tertiary},
+    style::{StyleExt, surface_tertiary},
     unit::Unit,
     widget::{
-        Button, ButtonStyle, IterWidgetCollection, Stack, Text, card, col,
+        Button, ButtonStyle, IterWidgetCollection, Text, card, col,
         interactive::{
             base::InteractiveWidget,
             overlay::{Overlay, OverlayHandle},

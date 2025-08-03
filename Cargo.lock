@@ -2275,11 +2275,14 @@ dependencies = [
  "ivy-gltf",
  "ivy-input",
  "ivy-physics",
+ "ivy-postprocessing",
  "ivy-ui",
  "ivy-wgpu",
  "ordered-float 5.0.0",
  "serde",
+ "serde_json",
  "tracing",
+ "wgpu",
 ]
 
 [[package]]

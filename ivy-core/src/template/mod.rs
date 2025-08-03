@@ -1,15 +1,7 @@
-use std::{
-    any::Any,
-    collections::BTreeMap,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc, Weak,
-    },
-    task::{Context, Waker},
-};
+use std::{any::Any, sync::Arc};
 
 use downcast_rs::{impl_downcast, DowncastSync};
-use flax::{Entity, EntityBuilder};
+use flax::{component, Entity, EntityBuilder};
 use futures::{
     future::{ready, BoxFuture},
     FutureExt, StreamExt,
@@ -19,11 +11,10 @@ use itertools::Itertools;
 use ivy_assets::{
     declare_resource,
     loadable::{Loadable, LoadableDyn},
-    AssetCache, Resource,
+    AssetCache, AssetPath, Resource,
 };
 use ivy_editable::{register_editable, registry::EDITABLE_REGISTRY, Editable};
 use palette::Srgba;
-use parking_lot::{Mutex, RwLock};
 use violet::{
     core::{
         layout::Align,
@@ -44,6 +35,10 @@ use crate::{
     bundle::Bundle,
     bundle_registry::{BundleRegistration, BUNDLE_REGISTRY},
 };
+
+component! {
+    pub template_key: AssetPath<Template>,
+}
 
 /// Defines an entity template to construct an entity using [[Bundle]]s
 pub struct Template {

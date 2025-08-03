@@ -29,9 +29,7 @@ impl EditableRegistry {
         Self {
             named: registrations
                 .iter()
-                .filter_map(|(_, registration)| {
-                    Some((registration.type_name?, *registration))
-                })
+                .filter_map(|(_, registration)| Some((registration.type_name?, *registration)))
                 .collect(),
             registrations,
         }
@@ -68,9 +66,7 @@ impl Default for EditableRegistry {
 
 pub static EDITABLE_REGISTRY: LazyLock<EditableRegistry> = LazyLock::new(EditableRegistry::new);
 
-type ProjectedState = Box<dyn Projection<Item = dyn PartialReflect>>;
 type ProjectedDyn = Box<dyn Projection<Item = dyn Send + Sync + Any>>;
-type CreateEditorFunc = fn(ProjectedState) -> Box<dyn Send + Widget>;
 type CreateEditorDyn = fn(ProjectedDyn) -> Box<dyn Send + Widget>;
 type CreateEditorAny = fn(
     Box<dyn Send + Sync + StateDuplex<Item = Box<dyn Send + Sync + Any>>>,
