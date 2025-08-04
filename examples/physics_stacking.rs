@@ -81,12 +81,14 @@ pub fn main() -> anyhow::Result<()> {
                 SurfacePbrPipelineDesc {
                     pbr_config: PbrRenderGraphConfig {
                         label: "basic".into(),
-                        skybox: Some(SkyboxConfig {
-                            hdri: Box::new(AssetPath::new(
-                                "hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
-                            )),
-                            format: TextureFormat::Rgba16Float,
-                        }),
+                        skybox: None,
+                        // skybox: Some(SkyboxConfig {
+                        //     // hdri: Box::new(AssetPath::new(
+                        //     //     "hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
+                        //     // )),
+                        //     hdri: None,
+                        //     format: TextureFormat::Rgba16Float,
+                        // }),
                         ..Default::default()
                     },
                     ..Default::default()

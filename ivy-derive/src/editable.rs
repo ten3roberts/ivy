@@ -249,9 +249,9 @@ fn expand_struct(
 
         let ty = &f.ty;
         let label = quote! {
-            #crate_name::__private::violet::core::widget::interactive::base::InteractiveWidget::new(
-                #crate_name::__private::violet::core::widget::label(stringify!(#ident))
-            ).with_tooltip_text(stringify!(#ty))
+            #crate_name::__private::violet::core::widget::interactive::tooltip::Tooltip::label(
+                #crate_name::__private::violet::core::widget::label(stringify!(#ident)), stringify!(#ty)
+            )
         };
 
         let editor = quote! {

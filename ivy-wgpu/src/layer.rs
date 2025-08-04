@@ -189,9 +189,14 @@ impl Layer for GraphicsLayer {
         });
 
         events.subscribe(|this, ctx, RedrawEvent| this.on_draw(ctx.world, ctx.assets, ctx.store));
-        events.subscribe(|this, ctx, ResizedEvent { physical_size }| {
-            this.on_resize(ctx.world, *physical_size)
-        });
+        events.subscribe(
+            |this,
+             ctx,
+             ResizedEvent {
+                 physical_size,
+                 logical_size: _,
+             }| { this.on_resize(ctx.world, *physical_size) },
+        );
 
         Ok(())
     }

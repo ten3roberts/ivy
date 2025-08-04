@@ -1,6 +1,6 @@
 # Ivy
 
-ECS based game engine wirtten in Rust
+ECS driven game engine written in Rust
 
 ## [Guide](https://ten3roberts.github.io/ivy)
 
@@ -8,14 +8,15 @@ A user guide is provided to quickly familiarize the user with the basic usage of
 the engine.
 
 ## Features
+  - ECS driven architecture
   - PBR rendering and post processing
   - Rendergraph abstractions for fine tuned render results
   - Collision detection and integrated physics engine
-  - ECS driven architecture
   - Deferred dynamic events using observer pattern
-  - Ray casting for arbitrary convex shapes
-  - Async asset management system
-  - Input system with composeable vector generation
+  - Async asset management and resource system
+  - Editor
+  - Asset Editor
+  - Input system with composable vector generation
   - UI system with configurable widget and positioning system
   - ... And more
 

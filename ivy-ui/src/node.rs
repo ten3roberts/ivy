@@ -9,6 +9,7 @@ use ivy_wgpu::{
     types::PhysicalSize,
     Gpu,
 };
+use tracing::info;
 use violet::{
     core::{assets::Asset, components::rect},
     glam::Mat4,
@@ -115,12 +116,17 @@ impl Node for UiRenderNode {
 
         let root = instance.frame.world_mut().entity(instance.root)?;
 
-        let size = root
+        let logical_size = root
+            // canvas size is in logical size
             .get_copy(rect())
             .context("missing size for canvas")?
             .size();
 
-        self.ctx.globals.projview = Mat4::orthographic_lh(0.0, size.x, size.y, 0.0, 0.0, 1000.0);
+        // info!(?size, "Canvas size");
+
+        self.ctx.globals.projview =
+            Mat4::orthographic_lh(0.0, logical_size.x, logical_size.y, 0.0, 0.0, 1000.0);
+
         self.ctx
             .globals_buffer
             .write(&self.ctx.gpu.queue, 0, &[self.ctx.globals]);
@@ -148,7 +154,7 @@ impl Node for UiRenderNode {
                 width: target.size().width,
                 height: target.size().height,
             },
-            1.0,
+            instance.scale_factor(),
         );
 
         renderer.update(&mut self.ctx, &mut instance.frame)?;

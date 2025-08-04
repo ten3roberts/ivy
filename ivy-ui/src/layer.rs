@@ -13,7 +13,7 @@ use ivy_input::types::InputEvent;
 use ivy_wgpu::{
     components::{main_window, window},
     driver::WindowHandle,
-    events::{ApplicationReady, ResizedEvent},
+    events::{ApplicationReady, ResizedEvent, ScaleFactorChangedEvent},
 };
 use violet::{
     core::{declare_atom, style::StylesheetOptions, widget::col, ScopeRef},
@@ -171,6 +171,21 @@ impl UiLayer {
         instance.on_resize(event.physical_size);
         Ok(())
     }
+
+    fn on_scale_factor_change(
+        &mut self,
+        engine_world: &mut World,
+        _: &AssetCache,
+        store: &mut DynamicStore,
+        event: &ScaleFactorChangedEvent,
+    ) -> anyhow::Result<()> {
+        tracing::info!(scale_factor = event.scale_factor, "Scale factor changed");
+        let instance = store.get_mut(&*engine_world.get(engine(), ui_instance())?);
+
+        instance.set_scale_factor(event.scale_factor);
+        instance.on_resize(instance.window_size());
+        Ok(())
+    }
 }
 
 impl Layer for UiLayer {
@@ -197,6 +212,10 @@ impl Layer for UiLayer {
 
         events.subscribe(|this, ctx, event: &ResizedEvent| {
             this.on_resized(ctx.world, ctx.assets, ctx.store, event)
+        });
+
+        events.subscribe(|this, ctx, event: &ScaleFactorChangedEvent| {
+            this.on_scale_factor_change(ctx.world, ctx.assets, ctx.store, event)
         });
 
         Ok(())

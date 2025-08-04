@@ -114,7 +114,7 @@ impl Gpu {
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::default(),
+                power_preference: wgpu::PowerPreference::HighPerformance,
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
             })
@@ -124,7 +124,7 @@ impl Gpu {
         tracing::info!("created adapter: {instance:?} {adapter:?}");
         let (device, queue) = desc.request_device(&adapter).await?;
 
-        tracing::info!("created device {device:?}");
+        tracing::info!("created device adapter: {:#?}", adapter.get_info());
 
         let surface_caps = surface.get_capabilities(&adapter);
 

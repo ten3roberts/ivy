@@ -24,7 +24,7 @@ use winit::{
 
 use crate::{
     components::{main_window, window, window_cursor_position, window_size},
-    events::{ApplicationReady, RedrawEvent, ResizedEvent},
+    events::{ApplicationReady, RedrawEvent, ResizedEvent, ScaleFactorChangedEvent},
 };
 
 pub struct WinitDriver {
@@ -180,15 +180,24 @@ impl WinitEventHandler<'_> {
                 serial: _,
                 token: _,
             } => todo!(),
-            WindowEvent::Resized(size) => {
-                let logical_size = size.to_logical(self.scale_factor);
+            WindowEvent::Resized(physical_size) => {
+                let logical_size = physical_size.to_logical(self.scale_factor);
 
                 let window = self.app.world().entity(window_id).unwrap();
                 *window.get_mut(window_size()).unwrap() = logical_size;
 
                 self.app.emit_event(ResizedEvent {
-                    physical_size: size,
+                    physical_size,
+                    logical_size,
                 })?;
+            }
+            WindowEvent::ScaleFactorChanged {
+                scale_factor,
+                inner_size_writer: _,
+            } => {
+                self.scale_factor = scale_factor;
+                self.app
+                    .emit_event(ScaleFactorChangedEvent { scale_factor })?;
             }
             WindowEvent::Moved(_) => {}
             WindowEvent::CloseRequested => event_loop.exit(),
@@ -289,12 +298,6 @@ impl WinitEventHandler<'_> {
                 value: _,
             } => {}
             WindowEvent::Touch(_) => todo!(),
-            WindowEvent::ScaleFactorChanged {
-                scale_factor,
-                inner_size_writer: _,
-            } => {
-                self.scale_factor = scale_factor;
-            }
             WindowEvent::ThemeChanged(_) => {}
             WindowEvent::Occluded(_) => {}
             WindowEvent::RedrawRequested => {
