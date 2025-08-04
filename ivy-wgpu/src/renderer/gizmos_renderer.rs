@@ -103,10 +103,10 @@ fn align_cylindrical_billboard(
     let right = billboard_axis.cross(to_camera).normalize();
     let forward = right.cross(billboard_axis).normalize();
 
-    let transform = Mat4::from_translation(center)
-        * Mat4::from_mat3(Mat3::from_cols(right, billboard_axis, forward));
+    
 
-    transform
+    Mat4::from_translation(center)
+        * Mat4::from_mat3(Mat3::from_cols(right, billboard_axis, forward))
 }
 
 impl Node for GizmosRendererNode {
@@ -195,13 +195,13 @@ impl Node for GizmosRendererNode {
         let vertex_buffer_size = (size_of::<Vertex>() * vertices.len()) as BufferAddress;
         if self.mesh.vertex_buffer().size() >= vertex_buffer_size {
             ctx.gpu.queue.write_buffer(
-                &self.mesh.vertex_buffer(),
+                self.mesh.vertex_buffer(),
                 0,
                 bytemuck::cast_slice(&vertices),
             );
 
             ctx.gpu.queue.write_buffer(
-                &self.mesh.index_buffer(),
+                self.mesh.index_buffer(),
                 0,
                 bytemuck::cast_slice(&indices),
             );

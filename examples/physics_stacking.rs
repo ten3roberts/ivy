@@ -22,7 +22,9 @@ use ivy_game::{
 };
 use ivy_graphics::texture::TextureData;
 use ivy_input::layer::InputLayer;
-use ivy_physics::{components::collider_builder, ColliderBundle, GizmoSettings, PhysicsPlugin};
+use ivy_physics::{
+    components::collider_builder, ColliderBundle, GizmoSettings, PhysicsPlugin, RigidBodyKind,
+};
 use ivy_postprocessing::preconfigured::{
     pbr::{PbrRenderGraphConfig, SkyboxConfig},
     SurfacePbrPipelineDesc, SurfacePbrRenderer,
@@ -30,20 +32,19 @@ use ivy_postprocessing::preconfigured::{
 use ivy_scene::ray_picker::RayPickingPlugin;
 use ivy_ui::{
     layer::{UiLayer, UiUpdateLayer},
-    screens::ScreenPlugin,
     streamed::StreamedUiPlugin,
 };
 use ivy_wgpu::{
     components::*,
     driver::WinitDriver,
+    effect_desc::{PbrRenderEffect, RenderEffect},
     layer::GraphicsLayer,
     light::{LightKind, LightParams},
-    material_desc::{MaterialData, PbrMaterialData},
     mesh_desc::MeshDesc,
     primitives::{CapsulePrimitive, CubePrimitive, UvSpherePrimitive},
     renderer::{EnvironmentData, RenderObjectBundle},
 };
-use rapier3d::prelude::{ColliderBuilder, RigidBodyType, SharedShape};
+use rapier3d::prelude::{ColliderBuilder, SharedShape};
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
 use wgpu::TextureFormat;
@@ -133,15 +134,15 @@ pub fn main() -> anyhow::Result<()> {
 }
 
 fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
-    let white_material = MaterialData::PbrMaterial(
-        PbrMaterialData::new()
+    let white_material = RenderEffect::Pbr(
+        PbrRenderEffect::new()
             .with_roughness_factor(1.0)
             .with_metallic_factor(0.0)
             .with_albedo(TextureData::srgba(Srgba::new(1.0, 1.0, 1.0, 1.0))),
     );
 
-    let red_material = MaterialData::PbrMaterial(
-        PbrMaterialData::new()
+    let red_material = RenderEffect::Pbr(
+        PbrRenderEffect::new()
             .with_roughness_factor(1.0)
             .with_metallic_factor(0.0)
             .with_albedo(TextureData::srgba(Color::from_hsla(1.0, 0.7, 0.7, 1.0))),
@@ -154,7 +155,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
         let mut builder = Entity::builder();
         builder
             .mount(TransformBundle::default())
-            .mount(RigidBodyBundle::new(RigidBodyType::Dynamic))
+            .mount(RigidBodyBundle::new(RigidBodyKind::Dynamic))
             .mount(
                 ColliderBundle::new(SharedShape::cuboid(1.0, 1.0, 1.0))
                     .with_restitution(RESTITUTION)
@@ -164,7 +165,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
                 MeshDesc::Content(assets.load(&CubePrimitive)),
                 &[
                     (forward_pass(), red_material.clone()),
-                    (shadow_pass(), MaterialData::ShadowMaterial),
+                    (shadow_pass(), RenderEffect::OpaqueShadow),
                 ],
             ));
 
@@ -205,7 +206,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
     };
 
     cube(Vec3::ZERO, vec3(100.0, 1.0, 100.0))
-        .mount(RigidBodyBundle::new(RigidBodyType::Fixed))
+        .mount(RigidBodyBundle::new(RigidBodyKind::Fixed))
         .set(scale(), vec3(100.0, 1.0, 100.0))
         .set(is_static(), ())
         .set(forward_pass(), white_material)

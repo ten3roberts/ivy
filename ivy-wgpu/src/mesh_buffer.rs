@@ -81,13 +81,13 @@ impl<V: Pod> MeshBuffer<V> {
 
         let vertex_buffer = MultiBuffer::new(
             gpu,
-            format!("{}::vertex_buffer", label),
+            format!("{label}::vertex_buffer"),
             BufferUsages::VERTEX | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
             capacity,
         );
         let index_buffer = MultiBuffer::new(
             gpu,
-            format!("{}::index_buffer", label),
+            format!("{label}::index_buffer"),
             BufferUsages::INDEX | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
             capacity,
         );

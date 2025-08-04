@@ -35,9 +35,9 @@ use ivy_ui::{
 use ivy_wgpu::{
     components::{cast_shadow, forward_pass, light_kind, light_params},
     driver::WinitDriver,
+    effect_desc::{PbrRenderEffect, RenderEffect},
     layer::GraphicsLayer,
     light::{LightKind, LightParams},
-    material_desc::{MaterialData, PbrMaterialData},
     mesh_desc::MeshDesc,
     primitives::CapsulePrimitive,
     renderer::{EnvironmentData, RenderObjectBundle},
@@ -126,8 +126,8 @@ pub fn main() -> anyhow::Result<()> {
 }
 
 fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
-    let material = MaterialData::PbrMaterial(
-        PbrMaterialData::new()
+    let material = RenderEffect::Pbr(
+        PbrRenderEffect::new()
             .with_roughness_factor(0.1)
             .with_metallic_factor(0.0)
             .with_albedo(TextureData::srgba(Srgba::new(1.0, 1.0, 1.0, 1.0))),

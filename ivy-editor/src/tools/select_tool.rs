@@ -1,5 +1,3 @@
-use std::{f32::consts::PI, future::ready};
-
 use anyhow::Context;
 use flax::{
     FetchExt, Query, QueryBorrow, World, component,
@@ -31,16 +29,11 @@ component! {
     shift_input: bool,
 }
 
+#[derive(Default)]
 pub struct SelectToolBundle {}
 
 impl SelectToolBundle {
     pub fn new() -> Self {
-        Self {}
-    }
-}
-
-impl Default for SelectToolBundle {
-    fn default() -> Self {
         Self {}
     }
 }
@@ -64,7 +57,7 @@ impl Bundle for SelectToolBundle {
                  mut camera: QueryBorrow<CameraQuery, _>,
                  world: &World,
                  pressed: bool| {
-                    let (tool, &cursor_pos, &shift_input, (selection, edit_commands)): (
+                    let (_tool, &cursor_pos, &shift_input, (selection, edit_commands)): (
                         &mut SelectTool,
                         &Vec2,
                         &bool,

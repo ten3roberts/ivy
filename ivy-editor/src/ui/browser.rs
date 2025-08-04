@@ -3,43 +3,68 @@ use std::{
     time::Duration,
 };
 
-use async_std::stream::StreamExt;
+use anyhow::Context;
+use flax::{EntityRef, Query};
+use futures::StreamExt;
 use glam::{BVec2, Vec2};
 use itertools::Itertools;
-use ivy_assets::{AssetCache, AssetPath, meta::AssetPayloadUntyped};
-use ivy_core::palette::Srgba;
-use ivy_ui::violet::{
-    core::{
-        Edges, Scope, ScopeRef, Widget,
-        components::LayoutAlignment,
-        layout::Align,
-        state::StateStream,
-        stored::WeakHandle,
-        style::{SizeExt, StyleExt, base_colors::*, default_corner_radius, surface_danger},
-        text::{FontFamily, Wrap},
-        time::sleep,
-        to_owned,
-        unit::Unit,
-        widget::{
-            Button, ButtonStyle, Collapsible, Image, IterWidgetCollection, LoadingSpinner,
-            ScrollArea, Selectable, SignalWidget, StreamWidget, SuspenseWidget, TextInput,
-            TextInputStyle, Throbber, WidgetExt, card, col, interactive::base::InteractiveWidget,
-            label, pill, row,
+use ivy_assets::{
+    AssetCache, AssetPath, Resource,
+    loadable::Loadable,
+    meta::{AssetMeta, AssetPayload, AssetPayloadUntyped},
+};
+use ivy_core::{
+    AsyncCommandBuffer, EntityBuilderExt,
+    components::{TransformBundle, async_commandbuffer, engine, main_camera},
+    palette::Srgba,
+    template::Template,
+};
+use ivy_input::types::MouseButton;
+use ivy_physics::{components::physics_state, rapier3d::prelude::QueryFilter};
+use ivy_scene::camera::{CameraQuery, screen_to_world_ray};
+use ivy_ui::{
+    streamed::StreamedUiExt,
+    violet::{
+        core::{
+            Edges, Scope, ScopeRef, Widget,
+            components::{LayoutAlignment, rect},
+            layout::Align,
+            state::StateStream,
+            stored::WeakHandle,
+            style::{SizeExt, StyleExt, base_colors::*, default_corner_radius, surface_danger},
+            text::{FontFamily, Wrap},
+            time::sleep,
+            to_owned,
+            unit::Unit,
+            widget::{
+                Button, ButtonStyle, Collapsible, Draggable, FutureWidget, Image,
+                IterWidgetCollection, LoadingSpinner, ScrollArea, Selectable, SignalWidget,
+                StreamWidget, SuspenseWidget, Text, TextInput, TextInputStyle, Throbber, WidgetExt,
+                card, col,
+                interactive::{base::InteractiveWidget, overlay::overlay_state},
+                label, pill, row,
+            },
+        },
+        futures_signals::signal::Mutable,
+        lucide::icons::{
+            LUCIDE_BOX, LUCIDE_BOXES, LUCIDE_CLOUD_SUN, LUCIDE_DROPLET, LUCIDE_FILE_ARCHIVE,
+            LUCIDE_FILE_BOX, LUCIDE_FILE_CODE, LUCIDE_FILE_IMAGE, LUCIDE_FILE_JSON,
+            LUCIDE_FILE_QUESTION, LUCIDE_FILE_TEXT, LUCIDE_FILE_WARNING, LUCIDE_FOLDER,
+            LUCIDE_FOLDER_OPEN, LUCIDE_PACKAGE, LUCIDE_TRASH_2,
         },
     },
-    futures_signals::signal::Mutable,
-    lucide::icons::{
-        LUCIDE_BOX, LUCIDE_BOXES, LUCIDE_CLOUD_SUN, LUCIDE_ECLIPSE, LUCIDE_FILE_ARCHIVE,
-        LUCIDE_FILE_BOX, LUCIDE_FILE_CODE, LUCIDE_FILE_IMAGE, LUCIDE_FILE_JSON,
-        LUCIDE_FILE_QUESTION, LUCIDE_FILE_TEXT, LUCIDE_FILE_WARNING, LUCIDE_FOLDER,
-        LUCIDE_FOLDER_OPEN, LUCIDE_PACKAGE,
-    },
+};
+use ivy_wgpu::material::{Material, MaterialDesc};
+use notify::Watcher;
+
+use crate::ui::{
+    asset_inspector::AssetInspector,
+    context_menu::{ContextMenu, ContextMenuItem, ContextMenuPanel},
+    drop::world_drop_area,
 };
 
-use crate::ui::asset_inspector::AssetInspector;
-
 pub const BROWSER_PANEL_HEIGHT: f32 = 300.0;
-pub const INSPECTOR_PANEL_HEIGHT: f32 = 500.0;
+pub const INSPECTOR_PANEL_MAX_HEIGHT: f32 = 800.0;
 pub const INSPECTOR_PANEL_WIDTH: f32 = 600.0;
 
 pub struct DirectoryTree {
@@ -116,50 +141,227 @@ pub struct DirectoryListing {
 
 impl Widget for DirectoryListing {
     fn mount(self, scope: &mut Scope<'_>) {
-        let items = std::fs::read_dir(&self.path)
-            .unwrap()
-            .filter_map(Result::ok)
-            .map(|entry| {
-                let entry_path = entry.path();
-                let entry_name = entry_path.file_name().unwrap();
-                let is_dir = entry_path.is_dir();
+        let path = self.path.clone();
+        let read_dir = move || {
+            let items = std::fs::read_dir(&path)
+                .unwrap()
+                .filter_map(Result::ok)
+                .map(|entry| {
+                    let entry_path = entry.path();
+                    let entry_name = entry_path.file_name().unwrap();
+                    let is_dir = entry_path.is_dir();
 
-                Item {
-                    is_dir,
-                    name: entry_name.to_string_lossy().to_string(),
-                    path: entry_path,
-                    selected: self.selected_file,
-                    selected_dir: self.selected_dir,
-                    assets: self.assets.clone(),
-                }
-            })
-            .sorted_by_key(|item| (!item.is_dir, item.name.clone()));
+                    FileItem {
+                        is_dir,
+                        name: entry_name.to_string_lossy().to_string(),
+                        path: entry_path,
+                        selected: self.selected_file,
+                        selected_dir: self.selected_dir,
+                        assets: self.assets.clone(),
+                    }
+                })
+                .sorted_by_key(|item| (!item.is_dir, item.name.clone()));
 
-        let lines = items.chunks(8);
-        let cols = lines
-            .into_iter()
-            .map(|line| row(IterWidgetCollection::new(line)));
+            let lines = items.chunks(8);
+            lines
+                .into_iter()
+                .map(|line| row(line.collect_vec()))
+                .collect_vec()
+        };
 
-        col((
-            Breadcrumbs {
-                path: &self.path,
-                selection: self.selected_dir,
-            },
-            ScrollArea::vertical(col(IterWidgetCollection::new(cols))),
-        ))
-        .with_stretch(true)
+        let path = self.path.clone();
+        let open_context_menu = {
+            move |scope: &ScopeRef, pos| {
+                open_context_menu(scope, pos, populate_menu(path.clone(), self.selected_file))
+            }
+        };
+
+        let refresh_state = Mutable::new(());
+
+        if let Err(err) = watch_directory(scope, &self.path, refresh_state.clone()) {
+            tracing::error!("Failed to watch directory {}: {}", self.path.display(), err);
+        }
+
+        InteractiveWidget::new(
+            col((
+                Breadcrumbs {
+                    path: &self.path,
+                    selection: self.selected_dir,
+                },
+                ScrollArea::vertical(StreamWidget::new(
+                    refresh_state.stream().map(move |()| col(read_dir())),
+                )),
+            ))
+            .with_stretch(true),
+        )
+        .on_mouse_input(move |scope, input| {
+            if input.state.is_pressed() && input.button == MouseButton::Right {
+                let pos = input.cursor.absolute_pos;
+                open_context_menu(scope, pos);
+                return None;
+            }
+
+            Some(input)
+        })
         .mount(scope)
     }
 }
 
-pub const ITEM_SIZE: Unit<Vec2> = Unit::px2(120.0, 100.0);
-
-pub struct FileIcon<'a> {
-    path: &'a Path,
-    assets: &'a AssetCache,
+fn open_context_menu(scope: &ScopeRef, position: Vec2, menu: ContextMenu) {
+    scope
+        .get_context(overlay_state())
+        .open(ContextMenuPanel::new(position, menu));
 }
 
-impl Widget for FileIcon<'_> {
+fn watch_directory(
+    scope: &mut Scope<'_>,
+    path: &Path,
+    refresh_state: Mutable<()>,
+) -> anyhow::Result<()> {
+    let mut watcher = notify::recommended_watcher({
+        to_owned!(refresh_state);
+        move |event: notify::Result<notify::Event>| {
+            let Ok(event) = event else {
+                tracing::error!("Failed to receive file system event");
+                return;
+            };
+
+            match event.kind {
+                notify::EventKind::Create(_) | notify::EventKind::Remove(_) => {
+                    refresh_state.set(())
+                }
+                _ => {}
+            }
+        }
+    })?;
+
+    watcher.watch(path, notify::RecursiveMode::NonRecursive)?;
+    scope.store(watcher); // drop on detach
+    Ok(())
+}
+
+pub fn find_next_filename(name: impl AsRef<Path>, dir: &Path) -> PathBuf {
+    let name = name.as_ref();
+    let base_name = name.file_stem().unwrap_or_default().to_string_lossy();
+    let extension = name.extension().unwrap_or_default();
+    tracing::info!(
+        "Finding next filename for {} {:?} in {}",
+        base_name,
+        extension,
+        dir.display()
+    );
+    let mut counter = 1;
+    let mut new_name = base_name.to_string();
+    let mut path = dir.join(&new_name).with_extension(extension);
+
+    while path.exists() {
+        new_name = format!("{} ({})", base_name, counter);
+        path = dir.join(&new_name).with_extension(extension);
+        counter += 1;
+    }
+
+    path
+}
+
+pub fn populate_item_menu(
+    selected_item: WeakHandle<Mutable<Option<PathBuf>>>,
+    path: PathBuf,
+) -> ContextMenu {
+    ContextMenu::new(vec![ContextMenuItem::new(
+        label(LUCIDE_TRASH_2),
+        "Delete File",
+        move |scope| {
+            if let Err(err) = std::fs::remove_file(&path) {
+                tracing::error!("Failed to delete file: {}", err);
+            } else {
+                scope.read(selected_item).set(None);
+            }
+            Ok(())
+        },
+    )])
+}
+
+pub fn create_asset<T>(
+    dir: &Path,
+    new_name: impl AsRef<Path>,
+    content: T::Desc,
+) -> anyhow::Result<PathBuf>
+where
+    T: Resource,
+    T::Desc: serde::Serialize,
+{
+    let new_name = new_name.as_ref();
+    let new_path = find_next_filename(new_name, &dir);
+    let content =
+        AssetPayload::new(AssetMeta::new(T::tag_name().into()), content).serialize_json()?;
+
+    std::fs::write(&new_path, content).context(format!(
+        "Failed to create asset file at {}",
+        new_path.display()
+    ))?;
+    Ok(new_path)
+}
+
+pub fn populate_menu(
+    dir: PathBuf,
+    selected_item: WeakHandle<Mutable<Option<PathBuf>>>,
+) -> ContextMenu {
+    ContextMenu::new(vec![
+        ContextMenuItem::new(label(LUCIDE_FILE_TEXT), "New File", {
+            to_owned!(dir);
+            move |scope| {
+                tracing::info!("Creating new file");
+                let new_path = find_next_filename("New File", &dir);
+                std::fs::write(&new_path, "")?;
+                tracing::info!("File created: {}", new_path.display());
+
+                scope.read(selected_item).set(Some(new_path));
+                // Implement file creation logic here
+                Ok(())
+            }
+        }),
+        ContextMenuItem::new(
+            FileType::Asset(AssetType::Template).label(),
+            "New Template",
+            |_| Ok(()),
+        ),
+        ContextMenuItem::new(
+            FileType::Asset(AssetType::Material).label(),
+            "New Material",
+            {
+                to_owned!(dir);
+                move |scope| {
+                    let new_path =
+                        create_asset::<Material>(&dir, "Material.asset", MaterialDesc::default())?;
+                    scope.read(selected_item).set(Some(new_path));
+                    Ok(())
+                }
+            },
+        ),
+        ContextMenuItem::new(FileType::Directory.label(), "New Asset Folder", {
+            to_owned!(dir);
+            move |scope| {
+                tracing::info!("Creating new asset folder");
+                let new_path = find_next_filename("Assets", &dir);
+                std::fs::create_dir(&new_path).context(format!(
+                    "Failed to create directory at {}",
+                    new_path.display()
+                ))?;
+                scope.read(selected_item).set(Some(new_path));
+                Ok(())
+            }
+        }),
+    ])
+}
+
+pub const ITEM_SIZE: Unit<Vec2> = Unit::px2(120.0, 100.0);
+
+pub struct FileIcon {
+    path: PathBuf,
+    assets: AssetCache,
+}
+
+impl Widget for FileIcon {
     fn mount(self, scope: &mut Scope<'_>) {
         to_owned!(path = self.path, assets = self.assets);
         SuspenseWidget::new(Throbber::new(48.0), async move {
@@ -188,7 +390,7 @@ impl Widget for FileIcon<'_> {
     }
 }
 
-pub struct Item {
+pub struct FileItem {
     name: String,
     path: PathBuf,
     assets: AssetCache,
@@ -197,34 +399,142 @@ pub struct Item {
     is_dir: bool,
 }
 
-impl Widget for Item {
+impl Widget for FileItem {
     fn mount(self, scope: &mut Scope<'_>) {
-        let path = self.path.clone();
-        Selectable::new_value(
-            col((
-                FileIcon {
-                    path: &self.path,
-                    assets: &self.assets,
-                },
-                RenamableItem {
-                    path: self.path.clone(),
-                    selected: self.selected,
-                    selected_dir: self.selected_dir,
-                },
-            ))
-            .with_cross_align(Align::Center)
-            .with_exact_size(ITEM_SIZE),
-            scope.read(&self.selected).clone(),
-            Some(self.path.clone()),
-        )
-        .on_double_click(move |scope: &ScopeRef| {
-            if self.is_dir {
-                scope.read(self.selected_dir).set(Some(path.clone()));
-            }
-        })
-        .with_style(ButtonStyle::hidden())
-        .mount(scope);
+        let is_selected = scope.read(&self.selected).clone();
+        let widget = async move {
+            let path = self.path.clone();
+            let assets = self.assets.clone();
+            let filetype = FileType::from_path(&path, &assets).await;
+            let preview = {
+                to_owned!(path);
+                move || label(path.file_name().unwrap_or_default().to_string_lossy())
+            };
+
+            let on_drop = {
+                to_owned!(path);
+                move |_scope: &ScopeRef, target: Option<(EntityRef, Vec2)>| {
+                    tracing::info!(?path, "Dropping file to {:?}", target);
+
+                    if let Some((widget, pos)) = target {
+                        if widget.has(world_drop_area()) {
+                            let screen_pos = pos / widget.get(rect()).unwrap().size();
+                            to_owned!(path, assets, filetype);
+                            _scope.apply(move |world| {
+                                let mut main_camera =
+                                    Query::new(CameraQuery::new()).with(main_camera());
+
+                                let mut main_camera = main_camera.borrow(world);
+
+                                let main_camera = main_camera.first().context("No main camera")?;
+
+                                let physics = world.get(engine(), physics_state()).unwrap();
+
+                                let ray = screen_to_world_ray(screen_pos, main_camera);
+                                let hit =
+                                    physics.cast_ray(ray, 1000.0, false, QueryFilter::default());
+
+                                match filetype {
+                                    FileType::Asset(AssetType::Template) => {
+                                        if let Some(hit) = hit {
+                                            tracing::info!("Dropping template at {:?}", hit);
+                                            let asset_path =
+                                                AssetPath::<Template>::new(path.canonicalize()?);
+
+                                            let async_cmd = world
+                                                .get_clone(engine(), async_commandbuffer())
+                                                .unwrap();
+
+                                            async_std::task::spawn(async move {
+                                                let fut = spawn_template(
+                                                    assets, ray, asset_path, hit, async_cmd,
+                                                )
+                                                .await;
+
+                                                if let Err(err) = fut {
+                                                    tracing::error!("{err:?}");
+                                                }
+                                            });
+                                        } else {
+                                            tracing::warn!("No hit detected for template drop");
+                                        }
+                                    }
+                                    _ => {
+                                        tracing::info!("Dropping file at {:?}", pos);
+                                    }
+                                }
+
+                                Ok(())
+                            });
+                        }
+                    }
+                }
+            };
+            Selectable::new_value(
+                Draggable::new(
+                    col((
+                        FileIcon {
+                            path: path.clone(),
+                            assets: self.assets,
+                        },
+                        RenamableItem {
+                            path: self.path.clone(),
+                            selected: self.selected,
+                            selected_dir: self.selected_dir,
+                        },
+                    ))
+                    .with_cross_align(Align::Center)
+                    .with_exact_size(ITEM_SIZE),
+                    preview,
+                    on_drop,
+                ),
+                is_selected,
+                Some(self.path.clone()),
+            )
+            .on_double_click({
+                move |scope: &ScopeRef| {
+                    if self.is_dir {
+                        scope.read(self.selected_dir).set(Some(path.clone()));
+                    }
+                }
+            })
+            .on_mouse_input({
+                to_owned!(path = self.path);
+                move |scope, input| {
+                    if input.state.is_pressed() && input.button == MouseButton::Right {
+                        open_context_menu(
+                            scope,
+                            input.cursor.absolute_pos,
+                            populate_item_menu(self.selected.clone(), path.clone()),
+                        );
+                    }
+
+                    Some(input)
+                }
+            })
+            .with_style(ButtonStyle::hidden())
+        };
+
+        FutureWidget::new(widget).mount(scope);
     }
+}
+
+async fn spawn_template(
+    assets: AssetCache,
+    ray: ivy_physics::shapes::Ray,
+    asset_path: AssetPath<Template>,
+    hit: ivy_physics::state::RaycastHit,
+    cmd: AsyncCommandBuffer,
+) -> anyhow::Result<()> {
+    let template = asset_path.load(&assets).await?;
+
+    tracing::info!("Loded template: {:?}", asset_path);
+    template
+        .build()
+        .mount(TransformBundle::default().with_position(ray.at(hit.intersection.time_of_impact)))
+        .spawn_into(&mut *cmd.lock());
+
+    Ok(())
 }
 
 struct RenamableItem {
@@ -393,7 +703,7 @@ pub struct FileDetailsPanel {
 
 fn bytes_to_human_readable(size: u64) -> String {
     if size < 1024 {
-        format!("{} bytes", size)
+        format!("{size} bytes")
     } else if size < 1024 * 1024 {
         format!("{:.2} KB", size as f64 / 1024.0)
     } else if size < 1024 * 1024 * 1024 {
@@ -403,6 +713,7 @@ fn bytes_to_human_readable(size: u64) -> String {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Code {
     Json,
     Rust,
@@ -414,12 +725,14 @@ enum Code {
     Wasm,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum AssetType {
     Asset,
     Template,
     Material,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum FileType {
     Directory,
     Code(Code),
@@ -475,7 +788,7 @@ impl FileType {
 
         match meta.type_name.as_str() {
             "Template" => Ok(AssetType::Template),
-            "MaterialData" => Ok(AssetType::Material),
+            "Material" => Ok(AssetType::Material),
             _ => Ok(AssetType::Asset),
         }
     }
@@ -505,7 +818,7 @@ impl FileType {
             FileType::Hdri => LUCIDE_CLOUD_SUN,
             FileType::Asset(AssetType::Asset) => LUCIDE_PACKAGE,
             FileType::Asset(AssetType::Template) => LUCIDE_BOXES,
-            FileType::Asset(AssetType::Material) => LUCIDE_ECLIPSE,
+            FileType::Asset(AssetType::Material) => LUCIDE_DROPLET,
         }
     }
 
@@ -532,6 +845,10 @@ impl FileType {
             FileType::Asset(AssetType::Template) => OCEAN_400,
             FileType::Asset(AssetType::Material) => RUBY_400,
         }
+    }
+
+    fn label(&self) -> Text {
+        label(self.icon()).with_color(self.color())
     }
 
     /// Returns `true` if the file type is [`Image`].
@@ -570,12 +887,12 @@ impl Widget for FileDetailsPanel {
             label("File Details")
                 .with_font_size(16.0)
                 .with_color(OCEAN_200),
-            label(format!("Name: {}", file_name)),
-            label(format!("Size: {}", file_size_str)),
+            label(format!("Name: {file_name}")),
+            label(format!("Size: {file_size_str}")),
             // label(format!("Path: {}", path.display())),
         )))
         .with_min_size(Unit::px2(INSPECTOR_PANEL_WIDTH, 200.0))
-        .with_max_size(Unit::px2(INSPECTOR_PANEL_WIDTH, INSPECTOR_PANEL_HEIGHT))
+        .with_max_size(Unit::px2(INSPECTOR_PANEL_WIDTH, INSPECTOR_PANEL_MAX_HEIGHT))
         .mount(scope);
     }
 }

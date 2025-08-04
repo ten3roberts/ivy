@@ -1,13 +1,7 @@
-use std::sync::Arc;
-
-use ivy_assets::{loadable::Loadable, AssetCache, Resource};
-use ivy_core::{palette::Srgb, template::BundleDesc, Bundle};
+use ivy_assets::Resource;
+use ivy_core::{palette::Srgb, Bundle};
 use ivy_editable::Editable;
-use violet::core::{
-    state::{StateDuplex, StateExt, StateStreamRef, StateWrite},
-    widget::{label, row, Selectable},
-    Widget,
-};
+use violet::core::{state::StateExt, Widget};
 
 use crate::components::{cast_shadow, light_kind, light_params};
 
@@ -15,8 +9,11 @@ use crate::components::{cast_shadow, light_kind, light_params};
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct LightParams {
     pub color: Srgb,
+    #[editable(range(0.0, 100.0))]
     pub intensity: f32,
+    #[editable(range(0.0, 1.5708))]
     pub inner_theta: f32,
+    #[editable(range(0.0, 1.5708))]
     pub outer_theta: f32,
 }
 
@@ -49,43 +46,13 @@ impl LightParams {
 }
 
 #[repr(u32)]
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Editable)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum LightKind {
     #[default]
     Point,
     Directional,
     Spotlight,
-}
-
-impl Editable for LightKind {
-    const INLINE: bool = true;
-
-    fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
-        state: S,
-    ) -> Box<dyn Send + Widget>
-    where
-        Self: Sized,
-    {
-        let state = Arc::new(state.memo(Default::default()));
-        state.sync_initial();
-        Box::new(row((
-            Selectable::new_value(label("Point"), state.clone(), LightKind::Point),
-            Selectable::new_value(label("Directional"), state.clone(), LightKind::Directional),
-            Selectable::new_value(label("Spotlight"), state, LightKind::Spotlight),
-        )))
-    }
-
-    fn create_editor_project<
-        S: 'static + Send + Sync + Clone + StateStreamRef<Item = Self> + StateWrite,
-    >(
-        state: S,
-    ) -> Box<dyn Send + Widget>
-    where
-        Self: Sized,
-    {
-        Self::create_editor(state.project_ref(|v| v, |v| v))
-    }
 }
 
 impl LightKind {

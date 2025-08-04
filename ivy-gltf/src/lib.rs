@@ -11,10 +11,12 @@ use gltf::{buffer, Gltf};
 use image::{DynamicImage, ImageFormat};
 use itertools::Itertools;
 use ivy_assets::{
-    loadable::{LoadFromPath, Resource},
-    Asset, AssetCache, AssetDesc, AssetPath,
+    declare_resource,
+    loadable::{LoadFromPath, Loadable},
+    Asset, AssetCache, AssetDesc, AssetPath, AsyncAssetKey,
 };
 use ivy_core::components::TransformBundle;
+use ivy_editable::Editable;
 use ivy_graphics::mesh::{MeshData, TANGENT_ATTRIBUTE};
 use ivy_profiling::{profile_function, profile_scope};
 
@@ -83,6 +85,32 @@ impl DocumentData {
         &self.gltf
     }
 }
+
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize, Editable,
+)]
+pub struct GltfNodeDesc {
+    document: AssetPath<Document>,
+    node: String,
+}
+
+impl Loadable for GltfNodeDesc {
+    type Output = GltfNode;
+
+    async fn load(&self, assets: &AssetCache) -> anyhow::Result<Self::Output> {
+        let document = self.document.load(assets).await?;
+        let node = document.find_node(&self.node).with_context(|| {
+            format!(
+                "Node {:?} not found in document {:?}",
+                self.node, self.document
+            )
+        })?;
+
+        Ok(node)
+    }
+}
+
+declare_resource!(GltfNode, GltfNodeDesc);
 
 pub struct Document {
     data: Asset<DocumentData>,

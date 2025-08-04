@@ -1,5 +1,6 @@
 use async_std::stream::StreamExt;
 use flax::World;
+use glam::Quat;
 use ivy_assets::{stored::DynamicStore, AssetCache, AssetPath};
 use ivy_core::{
     palette::Srgb,
@@ -8,11 +9,12 @@ use ivy_core::{
     App, EngineLayer,
 };
 use ivy_editable::Editable;
-use ivy_engine::{engine, TransformBundleDesc};
+use ivy_engine::engine;
 use ivy_game::{
     orbit_camera::OrbitCameraPlugin,
     viewport_camera::{CameraSettings, ViewportCameraLayer},
 };
+// use ivy_graphics::texture::TextureDesc;
 use ivy_input::layer::InputLayer;
 use ivy_postprocessing::preconfigured::{
     pbr::{PbrRenderGraphConfig, SkyboxConfig},
@@ -22,16 +24,22 @@ use ivy_ui::{
     layer::{UiLayer, UiUpdateLayer},
     screens::{screen_state, Screen},
 };
-use ivy_wgpu::{driver::WinitDriver, layer::GraphicsLayer, renderer::EnvironmentData};
+use ivy_wgpu::{
+    driver::WinitDriver, effect_desc::RenderEffectDesc, layer::GraphicsLayer,
+    renderer::EnvironmentData,
+};
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
 use violet::{
     core::{
         state::{StateExt, StateStream},
+        style::{base_colors::EMERALD_400, SizeExt},
+        unit::Unit,
         widget::{bold, card, col, label, maximized, StreamWidget},
         Widget,
     },
     futures_signals::signal::Mutable,
+    palette::WithAlpha,
 };
 use wgpu::TextureFormat;
 use winit::{dpi::LogicalSize, window::WindowAttributes};
@@ -127,27 +135,46 @@ impl Plugin for GameUiPlugin {
 struct MainUI {}
 
 #[derive(Clone, Debug, Editable)]
-struct ExampleStruct {
-    a: i32,
+enum MyEnum {
+    Variant1 {
+        name: String,
+        #[editable(default = 5)]
+        value: i32,
+    },
+    Variant2 {
+        #[editable(default = 6.4)]
+        #[editable(range(0.0, 10.0))]
+        value: f32,
+        #[editable(default = EMERALD_400.without_alpha())]
+        favorite_color: Srgb,
+    },
+    Variant3(#[editable(default = "Hello".into())] String),
+    Variant4,
+}
+
+#[derive(Clone, Debug, Editable)]
+struct MyStruct {
+    rotation: Quat,
+    #[editable(default = "Hello".into())]
     name: String,
-    transform: TransformBundleDesc,
+    kind: Option<MyEnum>,
+    material: Option<RenderEffectDesc>,
 }
 
 impl Screen for MainUI {
     fn create(self, scope: &mut violet::core::Scope<'_>, _: ivy_ui::screens::ScreenLifetimeToken) {
-        let value = Mutable::new(Some(ExampleStruct {
-            a: 42,
-            name: "Example".to_string(),
-            transform: Default::default(),
-        }));
+        let value = Mutable::new(None);
 
-        maximized(col((
-            card(ExampleStruct::create_editor(value.clone().lower_option())),
-            card(StreamWidget::new(value.stream().map(|v| {
-                v.map(|v| label(format!("{v:#?}")))
-                    .unwrap_or(bold("No Value"))
-            }))),
-        )))
+        maximized(
+            col((
+                card(MyStruct::create_editor(value.clone().lower_option())),
+                card(StreamWidget::new(value.stream().map(|v| {
+                    v.map(|v| label(format!("{v:#?}")))
+                        .unwrap_or(bold("No Value"))
+                }))),
+            ))
+            .with_max_size(Unit::px2(600.0, 600.0)),
+        )
         .mount(scope);
     }
 }

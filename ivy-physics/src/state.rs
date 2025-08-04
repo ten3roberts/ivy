@@ -374,6 +374,12 @@ pub struct RigidBodyFlags {
     pub enabled: bool,
 }
 
+impl Default for RigidBodyFlags {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RigidBodyFlags {
     pub fn new() -> Self {
         Self { enabled: true }

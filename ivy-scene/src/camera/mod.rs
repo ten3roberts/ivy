@@ -17,7 +17,7 @@ pub fn screen_to_world_ray(cursor_pos: Vec2, camera: CameraQueryItem) -> Ray {
 
     let origin = camera.transform.transform_point3(Vec3::ZERO);
 
-    Ray::new(origin.into(), world_ray.into())
+    Ray::new(origin, world_ray)
 }
 
 #[derive(Fetch)]

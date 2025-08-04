@@ -1,24 +1,26 @@
 use std::{any::Any, sync::Arc};
 
 use downcast_rs::{impl_downcast, DowncastSync};
-use flax::{Entity, EntityBuilder};
-use futures::{future::BoxFuture, FutureExt, StreamExt};
+use flax::{component, Entity, EntityBuilder};
+use futures::{
+    future::{ready, BoxFuture},
+    FutureExt, StreamExt,
+};
 use glam::Vec2;
 use itertools::Itertools;
 use ivy_assets::{
     declare_resource,
     loadable::{Loadable, LoadableDyn},
-    AssetCache, Resource,
+    AssetCache, AssetPath, Resource,
 };
 use ivy_editable::{register_editable, registry::EDITABLE_REGISTRY, Editable};
 use palette::Srgba;
 use violet::{
     core::{
         layout::Align,
-        state::{StateExt, StateStream, StateStreamRef, StateWrite},
+        state::{StateExt, StateSink, StateStream, StateStreamRef, StateWrite},
         style::{element_warning, surface_tertiary, SizeExt, StyleExt},
         to_owned,
-        unit::Unit,
         widget::{
             bold, card, col, interactive::select_list::SelectList, label, raised_card, row, Button,
             ButtonStyle, Collapsible, Rectangle, ScrollArea, StreamWidget,
@@ -34,9 +36,19 @@ use crate::{
     bundle_registry::{BundleRegistration, BUNDLE_REGISTRY},
 };
 
+component! {
+    pub template_key: AssetPath<Template>,
+}
+
 /// Defines an entity template to construct an entity using [[Bundle]]s
 pub struct Template {
     bundles: Vec<Box<dyn Bundle>>,
+}
+
+impl Default for Template {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Template {
@@ -165,6 +177,12 @@ pub struct TemplateDesc {
     bundles: Vec<ErasedBundleDesc>,
 }
 
+impl Default for TemplateDesc {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TemplateDesc {
     pub fn new() -> Self {
         Self {
@@ -204,30 +222,35 @@ impl Editable for TemplateDesc {
             .project_ref(|v| &v.bundles, |v| &mut v.bundles);
 
         let editors = move |scope: &mut Scope| {
-            let deduped = bundles
-                .stream()
-                .scan(None as Option<Vec<_>>, |state, item| {
-                    let emit = match state {
-                        Some(prev) if prev.len() == item.len() => None,
-                        _ => {
-                            *state = Some(item.clone());
-                            Some(item)
-                        }
-                    };
-                    futures::future::ready(emit)
-                });
+            let mut prev_len = usize::MAX;
+            let deduped = bundles.stream().filter(move |item| {
+                let len = item.len();
+                let result = if len == prev_len {
+                    false
+                } else {
+                    prev_len = len;
+                    true
+                };
+
+                ready(result)
+            });
 
             // Create initial editors
             scope.spawn_stream(deduped, {
                 move |scope, values| {
-                    tracing::info!("Creating editors");
-
                     scope.detach_all();
 
                     values.iter().enumerate().for_each(|(i, bundle)| {
                         let item_state = bundles
                             .clone()
                             .project_ref(move |v| &v[i], move |v| &mut v[i]);
+
+                        let state = Mutable::new(bundle.clone());
+
+                        scope.spawn(state.signal_cloned().for_each(move |new_value| {
+                            item_state.send(new_value);
+                            async {}
+                        }));
 
                         let text = bundle.bundle.tag_name();
                         to_owned!(bundles);
@@ -247,7 +270,7 @@ impl Editable for TemplateDesc {
                                     discard,
                                 ))
                                 .with_cross_align(Align::Center),
-                                bundle.editor(item_state),
+                                bundle.editor(state),
                             ))
                             .with_background(surface_tertiary()),
                         );
@@ -274,8 +297,8 @@ impl Editable for TemplateDesc {
                             to_owned!(add_tx, state);
                             move |new_bundle| {
                                 add_tx.send(None).ok();
-                                tracing::info!("Writing to bundle");
                                 if let Some(new_bundle) = new_bundle {
+                                    tracing::info!("Add bundle");
                                     state.write_mut(|v| v.bundles.push(new_bundle));
                                 }
                             }
@@ -288,7 +311,7 @@ impl Editable for TemplateDesc {
 
         Box::new(
             col((
-                editors,
+                ScrollArea::vertical(editors),
                 StreamWidget::new(
                     add_rx
                         .into_stream()

@@ -1,0 +1,57 @@
+{
+  "meta": {
+    "type_name": "Material"
+  },
+  "desc": {
+    "effects": {
+      "Forward": {
+        "Pbr": {
+          "label": "unknown_material",
+          "albedo": {
+            "Color": [
+              255,
+              255,
+              255,
+              255
+            ]
+          },
+          "normal": {
+            "Color": [
+              127,
+              127,
+              255,
+              255
+            ]
+          },
+          "metallic_roughness": {
+            "Color": [
+              255,
+              255,
+              255,
+              255
+            ]
+          },
+          "ambient_occlusion": {
+            "Color": [
+              255,
+              255,
+              255,
+              255
+            ]
+          },
+          "displacement": {
+            "Color": [
+              255,
+              255,
+              255,
+              255
+            ]
+          },
+          "roughness_factor": 0.15683603,
+          "metallic_factor": 1.0
+        }
+      },
+      "Shadow": "OpaqueShadow"
+    }
+  }
+}

@@ -1,4 +1,4 @@
-use std::{any::Any, collections::BTreeMap, sync::LazyLock};
+use std::{collections::BTreeMap, sync::LazyLock};
 
 pub(crate) type DeserializeFn =
     fn(&mut dyn erased_serde::Deserializer) -> erased_serde::Result<Box<dyn LoadableDyn>>;
@@ -7,6 +7,12 @@ type SerializeFn = fn(&dyn LoadableDyn) -> &dyn erased_serde::Serialize;
 /// Global registry of all implementors of [`Resource`].
 pub struct ResourceRegistry {
     resources: BTreeMap<&'static str, ResourceRegistration>,
+}
+
+impl Default for ResourceRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ResourceRegistry {
@@ -74,7 +80,7 @@ macro_rules! declare_resource {
             $crate::registry::ResourceRegistration::new::<$name>(stringify!($name))
         }
 
-        impl Resource for $name {
+        impl $crate::Resource for $name {
             type Desc = $desc;
 
             fn tag_name() -> &'static str {

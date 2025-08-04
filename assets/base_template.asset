@@ -5,6 +5,23 @@
   "desc": {
     "bundles": [
       {
+        "NameBundle": {
+          "name": "This is a name"
+        }
+      },
+      {
+        "GltfColliderBundle": {
+          "shape": {
+            "Sphere": {
+              "radius": 1.0
+            }
+          },
+          "restitution": 0.5311432,
+          "friction": 0.576828,
+          "density": 0.0
+        }
+      },
+      {
         "TransformBundle": {
           "position": [
             0.0,
@@ -25,33 +42,45 @@
         }
       },
       {
-        "LightBundle": {
-          "params": {
-            "color": {
-              "red": 1.0,
-              "green": 0.39,
-              "blue": 0.399
-            },
-            "intensity": 0.0,
-            "inner_theta": 0.0,
-            "outer_theta": 0.0
+        "PrimitiveBundle": {
+          "kind": "Cube"
+        }
+      },
+      {
+        "MaterialBundle": {
+          "material": "./Material.asset"
+        }
+      },
+      {
+        "RigidBodyBundle": {
+          "body_type": "Dynamic",
+          "can_sleep": true,
+          "mass": 0.0,
+          "angular_mass": 0.0,
+          "constraints": {
+            "lock_translation": [
+              false,
+              false,
+              false
+            ],
+            "lock_rotation": [
+              false,
+              false,
+              false
+            ]
           },
-          "kind": "Spotlight",
-          "cast_shadow": true
-        }
-      },
-      {
-        "TransformToolBundle": {
-          "settings": {
-            "space": "Global",
-            "snap_mode": "None",
-            "angle_snap": 0.0
-          }
-        }
-      },
-      {
-        "NameBundle": {
-          "name": "This is a name"
+          "velocity": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "angular_velocity": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "linear_damping": 0.0,
+          "angular_damping": 0.0
         }
       }
     ]

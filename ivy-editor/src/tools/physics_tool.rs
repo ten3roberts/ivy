@@ -55,7 +55,7 @@ impl PhysicsTool {
                     .get_clone(name())
                     .ok()
                     .unwrap_or_else(|| "Unnamed".to_string()),
-                velocity: velocity,
+                velocity,
                 angular_velocity,
                 mass,
             });

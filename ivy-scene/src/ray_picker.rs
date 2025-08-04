@@ -17,11 +17,11 @@ use ivy_physics::{
     components::{impulse_joint, physics_state},
     rapier3d::{
         math::Isometry,
-        prelude::{FixedJointBuilder, QueryFilter, RigidBodyType},
+        prelude::{FixedJointBuilder, QueryFilter},
     },
     shapes::Ray,
     state::PhysicsState,
-    RigidBodyBundle,
+    RigidBodyBundle, RigidBodyKind,
 };
 
 use crate::camera::{screen_to_world_ray, CameraQuery, CameraQueryItem};
@@ -60,7 +60,7 @@ impl RayPickingTool {
         if let Some(hit) = result {
             let entity = world.entity(hit.collider_id)?;
 
-            let point: Vec3 = ray.at(hit.intersection.time_of_impact).into();
+            let point: Vec3 = ray.at(hit.intersection.time_of_impact);
 
             let pos = entity.get_copy(position()).unwrap_or_default();
             let rotation = entity.get_copy(rotation()).unwrap_or_default();
@@ -128,7 +128,7 @@ impl RayPickingTool {
                 let mut manipulator_entity = Entity::builder();
                 manipulator_entity
                     .mount(TransformBundle::default())
-                    .mount(RigidBodyBundle::new(RigidBodyType::Dynamic).with_can_sleep(false))
+                    .mount(RigidBodyBundle::new(RigidBodyKind::Dynamic).with_can_sleep(false))
                     .set_default(child_of(id));
 
                 cmd.append_to(manipulator, manipulator_entity);
@@ -182,6 +182,12 @@ component! {
 }
 
 pub struct RayPickerBundle {}
+
+impl Default for RayPickerBundle {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl RayPickerBundle {
     pub fn new() -> Self {

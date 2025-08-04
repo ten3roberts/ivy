@@ -31,7 +31,7 @@ use wgpu::{
 
 use crate::{
     components::{environment_data, mesh, projection_matrix},
-    material_desc::MaterialData,
+    effect_desc::RenderEffect,
     mesh_desc::MeshDesc,
     rendergraph::{Dependency, Node, NodeUpdateContext, TextureHandle, UpdateResult},
     types::{BindGroupBuilder, BindGroupLayoutBuilder, RenderShader, TypedBuffer},
@@ -581,11 +581,11 @@ impl CameraShaderData {
 pub struct RenderObjectBundle<'a> {
     pub mesh: MeshDesc,
     pub color: Color,
-    pub materials: &'a [(Component<MaterialData>, MaterialData)],
+    pub materials: &'a [(Component<RenderEffect>, RenderEffect)],
 }
 
 impl<'a> RenderObjectBundle<'a> {
-    pub fn new(mesh: MeshDesc, materials: &'a [(Component<MaterialData>, MaterialData)]) -> Self {
+    pub fn new(mesh: MeshDesc, materials: &'a [(Component<RenderEffect>, RenderEffect)]) -> Self {
         Self {
             mesh,
             materials,

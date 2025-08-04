@@ -4,7 +4,7 @@ use anyhow::Context;
 use glam::{Mat4, Quat};
 use gltf::buffer;
 use itertools::Itertools;
-use ivy_assets::{Asset, AssetCache, AssetPath, AsyncAssetDesc, AsyncAssetExt};
+use ivy_assets::{Asset, AssetCache, AssetPath, AsyncAssetExt, AsyncAssetKey};
 use ivy_core::components::TransformBundle;
 
 use crate::Document;
@@ -161,7 +161,7 @@ pub struct SkinDesc {
     node: String,
 }
 
-impl AsyncAssetDesc for SkinDesc {
+impl AsyncAssetKey for SkinDesc {
     type Output = Skin;
     type Error = anyhow::Error;
 

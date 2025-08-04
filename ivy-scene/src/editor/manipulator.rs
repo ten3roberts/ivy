@@ -1,4 +1,4 @@
-use std::{convert::identity, sync::Arc};
+use std::sync::Arc;
 
 use flax::{Entity, EntityRef, World};
 use futures::StreamExt;
@@ -21,7 +21,7 @@ use ivy_physics::{
     state::RigidBodyFlags,
 };
 use ivy_ui::violet::core::{
-    state::{StateExt, StateStream, StateStreamRef},
+    state::{StateExt, StateStream},
     widget::{col, label, row, Selectable},
     Widget,
 };
@@ -316,13 +316,13 @@ impl TransformControls {
 
         let delta_dist = moved_dist - start_dist;
 
-        let delta_dist = match snap_mode {
+        
+
+        match snap_mode {
             SnapMode::None => delta_dist,
             SnapMode::Absolute(snap) => snap_value3(start_dist + delta_dist, snap) - start_dist,
             SnapMode::Increment(snap) => snap_value3(delta_dist, snap),
-        };
-
-        delta_dist
+        }
     }
 
     fn handle_rotate(camera_ray: Ray, drag_data: &DragData, snap: f32) -> Quat {
@@ -363,10 +363,10 @@ impl TransformControls {
                     self.hit_test_sphere(camera_ray, axis).map(|v| (1, v)),
                 ]
             })
-            .filter_map(identity)
+            .flatten()
             .min_by_key(|(prio, v)| (*prio, NotNan::new(v.hit_distance).unwrap()));
 
-        return Some(hit?.1);
+        Some(hit?.1)
     }
 
     fn hit_test_ring(&self, camera_ray: Ray, axis: Axis3D) -> Option<HitResult> {
@@ -920,7 +920,7 @@ impl TransformManipulator {
                 .collect_vec();
 
             self.manipulator.handle_mouse_up();
-            return Some(manipulation);
+            Some(manipulation)
         } else {
             None
         }

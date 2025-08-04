@@ -1,9 +1,13 @@
-use std::{convert::Infallible, f32::consts::PI};
+use std::{any, convert::Infallible, f32::consts::PI};
 
 use glam::{vec2, vec3, IVec3, Vec3};
-use ivy_assets::AssetDesc;
+use ivy_assets::{declare_resource, loadable::Loadable, Asset, AssetDesc};
+use ivy_core::Bundle;
+use ivy_editable::Editable;
 use ivy_graphics::mesh::MeshData;
 use ordered_float::NotNan;
+
+use crate::components::mesh;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct UvSpherePrimitive {
@@ -323,5 +327,47 @@ impl AssetDesc for CubePrimitive {
         assets: &ivy_assets::AssetCache,
     ) -> Result<ivy_assets::Asset<MeshData>, Self::Error> {
         Ok(assets.insert(generate_cube(1.0)))
+    }
+}
+
+#[derive(Debug, Clone, Editable, serde::Serialize, serde::Deserialize)]
+pub enum PrimitiveKindDesc {
+    Sphere,
+    Cube,
+    Plane,
+}
+
+#[derive(Debug, Clone, Editable, serde::Serialize, serde::Deserialize)]
+pub struct PrimitiveBundleDesc {
+    kind: PrimitiveKindDesc,
+}
+
+#[derive(Clone, Bundle)]
+pub struct PrimitiveBundle {
+    mesh: Asset<MeshData>,
+}
+
+declare_resource!(PrimitiveBundle, PrimitiveBundleDesc);
+
+impl Loadable for PrimitiveBundleDesc {
+    type Output = PrimitiveBundle;
+
+    async fn load(&self, assets: &ivy_assets::AssetCache) -> anyhow::Result<Self::Output> {
+        let mesh = match &self.kind {
+            PrimitiveKindDesc::Sphere => assets.try_load(&UvSpherePrimitive::default())?,
+            PrimitiveKindDesc::Cube => assets.try_load(&CubePrimitive)?,
+            PrimitiveKindDesc::Plane => assets.try_load(&PlaneDesc::default())?,
+        };
+
+        Ok(PrimitiveBundle { mesh })
+    }
+}
+
+impl Bundle for PrimitiveBundle {
+    fn mount(&self, entity: &mut flax::EntityBuilder) {
+        entity.set(
+            mesh(),
+            crate::mesh_desc::MeshDesc::Content(self.mesh.clone()),
+        );
     }
 }

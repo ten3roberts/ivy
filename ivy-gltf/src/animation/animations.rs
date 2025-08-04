@@ -6,7 +6,7 @@ use gltf::{
     buffer,
 };
 use itertools::Itertools;
-use ivy_assets::{Asset, AssetCache, AssetPath, AsyncAssetDesc, AsyncAssetExt};
+use ivy_assets::{Asset, AssetCache, AssetPath, AsyncAssetExt, AsyncAssetKey};
 use ordered_float::OrderedFloat;
 
 use crate::Document;
@@ -115,7 +115,7 @@ pub struct AnimationDesc {
     pub animation: String,
 }
 
-impl AsyncAssetDesc for AnimationDesc {
+impl AsyncAssetKey for AnimationDesc {
     type Output = Animation;
     type Error = anyhow::Error;
 

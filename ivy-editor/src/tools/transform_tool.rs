@@ -10,13 +10,12 @@ use flax::{
 };
 use futures::StreamExt;
 use glam::{Quat, Vec2};
-use ivy_assets::{Resource, loadable::Loadable};
+use ivy_assets::Resource;
 use ivy_core::{
     Bundle,
     components::{engine, gizmos, main_camera},
     gizmos::Gizmos,
     palette::Srgba,
-    template::BundleDesc,
     update_layer::Plugin,
 };
 
@@ -51,7 +50,6 @@ use ivy_ui::{
         lucide::icons::{LUCIDE_BOX, LUCIDE_GLOBE, LUCIDE_VIEW},
     },
 };
-use serde::{Deserialize, Serialize};
 
 use crate::{
     plugin::{EditCommand, MoveEntities, Selection, SetSelection, edit_commands, selection},
@@ -119,6 +117,7 @@ pub fn draw_system(gizmos: &mut Gizmos, query: &mut QueryBorrow<Component<Transf
 
 #[derive(Resource, Bundle)]
 #[resource(derive = [Editable])]
+#[derive(Default)]
 pub struct TransformToolBundle {
     #[resource_attr(serde(default))]
     settings: TransformSettings,
@@ -130,13 +129,6 @@ impl TransformToolBundle {
     }
 }
 
-impl Default for TransformToolBundle {
-    fn default() -> Self {
-        Self {
-            settings: TransformSettings::default(),
-        }
-    }
-}
 
 impl Bundle for TransformToolBundle {
     fn mount(&self, entity: &mut flax::EntityBuilder) {
@@ -370,9 +362,9 @@ impl Widget for TransformToolWidget {
         );
 
         let settings = state
-            .signal_ref(|s| s.clone())
+            .signal_ref(|s| *s)
             .to_stream()
-            .filter_map(|v| ready(v))
+            .filter_map(ready)
             .map(move |v| {
                 col((
                     row((

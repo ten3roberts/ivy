@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::BTreeMap};
+use std::collections::BTreeMap;
 
 use flax::{
     components::{child_of, name},
@@ -22,6 +22,12 @@ use ivy_ui::{
 
 pub struct HierarchyPanel {
     size: WidgetSizeProps,
+}
+
+impl Default for HierarchyPanel {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl HierarchyPanel {
@@ -68,7 +74,7 @@ impl Widget for HierarchyPanel {
                         .flatten()
                         .map(|roots| SubtreeWidget {
                             entity: roots.clone(),
-                            hierarchy: hierarchy,
+                            hierarchy,
                         })
                         .collect_vec();
 
@@ -114,7 +120,7 @@ impl Widget for SubtreeWidget {
 
         let can_collapse = children
             .as_ref()
-            .map(|children| children.len() > 0)
+            .map(|children| !children.is_empty())
             .unwrap_or(false);
 
         let widget = Collapsible::new(

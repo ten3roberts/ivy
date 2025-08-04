@@ -8,12 +8,12 @@ use std::{
 use super::AssetId;
 
 #[derive(Debug)]
-pub struct WeakHandle<T: ?Sized> {
+pub struct WeakAsset<T: ?Sized> {
     pub(crate) id: AssetId,
     pub(crate) value: Weak<T>,
 }
 
-impl<T: ?Sized> Clone for WeakHandle<T> {
+impl<T: ?Sized> Clone for WeakAsset<T> {
     fn clone(&self) -> Self {
         Self {
             value: self.value.clone(),
@@ -22,7 +22,7 @@ impl<T: ?Sized> Clone for WeakHandle<T> {
     }
 }
 
-impl<T: ?Sized> WeakHandle<T> {
+impl<T: ?Sized> WeakAsset<T> {
     pub fn upgrade(&self) -> Option<Asset<T>> {
         self.value
             .upgrade()
@@ -39,13 +39,13 @@ impl<T: ?Sized> WeakHandle<T> {
     }
 }
 
-impl<T: ?Sized> PartialEq for WeakHandle<T> {
+impl<T: ?Sized> PartialEq for WeakAsset<T> {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
     }
 }
 
-impl<T: ?Sized> Eq for WeakHandle<T> {}
+impl<T: ?Sized> Eq for WeakAsset<T> {}
 
 /// Keep-alive handle to an asset
 ///
@@ -94,8 +94,8 @@ impl<T: ?Sized> Clone for Asset<T> {
 }
 
 impl<T: ?Sized> Asset<T> {
-    pub fn downgrade(&self) -> WeakHandle<T> {
-        WeakHandle {
+    pub fn downgrade(&self) -> WeakAsset<T> {
+        WeakAsset {
             value: Arc::downgrade(&self.value),
             id: self.id,
         }

@@ -77,10 +77,7 @@ impl Widget for AssetInspector {
 
                     let editor = EDITABLE_REGISTRY.get_by_type((*payload.desc).type_id());
 
-                    let editor = match editor {
-                        Some(v) => Some(v.create_editor(Box::new(stream))),
-                        None => None,
-                    };
+                    let editor = editor.map(|v| v.create_editor(Box::new(stream)));
 
                     let type_name = payload.meta.type_name.clone();
 

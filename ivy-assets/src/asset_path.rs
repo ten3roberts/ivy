@@ -4,9 +4,10 @@ use derivative::Derivative;
 use futures::future::BoxFuture;
 
 use crate::{
+    hotreload::FileReloadService,
     loadable::{LoadFromPath, Loadable, Resource, ResourceDyn},
     service::FsAssetError,
-    Asset, AssetCache, AsyncAssetDesc, AsyncAssetExt,
+    Asset, AssetCache, AsyncAssetExt, AsyncAssetKey,
 };
 
 /// Describes an asset loaded from a relative filesystem path
@@ -49,9 +50,13 @@ impl<T> AssetPath<T> {
             .load_bytes_async(&self.path)
             .await
     }
+
+    pub fn path_mut(&mut self) -> &mut PathBuf {
+        &mut self.path
+    }
 }
 
-impl<T> AsyncAssetDesc for AssetPath<T>
+impl<T> AsyncAssetKey for AssetPath<T>
 where
     T: LoadFromPath,
 {
@@ -60,6 +65,9 @@ where
     type Error = anyhow::Error;
 
     async fn create(&self, assets: &AssetCache) -> Result<Asset<Self::Output>, Self::Error> {
+        if let Some(reload) = assets.try_get_service::<FileReloadService>() {
+            reload.track_path(self.clone())?;
+        }
         Ok(assets.insert(T::load_from_file(self.clone(), assets).await?))
     }
 
@@ -85,15 +93,5 @@ impl<T: LoadFromPath> Loadable for AssetPath<T> {
 
     async fn load(&self, assets: &AssetCache) -> anyhow::Result<Self::Output> {
         Ok(AsyncAssetExt::load_async(self, assets).await?)
-    }
-}
-
-trait AssetPathExt {
-    fn load_dyn(&self, assets: &AssetCache) -> BoxFuture<anyhow::Result<Box<dyn ResourceDyn>>>;
-}
-
-impl<T: LoadFromPath> AssetPathExt for AssetPath<T> {
-    fn load_dyn(&self, assets: &AssetCache) -> BoxFuture<anyhow::Result<Box<dyn ResourceDyn>>> {
-        todo!()
     }
 }

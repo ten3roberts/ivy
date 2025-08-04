@@ -1,8 +1,10 @@
 use itertools::Itertools;
 use proc_macro_crate::FoundCrate;
 use proc_macro2::{Span, TokenStream};
-use quote::quote;
-use syn::{Attribute, DeriveInput, Error, Field, Ident, Result, Token, Type, spanned::Spanned};
+use quote::{format_ident, quote};
+use syn::{
+    parenthesized, spanned::Spanned, Attribute, DeriveInput, Error, Field, Ident, Index, Result, Token, Type
+};
 
 pub fn editable_impl(input: DeriveInput) -> Result<TokenStream> {
     let ident = input.ident.clone();
@@ -31,30 +33,51 @@ fn expand_enum(
     let disc_selection = data_enum.variants.iter().map(|v| {
         let ident = &v.ident;
         let ident_s = ident.to_string();
-        quote! { Self::#ident => #ident_s }
+
+        let pat = match &v.fields {
+            syn::Fields::Named(named) => {
+                let names = named.named.iter().map(|v| {
+                    let ident = &v.ident;
+                    quote! {#ident: _}
+                });
+
+                quote! { { #(#names),* } }
+            }
+            syn::Fields::Unnamed(fields_unnamed) => {
+                let repeat = (0..fields_unnamed.unnamed.len()).map(|_| quote! { _ });
+                quote! { (#(#repeat),*) }
+            }
+            syn::Fields::Unit => quote! {},
+        };
+        quote! { Self::#ident #pat => #ident_s }
     });
 
+    let violet = quote! { #crate_name::__private::violet::core };
+
+    let default_variant = data_enum.variants.first().map(|v| &v.ident).ok_or_else(|| syn::Error::new_spanned(ident, "No variants found in enum"))?.to_string();
+
     let disc_selection = quote! {
-        Arc::new(state.clone().filter_map(|v| Some(Some( match v { #(#disc_selection),* })), |_| None).memo(None).dedup().lower_option());
+        ::std::sync::Arc::new(state.clone().filter_map(|v| Some( match v { #(#disc_selection),* }), |_| None).memo(#default_variant).dedup()) as ::std::sync::Arc<dyn Send + Sync + #violet::state::StateDuplex<Item = &'static str>>;
     };
 
     let kind_selection = data_enum.variants.iter().map(|v| {
         let ident = &v.ident;
         let ident_s = ident.to_string();
 
-        quote! { Selectable::new_value(label(#ident_s), discriminant.clone(), #ident_s) }
+        quote! { #violet::widget::Selectable::new_value(#violet::widget::label(#ident_s), discriminant.clone(), #ident_s) }
     });
 
-    let kind_selection = quote! { row((#(#kind_selection),*)); };
+    let kind_selection = quote! { #violet::widget::row((#(#kind_selection),*)); };
 
-    let variant_editors: Vec<_> = data_enum
+    let variant_editors = |project| -> syn::Result<Vec<TokenStream>> {
+        data_enum
         .variants
         .iter()
         .map(|v| {
             let ident = &v.ident;
             let ident_s = ident.to_string();
 
-            let (destruct, assemble, field_editors) = match &v.fields {
+            let body = match &v.fields {
                 syn::Fields::Named(fields_named) => {
                     let fields: Vec<ParsedField> = fields_named
                         .named
@@ -64,41 +87,152 @@ fn expand_enum(
 
                     let field_names = fields.iter().map(|v| v.ident).collect_vec();
 
-                    let field_editors = expand_field_editors(&crate_name, &[]);
+                    let field_lower = fields.iter().enumerate().map(|(i, f)| {
+                        let ident = &f.ident;
 
-                    (
-                        quote! { { #(#field_names),* } },
-                        quote! {  (#(#field_names,)*) },
-                        field_editors,
-                    )
+                        let ty = &f.ty;
+                        let i = syn::Index::from(i);
+                        quote! {
+                            let #ident = Box::new(state.clone().project_ref(|v| &v.#i, |v| &mut v.#i).lower_option()) as Box<dyn Send+Sync+#violet::state::StateDuplex<Item = #ty>>;
+                        }
+                    }).collect_vec();
+
+                    let field_editors = expand_field_editors(&crate_name, &fields, project);
+
+                    let destruct =quote! { { #(#field_names,)* } };
+                    let destruct_tuple =quote! { ( #(#field_names,)* ) };
+                    let to_tuple = quote! {  (#(Some(#field_names),)*) };
+                    let from_tuple = quote! { { #(#field_names: #field_names?),* } };
+
+                    let matched_state = if project {
+                        quote! {
+                            // Try and destructure this variant
+                            let state = ::std::sync::Arc::new(#violet::StateExt::filter_map(
+                                    state.clone(),
+                                    |v| if let Self::#ident #destruct = v { Some(#to_tuple) } else { None },
+                                    |#destruct_tuple| Some(Self::#ident #from_tuple)
+                                )
+                            );
+                        }
+
+                    } else {
+                        let default = fields.iter().map(|f| {
+                            if let Some(default_expr) = &f.attrs.default {
+                                quote! { Some(#default_expr) }
+                            } else {
+                                quote! { None }
+                            }
+                        }).collect_vec();
+
+                        quote!{
+                            // Try and destructure this variant
+                            let state = ::std::sync::Arc::new(#violet::StateExt::memo(#violet::StateExt::filter_map(state.clone(),
+                                    |v| if let Self::#ident #destruct = v { Some(#to_tuple) } else { None },
+                                    |#destruct_tuple| Some(Self::#ident #from_tuple)),
+                                (#(#default,)*)));
+                        }
+                    };
+
+                    quote! {
+                        #matched_state
+
+                        state.sync_initial();
+                        #(#field_lower)*
+
+                        Box::new(
+                            #violet::widget::col( (#(#field_editors),*))
+                        ) as Box<dyn Send + Widget>
+                    }
                 }
-                syn::Fields::Unnamed(_fields_unnamed) => todo!(),
-                syn::Fields::Unit => unreachable!(),
+                syn::Fields::Unnamed(fields) => {
+                    let fields: Vec<IndexedField> = fields.unnamed
+                        .iter().enumerate()
+                        .map(|(i, v)| IndexedField::get(i,v))
+                        .try_collect()?;
+
+                    let field_names = fields.iter().map(|v| &v.named_ident).collect_vec();
+
+
+                    let destruct =quote! { ( #(#field_names,)* ) };
+                    let destruct_tuple =quote! { ( #(#field_names,)* ) };
+                    let to_tuple = quote! {  (#(Some(#field_names),)*) };
+                    let from_tuple = quote! { ( #(#field_names?),* ) };
+                    let matched_state = if project {
+                        quote! {
+                            let state = ::std::sync::Arc::new(state.clone()
+                                // Try and destructure this variant
+                                .filter_map(
+                                    |v| if let Self::#ident #destruct = v { Some(#to_tuple) } else { None },
+                                    |#destruct_tuple| Some(Self::#ident #from_tuple)));
+                        }
+                    } else {
+
+                        let default = fields.iter().map(|f| {
+                            if let Some(default_expr) = &f.attrs.default {
+                                quote! { Some(#default_expr) }
+                            } else {
+                                quote! { None }
+                            }
+                        }).collect_vec();
+
+
+                        quote! {
+
+                            let state = ::std::sync::Arc::new(state.clone()
+                                // Try and destructure this variant
+                                .filter_map(
+                                    |v| if let Self::#ident #destruct = v { Some(#to_tuple) } else { None },
+                                    |#destruct_tuple| Some(Self::#ident #from_tuple))
+                                .memo((#(#default,)*)));
+                            }
+                    };
+
+                    let field_lower = fields.iter().map(|f| {
+                        let index = &f.index;
+                        let ty = &f.ty;
+
+                        let named_ident = &f.named_ident;
+                        quote! {
+                            let #named_ident = Box::new(state.clone().project_ref(|v| &v.#index, |v| &mut v.#index).lower_option()) as Box<dyn Send+Sync+#violet::state::StateDuplex<Item = #ty>>;
+                        }
+                    }).collect_vec();
+
+                    let field_editors = expand_field_editors_indexed(&crate_name, &fields, false);
+
+                    quote! [
+                        #matched_state
+                        state.sync_initial();
+                    #(#field_lower)*
+
+                    Box::new(
+                        #violet::widget::col( (#(#field_editors),*))
+                    ) as Box<dyn Send + Widget>
+                    ]
+                },
+                syn::Fields::Unit => {
+
+                    quote! {
+                        let state = ::std::sync::Arc::new(state.clone()
+                            // Try and destructure this variant
+                            .filter_map(
+                                |v| if let Self::#ident = v { Some(()) } else { None },
+                                |()| Some(Self::#ident))
+                            .memo(()));
+
+                        state.sync_initial();
+                        Box::new(#violet::widget::EmptyWidget) as Box<dyn Send + Widget> }
+                },
             };
 
-            let body = quote! {
-                let state = Arc::new(state.clone()
-                        .filter_map(
-                            |v| if let Self::#ident #destruct = v { Some(#assemble) } else { None },
-                            |#assemble| Some(Self::#ident #destruct))
-                    )
-                    .memo(Default::default());
-
-                Box::new(
-                    #crate_name::__private::violet::core::widget::col( (#(#field_editors),*))
-                ) as Box<dyn Send+Widget>
-            };
-
-            syn::Result::Ok(quote! {
-                #ident_s => {
-                    #body
-                }
-            })
+            syn::Result::Ok(quote! { #ident_s => { #body } })
         })
-        .try_collect()?;
+        .try_collect()
+    };
+
+    let variant_editors = variant_editors(false)?;
 
     let value_editor = quote! {
-        discriminant.stream().map(move |disc| {
+        #crate_name::__private::futures::StreamExt::map(discriminant.stream(), move |disc| {
             match disc {
                 #(#variant_editors,)*
                 _ => unreachable!()
@@ -110,72 +244,78 @@ fn expand_enum(
         impl #crate_name::Editable for #ident {
             const INLINE: bool = false;
 
-            fn create_editor<S: 'static + Send + Sync + #crate_name::__private::violet::core::state::StateDuplex<Item = Self>>(
+            fn create_editor<S: 'static + Send + Sync + #violet::state::StateDuplex<Item = Self>>(
                 state: S,
-            ) -> Box<dyn Send + #crate_name::__private::violet::core::widget::Widget> {
-                use #crate_name::__private::violet::core::widget::{ Widget, label, col, row, Selectable };
-                use #crate_name::__private::violet::core::style::SizeExt;
-                use #crate_name::__private::violet::core::state::StateExt;
-                use ::std::sync::Arc;
-
+            ) -> Box<dyn Send + #violet::widget::Widget> {
+                use #violet::{StateExt, StateStream, Widget, style::SizeExt};
                 let state = ::std::sync::Arc::new(state);
 
 
                 let discriminant = #disc_selection;
                 let kind_selection = #kind_selection;
                 let value_editor = #value_editor;
-                Box::new(col((kind_selection, value_editor)))
+                Box::new(#violet::widget::col((kind_selection, #violet::widget::StreamWidget::new(value_editor))))
             }
 
-            fn create_editor_project<S: 'static + Send + Sync + Clone + #crate_name::__private::violet::core::state::StateStreamRef<Item = Self> + #crate_name::__private::violet::core::state::StateWrite<Item = Self>>(
+            fn create_editor_project<S: 'static + Send + Sync + Clone + #violet::state::StateStreamRef<Item = Self> + #violet::state::StateWrite<Item = Self>>(
                 state: S,
-            ) -> Box<dyn Send + #crate_name::__private::violet::core::widget::Widget> {
-                use #crate_name::__private::violet::core::widget::Widget;
-                use #crate_name::__private::violet::core::style::SizeExt;
-                use #crate_name::__private::violet::core::state::StateExt;
-                use #crate_name::__private::violet::core::state::StateStream;
-
-                todo!()
+            ) -> Box<dyn Send + #violet::widget::Widget> {
+                <Self as #crate_name::Editable>::create_editor(#violet::state::StateExt::project_ref(state, |v| v, |v| v))
             }
         }
 
         #crate_name::register_editable!(#ident);
 
     };
-    // let expanded = quote! {
-
-    //     let kind_selection = #kind_selection;
-    //     let value_editor = #value_editor;
-    //     Box::new(col((kind_selection, value_editor)))
-    // };
 
     Ok(expanded)
 }
 
-fn expand_field_editors(crate_name: &Ident, fields: &[ParsedField]) -> Vec<TokenStream> {
+fn expand_field_editors(
+    crate_name: &Ident,
+    fields: &[ParsedField],
+    project: bool,
+) -> Vec<TokenStream> {
+    let violet = quote! { #crate_name::__private::violet::core };
     fields.iter().map(|f| {
         let ident = &f.ident;
 
         let ty = &f.ty;
         let label = quote! {
-            #crate_name::__private::violet::core::widget::interactive::base::InteractiveWidget::new(
-                #crate_name::__private::violet::core::widget::label(stringify!(#ident))
+            #violet::widget::interactive::base::InteractiveWidget::new(
+                #violet::widget::label(stringify!(#ident))
             ).with_tooltip_text(stringify!(#ty))
         };
 
-        let editor = quote! {
-            <#ty as #crate_name::Editable>::create_editor(#ident)
+        let editor = if let Some(opts) = f.attrs.opts_tokens(crate_name) {
+            let method = if project {
+                format_ident!("create_editor_project_opts")
+            } else {
+                format_ident!("create_editor_opts")
+            };
+            quote! {
+                <#ty as #crate_name::EditableWithOpts>::#method(#ident, #opts)
+            }   
+        } else {
+            let method = if project {
+                format_ident!("create_editor_project")
+            } else {
+                format_ident!("create_editor")
+            };
+            quote! {
+                <#ty as #crate_name::Editable>::#method(#ident)
+            }
         };
 
         quote! {
-            |scope: &mut #crate_name::__private::violet::core::Scope<'_>| {
+            |scope: &mut #violet::Scope<'_>| {
                 if <#ty as #crate_name::Editable>::INLINE {
-                    #crate_name::__private::violet::core::widget::row((
-                        #crate_name::__private::violet::core::widget::Stack::new(#label).with_maximize(#crate_name::__private::violet::glam::Vec2::X),
-                        #editor
-                    )).with_cross_align(#crate_name::__private::violet::core::layout::Align::Center).mount(scope);
+                    #violet::widget::row((
+                            #violet::widget::Stack::new(#label).with_maximize(#crate_name::__private::violet::glam::Vec2::X),
+                            #editor
+                    )).with_cross_align(#violet::layout::Align::Center).mount(scope);
                 } else {
-                    #crate_name::__private::violet::core::widget::Collapsible::new(
+                    #violet::widget::Collapsible::new(
                         #label,
                         #editor
                     ).indent(true).mount(scope);
@@ -185,11 +325,64 @@ fn expand_field_editors(crate_name: &Ident, fields: &[ParsedField]) -> Vec<Token
     }).collect_vec()
 }
 
+fn expand_field_editors_indexed(
+    crate_name: &Ident,
+    fields: &[IndexedField],
+    project: bool,
+) -> Vec<TokenStream> {
+    let violet = quote! { #crate_name::__private::violet::core };
+
+    fields
+        .iter()
+        .map(|f| {
+            let ty = &f.ty;
+
+            let named_ident = &f.named_ident;
+
+            let editor = if let Some(opts) = f.attrs.opts_tokens(crate_name) {
+                let method = if project {
+                    format_ident!("create_editor_project_opts")
+                } else {
+                    format_ident!("create_editor_opts")
+                };
+                quote! {
+                    <#ty as #crate_name::EditableWithOpts>::#method(#named_ident, #opts)
+                }   
+            } else {
+                let method = if project {
+                    format_ident!("create_editor_project")
+                } else {
+                    format_ident!("create_editor")
+                };
+                quote! {
+                    <#ty as #crate_name::Editable>::#method(#named_ident)
+                }
+            };
+
+            quote! {
+                |scope: &mut #violet::Scope<'_>| {
+                    if <#ty as #crate_name::Editable>::INLINE {
+                        #violet::widget::row((
+                                #editor
+                        )).with_cross_align(#violet::layout::Align::Center).mount(scope);
+                    } else {
+                        #violet::widget::Collapsible::new(
+                            #violet::widget::label(""),
+                            #editor
+                        ).indent(true).mount(scope);
+                    }
+                }
+            }
+        })
+        .collect_vec()
+}
+
 fn expand_struct(
     crate_name: Ident,
     input: &DeriveInput,
     data_struct: &syn::DataStruct,
 ) -> Result<TokenStream> {
+    let violet = quote! { #crate_name::__private::violet::core };
     let named_fields = match &data_struct.fields {
         syn::Fields::Named(fields) => fields,
         _ => {
@@ -222,15 +415,16 @@ fn expand_struct(
                 #(#field_names: #field_names?),*
             })
         )
-        .memo((#(#default,)*))
+            .memo((#(#default,)*))
     };
 
     let field_lower = fields.iter().enumerate().map(|(i, f)| {
         let ident = &f.ident;
+        let ty = &f.ty;
 
         let i = syn::Index::from(i);
         quote! {
-            let #ident = state.clone().project_ref(|v| &v.#i, |v| &mut v.#i).lower_option();
+            let #ident = Box::new(state.clone().project_ref(|v| &v.#i, |v| &mut v.#i).lower_option()) as Box<dyn Send+Sync+#violet::state::StateDuplex<Item = #ty>>;
         }
     });
 
@@ -242,50 +436,17 @@ fn expand_struct(
         }
     });
 
-    let field_edit = expand_field_editors(&crate_name, &fields);
-
-    let field_edit_project = fields.iter().map(|f| {
-        let ident = &f.ident;
-
-        let ty = &f.ty;
-        let label = quote! {
-            #crate_name::__private::violet::core::widget::interactive::tooltip::Tooltip::label(
-                #crate_name::__private::violet::core::widget::label(stringify!(#ident)), stringify!(#ty)
-            )
-        };
-
-        let editor = quote! {
-            <#ty as #crate_name::Editable>::create_editor_project(#ident)
-        };
-
-        quote! {
-            |scope: &mut #crate_name::__private::violet::core::Scope<'_>| {
-                if <#ty as #crate_name::Editable>::INLINE {
-                    #crate_name::__private::violet::core::widget::row((
-                        #crate_name::__private::violet::core::widget::Stack::new(#label).with_maximize(#crate_name::__private::violet::glam::Vec2::X),
-                        #editor
-                    )).with_cross_align(#crate_name::__private::violet::core::layout::Align::Center).mount(scope);
-                } else {
-                    #crate_name::__private::violet::core::widget::Collapsible::new(
-                        #label,
-                        #editor
-                    ).indent(true).mount(scope);
-                }
-            }
-        }
-    }).collect_vec();
+    let field_edit = expand_field_editors(&crate_name, &fields, false);
+    let field_edit_project = expand_field_editors(&crate_name, &fields, true);
 
     let expanded = quote! {
         impl #crate_name::Editable for #ident {
             const INLINE: bool = false;
 
-            fn create_editor<S: 'static + Send + Sync + #crate_name::__private::violet::core::state::StateDuplex<Item = Self>>(
+            fn create_editor<S: 'static + Send + Sync + #violet::state::StateDuplex<Item = Self>>(
                 value: S,
-            ) -> Box<dyn Send + #crate_name::__private::violet::core::widget::Widget> {
-                use #crate_name::__private::violet::core::widget::Widget;
-                use #crate_name::__private::violet::core::style::SizeExt;
-                use #crate_name::__private::violet::core::state::StateExt;
-
+            ) -> Box<dyn Send + #violet::widget::Widget> {
+                use #violet::{StateExt, StateStream, Widget, style::SizeExt};
                 let state = ::std::sync::Arc::new(#field_default);
 
                 state.sync_initial();
@@ -293,21 +454,18 @@ fn expand_struct(
                 #(#field_lower)*
 
                 Box::new(
-                    #crate_name::__private::violet::core::widget::col( (#(#field_edit),*))
+                    #violet::widget::col( (#(#field_edit),*))
                 )
             }
 
-            fn create_editor_project<S: 'static + Send + Sync + Clone + #crate_name::__private::violet::core::state::StateStreamRef<Item = Self> + #crate_name::__private::violet::core::state::StateWrite<Item = Self>>(
+            fn create_editor_project<S: 'static + Send + Sync + Clone + #violet::state::StateStreamRef<Item = Self> + #violet::state::StateWrite<Item = Self>>(
                 state: S,
-            ) -> Box<dyn Send + #crate_name::__private::violet::core::widget::Widget> {
-                use #crate_name::__private::violet::core::widget::Widget;
-                use #crate_name::__private::violet::core::style::SizeExt;
-                use #crate_name::__private::violet::core::state::StateExt;
-
+            ) -> Box<dyn Send + #violet::widget::Widget> {
+                use #violet::{StateExt, StateStream, Widget, style::SizeExt};
                 #(#field_project)*
 
                 Box::new(
-                    #crate_name::__private::violet::core::widget::col( (#(#field_edit_project),*))
+                    #violet::widget::col( (#(#field_edit_project),*))
                 )
             }
         }
@@ -316,12 +474,9 @@ fn expand_struct(
 
     };
 
-    eprintln!("Expanded editable for {}: {}", ident, expanded);
-
     Ok(expanded)
 }
 
-#[derive(Clone)]
 struct ParsedField<'a> {
     ty: &'a Type,
     ident: &'a Ident,
@@ -345,9 +500,31 @@ impl<'a> ParsedField<'a> {
     }
 }
 
+struct IndexedField<'a> {
+    ty: &'a Type,
+    index: Index,
+    attrs: FieldAttrs,
+    named_ident: Ident,
+}
+
+impl<'a> IndexedField<'a> {
+    fn get(index: usize, field: &'a Field) -> Result<Self> {
+        let attrs = FieldAttrs::get(&field.attrs)?;
+
+        let named_ident = Ident::new(&format!("field_{index}"), Span::call_site());
+        Ok(Self {
+            ty: &field.ty,
+            index: Index::from(index),
+            named_ident,
+            attrs,
+        })
+    }
+}
+
 #[derive(Default, Debug, Clone)]
 struct FieldAttrs {
     skip: bool,
+    range: Option<(syn::Expr, syn::Expr)>,
     default: Option<syn::Expr>,
 }
 
@@ -379,10 +556,20 @@ impl FieldAttrs {
                             }
 
                             Ok(())
+                        }
+                        else if meta.path.is_ident("range") {
+                            let content;
+
+                            parenthesized!(content in meta.input);
+                            let start = content.parse()?;
+                            content.parse::<Token![,]>()?;
+                            let end = content.parse()?;
+                            res.range = Some((start, end));
+                            Ok(())
                         } else {
                             Err(Error::new(
                                 meta.path.span(),
-                                "Unknown fetch field attribute",
+                                "Unknown editable field attribute",
                             ))
                         }
                     })?;
@@ -396,7 +583,18 @@ impl FieldAttrs {
             };
         }
 
-        eprintln!("Parsed field attributes: {:?}", res);
         Ok(res)
+    }
+
+    fn opts_tokens(&self, crate_name: &Ident) -> Option<TokenStream> {
+        if let Some((start, end)) = &self.range {
+            Some(quote! {
+                #crate_name::EditorOpts {
+                    range: Some((#start, #end)),
+                }
+            })
+        } else {
+            None
+        }
     }
 }

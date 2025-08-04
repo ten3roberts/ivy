@@ -9,7 +9,9 @@ use futures::AsyncReadExt;
 use thiserror::Error;
 
 /// A service is registered with the asset cache and is used to load assets.
-pub trait Service: 'static + Send + Sync + Downcast {}
+pub trait Service: 'static + Send + Sync + Downcast {
+    fn register(&self, _assets: &crate::AssetCache) {}
+}
 
 pub trait Downcast {
     fn as_any(&self) -> &dyn std::any::Any;

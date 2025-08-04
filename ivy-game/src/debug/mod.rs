@@ -64,7 +64,7 @@ impl Widget for TimelinesWidget {
             let end_load = timelines
                 .spans()
                 .iter()
-                .last()
+                .next_back()
                 .map(|v| v.1.load_end().unwrap_or(now))
                 .unwrap_or(Instant::now());
 

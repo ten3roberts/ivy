@@ -16,6 +16,7 @@ ivy-input = { path = "../ivy-input" }
 ivy-scene = { path = "../ivy-scene" }
 ivy-editable = { path = "../ivy-editable" }
 
+notify.workspace = true
 serde.workspace = true
 async-std.workspace = true
 enum_dispatch.workspace = true

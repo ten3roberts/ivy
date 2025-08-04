@@ -9,14 +9,14 @@ use crate::{shader::ShaderPass, types::TypedBuffer};
 /// A material for a single pass of the renderer
 ///
 /// Materials use a uniform representation
-pub struct RenderMaterial {
+pub struct EffectPass {
     label: String,
     bind_group: Option<BindGroup>,
     layout: Option<BindGroupLayout>,
     shader: Asset<ShaderPass>,
 }
 
-impl RenderMaterial {
+impl EffectPass {
     pub fn label(&self) -> &str {
         &self.label
     }
@@ -46,7 +46,7 @@ pub struct PbrMaterialParams {
 }
 
 impl PbrMaterialParams {
-    pub fn create_material(self, label: String, assets: &AssetCache) -> RenderMaterial {
+    pub fn create_material(self, label: String, assets: &AssetCache) -> EffectPass {
         let gpu = &assets.service();
         let layout = BindGroupLayoutBuilder::new(label.clone())
             .bind_sampler(ShaderStages::FRAGMENT)
@@ -89,7 +89,7 @@ impl PbrMaterialParams {
             .bind_buffer(&buffer)
             .build(gpu, &layout);
 
-        RenderMaterial {
+        EffectPass {
             label,
             bind_group: Some(bind_group),
             layout: Some(layout),
@@ -105,8 +105,8 @@ impl PbrMaterialParams {
 pub struct ShadowMaterialDesc {}
 
 impl ShadowMaterialDesc {
-    pub fn create_material(self, label: String, shader: Asset<ShaderPass>) -> RenderMaterial {
-        RenderMaterial {
+    pub fn create_material(self, label: String, shader: Asset<ShaderPass>) -> EffectPass {
+        EffectPass {
             label,
             bind_group: None,
             layout: None,

@@ -6,7 +6,7 @@ use ivy_gltf::GltfPrimitive;
 use ivy_graphics::mesh::{MeshData, POSITION_ATTRIBUTE};
 use rapier3d::{
     math::Point,
-    prelude::{SharedShape, TriMeshFlags},
+    prelude::{ConvexPolyhedron, TriMesh, TriMeshFlags},
 };
 
 /// Create a trimesh collider from provided primitive
@@ -17,10 +17,7 @@ pub struct GltfTriMeshDesc {
 }
 
 impl GltfTriMeshDesc {
-    pub fn create(
-        &self,
-        assets: &ivy_assets::AssetCache,
-    ) -> anyhow::Result<ivy_assets::Asset<SharedShape>> {
+    pub fn create(&self, assets: &ivy_assets::AssetCache) -> anyhow::Result<TriMesh> {
         let mut vertices: Vec<Point<f32>> = Vec::new();
         let mut indices = Vec::new();
 
@@ -47,10 +44,9 @@ impl GltfTriMeshDesc {
             );
         }
 
-        let shape =
-            SharedShape::trimesh_with_flags(vertices, indices, TriMeshFlags::FIX_INTERNAL_EDGES)?;
+        let shape = TriMesh::with_flags(vertices, indices, TriMeshFlags::FIX_INTERNAL_EDGES)?;
 
-        Ok(assets.insert(shape))
+        Ok(shape)
     }
 }
 
@@ -62,10 +58,7 @@ pub struct GltfConvexMeshDesc {
 }
 
 impl GltfConvexMeshDesc {
-    pub fn create(
-        &self,
-        assets: &ivy_assets::AssetCache,
-    ) -> anyhow::Result<ivy_assets::Asset<SharedShape>> {
+    pub fn create(&self, assets: &ivy_assets::AssetCache) -> anyhow::Result<ConvexPolyhedron> {
         let mesh: Asset<MeshData> = assets.try_load(&self.primitive)?;
 
         let positions = mesh
@@ -79,8 +72,9 @@ impl GltfConvexMeshDesc {
             .map(|&v| v.into())
             .collect_vec();
 
-        let shape = SharedShape::convex_hull(&vertices).context("Malformed convex mesh")?;
+        let shape =
+            ConvexPolyhedron::from_convex_hull(&vertices).context("Malformed convex mesh")?;
 
-        Ok(assets.insert(shape))
+        Ok(shape)
     }
 }

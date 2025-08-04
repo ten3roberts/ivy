@@ -8,7 +8,7 @@ use ivy_assets::Resource;
 use serde::{
     de::{self, DeserializeOwned, DeserializeSeed, Visitor},
     ser::SerializeMap,
-    Deserialize, Serialize, Serializer,
+    Deserialize, Serialize,
 };
 
 use crate::{template::BundleDesc, Bundle};
@@ -41,10 +41,7 @@ impl BundleRegistration {
             deserialize_fn: |de| {
                 erased_serde::deserialize::<T::Desc>(de).map(|v| Box::new(v) as Box<dyn BundleDesc>)
             },
-            serialize_fn: |this| {
-                tracing::info!(tag = this.tag_name(), "Serializing bundle");
-                this.downcast_ref::<T::Desc>().unwrap()
-            },
+            serialize_fn: |this| this.downcast_ref::<T::Desc>().unwrap(),
             upcast_any: |v| {
                 let v = v.downcast::<T::Desc>().expect("Invalid bundle type");
                 Box::new(*v)

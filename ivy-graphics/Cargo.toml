@@ -6,6 +6,7 @@ license-file.workspace = true
 
 [dependencies]
 ivy-core = { path = "../ivy-core" }
+ivy-editable = { path = "../ivy-editable" }
 ivy-assets = { path = "../ivy-assets" }
 ivy-profiling = { path = "../ivy-profiling" }
 

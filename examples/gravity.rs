@@ -24,9 +24,9 @@ use ivy_postprocessing::preconfigured::{
 use ivy_wgpu::{
     components::*,
     driver::WinitDriver,
+    effect_desc::{PbrRenderEffect, RenderEffect},
     layer::GraphicsLayer,
     light::{LightKind, LightParams},
-    material_desc::{MaterialData, PbrMaterialData},
     mesh_desc::MeshDesc,
     primitives::{CapsulePrimitive, CubePrimitive},
     renderer::{EnvironmentData, RenderObjectBundle},
@@ -100,15 +100,15 @@ pub fn main() -> anyhow::Result<()> {
 }
 
 fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
-    let white_material = MaterialData::PbrMaterial(
-        PbrMaterialData::new()
+    let white_material = RenderEffect::Pbr(
+        PbrRenderEffect::new()
             .with_roughness_factor(1.0)
             .with_metallic_factor(0.0)
             .with_albedo(TextureData::srgba(Srgba::new(1.0, 1.0, 1.0, 1.0))),
     );
 
-    let red_material = MaterialData::PbrMaterial(
-        PbrMaterialData::new()
+    let red_material = RenderEffect::Pbr(
+        PbrRenderEffect::new()
             .with_roughness_factor(0.1)
             .with_metallic_factor(0.0)
             .with_albedo(TextureData::srgba(Color::from_hsla(0.0, 0.7, 0.7, 1.0))),
@@ -145,7 +145,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
                 mesh.clone(),
                 &[
                     (forward_pass(), white_material.clone()),
-                    (shadow_pass(), MaterialData::ShadowMaterial),
+                    (shadow_pass(), RenderEffect::OpaqueShadow),
                 ],
             ));
 
@@ -177,7 +177,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
             cube_mesh.clone(),
             &[
                 (forward_pass(), white_material.clone()),
-                (shadow_pass(), MaterialData::ShadowMaterial),
+                (shadow_pass(), RenderEffect::OpaqueShadow),
             ],
         ))
         .spawn(world);
@@ -200,7 +200,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
             cube_mesh.clone(),
             &[
                 (forward_pass(), white_material),
-                (shadow_pass(), MaterialData::ShadowMaterial),
+                (shadow_pass(), RenderEffect::OpaqueShadow),
             ],
         ))
         .spawn(world);

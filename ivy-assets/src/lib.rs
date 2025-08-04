@@ -35,13 +35,17 @@ use std::{
     time::Duration,
 };
 
-use async_std::task::sleep;
-use dashmap::DashMap;
+use async_std::{path::PathBuf, task::sleep};
+use dashmap::{
+    mapref::one::{MappedRef, MappedRefMut},
+    DashMap,
+};
 
 mod asset_path;
 pub mod cell;
 pub mod fs;
 mod handle;
+pub mod hotreload;
 pub mod loadable;
 pub mod map;
 pub mod meta;
@@ -64,7 +68,7 @@ use timeline::{AssetInfo, Timelines};
 use crate::loadable::LoadFromPath;
 pub use crate::loadable::Resource;
 
-use self::{cell::AssetCell, handle::WeakHandle};
+use self::{cell::AssetCell, handle::WeakAsset};
 
 pub use asset_path::*;
 pub use ivy_derive::Resource;
@@ -117,17 +121,59 @@ impl Clone for SharedError {
     }
 }
 
-type KeyMap<K, V> = DashMap<K, WeakHandle<V>>;
+type KeyMap<K, V> = DashMap<K, WeakAsset<V>>;
 type PendingKeyMap<K, V> = DashMap<
     <K as StoredKey>::Stored,
     WeakShared<BoxFuture<'static, Result<Asset<V>, SharedError>>>,
 >;
 
+struct TypeMap {
+    inner: DashMap<TypeId, Box<dyn Any + Send + Sync>>,
+}
+
+impl TypeMap {
+    pub fn new() -> Self {
+        Self {
+            inner: DashMap::new(),
+        }
+    }
+
+    pub fn get<T: 'static + Send + Sync>(
+        &self,
+    ) -> std::option::Option<MappedRef<'_, TypeId, Box<dyn Any + Send + Sync>, T>> {
+        self.inner.get(&TypeId::of::<T>()).map(|v| {
+            dashmap::mapref::one::Ref::map(v, |v| v.downcast_ref::<T>().expect("Type mismatch"))
+        })
+    }
+
+    pub fn entry<T: 'static + Send + Sync>(
+        &self,
+    ) -> dashmap::Entry<'_, TypeId, Box<dyn Any + Send + Sync>> {
+        self.inner.entry(TypeId::of::<T>())
+    }
+
+    pub fn entry_or_default<T: 'static + Send + Sync + Default>(
+        &self,
+    ) -> MappedRefMut<'_, TypeId, Box<dyn Any + Send + Sync>, T> {
+        match self.entry::<T>() {
+            dashmap::Entry::Occupied(occupied_entry) => occupied_entry
+                .into_ref()
+                .map(|v| v.downcast_mut::<T>().expect("Type mismatch")),
+            dashmap::Entry::Vacant(vacant_entry) => {
+                let value = Box::new(T::default());
+                vacant_entry
+                    .insert(value)
+                    .map(|v| v.downcast_mut::<T>().expect("Type mismatch"))
+            }
+        }
+    }
+}
+
 /// Stores assets which are accessible through handles
 struct AssetCacheInner {
-    pending_keys: DashMap<TypeId, Box<dyn Any + Send + Sync>>,
-    keys: DashMap<TypeId, Box<dyn Any + Send + Sync>>,
-    cells: DashMap<TypeId, Box<dyn Any + Send + Sync>>,
+    pending_keys: TypeMap,
+    keys: TypeMap,
+    cells: TypeMap,
     services: RwLock<HashMap<TypeId, Box<dyn Service + Send>>>,
     timelines: Mutable<Timelines>,
 }
@@ -136,10 +182,10 @@ impl AssetCache {
     pub fn new() -> Self {
         Self {
             inner: Arc::new(AssetCacheInner {
-                keys: DashMap::new(),
-                cells: DashMap::new(),
+                keys: TypeMap::new(),
+                cells: TypeMap::new(),
+                pending_keys: TypeMap::new(),
                 services: Default::default(),
-                pending_keys: DashMap::new(),
                 timelines: Mutable::new(Timelines::new()),
             }),
             span: None,
@@ -192,10 +238,7 @@ impl AssetCache {
 
         self.inner
             .keys
-            .entry(TypeId::of::<(K::Stored, K::Output)>())
-            .or_insert_with(|| Box::<KeyMap<K::Stored, K::Output>>::default())
-            .downcast_mut::<KeyMap<K::Stored, K::Output>>()
-            .unwrap()
+            .entry_or_default::<KeyMap<K::Stored, K::Output>>()
             .insert(desc.to_stored(), value.downgrade());
 
         Ok(value)
@@ -216,7 +259,7 @@ impl AssetCache {
 
     pub fn try_load_async<K>(&self, desc: &K) -> AssetLoadFuture<K::Output>
     where
-        K: ?Sized + AsyncAssetDesc,
+        K: ?Sized + AsyncAssetKey,
     {
         if let Some(handle) = self.get_async(desc) {
             return AssetLoadFuture {
@@ -225,15 +268,9 @@ impl AssetCache {
         }
 
         {
-            let pending = self
-                .inner
-                .pending_keys
-                .get(&TypeId::of::<(K::Stored, K::Output)>());
-            if let Some(pending) = pending {
-                let pending = pending
-                    .downcast_ref::<PendingKeyMap<K, K::Output>>()
-                    .unwrap();
+            let pending = self.inner.pending_keys.get::<PendingKeyMap<K, K::Output>>();
 
+            if let Some(pending) = pending {
                 if let Some(fut) = pending.get(desc).and_then(|v| WeakShared::upgrade(&v)) {
                     return AssetLoadFuture { inner: Err(fut) };
                 }
@@ -245,7 +282,6 @@ impl AssetCache {
             asset_type: TypeId::of::<K::Output>(),
             type_name: tynm::type_name::<K::Output>(),
         };
-
         let span_id = self.inner.timelines.lock_mut().open_span(info, self.span);
 
         let assets = Self {
@@ -282,10 +318,7 @@ impl AssetCache {
             assets
                 .inner
                 .keys
-                .entry(TypeId::of::<(K::Stored, K::Output)>())
-                .or_insert_with(|| Box::<KeyMap<K::Stored, K::Output>>::default())
-                .downcast_mut::<KeyMap<K::Stored, K::Output>>()
-                .unwrap()
+                .entry_or_default::<KeyMap<K::Stored, K::Output>>()
                 .insert(desc, value.downgrade());
 
             Ok(value)
@@ -294,15 +327,11 @@ impl AssetCache {
         .shared();
 
         {
-            let mut pending = self
+            let pending = self
                 .inner
                 .pending_keys
-                .entry(TypeId::of::<(K::Stored, K::Output)>())
-                .or_insert_with(|| Box::new(PendingKeyMap::<K, K::Output>::new()));
+                .entry_or_default::<PendingKeyMap<K, K::Output>>();
 
-            let pending = pending
-                .downcast_mut::<PendingKeyMap<K, K::Output>>()
-                .unwrap();
             pending.insert(stored, fut.downgrade().unwrap());
         }
 
@@ -311,7 +340,7 @@ impl AssetCache {
         AssetLoadFuture { inner: Err(fut) }
     }
 
-    pub async fn load_async<K: AsyncAssetDesc + ?Sized>(&self, key: &K) -> Asset<K::Output> {
+    pub async fn load_async<K: AsyncAssetKey + ?Sized>(&self, key: &K) -> Asset<K::Output> {
         match self.try_load_async(key).await {
             Ok(v) => v,
             Err(err) => {
@@ -326,35 +355,21 @@ impl AssetCache {
         K: ?Sized + AssetDesc,
     {
         // Keys of K
-        let keys = self
-            .inner
-            .keys
-            .get(&TypeId::of::<(K::Stored, K::Output)>())?;
+        let keys = self.inner.keys.get::<KeyMap<K::Stored, K::Output>>()?;
 
-        let handle = keys
-            .downcast_ref::<KeyMap<K::Stored, K::Output>>()
-            .unwrap()
-            .get(key)?
-            .upgrade()?;
+        let handle = keys.get(key)?.upgrade()?;
 
         Some(handle)
     }
 
     pub fn get_async<K>(&self, key: &K) -> Option<Asset<K::Output>>
     where
-        K: ?Sized + AsyncAssetDesc,
+        K: ?Sized + AsyncAssetKey,
     {
         // Keys of K
-        let keys = self
-            .inner
-            .keys
-            .get(&TypeId::of::<(K::Stored, K::Output)>())?;
+        let keys = self.inner.keys.get::<KeyMap<K::Stored, K::Output>>()?;
 
-        let handle = keys
-            .downcast_ref::<KeyMap<K::Stored, K::Output>>()
-            .unwrap()
-            .get(key)?
-            .upgrade()?;
+        let handle = keys.get(key)?.upgrade()?;
 
         Some(handle)
     }
@@ -365,14 +380,28 @@ impl AssetCache {
     pub fn insert<V: 'static + Send + Sync>(&self, value: V) -> Asset<V> {
         self.inner
             .cells
-            .entry(TypeId::of::<V>())
-            .or_insert_with(|| Box::new(AssetCell::<V>::new()))
-            .downcast_mut::<AssetCell<V>>()
-            .unwrap()
+            .entry_or_default::<AssetCell<V>>()
             .insert(value)
     }
 
+    pub fn reload<K: AsyncAssetKey>(&self, key: &K) -> AssetLoadFuture<K::Output> {
+        // Remove the key from the pending keys
+        let pending = self.inner.pending_keys.get::<PendingKeyMap<K, K::Output>>();
+        if let Some(pending) = pending {
+            pending.remove(key);
+        }
+
+        self.inner
+            .keys
+            .get::<KeyMap<K::Stored, K::Output>>()
+            .and_then(|v| v.remove(key));
+
+        // Try to load the asset again
+        self.try_load_async(key)
+    }
+
     pub fn register_service<S: Service>(&self, service: S) {
+        service.register(self);
         self.inner
             .services
             .write()
@@ -387,6 +416,18 @@ impl AssetCache {
                 .downcast_ref::<S>()
                 .expect("Service type mismatch")
         })
+    }
+
+    pub fn try_get_service<S: Service>(&self) -> Option<impl Deref<Target = S> + '_ + Send> {
+        RwLockReadGuard::try_map(self.inner.services.read(), |v| {
+            Some(
+                v.get(&TypeId::of::<S>())?
+                    .as_any()
+                    .downcast_ref::<S>()
+                    .expect("Service type mismatch"),
+            )
+        })
+        .ok()
     }
 
     /// Returns asset loading timelines
@@ -438,7 +479,7 @@ pub trait AsyncAssetExt<V>: 'static + Send + Sync {
 
 impl<T, V> AsyncAssetExt<V> for T
 where
-    T: AsyncAssetDesc<Output = V>,
+    T: AsyncAssetKey<Output = V>,
     T::Error: Debug + Display,
     V: 'static + Send + Sync,
 {
@@ -476,7 +517,7 @@ pub trait AssetDesc: StoredKey + Debug {
 /// Assets are immutable, and shared.
 ///
 /// For mutable and owned/exclusive resource loading, refer to [`Loadable`]
-pub trait AsyncAssetDesc: StoredKey + Debug + Send + Sync {
+pub trait AsyncAssetKey: StoredKey + Debug + Send + Sync {
     type Output: 'static + Send + Sync;
     type Error: Send + Sync + 'static + Debug + Display + Into<anyhow::Error>;
 
@@ -636,15 +677,15 @@ mod tests {
         #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
         struct Key(String);
 
-        impl AsyncAssetDesc for Key {
+        impl AsyncAssetKey for Key {
             type Output = ();
             type Error = Infallible;
 
             async fn create(&self, assets: &AssetCache) -> Result<Asset<()>, Infallible> {
-                eprintln!("Loading {:?}", self);
+                eprintln!("Loading {self:?}");
                 YieldOnce { yielded: false }.await;
 
-                eprintln!("Finished {:?}", self);
+                eprintln!("Finished {self:?}");
                 Ok(assets.insert(()))
             }
         }
