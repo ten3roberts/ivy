@@ -109,7 +109,6 @@ impl UiLayer {
 
         instance.input_state.update_external_focus(&instance.frame);
 
-        // TODO: modifiers changed
         let mut captured = match event {
             InputEvent::Keyboard(keyboard_input) => instance.input_state.on_keyboard_input(
                 &mut instance.frame,

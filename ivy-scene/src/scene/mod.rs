@@ -1,8 +1,9 @@
 //! Core scene layer.
 //!
 //! Allows managing multiple game worlds.
+pub mod render;
 pub mod ser;
-pub mod viewport;
+pub mod ui;
 pub mod viewport_provider;
 
 use std::{ops::DerefMut, sync::Arc};
@@ -36,6 +37,7 @@ impl SceneCommand {
 component! {
     pub scene_commands: flume::Sender<SceneCommand>,
     pub scene_world: World,
+    pub on_new_scene: Vec<Box<dyn Send + Sync + FnMut(&World, Entity) -> bool>>,
 }
 
 /// A scene represents a world within the ivy engine
@@ -149,17 +151,10 @@ impl SceneLayer {
 
         Self {
             active_scene: None,
-            staged_scene: None,
             scene_command_rx: rx,
             scene_commands_tx: tx,
             window: None,
         }
-    }
-
-    /// Set the scene
-    pub fn with_scene(mut self, scene: SceneBuilder) -> Self {
-        self.staged_scene = Some(scene);
-        self
     }
 
     fn process_commands(
@@ -236,6 +231,7 @@ impl SceneLayer {
                 store,
                 &ResizedEvent {
                     physical_size: window.inner_size(),
+                    logical_size: window.inner_size().to_logical(window.scale_factor()),
                 },
             )?;
         }
