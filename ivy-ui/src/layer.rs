@@ -13,7 +13,7 @@ use ivy_input::types::InputEvent;
 use ivy_wgpu::{
     components::{main_window, window},
     driver::WindowHandle,
-    events::{ApplicationReady, ResizedEvent, ScaleFactorChangedEvent},
+    events::{ApplicationReady, ScaleFactorChangedEvent, WindowResizedEvent},
 };
 use violet::{
     core::{declare_atom, style::StylesheetOptions, widget::col, ScopeRef},
@@ -47,10 +47,27 @@ declare_atom! {
     pub action_sender: ActionSender,
 }
 
+/// Options for configuring the UI layer
+pub struct UiLayerOptions {
+    pub label: String,
+    pub capture_all_input: bool,
+    pub follow_window_size: bool,
+}
+
+impl Default for UiLayerOptions {
+    fn default() -> Self {
+        Self {
+            label: "main_ui".to_string(),
+            capture_all_input: false,
+            follow_window_size: true,
+        }
+    }
+}
+
 pub struct UiLayer {
+    options: UiLayerOptions,
     instance: Option<AppInstance>,
     window: Option<WindowHandle>,
-    capture_all_input: bool,
     screens: ScreenState,
 }
 
@@ -62,6 +79,10 @@ impl Default for UiLayer {
 
 impl UiLayer {
     pub fn new() -> Self {
+        Self::with_options(UiLayerOptions::default())
+    }
+
+    pub fn with_options(options: UiLayerOptions) -> Self {
         let screens = ScreenState::new();
 
         let instance = AppBuilder::new()
@@ -74,16 +95,21 @@ impl UiLayer {
             .build(col(ScreenStack::new(screens.clone())).with_contain_margins(true));
 
         Self {
+            options,
             screens,
             instance: Some(instance),
             window: None,
-            capture_all_input: false,
         }
+    }
+
+    pub fn with_label(mut self, label: impl Into<String>) -> Self {
+        self.options.label = label.into();
+        self
     }
 
     /// Capture all input events instead of feeding forward to lower layers
     pub fn with_capture_all_input(mut self, capture_all_input: bool) -> Self {
-        self.capture_all_input = capture_all_input;
+        self.options.capture_all_input = capture_all_input;
         self
     }
 
@@ -105,7 +131,7 @@ impl UiLayer {
         event: &InputEvent,
     ) -> anyhow::Result<bool> {
         profile_function!();
-        let instance = store.get_mut(&*engine_world.get(engine(), ui_instance())?);
+        let instance = &mut *store.get_mut(&*engine_world.get(engine(), ui_instance())?);
 
         instance.input_state.update_external_focus(&instance.frame);
 
@@ -160,7 +186,7 @@ impl UiLayer {
             }
         }
 
-        captured |= self.capture_all_input;
+        captured |= self.options.capture_all_input;
         Ok(captured)
     }
 
@@ -169,9 +195,9 @@ impl UiLayer {
         engine_world: &mut World,
         _: &AssetCache,
         store: &mut DynamicStore,
-        event: &ResizedEvent,
+        event: &WindowResizedEvent,
     ) -> anyhow::Result<()> {
-        let instance = store.get_mut(&*engine_world.get(engine(), ui_instance())?);
+        let instance = &mut *store.get_mut(&*engine_world.get(engine(), ui_instance())?);
 
         instance.on_resize(event.physical_size);
         Ok(())
@@ -185,7 +211,7 @@ impl UiLayer {
         event: &ScaleFactorChangedEvent,
     ) -> anyhow::Result<()> {
         tracing::info!(scale_factor = event.scale_factor, "Scale factor changed");
-        let instance = store.get_mut(&*engine_world.get(engine(), ui_instance())?);
+        let instance = &mut *store.get_mut(&*engine_world.get(engine(), ui_instance())?);
 
         instance.set_scale_factor(event.scale_factor);
         instance.on_resize(instance.window_size());
@@ -215,9 +241,11 @@ impl Layer for UiLayer {
             this.on_input_event(ctx.world, ctx.assets, ctx.store, event)
         });
 
-        events.subscribe(|this, ctx, event: &ResizedEvent| {
-            this.on_resized(ctx.world, ctx.assets, ctx.store, event)
-        });
+        if self.options.follow_window_size {
+            events.subscribe(|this, ctx, event: &WindowResizedEvent| {
+                this.on_resized(ctx.world, ctx.assets, ctx.store, event)
+            });
+        }
 
         events.subscribe(|this, ctx, event: &ScaleFactorChangedEvent| {
             this.on_scale_factor_change(ctx.world, ctx.assets, ctx.store, event)
@@ -243,7 +271,7 @@ impl UiUpdateLayer {
     }
 
     fn on_ready(&mut self, world: &mut World, store: &mut DynamicStore) -> anyhow::Result<()> {
-        let instance = store.get_mut(&*world.get(engine(), ui_instance())?);
+        let instance = &mut *store.get_mut(&*world.get(engine(), ui_instance())?);
 
         instance.frame.set_atom(
             action_sender(),
@@ -263,7 +291,7 @@ impl UiUpdateLayer {
     ) -> anyhow::Result<()> {
         profile_function!();
 
-        let instance = store.get_mut(&*world.get(engine(), ui_instance())?);
+        let instance = &mut *store.get_mut(&*world.get(engine(), ui_instance())?);
 
         instance.update();
 
@@ -271,18 +299,6 @@ impl UiUpdateLayer {
             action(world, assets)?;
         }
 
-        Ok(())
-    }
-
-    fn on_resized(
-        &mut self,
-        world: &mut World,
-        store: &mut DynamicStore,
-        event: &ResizedEvent,
-    ) -> anyhow::Result<()> {
-        let instance = store.get_mut(&*world.get(engine(), ui_instance())?);
-
-        instance.on_resize(event.physical_size);
         Ok(())
     }
 }
@@ -307,10 +323,6 @@ impl Layer for UiUpdateLayer {
         events.subscribe(|this, ctx, _: &ApplicationReady| this.on_ready(ctx.world, ctx.store));
 
         events.subscribe(|this, ctx, _: &TickEvent| this.on_tick(ctx.world, ctx.assets, ctx.store));
-
-        events.subscribe(|this, ctx, event: &ResizedEvent| {
-            this.on_resized(ctx.world, ctx.store, event)
-        });
 
         Ok(())
     }

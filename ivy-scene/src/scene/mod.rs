@@ -18,7 +18,7 @@ use ivy_core::{
 };
 use ivy_wgpu::{
     components::{main_window, window},
-    events::{ApplicationReady, ResizedEvent},
+    events::{ApplicationReady, WindowResizedEvent},
     types::Window,
 };
 
@@ -139,6 +139,7 @@ impl Scene {
 /// Allows nesting a scene within the engine
 pub struct SceneLayer {
     active_scene: Option<Scene>,
+    staged_scene: Option<SceneBuilder>,
     scene_command_rx: flume::Receiver<SceneCommand>,
     scene_commands_tx: flume::Sender<SceneCommand>,
     // TODO: don't use events for this
@@ -151,10 +152,16 @@ impl SceneLayer {
 
         Self {
             active_scene: None,
+            staged_scene: None,
             scene_command_rx: rx,
             scene_commands_tx: tx,
             window: None,
         }
+    }
+
+    pub fn with_scene(mut self, scene: SceneBuilder) -> Self {
+        self.staged_scene = Some(scene);
+        self
     }
 
     fn process_commands(
@@ -163,6 +170,16 @@ impl SceneLayer {
         assets: &AssetCache,
         store: &mut DynamicStore,
     ) -> anyhow::Result<()> {
+        if let Some(staged) = self.staged_scene.take() {
+            if let Some(old_scene) = self.active_scene.take() {
+                engine_world.despawn(old_scene.world_id)?;
+            }
+
+            let new_scene = self.process_staging_scene(engine_world, assets, store, staged)?;
+
+            self.active_scene = Some(new_scene);
+        }
+
         for cmd in self.scene_command_rx.drain() {
             match cmd {
                 SceneCommand::OpenScene(ctor) => {
@@ -229,7 +246,7 @@ impl SceneLayer {
                 engine_world,
                 assets,
                 store,
-                &ResizedEvent {
+                &WindowResizedEvent {
                     physical_size: window.inner_size(),
                     logical_size: window.inner_size().to_logical(window.scale_factor()),
                 },

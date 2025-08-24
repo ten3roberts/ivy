@@ -10,7 +10,7 @@ use ivy_core::{
     palette::Srgb,
     profiling::ProfilingLayer,
     transforms::TransformUpdatePlugin,
-    update_layer::{FixedTimeStep, Plugin, ScheduledLayer},
+    update_layer::{FixedTimeStep, Plugin, PluginLayer},
     App, Color, ColorExt, EngineLayer, EntityBuilderExt,
 };
 use ivy_editor::{
@@ -106,7 +106,7 @@ pub fn main() -> anyhow::Result<()> {
         .with_layer(UiLayer::new())
         .with_layer(InputLayer::new())
         .with_layer(
-            ScheduledLayer::new(FixedTimeStep::new(0.02))
+            PluginLayer::new(FixedTimeStep::new(0.02))
                 .with_plugin(FlyCameraPlugin)
                 .with_plugin(StreamedUiPlugin)
                 .with_plugin(ExamplePlugin)

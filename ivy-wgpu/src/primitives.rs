@@ -347,6 +347,12 @@ pub struct PrimitiveBundle {
     mesh: Asset<MeshData>,
 }
 
+impl PrimitiveBundle {
+    pub fn new(mesh: Asset<MeshData>) -> Self {
+        Self { mesh }
+    }
+}
+
 declare_resource!(PrimitiveBundle, PrimitiveBundleDesc);
 
 impl Loadable for PrimitiveBundleDesc {

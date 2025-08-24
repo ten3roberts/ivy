@@ -36,10 +36,6 @@ impl ScreenCommand {
 pub trait Screen: 'static + Send {
     fn create(self, scope: &mut Scope<'_>, token: ScreenLifetimeToken);
 
-    fn capture_input(&self) -> bool {
-        false
-    }
-
     fn block_lower_input(&self) -> bool {
         false
     }
@@ -262,12 +258,7 @@ struct ScreenWidget<S> {
 
 impl<S: Screen> Widget for ScreenWidget<S> {
     fn mount(self, scope: &mut Scope<'_>) {
-        let capture_input = self.screen.capture_input();
         let block_lower_input = self.screen.block_lower_input();
-
-        if capture_input {
-            scope.set_default(self::capture_input());
-        }
 
         if block_lower_input {
             scope.set_default(self::block_lower_input());
@@ -275,9 +266,6 @@ impl<S: Screen> Widget for ScreenWidget<S> {
 
         if block_lower_input {
             scope.attach(move |scope: &mut Scope| {
-                if self.screen.capture_input() {
-                    scope.set_default(keep_focus());
-                }
                 self.screen.create(scope, self.token);
             });
 
@@ -288,9 +276,6 @@ impl<S: Screen> Widget for ScreenWidget<S> {
                 .with_horizontal_alignment(Align::Center)
                 .mount(scope);
         } else {
-            if self.screen.capture_input() {
-                scope.set_default(keep_focus());
-            }
             self.screen.create(scope, self.token);
         };
     }
@@ -298,7 +283,6 @@ impl<S: Screen> Widget for ScreenWidget<S> {
 
 component! {
     pub request_focus: (),
-    capture_input: (),
     block_lower_input: (),
 }
 

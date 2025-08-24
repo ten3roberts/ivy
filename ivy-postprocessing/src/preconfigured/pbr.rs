@@ -7,7 +7,8 @@ use ivy_assets::{
     stored::{DynamicStore, Handle},
     AssetCache, AsyncAssetExt,
 };
-use ivy_ui::{node::UiRenderNode, violet::wgpu::app::AppInstance};
+use ivy_core::components::engine;
+use ivy_ui::{components::ui_instance, node::UiRenderNode, violet::wgpu::app::AppInstance};
 use ivy_wgpu::{
     components::{forward_pass, transparent_pass},
     renderer::{
@@ -101,11 +102,11 @@ impl Default for BloomConfig {
     }
 }
 
-pub struct PbrRenderGraph {
+pub struct PbrRenderGraphTextures {
     screensized: Vec<TextureHandle>,
 }
 
-impl PbrRenderGraph {
+impl PbrRenderGraphTextures {
     pub fn screensized(&self) -> &[TextureHandle] {
         &self.screensized
     }
@@ -121,9 +122,8 @@ impl PbrRenderGraphConfig {
         assets: &AssetCache,
         store: &mut DynamicStore,
         render_graph: &mut RenderGraph,
-        ui_instance: Option<Handle<AppInstance>>,
         destination: TextureHandle,
-    ) -> PbrRenderGraph {
+    ) -> PbrRenderGraphTextures {
         let object_manager = store.insert(ObjectManager::new(world, gpu));
 
         let extent = Extent3d {
@@ -462,15 +462,16 @@ impl PbrRenderGraphConfig {
             gizmos_depth_texture,
         ));
 
+        let ui_instance = world.get_clone(engine(), ui_instance()).ok();
         if let Some(ui) = ui_instance {
             render_graph.add_node(UiRenderNode::new(gpu, ui, destination));
         }
 
-        PbrRenderGraph { screensized }
+        PbrRenderGraphTextures { screensized }
     }
 }
 
-impl PbrRenderGraph {
+impl PbrRenderGraphTextures {
     pub fn set_size(&self, render_graph: &mut RenderGraph, size: PhysicalSize<u32>) {
         let new_extent = Extent3d {
             width: size.width,

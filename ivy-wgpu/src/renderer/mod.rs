@@ -7,7 +7,7 @@ pub mod shadowmapping;
 
 use std::any::type_name;
 
-use flax::{fetch::entity_refs, Component, EntityRef, Query, World};
+use flax::{fetch::entity_refs, Component, Entity, EntityRef, Query, World};
 use glam::{Mat4, Vec3};
 use itertools::Itertools;
 use ivy_assets::{
@@ -268,6 +268,7 @@ pub fn get_camera_data(camera: &EntityRef) -> CameraData {
 }
 
 pub struct CameraNode {
+    camera: Option<Entity>,
     renderer: Box<dyn CameraRenderer>,
     shader_data: CameraShaderData,
     depth_texture: TextureHandle,
@@ -304,6 +305,7 @@ impl CameraNode {
             output,
             skybox,
             bind_group: None,
+            camera: None,
         }
     }
 }
@@ -324,14 +326,18 @@ impl Node for CameraNode {
             .first()
         {
             self.shader_data.data = get_camera_data(&camera);
+            self.camera = Some(camera.id());
 
             self.shader_data
                 .buffer
                 .write(&ctx.gpu.queue, 0, &[self.shader_data.data]);
+        } else {
+            self.shader_data.data = Default::default();
+            self.camera = None;
+            self.bind_group = None;
         }
-
         self.light_manager.update(&ctx)?;
-        let object_manager = ctx.store.get_mut(&self.object_manager);
+        let object_manager = &mut *ctx.store.get_mut(&self.object_manager);
 
         object_manager.update(ctx.world, ctx.gpu)?;
 
@@ -353,6 +359,10 @@ impl Node for CameraNode {
     }
 
     fn draw(&mut self, ctx: crate::rendergraph::NodeExecutionContext) -> anyhow::Result<()> {
+        if self.camera.is_none() {
+            return Ok(());
+        }
+
         let depth = ctx.get_texture(self.depth_texture);
 
         let depth_view = depth.create_view(&Default::default());
@@ -439,7 +449,7 @@ impl Node for CameraNode {
         let output = ctx.get_texture(self.output);
         let output_view = output.create_view(&Default::default());
 
-        let object_manager = ctx.store.get_mut(&self.object_manager);
+        let object_manager = &mut *ctx.store.get_mut(&self.object_manager);
 
         let render_context = RenderContext {
             world: ctx.world,
@@ -578,6 +588,7 @@ impl CameraShaderData {
     }
 }
 
+// TODO: remove
 pub struct RenderObjectBundle<'a> {
     pub mesh: MeshDesc,
     pub color: Color,
@@ -603,6 +614,28 @@ impl Bundle for RenderObjectBundle<'_> {
         for (pass, material) in self.materials {
             entity.set(*pass, material.clone());
         }
+    }
+}
+
+pub struct MeshBundle {
+    pub mesh: MeshDesc,
+    pub color: Color,
+}
+
+impl MeshBundle {
+    pub fn new(mesh: MeshDesc) -> Self {
+        Self {
+            mesh,
+            color: Color::white(),
+        }
+    }
+}
+
+impl Bundle for MeshBundle {
+    fn mount(&self, entity: &mut flax::EntityBuilder) {
+        entity
+            .set(mesh(), self.mesh.clone())
+            .set(color(), self.color);
     }
 }
 

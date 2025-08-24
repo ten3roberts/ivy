@@ -74,7 +74,7 @@ impl Bundle for OrbitCameraBundle {
             .set(main_camera(), ())
             .set_default(projection_matrix())
             .set_default(environment_data())
-            .set(phi(), 0.0)
+            .set(phi(), -0.5)
             .set_default(theta())
             .set_default(focus_point())
             .set(

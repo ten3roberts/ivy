@@ -35,6 +35,19 @@ pub struct Material {
     effects: BTreeMap<EffectPass, RenderEffect>,
 }
 
+impl Material {
+    pub fn new() -> Self {
+        Self {
+            effects: BTreeMap::new(),
+        }
+    }
+
+    pub fn with_effect(mut self, pass: EffectPass, effect: RenderEffect) -> Self {
+        self.effects.insert(pass, effect);
+        self
+    }
+}
+
 #[derive(Debug, Clone, Editable, serde::Serialize, serde::Deserialize)]
 pub struct MaterialDesc {
     effects: BTreeMap<EffectPass, RenderEffectDesc>,
@@ -70,6 +83,12 @@ declare_resource!(Material, MaterialDesc);
 pub struct MaterialBundle {
     #[resource(load)]
     material: Asset<Material>,
+}
+
+impl MaterialBundle {
+    pub fn new(material: Asset<Material>) -> Self {
+        Self { material }
+    }
 }
 
 impl Bundle for MaterialBundle {

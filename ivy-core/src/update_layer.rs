@@ -291,13 +291,13 @@ impl ScheduleSet {
 }
 
 /// Executes a schedule using the provided time step
-pub struct ScheduledLayer {
+pub struct PluginLayer {
     builder: ScheduleSetBuilder,
     schedules: Option<ScheduleSet>,
     plugins: Vec<Box<dyn Plugin>>,
 }
 
-impl ScheduledLayer {
+impl PluginLayer {
     pub fn new(fixed_timestep: FixedTimeStep) -> Self {
         Self {
             builder: ScheduleSetBuilder::new(fixed_timestep),
@@ -467,7 +467,7 @@ impl ScheduledLayer {
     }
 }
 
-impl Layer for ScheduledLayer {
+impl Layer for PluginLayer {
     fn register(
         &mut self,
         _: &mut World,

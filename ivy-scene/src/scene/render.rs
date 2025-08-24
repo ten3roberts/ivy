@@ -2,7 +2,9 @@ use std::mem;
 
 use flax::{Entity, World};
 use ivy_assets::{stored::DynamicStore, AssetCache, AssetPath};
-use ivy_postprocessing::preconfigured::pbr::{PbrRenderGraph, PbrRenderGraphConfig, SkyboxConfig};
+use ivy_postprocessing::preconfigured::pbr::{
+    PbrRenderGraphConfig, PbrRenderGraphTextures, SkyboxConfig,
+};
 use ivy_wgpu::{
     rendergraph::{
         self, Dependency, ExternalResources, Node, NodeExecutionContext, NodeUpdateContext,
@@ -23,7 +25,7 @@ pub struct SceneRenderNode {
     view_handle: TextureHandle,
 
     subgraph_output: TextureHandle,
-    pbr: PbrRenderGraph,
+    pbr: PbrRenderGraphTextures,
     update_size: bool,
 }
 
@@ -55,7 +57,6 @@ impl SceneRenderNode {
             assets,
             store,
             &mut subgraph,
-            None,
             subgraph_output,
         );
 
@@ -169,7 +170,9 @@ fn get_rendering_settings() -> PbrRenderGraphConfig {
             msaa: Some(Default::default()),
             bloom: Some(Default::default()),
             skybox: Some(SkyboxConfig {
-                hdri: Box::new(AssetPath::new("hdris/rogland_clear_night_8k.hdr")),
+                hdri: Box::new(AssetPath::new(
+                    "hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
+                )),
                 format: TextureFormat::Rgba16Float,
             }),
             hdr_format: Some(wgpu::TextureFormat::Rgba16Float),

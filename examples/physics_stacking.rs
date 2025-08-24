@@ -1,13 +1,13 @@
 use flax::{Entity, World};
 use glam::{vec3, EulerRot, Quat, Vec3};
-use ivy_assets::{stored::DynamicStore, AssetCache, AssetPath};
+use ivy_assets::{stored::DynamicStore, AssetCache};
 use ivy_core::{
     app::PostInitEvent,
     layer::events::EventRegisterContext,
     palette::{Srgb, Srgba},
     profiling::ProfilingLayer,
     transforms::TransformUpdatePlugin,
-    update_layer::{FixedTimeStep, ScheduledLayer},
+    update_layer::{FixedTimeStep, PluginLayer},
     App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer,
 };
 use ivy_editor::{
@@ -26,8 +26,7 @@ use ivy_physics::{
     components::collider_builder, ColliderBundle, GizmoSettings, PhysicsPlugin, RigidBodyKind,
 };
 use ivy_postprocessing::preconfigured::{
-    pbr::{PbrRenderGraphConfig, SkyboxConfig},
-    SurfacePbrPipelineDesc, SurfacePbrRenderer,
+    pbr::PbrRenderGraphConfig, SurfacePbrPipelineDesc, SurfacePbrRenderer,
 };
 use ivy_scene::ray_picker::RayPickingPlugin;
 use ivy_ui::{
@@ -47,7 +46,6 @@ use ivy_wgpu::{
 use rapier3d::prelude::{ColliderBuilder, SharedShape};
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
-use wgpu::TextureFormat;
 use winit::{dpi::LogicalSize, window::WindowAttributes};
 
 const ENABLE_SKYBOX: bool = true;
@@ -100,7 +98,7 @@ pub fn main() -> anyhow::Result<()> {
         .with_layer(InputLayer::new())
         .with_layer(LogicLayer)
         .with_layer(
-            ScheduledLayer::new(FixedTimeStep::new(0.02))
+            PluginLayer::new(FixedTimeStep::new(0.02))
                 .with_plugin(StreamedUiPlugin)
                 .with_plugin(FlyCameraPlugin)
                 .with_plugin(

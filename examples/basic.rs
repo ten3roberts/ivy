@@ -1,13 +1,12 @@
 use std::f32::consts::{PI, TAU};
 
-use anyhow::Context;
 use flax::{
     components::child_of, BoxedSystem, Component, Entity, FetchExt, Query, QueryBorrow, System,
     World,
 };
 use glam::{vec3, EulerRot, Mat4, Quat, Vec3};
 use image::{DynamicImage, Rgba};
-use itertools::Itertools;
+use ivy_assets::loadable::Loadable;
 use ivy_assets::{stored::DynamicStore, Asset, AssetCache, AssetPath, AsyncAssetExt};
 use ivy_core::{
     app::PostInitEvent,
@@ -17,7 +16,7 @@ use ivy_core::{
     palette::{Srgb, WithAlpha},
     profiling::ProfilingLayer,
     transforms::TransformUpdatePlugin,
-    update_layer::{FixedTimeStep, Plugin, ScheduleSetBuilder, ScheduledLayer},
+    update_layer::{FixedTimeStep, Plugin, PluginLayer, ScheduleSetBuilder},
     App, AsyncCommandBuffer, EngineLayer, EntityBuilderExt, Layer,
 };
 use ivy_engine::{
@@ -49,6 +48,8 @@ use ivy_ui::{
     layer::{UiLayer, UiUpdateLayer},
     screens::{screen_state, Screen},
 };
+use ivy_wgpu::material::{EffectPass, Material, MaterialBundle};
+use ivy_wgpu::renderer::MeshBundle;
 use ivy_wgpu::{
     components::{forward_pass, light_kind, light_params, shadow_pass, transparent_pass},
     driver::WinitDriver,
@@ -128,7 +129,7 @@ pub fn main() -> anyhow::Result<()> {
         .with_layer(InputLayer::new())
         .with_layer(LogicLayer::new())
         .with_layer(
-            ScheduledLayer::new(FixedTimeStep::new(0.02))
+            PluginLayer::new(FixedTimeStep::new(0.02))
                 .with_plugin(GameUiPlugin)
                 .with_plugin(OrbitCameraPlugin)
                 .with_plugin(GizmosPlugin)
@@ -190,7 +191,7 @@ impl LogicLayer {
         Self {}
     }
 
-    fn setup_assets(&mut self, world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
+    fn setup_assets(&self, world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
         let cmd = world.get(engine(), async_commandbuffer()).unwrap().clone();
         let assets = assets.clone();
 
@@ -203,7 +204,6 @@ impl LogicLayer {
 
             let texture_group = "textures/BaseCollection/Sand";
             let albedo = AssetPath::new(format!("{texture_group}/albedo.png"));
-
             let normal = AssetPath::new(format!("{texture_group}/normal.png"));
 
             let roughness: AssetPath<DynamicImage> =
@@ -220,12 +220,7 @@ impl LogicLayer {
                     .with_metallic_factor(0.0)
                     .with_albedo(TextureDesc::Path(albedo))
                     .with_normal(TextureDesc::Path(normal))
-                    // .with_metallic_roughness(TextureDesc::Path(roughness).process(
-                    //     MetallicRoughnessProcessor::new(
-                    //         ColorChannelOrValue::Value(0),
-                    //         ColorChannelOrValue::Channel(ColorChannel::Red),
-                    //     ),
-                    // ))
+                    .with_metallic_roughness(TextureDesc::Path(roughness))
                     .with_ambient_occlusion(TextureDesc::Path(ao))
                     .with_displacement(TextureDesc::Path(displacement)),
             )
@@ -233,7 +228,7 @@ impl LogicLayer {
             .await?;
 
             let emissive_material = RenderEffectDesc::Emissive(PbrEmissiveRenderEffectDesc::new(
-                PbrRenderEffectDesc::new().with_albedo(TextureDesc::Color(255, 255, 255, 255)),
+                PbrRenderEffectDesc::new().with_albedo(TextureDesc::Color(255, 255, 255, 50)),
                 TextureDesc::Color(255, 255, 255, 255),
                 20.0,
             ))
@@ -256,7 +251,7 @@ impl LogicLayer {
                     ))
                     .mount(RigidBodyBundle::fixed())
                     .mount(
-                        ColliderBundle::new(SharedShape::cuboid(16.0, 0.01, 16.0))
+                        ColliderBundle::new(SharedShape::cuboid(16.0, 0.1, 16.0))
                             .with_density(DENSITY)
                             .with_restitution(RESTITUTION)
                             .with_friction(FRICTION),
@@ -267,8 +262,8 @@ impl LogicLayer {
 
             let unlit_material = RenderEffect::Pbr(
                 PbrRenderEffect::new()
-                    .with_metallic_factor(1.0)
-                    .with_roughness_factor(0.1)
+                    .with_metallic_factor(0.0)
+                    .with_roughness_factor(0.2)
                     .with_albedo(TextureData::Color(Rgba([255, 255, 255, 128]))),
             );
             Entity::builder()
@@ -290,13 +285,10 @@ impl LogicLayer {
                 )
                 .mount(RenderObjectBundle::new(
                     sphere_mesh.clone(),
-                    &[
-                        (forward_pass(), emissive_material.clone()),
-                        (shadow_pass(), RenderEffect::OpaqueShadow),
-                    ],
+                    &[(transparent_pass(), emissive_material.clone())],
                 ))
                 .mount(LightBundle {
-                    params: LightParams::new(Srgb::new(1.0, 1.0, 1.0), 2.0),
+                    params: LightParams::new(Srgb::new(1.0, 1.0, 1.0), 5.0),
                     kind: LightKind::Point,
                     cast_shadow: false,
                 })
@@ -308,14 +300,22 @@ impl LogicLayer {
                 for j in 0..2 {
                     let metallic = j as f32;
 
-                    let plastic_material = RenderEffect::Pbr(
-                        PbrRenderEffect::new()
-                            .with_metallic_factor(metallic)
-                            .with_roughness_factor(roughness),
-                    );
-
                     let phi = (i as f32 / roughness_count as f32) * TAU
                         + j as f32 * PI / roughness_count as f32;
+
+                    // one-off material
+                    let material = assets.insert(
+                        Material::new()
+                            .with_effect(
+                                EffectPass::Forward,
+                                RenderEffect::Pbr(
+                                    PbrRenderEffect::new()
+                                        .with_metallic_factor(metallic)
+                                        .with_roughness_factor(roughness),
+                                ),
+                            )
+                            .with_effect(EffectPass::Shadow, RenderEffect::OpaqueShadow),
+                    );
 
                     let radius = 8.0 + j as f32 * 3.0;
                     cmd.lock().spawn(
@@ -325,13 +325,8 @@ impl LogicLayer {
                                 1.0,
                                 phi.sin() * radius,
                             )))
-                            .mount(RenderObjectBundle::new(
-                                sphere_mesh.clone(),
-                                &[
-                                    (forward_pass(), plastic_material.clone()),
-                                    (shadow_pass(), RenderEffect::OpaqueShadow),
-                                ],
-                            )),
+                            .mount(MeshBundle::new(sphere_mesh.clone()))
+                            .mount(MaterialBundle::new(material)),
                     );
                 }
             }
@@ -345,46 +340,36 @@ impl LogicLayer {
                 .await
                 .unwrap();
 
-            tracing::info!(
-                "{:?}",
-                document
-                    .nodes()
-                    .map(|v| v.name().map(|v| v.to_string()))
-                    .collect_vec()
-            );
-            let node = document
-                .find_node("Gears")
-                .context("Missing document node")
-                .unwrap();
+            for node in document.nodes() {
+                let animation = assets
+                    .try_load_async(&AnimationDesc {
+                        document: "models/Gears.glb".into(),
+                        animation: "ArmatureAction.001".into(),
+                    })
+                    .await?;
 
-            let mut animator = Animator::new();
+                let mut player = AnimationPlayer::new(animation);
+                player.set_looping(true);
+                player.set_speed(0.5);
 
-            let animation = assets
-                .try_load_async(&AnimationDesc {
-                    document: "models/Gears.glb".into(),
-                    animation: "ArmatureAction.001".into(),
-                })
-                .await?;
+                let mut animator = Animator::new();
+                animator.start_animation(player);
 
-            let mut player = AnimationPlayer::new(animation);
-            player.set_looping(true);
-            player.set_speed(0.5);
-            animator.start_animation(player);
-
-            node.mount(
-                &mut Entity::builder(),
-                &NodeMountOptions {
-                    skip_empty_children: true,
-                    material_overrides: &Default::default(),
-                },
-            )
-            .mount(TransformBundle::new(
-                vec3(0.0, 0.5, 0.0),
-                Quat::IDENTITY,
-                Vec3::ONE,
-            ))
-            .set(ivy_gltf::components::animator(), animator)
-            .spawn_into(&mut cmd.lock());
+                node.mount(
+                    &mut Entity::builder(),
+                    &NodeMountOptions {
+                        skip_empty_children: true,
+                        material_overrides: &Default::default(),
+                    },
+                )
+                .mount(TransformBundle::new(
+                    vec3(0.0, 0.5, 0.0),
+                    Quat::IDENTITY,
+                    Vec3::ONE,
+                ))
+                .set(ivy_gltf::components::animator(), animator)
+                .spawn_into(&mut cmd.lock());
+            }
 
             anyhow::Ok(())
         }

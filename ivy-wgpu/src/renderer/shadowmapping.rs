@@ -153,7 +153,6 @@ impl Node for ShadowMapNode {
         let Some((_, &main_camera_transform, &main_camera_proj)) =
             self.main_camera_query.borrow(ctx.world).first()
         else {
-            tracing::warn!("no main camera");
             return Ok(UpdateResult::Success);
         };
 
@@ -303,7 +302,7 @@ impl Node for ShadowMapNode {
 
         ctx.world.append_all(light_shadow_data(), to_add)?;
 
-        let object_manager = ctx.store.get(&self.object_manager);
+        let object_manager = &mut ctx.store.get(&self.object_manager);
         let mut update_ctx = UpdateContext {
             world: ctx.world,
             assets: ctx.assets,
@@ -394,7 +393,7 @@ impl Node for ShadowMapNode {
         for (bind_group, view, light_camera, renderer) in iter {
             profile_scope!("cascade_draw");
 
-            let object_manager = ctx.store.get(&self.object_manager);
+            let object_manager = &*ctx.store.get(&self.object_manager);
             let draw_ctx = RenderContext {
                 world: ctx.world,
                 assets: ctx.assets,

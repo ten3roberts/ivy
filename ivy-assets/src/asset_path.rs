@@ -6,7 +6,7 @@ use futures::future::BoxFuture;
 use crate::{
     hotreload::FileReloadService,
     loadable::{LoadFromPath, Loadable, Resource, ResourceDyn},
-    service::FsAssetError,
+    service::{FileSystemMapService, FsAssetError},
     Asset, AssetCache, AsyncAssetExt, AsyncAssetKey,
 };
 
@@ -66,7 +66,13 @@ where
 
     async fn create(&self, assets: &AssetCache) -> Result<Asset<Self::Output>, Self::Error> {
         if let Some(reload) = assets.try_get_service::<FileReloadService>() {
-            reload.track_path(self.clone())?;
+            let full_path = assets
+                .service::<FileSystemMapService>()
+                .get_system_path(self.path());
+
+            if let Err(err) = reload.track_path(Self::new(full_path)) {
+                tracing::warn!("Failed to track asset path for hot-reloading: {err}");
+            }
         }
         Ok(assets.insert(T::load_from_file(self.clone(), assets).await?))
     }

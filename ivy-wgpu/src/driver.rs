@@ -24,7 +24,7 @@ use winit::{
 
 use crate::{
     components::{main_window, window, window_cursor_position, window_size},
-    events::{ApplicationReady, RedrawEvent, ResizedEvent, ScaleFactorChangedEvent},
+    events::{ApplicationReady, RedrawEvent, ScaleFactorChangedEvent, WindowResizedEvent},
 };
 
 pub struct WinitDriver {
@@ -186,7 +186,7 @@ impl WinitEventHandler<'_> {
                 let window = self.app.world().entity(window_id).unwrap();
                 *window.get_mut(window_size()).unwrap() = logical_size;
 
-                self.app.emit_event(ResizedEvent {
+                self.app.emit_event(WindowResizedEvent {
                     physical_size,
                     logical_size,
                 })?;

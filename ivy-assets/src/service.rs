@@ -62,6 +62,10 @@ impl FileSystemMapService {
         Self { root: root.into() }
     }
 
+    pub fn get_system_path(&self, path: impl AsRef<Path>) -> PathBuf {
+        self.root.join(path.as_ref())
+    }
+
     pub fn load_reader(&self, path: impl AsRef<Path>) -> Result<BufReader<File>, FsAssetError> {
         let path = path.as_ref();
 

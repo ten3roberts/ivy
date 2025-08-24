@@ -20,7 +20,7 @@ pub struct NodeExecutionContext<'a> {
     pub encoder: &'a mut CommandEncoder,
     pub assets: &'a AssetCache,
     pub world: &'a mut World,
-    pub store: &'a mut DynamicStore,
+    pub store: &'a DynamicStore,
     pub external_resources: &'a ExternalResources<'a>,
 }
 
@@ -43,7 +43,7 @@ pub struct NodeUpdateContext<'a> {
     pub resources: &'a RenderGraphResources,
     pub assets: &'a AssetCache,
     pub world: &'a mut World,
-    pub store: &'a mut DynamicStore,
+    pub store: &'a DynamicStore,
     pub external_resources: &'a ExternalResources<'a>,
 }
 
@@ -286,7 +286,7 @@ impl RenderGraph {
         gpu: &Gpu,
         world: &mut World,
         assets: &AssetCache,
-        store: &mut DynamicStore,
+        store: &DynamicStore,
         external_resources: &ExternalResources,
     ) -> anyhow::Result<()> {
         profile_function!();
@@ -341,7 +341,7 @@ impl RenderGraph {
         encoder: &mut CommandEncoder,
         world: &mut World,
         assets: &AssetCache,
-        store: &mut DynamicStore,
+        store: &DynamicStore,
         external_resources: &ExternalResources,
     ) -> anyhow::Result<()> {
         profile_function!();
@@ -707,7 +707,7 @@ mod test {
                 &mut encoder,
                 &mut World::default(),
                 &AssetCache::default(),
-                &mut DynamicStore::default(),
+                &DynamicStore::default(),
                 &ExternalResources::default(),
             )
             .unwrap();

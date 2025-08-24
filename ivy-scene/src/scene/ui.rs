@@ -1,4 +1,4 @@
-use flax::{Entity, Query};
+use flax::{fetch::entity_refs, Entity, Query};
 use glam::Vec2;
 use ivy_core::components::{engine, request_capture_mouse};
 use ivy_input::components::input_state;
@@ -9,19 +9,19 @@ use ivy_ui::{
     streamed::{streamed_tx, Streamed, StreamedUiExt},
     violet::core::{
         components::rect,
-        input::interactive,
-        style::SizeExt,
+        input::{interactive, keep_focus},
+        style::{default_corner_radius, SizeExt},
         unit::Unit,
         widget::{
             interactive::overlay::{overlay_state, OverlayStack, OverlayState},
-            maximized, row, Stack,
+            label, maximized, row, Stack,
         },
         Scope, Widget,
     },
 };
 use ivy_wgpu::rendergraph::TextureHandle;
 
-use crate::scene_world;
+use crate::{scene_world, viewport_provider::scene_viewport_state};
 
 pub enum SceneViewCommand {
     OpenViewport {
@@ -37,20 +37,20 @@ pub enum SceneViewCommand {
 }
 
 /// Shows the active scene from available [`SceneViewportProvider`] context
-pub struct SceneView {
-    scene_view_commands: flume::Receiver<SceneViewCommand>,
-}
+pub struct SceneView {}
 
 impl SceneView {
-    pub fn new(scene_view_commands: flume::Receiver<SceneViewCommand>) -> Self {
-        Self {
-            scene_view_commands,
-        }
+    pub fn new() -> Self {
+        Self {}
     }
 }
 
 impl Widget for SceneView {
     fn mount(self, scope: &mut Scope<'_>) {
+        let scene_views = scope
+            .get_context(scene_viewport_state())
+            .register_listener();
+
         let mut current_viewport: Option<(Entity, Entity)> = None;
 
         let on_command = move |scope: &mut Scope<'_>, item: SceneViewCommand| match item {
@@ -81,7 +81,7 @@ impl Widget for SceneView {
             }
         };
 
-        scope.spawn_stream(self.scene_view_commands.into_stream(), on_command);
+        scope.spawn_stream(scene_views.into_stream(), on_command);
 
         Stack::new(()).with_maximize(Vec2::ONE).mount(scope)
     }
@@ -133,6 +133,7 @@ impl Screen for SceneInputCapture {
         let capture_mouse = scope.stream_component(request_capture_mouse(), engine());
 
         scope.spawn_stream(capture_mouse.into_stream(), |scope, value| {
+            tracing::info!("Setting capture mouse to {value}");
             scope.set(request_capture_mouse(), value);
         });
 
@@ -142,7 +143,6 @@ impl Screen for SceneInputCapture {
                 Box::new(move |_, engine_world, _, event| {
                     let scene_world = engine_world.get_mut(self.world_id, scene_world())?;
 
-                    // Delegate input
                     Query::new(input_state().as_mut())
                         .borrow(&scene_world)
                         .for_each(|v| v.apply(event));
@@ -150,17 +150,14 @@ impl Screen for SceneInputCapture {
                     Ok(())
                 }),
             )
+            .set_default(keep_focus())
             .set_default(interactive());
 
         maximized(()).mount(scope)
     }
 
-    fn capture_input(&self) -> bool {
-        false
-    }
-
     fn block_lower_input(&self) -> bool {
-        false
+        true
     }
 }
 
@@ -184,6 +181,7 @@ impl Widget for SceneImage {
         });
 
         RendergraphImage::new(self.view)
+            .with_corner_radius(default_corner_radius())
             .with_maximize(Vec2::ONE)
             .with_min_size(Unit::px2(100.0, 100.0))
             .mount(scope);

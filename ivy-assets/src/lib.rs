@@ -24,9 +24,9 @@
 use std::{
     any::{Any, TypeId},
     borrow::Borrow,
-    collections::HashMap,
+    collections::{hash_map, HashMap},
     error::Error,
-    fmt::{Debug, Display},
+    fmt::{format, Debug, Display},
     future::Future,
     hash::Hash,
     ops::Deref,
@@ -35,6 +35,7 @@ use std::{
     time::Duration,
 };
 
+use anyhow::Context;
 use async_std::{path::PathBuf, task::sleep};
 use dashmap::{
     mapref::one::{MappedRef, MappedRefMut},
@@ -127,11 +128,11 @@ type PendingKeyMap<K, V> = DashMap<
     WeakShared<BoxFuture<'static, Result<Asset<V>, SharedError>>>,
 >;
 
-struct TypeMap {
+struct ShardedTypeMap {
     inner: DashMap<TypeId, Box<dyn Any + Send + Sync>>,
 }
 
-impl TypeMap {
+impl ShardedTypeMap {
     pub fn new() -> Self {
         Self {
             inner: DashMap::new(),
@@ -169,11 +170,49 @@ impl TypeMap {
     }
 }
 
+struct LocalTypeMap {
+    inner: HashMap<TypeId, Box<dyn Any>>,
+}
+
+impl LocalTypeMap {
+    pub fn new() -> Self {
+        Self {
+            inner: HashMap::new(),
+        }
+    }
+
+    pub fn get<T: 'static>(&self) -> std::option::Option<&T> {
+        self.inner
+            .get(&TypeId::of::<T>())
+            .map(|v| v.downcast_ref::<T>().expect("Type mismatch"))
+    }
+
+    pub fn entry<T: 'static>(&mut self) -> hash_map::Entry<'_, TypeId, Box<dyn Any>> {
+        self.inner.entry(TypeId::of::<T>())
+    }
+
+    pub fn entry_or_default<T: 'static + Default>(&mut self) -> &mut T {
+        match self.entry::<T>() {
+            hash_map::Entry::Occupied(occupied_entry) => occupied_entry
+                .into_mut()
+                .downcast_mut::<T>()
+                .expect("Type mismatch"),
+            hash_map::Entry::Vacant(vacant_entry) => {
+                let value = Box::new(T::default());
+                vacant_entry
+                    .insert(value)
+                    .downcast_mut::<T>()
+                    .expect("Type mismatch")
+            }
+        }
+    }
+}
+
 /// Stores assets which are accessible through handles
 struct AssetCacheInner {
-    pending_keys: TypeMap,
-    keys: TypeMap,
-    cells: TypeMap,
+    pending_keys: ShardedTypeMap,
+    keys: ShardedTypeMap,
+    cells: ShardedTypeMap,
     services: RwLock<HashMap<TypeId, Box<dyn Service + Send>>>,
     timelines: Mutable<Timelines>,
 }
@@ -182,9 +221,9 @@ impl AssetCache {
     pub fn new() -> Self {
         Self {
             inner: Arc::new(AssetCacheInner {
-                keys: TypeMap::new(),
-                cells: TypeMap::new(),
-                pending_keys: TypeMap::new(),
+                keys: ShardedTypeMap::new(),
+                cells: ShardedTypeMap::new(),
+                pending_keys: ShardedTypeMap::new(),
                 services: Default::default(),
                 timelines: Mutable::new(Timelines::new()),
             }),
@@ -560,11 +599,13 @@ impl LoadFromPath for DynamicImage {
         path: AssetPath<DynamicImage>,
         assets: &AssetCache,
     ) -> Result<Self, anyhow::Error> {
-        let format = image::ImageFormat::from_path(path.path())?;
+        let format = image::ImageFormat::from_path(path.path())
+            .with_context(|| format!("Failed to guess image format from path: {path:?}"))?;
         let data = assets
             .service::<FileSystemMapService>()
             .load_bytes_async(path.path())
-            .await?;
+            .await
+            .with_context(|| format!("Could not load bytes from path: {path:?}"))?;
 
         let image = async_std::task::spawn_blocking(move || {
             profile_scope!("load_image_blocking");

@@ -346,7 +346,7 @@ impl Plugin for StreamedUiPlugin {
         world.set(engine(), streamed_tx(), tx.clone())?;
         world.set(engine(), streamed(), Default::default())?;
 
-        let ui = store.get_mut(&*world.get(engine(), ui_instance())?);
+        let ui = &mut *store.get_mut(&*world.get(engine(), ui_instance())?);
         ui.root_scope().set_context(streamed_tx(), tx);
 
         schedules

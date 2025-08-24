@@ -1,8 +1,10 @@
 use flax::Query;
 use glam::Mat4;
 use ivy_assets::stored::DynamicStore;
-use ivy_core::{components::main_camera, Layer};
-use ivy_wgpu::{components::projection_matrix, events::ResizedEvent, renderer::EnvironmentData};
+use ivy_core::{components::main_camera, update_layer::Plugin, Layer};
+use ivy_wgpu::{
+    components::projection_matrix, events::WindowResizedEvent, renderer::EnvironmentData,
+};
 
 pub struct CameraSettings {
     pub environment_data: EnvironmentData,
@@ -20,6 +22,7 @@ impl ViewportCameraLayer {
     }
 }
 
+// TODO: plugin
 impl Layer for ViewportCameraLayer {
     fn register(
         &mut self,
@@ -33,7 +36,7 @@ impl Layer for ViewportCameraLayer {
     {
         let fov = self.settings.fov;
         let environment_data = self.settings.environment_data;
-        events.subscribe(move |_, ctx, resized: &ResizedEvent| {
+        events.subscribe(move |_, ctx, resized: &WindowResizedEvent| {
             if let Some((main_camera, environment)) = Query::new((
                 projection_matrix().as_mut(),
                 ivy_wgpu::components::environment_data().as_mut(),

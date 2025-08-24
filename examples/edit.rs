@@ -5,7 +5,7 @@ use ivy_assets::{stored::DynamicStore, AssetCache, AssetPath};
 use ivy_core::{
     palette::Srgb,
     profiling::ProfilingLayer,
-    update_layer::{FixedTimeStep, Plugin, ScheduleSetBuilder, ScheduledLayer},
+    update_layer::{FixedTimeStep, Plugin, PluginLayer, ScheduleSetBuilder},
     App, EngineLayer,
 };
 use ivy_editable::Editable;
@@ -94,7 +94,7 @@ pub fn main() -> anyhow::Result<()> {
         .with_layer(ui_input_layer)
         .with_layer(InputLayer::new())
         .with_layer(
-            ScheduledLayer::new(FixedTimeStep::new(0.02))
+            PluginLayer::new(FixedTimeStep::new(0.02))
                 .with_plugin(GameUiPlugin)
                 .with_plugin(OrbitCameraPlugin),
         )

@@ -9,7 +9,6 @@ use ivy_wgpu::{
     types::PhysicalSize,
     Gpu,
 };
-use tracing::info;
 use violet::{
     core::{assets::Asset, components::rect},
     glam::Mat4,
@@ -108,7 +107,7 @@ impl Node for UiRenderNode {
         let target = ctx.get_texture(self.target);
         let target_view = target.create_view(&Default::default());
 
-        let instance = ctx.store.get_mut(&self.instance);
+        let instance = &mut *ctx.store.get_mut(&self.instance);
 
         if mem::take(&mut instance.needs_update) {
             instance.update();

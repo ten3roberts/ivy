@@ -103,8 +103,6 @@ fn align_cylindrical_billboard(
     let right = billboard_axis.cross(to_camera).normalize();
     let forward = right.cross(billboard_axis).normalize();
 
-    
-
     Mat4::from_translation(center)
         * Mat4::from_mat3(Mat3::from_cols(right, billboard_axis, forward))
 }
@@ -135,7 +133,6 @@ impl Node for GizmosRendererNode {
 
         let Some((_, &main_camera_transform)) = self.main_camera_query.borrow(ctx.world).first()
         else {
-            tracing::warn!("no main camera");
             return Ok(UpdateResult::Success);
         };
 
@@ -200,11 +197,9 @@ impl Node for GizmosRendererNode {
                 bytemuck::cast_slice(&vertices),
             );
 
-            ctx.gpu.queue.write_buffer(
-                self.mesh.index_buffer(),
-                0,
-                bytemuck::cast_slice(&indices),
-            );
+            ctx.gpu
+                .queue
+                .write_buffer(self.mesh.index_buffer(), 0, bytemuck::cast_slice(&indices));
         } else {
             self.mesh = Mesh::new(
                 ctx.gpu,

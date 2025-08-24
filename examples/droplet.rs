@@ -8,7 +8,7 @@ use ivy_core::{
     palette::Srgb,
     profiling::ProfilingLayer,
     transforms::TransformUpdatePlugin,
-    update_layer::{FixedTimeStep, ScheduledLayer},
+    update_layer::{FixedTimeStep, PluginLayer},
     App, AsyncCommandBuffer, EngineLayer, EntityBuilderExt, Layer, DEG_90,
 };
 use ivy_engine::{async_commandbuffer, engine, TransformBundle};
@@ -73,7 +73,7 @@ pub fn main() -> anyhow::Result<()> {
         .with_layer(InputLayer::new())
         .with_layer(LogicLayer)
         .with_layer(
-            ScheduledLayer::new(FixedTimeStep::new(0.02))
+            PluginLayer::new(FixedTimeStep::new(0.02))
                 .with_plugin(OrbitCameraPlugin)
                 .with_plugin(PhysicsPlugin::new())
                 .with_plugin(TransformUpdatePlugin),

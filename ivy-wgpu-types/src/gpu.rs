@@ -188,7 +188,7 @@ impl Surface {
             self.config.height = new_size.height;
 
             self.size = new_size;
-            tracing::info!("reconfigure surface {:#?}", self.config);
+            // tracing::info!("reconfigure surface {:#?}", self.config);
             self.reconfigure(gpu);
         } else {
             self.size = new_size;
