@@ -1,4 +1,4 @@
-use flax::{fetch::entity_refs, Entity, Query};
+use flax::{Entity, Query};
 use glam::Vec2;
 use ivy_core::components::{engine, request_capture_mouse};
 use ivy_input::components::input_state;
@@ -6,7 +6,7 @@ use ivy_ui::{
     components::on_input_event,
     image::RendergraphImage,
     screens::{Screen, ScreenLifetimeToken, ScreenStack, ScreenState},
-    streamed::{streamed_tx, Streamed, StreamedUiExt},
+    streamed::{streamed_state, StreamedState, StreamedUiExt},
     violet::core::{
         components::rect,
         input::{interactive, keep_focus},
@@ -14,7 +14,7 @@ use ivy_ui::{
         unit::Unit,
         widget::{
             interactive::overlay::{overlay_state, OverlayStack, OverlayState},
-            label, maximized, row, Stack,
+            maximized, row, Stack,
         },
         Scope, Widget,
     },
@@ -23,17 +23,18 @@ use ivy_wgpu::rendergraph::TextureHandle;
 
 use crate::{scene_world, viewport_provider::scene_viewport_state};
 
+pub struct OpenViewport {
+    pub scene: Entity,
+    pub view: TextureHandle,
+    pub on_size: Box<dyn Send + Sync + FnMut(Vec2)>,
+    pub streamed: StreamedState,
+    pub screen_state: ScreenState,
+}
+
 pub enum SceneViewCommand {
-    OpenViewport {
-        scene: Entity,
-        view: TextureHandle,
-        on_size: Box<dyn Send + Sync + FnMut(Vec2)>,
-        streamed_tx: flume::Sender<Box<dyn Streamed>>,
-        screen_state: ScreenState,
-    },
-    CloseViewport {
-        scene: Entity,
-    },
+    OpenViewport(OpenViewport),
+    // TODO: pull into open command result
+    CloseViewport { scene: Entity },
 }
 
 /// Shows the active scene from available [`SceneViewportProvider`] context
@@ -54,15 +55,15 @@ impl Widget for SceneView {
         let mut current_viewport: Option<(Entity, Entity)> = None;
 
         let on_command = move |scope: &mut Scope<'_>, item: SceneViewCommand| match item {
-            SceneViewCommand::OpenViewport {
+            SceneViewCommand::OpenViewport(OpenViewport {
                 scene,
                 view,
                 on_size,
-                streamed_tx,
+                streamed: streamed_tx,
                 screen_state,
-            } => {
+            }) => {
                 let id = scope.attach(SceneViewport {
-                    streamed_tx,
+                    streamed_state: streamed_tx,
                     scene,
                     on_size,
                     view,
@@ -87,17 +88,30 @@ impl Widget for SceneView {
     }
 }
 
-struct SceneViewport {
-    streamed_tx: flume::Sender<Box<dyn Streamed>>,
+/// A viewport showing a scene, capturing input and forwarding it to the scene's input state
+pub struct SceneViewport {
+    streamed_state: StreamedState,
     scene: Entity,
     on_size: Box<dyn Send + Sync + FnMut(Vec2)>,
     view: TextureHandle,
     screen_state: ScreenState,
 }
 
+impl SceneViewport {
+    pub fn new(viewport: OpenViewport) -> Self {
+        Self {
+            streamed_state: viewport.streamed,
+            scene: viewport.scene,
+            on_size: viewport.on_size,
+            view: viewport.view,
+            screen_state: viewport.screen_state,
+        }
+    }
+}
+
 impl Widget for SceneViewport {
     fn mount(self, scope: &mut Scope<'_>) {
-        scope.set_context(streamed_tx(), self.streamed_tx);
+        scope.set_context(streamed_state(), self.streamed_state);
 
         // TODO: maybe a better way for this
         let screens = ScreenStack::new(self.screen_state);

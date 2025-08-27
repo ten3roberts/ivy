@@ -18,7 +18,7 @@
           },
           "restitution": 0.5311432,
           "friction": 0.576828,
-          "density": 0.0
+          "density": 4.9438477
         }
       },
       {
@@ -35,15 +35,15 @@
             1.0
           ],
           "scale": [
-            1.0,
-            1.0,
-            1.0
+            10.0,
+            10.0,
+            10.0
           ]
         }
       },
       {
         "PrimitiveBundle": {
-          "kind": "Cube"
+          "kind": "Sphere"
         }
       },
       {
@@ -54,7 +54,7 @@
       {
         "RigidBodyBundle": {
           "body_type": "Dynamic",
-          "can_sleep": true,
+          "can_sleep": false,
           "mass": 0.0,
           "angular_mass": 0.0,
           "constraints": {
@@ -81,6 +81,22 @@
           ],
           "linear_damping": 0.0,
           "angular_damping": 0.0
+        }
+      },
+      {
+        "LightBundle": {
+          "params": {
+            "color": {
+              "red": 1.0,
+              "green": 0.73,
+              "blue": 0.562
+            },
+            "intensity": 39.670372,
+            "inner_theta": 1.4698206,
+            "outer_theta": 1.5708
+          },
+          "kind": "Spotlight",
+          "cast_shadow": true
         }
       }
     ]

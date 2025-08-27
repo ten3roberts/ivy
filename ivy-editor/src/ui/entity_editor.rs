@@ -2,7 +2,7 @@ use flax::Entity;
 use futures::{FutureExt, channel::oneshot};
 use itertools::Itertools;
 use ivy_editable::registry;
-use ivy_ui::streamed::{StreamedUiExt, streamed_tx};
+use ivy_ui::streamed::{StreamedUiExt, streamed_state};
 use ivy_ui::violet::{self};
 use violet::core::{
     Widget,
@@ -24,7 +24,7 @@ impl EntityComponentEditor {
 
 impl Widget for EntityComponentEditor {
     fn mount(self, scope: &mut violet::core::Scope<'_>) {
-        let _streamed = scope.get_context_cloned(streamed_tx());
+        let _streamed = scope.get_context_cloned(streamed_state());
 
         let (tx, rx) = oneshot::channel();
 

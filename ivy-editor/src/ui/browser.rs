@@ -40,9 +40,9 @@ use ivy_ui::{
                 Button, ButtonStyle, Collapsible, Draggable, FutureWidget, Image,
                 IterWidgetCollection, LoadingSpinner, ScrollArea, Selectable, SignalWidget,
                 StreamWidget, SuspenseWidget, Text, TextInput, TextInputStyle, Throbber, WidgetExt,
-                card, col,
-                interactive::{base::InteractiveWidget, overlay::overlay_state},
-                label, pill, row,
+                col,
+                interactive::{base::InteractiveWidget, overlay::overlay_state, tooltip::Tooltip},
+                label, panel, pill, raised_card, row, subtitle,
             },
         },
         futures_signals::signal::Mutable,
@@ -65,7 +65,7 @@ use crate::ui::{
 
 pub const BROWSER_PANEL_HEIGHT: f32 = 300.0;
 pub const INSPECTOR_PANEL_MAX_HEIGHT: f32 = 800.0;
-pub const INSPECTOR_PANEL_WIDTH: f32 = 600.0;
+pub const INSPECTOR_PANEL_WIDTH: f32 = 400.0;
 
 pub struct DirectoryTree {
     selection: WeakHandle<Mutable<Option<PathBuf>>>,
@@ -602,29 +602,33 @@ impl Widget for RenamableItem {
     }
 }
 
-pub struct DirectoryBrowser {
-    assets: AssetCache,
-    path: PathBuf,
+#[derive(Clone, Debug)]
+pub struct DirectoryBrowserState {
+    selected_file: Mutable<Option<PathBuf>>,
 }
 
-impl DirectoryBrowser {
-    pub fn new(assets: AssetCache, path: impl Into<PathBuf>) -> Self {
+impl DirectoryBrowserState {
+    pub fn new() -> Self {
         Self {
-            assets,
-            path: path.into(),
+            selected_file: Mutable::new(None),
         }
     }
 }
 
-impl Widget for DirectoryBrowser {
+pub struct DetailsPanel {
+    assets: AssetCache,
+    state: DirectoryBrowserState,
+}
+
+impl DetailsPanel {
+    pub fn new(assets: AssetCache, state: DirectoryBrowserState) -> Self {
+        Self { assets, state }
+    }
+}
+
+impl Widget for DetailsPanel {
     fn mount(self, scope: &mut Scope<'_>) {
-        let selected_dir = Mutable::new(Some(self.path.clone()));
-        let selected_file = Mutable::new(Some(self.path.clone()));
-
-        let selected_dir = scope.store(selected_dir);
-        let selected_file = scope.store(selected_file);
-
-        let details_panel = SignalWidget::new(scope.read(&selected_file).signal_ref({
+        let details = SignalWidget::new(self.state.selected_file.signal_ref({
             to_owned!(assets = self.assets);
             move |selected| {
                 to_owned!(assets);
@@ -635,32 +639,59 @@ impl Widget for DirectoryBrowser {
             }
         }));
 
-        row((
-            card(row((
-                ScrollArea::vertical(DirectoryTree {
-                    selection: selected_dir,
-                    path: self.path,
-                    expand_depth: 1,
-                }),
-                SignalWidget::new(scope.read(&selected_dir).signal_ref({
-                    to_owned!(assets = self.assets);
-                    move |selected| {
-                        selected.as_ref().map(|v| DirectoryListing {
-                            path: v.clone(),
-                            selected_file,
-                            selected_dir,
-                            assets: assets.clone(),
-                        })
-                    }
-                })),
-            )))
-            .with_min_size(Unit::px2(100.0, BROWSER_PANEL_HEIGHT))
-            .with_max_size(Unit::px2(f32::MAX, BROWSER_PANEL_HEIGHT))
-            .with_maximize(Vec2::X),
-            details_panel,
-        ))
-        .with_cross_align(Align::End)
-        .with_item_align(LayoutAlignment::bottom_left())
+        panel(details)
+            .with_min_size(Unit::px2(INSPECTOR_PANEL_WIDTH, 0.0))
+            .with_max_size(Unit::px2(INSPECTOR_PANEL_WIDTH, f32::MAX))
+            .with_maximize(Vec2::Y)
+            .mount(scope);
+    }
+}
+
+pub struct DirectoryBrowser {
+    assets: AssetCache,
+    state: DirectoryBrowserState,
+    root: PathBuf,
+}
+
+impl DirectoryBrowser {
+    pub fn new(assets: AssetCache, root: impl Into<PathBuf>, state: DirectoryBrowserState) -> Self {
+        Self {
+            assets,
+            root: root.into(),
+            state,
+        }
+    }
+}
+
+impl Widget for DirectoryBrowser {
+    fn mount(self, scope: &mut Scope<'_>) {
+        let selected_dir = Mutable::new(Some(self.root.clone()));
+
+        let selected_dir = scope.store(selected_dir);
+        let selected_file = scope.store(self.state.selected_file);
+
+        panel(row((
+            ScrollArea::vertical(DirectoryTree {
+                selection: selected_dir,
+                path: self.root,
+                expand_depth: 1,
+            }),
+            SignalWidget::new(scope.read(&selected_dir).signal_ref({
+                to_owned!(assets = self.assets);
+                move |selected| {
+                    selected.as_ref().map(|v| DirectoryListing {
+                        path: v.clone(),
+                        selected_file,
+                        selected_dir,
+                        assets: assets.clone(),
+                    })
+                }
+            })),
+        )))
+        .with_min_size(Unit::px2(100.0, BROWSER_PANEL_HEIGHT))
+        .with_max_size(Unit::px2(f32::MAX, BROWSER_PANEL_HEIGHT))
+        .with_maximize(Vec2::X)
+        // details_panel,
         .mount(scope)
     }
 }
@@ -694,11 +725,6 @@ impl Widget for Breadcrumbs<'_> {
             .with_cross_align(Align::Center)
             .mount(scope);
     }
-}
-
-pub struct FileDetailsPanel {
-    assets: AssetCache,
-    path: PathBuf,
 }
 
 fn bytes_to_human_readable(size: u64) -> String {
@@ -868,6 +894,11 @@ impl FileType {
     }
 }
 
+struct FileDetailsPanel {
+    assets: AssetCache,
+    path: PathBuf,
+}
+
 impl Widget for FileDetailsPanel {
     fn mount(self, scope: &mut Scope<'_>) {
         let path = self.path.clone();
@@ -879,7 +910,7 @@ impl Widget for FileDetailsPanel {
         let file_size = path.metadata().map(|m| m.len()).unwrap_or(0);
         let file_size_str = bytes_to_human_readable(file_size);
 
-        card(col((
+        col((
             FilePreview {
                 assets: &self.assets,
                 path: &self.path,
@@ -887,12 +918,12 @@ impl Widget for FileDetailsPanel {
             label("File Details")
                 .with_font_size(16.0)
                 .with_color(OCEAN_200),
-            label(format!("Name: {file_name}")),
+            Tooltip::label(
+                label(format!("Name: {file_name}")),
+                path.display().to_string(),
+            ),
             label(format!("Size: {file_size_str}")),
-            // label(format!("Path: {}", path.display())),
-        )))
-        .with_min_size(Unit::px2(INSPECTOR_PANEL_WIDTH, 200.0))
-        .with_max_size(Unit::px2(INSPECTOR_PANEL_WIDTH, INSPECTOR_PANEL_MAX_HEIGHT))
+        ))
         .mount(scope);
     }
 }

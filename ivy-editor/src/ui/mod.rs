@@ -11,7 +11,7 @@ use itertools::Itertools;
 use ivy_assets::AssetCache;
 use ivy_ui::{
     screens::Screen,
-    streamed::StreamedUiExt,
+    streamed::{Streamed, StreamedState, StreamedUiExt},
     violet::{
         core::{
             Widget,
@@ -36,13 +36,13 @@ use crate::{
     ui::{browser::DirectoryBrowser, drop::WorldDropArea, entity_editor::EntityComponentEditor},
 };
 
-pub struct EditorUi {
+pub struct InGameEditorUi {
     assets: AssetCache,
     editor: Entity,
     tool_ui: flume::Receiver<Box<dyn Widget + Send>>,
 }
 
-impl EditorUi {
+impl InGameEditorUi {
     pub fn new(
         assets: AssetCache,
         editor: Entity,
@@ -56,7 +56,7 @@ impl EditorUi {
     }
 }
 
-impl Screen for EditorUi {
+impl Screen for InGameEditorUi {
     fn create(
         self,
         scope: &mut ivy_ui::violet::core::Scope<'_>,
@@ -77,7 +77,6 @@ impl Screen for EditorUi {
                     },
                 )),
             )),
-            DirectoryBrowser::new(self.assets, "./assets"),
         ))
         .mount(scope);
     }

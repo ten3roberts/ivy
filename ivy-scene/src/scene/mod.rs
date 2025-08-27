@@ -9,6 +9,7 @@ pub mod viewport_provider;
 use std::{ops::DerefMut, sync::Arc};
 
 use flax::{component, Entity, World};
+use futures::channel;
 use ivy_assets::{stored::DynamicStore, AssetCache};
 use ivy_core::{
     app::{PostInitEvent, TickEvent},
@@ -22,17 +23,29 @@ use ivy_wgpu::{
     types::Window,
 };
 
-pub enum SceneCommand {
-    CloseScene,
-    OpenScene(Box<dyn Send + FnOnce() -> SceneBuilder>),
+pub struct OpenSceneCommand {
+    builder: Box<dyn Send + FnOnce() -> SceneBuilder>,
+    on_ready: Option<channel::oneshot::Sender<Entity>>,
 }
 
-impl SceneCommand {
-    // Transition to a new scene
-    pub fn open_scene(scene: impl 'static + Send + FnOnce() -> SceneBuilder) -> Self {
-        Self::OpenScene(Box::new(scene))
+impl OpenSceneCommand {
+    pub fn new(
+        builder: impl Send + 'static + FnOnce() -> SceneBuilder,
+        on_ready: Option<channel::oneshot::Sender<Entity>>,
+    ) -> Self {
+        Self {
+            builder: Box::new(builder),
+            on_ready,
+        }
     }
 }
+
+pub enum SceneCommand {
+    CloseScene,
+    OpenScene(OpenSceneCommand),
+}
+
+impl SceneCommand {}
 
 component! {
     pub scene_commands: flume::Sender<SceneCommand>,
@@ -182,13 +195,17 @@ impl SceneLayer {
 
         for cmd in self.scene_command_rx.drain() {
             match cmd {
-                SceneCommand::OpenScene(ctor) => {
+                SceneCommand::OpenScene(cmd) => {
                     if let Some(old_scene) = self.active_scene.take() {
                         engine_world.despawn(old_scene.world_id)?;
                     }
 
                     let new_scene =
-                        self.process_staging_scene(engine_world, assets, store, ctor())?;
+                        self.process_staging_scene(engine_world, assets, store, (cmd.builder)())?;
+
+                    if let Some(on_ready) = cmd.on_ready {
+                        let _ = on_ready.send(new_scene.world_id);
+                    }
 
                     self.active_scene = Some(new_scene);
                 }
@@ -211,6 +228,7 @@ impl SceneLayer {
         mut scene: SceneBuilder,
     ) -> anyhow::Result<Scene> {
         let mut event_registry = EventRegistry::new();
+
         for (index, layer) in &mut scene.layers.iter_mut().enumerate() {
             layer.register_dyn(&mut scene.world, assets, store, &mut event_registry, index)?;
         }

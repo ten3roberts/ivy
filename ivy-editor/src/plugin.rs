@@ -39,7 +39,7 @@ use crate::{
         transform_tool::{TransformToolBundle, TransformToolPlugin, TransformToolWidget},
     },
     tools_controller::{Tool, ToolsControllerBundle, ToolsControllerPlugin},
-    ui::EditorUi,
+    ui::InGameEditorUi,
 };
 
 #[enum_dispatch(CommandExt)]
@@ -292,11 +292,12 @@ impl Plugin for EditorPlugin {
             .with_system(process_commands_system)
             .with_system(draw_selection_system());
 
-        world.get(engine(), screen_state())?.open(EditorUi::new(
-            assets.clone(),
-            editor,
-            tool_ui_rx,
-        ));
+        // TODO: set context globally, such as a global
+        //
+        // This will then be discovered by an external UI widget listening to it
+        world
+            .get(engine(), screen_state())?
+            .open(InGameEditorUi::new(assets.clone(), editor, tool_ui_rx));
 
         Ok(())
     }

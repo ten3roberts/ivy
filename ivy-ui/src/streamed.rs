@@ -20,10 +20,15 @@ use violet::{
 
 use crate::components::ui_instance;
 
+#[derive(Clone)]
+pub struct StreamedState {
+    pub tx: flume::Sender<Box<dyn Streamed>>,
+}
+
 flax::component! {
     pub streamed: Vec<Box<dyn Streamed>>,
 
-    pub streamed_tx: flume::Sender<Box<dyn Streamed>>,
+    pub streamed_state: StreamedState,
 }
 
 pub trait StreamedUiExt {
@@ -74,19 +79,25 @@ pub trait StreamedUiExt {
     }
 }
 
+impl StreamedUiExt for StreamedState {
+    fn open_streamed(&self, streamed: impl Streamed) {
+        self.tx.send(Box::new(streamed)).expect("Channel closed");
+    }
+}
+
 impl StreamedUiExt for Scope<'_> {
     fn open_streamed(&self, streamed: impl Streamed) {
-        let context = self.get_context(streamed_tx());
+        let context = self.get_context(streamed_state());
 
-        context.send(Box::new(streamed)).expect("Channel closed");
+        context.tx.send(Box::new(streamed)).expect("Channel closed");
     }
 }
 
 impl StreamedUiExt for ScopeRef<'_> {
     fn open_streamed(&self, streamed: impl Streamed) {
-        let context = self.get_context(streamed_tx());
+        let context = self.get_context(streamed_state());
 
-        context.send(Box::new(streamed)).expect("Channel closed");
+        context.tx.send(Box::new(streamed)).expect("Channel closed");
     }
 }
 
@@ -343,11 +354,12 @@ impl Plugin for StreamedUiPlugin {
         schedules: &mut ScheduleSetBuilder,
     ) -> anyhow::Result<()> {
         let (tx, rx) = flume::unbounded();
-        world.set(engine(), streamed_tx(), tx.clone())?;
+        let state = StreamedState { tx: tx.clone() };
+        world.set(engine(), streamed_state(), state.clone())?;
         world.set(engine(), streamed(), Default::default())?;
 
         let ui = &mut *store.get_mut(&*world.get(engine(), ui_instance())?);
-        ui.root_scope().set_context(streamed_tx(), tx);
+        ui.root_scope().set_context(streamed_state(), state);
 
         schedules
             .per_tick_mut()

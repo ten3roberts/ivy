@@ -1,12 +1,7 @@
-use std::{
-    any::type_name,
-    f32::consts::{PI, TAU},
-};
+use std::any::type_name;
 
-use flax::{components::child_of, Entity, FetchExt, Query, System, World};
+use flax::{Entity, World};
 use glam::{vec3, EulerRot, Quat, Vec2, Vec3};
-use image::Rgba;
-use ivy_assets::loadable::Loadable;
 use ivy_assets::{stored::DynamicStore, Asset, AssetCache, AssetPath, AsyncAssetExt};
 use ivy_core::{
     palette::Srgb,
@@ -15,11 +10,18 @@ use ivy_core::{
     update_layer::{FixedTimeStep, Plugin, PluginLayer, ScheduleSetBuilder},
     App, ColorExt, EngineLayer, EntityBuilderExt,
 };
+use ivy_editor::{
+    host::EditorHostPlugin,
+    plugin::EditorPlugin,
+    tools::{physics_tool::PhysicsToolPlugin, transform_tool::TransformToolPlugin},
+    tools_controller::ToolsControllerPlugin,
+};
 use ivy_engine::{
     async_commandbuffer, elapsed_time, engine, is_static, rotation, scale, RigidBodyBundle,
     TransformBundle,
 };
 use ivy_game::{
+    fly_camera::FlyCameraPlugin,
     orbit_camera::OrbitCameraPlugin,
     standalone_camera::StandaloneCameraPlugin,
     viewport_camera::{CameraSettings, ViewportCameraLayer},
@@ -32,10 +34,7 @@ use ivy_gltf::{
     },
     Document,
 };
-use ivy_graphics::{
-    mesh::MeshData,
-    texture::{TextureData, TextureDesc},
-};
+use ivy_graphics::texture::TextureData;
 use ivy_input::layer::InputLayer;
 use ivy_physics::{components::collider_builder, ColliderBundle, PhysicsPlugin, RigidBodyKind};
 use ivy_postprocessing::preconfigured::{
@@ -43,7 +42,7 @@ use ivy_postprocessing::preconfigured::{
     SurfacePbrPipelineDesc, SurfacePbrRenderer,
 };
 use ivy_scene::{
-    ui::SceneView, viewport_provider::SceneViewportProvider, GltfNodeExt, NodeMountOptions, Scene,
+    ray_picker::RayPickingPlugin, ui::SceneView, viewport_provider::SceneViewportProvider, Scene,
     SceneLayer,
 };
 use ivy_ui::{
@@ -52,38 +51,29 @@ use ivy_ui::{
     streamed::StreamedUiPlugin,
 };
 use ivy_wgpu::{
-    components::{forward_pass, light_kind, light_params, shadow_pass, transparent_pass},
     driver::WinitDriver,
-    effect_desc::{
-        PbrEmissiveRenderEffectDesc, PbrRenderEffect, PbrRenderEffectDesc, RenderEffect,
-        RenderEffectDesc,
-    },
+    effect_desc::{PbrRenderEffect, RenderEffect},
     layer::GraphicsLayer,
     light::{LightBundle, LightKind, LightParams},
     material::{EffectPass, Material, MaterialBundle},
-    mesh_desc::MeshDesc,
-    primitives::{
-        generate_plane, CapsulePrimitive, CubePrimitive, PrimitiveBundle, UvSpherePrimitive,
-    },
-    renderer::{EnvironmentData, MeshBundle, RenderObjectBundle},
+    primitives::{CapsulePrimitive, CubePrimitive, PrimitiveBundle, UvSpherePrimitive},
+    renderer::EnvironmentData,
 };
 use rapier3d::prelude::{ColliderBuilder, SharedShape};
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
 use violet::{
     core::{
-        components::LayoutAlignment,
         layout::Align,
         style::{base_colors::AMBER_400, spacing_medium, text_large, SizeExt},
         widget::{
-            bold, card, col, interactive::tooltip::Tooltip, label, maximized, panel, raised_card,
-            row, subtitle, Collapsible, LabeledSlider,
+            bold, col, interactive::tooltip::Tooltip, label, maximized, panel, raised_card, row,
+            subtitle,
         },
         Widget,
     },
-    futures_signals::signal::Mutable,
     lucide::icons::LUCIDE_LAYERS_2,
-    palette::{rgb::Rgb, Hsl, IntoColor, Srgba},
+    palette::Srgba,
 };
 use wgpu::TextureFormat;
 use winit::{dpi::LogicalSize, window::WindowAttributes};
@@ -100,6 +90,43 @@ pub fn main() -> anyhow::Result<()> {
                 .with_span_retrace(true),
         )
         .init();
+
+    let scene = || {
+        Scene::builder()
+            .with_layer(EngineLayer::new())
+            .with_layer(
+                UiLayer::with_options(UiLayerOptions {
+                    label: "scene_ui".into(),
+                    follow_window_size: false,
+                    ..Default::default()
+                })
+                .with_label("scene_ui"),
+            )
+            .with_layer(InputLayer::new())
+            .with_layer(ViewportCameraLayer::new(CameraSettings {
+                environment_data: EnvironmentData::new(
+                    Srgb::new(0.2, 0.2, 0.3),
+                    0.001,
+                    if ENABLE_SKYBOX { 0.0 } else { 1.0 },
+                ),
+                fov: 1.0,
+            }))
+            .with_layer(
+                PluginLayer::new(FixedTimeStep::new(0.02))
+                    .with_plugin(StreamedUiPlugin)
+                    .with_plugin(SetupPlugin)
+                    .with_plugin(FlyCameraPlugin)
+                    .with_plugin(AnimationPlugin)
+                    .with_plugin(PhysicsPlugin::new())
+                    .with_plugin(TransformToolPlugin)
+                    .with_plugin(PhysicsToolPlugin)
+                    .with_plugin(ToolsControllerPlugin)
+                    .with_plugin(RayPickingPlugin)
+                    .with_plugin(EditorPlugin)
+                    .with_plugin(TransformUpdatePlugin),
+            )
+            .with_layer(UiUpdateLayer::new())
+    };
 
     if let Err(err) = App::builder()
         .with_driver(WinitDriver::new(
@@ -136,43 +163,11 @@ pub fn main() -> anyhow::Result<()> {
         .with_layer(InputLayer::new())
         .with_layer(
             PluginLayer::new(FixedTimeStep::new(0.02))
-                .with_plugin(SceneUiPlugin)
-                .with_plugin(StandaloneCameraPlugin),
+                .with_plugin(EditorHostPlugin::new().with_scene(scene))
+                // .with_plugin(SceneUiPlugin)
+                .with_plugin(StandaloneCameraPlugin), // TODO: remove,
         )
-        .with_layer(
-            SceneLayer::new().with_scene(
-                Scene::builder()
-                    .with_layer(EngineLayer::new())
-                    .with_layer(
-                        UiLayer::with_options(UiLayerOptions {
-                            label: "scene_ui".into(),
-                            follow_window_size: false,
-                            ..Default::default()
-                        })
-                        .with_label("scene_ui"),
-                    )
-                    .with_layer(InputLayer::new())
-                    .with_layer(ViewportCameraLayer::new(CameraSettings {
-                        environment_data: EnvironmentData::new(
-                            Srgb::new(0.2, 0.2, 0.3),
-                            0.001,
-                            if ENABLE_SKYBOX { 0.0 } else { 1.0 },
-                        ),
-                        fov: 1.0,
-                    }))
-                    .with_layer(
-                        PluginLayer::new(FixedTimeStep::new(0.02))
-                            .with_plugin(StreamedUiPlugin)
-                            .with_plugin(SetupPlugin)
-                            .with_plugin(GameUiPlugin)
-                            .with_plugin(OrbitCameraPlugin)
-                            .with_plugin(AnimationPlugin)
-                            .with_plugin(PhysicsPlugin::new())
-                            .with_plugin(TransformUpdatePlugin),
-                    )
-                    .with_layer(UiUpdateLayer::new()),
-            ),
-        )
+        .with_layer(SceneLayer::new())
         .with_layer(SceneViewportProvider::new())
         .with_layer(UiUpdateLayer::new())
         .run()
@@ -200,27 +195,6 @@ impl Plugin for SceneUiPlugin {
     }
 }
 
-struct GameUiPlugin;
-
-impl Plugin for GameUiPlugin {
-    fn install(
-        &self,
-        world: &mut World,
-        _: &AssetCache,
-        _: &mut DynamicStore,
-        _: &mut ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
-        tracing::info!("Opening game UI");
-        world.get(engine(), screen_state())?.open(GameUI);
-
-        Ok(())
-    }
-
-    fn after(&self) -> Vec<&str> {
-        vec![type_name::<StreamedUiPlugin>()]
-    }
-}
-
 struct MainUI;
 
 impl Screen for MainUI {
@@ -245,23 +219,6 @@ impl Screen for MainUI {
             ),
             SceneView::new(),
         ))))
-        .mount(scope);
-    }
-}
-
-struct GameUI;
-
-impl Screen for GameUI {
-    fn create(self, scope: &mut violet::core::Scope<'_>, _: ivy_ui::screens::ScreenLifetimeToken) {
-        maximized((
-            card(Collapsible::label(
-                "Game",
-                col((LabeledSlider::new(Mutable::new(50), 0, 100),)),
-            )),
-            card(label("Scene"))
-                .with_maximize(Vec2::X)
-                .with_item_align(LayoutAlignment::bottom_left()),
-        ))
         .mount(scope);
     }
 }

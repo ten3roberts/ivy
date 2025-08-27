@@ -8,12 +8,13 @@ use flax::{
     events::{EventKindFilter, EventSubscriber},
     Entity, World,
 };
+use futures::channel::oneshot;
 use glam::Vec2;
 use ivy_core::{app::TickEvent, components::engine, events::EventContext, Layer};
 use ivy_ui::{
     components::ui_instance,
     screens::{screen_state, ScreenState},
-    streamed::{streamed_tx, Streamed},
+    streamed::{streamed_state, StreamedState},
     violet::core::to_owned,
 };
 use ivy_wgpu::{
@@ -26,7 +27,11 @@ use ivy_wgpu::{
 use parking_lot::Mutex;
 use wgpu::{TextureDimension, TextureFormat};
 
-use crate::{render::SceneRenderNode, scene_world, ui::SceneViewCommand};
+use crate::{
+    render::SceneRenderNode,
+    scene_world,
+    ui::{OpenViewport, SceneViewCommand},
+};
 
 flax::component! {
     /// Allows listening to and receiving new viewports from the scene system
@@ -44,10 +49,17 @@ impl SceneViewportState {
         self.inner.lock().new_listeners.push(tx);
         rx
     }
+
+    pub fn open_viewport(&self, scene: Entity) -> oneshot::Receiver<OpenViewport> {
+        let (tx, rx) = oneshot::channel();
+        self.inner.lock().viewport_requests.push((scene, tx));
+        rx
+    }
 }
 
 struct SceneViewportStateInner {
     new_listeners: Vec<flume::Sender<SceneViewCommand>>,
+    viewport_requests: Vec<(Entity, oneshot::Sender<OpenViewport>)>,
 }
 
 /// Hooks into a new scene and provides it with a viewport
@@ -70,6 +82,7 @@ impl SceneViewportProvider {
             state: SceneViewportState {
                 inner: Arc::new(Mutex::new(SceneViewportStateInner {
                     new_listeners: Vec::new(),
+                    viewport_requests: Vec::new(),
                 })),
             },
             listeners: Vec::new(),
@@ -103,22 +116,40 @@ impl Layer for SceneViewportProvider {
         );
 
         events.subscribe(move |this, ctx, _: &TickEvent| {
-            for new_listener in this.state.inner.lock().new_listeners.drain(..) {
-                for &scene_id in &this.open_scenes {
-                    let scene = ctx.world.get_mut(scene_id, scene_world())?;
-                    let streamed_tx = scene.get(engine(), streamed_tx())?.clone();
+            {
+                let mut inner = this.state.inner.lock();
+                for new_listener in inner.new_listeners.drain(..) {
+                    for &scene_id in &this.open_scenes {
+                        let scene = ctx.world.get_mut(scene_id, scene_world())?;
+                        let streamed_tx = scene.get(engine(), streamed_state())?.clone();
+                        let screen_state = scene.get(engine(), screen_state())?.clone();
+                        drop(scene);
+
+                        this.open_viewport(
+                            ctx,
+                            scene_id,
+                            streamed_tx,
+                            screen_state,
+                            Some(new_listener.clone()),
+                        )?;
+                    }
+                    this.listeners.push(new_listener);
+                }
+
+                for request in inner.viewport_requests.drain(..) {
+                    let scene = ctx
+                        .world
+                        .get_mut(request.0, scene_world())
+                        .context("Attempt to open viewport for nonexistent scene")?;
+
+                    let streamed_tx = scene.get(engine(), streamed_state())?.clone();
                     let screen_state = scene.get(engine(), screen_state())?.clone();
                     drop(scene);
 
-                    this.open_viewport(
-                        ctx,
-                        scene_id,
-                        streamed_tx,
-                        screen_state,
-                        new_listener.clone(),
-                    )?;
+                    let result =
+                        this.open_viewport(ctx, request.0, streamed_tx, screen_state, None)?;
+                    let _ = request.1.send(result);
                 }
-                this.listeners.push(new_listener);
             }
 
             for (texture_handle, desc) in this.pending_resizes_rx.drain() {
@@ -176,14 +207,16 @@ impl SceneViewportProvider {
         self.open_scenes.insert(scene_id);
 
         let scene = ctx.world.get_mut(scene_id, scene_world())?;
-        let streamed_tx = scene.get(engine(), streamed_tx())?.clone();
+        let streamed_tx = scene.get(engine(), streamed_state())?.clone();
         let screen_state = scene.get(engine(), screen_state())?.clone();
         drop(scene);
 
         for tx in self.listeners.iter().cloned() {
             to_owned!(scene_id, streamed_tx, screen_state);
 
-            self.open_viewport(ctx, scene_id, streamed_tx, screen_state, tx)?;
+            let result =
+                self.open_viewport(ctx, scene_id, streamed_tx, screen_state, Some(tx.clone()))?;
+            let _ = tx.send(SceneViewCommand::OpenViewport(result));
         }
 
         Ok(())
@@ -227,90 +260,74 @@ impl SceneViewportProvider {
         &self,
         ctx: &mut ivy_core::events::EventContext,
         scene_id: Entity,
-        streamed_tx: flume::Sender<Box<dyn Streamed>>,
+        streamed: StreamedState,
         screen_state: ScreenState,
-        tx: flume::Sender<SceneViewCommand>,
-    ) -> Result<(), anyhow::Error> {
+        tx: Option<flume::Sender<SceneViewCommand>>,
+    ) -> Result<OpenViewport, anyhow::Error> {
         let proxy_nodes = self.proxy_nodes.clone();
         let render_graph_handle = ctx.world.get(engine(), render_graph_handle())?.clone();
         let gpu = ctx.world.get(engine(), gpu_instance())?.clone();
 
-        {
-            let mut render_graph = ctx.store.get_mut(&render_graph_handle);
-            let subgraph_resources =
-                RenderGraphResources::new(render_graph.resources.shader_library().clone());
-            let subgraph = RenderGraph::new(subgraph_resources);
+        let mut render_graph = ctx.store.get_mut(&render_graph_handle);
+        let subgraph_resources =
+            RenderGraphResources::new(render_graph.resources.shader_library().clone());
+        let subgraph = RenderGraph::new(subgraph_resources);
 
-            let mut scene_render_desc = ManagedTextureDesc {
-                label: "scene_dst".into(),
-                extent: wgpu::Extent3d {
-                    width: 240,
-                    height: 240,
-                    depth_or_array_layers: 1,
-                },
-                dimension: TextureDimension::D2,
-                format: TextureFormat::Rgba8UnormSrgb,
-                mip_level_count: 1,
-                sample_count: 1,
-                persistent: false,
-            };
-
-            let scene_render = render_graph
-                .resources
-                .insert_texture(RenderGraphImageDesc::Managed(scene_render_desc.clone()));
-
-            drop(render_graph);
-            let node = SceneRenderNode::new(
-                ctx.world,
-                &gpu,
-                ctx.assets,
-                ctx.store,
-                scene_id,
-                subgraph,
-                scene_render,
-            );
-
-            let render_graph = &mut *ctx.store.get_mut(&render_graph_handle);
-            let node_id = render_graph.add_node(node);
-
-            proxy_nodes.lock().entry(scene_id).or_default().push((
-                node_id,
-                scene_render,
-                tx.clone(),
-            ));
-
-            let pending_resizes = self.pending_resizes_tx.clone();
-            let on_size = move |size: Vec2| {
-                let px = size.as_uvec2();
-
-                scene_render_desc.extent.width = px.x;
-                scene_render_desc.extent.height = px.y;
-                let _ = pending_resizes.send((scene_render, scene_render_desc.clone()));
-
-                // // TODO: single frame latency
-                // *render_graph
-                //     .resources
-                //     .get_texture_mut(scene_render)
-                //     .as_managed_mut()
-                //     .expect("Missing managed texture") = scene_render_desc;
-
-                // .update_texture(scene_render, &scene_render_desc);
-                // let _ = renderer_commands2.send(RendererCommand::UpdateTexture {
-                //     handle: scene_render,
-                //     desc: scene_render_desc.clone(),
-                // });
-            };
-
-            let _ = tx.send(SceneViewCommand::OpenViewport {
-                scene: scene_id,
-                view: scene_render,
-                on_size: Box::new(on_size),
-                streamed_tx,
-                screen_state,
-            });
+        let mut scene_render_desc = ManagedTextureDesc {
+            label: "scene_dst".into(),
+            extent: wgpu::Extent3d {
+                width: 240,
+                height: 240,
+                depth_or_array_layers: 1,
+            },
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Rgba8UnormSrgb,
+            mip_level_count: 1,
+            sample_count: 1,
+            persistent: false,
         };
 
-        // renderer_commands.send(renderer_command)?;
-        Ok(())
+        let scene_render = render_graph
+            .resources
+            .insert_texture(RenderGraphImageDesc::Managed(scene_render_desc.clone()));
+
+        drop(render_graph);
+        let node = SceneRenderNode::new(
+            ctx.world,
+            &gpu,
+            ctx.assets,
+            ctx.store,
+            scene_id,
+            subgraph,
+            scene_render,
+        );
+
+        let render_graph = &mut *ctx.store.get_mut(&render_graph_handle);
+        let node_id = render_graph.add_node(node);
+
+        if let Some(tx) = tx {
+            proxy_nodes
+                .lock()
+                .entry(scene_id)
+                .or_default()
+                .push((node_id, scene_render, tx));
+        }
+
+        let pending_resizes = self.pending_resizes_tx.clone();
+        let on_size = move |size: Vec2| {
+            let px = size.as_uvec2();
+
+            scene_render_desc.extent.width = px.x;
+            scene_render_desc.extent.height = px.y;
+            let _ = pending_resizes.send((scene_render, scene_render_desc.clone()));
+        };
+
+        Ok(OpenViewport {
+            scene: scene_id,
+            view: scene_render,
+            on_size: Box::new(on_size),
+            streamed,
+            screen_state,
+        })
     }
 }
