@@ -24,9 +24,8 @@ use ivy_engine::{
     TransformBundle,
 };
 use ivy_game::{
-    debug::AssetTimelinesWidget,
-    orbit_camera::OrbitCameraPlugin,
-    viewport_camera::{CameraSettings, ViewportCameraLayer},
+    debug::AssetTimelinesWidget, orbit_camera::OrbitCameraPlugin,
+    viewport_camera::CameraViewportPlugin,
 };
 use ivy_gltf::{
     animation::{
@@ -61,7 +60,7 @@ use ivy_wgpu::{
     light::{LightBundle, LightKind, LightParams},
     mesh_desc::MeshDesc,
     primitives::{generate_plane, UvSpherePrimitive},
-    renderer::{EnvironmentData, RenderObjectBundle},
+    renderer::RenderObjectBundle,
 };
 use rapier3d::prelude::SharedShape;
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
@@ -142,14 +141,14 @@ pub fn main() -> anyhow::Result<()> {
                 .with_plugin(RotateSpotlightPlugin)
                 .with_plugin(TransformUpdatePlugin),
         )
-        .with_layer(ViewportCameraLayer::new(CameraSettings {
-            environment_data: EnvironmentData::new(
-                Srgb::new(0.2, 0.2, 0.3),
-                0.001,
-                if ENABLE_SKYBOX { 0.0 } else { 1.0 },
-            ),
-            fov: 1.0,
-        }))
+        // .with_layer(CameraViewportPlugin::new(CameraSettings {
+        //     environment_data: EnvironmentData::new(
+        //         Srgb::new(0.2, 0.2, 0.3),
+        //         0.001,
+        //         if ENABLE_SKYBOX { 0.0 } else { 1.0 },
+        //     ),
+        //     fov: 1.0,
+        // }))
         .with_layer(ui_layer)
         .run()
     {

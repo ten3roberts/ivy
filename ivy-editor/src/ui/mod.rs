@@ -1,7 +1,6 @@
 pub mod asset_inspector;
 pub mod browser;
 pub mod context_menu;
-mod drop;
 pub mod entity_editor;
 
 use flax::Entity;
@@ -11,7 +10,7 @@ use itertools::Itertools;
 use ivy_assets::AssetCache;
 use ivy_ui::{
     screens::Screen,
-    streamed::{Streamed, StreamedState, StreamedUiExt},
+    streamed::{Streamed, StreamedUiExt},
     violet::{
         core::{
             Widget,
@@ -33,7 +32,7 @@ use ivy_ui::{
 use crate::{
     plugin::selection,
     tools_controller::{current_tool, tools},
-    ui::{browser::DirectoryBrowser, drop::WorldDropArea, entity_editor::EntityComponentEditor},
+    ui::{browser::DirectoryBrowser, entity_editor::EntityComponentEditor},
 };
 
 pub struct InGameEditorUi {
@@ -64,20 +63,17 @@ impl Screen for InGameEditorUi {
     ) {
         scope.monitor_entity_lifetime(self.editor, move || token.close_screen());
 
-        Stack::new((
-            WorldDropArea {},
-            col((
-                EditorMenuBar {
+        Stack::new((col((
+            EditorMenuBar {
+                editor: self.editor,
+            },
+            maximized((
+                StreamWidget::new(self.tool_ui.into_stream()),
+                InspectorUI {
                     editor: self.editor,
                 },
-                maximized((
-                    StreamWidget::new(self.tool_ui.into_stream()),
-                    InspectorUI {
-                        editor: self.editor,
-                    },
-                )),
             )),
-        ))
+        )),))
         .mount(scope);
     }
 }

@@ -23,7 +23,7 @@ use winit::{
 };
 
 use crate::{
-    components::{main_window, window, window_cursor_position, window_size},
+    components::{main_window, viewport_size, window, window_size},
     events::{ApplicationReady, RedrawEvent, ScaleFactorChangedEvent, WindowResizedEvent},
 };
 
@@ -96,7 +96,7 @@ impl ApplicationHandler for WinitEventHandler<'_> {
             )
             .set_default(main_window())
             .set_default(window_size())
-            .set_default(window_cursor_position())
+            .set_default(viewport_size())
             .spawn(&mut self.app.world);
 
         self.scale_factor = window.scale_factor();
@@ -185,6 +185,8 @@ impl WinitEventHandler<'_> {
 
                 let window = self.app.world().entity(window_id).unwrap();
                 *window.get_mut(window_size()).unwrap() = logical_size;
+                *window.get_mut(viewport_size()).unwrap() =
+                    vec2(logical_size.width, logical_size.height);
 
                 self.app.emit_event(WindowResizedEvent {
                     physical_size,
@@ -228,7 +230,6 @@ impl WinitEventHandler<'_> {
 
                 let size;
                 {
-                    *window_entity.get_mut(window_cursor_position()).unwrap() = logical_pos;
                     size = window_entity.get_copy(window_size()).unwrap();
                     let window = &mut *window_entity.get_mut(crate::components::window()).unwrap();
                     window

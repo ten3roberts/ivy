@@ -5,15 +5,15 @@
   "desc": {
     "params": {
       "color": {
-        "red": 0.4,
-        "green": 0.335,
-        "blue": 0.43
+        "red": 0.563,
+        "green": 0.755,
+        "blue": 0.099
       },
       "intensity": 5.0,
       "inner_theta": 0.8,
-      "outer_theta": 0.7
+      "outer_theta": 0.43758252
     },
-    "kind": "Directional",
+    "kind": "Spotlight",
     "cast_shadow": true
   }
 }

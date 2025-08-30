@@ -12,10 +12,7 @@ use ivy_core::{
     App, AsyncCommandBuffer, EngineLayer, EntityBuilderExt, Layer, DEG_90,
 };
 use ivy_engine::{async_commandbuffer, engine, TransformBundle};
-use ivy_game::{
-    orbit_camera::OrbitCameraPlugin,
-    viewport_camera::{CameraSettings, ViewportCameraLayer},
-};
+use ivy_game::orbit_camera::OrbitCameraPlugin;
 use ivy_gltf::Document;
 use ivy_input::layer::InputLayer;
 use ivy_physics::PhysicsPlugin;
@@ -24,7 +21,7 @@ use ivy_postprocessing::preconfigured::{
     SurfacePbrPipelineDesc, SurfacePbrRenderer,
 };
 use ivy_scene::{GltfNodeExt, NodeMountOptions};
-use ivy_wgpu::{driver::WinitDriver, layer::GraphicsLayer, renderer::EnvironmentData};
+use ivy_wgpu::{driver::WinitDriver, layer::GraphicsLayer};
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
 use wgpu::TextureFormat;
@@ -78,10 +75,6 @@ pub fn main() -> anyhow::Result<()> {
                 .with_plugin(PhysicsPlugin::new())
                 .with_plugin(TransformUpdatePlugin),
         )
-        .with_layer(ViewportCameraLayer::new(CameraSettings {
-            environment_data: EnvironmentData::new(Srgb::new(0.0, 0.0, 0.1), 0.001, 0.0),
-            fov: 1.0,
-        }))
         .run()
     {
         tracing::error!("{err:?}");

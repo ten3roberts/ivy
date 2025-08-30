@@ -1,6 +1,7 @@
 use std::{path::PathBuf, time::Duration};
 
 use async_std::stream::StreamExt;
+use glam::BVec2;
 use ivy_assets::{
     AssetCache, AssetPath,
     loadable::{Loadable, LoadableDyn},
@@ -17,7 +18,7 @@ use ivy_ui::violet::{
         time::sleep,
         to_owned,
         widget::{
-            LoadingSpinner, StreamWidget, SuspenseWidget, Throbber, bold, col,
+            LoadingSpinner, ScrollArea, StreamWidget, SuspenseWidget, Throbber, bold, col,
             interactive::base::InteractiveWidget, label, row, subtitle,
         },
     },
@@ -25,12 +26,12 @@ use ivy_ui::violet::{
     lucide::icons::{LUCIDE_CHECK, LUCIDE_TRIANGLE_ALERT},
 };
 
-pub struct AssetInspector {
+pub struct AssetEditor {
     assets: AssetCache,
     path: PathBuf,
 }
 
-impl AssetInspector {
+impl AssetEditor {
     pub fn new(assets: AssetCache, path: PathBuf) -> Self {
         Self { assets, path }
     }
@@ -55,7 +56,7 @@ impl Clone for ErasedAssetDesc {
     }
 }
 
-impl Widget for AssetInspector {
+impl Widget for AssetEditor {
     fn mount(self, scope: &mut ivy_ui::violet::core::Scope<'_>) {
         let editor = async move {
             let path = AssetPath::<AssetPayloadUntyped>::new(self.path.canonicalize()?);
@@ -64,6 +65,7 @@ impl Widget for AssetInspector {
         };
 
         SuspenseWidget::new(LoadingSpinner::new("Loading Asset"), async move {
+            async_std::task::sleep(Duration::from_millis(100)).await;
             let editor = editor.await;
 
             |scope: &mut Scope| match editor {
@@ -123,7 +125,7 @@ impl Widget for AssetInspector {
                     col((
                         row((subtitle(&type_name), StreamWidget::new(save_status)))
                             .with_cross_align(Align::Center),
-                        editor,
+                        ScrollArea::new(BVec2::TRUE, editor),
                     ))
                     .mount(scope);
                 }

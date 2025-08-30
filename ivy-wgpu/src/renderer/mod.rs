@@ -16,10 +16,9 @@ use ivy_assets::{
 };
 use ivy_core::{
     components::{color, main_camera, world_transform},
-    impl_for_tuples,
-    palette::Srgb,
-    to_linear_vec3, Bundle, Color, ColorExt,
+    impl_for_tuples, to_linear_vec3, Bundle, Color, ColorExt,
 };
+use ivy_graphics::camera::{environment_data, projection_matrix};
 use ivy_wgpu_types::shader::TargetDesc;
 pub use light_manager::LightManager;
 pub use object_manager::ObjectManager;
@@ -30,7 +29,7 @@ use wgpu::{
 };
 
 use crate::{
-    components::{environment_data, mesh, projection_matrix},
+    components::mesh,
     effect_desc::RenderEffect,
     mesh_desc::MeshDesc,
     rendergraph::{Dependency, Node, NodeUpdateContext, TextureHandle, UpdateResult},
@@ -220,23 +219,6 @@ impl SkyboxTextures {
             irradiance_map,
             specular_map,
             integrated_brdf,
-        }
-    }
-}
-
-#[derive(Default, Debug, Clone, Copy)]
-pub struct EnvironmentData {
-    pub fog_color: Srgb,
-    pub fog_density: f32,
-    pub fog_blend: f32,
-}
-
-impl EnvironmentData {
-    pub fn new(fog_color: Srgb, fog_density: f32, fog_blend: f32) -> Self {
-        Self {
-            fog_color,
-            fog_density,
-            fog_blend,
         }
     }
 }

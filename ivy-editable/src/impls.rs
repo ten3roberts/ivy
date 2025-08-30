@@ -38,7 +38,9 @@ impl Editable for String {
     fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         state: S,
     ) -> Box<dyn Send + Widget> {
-        Box::new(TextInput::new(state.memo(Default::default()).dedup()))
+        let state = state.memo(Default::default());
+        state.sync_initial();
+        Box::new(TextInput::new(state.dedup()))
     }
 
     fn create_editor_project<S: 'static + Send + Sync + StateStreamRef<Item = Self> + StateWrite>(
@@ -374,6 +376,66 @@ impl Editable for Srgba {
     }
 
     fn create_editor_project<S: 'static + Send + Sync + StateStreamRef<Item = Self> + StateWrite>(
+        state: S,
+    ) -> Box<dyn Send + Widget>
+    where
+        Self: Sized,
+    {
+        Self::create_editor(state.project_ref(|v| v, |v| v))
+    }
+}
+
+impl Editable for Srgba<u8> {
+    const INLINE: bool = false;
+
+    fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
+        state: S,
+    ) -> Box<dyn Send + Widget>
+    where
+        Self: Sized,
+    {
+        let state = state
+            .map_value(
+                |v| -> Srgba { v.into_format() },
+                |v| Srgba::<u8>::from_format(v),
+            )
+            .memo(Default::default());
+        Box::new(RgbColorPicker::new(state).enable_alpha(true))
+    }
+
+    fn create_editor_project<
+        S: 'static + Send + Sync + Clone + violet::core::state::StateProjected<Item = Self>,
+    >(
+        state: S,
+    ) -> Box<dyn Send + Widget>
+    where
+        Self: Sized,
+    {
+        Self::create_editor(state.project_ref(|v| v, |v| v))
+    }
+}
+
+impl Editable for Srgb<u8> {
+    const INLINE: bool = false;
+
+    fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
+        state: S,
+    ) -> Box<dyn Send + Widget>
+    where
+        Self: Sized,
+    {
+        let state = state
+            .map_value(
+                |v| -> Srgba { v.into_format().with_alpha(1.0) },
+                |v| Srgba::<u8>::from_format(v).without_alpha(),
+            )
+            .memo(Default::default());
+        Box::new(RgbColorPicker::new(state).enable_alpha(false))
+    }
+
+    fn create_editor_project<
+        S: 'static + Send + Sync + Clone + violet::core::state::StateProjected<Item = Self>,
+    >(
         state: S,
     ) -> Box<dyn Send + Widget>
     where

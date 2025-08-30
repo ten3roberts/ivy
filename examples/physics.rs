@@ -16,10 +16,7 @@ use ivy_editor::{
     tools_controller::ToolsControllerPlugin,
 };
 use ivy_engine::{RigidBodyBundle, TransformBundle};
-use ivy_game::{
-    fly_camera::FlyCameraPlugin,
-    viewport_camera::{CameraSettings, ViewportCameraLayer},
-};
+use ivy_game::fly_camera::FlyCameraPlugin;
 use ivy_graphics::texture::TextureData;
 use ivy_input::layer::InputLayer;
 use ivy_physics::{ColliderBundle, PhysicsPlugin};
@@ -40,14 +37,12 @@ use ivy_wgpu::{
     light::{LightKind, LightParams},
     mesh_desc::MeshDesc,
     primitives::CapsulePrimitive,
-    renderer::{EnvironmentData, RenderObjectBundle},
+    renderer::RenderObjectBundle,
 };
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
 use wgpu::TextureFormat;
 use winit::{dpi::LogicalSize, window::WindowAttributes};
-
-const ENABLE_SKYBOX: bool = true;
 
 pub fn main() -> anyhow::Result<()> {
     registry()
@@ -108,14 +103,6 @@ pub fn main() -> anyhow::Result<()> {
                 .with_plugin(TransformUpdatePlugin),
         )
         .with_layer(UiUpdateLayer::new())
-        .with_layer(ViewportCameraLayer::new(CameraSettings {
-            environment_data: EnvironmentData::new(
-                Srgb::new(0.2, 0.2, 0.3),
-                0.001,
-                if ENABLE_SKYBOX { 0.0 } else { 1.0 },
-            ),
-            fov: 1.0,
-        }))
         .run()
     {
         tracing::error!("{err:?}");

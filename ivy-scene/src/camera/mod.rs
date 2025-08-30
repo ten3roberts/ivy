@@ -1,8 +1,8 @@
 use flax::{Component, Fetch};
 use glam::{vec2, vec4, Mat4, Vec2, Vec3, Vec4Swizzles};
 use ivy_core::components::world_transform;
+use ivy_graphics::camera::projection_matrix;
 use ivy_physics::shapes::Ray;
-use ivy_wgpu::components::projection_matrix;
 
 /// Returns a world ray from the given screen coordinates and camera.
 ///

@@ -1,4 +1,4 @@
-use std::{cell::RefCell, sync::Arc, time::Duration};
+use std::{any::type_name, cell::RefCell, sync::Arc, time::Duration};
 
 use async_std::task::sleep;
 use flax::{Entity, EntityIds, World};
@@ -11,28 +11,21 @@ use ivy_scene::{
     viewport_provider::scene_viewport_state,
 };
 use ivy_ui::{
-    screens::{Screen, ScreenState, screen_state},
+    screens::{Screen, screen_state},
+    streamed::StreamedUiPlugin,
     violet::{
         core::{
             Widget,
             layout::Align,
-            style::{
-                SizeExt,
-                base_colors::{EMERALD_400, TEAL_400},
-                element_accent, spacing_medium, text_large,
-            },
+            style::{SizeExt, element_accent},
             to_owned,
-            unit::Unit,
             widget::{
-                Button, EmptyWidget, FutureWidget, Rectangle, Stack, StreamWidget, bold, col,
-                interactive::tooltip::Tooltip, label, maximized, panel, raised_card, row, subtitle,
+                Button, FutureWidget, StreamWidget, bold, col, maximized, panel, raised_card, row,
+                subtitle,
             },
         },
         futures_signals::signal::{Mutable, SignalExt},
-        lucide::icons::{
-            LUCIDE_FOLDER, LUCIDE_LEAF, LUCIDE_PEN, LUCIDE_PEN_TOOL, LUCIDE_SATELLITE,
-            LUCIDE_SATELLITE_DISH, LUCIDE_SEARCH,
-        },
+        lucide::icons::{LUCIDE_FOLDER, LUCIDE_LEAF, LUCIDE_SATELLITE_DISH},
     },
 };
 
@@ -108,7 +101,7 @@ impl Plugin for EditorHostPlugin {
         world: &mut World,
         // TODO: collect into struct
         assets: &ivy_assets::AssetCache,
-        store: &mut ivy_assets::stored::DynamicStore,
+        _: &mut ivy_assets::stored::DynamicStore,
         _schedules: &mut ivy_core::update_layer::ScheduleSetBuilder,
     ) -> anyhow::Result<()> {
         let scene_commands = world.get(engine(), scene_commands())?;
@@ -132,6 +125,10 @@ impl Plugin for EditorHostPlugin {
         });
 
         Ok(())
+    }
+
+    fn after(&self) -> Vec<&str> {
+        vec![type_name::<StreamedUiPlugin>()]
     }
 }
 

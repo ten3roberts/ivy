@@ -18,6 +18,7 @@ use ivy_ui::{
     violet::core::to_owned,
 };
 use ivy_wgpu::{
+    components::viewport_size,
     layer::{gpu_instance, render_graph_handle},
     rendergraph::{
         ManagedTextureDesc, NodeId, RenderGraph, RenderGraphImageDesc, RenderGraphResources,
@@ -36,6 +37,13 @@ use crate::{
 flax::component! {
     /// Allows listening to and receiving new viewports from the scene system
     pub scene_viewport_state: SceneViewportState,
+}
+
+struct ViewportResize {
+    scene_id: Entity,
+    new_size: Vec2,
+    texture_desc: ManagedTextureDesc,
+    texture_handle: TextureHandle,
 }
 
 #[derive(Clone)]
@@ -67,8 +75,8 @@ pub struct SceneViewportProvider {
     open_scenes: BTreeSet<Entity>,
     state: SceneViewportState,
     listeners: Vec<flume::Sender<SceneViewCommand>>,
-    pending_resizes_rx: flume::Receiver<(TextureHandle, ManagedTextureDesc)>,
-    pending_resizes_tx: flume::Sender<(TextureHandle, ManagedTextureDesc)>,
+    pending_resizes_rx: flume::Receiver<ViewportResize>,
+    pending_resizes_tx: flume::Sender<ViewportResize>,
     proxy_nodes:
         Arc<Mutex<BTreeMap<Entity, Vec<(NodeId, TextureHandle, flume::Sender<SceneViewCommand>)>>>>,
 }
@@ -152,14 +160,25 @@ impl Layer for SceneViewportProvider {
                 }
             }
 
-            for (texture_handle, desc) in this.pending_resizes_rx.drain() {
+            for mut resize in this.pending_resizes_rx.drain() {
                 let render_graph_handle = ctx.world.get(engine(), render_graph_handle())?.clone();
                 let mut render_graph = ctx.store.get_mut(&render_graph_handle);
 
-                let texture = render_graph.resources.get_texture_mut(texture_handle);
+                let scene = ctx.world.get(resize.scene_id, scene_world())?;
+                scene.update_dedup(engine(), viewport_size(), resize.new_size)?;
+
+                let texture = render_graph
+                    .resources
+                    .get_texture_mut(resize.texture_handle);
+
+                resize.texture_desc.extent = wgpu::Extent3d {
+                    width: resize.new_size.x as u32,
+                    height: resize.new_size.y as u32,
+                    depth_or_array_layers: 1,
+                };
 
                 if let RenderGraphImageDesc::Managed(managed) = texture {
-                    *managed = desc;
+                    *managed = resize.texture_desc;
                 } else {
                     tracing::warn!("Tried to resize a non-managed texture");
                 }
@@ -319,7 +338,12 @@ impl SceneViewportProvider {
 
             scene_render_desc.extent.width = px.x;
             scene_render_desc.extent.height = px.y;
-            let _ = pending_resizes.send((scene_render, scene_render_desc.clone()));
+            let _ = pending_resizes.send(ViewportResize {
+                scene_id,
+                new_size: size,
+                texture_desc: scene_render_desc.clone(),
+                texture_handle: scene_render,
+            });
         };
 
         Ok(OpenViewport {

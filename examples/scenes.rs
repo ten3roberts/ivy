@@ -2,7 +2,7 @@ use std::any::type_name;
 
 use flax::{Entity, World};
 use glam::{vec3, EulerRot, Quat, Vec2, Vec3};
-use ivy_assets::{stored::DynamicStore, Asset, AssetCache, AssetPath, AsyncAssetExt};
+use ivy_assets::{stored::DynamicStore, AssetCache, AssetPath};
 use ivy_core::{
     palette::Srgb,
     profiling::ProfilingLayer,
@@ -16,24 +16,12 @@ use ivy_editor::{
     tools::{physics_tool::PhysicsToolPlugin, transform_tool::TransformToolPlugin},
     tools_controller::ToolsControllerPlugin,
 };
-use ivy_engine::{
-    async_commandbuffer, elapsed_time, engine, is_static, rotation, scale, RigidBodyBundle,
-    TransformBundle,
-};
+use ivy_engine::{engine, is_static, rotation, scale, RigidBodyBundle, TransformBundle};
 use ivy_game::{
-    fly_camera::FlyCameraPlugin,
-    orbit_camera::OrbitCameraPlugin,
-    standalone_camera::StandaloneCameraPlugin,
-    viewport_camera::{CameraSettings, ViewportCameraLayer},
+    fly_camera::FlyCameraPlugin, standalone_camera::StandaloneCameraPlugin,
+    viewport_camera::CameraViewportPlugin,
 };
-use ivy_gltf::{
-    animation::{
-        player::{AnimationPlayer, Animator},
-        plugin::AnimationPlugin,
-        AnimationDesc,
-    },
-    Document,
-};
+use ivy_gltf::animation::plugin::AnimationPlugin;
 use ivy_graphics::texture::TextureData;
 use ivy_input::layer::InputLayer;
 use ivy_physics::{components::collider_builder, ColliderBundle, PhysicsPlugin, RigidBodyKind};
@@ -57,7 +45,6 @@ use ivy_wgpu::{
     light::{LightBundle, LightKind, LightParams},
     material::{EffectPass, Material, MaterialBundle},
     primitives::{CapsulePrimitive, CubePrimitive, PrimitiveBundle, UvSpherePrimitive},
-    renderer::EnvironmentData,
 };
 use rapier3d::prelude::{ColliderBuilder, SharedShape};
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
@@ -103,20 +90,13 @@ pub fn main() -> anyhow::Result<()> {
                 .with_label("scene_ui"),
             )
             .with_layer(InputLayer::new())
-            .with_layer(ViewportCameraLayer::new(CameraSettings {
-                environment_data: EnvironmentData::new(
-                    Srgb::new(0.2, 0.2, 0.3),
-                    0.001,
-                    if ENABLE_SKYBOX { 0.0 } else { 1.0 },
-                ),
-                fov: 1.0,
-            }))
             .with_layer(
                 PluginLayer::new(FixedTimeStep::new(0.02))
                     .with_plugin(StreamedUiPlugin)
                     .with_plugin(SetupPlugin)
                     .with_plugin(FlyCameraPlugin)
                     .with_plugin(AnimationPlugin)
+                    .with_plugin(CameraViewportPlugin)
                     .with_plugin(PhysicsPlugin::new())
                     .with_plugin(TransformToolPlugin)
                     .with_plugin(PhysicsToolPlugin)
@@ -164,7 +144,7 @@ pub fn main() -> anyhow::Result<()> {
         .with_layer(
             PluginLayer::new(FixedTimeStep::new(0.02))
                 .with_plugin(EditorHostPlugin::new().with_scene(scene))
-                // .with_plugin(SceneUiPlugin)
+                .with_plugin(StreamedUiPlugin)
                 .with_plugin(StandaloneCameraPlugin), // TODO: remove,
         )
         .with_layer(SceneLayer::new())
@@ -176,50 +156,6 @@ pub fn main() -> anyhow::Result<()> {
         Err(err)
     } else {
         Ok(())
-    }
-}
-
-struct SceneUiPlugin;
-
-impl Plugin for SceneUiPlugin {
-    fn install(
-        &self,
-        world: &mut World,
-        _: &AssetCache,
-        _: &mut DynamicStore,
-        _: &mut ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
-        world.get(engine(), screen_state())?.open(MainUI);
-
-        Ok(())
-    }
-}
-
-struct MainUI;
-
-impl Screen for MainUI {
-    fn create(self, scope: &mut violet::core::Scope<'_>, _: ivy_ui::screens::ScreenLifetimeToken) {
-        maximized(panel(col((
-            raised_card(
-                row((
-                    Tooltip::label(
-                        bold(LUCIDE_LAYERS_2)
-                            .with_font_size(text_large())
-                            .with_color(AMBER_400)
-                            .with_margin(spacing_medium()),
-                        "An icon of a stack of layers, alluding to represents the concept of subscenes",
-                    ),
-                    col((
-                        subtitle("Scenes"),
-                        label("Allows nesting and decoupling multiple worlds from the core engine"),
-                    )),
-                ))
-                .with_maximize(Vec2::X)
-                .with_cross_align(Align::Center),
-            ),
-            SceneView::new(),
-        ))))
-        .mount(scope);
     }
 }
 

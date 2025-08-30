@@ -1,14 +1,18 @@
-use flax::{Entity, Query};
-use glam::Vec2;
+use flax::{ComponentMut, Entity, Query, QueryBorrow};
+use glam::{vec2, Vec2, Vec3Swizzles};
 use ivy_core::components::{engine, request_capture_mouse};
-use ivy_input::components::input_state;
+use ivy_input::{
+    components::input_state,
+    types::{CursorMoved, InputEvent},
+    InputState,
+};
 use ivy_ui::{
     components::on_input_event,
     image::RendergraphImage,
     screens::{Screen, ScreenLifetimeToken, ScreenStack, ScreenState},
     streamed::{streamed_state, StreamedState, StreamedUiExt},
     violet::core::{
-        components::rect,
+        components::{rect, screen_transform},
         input::{interactive, keep_focus},
         style::{default_corner_radius, SizeExt},
         unit::Unit,
@@ -19,9 +23,9 @@ use ivy_ui::{
         Scope, Widget,
     },
 };
-use ivy_wgpu::rendergraph::TextureHandle;
+use ivy_wgpu::{rendergraph::TextureHandle, types::LogicalPosition};
 
-use crate::{scene_world, viewport_provider::scene_viewport_state};
+use crate::{drop::WorldDropArea, scene_world, viewport_provider::scene_viewport_state};
 
 pub struct OpenViewport {
     pub scene: Entity,
@@ -124,6 +128,7 @@ impl Widget for SceneViewport {
         scope.set_context(overlay_state(), overlays.clone());
 
         Stack::new((
+            WorldDropArea::new(self.scene),
             SceneImage::new(self.view, self.on_size),
             row(screens).with_contain_margins(true),
             OverlayStack::from_state(overlays),
@@ -147,19 +152,48 @@ impl Screen for SceneInputCapture {
         let capture_mouse = scope.stream_component(request_capture_mouse(), engine());
 
         scope.spawn_stream(capture_mouse.into_stream(), |scope, value| {
-            tracing::info!("Setting capture mouse to {value}");
             scope.set(request_capture_mouse(), value);
         });
+
+        let mut query = Query::new(input_state().as_mut());
+
+        fn propagate_event(query: &mut QueryBorrow<ComponentMut<InputState>>, event: &InputEvent) {
+            query.for_each(|v| v.apply(&event));
+        }
 
         scope
             .set(
                 on_input_event(),
-                Box::new(move |_, engine_world, _, event| {
+                Box::new(move |scope, engine_world, _, event| {
                     let scene_world = engine_world.get_mut(self.world_id, scene_world())?;
+                    let rect = scope.get_copy(rect()).unwrap_or_default();
+                    let transform = scope.get_copy(screen_transform()).unwrap_or_default();
 
-                    Query::new(input_state().as_mut())
-                        .borrow(&scene_world)
-                        .for_each(|v| v.apply(event));
+                    match event {
+                        InputEvent::CursorMoved(cursor_moved) => {
+                            let absolute_position = vec2(
+                                cursor_moved.absolute_position.x,
+                                cursor_moved.absolute_position.y,
+                            );
+
+                            let relative_position = transform
+                                .inverse()
+                                .transform_point3(absolute_position.extend(0.0))
+                                .xy()
+                                - rect.min;
+
+                            let event = InputEvent::CursorMoved(CursorMoved {
+                                absolute_position: LogicalPosition {
+                                    x: relative_position.x,
+                                    y: relative_position.y,
+                                },
+                                normalized_position: relative_position / rect.size(),
+                            });
+
+                            propagate_event(&mut query.borrow(&scene_world), &event);
+                        }
+                        event => propagate_event(&mut query.borrow(&scene_world), event),
+                    };
 
                     Ok(())
                 }),

@@ -7,7 +7,6 @@ use ivy_assets::{stored::DynamicStore, AssetCache, AssetPath};
 use ivy_core::{
     app::PostInitEvent,
     layer::events::EventRegisterContext,
-    palette::Srgb,
     profiling::ProfilingLayer,
     transforms::TransformUpdatePlugin,
     update_layer::{FixedTimeStep, Plugin, PluginLayer},
@@ -16,10 +15,7 @@ use ivy_core::{
 use ivy_engine::{
     color, elapsed_time, engine, parent_transform, position, rotation, scale, world_transform,
 };
-use ivy_game::{
-    fly_camera::FlyCameraPlugin,
-    viewport_camera::{CameraSettings, ViewportCameraLayer},
-};
+use ivy_game::fly_camera::FlyCameraPlugin;
 use ivy_gltf::animation::plugin::AnimationPlugin;
 use ivy_input::layer::InputLayer;
 use ivy_physics::{GizmoSettings, PhysicsPlugin};
@@ -34,14 +30,11 @@ use ivy_wgpu::{
     layer::GraphicsLayer,
     mesh_desc::MeshDesc,
     primitives::CubePrimitive,
-    renderer::EnvironmentData,
 };
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
 use wgpu::TextureFormat;
 use winit::{dpi::LogicalSize, window::WindowAttributes};
-
-const ENABLE_SKYBOX: bool = true;
 
 pub fn main() -> anyhow::Result<()> {
     registry()
@@ -101,14 +94,6 @@ pub fn main() -> anyhow::Result<()> {
                 )
                 .with_plugin(TransformUpdatePlugin),
         )
-        .with_layer(ViewportCameraLayer::new(CameraSettings {
-            environment_data: EnvironmentData::new(
-                Srgb::new(0.2, 0.2, 0.3),
-                0.001,
-                if ENABLE_SKYBOX { 0.0 } else { 1.0 },
-            ),
-            fov: 1.0,
-        }))
         .run()
     {
         tracing::error!("{err:?}");

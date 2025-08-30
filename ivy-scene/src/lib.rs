@@ -1,5 +1,6 @@
 pub mod camera;
 mod collider;
+pub mod drop;
 pub mod editor;
 pub mod ray_picker;
 mod scene;

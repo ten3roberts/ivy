@@ -21,12 +21,16 @@ use ivy_core::{
 };
 use ivy_input::types::MouseButton;
 use ivy_physics::{components::physics_state, rapier3d::prelude::QueryFilter};
-use ivy_scene::camera::{CameraQuery, screen_to_world_ray};
+use ivy_scene::{
+    camera::{CameraQuery, screen_to_world_ray},
+    drop::world_drop_area,
+    scene_world,
+};
 use ivy_ui::{
     streamed::StreamedUiExt,
     violet::{
         core::{
-            Edges, Scope, ScopeRef, Widget,
+            Edges, Scope, ScopeRef, StateExt, StateStreamRef, Widget,
             components::{LayoutAlignment, rect},
             layout::Align,
             state::StateStream,
@@ -58,14 +62,13 @@ use ivy_wgpu::material::{Material, MaterialDesc};
 use notify::Watcher;
 
 use crate::ui::{
-    asset_inspector::AssetInspector,
+    asset_inspector::AssetEditor,
     context_menu::{ContextMenu, ContextMenuItem, ContextMenuPanel},
-    drop::world_drop_area,
 };
 
 pub const BROWSER_PANEL_HEIGHT: f32 = 300.0;
 pub const INSPECTOR_PANEL_MAX_HEIGHT: f32 = 800.0;
-pub const INSPECTOR_PANEL_WIDTH: f32 = 400.0;
+pub const INSPECTOR_PANEL_WIDTH: f32 = 600.0;
 
 pub struct DirectoryTree {
     selection: WeakHandle<Mutable<Option<PathBuf>>>,
@@ -194,7 +197,7 @@ impl Widget for DirectoryListing {
             ))
             .with_stretch(true),
         )
-        .on_mouse_input(move |scope, input| {
+        .on_generic_mouse_input(move |scope, input| {
             if input.state.is_pressed() && input.button == MouseButton::Right {
                 let pos = input.cursor.absolute_pos;
                 open_context_menu(scope, pos);
@@ -358,35 +361,26 @@ pub const ITEM_SIZE: Unit<Vec2> = Unit::px2(120.0, 100.0);
 
 pub struct FileIcon {
     path: PathBuf,
-    assets: AssetCache,
+    filetype: FileType,
 }
 
 impl Widget for FileIcon {
     fn mount(self, scope: &mut Scope<'_>) {
-        to_owned!(path = self.path, assets = self.assets);
-        SuspenseWidget::new(Throbber::new(48.0), async move {
-            let path = path;
-            let ty = FileType::from_path(&path, &assets).await;
+        // Load the file type asynchronously
+        if self.filetype.is_image() {
+            // If the file is an image, we can display it directly
+            let image = Image::new(self.path.canonicalize().unwrap().to_owned());
+            image
+                .with_exact_size(Unit::px2(64.0, 64.0))
+                .with_corner_radius(default_corner_radius())
+                .mount(scope);
+            return;
+        }
 
-            move |scope: &mut Scope<'_>| {
-                // Load the file type asynchronously
-                if ty.is_image() {
-                    // If the file is an image, we can display it directly
-                    let image = Image::new(path.canonicalize().unwrap().to_owned());
-                    image
-                        .with_exact_size(Unit::px2(64.0, 64.0))
-                        .with_corner_radius(default_corner_radius())
-                        .mount(scope);
-                    return;
-                }
-
-                label(ty.icon())
-                    .with_color(ty.color())
-                    .with_font_size(48.0)
-                    .mount(scope);
-            }
-        })
-        .mount(scope)
+        label(self.filetype.icon())
+            .with_color(self.filetype.color())
+            .with_font_size(48.0)
+            .mount(scope)
     }
 }
 
@@ -407,66 +401,72 @@ impl Widget for FileItem {
             let assets = self.assets.clone();
             let filetype = FileType::from_path(&path, &assets).await;
             let preview = {
-                to_owned!(path);
-                move || label(path.file_name().unwrap_or_default().to_string_lossy())
+                to_owned!(path, filetype);
+                move || FileIcon {
+                    path: path.clone(),
+                    filetype: filetype.clone(),
+                }
             };
 
             let on_drop = {
-                to_owned!(path);
+                to_owned!(path, filetype);
                 move |_scope: &ScopeRef, target: Option<(EntityRef, Vec2)>| {
                     tracing::info!(?path, "Dropping file to {:?}", target);
 
                     if let Some((widget, pos)) = target {
-                        if widget.has(world_drop_area()) {
-                            let screen_pos = pos / widget.get(rect()).unwrap().size();
-                            to_owned!(path, assets, filetype);
-                            _scope.apply(move |world| {
-                                let mut main_camera =
-                                    Query::new(CameraQuery::new()).with(main_camera());
+                        let Ok(scene_id) = widget.get_copy(world_drop_area()) else {
+                            return;
+                        };
 
-                                let mut main_camera = main_camera.borrow(world);
+                        let screen_pos = pos / widget.get(rect()).unwrap().size();
+                        to_owned!(path, assets, filetype);
+                        _scope.apply(move |world| {
+                            let world = &mut *world.get_mut(scene_id, scene_world())?;
 
-                                let main_camera = main_camera.first().context("No main camera")?;
+                            let mut main_camera =
+                                Query::new(CameraQuery::new()).with(main_camera());
 
-                                let physics = world.get(engine(), physics_state()).unwrap();
+                            let mut main_camera = main_camera.borrow(world);
 
-                                let ray = screen_to_world_ray(screen_pos, main_camera);
-                                let hit =
-                                    physics.cast_ray(ray, 1000.0, false, QueryFilter::default());
+                            let main_camera = main_camera.first().context("No main camera")?;
 
-                                match filetype {
-                                    FileType::Asset(AssetType::Template) => {
-                                        if let Some(hit) = hit {
-                                            tracing::info!("Dropping template at {:?}", hit);
-                                            let asset_path =
-                                                AssetPath::<Template>::new(path.canonicalize()?);
+                            let physics = world.get(engine(), physics_state()).unwrap();
 
-                                            let async_cmd = world
-                                                .get_clone(engine(), async_commandbuffer())
-                                                .unwrap();
+                            let ray = screen_to_world_ray(screen_pos, main_camera);
+                            let hit = physics.cast_ray(ray, 1000.0, false, QueryFilter::default());
 
-                                            async_std::task::spawn(async move {
-                                                let fut = spawn_template(
-                                                    assets, ray, asset_path, hit, async_cmd,
-                                                )
-                                                .await;
+                            match filetype {
+                                FileType::Asset(AssetType::Template) => {
+                                    if let Some(hit) = hit {
+                                        tracing::info!("Dropping template at {:?}", hit);
+                                        let asset_path =
+                                            AssetPath::<Template>::new(path.canonicalize()?);
 
-                                                if let Err(err) = fut {
-                                                    tracing::error!("{err:?}");
-                                                }
-                                            });
-                                        } else {
-                                            tracing::warn!("No hit detected for template drop");
-                                        }
-                                    }
-                                    _ => {
-                                        tracing::info!("Dropping file at {:?}", pos);
+                                        let async_cmd = world
+                                            .get_clone(engine(), async_commandbuffer())
+                                            .unwrap();
+
+                                        async_std::task::spawn(async move {
+                                            let fut = spawn_template(
+                                                assets, ray, asset_path, hit, async_cmd,
+                                            )
+                                            .await;
+
+                                            if let Err(err) = fut {
+                                                tracing::error!("{err:?}");
+                                            }
+                                        });
+                                    } else {
+                                        tracing::warn!("No hit detected for template drop");
                                     }
                                 }
+                                _ => {
+                                    tracing::info!("Dropping file at {:?}", pos);
+                                }
+                            }
 
-                                Ok(())
-                            });
-                        }
+                            Ok(())
+                        });
                     }
                 }
             };
@@ -475,7 +475,7 @@ impl Widget for FileItem {
                     col((
                         FileIcon {
                             path: path.clone(),
-                            assets: self.assets,
+                            filetype: filetype.clone(),
                         },
                         RenamableItem {
                             path: self.path.clone(),
@@ -488,7 +488,7 @@ impl Widget for FileItem {
                     preview,
                     on_drop,
                 ),
-                is_selected,
+                is_selected.dedup(),
                 Some(self.path.clone()),
             )
             .on_double_click({
@@ -628,11 +628,11 @@ impl DetailsPanel {
 
 impl Widget for DetailsPanel {
     fn mount(self, scope: &mut Scope<'_>) {
-        let details = SignalWidget::new(self.state.selected_file.signal_ref({
+        let details = StreamWidget::new(self.state.selected_file.dedup().stream_ref({
             to_owned!(assets = self.assets);
             move |selected| {
                 to_owned!(assets);
-                selected.as_ref().map(move |v| FileDetailsPanel {
+                selected.as_ref().map(move |v| FileDetailsWidget {
                     assets: assets.clone(),
                     path: v.to_owned(),
                 })
@@ -894,12 +894,12 @@ impl FileType {
     }
 }
 
-struct FileDetailsPanel {
+struct FileDetailsWidget {
     assets: AssetCache,
     path: PathBuf,
 }
 
-impl Widget for FileDetailsPanel {
+impl Widget for FileDetailsWidget {
     fn mount(self, scope: &mut Scope<'_>) {
         let path = self.path.clone();
         let file_name = path
@@ -950,8 +950,8 @@ impl Widget for FilePreview<'_> {
                         .with_exact_size(Unit::px2(200.0, 200.0))
                         .mount(scope);
                 } else if ty.is_asset() {
-                    tracing::info!("Inspecting asset: {}", path.display());
-                    AssetInspector::new(assets.clone(), path.to_owned()).mount(scope)
+                    // tracing::info!("Inspecting asset: {}", path.display());
+                    AssetEditor::new(assets.clone(), path.to_owned()).mount(scope)
                 } else if ty.is_text() {
                     let async_load = async {
                         sleep(Duration::from_millis(500)).await;

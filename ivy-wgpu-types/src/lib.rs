@@ -11,5 +11,7 @@ pub use bind_groups::{BindGroupBuilder, BindGroupLayoutBuilder};
 pub use gpu::{Gpu, Surface};
 pub use shader::RenderShader;
 pub use typed_buffer::TypedBuffer;
+pub use winit::dpi::LogicalPosition;
+pub use winit::dpi::LogicalSize;
 pub use winit::dpi::PhysicalSize;
 pub use winit::window::Window;

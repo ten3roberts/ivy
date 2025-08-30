@@ -10,11 +10,7 @@ use ivy_core::{
 };
 use ivy_editable::Editable;
 use ivy_engine::engine;
-use ivy_game::{
-    orbit_camera::OrbitCameraPlugin,
-    viewport_camera::{CameraSettings, ViewportCameraLayer},
-};
-// use ivy_graphics::texture::TextureDesc;
+use ivy_game::orbit_camera::OrbitCameraPlugin;
 use ivy_input::layer::InputLayer;
 use ivy_postprocessing::preconfigured::{
     pbr::{PbrRenderGraphConfig, SkyboxConfig},
@@ -24,10 +20,7 @@ use ivy_ui::{
     layer::{UiLayer, UiUpdateLayer},
     screens::{screen_state, Screen},
 };
-use ivy_wgpu::{
-    driver::WinitDriver, effect_desc::RenderEffectDesc, layer::GraphicsLayer,
-    renderer::EnvironmentData,
-};
+use ivy_wgpu::{driver::WinitDriver, effect_desc::RenderEffectDesc, layer::GraphicsLayer};
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
 use violet::{
@@ -43,8 +36,6 @@ use violet::{
 };
 use wgpu::TextureFormat;
 use winit::{dpi::LogicalSize, window::WindowAttributes};
-
-const ENABLE_SKYBOX: bool = true;
 
 pub fn main() -> anyhow::Result<()> {
     registry()
@@ -98,14 +89,6 @@ pub fn main() -> anyhow::Result<()> {
                 .with_plugin(GameUiPlugin)
                 .with_plugin(OrbitCameraPlugin),
         )
-        .with_layer(ViewportCameraLayer::new(CameraSettings {
-            environment_data: EnvironmentData::new(
-                Srgb::new(0.2, 0.2, 0.3),
-                0.001,
-                if ENABLE_SKYBOX { 0.0 } else { 1.0 },
-            ),
-            fov: 1.0,
-        }))
         .with_layer(ui_layer)
         .run()
     {

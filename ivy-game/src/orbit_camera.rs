@@ -7,11 +7,11 @@ use ivy_core::{
     update_layer::{Plugin, ScheduleSetBuilder},
     Bundle, EntityBuilderExt, DEG_90,
 };
+use ivy_graphics::camera::CameraBundle;
 use ivy_input::{
     components::input_state, types::MouseButton, Action, BindingExt, CompositeBinding,
     CursorMoveBinding, InputState, MouseButtonBinding, ScrollBinding,
 };
-use ivy_wgpu::components::{environment_data, projection_matrix};
 
 flax::component! {
     control_active: bool,
@@ -70,10 +70,9 @@ impl Bundle for OrbitCameraBundle {
 
         entity
             .mount(TransformBundle::default())
+            .mount(CameraBundle::default())
             .set(name(), "OrbitCamera".to_string())
             .set(main_camera(), ())
-            .set_default(projection_matrix())
-            .set_default(environment_data())
             .set(phi(), -0.5)
             .set_default(theta())
             .set_default(focus_point())

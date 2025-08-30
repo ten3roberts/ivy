@@ -1,3 +1,5 @@
+use std::any::type_name;
+
 use flax::{
     components::name, BoxedSystem, Component, ComponentMut, Entity, FetchExt, Query, QueryBorrow,
     System, World,
@@ -5,10 +7,15 @@ use flax::{
 use glam::{vec3, EulerRot, Quat, Vec2, Vec3};
 use ivy_assets::{stored::DynamicStore, AssetCache};
 use ivy_core::{
-    components::{main_camera, request_capture_mouse, rotation, TransformBundle},
+    components::{engine, main_camera, request_capture_mouse, rotation, TransformBundle},
     math::{Axis2D, Axis3D},
     update_layer::{Plugin, ScheduleSetBuilder},
     Bundle, EntityBuilderExt, DEG_45,
+};
+use ivy_editable::Editable;
+use ivy_graphics::camera::{
+    camera_settings, environment_data, CameraBundle, CameraProjection, CameraSettings,
+    EnvironmentData,
 };
 use ivy_input::{
     components::input_state,
@@ -20,7 +27,22 @@ use ivy_physics::{
     components::{angular_velocity, velocity},
     RigidBodyBundle, RigidBodyKind,
 };
-use ivy_wgpu::components::{environment_data, projection_matrix};
+use ivy_ui::{
+    screens::{screen_state, Screen},
+    streamed::StreamedUiExt,
+};
+use violet::{
+    core::{
+        components::LayoutAlignment,
+        style::SizeExt,
+        widget::{card, col, label, row, subtitle, Collapsible, LabeledSlider},
+        StateExt, Widget,
+    },
+    futures_signals::signal::Mutable,
+    palette::Srgb,
+};
+
+use crate::viewport_camera::CameraViewportPlugin;
 
 flax::component! {
     pub pan_active: bool,
@@ -41,7 +63,7 @@ impl Plugin for FlyCameraPlugin {
         _: &mut DynamicStore,
         schedules: &mut ScheduleSetBuilder,
     ) -> anyhow::Result<()> {
-        Entity::builder().mount(FreeCameraBundle).spawn(world);
+        let id = Entity::builder().mount(FreeCameraBundle).spawn(world);
 
         schedules
             .per_tick_mut()
@@ -50,7 +72,15 @@ impl Plugin for FlyCameraPlugin {
             .with_system(camera_rotation_input_system())
             .with_system(camera_movement_input_system());
 
+        world
+            .get(engine(), screen_state())?
+            .open(FlyCameraScreen { id });
+
         Ok(())
+    }
+
+    fn before(&self) -> Vec<&str> {
+        vec![type_name::<CameraViewportPlugin>()]
     }
 }
 
@@ -124,9 +154,8 @@ impl Bundle for FreeCameraBundle {
                 Vec3::ONE,
             ))
             .mount(RigidBodyBundle::new(RigidBodyKind::Dynamic).with_can_sleep(false))
+            .mount(CameraBundle::default())
             .set(main_camera(), ())
-            .set_default(projection_matrix())
-            .set_default(environment_data())
             .set_default(velocity())
             .set_default(angular_velocity())
             .set(
@@ -172,7 +201,6 @@ fn camera_speed_input_system() -> BoxedSystem {
         .for_each(|(speed, &delta)| {
             let change = 2_f32.powf(delta * 0.05);
             *speed = (*speed * change).clamp(0.1, 1000.0);
-            tracing::info!("camera speed: {speed} {delta}");
         })
         .boxed()
 }
@@ -204,4 +232,68 @@ fn camera_movement_input_system() -> BoxedSystem {
             *velocity = *rotation * (movement * vec3(1.0, 1.0, -1.0) * camera_speed);
         })
         .boxed()
+}
+
+struct FlyCameraScreen {
+    id: Entity,
+}
+
+impl Screen for FlyCameraScreen {
+    fn create(
+        self,
+        scope: &mut violet::core::Scope<'_>,
+        token: ivy_ui::screens::ScreenLifetimeToken,
+    ) {
+        scope.monitor_entity_lifetime(self.id, move || {
+            token.close_screen();
+        });
+
+        let camera_speed_value = Mutable::new(None);
+        let camera_settings_value = Mutable::new(None);
+        let envirnment_data_value = Mutable::new(None);
+
+        scope.stream_component_duplex(camera_speed(), self.id, camera_speed_value.clone());
+        scope.stream_component_duplex(camera_settings(), self.id, camera_settings_value.clone());
+        scope.stream_component_duplex(environment_data(), self.id, envirnment_data_value.clone());
+
+        let perspective = camera_settings_value
+            .lower_option()
+            .memo(Default::default())
+            .project_ref(|v| v.projection(), |v| v.projection_mut())
+            .filter_map(
+                |v| match v {
+                    CameraProjection::Perspective { fov_y, near, far } => Some((fov_y, near, far)),
+                    CameraProjection::Orthographic { .. } => None,
+                },
+                |v| Some(CameraProjection::perspective(v.0, v.1, v.2)),
+            );
+
+        let fov = perspective
+            .memo(Default::default())
+            .project_ref(|v| &v.0, |v| &mut v.0)
+            .map_value(|v| v.to_degrees(), |v| v.to_radians());
+
+        card(
+            col((
+                subtitle("Camera"),
+                row((
+                    label("Speed"),
+                    LabeledSlider::input(camera_speed_value.lower_option(), 0.1, 1000.0)
+                        .precision(0),
+                )),
+                row((
+                    label("Fov"),
+                    LabeledSlider::input(fov, 10.0, 120.0).precision(0),
+                )),
+                Collapsible::label(
+                    "Environment",
+                    EnvironmentData::create_editor(envirnment_data_value.lower_option()),
+                )
+                .indent(true),
+            ))
+            .with_stretch(true),
+        )
+        .with_item_align(LayoutAlignment::bottom_right())
+        .mount(scope);
+    }
 }

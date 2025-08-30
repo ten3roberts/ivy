@@ -97,7 +97,7 @@ impl Overlay for ContextMenuPanel {
         };
 
         InteractiveWidget::new(maximized(menu).with_background(Srgba::new(0.0, 0.0, 0.0, 0.0)))
-            .on_mouse_input(move |scope, input| {
+            .on_generic_mouse_input(move |scope, input| {
                 scope.read(token).close();
                 Some(input)
             })

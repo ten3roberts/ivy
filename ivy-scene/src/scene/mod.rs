@@ -18,7 +18,7 @@ use ivy_core::{
     Layer, LayerDyn, WorldExt,
 };
 use ivy_wgpu::{
-    components::{main_window, window},
+    components::{main_window, viewport_size, window},
     events::{ApplicationReady, WindowResizedEvent},
     types::Window,
 };
@@ -91,6 +91,7 @@ impl Scene {
         }
 
         Entity::builder()
+            .set_default(viewport_size())
             // .set_opt(audio_mixer(), engine_entity.get_clone(audio_mixer()).ok())
             .append_to(world, engine())?;
 

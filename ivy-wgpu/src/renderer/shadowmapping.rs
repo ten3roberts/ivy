@@ -10,6 +10,7 @@ use ivy_core::{
     profiling::{profile_function, profile_scope},
     WorldExt,
 };
+use ivy_graphics::camera::projection_matrix;
 use ivy_wgpu_types::shader::ShaderDesc;
 use ordered_float::OrderedFloat;
 use wgpu::{
@@ -20,9 +21,7 @@ use wgpu::{
 
 use super::ObjectManager;
 use crate::{
-    components::{
-        cast_shadow, light_kind, light_params, light_shadow_data, projection_matrix, shadow_pass,
-    },
+    components::{cast_shadow, light_kind, light_params, light_shadow_data, shadow_pass},
     light::{LightKind, LightParams},
     renderer::{
         mesh_renderer::MeshRenderer, CameraData, CameraRenderer, RenderContext, RendererStore,

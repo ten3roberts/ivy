@@ -16,10 +16,7 @@ use ivy_editor::{
     tools_controller::ToolsControllerPlugin,
 };
 use ivy_engine::{is_static, rotation, scale, RigidBodyBundle, TransformBundle};
-use ivy_game::{
-    fly_camera::FlyCameraPlugin,
-    viewport_camera::{CameraSettings, ViewportCameraLayer},
-};
+use ivy_game::{fly_camera::FlyCameraPlugin, viewport_camera::CameraViewportPlugin};
 use ivy_graphics::texture::TextureData;
 use ivy_input::layer::InputLayer;
 use ivy_physics::{
@@ -41,7 +38,7 @@ use ivy_wgpu::{
     light::{LightKind, LightParams},
     mesh_desc::MeshDesc,
     primitives::{CapsulePrimitive, CubePrimitive, UvSpherePrimitive},
-    renderer::{EnvironmentData, RenderObjectBundle},
+    renderer::RenderObjectBundle,
 };
 use rapier3d::prelude::{ColliderBuilder, SharedShape};
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
@@ -114,14 +111,6 @@ pub fn main() -> anyhow::Result<()> {
                 .with_plugin(TransformUpdatePlugin),
         )
         .with_layer(UiUpdateLayer::new())
-        .with_layer(ViewportCameraLayer::new(CameraSettings {
-            environment_data: EnvironmentData::new(
-                Srgb::new(0.2, 0.2, 0.3),
-                0.001,
-                if ENABLE_SKYBOX { 0.0 } else { 1.0 },
-            ),
-            fov: 1.0,
-        }))
         .run()
     {
         tracing::error!("{err:?}");

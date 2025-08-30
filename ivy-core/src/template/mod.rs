@@ -22,8 +22,10 @@ use violet::{
         style::{element_warning, surface_tertiary, SizeExt, StyleExt},
         to_owned,
         widget::{
-            bold, card, col, interactive::select_list::SelectList, label, raised_card, row, Button,
-            ButtonStyle, Collapsible, Rectangle, ScrollArea, StreamWidget,
+            bold, card, col,
+            interactive::{dropdown::Dropdown, select_list::SelectList},
+            label, raised_card, row, Button, ButtonStyle, Collapsible, Rectangle, ScrollArea,
+            StreamWidget,
         },
         Scope, Widget,
     },
@@ -311,7 +313,7 @@ impl Editable for TemplateDesc {
 
         Box::new(
             col((
-                ScrollArea::vertical(editors),
+                editors,
                 StreamWidget::new(
                     add_rx
                         .into_stream()
@@ -403,7 +405,7 @@ impl Widget for BundleCreationWidget {
             }
         });
 
-        let selection_widget = raised_card(ScrollArea::vertical(SelectList::new(
+        let selection_widget = raised_card(ScrollArea::vertical(Dropdown::new(
             selected,
             available_bundles.clone(),
         )));

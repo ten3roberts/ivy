@@ -15,7 +15,7 @@ use crate::{
 };
 
 /// Asynchronously loadable material, e.g; from json and texture file paths
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Editable)]
+#[derive(Debug, Clone, Editable)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum RenderEffectDesc {
     Pbr(PbrRenderEffectDesc),
@@ -51,7 +51,7 @@ impl Loadable for RenderEffectDesc {
 
 declare_resource!(RenderEffect, RenderEffectDesc);
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Editable)]
+#[derive(Debug, Clone, Editable)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PbrRenderEffectDesc {
     label: String,
@@ -162,7 +162,7 @@ impl Default for PbrRenderEffectDesc {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Editable)]
+#[derive(Debug, Clone, Editable)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PbrEmissiveRenderEffectDesc {
     pbr: PbrRenderEffectDesc,

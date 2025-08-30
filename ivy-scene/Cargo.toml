@@ -9,6 +9,7 @@ license-file.workspace = true
 ivy-core = { path = "../ivy-core" }
 ivy-editable = { path = "../ivy-editable" }
 ivy-wgpu = { path = "../ivy-wgpu" }
+ivy-graphics = { path = "../ivy-graphics" }
 ivy-physics = { path = "../ivy-physics" }
 ivy-gltf = { path = "../ivy-gltf" }
 ivy-assets = { path = "../ivy-assets" }
