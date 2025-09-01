@@ -350,20 +350,15 @@ impl Widget for BundleCreationWidget {
             }
         }
 
-        let selected = Mutable::new(None as Option<usize>);
+        let selected: Mutable<Option<BundleEntry>> = Mutable::new(None);
 
-        let value_editor = selected.stream_ref({
+        let value_editor = selected.clone().lower_option().stream().map({
             to_owned!(available_bundles);
-            move |i| {
-                let &Some(i) = i else {
-                    return None;
-                };
-
-                let entry = available_bundles[i];
-                let editor = EDITABLE_REGISTRY.get_by_type((entry.registration.desc_type_id)());
+            move |bundle| {
+                let editor = EDITABLE_REGISTRY.get_by_type((bundle.registration.desc_type_id)());
 
                 let value = Mutable::new(None as Option<ErasedBundleDesc>);
-                let upcast = entry.registration.upcast_any;
+                let upcast = bundle.registration.upcast_any;
 
                 let add_controls = value.stream().map(move |v| {
                     let add = match v {
@@ -406,7 +401,7 @@ impl Widget for BundleCreationWidget {
         });
 
         let selection_widget = raised_card(ScrollArea::vertical(Dropdown::new(
-            selected,
+            selected.lower_option(),
             available_bundles.clone(),
         )));
 

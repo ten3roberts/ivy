@@ -243,7 +243,7 @@ impl Widget for TimespanWidget {
             .with_size(Unit::px2(padded_width, CELL_HEIGHT + CELL_SPACING))
             .with_padding(spacing_small())
             .with_alignment(LayoutAlignment::new(Align::Start, Align::Center)),
-            move || pill(label(&self.text)),
+            move |_| pill(label(&self.text)),
         )
         .mount(scope);
     }

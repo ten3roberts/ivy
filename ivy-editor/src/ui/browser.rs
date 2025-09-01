@@ -710,7 +710,7 @@ impl Widget for Breadcrumbs<'_> {
 
             let widget = InteractiveWidget::new(pill(
                 label(&segment_str)
-                    .with_color(OCEAN_200)
+                    .with_color(SAPPHIRE_200)
                     .with_wrap(Wrap::None),
             ))
             .on_click(move |scope: &ScopeRef| {
@@ -850,14 +850,14 @@ impl FileType {
 
     fn color(&self) -> Srgba {
         match self {
-            FileType::Directory => OCEAN_200,
+            FileType::Directory => SAPPHIRE_200,
             FileType::Text => PLATINUM_50,
-            FileType::Image => CHERRY_400,
+            FileType::Image => RUBY_400,
             FileType::Code(Code::Rust) => AMBER_400,
-            FileType::Code(Code::C) => OCEAN_400,
-            FileType::Code(Code::Cpp) => OCEAN_400,
-            FileType::Code(Code::Python) => CITRUS_400,
-            FileType::Code(Code::Js) => CITRUS_400,
+            FileType::Code(Code::C) => SAPPHIRE_400,
+            FileType::Code(Code::Cpp) => SAPPHIRE_400,
+            FileType::Code(Code::Python) => AMBER_400,
+            FileType::Code(Code::Js) => AMBER_400,
             FileType::Code(Code::Wgsl) => AMETHYST_400,
             FileType::Code(Code::Wasm) => AMETHYST_400,
             FileType::Code(Code::Json) => FOREST_400,
@@ -866,9 +866,9 @@ impl FileType {
             FileType::Error => RUBY_400,
             FileType::Blend => AMBER_400,
             FileType::Gltf => TEAL_400,
-            FileType::Hdri => CITRUS_400,
-            FileType::Asset(AssetType::Asset) => CITRUS_400,
-            FileType::Asset(AssetType::Template) => OCEAN_400,
+            FileType::Hdri => AMBER_400,
+            FileType::Asset(AssetType::Asset) => AMBER_400,
+            FileType::Asset(AssetType::Template) => SAPPHIRE_400,
             FileType::Asset(AssetType::Material) => RUBY_400,
         }
     }
@@ -917,7 +917,7 @@ impl Widget for FileDetailsWidget {
             },
             label("File Details")
                 .with_font_size(16.0)
-                .with_color(OCEAN_200),
+                .with_color(SAPPHIRE_200),
             Tooltip::label(
                 label(format!("Name: {file_name}")),
                 path.display().to_string(),

@@ -17,11 +17,11 @@ use ivy_ui::{
         core::{
             Widget,
             layout::Align,
-            style::{SizeExt, element_accent},
+            style::{SizeExt, element_accent, surface_primary},
             to_owned,
             widget::{
-                Button, FutureWidget, StreamWidget, bold, col, maximized, panel, raised_card, row,
-                subtitle,
+                Button, FutureWidget, StreamWidget, bold, card, col, maximized, panel, raised_card,
+                row, subtitle,
             },
         },
         futures_signals::signal::{Mutable, SignalExt},
@@ -154,15 +154,17 @@ impl Screen for MainEditorUI {
         ));
 
         let browser_state = DirectoryBrowserState::new();
-        let directory_browser = col((
-            window_header(LUCIDE_FOLDER, "Assets"),
+        let directory_browser = window(
+            LUCIDE_FOLDER,
+            "Assets",
             DirectoryBrowser::new(self.assets.clone(), "./assets", browser_state.clone()),
-        ));
+        );
 
-        let details_panel = col((
-            window_header(LUCIDE_SATELLITE_DISH, "Inspector"),
+        let details_panel = window(
+            LUCIDE_SATELLITE_DISH,
+            "Inspector",
             DetailsPanel::new(self.assets, browser_state),
-        ));
+        );
 
         panel(
             col((
@@ -171,6 +173,7 @@ impl Screen for MainEditorUI {
             ))
             .with_contain_margins(true),
         )
+        .with_background(surface_primary())
         .with_maximize(Vec2::ONE)
         .mount(scope);
     }
@@ -183,6 +186,10 @@ pub fn window_header(icon: impl Into<String>, title: impl Into<String>) -> impl 
             .with_cross_align(Align::Center)
             .with_maximize(Vec2::X),
     )
+}
+
+fn window(icon: impl Into<String>, title: impl Into<String>, content: impl Widget) -> impl Widget {
+    card(col((window_header(icon, title), content)))
 }
 
 fn header() -> impl Widget {

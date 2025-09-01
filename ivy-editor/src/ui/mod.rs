@@ -119,7 +119,7 @@ impl Widget for ToolSelectionWidget {
                         selection.clone().lower_option().lower_option(),
                         i,
                     )
-                    .with_tooltip(TooltipOptions::new(move || label(&name)))
+                    .with_tooltip(TooltipOptions::new(move |_| label(&name)))
                 });
 
                 row(items.collect_vec())
