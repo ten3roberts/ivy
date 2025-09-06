@@ -20,9 +20,9 @@
               ]
             }
           },
-          "restitution": 0.5311432,
-          "friction": 0.576828,
-          "density": 4.9438477
+          "restitution": 1.0,
+          "friction": 0.58673096,
+          "density": 44.509888
         }
       },
       {
@@ -92,10 +92,10 @@
           "params": {
             "color": {
               "red": 1.0,
-              "green": 1.0,
-              "blue": 1.0
+              "green": 0.496,
+              "blue": 0.224
             },
-            "intensity": 0.0,
+            "intensity": 37.58087,
             "inner_theta": 1.4698206,
             "outer_theta": 1.5708
           },

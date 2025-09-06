@@ -9,10 +9,13 @@ use crate::components::{cast_shadow, light_kind, light_params};
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct LightParams {
     pub color: Srgb,
+    /// Light intensity
     #[editable(range(0.0, 100.0))]
     pub intensity: f32,
+    /// Spotlight inner cone radius
     #[editable(range(0.0, 1.5708))]
     pub inner_theta: f32,
+    /// Spotlight outer cone radius
     #[editable(range(0.0, 1.5708))]
     pub outer_theta: f32,
 }

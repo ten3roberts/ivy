@@ -15,9 +15,9 @@ use ivy_ui::{
     streamed::StreamedUiPlugin,
     violet::{
         core::{
-            Widget,
+            Edges, Widget,
             layout::Align,
-            style::{SizeExt, element_accent, surface_primary},
+            style::{SizeExt, element_accent, surface_primary, surface_secondary},
             to_owned,
             widget::{
                 Button, FutureWidget, StreamWidget, bold, card, col, maximized, panel, raised_card,
@@ -25,7 +25,7 @@ use ivy_ui::{
             },
         },
         futures_signals::signal::{Mutable, SignalExt},
-        lucide::icons::{LUCIDE_FOLDER, LUCIDE_LEAF, LUCIDE_SATELLITE_DISH},
+        lucide::icons::{LUCIDE_FOLDER, LUCIDE_LEAF, LUCIDE_PACKAGE, LUCIDE_SATELLITE_DISH},
     },
 };
 
@@ -155,7 +155,7 @@ impl Screen for MainEditorUI {
 
         let browser_state = DirectoryBrowserState::new();
         let directory_browser = window(
-            LUCIDE_FOLDER,
+            LUCIDE_PACKAGE,
             "Assets",
             DirectoryBrowser::new(self.assets.clone(), "./assets", browser_state.clone()),
         );
@@ -189,7 +189,7 @@ pub fn window_header(icon: impl Into<String>, title: impl Into<String>) -> impl 
 }
 
 fn window(icon: impl Into<String>, title: impl Into<String>, content: impl Widget) -> impl Widget {
-    card(col((window_header(icon, title), content)))
+    col((window_header(icon, title), card(content))).with_background(surface_secondary())
 }
 
 fn header() -> impl Widget {

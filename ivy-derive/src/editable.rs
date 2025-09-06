@@ -1,9 +1,9 @@
 use itertools::Itertools;
 use proc_macro_crate::FoundCrate;
 use proc_macro2::{Span, TokenStream};
-use quote::{format_ident, quote};
+use quote::{format_ident, quote, ToTokens};
 use syn::{
-    parenthesized, spanned::Spanned, Attribute, DeriveInput, Error, Field, Ident, Index, Result, Token, Type
+    parenthesized, spanned::Spanned, Attribute, DeriveInput, Error, Expr, Field, Ident, Index, PatLit, Result, Token, Type
 };
 
 pub fn editable_impl(input: DeriveInput) -> Result<TokenStream> {
@@ -30,12 +30,15 @@ fn expand_enum(
 ) -> Result<TokenStream> {
     let ident = &input.ident;
 
-    let disc_selection = data_enum.variants.iter().map(|v| {
+    let mut inline = true;
+
+    let disc_pat = data_enum.variants.iter().map(|v| {
         let ident = &v.ident;
         let ident_s = ident.to_string();
 
         let pat = match &v.fields {
             syn::Fields::Named(named) => {
+                inline = false;
                 let names = named.named.iter().map(|v| {
                     let ident = &v.ident;
                     quote! {#ident: _}
@@ -44,6 +47,7 @@ fn expand_enum(
                 quote! { { #(#names),* } }
             }
             syn::Fields::Unnamed(fields_unnamed) => {
+                inline = false;
                 let repeat = (0..fields_unnamed.unnamed.len()).map(|_| quote! { _ });
                 quote! { (#(#repeat),*) }
             }
@@ -56,18 +60,18 @@ fn expand_enum(
 
     let default_variant = data_enum.variants.first().map(|v| &v.ident).ok_or_else(|| syn::Error::new_spanned(ident, "No variants found in enum"))?.to_string();
 
-    let disc_selection = quote! {
-        ::std::sync::Arc::new(state.clone().filter_map(|v| Some( match v { #(#disc_selection),* }), |_| None).memo(#default_variant).dedup()) as ::std::sync::Arc<dyn Send + Sync + #violet::state::StateDuplex<Item = &'static str>>;
+    let discriminant = quote! {
+        ::std::sync::Arc::new(state.clone().filter_map(|v| Some( match v { #(#disc_pat),* }), |_| None).memo(#default_variant).dedup()) as ::std::sync::Arc<dyn Send + Sync + #violet::state::StateDuplex<Item = &'static str>>;
     };
 
-    let kind_selection = data_enum.variants.iter().map(|v| {
+    let variant_names = data_enum.variants.iter().map(|v| {
         let ident = &v.ident;
         let ident_s = ident.to_string();
 
-        quote! { #violet::widget::Selectable::new_value(#violet::widget::label(#ident_s), discriminant.clone(), #ident_s) }
+        quote! { #violet::widget::DisplayWidget::new(#ident_s) }
     });
 
-    let kind_selection = quote! { #violet::widget::row((#(#kind_selection),*)); };
+    let kind_selection = quote! { #violet::widget::interactive::Dropdown::new(discriminant.clone().map_value(#violet::widget::DisplayWidget::new, |v| v.value().clone()), [#(#variant_names),*]); };
 
     let variant_editors = |project| -> syn::Result<Vec<TokenStream>> {
         data_enum
@@ -242,7 +246,7 @@ fn expand_enum(
 
     let expanded = quote! {
         impl #crate_name::Editable for #ident {
-            const INLINE: bool = false;
+            const INLINE: bool = #inline;
 
             fn create_editor<S: 'static + Send + Sync + #violet::state::StateDuplex<Item = Self>>(
                 state: S,
@@ -251,7 +255,7 @@ fn expand_enum(
                 let state = ::std::sync::Arc::new(state);
 
 
-                let discriminant = #disc_selection;
+                let discriminant = #discriminant;
                 let kind_selection = #kind_selection;
                 let value_editor = #value_editor;
                 Box::new(#violet::widget::col((kind_selection, #violet::widget::StreamWidget::new(value_editor))))
@@ -281,10 +285,20 @@ fn expand_field_editors(
         let ident = &f.ident;
 
         let ty = &f.ty;
+        let tooltip = if !f.doc.is_empty() {
+            let doc =  &f.doc;
+            quote! {#doc}
+        } else {
+            let ty = &f.ty;
+            quote! {stringify!(#ty)}
+        };
+
+        use heck::ToTitleCase;
+        let name = ident.to_string().to_title_case();
         let label = quote! {
             #violet::widget::interactive::base::InteractiveWidget::new(
-                #violet::widget::label(stringify!(#ident))
-            ).with_tooltip_text(stringify!(#ty))
+                #violet::widget::label(#name)
+            ).with_tooltip_text(#tooltip)
         };
 
         let editor = if let Some(opts) = f.attrs.opts_tokens(crate_name) {
@@ -481,6 +495,7 @@ struct ParsedField<'a> {
     ty: &'a Type,
     ident: &'a Ident,
     attrs: FieldAttrs,
+    doc: String,
 }
 
 impl<'a> ParsedField<'a> {
@@ -493,6 +508,7 @@ impl<'a> ParsedField<'a> {
         let attrs = FieldAttrs::get(&field.attrs)?;
 
         Ok(Self {
+            doc: attrs_to_doc(&field.attrs),
             ty: &field.ty,
             ident,
             attrs,
@@ -500,11 +516,29 @@ impl<'a> ParsedField<'a> {
     }
 }
 
+fn attrs_to_doc(attrs: &[Attribute]) -> String {
+    attrs
+        .iter()
+        .filter_map(|v| {
+            match &v.meta {
+                syn::Meta::NameValue(name_value) if name_value.path.is_ident("doc") => {
+                    if let Expr::Lit(syn::ExprLit { lit:  syn::Lit::Str(lit_str), .. }) = &name_value.value {
+                        Some(lit_str.value().trim().to_string())
+                    } else {
+                        None
+                    }
+                }
+                _ => None
+            }
+        }).join("\n")
+}
+
 struct IndexedField<'a> {
     ty: &'a Type,
     index: Index,
     attrs: FieldAttrs,
     named_ident: Ident,
+    doc: String,
 }
 
 impl<'a> IndexedField<'a> {
@@ -512,7 +546,11 @@ impl<'a> IndexedField<'a> {
         let attrs = FieldAttrs::get(&field.attrs)?;
 
         let named_ident = Ident::new(&format!("field_{index}"), Span::call_site());
+
+
+
         Ok(Self {
+            doc: attrs_to_doc(&field.attrs),
             ty: &field.ty,
             index: Index::from(index),
             named_ident,
@@ -524,8 +562,8 @@ impl<'a> IndexedField<'a> {
 #[derive(Default, Debug, Clone)]
 struct FieldAttrs {
     skip: bool,
-    range: Option<(syn::Expr, syn::Expr)>,
-    default: Option<syn::Expr>,
+    range: Option<(Expr, Expr)>,
+    default: Option<Expr>,
 }
 
 impl FieldAttrs {

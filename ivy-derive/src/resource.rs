@@ -373,6 +373,10 @@ impl FieldAttrs {
                     }
                 }
                 continue;
+            } else if attr.path().is_ident("doc") {
+                // Preserve doc comments
+                res.attrs.push(attr.clone());
+                continue;
             }
 
             if !attr.path().is_ident("resource") {

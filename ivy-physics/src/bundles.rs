@@ -38,12 +38,14 @@ pub struct RigidBodyBundle {
     pub can_sleep: bool,
     #[cfg_attr(feature = "serde", serde(default))]
     #[resource_attr(editable(default))]
+    /// Additional mass added to the body.
     pub mass: f32,
     #[cfg_attr(feature = "serde", serde(default))]
     #[resource_attr(editable(default))]
     pub angular_mass: f32,
     #[cfg_attr(feature = "serde", serde(default))]
     #[resource_attr(editable(default))]
+    /// Constrain the movement of the body
     pub constraints: AxisContraints,
 
     #[cfg_attr(feature = "serde", serde(default))]
