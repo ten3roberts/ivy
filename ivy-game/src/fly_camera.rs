@@ -289,6 +289,7 @@ impl Screen for FlyCameraScreen {
                     "Environment",
                     EnvironmentData::create_editor(envirnment_data_value.lower_option()),
                 )
+                .start_collapsed(true)
                 .indent(true),
             ))
             .with_stretch(true),

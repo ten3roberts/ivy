@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::Context;
 use flax::{EntityRef, Query};
-use futures::StreamExt;
+use futures::{StreamExt, future::ready};
 use glam::{BVec2, Vec2};
 use itertools::Itertools;
 use ivy_assets::{
@@ -35,16 +35,19 @@ use ivy_ui::{
             layout::Align,
             state::StateStream,
             stored::WeakHandle,
-            style::{SizeExt, StyleExt, base_colors::*, default_corner_radius, surface_danger},
+            style::{
+                SizeExt, StyleExt, base_colors::*, default_corner_radius, surface_danger,
+                surface_secondary,
+            },
             text::{FontFamily, Wrap},
             time::sleep,
             to_owned,
             unit::Unit,
             widget::{
-                Button, ButtonStyle, Collapsible, Draggable, FutureWidget, Image,
-                IterWidgetCollection, LoadingSpinner, ScrollArea, Selectable, SignalWidget,
-                StreamWidget, SuspenseWidget, Text, TextInput, TextInputStyle, Throbber, WidgetExt,
-                col,
+                Button, ButtonStyle, Checkbox, Collapsible, Draggable, FutureWidget, Image,
+                IterWidgetCollection, LoadingSpinner, Rectangle, ScrollArea, Selectable,
+                SignalWidget, Stack, StreamWidget, SuspenseWidget, Text, TextInput, TextInputStyle,
+                Throbber, WidgetExt, card, col,
                 interactive::{base::InteractiveWidget, overlay::overlay_state, tooltip::Tooltip},
                 label, panel, pill, raised_card, row, subtitle,
             },
@@ -54,7 +57,7 @@ use ivy_ui::{
             LUCIDE_BOX, LUCIDE_BOXES, LUCIDE_CLOUD_SUN, LUCIDE_DROPLET, LUCIDE_FILE_ARCHIVE,
             LUCIDE_FILE_BOX, LUCIDE_FILE_CODE, LUCIDE_FILE_IMAGE, LUCIDE_FILE_JSON,
             LUCIDE_FILE_QUESTION, LUCIDE_FILE_TEXT, LUCIDE_FILE_WARNING, LUCIDE_FOLDER,
-            LUCIDE_FOLDER_OPEN, LUCIDE_PACKAGE, LUCIDE_TRASH_2,
+            LUCIDE_FOLDER_OPEN, LUCIDE_PACKAGE, LUCIDE_PIN, LUCIDE_SATELLITE, LUCIDE_TRASH_2,
         },
     },
 };
@@ -67,7 +70,6 @@ use crate::ui::{
 };
 
 pub const BROWSER_PANEL_HEIGHT: f32 = 300.0;
-pub const INSPECTOR_PANEL_MAX_HEIGHT: f32 = 800.0;
 pub const INSPECTOR_PANEL_WIDTH: f32 = 600.0;
 
 pub struct DirectoryTree {
@@ -129,7 +131,7 @@ impl Widget for DirectoryTree {
 
         Collapsible::deferred(header, || subdirs)
             .can_collapse(subdir_count > 0)
-            .collapsed(self.expand_depth == 0)
+            .start_collapsed(self.expand_depth == 0)
             .with_name(path.display().to_string())
             .mount(scope);
     }
@@ -402,9 +404,18 @@ impl Widget for FileItem {
             let filetype = FileType::from_path(&path, &assets).await;
             let preview = {
                 to_owned!(path, filetype);
-                move || FileIcon {
-                    path: path.clone(),
-                    filetype: filetype.clone(),
+                move || {
+                    // col((
+                    FileIcon {
+                        path: path.clone(),
+                        filetype: filetype.clone(),
+                    }
+                    // label(&name)
+                    //     .with_wrap(Wrap::WordOrGlyph)
+                    //     .with_font_size(12.0),
+                    // ))
+                    // .center()
+                    // .with_exact_size(ITEM_SIZE)
                 }
             };
 
@@ -472,18 +483,21 @@ impl Widget for FileItem {
             };
             Selectable::new_value(
                 Draggable::new(
-                    col((
-                        FileIcon {
-                            path: path.clone(),
-                            filetype: filetype.clone(),
-                        },
-                        RenamableItem {
-                            path: self.path.clone(),
-                            selected: self.selected,
-                            selected_dir: self.selected_dir,
-                        },
-                    ))
-                    .with_cross_align(Align::Center)
+                    Stack::new(
+                        col((
+                            FileIcon {
+                                path: path.clone(),
+                                filetype: filetype.clone(),
+                            },
+                            RenamableItem {
+                                path: self.path.clone(),
+                                selected: self.selected,
+                                selected_dir: self.selected_dir,
+                            },
+                        ))
+                        .center(),
+                    )
+                    .with_alignment(LayoutAlignment::center())
                     .with_exact_size(ITEM_SIZE),
                     preview,
                     on_drop,
@@ -615,35 +629,83 @@ impl DirectoryBrowserState {
     }
 }
 
-pub struct DetailsPanel {
+pub struct AspectInspectorPanel {
     assets: AssetCache,
     state: DirectoryBrowserState,
 }
 
-impl DetailsPanel {
+impl AspectInspectorPanel {
     pub fn new(assets: AssetCache, state: DirectoryBrowserState) -> Self {
         Self { assets, state }
     }
 }
 
-impl Widget for DetailsPanel {
-    fn mount(self, scope: &mut Scope<'_>) {
-        let details = StreamWidget::new(self.state.selected_file.dedup().stream_ref({
-            to_owned!(assets = self.assets);
-            move |selected| {
-                to_owned!(assets);
-                selected.as_ref().map(move |v| FileDetailsWidget {
-                    assets: assets.clone(),
-                    path: v.to_owned(),
-                })
-            }
-        }));
+// TODO: to main Ui component
+pub fn window_header(
+    icon: impl Into<String>,
+    title: impl Into<String>,
+    controls: impl Widget,
+) -> impl Widget {
+    raised_card(
+        row((
+            subtitle(icon.into()),
+            subtitle(title.into()),
+            Rectangle::new(Srgba::new(0.0, 0.0, 0.0, 0.0)),
+            controls,
+        ))
+        .with_cross_align(Align::Center)
+        .with_maximize(Vec2::X),
+    )
+}
 
-        panel(details)
-            .with_min_size(Unit::px2(INSPECTOR_PANEL_WIDTH, 0.0))
-            .with_max_size(Unit::px2(INSPECTOR_PANEL_WIDTH, f32::MAX))
-            .with_maximize(Vec2::Y)
-            .mount(scope);
+pub fn window(
+    icon: impl Into<String>,
+    title: impl Into<String>,
+    controls: impl Widget,
+    content: impl Widget,
+) -> impl Widget {
+    col((window_header(icon, title, controls), card(content))).with_background(surface_secondary())
+}
+
+impl Widget for AspectInspectorPanel {
+    fn mount(self, scope: &mut Scope<'_>) {
+        let locked = Mutable::new(false);
+        let lock_widget = Checkbox::with_label(label(LUCIDE_PIN), locked.clone())
+            .with_style(ButtonStyle::default());
+
+        let details = StreamWidget::new(
+            self.state
+                .selected_file
+                .dedup()
+                .stream_ref({
+                    to_owned!(assets = self.assets);
+                    move |selected| {
+                        to_owned!(assets);
+                        selected.as_ref().map(move |v| FileDetailsWidget {
+                            assets: assets.clone(),
+                            path: v.to_owned(),
+                        })
+                    }
+                })
+                .filter_map(move |v| {
+                    if locked.get() {
+                        ready(None)
+                    } else {
+                        ready(Some(v))
+                    }
+                }),
+        );
+
+        window(
+            LUCIDE_SATELLITE,
+            "Inspector",
+            row(lock_widget),
+            panel(details)
+                .with_min_size(Unit::px2(INSPECTOR_PANEL_WIDTH, 0.0))
+                .with_max_size(Unit::px2(INSPECTOR_PANEL_WIDTH, f32::MAX))
+                .with_maximize(Vec2::Y),
+        )
+        .mount(scope);
     }
 }
 

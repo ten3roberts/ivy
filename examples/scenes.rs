@@ -37,6 +37,7 @@ use ivy_ui::{
     layer::{UiLayer, UiLayerOptions, UiUpdateLayer},
     screens::{screen_state, Screen},
     streamed::StreamedUiPlugin,
+    toast::ToastPlugin,
 };
 use ivy_wgpu::{
     driver::WinitDriver,
@@ -144,6 +145,7 @@ pub fn main() -> anyhow::Result<()> {
         .with_layer(
             PluginLayer::new(FixedTimeStep::new(0.02))
                 .with_plugin(EditorHostPlugin::new().with_scene(scene))
+                .with_plugin(ToastPlugin)
                 .with_plugin(StreamedUiPlugin)
                 .with_plugin(StandaloneCameraPlugin), // TODO: remove,
         )

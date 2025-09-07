@@ -20,8 +20,8 @@ use ivy_ui::{
             style::{SizeExt, element_accent, surface_primary, surface_secondary},
             to_owned,
             widget::{
-                Button, FutureWidget, StreamWidget, bold, card, col, maximized, panel, raised_card,
-                row, subtitle,
+                Button, EmptyWidget, FutureWidget, Stack, StreamWidget, bold, card, col, maximized,
+                panel, raised_card, row, subtitle,
             },
         },
         futures_signals::signal::{Mutable, SignalExt},
@@ -29,7 +29,7 @@ use ivy_ui::{
     },
 };
 
-use crate::ui::browser::{DetailsPanel, DirectoryBrowser, DirectoryBrowserState};
+use crate::ui::browser::{AspectInspectorPanel, DirectoryBrowser, DirectoryBrowserState, window};
 
 pub struct EditorHost {
     scene_commands: flume::Sender<ivy_scene::SceneCommand>,
@@ -141,7 +141,7 @@ impl Screen for MainEditorUI {
     fn create(
         self,
         scope: &mut ivy_ui::violet::core::Scope<'_>,
-        token: ivy_ui::screens::ScreenLifetimeToken,
+        _: ivy_ui::screens::ScreenLifetimeToken,
     ) {
         let main_viewport = maximized(StreamWidget(
             self.editor_state
@@ -157,16 +157,13 @@ impl Screen for MainEditorUI {
         let directory_browser = window(
             LUCIDE_PACKAGE,
             "Assets",
+            EmptyWidget,
             DirectoryBrowser::new(self.assets.clone(), "./assets", browser_state.clone()),
         );
 
-        let details_panel = window(
-            LUCIDE_SATELLITE_DISH,
-            "Inspector",
-            DetailsPanel::new(self.assets, browser_state),
-        );
+        let details_panel = AspectInspectorPanel::new(self.assets, browser_state);
 
-        panel(
+        Stack::new(
             col((
                 header(),
                 row((col((main_viewport, directory_browser)), details_panel)),
@@ -177,19 +174,6 @@ impl Screen for MainEditorUI {
         .with_maximize(Vec2::ONE)
         .mount(scope);
     }
-}
-
-// TODO: to main Ui component
-pub fn window_header(icon: impl Into<String>, title: impl Into<String>) -> impl Widget {
-    raised_card(
-        row((subtitle(icon.into()), subtitle(title.into())))
-            .with_cross_align(Align::Center)
-            .with_maximize(Vec2::X),
-    )
-}
-
-fn window(icon: impl Into<String>, title: impl Into<String>, content: impl Widget) -> impl Widget {
-    col((window_header(icon, title), card(content))).with_background(surface_secondary())
 }
 
 fn header() -> impl Widget {

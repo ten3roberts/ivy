@@ -8,22 +8,25 @@ use ivy_assets::{
     meta::AssetPayloadUntyped,
 };
 use ivy_editable::registry::EDITABLE_REGISTRY;
-use ivy_ui::violet::{
-    core::{
-        Scope, Widget,
-        layout::Align,
-        state::StateExt,
-        style::surface_danger,
-        text::Wrap,
-        time::sleep,
-        to_owned,
-        widget::{
-            LoadingSpinner, ScrollArea, StreamWidget, SuspenseWidget, Throbber, bold, col,
-            interactive::base::InteractiveWidget, label, row, subtitle,
+use ivy_ui::{
+    toast::{Toast, toasts},
+    violet::{
+        core::{
+            Scope, Widget,
+            layout::Align,
+            state::StateExt,
+            style::surface_danger,
+            text::Wrap,
+            time::sleep,
+            to_owned,
+            widget::{
+                LoadingSpinner, ScrollArea, StreamWidget, SuspenseWidget, Throbber, bold, col,
+                interactive::base::InteractiveWidget, label, row, subtitle,
+            },
         },
+        futures_signals::signal::{Mutable, SignalExt},
+        lucide::icons::{LUCIDE_CHECK, LUCIDE_TRIANGLE_ALERT},
     },
-    futures_signals::signal::{Mutable, SignalExt},
-    lucide::icons::{LUCIDE_CHECK, LUCIDE_TRIANGLE_ALERT},
 };
 
 pub struct AssetEditor {
@@ -82,6 +85,7 @@ impl Widget for AssetEditor {
                     let editor = editor.map(|v| v.create_editor(Box::new(stream)));
 
                     let type_name = payload.meta.type_name.clone();
+                    let toasts = scope.get_atom(toasts()).unwrap().clone();
 
                     let save_status = value
                         .signal_ref(move |v| AssetPayloadUntyped {
@@ -92,13 +96,14 @@ impl Widget for AssetEditor {
                         .to_stream()
                         .skip(1)
                         .map(move |payload| {
-                            to_owned!(path);
+                            to_owned!(path, toasts);
                             SuspenseWidget::new(Throbber::new(12.0), async move {
-                                to_owned!(path);
+                                to_owned!(path, toasts);
                                 let result = async move {
                                     let payload = payload.serialize_json()?;
                                     async_std::fs::write(path.path(), payload).await?;
                                     sleep(Duration::from_millis(500)).await;
+                                    toasts.send(Toast::info("Asset", "Saved asset"));
                                     anyhow::Ok(())
                                 }
                                 .await;
