@@ -48,7 +48,7 @@
             }
           },
           "roughness_factor": 0.50494385,
-          "metallic_factor": 0.0
+          "metallic_factor": 1.0
         }
       },
       "Shadow": "OpaqueShadow"

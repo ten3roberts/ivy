@@ -15,17 +15,20 @@ use ivy_ui::{
     streamed::StreamedUiPlugin,
     violet::{
         core::{
-            Edges, Widget,
+            Edges, StateExt, Widget,
             layout::Align,
             style::{SizeExt, element_accent, surface_primary, surface_secondary},
             to_owned,
             widget::{
-                Button, EmptyWidget, FutureWidget, Stack, StreamWidget, bold, card, col, maximized,
-                panel, raised_card, row, subtitle,
+                Button, EmptyWidget, FutureWidget, Stack, StreamWidget, TextInput, bold, card, col,
+                maximized, panel, raised_card, row, subtitle,
             },
         },
         futures_signals::signal::{Mutable, SignalExt},
-        lucide::icons::{LUCIDE_FOLDER, LUCIDE_LEAF, LUCIDE_PACKAGE, LUCIDE_SATELLITE_DISH},
+        lucide::icons::{
+            LUCIDE_FOLDER, LUCIDE_LEAF, LUCIDE_PACKAGE, LUCIDE_SATELLITE_DISH, LUCIDE_SAVE,
+            LUCIDE_UPLOAD,
+        },
     },
 };
 
@@ -37,6 +40,7 @@ pub struct EditorHost {
 }
 
 pub struct EditorState {
+    scene_name: Option<String>,
     current_scene: Option<Entity>,
 }
 
@@ -54,6 +58,7 @@ impl EditorHost {
     pub fn open_scene(
         &mut self,
         scene: impl 'static + Send + FnOnce() -> SceneBuilder,
+        name: Option<String>,
     ) -> anyhow::Result<()> {
         let (on_ready_tx, on_ready_rx) = oneshot::channel();
 
@@ -71,7 +76,10 @@ impl EditorHost {
             sleep(Duration::from_millis(500)).await;
             let scene_id = on_ready_rx.await.expect("Scene created");
             tracing::info!(?scene_id, "editor: opened scene");
-            state.lock_mut().current_scene = Some(scene_id);
+            let mut state = state.lock_mut();
+
+            state.current_scene = Some(scene_id);
+            state.scene_name = name;
         });
 
         Ok(())
@@ -109,6 +117,7 @@ impl Plugin for EditorHostPlugin {
 
         let editor_state = Mutable::new(EditorState {
             current_scene: None,
+            scene_name: None,
         });
 
         let mut editor_host = EditorHost::new(scene_commands.clone(), editor_state.clone());
@@ -116,7 +125,7 @@ impl Plugin for EditorHostPlugin {
         // Open initial scene
         if let Some(scene) = self.scene.clone() {
             // TODO: maybe just "with world" and provided base scene builder?
-            editor_host.open_scene(move || scene())?;
+            editor_host.open_scene(move || scene(), None)?;
         }
 
         screens.open(MainEditorUI {
@@ -165,7 +174,7 @@ impl Screen for MainEditorUI {
 
         Stack::new(
             col((
-                header(),
+                header(self.editor_state),
                 row((col((main_viewport, directory_browser)), details_panel)),
             ))
             .with_contain_margins(true),
@@ -176,14 +185,22 @@ impl Screen for MainEditorUI {
     }
 }
 
-fn header() -> impl Widget {
+fn header(state: Mutable<EditorState>) -> impl Widget {
+    let save_controls = row((
+        TextInput::new(
+            state
+                .project_ref(|v| &v.scene_name, |v| &mut v.scene_name)
+                .lower_option(),
+        ),
+        Button::label(LUCIDE_SAVE).on_click(|_| tracing::info!("Save clicked")),
+        Button::label(LUCIDE_UPLOAD).on_click(|_| tracing::info!("Save clicked")),
+    ));
+
     raised_card(
         row((
             subtitle(LUCIDE_LEAF).with_color(element_accent()),
             subtitle("Editor"),
-            Button::label("Save").disabled(),
-            Button::label("Load").disabled(),
-            Button::label("Menu").disabled(),
+            save_controls,
         ))
         .with_cross_align(Align::Center)
         .with_maximize(Vec2::X),

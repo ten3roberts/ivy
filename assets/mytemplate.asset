@@ -21,8 +21,8 @@
             }
           },
           "restitution": 1.0,
-          "friction": 0.58673096,
-          "density": 44.509888
+          "friction": 0.586802,
+          "density": 322.15356
         }
       },
       {
@@ -39,9 +39,9 @@
             1.0
           ],
           "scale": [
-            1.0,
-            1.0,
-            1.0
+            0.5,
+            0.5,
+            0.5
           ]
         }
       },
@@ -91,13 +91,13 @@
         "LightBundle": {
           "params": {
             "color": {
-              "red": 1.0,
-              "green": 0.496,
-              "blue": 0.224
+              "red": 0.0,
+              "green": 0.402,
+              "blue": 1.0
             },
-            "intensity": 37.58087,
-            "inner_theta": 1.4698206,
-            "outer_theta": 1.5708
+            "intensity": 23.736572,
+            "inner_theta": 0.0,
+            "outer_theta": 0.0
           },
           "kind": "Point",
           "cast_shadow": false

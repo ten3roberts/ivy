@@ -188,6 +188,7 @@ impl ObjectManager {
 
             let new_index = self.object_data.len();
             new_components.push((id, new_index));
+            tracing::info!(?id, ?new_index, "adding object to object manager");
 
             self.object_data.push(RenderObjectData::new(
                 transform,
@@ -218,6 +219,7 @@ impl ObjectManager {
     pub fn process_removed(&mut self, world: &World) {
         profile_function!();
         for (id, _) in self.removed_rx.try_iter() {
+            tracing::info!(?id, "removing object from object manager");
             let loc = self.entity_locations.remove(&id).unwrap();
             if loc == self.object_data.len() - 1 {
                 self.object_map.pop();
@@ -241,6 +243,14 @@ impl ObjectManager {
     fn update_object_data(&mut self, world: &World, gpu: &Gpu) {
         profile_function!();
         for (&loc, item) in &mut self.object_query.borrow(world) {
+            if loc >= self.object_data.len() {
+                tracing::warn!(
+                    ?loc,
+                    "skipping invalid object buffer index. Items: {}",
+                    self.object_data.len()
+                );
+                continue;
+            }
             assert_ne!(loc, usize::MAX);
             let object_data = &mut self.object_data[loc];
             object_data.transform = *item.transform;

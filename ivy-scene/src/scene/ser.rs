@@ -14,6 +14,14 @@ use serde::{
     Serialize,
 };
 
+/// Allows serializing and deserializing a saved scene.
+///
+/// # Format
+///
+/// A scene is described as a collection of entities.
+///
+/// Each Entity consists of an originating [`Template`][`ivy_core::template::Template`], and a
+/// collection of serialized component data, such as positions.
 pub struct SceneSerializer {
     serialization_context: SerializationContext,
 }
@@ -31,6 +39,7 @@ impl SceneSerializer {
         }
     }
 
+    /// Serializes an entire world
     pub fn serialize_scene<'a>(&'a self, world: &'a World) -> SerializeScene<'a> {
         SerializeScene { ctx: self, world }
     }
@@ -43,6 +52,7 @@ impl SceneSerializer {
         entity.has(template_key())
     }
 
+    /// Serializes a world to json
     pub fn serialize_json(
         &self,
         world: &World,
@@ -52,6 +62,7 @@ impl SceneSerializer {
         self.serialize_scene(world).serialize(&mut serializer)
     }
 
+    /// Deserializes a scene from json
     pub async fn deserialize_json(
         &self,
         assets: &AssetCache,
