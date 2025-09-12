@@ -25,17 +25,17 @@ use ivy_wgpu::{
 
 pub struct OpenSceneCommand {
     builder: Box<dyn Send + FnOnce() -> SceneBuilder>,
-    on_ready: Option<channel::oneshot::Sender<Entity>>,
+    on_ready: Option<Box<dyn Send + FnOnce(Entity)>>,
 }
 
 impl OpenSceneCommand {
     pub fn new(
         builder: impl Send + 'static + FnOnce() -> SceneBuilder,
-        on_ready: Option<channel::oneshot::Sender<Entity>>,
+        on_ready: Option<impl Send + 'static + FnOnce(Entity)>,
     ) -> Self {
         Self {
             builder: Box::new(builder),
-            on_ready,
+            on_ready: on_ready.map(|f| Box::new(f) as Box<dyn Send + FnOnce(Entity)>),
         }
     }
 }
@@ -205,7 +205,7 @@ impl SceneLayer {
                         self.process_staging_scene(engine_world, assets, store, (cmd.builder)())?;
 
                     if let Some(on_ready) = cmd.on_ready {
-                        let _ = on_ready.send(new_scene.world_id);
+                        on_ready(new_scene.world_id);
                     }
 
                     self.active_scene = Some(new_scene);

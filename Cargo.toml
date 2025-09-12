@@ -17,24 +17,23 @@ license-file = "./LICENSE"
 [workspace]
 exclude = ["violet"]
 members = [
-    "ivy-core",
-    "ivy-profiling",
-    "ivy-input",
-    "ivy-postprocessing",
-    "ivy-physics",
-    "ivy-random",
     "ivy-assets",
-    "ivy-wgpu",
-    "ivy-gltf",
-    "ivy-scene",
-    "ivy-wgpu-types",
-    "ivy-profiling",
-    "ivy-graphics",
-    "ivy-game",
-    "ivy-ui",
-    "ivy-editor",
+    "ivy-core",
     "ivy-derive",
     "ivy-editable",
+    "ivy-editor",
+    "ivy-game",
+    "ivy-gltf",
+    "ivy-graphics",
+    "ivy-input",
+    "ivy-physics",
+    "ivy-postprocessing",
+    "ivy-profiling",
+    "ivy-random",
+    "ivy-scene",
+    "ivy-ui",
+    "ivy-wgpu",
+    "ivy-wgpu-types",
 ]
 
 [workspace.dependencies]
@@ -114,7 +113,7 @@ heck = "0.5"
 erased-serde = "0.4"
 downcast-rs = "2.0"
 notify = "5.0"
-
+rfd = "0.15"
 
 [dependencies]
 ivy-assets = { path = "./ivy-assets", version = "0.10" }

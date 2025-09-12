@@ -47,7 +47,7 @@
       },
       {
         "PrimitiveBundle": {
-          "kind": "Cube"
+          "kind": "Sphere"
         }
       },
       {

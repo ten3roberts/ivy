@@ -30,8 +30,8 @@ use ivy_postprocessing::preconfigured::{
     SurfacePbrPipelineDesc, SurfacePbrRenderer,
 };
 use ivy_scene::{
-    ray_picker::RayPickingPlugin, ui::SceneView, viewport_provider::SceneViewportProvider, Scene,
-    SceneLayer,
+    ray_picker::RayPickingPlugin, ser::SceneData, ui::SceneView,
+    viewport_provider::SceneViewportProvider, Scene, SceneLayer,
 };
 use ivy_ui::{
     layer::{UiLayer, UiLayerOptions, UiUpdateLayer},
@@ -79,7 +79,7 @@ pub fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    let scene = || {
+    let scene_constructor = || {
         Scene::builder()
             .with_layer(EngineLayer::new())
             .with_layer(
@@ -144,7 +144,11 @@ pub fn main() -> anyhow::Result<()> {
         .with_layer(InputLayer::new())
         .with_layer(
             PluginLayer::new(FixedTimeStep::new(0.02))
-                .with_plugin(EditorHostPlugin::new().with_scene(scene))
+                .with_plugin(
+                    EditorHostPlugin::new(scene_constructor).with_scene(SceneData {
+                        world: World::new(),
+                    }),
+                )
                 .with_plugin(ToastPlugin)
                 .with_plugin(StreamedUiPlugin)
                 .with_plugin(StandaloneCameraPlugin), // TODO: remove,

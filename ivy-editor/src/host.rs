@@ -1,54 +1,66 @@
-use std::{any::type_name, cell::RefCell, sync::Arc, time::Duration};
+use std::{any::type_name, cell::RefCell, io::Cursor, path::PathBuf, sync::Arc};
 
-use async_std::task::sleep;
-use flax::{Entity, EntityIds, World};
+use async_std::stream::StreamExt;
+use flax::{Entity, World};
 use futures::channel::oneshot;
 use glam::Vec2;
-use ivy_assets::AssetCache;
-use ivy_core::{components::engine, update_layer::Plugin};
+use ivy_assets::{AssetCache, stored::DynamicStore};
+use ivy_core::{
+    components::engine,
+    update_layer::{Plugin, ScheduleSetBuilder},
+};
 use ivy_scene::{
-    OpenSceneCommand, SceneBuilder, SceneCommand, scene_commands,
+    OpenSceneCommand, Scene, SceneBuilder, SceneCommand, scene_commands, scene_world,
+    ser::{SceneData, SceneSerializer},
     viewport_provider::scene_viewport_state,
 };
 use ivy_ui::{
-    screens::{Screen, screen_state},
-    streamed::StreamedUiPlugin,
+    screens::{Screen, ScreenLifetimeToken, screen_state},
+    streamed::{StreamedUiExt, StreamedUiPlugin},
+    toast::{Toast, toasts},
     violet::{
         core::{
-            Edges, StateExt, Widget,
+            Scope, StateExt, StateStream, Widget,
             layout::Align,
-            style::{SizeExt, element_accent, surface_primary, surface_secondary},
+            style::{SizeExt, element_accent, surface_primary},
             to_owned,
             widget::{
-                Button, EmptyWidget, FutureWidget, Stack, StreamWidget, TextInput, bold, card, col,
-                maximized, panel, raised_card, row, subtitle,
+                Button, EmptyWidget, FutureWidget, Stack, StreamWidget, TextInput, bold, col,
+                label, maximized, panel, raised_card, row, subtitle,
             },
         },
         futures_signals::signal::{Mutable, SignalExt},
         lucide::icons::{
-            LUCIDE_FOLDER, LUCIDE_LEAF, LUCIDE_PACKAGE, LUCIDE_SATELLITE_DISH, LUCIDE_SAVE,
-            LUCIDE_UPLOAD,
+            LUCIDE_FOLDER, LUCIDE_FOLDER_OPEN, LUCIDE_FOLDERS, LUCIDE_LEAF, LUCIDE_PACKAGE,
+            LUCIDE_SAVE, LUCIDE_UPLOAD,
         },
     },
 };
+use rfd::{AsyncFileDialog, FileHandle};
 
 use crate::ui::browser::{AspectInspectorPanel, DirectoryBrowser, DirectoryBrowserState, window};
 
 pub struct EditorHost {
     scene_commands: flume::Sender<ivy_scene::SceneCommand>,
-    state: Mutable<EditorState>,
+    state: EditorState,
 }
 
+pub struct SceneState {
+    scene_id: Entity,
+}
+
+pub type SceneConstructor = Arc<dyn Fn() -> SceneBuilder + Send + Sync + 'static>;
+
+#[derive(Clone)]
 pub struct EditorState {
-    scene_name: Option<String>,
-    current_scene: Option<Entity>,
+    current_scene: Mutable<Option<SceneState>>,
+    scene_name: Mutable<Option<String>>,
+    scene_commands: flume::Sender<ivy_scene::SceneCommand>,
+    scene_constructor: SceneConstructor,
 }
 
 impl EditorHost {
-    pub fn new(
-        scene_commands: flume::Sender<ivy_scene::SceneCommand>,
-        state: Mutable<EditorState>,
-    ) -> Self {
+    pub fn new(scene_commands: flume::Sender<ivy_scene::SceneCommand>, state: EditorState) -> Self {
         Self {
             scene_commands,
             state,
@@ -60,27 +72,18 @@ impl EditorHost {
         scene: impl 'static + Send + FnOnce() -> SceneBuilder,
         name: Option<String>,
     ) -> anyhow::Result<()> {
-        let (on_ready_tx, on_ready_rx) = oneshot::channel();
-
         let scene_builder = || scene();
 
+        to_owned!(state = self.state);
         let _ =
             self.scene_commands
                 .send(ivy_scene::SceneCommand::OpenScene(OpenSceneCommand::new(
                     scene_builder,
-                    Some(on_ready_tx),
+                    Some(move |scene_id| {
+                        state.current_scene.set(Some(SceneState { scene_id }));
+                        state.scene_name.set(name);
+                    }),
                 )));
-
-        to_owned!(state = self.state);
-        async_std::task::spawn(async move {
-            sleep(Duration::from_millis(500)).await;
-            let scene_id = on_ready_rx.await.expect("Scene created");
-            tracing::info!(?scene_id, "editor: opened scene");
-            let mut state = state.lock_mut();
-
-            state.current_scene = Some(scene_id);
-            state.scene_name = name;
-        });
 
         Ok(())
     }
@@ -88,16 +91,20 @@ impl EditorHost {
 
 /// Plugin for the outer engine to manage scene state and cross-scene editor functionality
 pub struct EditorHostPlugin {
-    scene: Option<Arc<dyn Send + Sync + 'static + Fn() -> SceneBuilder>>,
+    scene: RefCell<Option<SceneData>>,
+    scene_constructor: SceneConstructor,
 }
 
 impl EditorHostPlugin {
-    pub fn new() -> Self {
-        Self { scene: None }
+    pub fn new(scene_constructor: impl 'static + Send + Sync + Fn() -> SceneBuilder) -> Self {
+        Self {
+            scene: RefCell::new(None),
+            scene_constructor: Arc::new(scene_constructor),
+        }
     }
 
-    pub fn with_scene(mut self, scene: impl 'static + Send + Sync + Fn() -> SceneBuilder) -> Self {
-        self.scene = Some(Arc::new(scene));
+    pub fn with_scene(mut self, scene: SceneData) -> Self {
+        self.scene.replace(Some(scene));
         self
     }
 }
@@ -108,24 +115,33 @@ impl Plugin for EditorHostPlugin {
         &self,
         world: &mut World,
         // TODO: collect into struct
-        assets: &ivy_assets::AssetCache,
-        _: &mut ivy_assets::stored::DynamicStore,
-        _schedules: &mut ivy_core::update_layer::ScheduleSetBuilder,
+        assets: &AssetCache,
+        _: &mut DynamicStore,
+        _schedules: &mut ScheduleSetBuilder,
     ) -> anyhow::Result<()> {
         let scene_commands = world.get(engine(), scene_commands())?;
         let screens = world.get_mut(engine(), screen_state())?;
 
-        let editor_state = Mutable::new(EditorState {
-            current_scene: None,
-            scene_name: None,
-        });
+        let editor_state = EditorState {
+            current_scene: Mutable::new(None),
+            scene_name: Mutable::new(None),
+            scene_commands: scene_commands.clone(),
+            scene_constructor: self.scene_constructor.clone(),
+        };
 
+        // TODO: maybe extract to command pattern
         let mut editor_host = EditorHost::new(scene_commands.clone(), editor_state.clone());
 
         // Open initial scene
-        if let Some(scene) = self.scene.clone() {
+        if let Some(scene) = self.scene.take() {
             // TODO: maybe just "with world" and provided base scene builder?
-            editor_host.open_scene(move || scene(), None)?;
+            editor_host.open_scene(
+                {
+                    to_owned!(scene_ctor = editor_host.state.scene_constructor);
+                    move || (scene_ctor()).with_world(scene.world)
+                },
+                None,
+            )?;
         }
 
         screens.open(MainEditorUI {
@@ -142,21 +158,22 @@ impl Plugin for EditorHostPlugin {
 }
 
 struct MainEditorUI {
-    editor_state: Mutable<EditorState>,
+    editor_state: EditorState,
     assets: AssetCache,
 }
 
 impl Screen for MainEditorUI {
-    fn create(
-        self,
-        scope: &mut ivy_ui::violet::core::Scope<'_>,
-        _: ivy_ui::screens::ScreenLifetimeToken,
-    ) {
+    fn create(self, scope: &mut Scope<'_>, _: ScreenLifetimeToken) {
         let main_viewport = maximized(StreamWidget(
             self.editor_state
+                .current_scene
                 .signal_ref(|v| {
-                    v.current_scene
-                        .map(|id| Box::new(SceneView { scene_id: id }) as Box<dyn Widget>)
+                    v.as_ref()
+                        .map(|v| {
+                            Box::new(SceneView {
+                                scene_id: v.scene_id,
+                            }) as Box<dyn Widget>
+                        })
                         .unwrap_or(Box::new(panel(bold("No Scene Open"))))
                 })
                 .to_stream(),
@@ -170,11 +187,11 @@ impl Screen for MainEditorUI {
             DirectoryBrowser::new(self.assets.clone(), "./assets", browser_state.clone()),
         );
 
-        let details_panel = AspectInspectorPanel::new(self.assets, browser_state);
+        let details_panel = AspectInspectorPanel::new(self.assets.clone(), browser_state);
 
         Stack::new(
             col((
-                header(self.editor_state),
+                header(self.assets.clone(), self.editor_state),
                 row((col((main_viewport, directory_browser)), details_panel)),
             ))
             .with_contain_margins(true),
@@ -185,15 +202,180 @@ impl Screen for MainEditorUI {
     }
 }
 
-fn header(state: Mutable<EditorState>) -> impl Widget {
+fn local_dir() -> PathBuf {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        std::env::current_dir().unwrap()
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        PathBuf::from(".")
+    }
+}
+
+fn save_scene(
+    world: &World,
+    save_file: Option<PathBuf>,
+) -> impl 'static + Future<Output = anyhow::Result<PathBuf>> {
+    let mut data = Vec::new();
+    let result = SceneSerializer::new().serialize_json(world, &mut data);
+
+    async move {
+        result?;
+
+        let file = match save_file {
+            Some(path) => FileHandle::from(path),
+            None => {
+                let file = AsyncFileDialog::new()
+                    .set_title("Ivy Scene")
+                    .set_directory(local_dir())
+                    .set_file_name("scene.ivscn")
+                    .save_file()
+                    .await;
+
+                let Some(file) = file else {
+                    anyhow::bail!("No file selected");
+                };
+
+                file
+            }
+        };
+
+        file.write(&data).await?;
+
+        Ok(file.path().to_path_buf())
+    }
+}
+
+fn load_scene(
+    assets: AssetCache,
+) -> impl Future<Output = anyhow::Result<Option<(PathBuf, SceneData)>>> {
+    async move {
+        let file = AsyncFileDialog::new()
+            .add_filter("Ivy Scene", &["ivscn"])
+            .set_directory(local_dir())
+            .set_title("Open Ivy Scene")
+            .pick_file()
+            .await;
+
+        if let Some(file) = file {
+            let data = file.read().await;
+            let scene = SceneSerializer::new()
+                .load_scene(&assets, &mut Cursor::new(data))
+                .await?;
+
+            Ok(Some((file.path().to_path_buf(), scene)))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+fn header(assets: AssetCache, state: EditorState) -> impl Widget {
     let save_controls = row((
-        TextInput::new(
+        Button::label(LUCIDE_SAVE)
+            .with_tooltip_text("Save Scene")
+            .on_click({
+                to_owned!(state);
+                move |scope| {
+                    let scene_id = state.current_scene.lock_ref().as_ref().map(|v| v.scene_id);
+                    let Some(scene_id) = scene_id else {
+                        return;
+                    };
+
+                    let toasts = scope.get_atom_cloned(toasts()).unwrap();
+
+                    scope.apply({
+                        to_owned!(state);
+                        move |engine_world| {
+                            let scene = engine_world.get(scene_id, scene_world()).unwrap();
+                            let result = save_scene(
+                                &*scene,
+                                state.scene_name.get_cloned().map(|v| v.into()),
+                            );
+
+                            async_std::task::spawn(async move {
+                                match result.await {
+                                    Ok(path) => {
+                                        toasts.send(Toast::info(
+                                            "Scene",
+                                            format!("Scene saved to {}", path.display()),
+                                        ));
+                                        tracing::info!("Scene saved to {}", path.display());
+                                    }
+                                    Err(e) => {
+                                        toasts.send(Toast::error(
+                                            "Scene",
+                                            format!("Failed to save scene: {e:?}"),
+                                        ));
+                                        tracing::error!("Failed to save scene: {e:?}");
+                                    }
+                                }
+                            });
+
+                            Ok(())
+                        }
+                    });
+                }
+            }),
+        Button::label(LUCIDE_FOLDER)
+            .with_tooltip_text("Open Scene")
+            .on_click({
+                to_owned!(state);
+                move |scope| {
+                    let toasts = scope.get_atom_cloned(toasts()).unwrap();
+                    let assets = assets.clone();
+
+                    to_owned!(state);
+
+                    let result = load_scene(assets);
+
+                    async_std::task::spawn({
+                        to_owned!(state);
+                        async move {
+                            match result.await {
+                                Ok(Some((path, scene_data))) => {
+                                    to_owned!(scene_ctor = state.scene_constructor);
+                                    let scene_builder =
+                                        move || (scene_ctor()).with_world(scene_data.world);
+
+                                    let _ = state.scene_commands.send(SceneCommand::OpenScene(
+                                        OpenSceneCommand::new(
+                                            scene_builder,
+                                            Some(move |scene_id: Entity| {
+                                                state
+                                                    .current_scene
+                                                    .set(Some(SceneState { scene_id }));
+                                                state
+                                                    .scene_name
+                                                    .set(Some(path.display().to_string()));
+                                            }),
+                                        ),
+                                    ));
+                                }
+                                Ok(None) => {
+                                    // User cancelled
+                                }
+                                Err(e) => {
+                                    toasts.send(Toast::error(
+                                        "Scene",
+                                        format!("Failed to load scene: {e:?}"),
+                                    ));
+                                    tracing::error!("Failed to load scene: {e:?}");
+                                }
+                            }
+                        }
+                    });
+                }
+            }),
+        StreamWidget::new(
             state
-                .project_ref(|v| &v.scene_name, |v| &mut v.scene_name)
-                .lower_option(),
+                .scene_name
+                .clone()
+                .lower_option()
+                .stream()
+                .map(|v| label(v)),
         ),
-        Button::label(LUCIDE_SAVE).on_click(|_| tracing::info!("Save clicked")),
-        Button::label(LUCIDE_UPLOAD).on_click(|_| tracing::info!("Save clicked")),
     ));
 
     raised_card(
@@ -212,7 +394,7 @@ struct SceneView {
 }
 
 impl Widget for SceneView {
-    fn mount(self, scope: &mut ivy_ui::violet::core::Scope<'_>) {
+    fn mount(self, scope: &mut Scope<'_>) {
         let viewports = scope.get_context_cloned(scene_viewport_state());
 
         let tx = viewports.open_viewport(self.scene_id);

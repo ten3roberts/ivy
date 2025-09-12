@@ -77,8 +77,18 @@ pub struct SceneViewportProvider {
     listeners: Vec<flume::Sender<SceneViewCommand>>,
     pending_resizes_rx: flume::Receiver<ViewportResize>,
     pending_resizes_tx: flume::Sender<ViewportResize>,
-    proxy_nodes:
-        Arc<Mutex<BTreeMap<Entity, Vec<(NodeId, TextureHandle, flume::Sender<SceneViewCommand>)>>>>,
+    proxy_nodes: Arc<
+        Mutex<
+            BTreeMap<
+                Entity,
+                Vec<(
+                    NodeId,
+                    TextureHandle,
+                    Option<flume::Sender<SceneViewCommand>>,
+                )>,
+            >,
+        >,
+    >,
 }
 
 impl SceneViewportProvider {
@@ -216,6 +226,7 @@ impl SceneViewportProvider {
         ctx: &mut EventContext,
         scene_id: Entity,
     ) -> anyhow::Result<()> {
+        tracing::info!(?scene_id, "new scene");
         let proxy_nodes = self.proxy_nodes.clone();
 
         if proxy_nodes.lock().contains_key(&scene_id) {
@@ -246,6 +257,7 @@ impl SceneViewportProvider {
         ctx: &mut ivy_core::events::EventContext,
         scene_id: Entity,
     ) -> anyhow::Result<()> {
+        tracing::info!(?scene_id, "remove scene");
         let render_graph = ctx.world.get(engine(), render_graph_handle())?.clone();
         let mut render_graph = ctx.store.get_mut(&render_graph);
 
@@ -269,7 +281,9 @@ impl SceneViewportProvider {
                 .remove_texture(texture_handle)
                 .context("Missing texture for proxy node")?;
 
-            let _ = tx.send(SceneViewCommand::CloseViewport { scene: scene_id });
+            if let Some(tx) = tx {
+                let _ = tx.send(SceneViewCommand::CloseViewport { scene: scene_id });
+            }
         }
 
         Ok(())
@@ -324,13 +338,11 @@ impl SceneViewportProvider {
         let render_graph = &mut *ctx.store.get_mut(&render_graph_handle);
         let node_id = render_graph.add_node(node);
 
-        if let Some(tx) = tx {
-            proxy_nodes
-                .lock()
-                .entry(scene_id)
-                .or_default()
-                .push((node_id, scene_render, tx));
-        }
+        proxy_nodes
+            .lock()
+            .entry(scene_id)
+            .or_default()
+            .push((node_id, scene_render, tx));
 
         let pending_resizes = self.pending_resizes_tx.clone();
         let on_size = move |size: Vec2| {

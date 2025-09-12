@@ -62,12 +62,12 @@ impl SceneSerializer {
         self.serialize_scene(world).serialize(&mut serializer)
     }
 
-    /// Deserializes a scene from json
-    pub async fn deserialize_json(
+    /// Deserializes a scene from json and loads all assets
+    pub async fn load_scene(
         &self,
         assets: &AssetCache,
         reader: impl Read,
-    ) -> anyhow::Result<Scene> {
+    ) -> anyhow::Result<SceneData> {
         let mut deserializer = serde_json::Deserializer::from_reader(reader);
         let value = SceneDeserializer { ctx: self }.deserialize(&mut deserializer)?;
 
@@ -277,12 +277,12 @@ pub struct SceneDesc {
     entities: Vec<SceneEntityDesc>,
 }
 
-pub struct Scene {
+pub struct SceneData {
     pub world: World,
 }
 
 impl SceneDesc {
-    async fn build(self, assets: &AssetCache) -> anyhow::Result<Scene> {
+    async fn build(self, assets: &AssetCache) -> anyhow::Result<SceneData> {
         let mut world = World::new();
 
         for entity in &self.entities {
@@ -324,7 +324,7 @@ impl SceneDesc {
             })
             .await?;
 
-        Ok(Scene { world })
+        Ok(SceneData { world })
     }
 }
 

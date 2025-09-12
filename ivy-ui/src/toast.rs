@@ -1,7 +1,7 @@
 use std::{char::ToUppercase, time::Duration};
 
 use flax::{component, Component};
-use glam::vec2;
+use glam::{vec2, BVec2};
 use ivy_core::{components::engine, update_layer::Plugin};
 use violet::{
     core::{
@@ -13,7 +13,10 @@ use violet::{
         },
         time::sleep,
         tweens::{tween::Tweener, ComponentTween},
-        widget::{self, bold, card, col, label, row, AnimateLifecycle, Text, TextStyle},
+        unit::Unit,
+        widget::{
+            self, bold, card, col, label, row, AnimateLifecycle, ScrollArea, Text, TextStyle,
+        },
         Scope, Widget,
     },
     lucide::icons::{LUCIDE_CIRCLE_X, LUCIDE_INFO, LUCIDE_TRIANGLE_ALERT},
@@ -65,6 +68,9 @@ impl ToastLevel {
     }
 }
 
+pub const MAX_TOAST_WIDTH: f32 = 600.0;
+pub const MAX_TOAST_HEIGHT: f32 = 300.0;
+
 pub struct Toast {
     title: Text,
     body: Text,
@@ -108,7 +114,8 @@ impl Widget for Toast {
                         self.title,
                     ))
                     .center(),
-                    self.body,
+                    ScrollArea::new(BVec2::TRUE, self.body)
+                        .with_max_size(Unit::px2(MAX_TOAST_WIDTH, MAX_TOAST_HEIGHT)),
                 ))
                 .with_stretch(true),
             )
@@ -117,11 +124,11 @@ impl Widget for Toast {
             .with_padding(spacing_large()),
             ComponentTween::new(
                 translation(),
-                Tweener::elastic_in_out(vec2(800.0, 0.0), vec2(0.0, 0.0), 0.6),
+                Tweener::elastic_out(vec2(MAX_TOAST_WIDTH + 10.0, 0.0), vec2(0.0, 0.0), 0.8),
             ),
             ComponentTween::new(
                 translation(),
-                Tweener::elastic_in_out(vec2(0.0, 0.0), vec2(800.0, 0.0), 0.6),
+                Tweener::elastic_in(vec2(0.0, 0.0), vec2(MAX_TOAST_WIDTH + 10.0, 0.0), 0.8),
             ),
         )
         .mount(scope);
