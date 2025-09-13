@@ -73,6 +73,10 @@ pub trait LoadFromPath: 'static + Send + Sync + Sized {
     ) -> impl Send + Future<Output = Result<Self, anyhow::Error>>
     where
         Self: Sized;
+
+    fn resource_name() -> Option<&'static str>;
+
+    fn extensions() -> &'static [&'static str];
 }
 
 /// Generic loading mechanism.
@@ -160,6 +164,14 @@ where
         let payload = load_asset_payload(&path, assets).await?;
         let asset = payload.desc.load(payload.meta, path, assets).await?;
         Ok(asset)
+    }
+
+    fn resource_name() -> Option<&'static str> {
+        Some(T::tag_name())
+    }
+
+    fn extensions() -> &'static [&'static str] {
+        &["asset"]
     }
 }
 

@@ -103,6 +103,14 @@ impl LoadFromPath for AssetPayloadUntyped {
 
         Ok(payload)
     }
+
+    fn resource_name() -> Option<&'static str> {
+        None
+    }
+
+    fn extensions() -> &'static [&'static str] {
+        &["asset"]
+    }
 }
 
 struct PayloadVisitor;

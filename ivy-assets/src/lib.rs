@@ -615,6 +615,14 @@ impl LoadFromPath for DynamicImage {
         .await?;
         Ok(image)
     }
+
+    fn resource_name() -> Option<&'static str> {
+        None
+    }
+
+    fn extensions() -> &'static [&'static str] {
+        &["png", "jpg", "jpeg", "bmp", "tga", "gif", "webp", "tiff"]
+    }
 }
 
 type SharedLoadFuture<T> = Shared<BoxFuture<'static, Result<Asset<T>, SharedError>>>;

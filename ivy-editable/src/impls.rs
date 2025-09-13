@@ -4,7 +4,10 @@ use flax::Entity;
 use futures::StreamExt;
 use glam::{BVec3, Quat, Vec2, Vec3, Vec4};
 use itertools::Itertools;
-use ivy_assets::{AssetCache, AssetPath, services::filesystem_index::FileSystemIndexService};
+use ivy_assets::{
+    AssetCache, AssetPath, Resource, loadable::LoadFromPath,
+    services::filesystem_index::FileSystemIndexService,
+};
 use ordered_float::NotNan;
 use violet::{
     self,
@@ -56,7 +59,7 @@ impl Editable for String {
     }
 }
 
-impl<T: 'static + Send + Sync> Editable for AssetPath<T> {
+impl<T: 'static + Send + Sync + LoadFromPath> Editable for AssetPath<T> {
     const INLINE: bool = true;
 
     fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
@@ -83,13 +86,37 @@ impl<T: 'static + Send + Sync> Editable for AssetPath<T> {
             }
         }
 
-        let items = assets
-            .service::<FileSystemIndexService>()
-            .get_index()
-            .into_iter()
-            .map(|v| v.assets.iter().map(|v| PathDisplay::new(Arc::clone(v))))
-            .flatten()
-            .collect_vec();
+        let filter_name = T::resource_name();
+        let index_service = assets.service::<FileSystemIndexService>();
+
+        let items = if let Some(filter_name) = filter_name {
+            index_service
+                .get_index()
+                .into_iter()
+                .map(|v| {
+                    v.by_type
+                        .get(filter_name)
+                        .into_iter()
+                        .flatten()
+                        .map(|v| PathDisplay::new(Arc::clone(v)))
+                })
+                .flatten()
+                .collect_vec()
+        } else {
+            // Filter by extension, not meta
+
+            index_service
+                .get_index()
+                .into_iter()
+                .map(|v| {
+                    T::extensions()
+                        .into_iter()
+                        .flat_map(|&ext| v.by_extension.get(ext).into_iter().flatten())
+                        .map(|v| PathDisplay::new(Arc::clone(v)))
+                })
+                .flatten()
+                .collect_vec()
+        };
 
         Box::new(
             Dropdown::new(

@@ -12,12 +12,11 @@
       {
         "GltfColliderBundle": {
           "shape": {
-            "Cuboid": {
-              "size": [
-                1.0,
-                1.0,
-                1.0
-              ]
+            "GltfConvexMesh": {
+              "node": {
+                "document": "./assets/textures/materials.glb",
+                "node": ""
+              }
             }
           },
           "restitution": 1.0,

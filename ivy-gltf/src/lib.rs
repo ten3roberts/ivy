@@ -372,6 +372,14 @@ impl LoadFromPath for Document {
 
         Ok(Self { data })
     }
+
+    fn resource_name() -> Option<&'static str> {
+        None
+    }
+
+    fn extensions() -> &'static [&'static str] {
+        &["gltf", "glb"]
+    }
 }
 
 /// References a mesh primitive in a gltf document
