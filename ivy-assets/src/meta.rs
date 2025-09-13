@@ -6,7 +6,7 @@ use serde::{
 };
 
 use crate::{
-    loadable::{LoadFromPath, Loadable, LoadableDyn},
+    loadable::{LoadFromPath, LoadableDyn, LoadablePayload},
     registry::{DeserializeFn, RESOURCE_REGISTRY},
     AssetCache, AssetPath,
 };
@@ -28,7 +28,7 @@ pub struct AssetPayload<T> {
     pub desc: T,
 }
 
-impl<T: Loadable + Serialize> AssetPayload<T> {
+impl<T: LoadablePayload + Serialize> AssetPayload<T> {
     pub fn new(meta: AssetMeta, desc: T) -> Self {
         Self { meta, desc }
     }

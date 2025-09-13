@@ -225,16 +225,12 @@ impl Widget for ScreenStack {
             for &child in scope.children().iter().rev() {
                 let child = scope.frame().world().entity(child).unwrap();
 
-                // if child.has(capture_input()) {
                 let to_focus = find_in_tree(scope.frame().world(), child, &|v| {
                     v.has(self::request_focus())
                 })
                 .unwrap_or(child);
 
-                tracing::info!("focusing: {to_focus} of {child}");
-
                 request_focus.send(to_focus.id()).unwrap();
-                // }
 
                 if child.has(block_lower_input()) {
                     tracing::info!("blocking input");

@@ -10,7 +10,8 @@ use glam::Vec2;
 use itertools::Itertools;
 use ivy_assets::{
     declare_resource,
-    loadable::{Loadable, LoadableDyn},
+    loadable::{LoadFromPath, Loadable, LoadableDyn, LoadablePayload},
+    meta::AssetMeta,
     AssetCache, AssetPath, Resource,
 };
 use ivy_editable::{register_editable, registry::EDITABLE_REGISTRY, Editable};
@@ -39,7 +40,7 @@ use crate::{
 };
 
 component! {
-    pub template_key: AssetPath<Template>,
+    pub template_path: AssetPath<Template>,
 }
 
 /// Defines an entity template to construct an entity using [[Bundle]]s
@@ -400,10 +401,16 @@ impl Widget for BundleCreationWidget {
             }
         });
 
-        let selection_widget = raised_card(ScrollArea::vertical(Dropdown::new(
-            selected.lower_option(),
-            available_bundles.clone(),
-        )));
+        let selection_widget = raised_card(ScrollArea::vertical(
+            Dropdown::new(selected.lower_option(), available_bundles.clone()).searcheable(
+                |item, filter| {
+                    item.registration
+                        .tag_name()
+                        .to_lowercase()
+                        .contains(&filter.to_lowercase())
+                },
+            ),
+        ));
 
         col((
             selection_widget,
@@ -416,11 +423,35 @@ impl Widget for BundleCreationWidget {
 
 declare_resource!(Template, TemplateDesc);
 
-impl Loadable for TemplateDesc {
+// impl Loadable for TemplateDesc {
+//     type Output = Template;
+
+//     async fn load(&self, assets: &AssetCache) -> Result<Self::Output, anyhow::Error> {
+//         let mut bundles = Vec::new();
+//         for bundle in &self.bundles {
+//             let loaded_bundle = bundle.bundle.load_as_bundle(assets).await?;
+//             bundles.push(loaded_bundle);
+//         }
+//         Ok(Template { bundles })
+//     }
+// }
+
+impl LoadablePayload for TemplateDesc {
     type Output = Template;
 
-    async fn load(&self, assets: &AssetCache) -> Result<Self::Output, anyhow::Error> {
+    async fn load(
+        &self,
+        _meta: AssetMeta,
+        path: AssetPath<Self::Output>,
+        assets: &AssetCache,
+    ) -> anyhow::Result<Self::Output>
+    where
+        Self: Sized,
+    {
         let mut bundles = Vec::new();
+
+        bundles.push(Box::new(TemplateBundle { template: path }) as Box<dyn Bundle>);
+
         for bundle in &self.bundles {
             let loaded_bundle = bundle.bundle.load_as_bundle(assets).await?;
             bundles.push(loaded_bundle);
@@ -429,4 +460,13 @@ impl Loadable for TemplateDesc {
     }
 }
 
+pub struct TemplateBundle {
+    template: AssetPath<Template>,
+}
+
+impl Bundle for TemplateBundle {
+    fn mount(&self, entity: &mut EntityBuilder) {
+        entity.set(template_path(), self.template.clone());
+    }
+}
 register_editable!(TemplateDesc);

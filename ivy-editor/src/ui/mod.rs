@@ -32,7 +32,7 @@ use ivy_ui::{
 use crate::{
     plugin::selection,
     tools_controller::{current_tool, tools},
-    ui::{browser::DirectoryBrowser, entity_editor::EntityComponentEditor},
+    ui::{browser::AssetBrowser, entity_editor::EntityComponentEditor},
 };
 
 pub struct InGameEditorUi {

@@ -6,8 +6,9 @@ use flax::{
 };
 use glam::{vec3, EulerRot, Mat4, Quat, Vec3};
 use image::{DynamicImage, Rgba};
-use ivy_assets::loadable::Loadable;
-use ivy_assets::{stored::DynamicStore, Asset, AssetCache, AssetPath, AsyncAssetExt};
+use ivy_assets::{
+    loadable::Loadable, stored::DynamicStore, Asset, AssetCache, AssetPath, AsyncAssetExt,
+};
 use ivy_core::{
     app::PostInitEvent,
     gizmos,
@@ -23,10 +24,7 @@ use ivy_engine::{
     async_commandbuffer, elapsed_time, engine, rotation, world_transform, RigidBodyBundle,
     TransformBundle,
 };
-use ivy_game::{
-    debug::AssetTimelinesWidget, orbit_camera::OrbitCameraPlugin,
-    viewport_camera::CameraViewportPlugin,
-};
+use ivy_game::{debug::AssetTimelinesWidget, orbit_camera::OrbitCameraPlugin};
 use ivy_gltf::{
     animation::{
         player::{AnimationPlayer, Animator},
@@ -65,6 +63,7 @@ use ivy_wgpu::{
 use rapier3d::prelude::SharedShape;
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
+use violet::palette::Srgba;
 use violet::{
     core::{
         style::SizeExt,
@@ -76,8 +75,6 @@ use violet::{
 };
 use wgpu::TextureFormat;
 use winit::{dpi::LogicalSize, window::WindowAttributes};
-
-const ENABLE_SKYBOX: bool = true;
 
 pub fn main() -> anyhow::Result<()> {
     registry()
@@ -227,8 +224,9 @@ impl LogicLayer {
             .await?;
 
             let emissive_material = RenderEffectDesc::Emissive(PbrEmissiveRenderEffectDesc::new(
-                PbrRenderEffectDesc::new().with_albedo(TextureDesc::Color(255, 255, 255, 50)),
-                TextureDesc::Color(255, 255, 255, 255),
+                PbrRenderEffectDesc::new()
+                    .with_albedo(TextureDesc::Color(Srgba::new(255, 255, 255, 50))),
+                TextureDesc::Color(Srgba::new(255, 255, 255, 255)),
                 20.0,
             ))
             .load(&assets)
@@ -342,7 +340,7 @@ impl LogicLayer {
             for node in document.nodes() {
                 let animation = assets
                     .try_load_async(&AnimationDesc {
-                        document: "models/Gears.glb".into(),
+                        document: AssetPath::new("models/Gears.glb"),
                         animation: "ArmatureAction.001".into(),
                     })
                     .await?;

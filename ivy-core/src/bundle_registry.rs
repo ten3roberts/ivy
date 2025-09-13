@@ -48,6 +48,10 @@ impl BundleRegistration {
             },
         }
     }
+
+    pub fn tag_name(&self) -> &'static str {
+        (self.tag)()
+    }
 }
 
 /// Registry of available bundles, used for editing and serialization.

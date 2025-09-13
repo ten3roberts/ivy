@@ -1,17 +1,20 @@
-use std::{any::Any, collections::BTreeMap, future::Future};
+use std::{any::Any, collections::BTreeMap, future::Future, path::PathBuf};
 
 use downcast_rs::{impl_downcast, Downcast, DowncastSync};
 use futures::{future::BoxFuture, stream, FutureExt, StreamExt, TryStreamExt};
 use serde::de::DeserializeOwned;
 
-use crate::{meta::AssetPayload, AssetCache, AssetPath};
+use crate::{
+    meta::{AssetMeta, AssetPayload},
+    AssetCache, AssetPath,
+};
 
 /// Signifies a type is a endpoint of a resource loading chain.
 ///
 /// Many `AsyncAssetDesc` implementations can load to the same type, but this allows a type to
 /// prefer one asset implementation over another.
 pub trait Resource: 'static + Send + Sync {
-    type Desc: Loadable<Output = Self>;
+    type Desc: LoadablePayload<Output = Self>;
 
     fn tag_name() -> &'static str;
 }
@@ -19,7 +22,12 @@ pub trait Resource: 'static + Send + Sync {
 pub trait ResourceDyn: Downcast {}
 
 pub trait LoadableDyn: 'static + Send + Sync + DowncastSync {
-    fn load_dyn(&self, assets: &AssetCache) -> BoxFuture<anyhow::Result<Box<dyn ResourceDyn>>>;
+    fn load_dyn(
+        &self,
+        meta: AssetMeta,
+        path: PathBuf,
+        assets: &AssetCache,
+    ) -> BoxFuture<anyhow::Result<Box<dyn ResourceDyn>>>;
     fn upcast_boxed_any(&self) -> fn(Box<dyn Send + Sync + Any>) -> Box<dyn LoadableDyn>;
 
     fn clone_dyn(&self) -> Box<dyn LoadableDyn>;
@@ -29,13 +37,18 @@ impl<T> ResourceDyn for T where T: Resource {}
 
 impl<T> LoadableDyn for T
 where
-    T: Clone + Loadable,
+    T: Clone + LoadablePayload,
     T::Output: ResourceDyn,
 {
-    fn load_dyn(&self, assets: &AssetCache) -> BoxFuture<anyhow::Result<Box<dyn ResourceDyn>>> {
+    fn load_dyn(
+        &self,
+        meta: AssetMeta,
+        path: PathBuf,
+        assets: &AssetCache,
+    ) -> BoxFuture<anyhow::Result<Box<dyn ResourceDyn>>> {
         let assets = assets.clone();
         async move {
-            let resource = self.load(&assets).await?;
+            let resource = self.load(meta, AssetPath::new(path), &assets).await?;
             Ok(Box::new(resource) as Box<dyn ResourceDyn>)
         }
         .boxed()
@@ -79,6 +92,62 @@ pub trait Loadable: 'static + Send + Sync {
         Self: Sized;
 }
 
+pub trait LoadablePayload: 'static + Send + Sync {
+    /// The type of the resource that this can load.
+    type Output: 'static + Send + Sync;
+
+    fn load(
+        &self,
+        meta: AssetMeta,
+        path: AssetPath<Self::Output>,
+        assets: &AssetCache,
+    ) -> impl Send + Future<Output = Result<Self::Output, anyhow::Error>>
+    where
+        Self: Sized;
+}
+
+impl<T: 'static + Loadable> LoadablePayload for T {
+    type Output = T::Output;
+
+    async fn load(
+        &self,
+        _meta: AssetMeta,
+        _path: AssetPath<Self::Output>,
+        assets: &AssetCache,
+    ) -> Result<Self::Output, anyhow::Error>
+    where
+        Self: Sized,
+    {
+        self.load(assets).await
+    }
+}
+
+async fn load_asset_payload<T>(
+    path: &AssetPath<T>,
+    assets: &AssetCache,
+) -> anyhow::Result<AssetPayload<T::Desc>>
+where
+    T: Resource,
+    T::Desc: DeserializeOwned,
+{
+    let content = assets
+        .service::<crate::service::FileSystemMapService>()
+        .load_bytes_async(path.path())
+        .await?;
+
+    let payload: AssetPayload<T::Desc> = serde_json::from_slice(&content[..])?;
+
+    if payload.meta.type_name != T::tag_name() {
+        return Err(anyhow::anyhow!(
+            "Asset type mismatch: expected {}, found {}",
+            payload.meta.type_name,
+            T::tag_name()
+        ));
+    }
+
+    Ok(payload)
+}
+
 impl<T> LoadFromPath for T
 where
     T: Resource,
@@ -88,22 +157,8 @@ where
     where
         Self: Sized,
     {
-        let content = assets
-            .service::<crate::service::FileSystemMapService>()
-            .load_bytes_async(path.path())
-            .await?;
-
-        let payload: AssetPayload<T::Desc> = serde_json::from_slice(&content[..])?;
-
-        if payload.meta.type_name != T::tag_name() {
-            return Err(anyhow::anyhow!(
-                "Asset type mismatch: expected {}, found {}",
-                payload.meta.type_name,
-                T::tag_name()
-            ));
-        }
-
-        let asset = payload.desc.load(assets).await?;
+        let payload = load_asset_payload(&path, assets).await?;
+        let asset = payload.desc.load(payload.meta, path, assets).await?;
         Ok(asset)
     }
 }

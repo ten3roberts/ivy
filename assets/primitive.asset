@@ -1,0 +1,108 @@
+{
+  "meta": {
+    "type_name": "Template"
+  },
+  "desc": {
+    "bundles": [
+      {
+        "NameBundle": {
+          "name": "Object"
+        }
+      },
+      {
+        "GltfColliderBundle": {
+          "shape": {
+            "Cuboid": {
+              "size": [
+                1.0,
+                1.0,
+                1.0
+              ]
+            }
+          },
+          "restitution": 1.0,
+          "friction": 0.586802,
+          "density": 322.15356
+        }
+      },
+      {
+        "TransformBundle": {
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            0.5,
+            0.5,
+            0.5
+          ]
+        }
+      },
+      {
+        "PrimitiveBundle": {
+          "kind": "Sphere"
+        }
+      },
+      {
+        "MaterialBundle": {
+          "material": "./Material.asset"
+        }
+      },
+      {
+        "RigidBodyBundle": {
+          "body_type": "Dynamic",
+          "can_sleep": false,
+          "mass": 0.0,
+          "angular_mass": 0.0,
+          "constraints": {
+            "lock_translation": [
+              false,
+              false,
+              false
+            ],
+            "lock_rotation": [
+              false,
+              false,
+              false
+            ]
+          },
+          "velocity": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "angular_velocity": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "linear_damping": 0.0,
+          "angular_damping": 0.0
+        }
+      },
+      {
+        "LightBundle": {
+          "params": {
+            "color": {
+              "red": 0.0,
+              "green": 0.402,
+              "blue": 1.0
+            },
+            "intensity": 23.736572,
+            "inner_theta": 0.0,
+            "outer_theta": 0.0
+          },
+          "kind": "Point",
+          "cast_shadow": false
+        }
+      }
+    ]
+  }
+}

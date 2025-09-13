@@ -28,6 +28,7 @@ use ivy_scene::{
 };
 use ivy_ui::{
     streamed::StreamedUiExt,
+    toast::{Toast, toasts},
     violet::{
         core::{
             Edges, Scope, ScopeRef, StateExt, StateStreamRef, Widget,
@@ -37,7 +38,7 @@ use ivy_ui::{
             stored::WeakHandle,
             style::{
                 SizeExt, StyleExt, base_colors::*, default_corner_radius, surface_danger,
-                surface_secondary,
+                surface_primary, surface_secondary,
             },
             text::{FontFamily, Wrap},
             time::sleep,
@@ -54,7 +55,7 @@ use ivy_ui::{
         },
         futures_signals::signal::Mutable,
         lucide::icons::{
-            LUCIDE_BOX, LUCIDE_BOXES, LUCIDE_CLOUD_SUN, LUCIDE_DROPLET, LUCIDE_FILE_ARCHIVE,
+            LUCIDE_BOX, LUCIDE_CLOUD_SUN, LUCIDE_COPY_PLUS, LUCIDE_ECLIPSE, LUCIDE_FILE_ARCHIVE,
             LUCIDE_FILE_BOX, LUCIDE_FILE_CODE, LUCIDE_FILE_IMAGE, LUCIDE_FILE_JSON,
             LUCIDE_FILE_QUESTION, LUCIDE_FILE_TEXT, LUCIDE_FILE_WARNING, LUCIDE_FOLDER,
             LUCIDE_FOLDER_OPEN, LUCIDE_PACKAGE, LUCIDE_PIN, LUCIDE_SATELLITE, LUCIDE_TRASH_2,
@@ -69,11 +70,11 @@ use crate::ui::{
     context_menu::{ContextMenu, ContextMenuItem, ContextMenuPanel},
 };
 
-pub const BROWSER_PANEL_HEIGHT: f32 = 300.0;
+pub const BROWSER_PANEL_HEIGHT: f32 = 200.0;
 pub const INSPECTOR_PANEL_WIDTH: f32 = 600.0;
 
 pub struct DirectoryTree {
-    selection: WeakHandle<Mutable<Option<PathBuf>>>,
+    state: DirectoryBrowserState,
     path: PathBuf,
     expand_depth: usize,
 }
@@ -83,7 +84,7 @@ impl Widget for DirectoryTree {
         let path = self.path;
         let name = path.file_name().unwrap().to_string_lossy().to_string();
 
-        let selection = scope.read(&self.selection).clone();
+        let selection = self.state.active_dir.clone();
 
         let mut item_count = 0;
         let subdirs = std::fs::read_dir(&path)
@@ -98,7 +99,7 @@ impl Widget for DirectoryTree {
                     Some(DirectoryTree {
                         path: entry_path,
                         expand_depth: self.expand_depth.saturating_sub(1),
-                        selection: self.selection,
+                        state: self.state.clone(),
                     })
                 } else {
                     None
@@ -116,18 +117,10 @@ impl Widget for DirectoryTree {
             _ => LUCIDE_FOLDER,
         };
 
-        let header = Selectable::new_value(
-            row((
-                // label(special_folder_icon(&name).unwrap_or(icon)),
-                label(icon),
-                label(name),
-            ))
-            .with_stretch(true),
-            selection,
-            Some(path.clone()),
-        )
-        .with_style(ButtonStyle::hidden().with_align(LayoutAlignment::left_center()))
-        .with_maximize(Vec2::X);
+        let header =
+            Selectable::new_value(row((label(icon), label(name))), selection, path.clone())
+                .with_style(ButtonStyle::hidden().with_align(LayoutAlignment::left_center()))
+                .with_maximize(Vec2::X);
 
         Collapsible::deferred(header, || subdirs)
             .can_collapse(subdir_count > 0)
@@ -140,13 +133,12 @@ impl Widget for DirectoryTree {
 pub struct DirectoryListing {
     assets: AssetCache,
     path: PathBuf,
-    selected_file: WeakHandle<Mutable<Option<PathBuf>>>,
-    selected_dir: WeakHandle<Mutable<Option<PathBuf>>>,
+    state: DirectoryBrowserState,
 }
 
 impl Widget for DirectoryListing {
     fn mount(self, scope: &mut Scope<'_>) {
-        let path = self.path.clone();
+        to_owned!(path = self.path, state = self.state, assets = self.assets);
         let read_dir = move || {
             let items = std::fs::read_dir(&path)
                 .unwrap()
@@ -160,9 +152,8 @@ impl Widget for DirectoryListing {
                         is_dir,
                         name: entry_name.to_string_lossy().to_string(),
                         path: entry_path,
-                        selected: self.selected_file,
-                        selected_dir: self.selected_dir,
-                        assets: self.assets.clone(),
+                        state: state.clone(),
+                        assets: assets.clone(),
                     }
                 })
                 .sorted_by_key(|item| (!item.is_dir, item.name.clone()));
@@ -174,10 +165,12 @@ impl Widget for DirectoryListing {
                 .collect_vec()
         };
 
+        let selected_file = scope.store(self.state.selected_file);
+
         let path = self.path.clone();
         let open_context_menu = {
             move |scope: &ScopeRef, pos| {
-                open_context_menu(scope, pos, populate_menu(path.clone(), self.selected_file))
+                open_context_menu(scope, pos, populate_menu(path.clone(), selected_file))
             }
         };
 
@@ -191,7 +184,7 @@ impl Widget for DirectoryListing {
             col((
                 Breadcrumbs {
                     path: &self.path,
-                    selection: self.selected_dir,
+                    selection: self.state.active_dir.clone(),
                 },
                 ScrollArea::vertical(StreamWidget::new(
                     refresh_state.stream().map(move |()| col(read_dir())),
@@ -272,18 +265,34 @@ pub fn populate_item_menu(
     selected_item: WeakHandle<Mutable<Option<PathBuf>>>,
     path: PathBuf,
 ) -> ContextMenu {
-    ContextMenu::new(vec![ContextMenuItem::new(
-        label(LUCIDE_TRASH_2),
-        "Delete File",
-        move |scope| {
-            if let Err(err) = std::fs::remove_file(&path) {
-                tracing::error!("Failed to delete file: {}", err);
-            } else {
-                scope.read(selected_item).set(None);
+    ContextMenu::new(vec![
+        ContextMenuItem::new(label(LUCIDE_TRASH_2), "Delete File", {
+            to_owned!(path);
+            move |scope| {
+                if let Err(err) = std::fs::remove_file(&path) {
+                    tracing::error!("Failed to delete file: {}", err);
+                } else {
+                    scope.read(selected_item).set(None);
+                }
+                Ok(())
             }
-            Ok(())
-        },
-    )])
+        }),
+        ContextMenuItem::new(label(LUCIDE_COPY_PLUS), "Duplicate", {
+            to_owned!(path, selected_item);
+            move |scope| {
+                let dir = path.parent().unwrap_or_else(|| Path::new("."));
+                let file_name = path.file_name().unwrap_or_default();
+                let new_path = find_next_filename(file_name, dir);
+
+                if let Err(err) = std::fs::copy(&path, &new_path) {
+                    tracing::error!("Failed to duplicate file: {}", err);
+                } else {
+                    scope.read(selected_item).set(Some(new_path));
+                }
+                Ok(())
+            }
+        }),
+    ])
 }
 
 pub fn create_asset<T>(
@@ -315,10 +324,8 @@ pub fn populate_menu(
         ContextMenuItem::new(label(LUCIDE_FILE_TEXT), "New File", {
             to_owned!(dir);
             move |scope| {
-                tracing::info!("Creating new file");
                 let new_path = find_next_filename("New File", &dir);
                 std::fs::write(&new_path, "")?;
-                tracing::info!("File created: {}", new_path.display());
 
                 scope.read(selected_item).set(Some(new_path));
                 // Implement file creation logic here
@@ -390,48 +397,39 @@ pub struct FileItem {
     name: String,
     path: PathBuf,
     assets: AssetCache,
-    selected: WeakHandle<Mutable<Option<PathBuf>>>,
-    selected_dir: WeakHandle<Mutable<Option<PathBuf>>>,
+    state: DirectoryBrowserState,
     is_dir: bool,
 }
 
 impl Widget for FileItem {
     fn mount(self, scope: &mut Scope<'_>) {
-        let is_selected = scope.read(&self.selected).clone();
+        let is_selected = self.state.selected_file.clone();
+        let selected_file = scope.store(is_selected.clone());
         let widget = async move {
             let path = self.path.clone();
             let assets = self.assets.clone();
-            let filetype = FileType::from_path(&path, &assets).await;
+            let filetype = FileType::from_path(&self.state.root, &path, &assets).await;
             let preview = {
                 to_owned!(path, filetype);
-                move || {
-                    // col((
-                    FileIcon {
-                        path: path.clone(),
-                        filetype: filetype.clone(),
-                    }
-                    // label(&name)
-                    //     .with_wrap(Wrap::WordOrGlyph)
-                    //     .with_font_size(12.0),
-                    // ))
-                    // .center()
-                    // .with_exact_size(ITEM_SIZE)
+                move || FileIcon {
+                    path: path.clone(),
+                    filetype: filetype.clone(),
                 }
             };
 
             let on_drop = {
-                to_owned!(path, filetype);
-                move |_scope: &ScopeRef, target: Option<(EntityRef, Vec2)>| {
-                    tracing::info!(?path, "Dropping file to {:?}", target);
-
+                to_owned!(path, state = self.state, filetype);
+                move |scope: &ScopeRef, target: Option<(EntityRef, Vec2)>| {
                     if let Some((widget, pos)) = target {
                         let Ok(scene_id) = widget.get_copy(world_drop_area()) else {
                             return;
                         };
 
                         let screen_pos = pos / widget.get(rect()).unwrap().size();
-                        to_owned!(path, assets, filetype);
-                        _scope.apply(move |world| {
+                        let toasts = scope.get_atom_cloned(toasts()).unwrap();
+
+                        to_owned!(path, assets, filetype, state);
+                        scope.apply(move |world| {
                             let world = &mut *world.get_mut(scene_id, scene_world())?;
 
                             let mut main_camera =
@@ -449,9 +447,8 @@ impl Widget for FileItem {
                             match filetype {
                                 FileType::Asset(AssetType::Template) => {
                                     if let Some(hit) = hit {
-                                        tracing::info!("Dropping template at {:?}", hit);
-                                        let asset_path =
-                                            AssetPath::<Template>::new(path.canonicalize()?);
+                                        let asset_path: AssetPath<Template> =
+                                            AssetPath::from_root(&state.root, &path);
 
                                         let async_cmd = world
                                             .get_clone(engine(), async_commandbuffer())
@@ -459,21 +456,34 @@ impl Widget for FileItem {
 
                                         async_std::task::spawn(async move {
                                             let fut = spawn_template(
-                                                assets, ray, asset_path, hit, async_cmd,
+                                                assets,
+                                                ray,
+                                                asset_path.clone(),
+                                                hit,
+                                                async_cmd,
                                             )
                                             .await;
 
-                                            if let Err(err) = fut {
-                                                tracing::error!("{err:?}");
+                                            match fut {
+                                                Ok(_) => {
+                                                    toasts.send(Toast::info(
+                                                        "Editor",
+                                                        format!("Spawned template {asset_path:?}"),
+                                                    ));
+                                                }
+                                                Err(e) => {
+                                                    toasts.send(Toast::error(
+                                                        "Editor",
+                                                        format!("Failed to spawn template {asset_path:?}\n{e}"),
+                                                    ));
+                                                }
                                             }
                                         });
                                     } else {
                                         tracing::warn!("No hit detected for template drop");
                                     }
                                 }
-                                _ => {
-                                    tracing::info!("Dropping file at {:?}", pos);
-                                }
+                                _ => {}
                             }
 
                             Ok(())
@@ -491,8 +501,7 @@ impl Widget for FileItem {
                             },
                             RenamableItem {
                                 path: self.path.clone(),
-                                selected: self.selected,
-                                selected_dir: self.selected_dir,
+                                state: self.state.clone(),
                             },
                         ))
                         .center(),
@@ -506,9 +515,9 @@ impl Widget for FileItem {
                 Some(self.path.clone()),
             )
             .on_double_click({
-                move |scope: &ScopeRef| {
+                move |_: &ScopeRef| {
                     if self.is_dir {
-                        scope.read(self.selected_dir).set(Some(path.clone()));
+                        self.state.active_dir.set(path.clone());
                     }
                 }
             })
@@ -519,7 +528,7 @@ impl Widget for FileItem {
                         open_context_menu(
                             scope,
                             input.cursor.absolute_pos,
-                            populate_item_menu(self.selected.clone(), path.clone()),
+                            populate_item_menu(selected_file, path.clone()),
                         );
                     }
 
@@ -553,8 +562,7 @@ async fn spawn_template(
 
 struct RenamableItem {
     path: PathBuf,
-    selected: WeakHandle<Mutable<Option<PathBuf>>>,
-    selected_dir: WeakHandle<Mutable<Option<PathBuf>>>,
+    state: DirectoryBrowserState,
 }
 
 impl Widget for RenamableItem {
@@ -563,8 +571,8 @@ impl Widget for RenamableItem {
 
         let mut edit_state = None as Option<Mutable<String>>;
 
-        let selected = scope.read(&self.selected).clone();
-        let selected_dir = scope.read(&self.selected_dir).clone();
+        let selected = self.state.selected_file.clone();
+        let selected_dir = self.state.active_dir.clone();
 
         let renaming = scope.store(renaming);
         let controls = scope.read(&renaming).stream().map(move |v| {
@@ -577,12 +585,12 @@ impl Widget for RenamableItem {
                     self.path = new_path;
 
                     selected.set(Some(self.path.clone()));
-                    selected_dir.set(Some(
+                    selected_dir.set(
                         self.path
                             .parent()
                             .unwrap_or_else(|| Path::new("."))
                             .to_owned(),
-                    ));
+                    );
                 }
             }
 
@@ -619,12 +627,17 @@ impl Widget for RenamableItem {
 #[derive(Clone, Debug)]
 pub struct DirectoryBrowserState {
     selected_file: Mutable<Option<PathBuf>>,
+    active_dir: Mutable<PathBuf>,
+    root: PathBuf,
 }
 
 impl DirectoryBrowserState {
-    pub fn new() -> Self {
+    pub fn new(root: impl Into<PathBuf>) -> Self {
+        let root = root.into();
         Self {
             selected_file: Mutable::new(None),
+            active_dir: Mutable::new(root.clone()),
+            root: root,
         }
     }
 }
@@ -678,12 +691,13 @@ impl Widget for AspectInspectorPanel {
                 .selected_file
                 .dedup()
                 .stream_ref({
-                    to_owned!(assets = self.assets);
+                    to_owned!(root = self.state.root, assets = self.assets);
                     move |selected| {
-                        to_owned!(assets);
+                        to_owned!(root, assets);
                         selected.as_ref().map(move |v| FileDetailsWidget {
                             assets: assets.clone(),
                             path: v.to_owned(),
+                            asset_root: root,
                         })
                     }
                 })
@@ -709,74 +723,62 @@ impl Widget for AspectInspectorPanel {
     }
 }
 
-pub struct DirectoryBrowser {
+pub struct AssetBrowser {
     assets: AssetCache,
     state: DirectoryBrowserState,
-    root: PathBuf,
 }
 
-impl DirectoryBrowser {
-    pub fn new(assets: AssetCache, root: impl Into<PathBuf>, state: DirectoryBrowserState) -> Self {
-        Self {
-            assets,
-            root: root.into(),
-            state,
-        }
+impl AssetBrowser {
+    pub fn new(assets: AssetCache, state: DirectoryBrowserState) -> Self {
+        Self { assets, state }
     }
 }
 
-impl Widget for DirectoryBrowser {
+impl Widget for AssetBrowser {
     fn mount(self, scope: &mut Scope<'_>) {
-        let selected_dir = Mutable::new(Some(self.root.clone()));
-
-        let selected_dir = scope.store(selected_dir);
-        let selected_file = scope.store(self.state.selected_file);
-
-        panel(row((
-            ScrollArea::vertical(DirectoryTree {
-                selection: selected_dir,
-                path: self.root,
+        row((
+            card(ScrollArea::vertical(DirectoryTree {
+                path: self.state.root.clone(),
+                state: self.state.clone(),
                 expand_depth: 1,
-            }),
-            SignalWidget::new(scope.read(&selected_dir).signal_ref({
-                to_owned!(assets = self.assets);
-                move |selected| {
-                    selected.as_ref().map(|v| DirectoryListing {
-                        path: v.clone(),
-                        selected_file,
-                        selected_dir,
-                        assets: assets.clone(),
-                    })
+            }))
+            .with_background(surface_primary()),
+            SignalWidget::new(self.state.active_dir.signal_ref({
+                to_owned!(state = self.state, assets = self.assets);
+                move |path| DirectoryListing {
+                    path: path.clone(),
+                    state: state.clone(),
+                    assets: assets.clone(),
                 }
             })),
-        )))
+        ))
         .with_min_size(Unit::px2(100.0, BROWSER_PANEL_HEIGHT))
         .with_max_size(Unit::px2(f32::MAX, BROWSER_PANEL_HEIGHT))
         .with_maximize(Vec2::X)
-        // details_panel,
         .mount(scope)
     }
 }
 
 pub struct Breadcrumbs<'a> {
     path: &'a Path,
-    selection: WeakHandle<Mutable<Option<PathBuf>>>,
+    selection: Mutable<PathBuf>,
 }
 
 impl Widget for Breadcrumbs<'_> {
     fn mount(self, scope: &mut Scope<'_>) {
         let mut tail = Vec::new();
+        let selection = scope.store(self.selection);
         let items = self.path.components().map(|segment| {
             let segment_str = segment.as_os_str().to_string_lossy().to_string();
             let full_path = tail.iter().chain([&segment_str]).collect::<PathBuf>();
 
-            let widget = InteractiveWidget::new(pill(
-                label(&segment_str)
-                    .with_color(SAPPHIRE_200)
-                    .with_wrap(Wrap::None),
-            ))
+            let widget = InteractiveWidget::new(
+                pill(label(&segment_str).with_wrap(Wrap::None))
+                    .with_margin(Edges::even(2.0))
+                    .with_corner_radius(Unit::px(0.0)),
+            )
             .on_click(move |scope: &ScopeRef| {
-                scope.read(self.selection).set(Some(full_path.clone()));
+                scope.read(selection).set(full_path.clone());
             });
 
             tail.push(segment_str);
@@ -836,13 +838,13 @@ enum FileType {
 }
 
 impl FileType {
-    async fn from_path(path: &Path, assets: &AssetCache) -> Self {
+    async fn from_path(asset_root: &Path, path: &Path, assets: &AssetCache) -> Self {
         if path.is_dir() {
             FileType::Directory
         } else {
             match path.extension().and_then(|s| s.to_str()) {
                 Some(ext) => match ext {
-                    "asset" => Self::determine_asset_type(path, assets)
+                    "asset" => Self::determine_asset_type(asset_root, path, assets)
                         .await
                         .map(FileType::Asset)
                         .unwrap_or(FileType::Error),
@@ -870,8 +872,12 @@ impl FileType {
         }
     }
 
-    async fn determine_asset_type(path: &Path, assets: &AssetCache) -> anyhow::Result<AssetType> {
-        let path = AssetPath::new(path.canonicalize()?);
+    async fn determine_asset_type(
+        asset_root: &Path,
+        path: &Path,
+        assets: &AssetCache,
+    ) -> anyhow::Result<AssetType> {
+        let path = AssetPath::from_root(asset_root, path);
         let meta = AssetPayloadUntyped::load_meta_from_file(&path, assets).await?;
 
         match meta.type_name.as_str() {
@@ -905,8 +911,8 @@ impl FileType {
             FileType::Error => LUCIDE_FILE_WARNING,
             FileType::Hdri => LUCIDE_CLOUD_SUN,
             FileType::Asset(AssetType::Asset) => LUCIDE_PACKAGE,
-            FileType::Asset(AssetType::Template) => LUCIDE_BOXES,
-            FileType::Asset(AssetType::Material) => LUCIDE_DROPLET,
+            FileType::Asset(AssetType::Template) => LUCIDE_BOX,
+            FileType::Asset(AssetType::Material) => LUCIDE_ECLIPSE,
         }
     }
 
@@ -959,6 +965,7 @@ impl FileType {
 struct FileDetailsWidget {
     assets: AssetCache,
     path: PathBuf,
+    asset_root: PathBuf,
 }
 
 impl Widget for FileDetailsWidget {
@@ -976,10 +983,8 @@ impl Widget for FileDetailsWidget {
             FilePreview {
                 assets: &self.assets,
                 path: &self.path,
+                asset_root: &self.asset_root,
             },
-            label("File Details")
-                .with_font_size(16.0)
-                .with_color(SAPPHIRE_200),
             Tooltip::label(
                 label(format!("Name: {file_name}")),
                 path.display().to_string(),
@@ -993,14 +998,19 @@ impl Widget for FileDetailsWidget {
 struct FilePreview<'a> {
     assets: &'a AssetCache,
     path: &'a Path,
+    asset_root: &'a Path,
 }
 
 impl Widget for FilePreview<'_> {
     fn mount(self, scope: &mut Scope<'_>) {
-        to_owned!(assets = self.assets, path = self.path);
+        to_owned!(
+            assets = self.assets,
+            root = self.asset_root,
+            path = self.path
+        );
         SuspenseWidget::new(Throbber::new(45.0), async move {
             let path = path;
-            let ty = FileType::from_path(&path, &assets).await;
+            let ty = FileType::from_path(&root, &path, &assets).await;
             let icon = label(ty.icon())
                 .with_color(ty.color())
                 .with_font_size(256.0);
@@ -1013,7 +1023,7 @@ impl Widget for FilePreview<'_> {
                         .mount(scope);
                 } else if ty.is_asset() {
                     // tracing::info!("Inspecting asset: {}", path.display());
-                    AssetEditor::new(assets.clone(), path.to_owned()).mount(scope)
+                    AssetEditor::new(assets.clone(), AssetPath::from_root(root, path)).mount(scope)
                 } else if ty.is_text() {
                     let async_load = async {
                         sleep(Duration::from_millis(500)).await;

@@ -7,7 +7,7 @@ use flax::{
 };
 use futures::{stream, StreamExt, TryStreamExt};
 use ivy_assets::{loadable::Loadable, Asset, AssetCache, AssetPath, AsyncAssetExt};
-use ivy_core::template::{template_key, Template};
+use ivy_core::template::{template_path, Template};
 use serde::{
     de::{self, DeserializeSeed, Visitor},
     ser::{self, SerializeMap, SerializeSeq},
@@ -49,7 +49,7 @@ impl SceneSerializer {
     }
 
     fn filter_entity(&self, entity: &EntityRef) -> bool {
-        entity.has(template_key())
+        entity.has(template_path())
     }
 
     /// Serializes a world to json
@@ -110,7 +110,7 @@ impl Serialize for EntitiesSerializer<'_> {
     where
         S: serde::Serializer,
     {
-        let mut entities = Query::new(entity_refs()).with(template_key());
+        let mut entities = Query::new(entity_refs()).with(template_path());
 
         let count = entities.borrow(self.world).count();
 
@@ -144,7 +144,7 @@ impl Serialize for SerializeEntity<'_> {
 
         let template = self
             .entity
-            .get_clone(template_key())
+            .get_clone(template_path())
             .map_err(|_| serde::ser::Error::custom("missing template on serialized entity"))?;
 
         s.serialize_entry("template", &template)?;
@@ -169,7 +169,7 @@ impl Serialize for SceneEntitySerializer<'_> {
     {
         let mut s = serializer.serialize_map(Some(3))?;
 
-        let template = self.entity.get_clone(template_key()).ok();
+        let template = self.entity.get_clone(template_path()).ok();
 
         s.serialize_entry("id", &self.entity.id())?;
         s.serialize_entry("template", &template)?;
@@ -294,7 +294,7 @@ impl SceneDesc {
         fn clean_entity_builders(entity: &mut EntityBuilder) {
             // remove all children containing a template key
             entity.children_mut().retain_mut(|child| {
-                if child.has(template_key()) {
+                if child.has(template_path()) {
                     clean_entity_builders(child);
                     false
                 } else {

@@ -35,7 +35,7 @@ violet::core::declare_atom! {
 
 #[derive(Clone)]
 pub struct ToastState {
-    pub toasts_tx: flume::Sender<Toast>,
+    toasts_tx: flume::Sender<Toast>,
 }
 
 impl ToastState {

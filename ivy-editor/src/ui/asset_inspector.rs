@@ -1,4 +1,4 @@
-use std::{path::PathBuf, time::Duration};
+use std::time::Duration;
 
 use async_std::stream::StreamExt;
 use glam::BVec2;
@@ -31,11 +31,11 @@ use ivy_ui::{
 
 pub struct AssetEditor {
     assets: AssetCache,
-    path: PathBuf,
+    path: AssetPath<AssetPayloadUntyped>,
 }
 
 impl AssetEditor {
-    pub fn new(assets: AssetCache, path: PathBuf) -> Self {
+    pub fn new(assets: AssetCache, path: AssetPath<AssetPayloadUntyped>) -> Self {
         Self { assets, path }
     }
 }
@@ -62,9 +62,8 @@ impl Clone for ErasedAssetDesc {
 impl Widget for AssetEditor {
     fn mount(self, scope: &mut ivy_ui::violet::core::Scope<'_>) {
         let editor = async move {
-            let path = AssetPath::<AssetPayloadUntyped>::new(self.path.canonicalize()?);
-            let payload = path.load(&self.assets).await?;
-            anyhow::Ok((path, payload))
+            let payload = self.path.load(&self.assets).await?;
+            anyhow::Ok((self.path, payload))
         };
 
         SuspenseWidget::new(LoadingSpinner::new("Loading Asset"), async move {

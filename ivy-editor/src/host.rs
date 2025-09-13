@@ -2,7 +2,6 @@ use std::{any::type_name, cell::RefCell, io::Cursor, path::PathBuf, sync::Arc};
 
 use async_std::stream::StreamExt;
 use flax::{Entity, World};
-use futures::channel::oneshot;
 use glam::Vec2;
 use ivy_assets::{AssetCache, stored::DynamicStore};
 use ivy_core::{
@@ -10,7 +9,7 @@ use ivy_core::{
     update_layer::{Plugin, ScheduleSetBuilder},
 };
 use ivy_scene::{
-    OpenSceneCommand, Scene, SceneBuilder, SceneCommand, scene_commands, scene_world,
+    OpenSceneCommand, SceneBuilder, SceneCommand, scene_commands, scene_world,
     ser::{SceneData, SceneSerializer},
     viewport_provider::scene_viewport_state,
 };
@@ -20,25 +19,22 @@ use ivy_ui::{
     toast::{Toast, toasts},
     violet::{
         core::{
-            Scope, StateExt, StateStream, Widget,
+            Scope, ScopeRef, StateExt, StateStream, Widget,
             layout::Align,
-            style::{SizeExt, element_accent, surface_primary},
+            style::{SizeExt, element_accent, element_tertiary, surface_primary},
             to_owned,
             widget::{
-                Button, EmptyWidget, FutureWidget, Stack, StreamWidget, TextInput, bold, col,
-                label, maximized, panel, raised_card, row, subtitle,
+                Button, EmptyWidget, FutureWidget, Stack, StreamWidget, bold, col,
+                interactive::Tooltip, label, maximized, panel, raised_card, row, subtitle,
             },
         },
         futures_signals::signal::{Mutable, SignalExt},
-        lucide::icons::{
-            LUCIDE_FOLDER, LUCIDE_FOLDER_OPEN, LUCIDE_FOLDERS, LUCIDE_LEAF, LUCIDE_PACKAGE,
-            LUCIDE_SAVE, LUCIDE_UPLOAD,
-        },
+        lucide::icons::{LUCIDE_FOLDER, LUCIDE_LEAF, LUCIDE_PACKAGE, LUCIDE_SAVE},
     },
 };
 use rfd::{AsyncFileDialog, FileHandle};
 
-use crate::ui::browser::{AspectInspectorPanel, DirectoryBrowser, DirectoryBrowserState, window};
+use crate::ui::browser::{AspectInspectorPanel, AssetBrowser, DirectoryBrowserState, window};
 
 pub struct EditorHost {
     scene_commands: flume::Sender<ivy_scene::SceneCommand>,
@@ -54,7 +50,7 @@ pub type SceneConstructor = Arc<dyn Fn() -> SceneBuilder + Send + Sync + 'static
 #[derive(Clone)]
 pub struct EditorState {
     current_scene: Mutable<Option<SceneState>>,
-    scene_name: Mutable<Option<String>>,
+    scene_path: Mutable<Option<PathBuf>>,
     scene_commands: flume::Sender<ivy_scene::SceneCommand>,
     scene_constructor: SceneConstructor,
 }
@@ -70,7 +66,6 @@ impl EditorHost {
     pub fn open_scene(
         &mut self,
         scene: impl 'static + Send + FnOnce() -> SceneBuilder,
-        name: Option<String>,
     ) -> anyhow::Result<()> {
         let scene_builder = || scene();
 
@@ -81,7 +76,7 @@ impl EditorHost {
                     scene_builder,
                     Some(move |scene_id| {
                         state.current_scene.set(Some(SceneState { scene_id }));
-                        state.scene_name.set(name);
+                        state.scene_path.set(None);
                     }),
                 )));
 
@@ -103,7 +98,7 @@ impl EditorHostPlugin {
         }
     }
 
-    pub fn with_scene(mut self, scene: SceneData) -> Self {
+    pub fn with_scene(self, scene: SceneData) -> Self {
         self.scene.replace(Some(scene));
         self
     }
@@ -124,7 +119,7 @@ impl Plugin for EditorHostPlugin {
 
         let editor_state = EditorState {
             current_scene: Mutable::new(None),
-            scene_name: Mutable::new(None),
+            scene_path: Mutable::new(None),
             scene_commands: scene_commands.clone(),
             scene_constructor: self.scene_constructor.clone(),
         };
@@ -135,13 +130,10 @@ impl Plugin for EditorHostPlugin {
         // Open initial scene
         if let Some(scene) = self.scene.take() {
             // TODO: maybe just "with world" and provided base scene builder?
-            editor_host.open_scene(
-                {
-                    to_owned!(scene_ctor = editor_host.state.scene_constructor);
-                    move || (scene_ctor()).with_world(scene.world)
-                },
-                None,
-            )?;
+            editor_host.open_scene({
+                to_owned!(scene_ctor = editor_host.state.scene_constructor);
+                move || (scene_ctor()).with_world(scene.world)
+            })?;
         }
 
         screens.open(MainEditorUI {
@@ -179,12 +171,12 @@ impl Screen for MainEditorUI {
                 .to_stream(),
         ));
 
-        let browser_state = DirectoryBrowserState::new();
+        let browser_state = DirectoryBrowserState::new("./assets");
         let directory_browser = window(
             LUCIDE_PACKAGE,
             "Assets",
             EmptyWidget,
-            DirectoryBrowser::new(self.assets.clone(), "./assets", browser_state.clone()),
+            AssetBrowser::new(self.assets.clone(), browser_state.clone()),
         );
 
         let details_panel = AspectInspectorPanel::new(self.assets.clone(), browser_state);
@@ -219,6 +211,7 @@ fn save_scene(
 ) -> impl 'static + Future<Output = anyhow::Result<PathBuf>> {
     let mut data = Vec::new();
     let result = SceneSerializer::new().serialize_json(world, &mut data);
+    let scene_dir = local_dir();
 
     async move {
         result?;
@@ -228,8 +221,8 @@ fn save_scene(
             None => {
                 let file = AsyncFileDialog::new()
                     .set_title("Ivy Scene")
-                    .set_directory(local_dir())
-                    .set_file_name("scene.ivscn")
+                    .set_directory(&scene_dir)
+                    .set_file_name("scene.ivsc")
                     .save_file()
                     .await;
 
@@ -243,17 +236,22 @@ fn save_scene(
 
         file.write(&data).await?;
 
-        Ok(file.path().to_path_buf())
+        Ok(file
+            .path()
+            .strip_prefix(scene_dir)
+            .unwrap_or_else(|_| file.path())
+            .to_path_buf())
     }
 }
 
 fn load_scene(
     assets: AssetCache,
 ) -> impl Future<Output = anyhow::Result<Option<(PathBuf, SceneData)>>> {
+    let local_dir = local_dir();
     async move {
         let file = AsyncFileDialog::new()
-            .add_filter("Ivy Scene", &["ivscn"])
-            .set_directory(local_dir())
+            .add_filter("Ivy Scene", &["ivsc"])
+            .set_directory(&local_dir)
             .set_title("Open Ivy Scene")
             .pick_file()
             .await;
@@ -264,7 +262,13 @@ fn load_scene(
                 .load_scene(&assets, &mut Cursor::new(data))
                 .await?;
 
-            Ok(Some((file.path().to_path_buf(), scene)))
+            Ok(Some((
+                file.path()
+                    .strip_prefix(local_dir)
+                    .unwrap_or_else(|_| file.path())
+                    .to_path_buf(),
+                scene,
+            )))
         } else {
             Ok(None)
         }
@@ -272,111 +276,108 @@ fn load_scene(
 }
 
 fn header(assets: AssetCache, state: EditorState) -> impl Widget {
-    let save_controls = row((
-        Button::label(LUCIDE_SAVE)
-            .with_tooltip_text("Save Scene")
-            .on_click({
+    let save_scene = {
+        to_owned!(state);
+        move |scope: &ScopeRef| {
+            let scene_id = state.current_scene.lock_ref().as_ref().map(|v| v.scene_id);
+            let Some(scene_id) = scene_id else {
+                return;
+            };
+
+            let toasts = scope.get_atom_cloned(toasts()).unwrap();
+
+            scope.apply({
                 to_owned!(state);
-                move |scope| {
-                    let scene_id = state.current_scene.lock_ref().as_ref().map(|v| v.scene_id);
-                    let Some(scene_id) = scene_id else {
-                        return;
-                    };
+                move |engine_world| {
+                    let scene = engine_world.get(scene_id, scene_world()).unwrap();
+                    let result =
+                        save_scene(&*scene, state.scene_path.get_cloned().map(|v| v.into()));
 
-                    let toasts = scope.get_atom_cloned(toasts()).unwrap();
+                    async_std::task::spawn(async move {
+                        match result.await {
+                            Ok(path) => {
+                                toasts.send(Toast::info(
+                                    "Scene",
+                                    format!("Scene saved to {}", path.display()),
+                                ));
 
-                    scope.apply({
-                        to_owned!(state);
-                        move |engine_world| {
-                            let scene = engine_world.get(scene_id, scene_world()).unwrap();
-                            let result = save_scene(
-                                &*scene,
-                                state.scene_name.get_cloned().map(|v| v.into()),
-                            );
-
-                            async_std::task::spawn(async move {
-                                match result.await {
-                                    Ok(path) => {
-                                        toasts.send(Toast::info(
-                                            "Scene",
-                                            format!("Scene saved to {}", path.display()),
-                                        ));
-                                        tracing::info!("Scene saved to {}", path.display());
-                                    }
-                                    Err(e) => {
-                                        toasts.send(Toast::error(
-                                            "Scene",
-                                            format!("Failed to save scene: {e:?}"),
-                                        ));
-                                        tracing::error!("Failed to save scene: {e:?}");
-                                    }
-                                }
-                            });
-
-                            Ok(())
-                        }
-                    });
-                }
-            }),
-        Button::label(LUCIDE_FOLDER)
-            .with_tooltip_text("Open Scene")
-            .on_click({
-                to_owned!(state);
-                move |scope| {
-                    let toasts = scope.get_atom_cloned(toasts()).unwrap();
-                    let assets = assets.clone();
-
-                    to_owned!(state);
-
-                    let result = load_scene(assets);
-
-                    async_std::task::spawn({
-                        to_owned!(state);
-                        async move {
-                            match result.await {
-                                Ok(Some((path, scene_data))) => {
-                                    to_owned!(scene_ctor = state.scene_constructor);
-                                    let scene_builder =
-                                        move || (scene_ctor()).with_world(scene_data.world);
-
-                                    let _ = state.scene_commands.send(SceneCommand::OpenScene(
-                                        OpenSceneCommand::new(
-                                            scene_builder,
-                                            Some(move |scene_id: Entity| {
-                                                state
-                                                    .current_scene
-                                                    .set(Some(SceneState { scene_id }));
-                                                state
-                                                    .scene_name
-                                                    .set(Some(path.display().to_string()));
-                                            }),
-                                        ),
-                                    ));
-                                }
-                                Ok(None) => {
-                                    // User cancelled
-                                }
-                                Err(e) => {
-                                    toasts.send(Toast::error(
-                                        "Scene",
-                                        format!("Failed to load scene: {e:?}"),
-                                    ));
-                                    tracing::error!("Failed to load scene: {e:?}");
-                                }
+                                state.scene_path.set(Some(path));
+                            }
+                            Err(e) => {
+                                toasts.send(Toast::error(
+                                    "Scene",
+                                    format!("Failed to save scene: {e:?}"),
+                                ));
+                                tracing::error!("Failed to save scene: {e:?}");
                             }
                         }
                     });
+
+                    Ok(())
                 }
-            }),
-        StreamWidget::new(
-            state
-                .scene_name
-                .clone()
-                .lower_option()
-                .stream()
-                .map(|v| label(v)),
-        ),
-    ));
+            });
+        }
+    };
+
+    let load_scene = {
+        to_owned!(state);
+        move |scope: &ScopeRef| {
+            let toasts = scope.get_atom_cloned(toasts()).unwrap();
+            let assets = assets.clone();
+
+            to_owned!(state);
+
+            let result = load_scene(assets);
+
+            async_std::task::spawn({
+                to_owned!(state);
+                async move {
+                    match result.await {
+                        Ok(Some((path, scene_data))) => {
+                            to_owned!(scene_ctor = state.scene_constructor);
+                            let scene_builder = move || (scene_ctor()).with_world(scene_data.world);
+
+                            let _ = state.scene_commands.send(SceneCommand::OpenScene(
+                                OpenSceneCommand::new(
+                                    scene_builder,
+                                    Some(move |scene_id: Entity| {
+                                        state.current_scene.set(Some(SceneState { scene_id }));
+                                        state.scene_path.set(Some(path));
+                                    }),
+                                ),
+                            ));
+                        }
+                        Ok(None) => {
+                            // User cancelled
+                        }
+                        Err(e) => {
+                            toasts.send(Toast::error(
+                                "Scene",
+                                format!("Failed to load scene: {e:?}"),
+                            ));
+                            tracing::error!("Failed to load scene: {e:?}");
+                        }
+                    }
+                }
+            });
+        }
+    };
+
+    let save_controls = row((
+        Button::label(LUCIDE_SAVE)
+            .with_tooltip_text("Save Scene")
+            .on_click(save_scene),
+        Button::label(LUCIDE_FOLDER)
+            .with_tooltip_text("Open Scene")
+            .on_click(load_scene),
+        StreamWidget::new(state.scene_path.clone().lower_option().stream().map(|v| {
+            Tooltip::label(
+                label(v.display().to_string()).with_color(element_tertiary()),
+                v.canonicalize().unwrap_or(v).display().to_string(),
+            )
+        })),
+    ))
+    .center();
 
     raised_card(
         row((

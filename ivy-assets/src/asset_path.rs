@@ -1,4 +1,8 @@
-use std::{ffi::OsStr, marker::PhantomData, path::PathBuf};
+use std::{
+    ffi::OsStr,
+    marker::PhantomData,
+    path::{Path, PathBuf},
+};
 
 use derivative::Derivative;
 use futures::future::BoxFuture;
@@ -22,16 +26,27 @@ pub struct AssetPath<T> {
     _marker: PhantomData<T>,
 }
 
-impl<T, P: Into<PathBuf>> From<P> for AssetPath<T> {
-    fn from(value: P) -> Self {
-        Self::new(value)
-    }
-}
+// impl<T, P: Into<PathBuf>> From<P> for AssetPath<T> {
+//     fn from(value: P) -> Self {
+//         Self::new(value)
+//     }
+// }
 
 impl<T> AssetPath<T> {
+    /// Construct a new asset path identifier from a path and a given asset root.
+    pub fn from_root(root: impl AsRef<Path>, path: impl AsRef<Path>) -> Self {
+        let root = root.as_ref().canonicalize().unwrap();
+        let path = path.as_ref().canonicalize().unwrap();
+
+        Self::new(path.strip_prefix(&root).unwrap_or(&path).to_path_buf())
+    }
+
     pub fn new(path: impl Into<PathBuf>) -> Self {
+        let path = path.into();
+        assert!(path.is_relative(), "AssetPath {path:?} must be relative");
+
         Self {
-            path: path.into(),
+            path,
             _marker: PhantomData,
         }
     }
