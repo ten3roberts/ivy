@@ -8,7 +8,8 @@ pub use builder::*;
 pub use event::*;
 use flax::World;
 use ivy_assets::{
-    hotreload::FileReloadService, service::FileSystemMapService, stored::DynamicStore, AssetCache,
+    hotreload::FileReloadService, service::FileSystemMapService,
+    services::filesystem_index::FileSystemIndexService, stored::DynamicStore, AssetCache,
 };
 
 use self::driver::Driver;
@@ -37,6 +38,8 @@ impl App {
     pub fn new() -> Self {
         let asset_cache = AssetCache::new();
         asset_cache.register_service(FileSystemMapService::new("./assets"));
+        asset_cache.register_service(FileSystemIndexService::new());
+
         match FileReloadService::new() {
             Ok(v) => {
                 asset_cache.register_service(v);

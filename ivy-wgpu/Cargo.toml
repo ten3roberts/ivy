@@ -37,11 +37,8 @@ slotmap.workspace = true
 mikktspace.workspace = true
 rayon.workspace = true
 ordered-float.workspace = true
-serde = { workspace = true, optional = true }
+serde = { workspace = true }
 typetag = { workspace = true }
 
 [dev-dependencies]
 tracing-subscriber.workspace = true
-
-[features]
-serde = ["dep:serde", "wgpu/serde"]

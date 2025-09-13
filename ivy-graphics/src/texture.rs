@@ -5,8 +5,7 @@ use ivy_assets::{loadable::Loadable, Asset, AssetCache, AssetDesc, AssetPath, As
 use ivy_core::palette::Srgba;
 use ivy_editable::Editable;
 
-#[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ProcessedTextureDesc {
     texture: Box<TextureDesc>,
     processor: StaticTextureProcessor,
@@ -18,8 +17,7 @@ pub struct ProcessedTexture {
     processor: StaticTextureProcessor,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Editable)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Editable, serde::Serialize, serde::Deserialize)]
 pub enum StaticTextureProcessor {
     MetallicRoughness(MetallicRoughnessProcessor),
 }
@@ -42,23 +40,20 @@ pub trait TextureProcessor {
     fn process(&self, image: DynamicImage) -> DynamicImage;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Editable)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Editable, serde::Serialize, serde::Deserialize)]
 pub enum ColorChannel {
     Red,
     Green,
     Blue,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Editable)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Editable, serde::Serialize, serde::Deserialize)]
 pub enum ColorChannelOrValue {
     Channel(ColorChannel),
     Value(u8),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Editable)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Editable, serde::Serialize, serde::Deserialize)]
 pub struct MetallicRoughnessProcessor {
     metallic_channel: ColorChannelOrValue,
     roughness_channel: ColorChannelOrValue,
@@ -103,8 +98,7 @@ impl TextureProcessor for MetallicRoughnessProcessor {
 }
 
 /// Describes a loadable texture
-#[derive(Debug, Clone, Editable)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Editable, serde::Serialize, serde::Deserialize)]
 pub enum TextureDesc {
     Path(AssetPath<DynamicImage>),
     Color(Srgba<u8>),

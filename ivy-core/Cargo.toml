@@ -35,7 +35,7 @@ puffin = { workspace = true, optional = true }
 puffin_http = { workspace = true, optional = true }
 rand.workspace = true
 rand_distr.workspace = true
-serde = { workspace = true, optional = true }
+serde = { workspace = true }
 thiserror.workspace = true
 tracing.workspace = true
 slab.workspace = true
@@ -48,4 +48,3 @@ erased-serde.workspace = true
 [features]
 profile = ["ivy-profiling/profile_with_puffin", "puffin", "puffin_http"]
 default = []
-serde = ["dep:serde", "glam/serde", "palette/serializing"]

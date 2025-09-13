@@ -61,16 +61,20 @@ impl Clone for ErasedAssetDesc {
 
 impl Widget for AssetEditor {
     fn mount(self, scope: &mut ivy_ui::violet::core::Scope<'_>) {
-        let editor = async move {
-            let payload = self.path.load(&self.assets).await?;
-            anyhow::Ok((self.path, payload))
+        let editor = {
+            to_owned!(assets = self.assets);
+            async move {
+                let payload = self.path.load(&assets).await?;
+                anyhow::Ok((self.path, payload))
+            }
         };
 
         SuspenseWidget::new(LoadingSpinner::new("Loading Asset"), async move {
             async_std::task::sleep(Duration::from_millis(100)).await;
             let editor = editor.await;
 
-            |scope: &mut Scope| match editor {
+            to_owned!(assets = self.assets);
+            move |scope: &mut Scope| match editor {
                 Ok((path, payload)) => {
                     let upcast = payload.desc.upcast_boxed_any();
                     let value = Mutable::new(ErasedAssetDesc::new(payload.desc.clone_dyn()));
@@ -81,7 +85,7 @@ impl Widget for AssetEditor {
 
                     let editor = EDITABLE_REGISTRY.get_by_type((*payload.desc).type_id());
 
-                    let editor = editor.map(|v| v.create_editor(Box::new(stream)));
+                    let editor = editor.map(|v| v.create_editor(Box::new(stream), &assets));
 
                     let type_name = payload.meta.type_name.clone();
                     let toasts = scope.get_atom(toasts()).unwrap().clone();

@@ -6,8 +6,7 @@ use wgpu::{
 
 use crate::Gpu;
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Culling {
     pub cull_mode: Option<Face>,
     pub front_face: FrontFace,

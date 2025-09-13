@@ -1,10 +1,10 @@
-use std::{future::ready, marker::Sized, sync::Arc};
+use std::{future::ready, marker::Sized, path::PathBuf, sync::Arc};
 
 use flax::Entity;
 use futures::StreamExt;
 use glam::{BVec3, Quat, Vec2, Vec3, Vec4};
 use itertools::Itertools;
-use ivy_assets::AssetPath;
+use ivy_assets::{AssetCache, AssetPath, services::filesystem_index::FileSystemIndexService};
 use ordered_float::NotNan;
 use violet::{
     self,
@@ -18,15 +18,16 @@ use violet::{
         widget::{
             Button, Checkbox, InputBox, LabeledSlider, SignalWidget, StreamWidget, TextInput, card,
             interactive::{
+                Dropdown,
                 colorpicker::RgbColorPicker,
                 overlay::{Overlay, overlay_state},
                 select_list::SelectList,
             },
-            row,
+            label, row,
         },
     },
     futures_signals::signal::{Mutable, SignalExt},
-    lucide::icons::{LUCIDE_PLUS, LUCIDE_TRASH_2},
+    lucide::icons::{LUCIDE_PACKAGE, LUCIDE_PLUS, LUCIDE_TRASH_2},
     palette::{Srgb, Srgba, WithAlpha},
 };
 
@@ -37,6 +38,7 @@ impl Editable for String {
 
     fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         state: S,
+        _assets: &AssetCache,
     ) -> Box<dyn Send + Widget> {
         let state = state.memo(Default::default());
         state.sync_initial();
@@ -45,11 +47,12 @@ impl Editable for String {
 
     fn create_editor_project<S: 'static + Send + Sync + StateStreamRef<Item = Self> + StateWrite>(
         state: S,
+        assets: &AssetCache,
     ) -> Box<dyn Send + Widget>
     where
         Self: Sized,
     {
-        Self::create_editor(state.project_ref(|v| v, |v| v))
+        Self::create_editor(state.project_ref(|v| v, |v| v), assets)
     }
 }
 
@@ -58,30 +61,64 @@ impl<T: 'static + Send + Sync> Editable for AssetPath<T> {
 
     fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         state: S,
+        assets: &AssetCache,
     ) -> Box<dyn Send + Widget>
     where
         Self: Sized,
     {
-        Box::new(TextInput::new(
-            state
-                .map_value(
-                    |v| v.path().to_string_lossy().to_string(),
-                    |v| AssetPath::new(v),
-                )
-                .memo(Default::default())
-                .dedup(),
-        ))
+        #[derive(Clone)]
+        struct PathDisplay {
+            path: Arc<PathBuf>,
+        }
+
+        impl PathDisplay {
+            fn new(path: Arc<PathBuf>) -> Self {
+                Self { path }
+            }
+        }
+
+        impl Widget for PathDisplay {
+            fn mount(self, scope: &mut Scope<'_>) {
+                row((label(LUCIDE_PACKAGE), label(self.path.to_string_lossy()))).mount(scope);
+            }
+        }
+
+        let items = assets
+            .service::<FileSystemIndexService>()
+            .get_index()
+            .into_iter()
+            .map(|v| v.assets.iter().map(|v| PathDisplay::new(Arc::clone(v))))
+            .flatten()
+            .collect_vec();
+
+        Box::new(
+            Dropdown::new(
+                state.map_value(
+                    |v| PathDisplay::new(Arc::new(v.path().to_path_buf())),
+                    |v| AssetPath::new(&*v.path),
+                ),
+                items,
+            )
+            .searcheable(|item, query| {
+                item.path
+                    .display()
+                    .to_string()
+                    .to_lowercase()
+                    .contains(&query.to_lowercase())
+            }),
+        )
     }
 
     fn create_editor_project<
         S: 'static + Send + Sync + Clone + StateStreamRef<Item = Self> + StateWrite,
     >(
         state: S,
+        assets: &AssetCache,
     ) -> Box<dyn Send + Widget>
     where
         Self: Sized,
     {
-        Self::create_editor(state.project_ref(|v| v, |v| v))
+        Self::create_editor(state.project_ref(|v| v, |v| v), assets)
     }
 }
 
@@ -94,6 +131,7 @@ macro_rules! input_box_impl {
             fn create_editor_opts<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
                 state: S,
                 opts: crate::EditorOpts<Self>,
+                _assets: &AssetCache,
             ) -> Box<dyn Send + Widget> {
                 let state = state.memo(Default::default());
                 state.sync_initial();
@@ -109,6 +147,7 @@ macro_rules! input_box_impl {
             >(
                 state: S,
                 opts: crate::EditorOpts<Self>,
+                _assets: &AssetCache,
             ) -> Box<dyn Send + Widget>
             where
                 Self: Sized,
@@ -136,6 +175,7 @@ impl Editable for bool {
 
     fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         state: S,
+        _assets: &AssetCache,
     ) -> Box<dyn Send + Widget> {
         let state = state.memo(false);
         state.sync_initial();
@@ -144,6 +184,7 @@ impl Editable for bool {
 
     fn create_editor_project<S: 'static + Send + Sync + StateStreamRef<Item = Self> + StateWrite>(
         state: S,
+        _assets: &AssetCache,
     ) -> Box<dyn Send + Widget>
     where
         Self: Sized,
@@ -159,8 +200,9 @@ impl EditableWithOpts for Vec2 {
     fn create_editor_opts<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         state: S,
         opts: EditorOpts<Self>,
+        assets: &AssetCache,
     ) -> Box<dyn Send + Widget> {
-        Self::create_editor_project_opts(Arc::new(state.memo(Default::default())), opts)
+        Self::create_editor_project_opts(Arc::new(state.memo(Default::default())), opts, assets)
     }
 
     fn create_editor_project_opts<
@@ -168,6 +210,7 @@ impl EditableWithOpts for Vec2 {
     >(
         state: S,
         opts: EditorOpts<Self>,
+        assets: &AssetCache,
     ) -> Box<dyn Send + Widget>
     where
         Self: Sized,
@@ -179,8 +222,8 @@ impl EditableWithOpts for Vec2 {
         let y = state.clone().project_ref(|v| &v.y, |v| &mut v.y);
 
         Box::new(row((
-            f32::create_editor_project_opts(x, opts_x),
-            f32::create_editor_project_opts(y, opts_y),
+            f32::create_editor_project_opts(x, opts_x, assets),
+            f32::create_editor_project_opts(y, opts_y, assets),
         )))
     }
 }
@@ -192,8 +235,9 @@ impl EditableWithOpts for Vec3 {
     fn create_editor_opts<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         state: S,
         opts: EditorOpts<Self>,
+        assets: &AssetCache,
     ) -> Box<dyn Send + Widget> {
-        Self::create_editor_project_opts(Arc::new(state.memo(Default::default())), opts)
+        Self::create_editor_project_opts(Arc::new(state.memo(Default::default())), opts, assets)
     }
 
     fn create_editor_project_opts<
@@ -201,6 +245,7 @@ impl EditableWithOpts for Vec3 {
     >(
         state: S,
         opts: EditorOpts<Self>,
+        assets: &AssetCache,
     ) -> Box<dyn Send + Widget>
     where
         Self: Sized,
@@ -214,9 +259,9 @@ impl EditableWithOpts for Vec3 {
         let opts_z = opts.map_range(|v| v.z);
 
         Box::new(row((
-            f32::create_editor_project_opts(x, opts_x),
-            f32::create_editor_project_opts(y, opts_y),
-            f32::create_editor_project_opts(z, opts_z),
+            f32::create_editor_project_opts(x, opts_x, assets),
+            f32::create_editor_project_opts(y, opts_y, assets),
+            f32::create_editor_project_opts(z, opts_z, assets),
         )))
     }
 }
@@ -228,8 +273,9 @@ impl EditableWithOpts for Vec4 {
     fn create_editor_opts<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         state: S,
         opts: EditorOpts<Self>,
+        assets: &AssetCache,
     ) -> Box<dyn Send + Widget> {
-        Self::create_editor_project_opts(Arc::new(state.memo(Default::default())), opts)
+        Self::create_editor_project_opts(Arc::new(state.memo(Default::default())), opts, assets)
     }
 
     fn create_editor_project_opts<
@@ -237,6 +283,7 @@ impl EditableWithOpts for Vec4 {
     >(
         state: S,
         opts: EditorOpts<Self>,
+        assets: &AssetCache,
     ) -> Box<dyn Send + Widget>
     where
         Self: Sized,
@@ -252,10 +299,10 @@ impl EditableWithOpts for Vec4 {
         let opts_w = opts.map_range(|v| v.w);
 
         Box::new(row((
-            f32::create_editor_project_opts(x, opts_x),
-            f32::create_editor_project_opts(y, opts_y),
-            f32::create_editor_project_opts(z, opts_z),
-            f32::create_editor_project_opts(w, opts_w),
+            f32::create_editor_project_opts(x, opts_x, assets),
+            f32::create_editor_project_opts(y, opts_y, assets),
+            f32::create_editor_project_opts(z, opts_z, assets),
+            f32::create_editor_project_opts(w, opts_w, assets),
         )))
     }
 }
@@ -265,14 +312,16 @@ impl Editable for BVec3 {
 
     fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         state: S,
+        assets: &AssetCache,
     ) -> Box<dyn Send + Widget> {
-        Self::create_editor_project(Arc::new(state.memo(Default::default())))
+        Self::create_editor_project(Arc::new(state.memo(Default::default())), assets)
     }
 
     fn create_editor_project<
         S: 'static + Send + Sync + Clone + StateStreamRef<Item = Self> + StateWrite,
     >(
         state: S,
+        assets: &AssetCache,
     ) -> Box<dyn Send + Widget>
     where
         Self: Sized,
@@ -282,9 +331,9 @@ impl Editable for BVec3 {
         let z = state.clone().project_ref(|v| &v.z, |v| &mut v.z);
 
         Box::new(row((
-            bool::create_editor_project(x),
-            bool::create_editor_project(y),
-            bool::create_editor_project(z),
+            bool::create_editor_project(x, assets),
+            bool::create_editor_project(y, assets),
+            bool::create_editor_project(z, assets),
         )))
     }
 }
@@ -294,6 +343,7 @@ impl<T: Clone + Editable> Editable for Option<T> {
 
     fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         state: S,
+        assets: &AssetCache,
     ) -> Box<dyn Send + Widget>
     where
         Self: Sized,
@@ -311,9 +361,10 @@ impl<T: Clone + Editable> Editable for Option<T> {
 
         let inner_value = Arc::new(state.clone().lower_option());
 
+        to_owned!(assets);
         let inner_value = has_value.stream().map(move |has_value| {
             if has_value {
-                Some(T::create_editor(inner_value.clone()))
+                Some(T::create_editor(inner_value.clone(), &assets))
             } else {
                 None
             }
@@ -336,11 +387,12 @@ impl<T: Clone + Editable> Editable for Option<T> {
         S: 'static + Send + Sync + Clone + violet::core::state::StateProjected<Item = Self>,
     >(
         state: S,
+        assets: &AssetCache,
     ) -> Box<dyn Send + Widget>
     where
         Self: Sized,
     {
-        Self::create_editor(state.project_ref(|v| v, |v| v))
+        Self::create_editor(state.project_ref(|v| v, |v| v), assets)
     }
 }
 
@@ -349,6 +401,7 @@ impl Editable for Srgb {
 
     fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         state: S,
+        _assets: &AssetCache,
     ) -> Box<dyn Send + Widget> {
         Box::new(
             RgbColorPicker::new(state.map_value(|v| v.with_alpha(1.0), |v| v.without_alpha()))
@@ -358,11 +411,12 @@ impl Editable for Srgb {
 
     fn create_editor_project<S: 'static + Send + Sync + StateStreamRef<Item = Self> + StateWrite>(
         state: S,
+        assets: &AssetCache,
     ) -> Box<dyn Send + Widget>
     where
         Self: Sized,
     {
-        Self::create_editor(state.project_ref(|v| v, |v| v))
+        Self::create_editor(state.project_ref(|v| v, |v| v), assets)
     }
 }
 
@@ -371,17 +425,19 @@ impl Editable for Srgba {
 
     fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         state: S,
+        _assets: &AssetCache,
     ) -> Box<dyn Send + Widget> {
         Box::new(RgbColorPicker::new(state).enable_alpha(true))
     }
 
     fn create_editor_project<S: 'static + Send + Sync + StateStreamRef<Item = Self> + StateWrite>(
         state: S,
+        assets: &AssetCache,
     ) -> Box<dyn Send + Widget>
     where
         Self: Sized,
     {
-        Self::create_editor(state.project_ref(|v| v, |v| v))
+        Self::create_editor(state.project_ref(|v| v, |v| v), assets)
     }
 }
 
@@ -390,6 +446,7 @@ impl Editable for Srgba<u8> {
 
     fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         state: S,
+        _assets: &AssetCache,
     ) -> Box<dyn Send + Widget>
     where
         Self: Sized,
@@ -407,11 +464,12 @@ impl Editable for Srgba<u8> {
         S: 'static + Send + Sync + Clone + violet::core::state::StateProjected<Item = Self>,
     >(
         state: S,
+        assets: &AssetCache,
     ) -> Box<dyn Send + Widget>
     where
         Self: Sized,
     {
-        Self::create_editor(state.project_ref(|v| v, |v| v))
+        Self::create_editor(state.project_ref(|v| v, |v| v), assets)
     }
 }
 
@@ -420,6 +478,7 @@ impl Editable for Srgb<u8> {
 
     fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         state: S,
+        _assets: &AssetCache,
     ) -> Box<dyn Send + Widget>
     where
         Self: Sized,
@@ -437,11 +496,12 @@ impl Editable for Srgb<u8> {
         S: 'static + Send + Sync + Clone + violet::core::state::StateProjected<Item = Self>,
     >(
         state: S,
+        assets: &AssetCache,
     ) -> Box<dyn Send + Widget>
     where
         Self: Sized,
     {
-        Self::create_editor(state.project_ref(|v| v, |v| v))
+        Self::create_editor(state.project_ref(|v| v, |v| v), assets)
     }
 }
 
@@ -450,6 +510,7 @@ impl Editable for Quat {
 
     fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         state: S,
+        _assets: &AssetCache,
     ) -> Box<dyn Send + Widget> {
         let state = Arc::new(
             state
@@ -491,11 +552,12 @@ impl Editable for Quat {
 
     fn create_editor_project<S: 'static + Send + Sync + StateStreamRef<Item = Self> + StateWrite>(
         state: S,
+        assets: &AssetCache,
     ) -> Box<dyn Send + Widget>
     where
         Self: Sized,
     {
-        Self::create_editor(state.project_ref(|v| v, |v| v))
+        Self::create_editor(state.project_ref(|v| v, |v| v), assets)
     }
 }
 
@@ -528,6 +590,7 @@ impl Editable for Entity {
 
     fn create_editor<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         state: S,
+        _assets: &AssetCache,
     ) -> Box<dyn Send + Widget> {
         let state = Arc::new(state);
         Box::new(
@@ -548,11 +611,12 @@ impl Editable for Entity {
 
     fn create_editor_project<S: 'static + Send + Sync + StateStreamRef<Item = Self> + StateWrite>(
         state: S,
+        assets: &AssetCache,
     ) -> Box<dyn Send + Widget>
     where
         Self: Sized,
     {
-        Self::create_editor(state.project_ref(|v| v, |v| v))
+        Self::create_editor(state.project_ref(|v| v, |v| v), assets)
     }
 }
 
@@ -615,6 +679,7 @@ impl EditableWithOpts for NotNan<f32> {
     fn create_editor_opts<S: 'static + Send + Sync + StateDuplex<Item = Self>>(
         state: S,
         opts: EditorOpts<f32>,
+        assets: &AssetCache,
     ) -> Box<dyn Send + Widget>
     where
         Self: Sized,
@@ -622,6 +687,7 @@ impl EditableWithOpts for NotNan<f32> {
         f32::create_editor_opts(
             state.filter_map(|v| Some(*v), |v| NotNan::new(v).ok()),
             opts,
+            assets,
         )
     }
 
@@ -630,6 +696,7 @@ impl EditableWithOpts for NotNan<f32> {
     >(
         state: S,
         opts: EditorOpts<f32>,
+        assets: &AssetCache,
     ) -> Box<dyn Send + Widget>
     where
         Self: Sized,
@@ -639,6 +706,7 @@ impl EditableWithOpts for NotNan<f32> {
                 .project_ref(|v| v, |v| v)
                 .filter_map(|v| Some(*v), |v| NotNan::new(v).ok()),
             opts,
+            assets,
         )
     }
 }

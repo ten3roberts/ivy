@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::Context;
 use glam::{Mat4, Quat};
-use gltf::buffer;
+use gltf::{buffer, json::deserialize};
 use itertools::Itertools;
 use ivy_assets::{Asset, AssetCache, AssetPath, AsyncAssetExt, AsyncAssetKey};
 use ivy_core::components::TransformBundle;
@@ -154,8 +154,9 @@ impl Skin {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct SkinDesc {
     document: AssetPath<Document>,
     node: String,

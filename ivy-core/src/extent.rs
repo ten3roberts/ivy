@@ -6,8 +6,9 @@ use std::{
 use glam::Vec2;
 
 /// Represents a width and height.
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(
+    Debug, Copy, Clone, Hash, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize,
+)]
 pub struct Extent {
     pub width: u32,
     pub height: u32,

@@ -5,8 +5,7 @@ use violet::core::{state::StateExt, Widget};
 
 use crate::components::{cast_shadow, light_kind, light_params};
 
-#[derive(Debug, Clone, Editable)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Editable, serde::Serialize, serde::Deserialize)]
 pub struct LightParams {
     pub color: Srgb,
     /// Light intensity
@@ -49,8 +48,19 @@ impl LightParams {
 }
 
 #[repr(u32)]
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Editable)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(
+    Default,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Editable,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub enum LightKind {
     #[default]
     Point,

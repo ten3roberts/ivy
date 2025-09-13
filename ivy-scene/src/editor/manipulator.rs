@@ -36,7 +36,9 @@ pub enum TransformMode {
     // Scale, // TODO
 }
 
-#[derive(Default, Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Default, Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize, Editable,
+)]
 pub enum SnapMode {
     #[default]
     None,
@@ -316,8 +318,6 @@ impl TransformControls {
 
         let delta_dist = moved_dist - start_dist;
 
-        
-
         match snap_mode {
             SnapMode::None => delta_dist,
             SnapMode::Absolute(snap) => snap_value3(start_dist + delta_dist, snap) - start_dist,
@@ -556,133 +556,14 @@ impl ManipulatedEntity {
     }
 }
 
-#[derive(Default, Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Editable, Default, Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize,
+)]
 pub enum ManipulationSpace {
     Local,
     #[default]
     Global,
     View,
-}
-
-impl Editable for ManipulationSpace {
-    const INLINE: bool = false;
-
-    fn create_editor<
-        S: 'static + Send + Sync + ivy_ui::violet::core::state::StateDuplex<Item = Self>,
-    >(
-        _state: S,
-    ) -> Box<dyn Send + ivy_ui::violet::core::Widget>
-    where
-        Self: Sized,
-    {
-        Box::new(row(label("TODO")))
-    }
-
-    fn create_editor_project<
-        S: 'static
-            + Send
-            + Sync
-            + Clone
-            + ivy_ui::violet::core::state::StateStreamRef<Item = Self>
-            + ivy_ui::violet::core::state::StateWrite,
-    >(
-        _state: S,
-    ) -> Box<dyn Send + ivy_ui::violet::core::Widget>
-    where
-        Self: Sized,
-    {
-        Box::new(row(label("TODO")))
-    }
-}
-
-impl Editable for SnapMode {
-    const INLINE: bool = false;
-
-    fn create_editor<
-        S: 'static + Send + Sync + ivy_ui::violet::core::state::StateDuplex<Item = Self>,
-    >(
-        state: S,
-    ) -> Box<dyn Send + ivy_ui::violet::core::Widget>
-    where
-        Self: Sized,
-    {
-        let state = Arc::new(state);
-        let discriminant = Arc::new(
-            state
-                .clone()
-                .filter_map(
-                    |v| {
-                        Some(Some(match v {
-                            SnapMode::None => "None",
-                            SnapMode::Absolute(_) => "Absolute",
-                            SnapMode::Increment(_) => "Increment",
-                        }))
-                    },
-                    |_| None,
-                )
-                .memo(None)
-                .lower_option()
-                .dedup(),
-        );
-
-        let kind = row((
-            Selectable::new_value(label("None"), discriminant.clone(), "None"),
-            Selectable::new_value(label("Absolute"), discriminant.clone(), "Absolute"),
-        ));
-
-        let editor = discriminant.stream().map(move |disc| {
-            tracing::info!("New discriminant");
-            match disc {
-                "None" => Box::new(row(())) as Box<dyn Send + Widget>,
-                "Absolute" => {
-                    tracing::info!("Configuring editor for Absolute");
-                    let state = Arc::new(
-                        state
-                            .clone()
-                            .filter_map(
-                                |v| {
-                                    if let Self::Absolute(value) = v {
-                                        Some(value)
-                                    } else {
-                                        None
-                                    }
-                                },
-                                |v| Some(Self::Absolute(v)),
-                            )
-                            .memo(f32::default()),
-                    );
-
-                    let field_0 = f32::create_editor(state.clone());
-                    Box::new(row((field_0,)))
-                }
-                "Increment" => {
-                    todo!()
-                }
-                _ => unreachable!(),
-            }
-        });
-
-        Box::new(col((
-            kind,
-            ivy_ui::violet::core::widget::StreamWidget::new(editor),
-        )))
-    }
-
-    fn create_editor_project<
-        S: 'static
-            + Send
-            + Sync
-            + Clone
-            + ivy_ui::violet::core::state::StateStreamRef<Item = Self>
-            + ivy_ui::violet::core::state::StateWrite,
-    >(
-        state: S,
-    ) -> Box<dyn Send + ivy_ui::violet::core::Widget>
-    where
-        Self: Sized,
-    {
-        Self::create_editor(state.project_ref(|v| v, |v| v))
-    }
 }
 
 #[derive(

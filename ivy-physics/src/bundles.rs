@@ -25,47 +25,45 @@ fn default_true() -> bool {
     true
 }
 
-#[derive(Clone, Debug, Resource, Bundle)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, Resource, Bundle, serde::Serialize, serde::Deserialize)]
 #[resource(derive = [Editable])]
 /// Bundle for a rigidbody without collider
 pub struct RigidBodyBundle {
     #[resource_attr(editable(default = RigidBodyKind::Dynamic))]
-    #[cfg_attr(feature = "serde", serde(default = "default_fixed"))]
+    #[serde(default = "default_fixed")]
     pub body_type: RigidBodyKind,
-    #[cfg_attr(feature = "serde", serde(default = "default_true"))]
+    #[serde(default = "default_true")]
     #[resource_attr(editable(default = true))]
     pub can_sleep: bool,
-    #[cfg_attr(feature = "serde", serde(default))]
+    #[serde(default)]
     #[resource_attr(editable(default))]
     /// Additional mass added to the body.
     pub mass: f32,
-    #[cfg_attr(feature = "serde", serde(default))]
+    #[serde(default)]
     #[resource_attr(editable(default))]
     pub angular_mass: f32,
-    #[cfg_attr(feature = "serde", serde(default))]
+    #[serde(default)]
     #[resource_attr(editable(default))]
     /// Constrain the movement of the body
     pub constraints: AxisContraints,
 
-    #[cfg_attr(feature = "serde", serde(default))]
+    #[serde(default)]
     #[resource_attr(editable(default))]
     pub velocity: Vec3,
-    #[cfg_attr(feature = "serde", serde(default))]
+    #[serde(default)]
     #[resource_attr(editable(default))]
     pub angular_velocity: Vec3,
 
-    #[cfg_attr(feature = "serde", serde(default))]
+    #[serde(default)]
     #[resource_attr(editable(default))]
     pub linear_damping: f32,
 
-    #[cfg_attr(feature = "serde", serde(default))]
+    #[serde(default)]
     #[resource_attr(editable(default))]
     pub angular_damping: f32,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Editable)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Editable, serde::Serialize, serde::Deserialize)]
 /// The status of a body, governing the way it is affected by external forces.
 pub enum RigidBodyKind {
     /// A `RigidBodyType::Dynamic` body can be affected by all external forces.
@@ -90,8 +88,7 @@ pub enum RigidBodyKind {
     // Disabled,
 }
 
-#[derive(Debug, Clone, Copy, Editable)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Copy, Editable, serde::Serialize, serde::Deserialize)]
 pub struct AxisContraints {
     lock_translation: BVec3,
     lock_rotation: BVec3,
@@ -251,8 +248,7 @@ impl Bundle for RigidBodyBundle {
     }
 }
 
-#[derive(Clone, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ColliderBundle {
     collider: ColliderBuilder,
 }

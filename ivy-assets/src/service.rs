@@ -112,4 +112,8 @@ impl FileSystemMapService {
             error: err,
         })
     }
+
+    pub fn root(&self) -> &PathBuf {
+        &self.root
+    }
 }

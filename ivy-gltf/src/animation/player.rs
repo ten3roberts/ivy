@@ -220,8 +220,7 @@ struct ChannelState {
 }
 
 /// Adds an animator to the entity
-#[derive(Debug, Clone, Copy)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub struct AnimatorBundle {}
 
 impl Bundle for AnimatorBundle {

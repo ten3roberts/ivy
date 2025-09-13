@@ -479,9 +479,7 @@ impl Widget for FileItem {
                                                 }
                                             }
                                         });
-                                    } else {
-                                        tracing::warn!("No hit detected for template drop");
-                                    }
+                                    } 
                                 }
                                 _ => {}
                             }

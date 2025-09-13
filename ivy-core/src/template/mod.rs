@@ -142,14 +142,20 @@ impl ErasedBundleDesc {
     fn editor<S: 'static + Send + Sync + StateStreamRef<Item = Self> + StateWrite>(
         &self,
         state: S,
+        assets: &AssetCache,
     ) -> Box<dyn Widget + Send> {
         let editor = EDITABLE_REGISTRY.get_by_type((*self.bundle).type_id());
 
         match editor {
             Some(editor) => {
-                let editor = (editor.create_editor_projected)(Box::new(
-                    state.project_ref(|v| v.bundle.as_sync_any(), |v| v.bundle.as_sync_any_mut()),
-                ));
+                let editor =
+                    (editor.create_editor_projected)(
+                        Box::new(state.project_ref(
+                            |v| v.bundle.as_sync_any(),
+                            |v| v.bundle.as_sync_any_mut(),
+                        )),
+                        assets,
+                    );
 
                 Box::new(editor)
             }
@@ -204,18 +210,23 @@ impl Editable for TemplateDesc {
 
     fn create_editor<S: 'static + Send + Sync + violet::core::state::StateDuplex<Item = Self>>(
         state: S,
+        assets: &AssetCache,
     ) -> Box<dyn Send + Widget>
     where
         Self: Sized,
     {
-        Self::create_editor_project(Arc::new(state.memo(TemplateDesc {
-            bundles: Vec::new(),
-        })))
+        Self::create_editor_project(
+            Arc::new(state.memo(TemplateDesc {
+                bundles: Vec::new(),
+            })),
+            assets,
+        )
     }
     fn create_editor_project<
         S: 'static + Send + Sync + Clone + StateStreamRef<Item = Self> + StateWrite,
     >(
         state: S,
+        assets: &AssetCache,
     ) -> Box<dyn Send + Widget>
     where
         Self: Sized,
@@ -224,72 +235,77 @@ impl Editable for TemplateDesc {
             .clone()
             .project_ref(|v| &v.bundles, |v| &mut v.bundles);
 
-        let editors = move |scope: &mut Scope| {
-            let mut prev_len = usize::MAX;
-            let deduped = bundles.stream().filter(move |item| {
-                let len = item.len();
-                let result = if len == prev_len {
-                    false
-                } else {
-                    prev_len = len;
-                    true
-                };
+        let editors = {
+            to_owned!(assets);
+            move |scope: &mut Scope| {
+                let mut prev_len = usize::MAX;
+                let deduped = bundles.stream().filter(move |item| {
+                    let len = item.len();
+                    let result = if len == prev_len {
+                        false
+                    } else {
+                        prev_len = len;
+                        true
+                    };
 
-                ready(result)
-            });
+                    ready(result)
+                });
 
-            // Create initial editors
-            scope.spawn_stream(deduped, {
-                move |scope, values| {
-                    scope.detach_all();
+                // Create initial editors
+                scope.spawn_stream(deduped, {
+                    to_owned!(assets);
+                    move |scope, values| {
+                        scope.detach_all();
 
-                    values.iter().enumerate().for_each(|(i, bundle)| {
-                        let item_state = bundles
-                            .clone()
-                            .project_ref(move |v| &v[i], move |v| &mut v[i]);
+                        values.iter().enumerate().for_each(|(i, bundle)| {
+                            let item_state = bundles
+                                .clone()
+                                .project_ref(move |v| &v[i], move |v| &mut v[i]);
 
-                        let state = Mutable::new(bundle.clone());
+                            let state = Mutable::new(bundle.clone());
 
-                        scope.spawn(state.signal_cloned().for_each(move |new_value| {
-                            item_state.send(new_value);
-                            async {}
-                        }));
+                            scope.spawn(state.signal_cloned().for_each(move |new_value| {
+                                item_state.send(new_value);
+                                async {}
+                            }));
 
-                        let text = bundle.bundle.tag_name();
-                        to_owned!(bundles);
-                        let discard = Button::label(LUCIDE_TRASH_2)
-                            .with_style(ButtonStyle::hidden())
-                            .with_tooltip_text("Remove Bundle")
-                            .on_click(move |_| {
-                                bundles.write_mut(|v| v.remove(i));
-                            });
+                            let text = bundle.bundle.tag_name();
+                            to_owned!(bundles);
+                            let discard = Button::label(LUCIDE_TRASH_2)
+                                .with_style(ButtonStyle::hidden())
+                                .with_tooltip_text("Remove Bundle")
+                                .on_click(move |_| {
+                                    bundles.write_mut(|v| v.remove(i));
+                                });
 
-                        scope.attach(
-                            card(Collapsible::new(
-                                row((
-                                    bold(text),
-                                    Rectangle::new(Srgba::new(0.0, 0.0, 0.0, 0.0))
-                                        .with_maximize(Vec2::X),
-                                    discard,
+                            scope.attach(
+                                card(Collapsible::new(
+                                    row((
+                                        bold(text),
+                                        Rectangle::new(Srgba::new(0.0, 0.0, 0.0, 0.0))
+                                            .with_maximize(Vec2::X),
+                                        discard,
+                                    ))
+                                    .with_cross_align(Align::Center),
+                                    bundle.editor(state, &assets),
                                 ))
-                                .with_cross_align(Align::Center),
-                                bundle.editor(state),
-                            ))
-                            .with_background(surface_tertiary()),
-                        );
-                    });
+                                .with_background(surface_tertiary()),
+                            );
+                        });
 
-                    col(()).with_stretch(true).mount(scope);
-                }
-            });
+                        col(()).with_stretch(true).mount(scope);
+                    }
+                });
+            }
         };
 
         let (add_tx, add_rx) = flume::unbounded::<Option<Box<dyn Send + Widget>>>();
         // Create initial editors
         add_tx.send(None).ok();
 
+        to_owned!(assets, add_tx, state);
         let add_new = move || {
-            to_owned!(add_tx, state);
+            to_owned!(assets, add_tx, state);
             Button::label("Add Bundle")
                 .with_maximize(Vec2::X)
                 .with_tooltip_text("Add new bundle")
@@ -306,6 +322,7 @@ impl Editable for TemplateDesc {
                                 }
                             }
                         }),
+                        assets: assets.clone(),
                     };
 
                     let _ = add_tx.send(Some(Box::new(widget)));
@@ -329,6 +346,7 @@ impl Editable for TemplateDesc {
 
 struct BundleCreationWidget {
     on_add: Box<dyn Fn(Option<ErasedBundleDesc>) + Send + Sync>,
+    assets: AssetCache,
 }
 
 impl Widget for BundleCreationWidget {
@@ -385,12 +403,13 @@ impl Widget for BundleCreationWidget {
                 });
 
                 let widget = if let Some(editor) = editor {
-                    Box::new(editor.create_editor(Box::new(
-                        value.clone().lower_option().map_value(
+                    Box::new(editor.create_editor(
+                        Box::new(value.clone().lower_option().map_value(
                             |v| v.bundle.into_any_sync(),
                             move |v| ErasedBundleDesc::new(upcast(v)),
-                        ),
-                    ))) as Box<dyn Send + Widget>
+                        )),
+                        &self.assets,
+                    )) as Box<dyn Send + Widget>
                 } else {
                     Box::new(
                         label("No editor available for this bundle").with_color(element_warning()),

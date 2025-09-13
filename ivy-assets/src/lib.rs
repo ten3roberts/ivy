@@ -52,6 +52,7 @@ pub mod map;
 pub mod meta;
 pub mod registry;
 pub mod service;
+pub mod services;
 pub mod stored;
 pub mod timeline;
 use futures::{

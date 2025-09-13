@@ -6,6 +6,7 @@ use std::{
 
 use bevy_reflect::PartialReflect;
 use futures::{StreamExt, stream::BoxStream};
+use ivy_assets::AssetCache;
 use violet::core::{
     Widget,
     state::{State, StateDuplex, StateExt, StateSink, StateStream},
@@ -67,9 +68,10 @@ impl Default for EditableRegistry {
 pub static EDITABLE_REGISTRY: LazyLock<EditableRegistry> = LazyLock::new(EditableRegistry::new);
 
 type ProjectedDyn = Box<dyn Projection<Item = dyn Send + Sync + Any>>;
-type CreateEditorDyn = fn(ProjectedDyn) -> Box<dyn Send + Widget>;
+type CreateEditorDyn = fn(ProjectedDyn, &AssetCache) -> Box<dyn Send + Widget>;
 type CreateEditorAny = fn(
     Box<dyn Send + Sync + StateDuplex<Item = Box<dyn Send + Sync + Any>>>,
+    &AssetCache,
 ) -> Box<dyn Send + Widget>;
 
 pub trait DowncastableProject {}
@@ -93,18 +95,18 @@ impl EditableRegistration {
 
             //     T::create_editor(concrete)
             // },
-            create_editor_boxed: |value| {
+            create_editor_boxed: |value, assets| {
                 let concrete = value.map_value(
                     |v| -> T { *v.downcast::<T>().unwrap() },
                     |v: T| Box::new(v) as Box<dyn Send + Sync + Any>,
                 );
 
-                T::create_editor(concrete)
+                T::create_editor(concrete, assets)
             },
-            create_editor_projected: |project| {
+            create_editor_projected: |project, assets| {
                 let concrete = DowncastDynProject::new(project);
 
-                T::create_editor(concrete)
+                T::create_editor(concrete, assets)
             }, // create_component_editor: |entity, component, streamed| {
                //     let component = component.downcast::<T>();
                //     let value = entity.get_clone(component).expect("Missing component");
@@ -148,8 +150,9 @@ impl EditableRegistration {
     pub fn create_editor(
         &self,
         value: Box<dyn Send + Sync + StateDuplex<Item = Box<dyn Send + Sync + Any>>>,
+        assets: &AssetCache,
     ) -> Box<dyn Send + Widget> {
-        (self.create_editor_boxed)(value)
+        (self.create_editor_boxed)(value, assets)
     }
 }
 

@@ -56,7 +56,7 @@ flax = { git = "https://github.com/ten3roberts/flax", branch = "dev", features =
 ] }
 flume = "0.11"
 futures = "0.3"
-glam = { version = "0.30", features = ["bytemuck", "rand"] }
+glam = { version = "0.30", features = ["bytemuck", "rand", "serde"] }
 derivative = "2.2"
 gltf = "1.0"
 image = { version = "0.25.1", default-features = false, features = [
@@ -88,11 +88,15 @@ tracing-subscriber = { version = "0.3", features = [
     "parking_lot",
 ] }
 tracing-tree = "0.4"
-wgpu = "22.1.0"
-winit = "0.30"
+wgpu = { version = "22.1.0", features = ["serde"] }
+winit = { version = "0.30", features = ["serde"] }
 rayon = "1.0"
 ordered-float = { version = "5.0", features = ["serde"] }
-rapier3d = { version = "0.23", features = ["simd-stable", "parallel"] }
+rapier3d = { version = "0.23", features = [
+    "simd-stable",
+    "parallel",
+    "serde-serialize",
+] }
 nalgebra = { version = "0.33", features = ["convert-glam030"] }
 violet = { path = "./violet", features = ["lucide"], version = "*" }
 tynm = "0.2"
@@ -164,15 +168,6 @@ bevy_reflect.workspace = true
 
 [features]
 default = []
-serde = [
-    "ivy-core/serde",
-    "ivy-physics/serde",
-    "ivy-wgpu/serde",
-    "ivy-wgpu-types/serde",
-    "ivy-input/serde",
-    "ivy-gltf/serde",
-    "ivy-graphics/serde",
-]
 profile = ["ivy-core/profile"]
 
 [profile.dev.package]

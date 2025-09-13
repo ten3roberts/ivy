@@ -15,8 +15,7 @@ use crate::{
 };
 
 /// Asynchronously loadable material, e.g; from json and texture file paths
-#[derive(Debug, Clone, Editable)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Editable, serde::Serialize, serde::Deserialize)]
 pub enum RenderEffectDesc {
     Pbr(PbrRenderEffectDesc),
     Unlit(PbrRenderEffectDesc),
@@ -51,23 +50,22 @@ impl Loadable for RenderEffectDesc {
 
 declare_resource!(RenderEffect, RenderEffectDesc);
 
-#[derive(Debug, Clone, Editable)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Editable, serde::Serialize, serde::Deserialize)]
 pub struct PbrRenderEffectDesc {
     label: String,
-    #[cfg_attr(feature = "serde", serde(default = "TextureDesc::white"))]
+    #[serde(default = "TextureDesc::white")]
     #[editable(default = TextureDesc::white())]
     albedo: TextureDesc,
-    #[cfg_attr(feature = "serde", serde(default = "TextureDesc::default_normal"))]
+    #[serde(default = "TextureDesc::default_normal")]
     #[editable(default = TextureDesc::default_normal())]
     normal: TextureDesc,
-    #[cfg_attr(feature = "serde", serde(default = "TextureDesc::white"))]
+    #[serde(default = "TextureDesc::white")]
     #[editable(default = TextureDesc::white())]
     metallic_roughness: TextureDesc,
-    #[cfg_attr(feature = "serde", serde(default = "TextureDesc::white"))]
+    #[serde(default = "TextureDesc::white")]
     #[editable(default = TextureDesc::white())]
     ambient_occlusion: TextureDesc,
-    #[cfg_attr(feature = "serde", serde(default = "TextureDesc::white"))]
+    #[serde(default = "TextureDesc::white")]
     #[editable(default = TextureDesc::white())]
     displacement: TextureDesc,
     #[editable(default = NotNan::new(0.0).unwrap(), range(0.0, 1.0))]
@@ -162,8 +160,7 @@ impl Default for PbrRenderEffectDesc {
     }
 }
 
-#[derive(Debug, Clone, Editable)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Editable, serde::Serialize, serde::Deserialize)]
 pub struct PbrEmissiveRenderEffectDesc {
     pbr: PbrRenderEffectDesc,
     emissive_color: TextureDesc,

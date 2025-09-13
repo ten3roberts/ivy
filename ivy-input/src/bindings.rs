@@ -173,7 +173,7 @@ impl<Space: Copy + Send + Sync, T: Composable<Space>, B: Binding<Value = T>> Bin
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct Amplitude<B, Rhs> {
     binding: B,
     amplitude: Rhs,
@@ -200,7 +200,7 @@ where
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct Value<B, T> {
     binding: B,
     value: T,
@@ -230,7 +230,7 @@ where
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct KeyBinding {
     pressed: bool,
     key: Key<SmolStr>,

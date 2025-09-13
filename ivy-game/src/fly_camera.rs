@@ -14,8 +14,7 @@ use ivy_core::{
 };
 use ivy_editable::Editable;
 use ivy_graphics::camera::{
-    camera_settings, environment_data, CameraBundle, CameraProjection, CameraSettings,
-    EnvironmentData,
+    camera_settings, environment_data, CameraBundle, CameraProjection, EnvironmentData,
 };
 use ivy_input::{
     components::input_state,
@@ -39,7 +38,6 @@ use violet::{
         StateExt, Widget,
     },
     futures_signals::signal::Mutable,
-    palette::Srgb,
 };
 
 use crate::viewport_camera::CameraViewportPlugin;
@@ -287,7 +285,10 @@ impl Screen for FlyCameraScreen {
                 )),
                 Collapsible::label(
                     "Environment",
-                    EnvironmentData::create_editor(envirnment_data_value.lower_option()),
+                    EnvironmentData::create_editor(
+                        envirnment_data_value.lower_option(),
+                        &AssetCache::new(),
+                    ),
                 )
                 .start_collapsed(true)
                 .indent(true),

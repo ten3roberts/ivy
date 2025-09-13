@@ -236,12 +236,12 @@ fn expand_enum(
     let variant_editors = variant_editors(false)?;
 
     let value_editor = quote! {
-        #crate_name::__private::futures::StreamExt::map(discriminant.stream(), move |disc| {
+        #crate_name::__private::futures::StreamExt::map(discriminant.stream(), {let assets = assets.clone(); move |disc| {
             match disc {
                 #(#variant_editors,)*
                 _ => unreachable!()
             }
-        })
+        }})
     };
 
     let expanded = quote! {
@@ -250,6 +250,7 @@ fn expand_enum(
 
             fn create_editor<S: 'static + Send + Sync + #violet::state::StateDuplex<Item = Self>>(
                 state: S,
+                assets: &#crate_name::AssetCache,
             ) -> Box<dyn Send + #violet::widget::Widget> {
                 use #violet::{StateExt, StateStream, Widget, style::SizeExt};
                 let state = ::std::sync::Arc::new(state);
@@ -263,8 +264,9 @@ fn expand_enum(
 
             fn create_editor_project<S: 'static + Send + Sync + Clone + #violet::state::StateStreamRef<Item = Self> + #violet::state::StateWrite<Item = Self>>(
                 state: S,
+                assets: &#crate_name::AssetCache,
             ) -> Box<dyn Send + #violet::widget::Widget> {
-                <Self as #crate_name::Editable>::create_editor(#violet::state::StateExt::project_ref(state, |v| v, |v| v))
+                <Self as #crate_name::Editable>::create_editor(#violet::state::StateExt::project_ref(state, |v| v, |v| v), assets)
             }
         }
 
@@ -308,7 +310,7 @@ fn expand_field_editors(
                 format_ident!("create_editor_opts")
             };
             quote! {
-                <#ty as #crate_name::EditableWithOpts>::#method(#ident, #opts)
+                <#ty as #crate_name::EditableWithOpts>::#method(#ident, #opts, assets)
             }   
         } else {
             let method = if project {
@@ -317,22 +319,26 @@ fn expand_field_editors(
                 format_ident!("create_editor")
             };
             quote! {
-                <#ty as #crate_name::Editable>::#method(#ident)
+                <#ty as #crate_name::Editable>::#method(#ident, assets)
             }
         };
 
         quote! {
-            |scope: &mut #violet::Scope<'_>| {
-                if <#ty as #crate_name::Editable>::INLINE {
-                    #violet::widget::row((
-                            #violet::widget::Stack::new(#label).with_maximize(#crate_name::__private::violet::glam::Vec2::X),
+            {
+                let assets = assets.clone();
+                move |scope: &mut #violet::Scope<'_>| {
+                    let assets = &assets;
+                    if <#ty as #crate_name::Editable>::INLINE {
+                        #violet::widget::row((
+                                #violet::widget::Stack::new(#label).with_maximize(#crate_name::__private::violet::glam::Vec2::X),
+                                #editor
+                        )).with_cross_align(#violet::layout::Align::Center).mount(scope);
+                    } else {
+                        #violet::widget::Collapsible::new(
+                            #label,
                             #editor
-                    )).with_cross_align(#violet::layout::Align::Center).mount(scope);
-                } else {
-                    #violet::widget::Collapsible::new(
-                        #label,
-                        #editor
-                    ).indent(true).mount(scope);
+                        ).indent(true).mount(scope);
+                    }
                 }
             }
         }
@@ -360,7 +366,7 @@ fn expand_field_editors_indexed(
                     format_ident!("create_editor_opts")
                 };
                 quote! {
-                    <#ty as #crate_name::EditableWithOpts>::#method(#named_ident, #opts)
+                    <#ty as #crate_name::EditableWithOpts>::#method(#named_ident, #opts, assets)
                 }   
             } else {
                 let method = if project {
@@ -369,21 +375,25 @@ fn expand_field_editors_indexed(
                     format_ident!("create_editor")
                 };
                 quote! {
-                    <#ty as #crate_name::Editable>::#method(#named_ident)
+                    <#ty as #crate_name::Editable>::#method(#named_ident, assets)
                 }
             };
 
             quote! {
-                |scope: &mut #violet::Scope<'_>| {
-                    if <#ty as #crate_name::Editable>::INLINE {
-                        #violet::widget::row((
+                {
+                    let assets = assets.clone();
+                    move |scope: &mut #violet::Scope<'_>| {
+                        let assets = &assets;
+                        if <#ty as #crate_name::Editable>::INLINE {
+                            #violet::widget::row((
+                                    #editor
+                            )).with_cross_align(#violet::layout::Align::Center).mount(scope);
+                        } else {
+                            #violet::widget::Collapsible::new(
+                                #violet::widget::label(""),
                                 #editor
-                        )).with_cross_align(#violet::layout::Align::Center).mount(scope);
-                    } else {
-                        #violet::widget::Collapsible::new(
-                            #violet::widget::label(""),
-                            #editor
-                        ).indent(true).mount(scope);
+                            ).indent(true).mount(scope);
+                        }
                     }
                 }
             }
@@ -459,6 +469,7 @@ fn expand_struct(
 
             fn create_editor<S: 'static + Send + Sync + #violet::state::StateDuplex<Item = Self>>(
                 value: S,
+                assets: &#crate_name::AssetCache,
             ) -> Box<dyn Send + #violet::widget::Widget> {
                 use #violet::{StateExt, StateStream, Widget, style::SizeExt};
                 let state = ::std::sync::Arc::new(#field_default);
@@ -467,6 +478,7 @@ fn expand_struct(
 
                 #(#field_lower)*
 
+                let assets = assets.clone();
                 Box::new(
                     #violet::widget::col( (#(#field_edit),*))
                 )
@@ -474,8 +486,10 @@ fn expand_struct(
 
             fn create_editor_project<S: 'static + Send + Sync + Clone + #violet::state::StateStreamRef<Item = Self> + #violet::state::StateWrite<Item = Self>>(
                 state: S,
+                assets: &#crate_name::AssetCache,
             ) -> Box<dyn Send + #violet::widget::Widget> {
                 use #violet::{StateExt, StateStream, Widget, style::SizeExt};
+                let assets = assets.clone();
                 #(#field_project)*
 
                 Box::new(

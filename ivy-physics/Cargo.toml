@@ -30,7 +30,7 @@ itertools.workspace = true
 nalgebra.workspace = true
 rapier3d.workspace = true
 rayon = "1.5.2"
-serde = { workspace = true, optional = true }
+serde = { workspace = true }
 slotmap.workspace = true
 smallvec = "1.8.0"
 thiserror.workspace = true
@@ -38,4 +38,3 @@ tracing.workspace = true
 
 [features]
 default = []
-serde = ["dep:serde", "glam/serde", "rapier3d/serde-serialize"]

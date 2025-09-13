@@ -10,7 +10,7 @@ ivy-editable = { path = "../ivy-editable" }
 ivy-assets = { path = "../ivy-assets" }
 ivy-profiling = { path = "../ivy-profiling" }
 
-serde = { workspace = true, optional = true }
+serde = { workspace = true }
 
 either.workspace = true
 anyhow.workspace = true
