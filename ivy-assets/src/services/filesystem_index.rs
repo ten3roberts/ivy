@@ -75,28 +75,29 @@ fn index_dir<'a>(
             if path.is_dir().await {
                 index_dir(root, assets, result.clone(), &(path.into())).await;
             } else if path.is_file().await {
-                let arc_path: Arc<PathBuf> = Arc::new((&path).into());
+                let asset_path: Arc<PathBuf> = Arc::new((strip_root(root, &(&path).into())).into());
                 if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
                     {
                         let mut result_ref = result.lock();
-                        result_ref.assets.push(arc_path.clone());
+                        result_ref.assets.push(asset_path.clone());
                         result_ref
                             .by_extension
                             .entry(ext.to_lowercase())
                             .or_default()
-                            .push(arc_path.clone());
+                            .push(asset_path.clone());
                     }
 
                     if ext == "asset" {
                         spawned_tasks.push(async_std::task::spawn(index_asset_meta(
                             root.clone(),
                             assets.clone(),
-                            arc_path,
+                            path.into(),
+                            asset_path,
                             result.clone(),
                         )));
                     }
                 } else {
-                    result.lock().assets.push(arc_path);
+                    result.lock().assets.push(asset_path);
                 }
             }
         }
@@ -112,7 +113,8 @@ fn index_dir<'a>(
 async fn index_asset_meta(
     root: PathBuf,
     assets: AssetCache,
-    path: Arc<PathBuf>,
+    path: PathBuf,
+    asset_path: Arc<PathBuf>,
     result: Arc<Mutex<FileSystemIndex>>,
 ) {
     let meta =
@@ -126,12 +128,16 @@ async fn index_asset_meta(
                 .by_type
                 .entry(meta.type_name)
                 .or_default()
-                .push(path);
+                .push(asset_path);
         }
         Err(e) => {
             tracing::error!("Failed to index meta for asset: {path:?}\n\n{e:?}");
         }
     }
+}
+
+fn strip_root(root: &PathBuf, path: &PathBuf) -> PathBuf {
+    path.strip_prefix(root).unwrap_or(path).to_path_buf()
 }
 
 #[derive(Default)]

@@ -1,6 +1,9 @@
 use std::time::Duration;
 
-use async_std::stream::StreamExt;
+use async_std::{
+    path::{Path, PathBuf},
+    stream::StreamExt,
+};
 use glam::BVec2;
 use ivy_assets::{
     AssetCache, AssetPath,
@@ -31,12 +34,13 @@ use ivy_ui::{
 
 pub struct AssetEditor {
     assets: AssetCache,
-    path: AssetPath<AssetPayloadUntyped>,
+    path: PathBuf,
+    root: PathBuf,
 }
 
 impl AssetEditor {
-    pub fn new(assets: AssetCache, path: AssetPath<AssetPayloadUntyped>) -> Self {
-        Self { assets, path }
+    pub fn new(assets: AssetCache, root: PathBuf, path: PathBuf) -> Self {
+        Self { assets, path, root }
     }
 }
 
@@ -64,7 +68,10 @@ impl Widget for AssetEditor {
         let editor = {
             to_owned!(assets = self.assets);
             async move {
-                let payload = self.path.load(&assets).await?;
+                let asset_path: AssetPath<AssetPayloadUntyped> =
+                    AssetPath::from_root(&self.root, &self.path);
+
+                let payload = asset_path.load(&assets).await?;
                 anyhow::Ok((self.path, payload))
             }
         };
@@ -88,7 +95,6 @@ impl Widget for AssetEditor {
                     let editor = editor.map(|v| v.create_editor(Box::new(stream), &assets));
 
                     let type_name = payload.meta.type_name.clone();
-                    let toasts = scope.get_atom(toasts()).unwrap().clone();
 
                     let save_status = value
                         .signal_ref(move |v| AssetPayloadUntyped {
@@ -99,14 +105,14 @@ impl Widget for AssetEditor {
                         .to_stream()
                         .skip(1)
                         .map(move |payload| {
-                            to_owned!(path, toasts);
+                            to_owned!(path);
                             SuspenseWidget::new(Throbber::new(12.0), async move {
-                                to_owned!(path, toasts);
+                                to_owned!(path);
                                 let result = async move {
                                     let payload = payload.serialize_json()?;
-                                    async_std::fs::write(path.path(), payload).await?;
+
+                                    async_std::fs::write(path, payload).await?;
                                     sleep(Duration::from_millis(500)).await;
-                                    toasts.send(Toast::info("Asset", "Saved asset"));
                                     anyhow::Ok(())
                                 }
                                 .await;

@@ -20,7 +20,7 @@ fn editable_derive_struct() {
         value: 42,
     });
 
-    let _editor = Editable::create_editor(s.clone());
+    let _editor = Editable::create_editor(s.clone(), &Default::default());
 }
 
 #[test]
@@ -30,5 +30,5 @@ fn editable_derive_enum() {
         value: 42,
     });
 
-    let _editor = Editable::create_editor(s.clone());
+    let _editor = Editable::create_editor(s.clone(), &Default::default());
 }

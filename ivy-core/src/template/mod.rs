@@ -22,6 +22,7 @@ use violet::{
         state::{StateExt, StateSink, StateStream, StateStreamRef, StateWrite},
         style::{element_warning, surface_tertiary, SizeExt, StyleExt},
         to_owned,
+        unit::Unit,
         widget::{
             bold, card, col,
             interactive::{dropdown::Dropdown, select_list::SelectList},
@@ -338,6 +339,7 @@ impl Editable for TemplateDesc {
                         .map(move |v| v.unwrap_or_else(|| Box::new(add_new()))),
                 ),
             ))
+            .with_min_size(Unit::px2(400.0, 300.0))
             .with_cross_align(Align::Center)
             .with_stretch(true),
         )
@@ -435,25 +437,13 @@ impl Widget for BundleCreationWidget {
             selection_widget,
             raised_card(StreamWidget::new(value_editor)),
         ))
+        .with_min_size(Unit::px2(400.0, 300.0))
         .with_stretch(true)
         .mount(scope);
     }
 }
 
 declare_resource!(Template, TemplateDesc);
-
-// impl Loadable for TemplateDesc {
-//     type Output = Template;
-
-//     async fn load(&self, assets: &AssetCache) -> Result<Self::Output, anyhow::Error> {
-//         let mut bundles = Vec::new();
-//         for bundle in &self.bundles {
-//             let loaded_bundle = bundle.bundle.load_as_bundle(assets).await?;
-//             bundles.push(loaded_bundle);
-//         }
-//         Ok(Template { bundles })
-//     }
-// }
 
 impl LoadablePayload for TemplateDesc {
     type Output = Template;

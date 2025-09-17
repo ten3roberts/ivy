@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, fmt::Display, marker::Sized, sync::Arc};
+use std::{collections::BTreeMap, fmt::Display, future::ready, marker::Sized, sync::Arc};
 
 use flax::{Entity, component::ComponentValue};
 use futures::{StreamExt, stream::BoxStream};
@@ -6,18 +6,22 @@ use glam::{Quat, Vec2, Vec3};
 use itertools::Itertools;
 use violet::{
     core::{
-        Widget,
+        Scope, Widget,
         layout::Align,
         state::{
-            Project, State, StateDuplex, StateExt, StateProjected, StateStream, StateStreamRef,
-            StateWrite,
+            Project, State, StateDuplex, StateExt, StateProjected, StateSink, StateStream,
+            StateStreamRef, StateWrite,
         },
-        style::{StyleExt, element_disabled, element_primary},
+        style::{SizeExt, StyleExt, element_disabled, element_primary, surface_tertiary},
         to_owned,
-        widget::{Button, ButtonStyle, SignalWidget, StreamWidget, col, label, row},
+        widget::{
+            Button, ButtonStyle, Collapsible, Rectangle, SignalWidget, StreamWidget, bold, card,
+            col, label, row,
+        },
     },
     futures_signals::signal::{Mutable, SignalExt},
     lucide::icons::{LUCIDE_CHECK, LUCIDE_PLUS, LUCIDE_TRASH_2, LUCIDE_X},
+    palette::Srgba,
 };
 
 mod impls;
@@ -377,125 +381,159 @@ impl<K: Ord + Eq + Editable + Clone + Display, V: Editable + Clone> Editable for
         state.sync_initial();
         to_owned!(assets);
 
-        let values = state.stream().map({
+        let editors = {
             to_owned!(assets, state);
-            move |values| {
-                let state = state.clone();
-                let values = values
-                    .iter()
-                    .map(|(k, _)| {
-                        let k_display = k.to_string();
-                        let k = k.to_owned();
-                        let element = state.clone().transform(
-                            {
-                                to_owned!(k);
-                                move |v| v[&k].clone()
-                            },
-                            {
-                                to_owned!(k);
-                                move |v, new_value| *v.get_mut(&k).unwrap() = new_value
-                            },
-                        );
+            move |scope: &mut Scope| {
+                let mut prev_len = usize::MAX;
+                let deduped = state.stream().filter(move |item| {
+                    let len = item.len();
+                    let result = if len == prev_len {
+                        false
+                    } else {
+                        prev_len = len;
+                        true
+                    };
 
-                        let state = state.clone();
-                        row((
-                            label(k_display),
-                            V::create_editor(element, &assets),
-                            Button::label(LUCIDE_TRASH_2)
+                    ready(result)
+                });
+
+                scope.spawn_stream(deduped, {
+                    to_owned!(assets);
+                    move |scope, values| {
+                        scope.detach_all();
+
+                        values.iter().for_each(|(key, value)| {
+                            let element = state.clone().transform(
+                                {
+                                    to_owned!(key);
+                                    move |v| v[&key].clone()
+                                },
+                                {
+                                    to_owned!(key);
+                                    move |v, new_value| *v.get_mut(&key).unwrap() = new_value
+                                },
+                            );
+
+                            let item_state = Mutable::new(value.clone());
+
+                            scope.spawn(item_state.signal_cloned().for_each(move |new_value| {
+                                element.send(new_value);
+                                async {}
+                            }));
+
+                            to_owned!(state);
+                            let discard = Button::label(LUCIDE_TRASH_2)
                                 .with_style(ButtonStyle::hidden())
-                                .with_tooltip_text("Remove item")
-                                .on_click(move |_| {
-                                    state.write_mut(|v| v.remove(&k));
-                                }),
-                        ))
-                        .with_cross_align(Align::Center)
-                    })
-                    .collect_vec();
+                                .with_tooltip_text("Remove Bundle")
+                                .on_click({
+                                    to_owned!(key);
+                                    move |_| {
+                                        state.write_mut(|v| v.remove(&key));
+                                    }
+                                });
 
-                col(values)
+                            let k_display = key.to_string();
+                            let k = key.to_owned();
+                            scope.attach(
+                                card(Collapsible::new(
+                                    row((bold(k_display), discard)).with_cross_align(Align::Center),
+                                    V::create_editor(item_state, &assets),
+                                ))
+                                .with_background(surface_tertiary()),
+                            );
+                        });
+
+                        col(()).with_stretch(true).mount(scope);
+                    }
+                });
             }
-        });
+        };
 
         let (add_widget_tx, add_widget_rx) = flume::unbounded::<Option<Box<dyn Send + Widget>>>();
         let _ = add_widget_tx.send(None);
 
-        let new_entry = add_widget_rx.into_stream().map(move |v| {
-            to_owned!(assets, state, add_widget_tx);
-            v.unwrap_or_else(move || {
-                to_owned!(state, assets);
-                let new_button = Button::label(LUCIDE_PLUS)
-                    .with_style(ButtonStyle::hidden())
-                    .with_tooltip_text("Add new item")
-                    .on_click({
-                        to_owned!(state);
-                        move |_| {
+        let new_entry = add_widget_rx.into_stream().map({
+            to_owned!(state);
+            move |v| {
+                to_owned!(assets, state, add_widget_tx);
+                v.unwrap_or_else(move || {
+                    to_owned!(state, assets);
+                    let new_button = Button::label(LUCIDE_PLUS)
+                        .with_style(ButtonStyle::hidden())
+                        .with_tooltip_text("Add new item")
+                        .on_click({
                             to_owned!(state);
-                            let new_entry = Mutable::new((None, None) as (Option<K>, Option<V>));
-                            let new_key = new_entry
-                                .clone()
-                                .project_ref(|v| &v.0, |v| &mut v.0)
-                                .lower_option();
+                            move |_| {
+                                to_owned!(state);
+                                let new_entry =
+                                    Mutable::new((None, None) as (Option<K>, Option<V>));
+                                let new_key = new_entry
+                                    .clone()
+                                    .project_ref(|v| &v.0, |v| &mut v.0)
+                                    .lower_option();
 
-                            let new_value = new_entry
-                                .clone()
-                                .project_ref(|v| &v.1, |v| &mut v.1)
-                                .lower_option();
+                                let new_value = new_entry
+                                    .clone()
+                                    .project_ref(|v| &v.1, |v| &mut v.1)
+                                    .lower_option();
 
-                            let key_editor = K::create_editor(new_key, &assets);
-                            let value_editor = V::create_editor(new_value, &assets);
-                            to_owned!(add_widget_tx, state);
-                            let confirm = new_entry
-                                .signal_ref(|(k, v)| (k.is_some() && v.is_some()))
-                                .map({
-                                    to_owned!(add_widget_tx);
-                                    move |valid| {
-                                        to_owned!(new_entry, add_widget_tx, state);
-                                        Button::new(label(LUCIDE_CHECK).with_color(if valid {
-                                            element_primary()
-                                        } else {
-                                            element_disabled()
-                                        }))
-                                        .with_style(ButtonStyle::hidden())
-                                        .on_click({
-                                            to_owned!(add_widget_tx);
-                                            move |_| {
-                                                if let (Some(new_key), Some(new_value)) =
-                                                    new_entry.lock_ref().clone()
-                                                {
-                                                    let _ = add_widget_tx.send(None);
-                                                    state.write_mut(|v| {
-                                                        v.insert(new_key, new_value)
-                                                    });
+                                let key_editor = K::create_editor(new_key, &assets);
+                                let value_editor = V::create_editor(new_value, &assets);
+                                to_owned!(add_widget_tx, state);
+                                let confirm = new_entry
+                                    .signal_ref(|(k, v)| (k.is_some() && v.is_some()))
+                                    .map({
+                                        to_owned!(add_widget_tx);
+                                        move |valid| {
+                                            to_owned!(new_entry, add_widget_tx, state);
+                                            Button::new(label(LUCIDE_CHECK).with_color(if valid {
+                                                element_primary()
+                                            } else {
+                                                element_disabled()
+                                            }))
+                                            .with_style(ButtonStyle::hidden())
+                                            .on_click({
+                                                to_owned!(add_widget_tx);
+                                                move |_| {
+                                                    if let (Some(new_key), Some(new_value)) =
+                                                        new_entry.lock_ref().clone()
+                                                    {
+                                                        let _ = add_widget_tx.send(None);
+                                                        state.write_mut(|v| {
+                                                            v.insert(new_key, new_value)
+                                                        });
+                                                    }
                                                 }
-                                            }
-                                        })
-                                    }
-                                });
+                                            })
+                                        }
+                                    });
 
-                            let abort = Button::label(LUCIDE_X)
-                                .with_style(ButtonStyle::hidden())
-                                .with_tooltip_text("Cancel")
-                                .on_click({
-                                    to_owned!(add_widget_tx);
-                                    move |_| {
-                                        let _ = add_widget_tx.send(None);
-                                    }
-                                });
+                                let abort = Button::label(LUCIDE_X)
+                                    .with_style(ButtonStyle::hidden())
+                                    .with_tooltip_text("Cancel")
+                                    .on_click({
+                                        to_owned!(add_widget_tx);
+                                        move |_| {
+                                            let _ = add_widget_tx.send(None);
+                                        }
+                                    });
 
-                            let editor =
-                                row((key_editor, value_editor, abort, SignalWidget::new(confirm)));
+                                let editor = row((
+                                    key_editor,
+                                    value_editor,
+                                    abort,
+                                    SignalWidget::new(confirm),
+                                ));
 
-                            let _ = add_widget_tx.send(Some(Box::new(editor)));
-                        }
-                    });
+                                let _ = add_widget_tx.send(Some(Box::new(editor)));
+                            }
+                        });
 
-                Box::new(new_button)
-            })
+                    Box::new(new_button)
+                })
+            }
         });
-        Box::new(col((
-            StreamWidget::new(values),
-            StreamWidget::new(new_entry),
-        )))
+        Box::new(col((editors, StreamWidget::new(new_entry))))
     }
 
     fn create_editor_project<S: 'static + Send + Sync + Clone + StateProjected<Item = Self>>(

@@ -14,10 +14,7 @@ use ivy_assets::{
     meta::{AssetMeta, AssetPayload, AssetPayloadUntyped},
 };
 use ivy_core::{
-    AsyncCommandBuffer, EntityBuilderExt,
-    components::{TransformBundle, async_commandbuffer, engine, main_camera},
-    palette::Srgba,
-    template::Template,
+    components::{async_commandbuffer, engine, main_camera, TransformBundle}, palette::Srgba, template::{Template, TemplateDesc}, AsyncCommandBuffer, EntityBuilderExt
 };
 use ivy_input::types::MouseButton;
 use ivy_physics::{components::physics_state, rapier3d::prelude::QueryFilter};
@@ -335,7 +332,15 @@ pub fn populate_menu(
         ContextMenuItem::new(
             FileType::Asset(AssetType::Template).label(),
             "New Template",
-            |_| Ok(()),
+            {
+                to_owned!(dir);
+                move |scope| {
+                    let new_path =
+                        create_asset::<Template>(&dir, "Template.asset", TemplateDesc::default())?;
+                    scope.read(selected_item).set(Some(new_path));
+                    Ok(())
+                }
+            }
         ),
         ContextMenuItem::new(
             FileType::Asset(AssetType::Material).label(),
@@ -1020,8 +1025,7 @@ impl Widget for FilePreview<'_> {
                         .with_exact_size(Unit::px2(200.0, 200.0))
                         .mount(scope);
                 } else if ty.is_asset() {
-                    // tracing::info!("Inspecting asset: {}", path.display());
-                    AssetEditor::new(assets.clone(), AssetPath::from_root(root, path)).mount(scope)
+                    AssetEditor::new(assets.clone(), root.into(), path.into()).mount(scope)
                 } else if ty.is_text() {
                     let async_load = async {
                         sleep(Duration::from_millis(500)).await;

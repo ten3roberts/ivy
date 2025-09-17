@@ -53,8 +53,6 @@ declare_resource!(RenderEffect, RenderEffectDesc);
 #[derive(Debug, Clone, Editable, serde::Serialize, serde::Deserialize)]
 pub struct PbrRenderEffectDesc {
     label: String,
-    #[serde(default = "TextureDesc::white")]
-    #[editable(default = TextureDesc::white())]
     albedo: TextureDesc,
     #[serde(default = "TextureDesc::default_normal")]
     #[editable(default = TextureDesc::default_normal())]

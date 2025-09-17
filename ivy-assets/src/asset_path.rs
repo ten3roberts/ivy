@@ -26,12 +26,6 @@ pub struct AssetPath<T> {
     _marker: PhantomData<T>,
 }
 
-// impl<T, P: Into<PathBuf>> From<P> for AssetPath<T> {
-//     fn from(value: P) -> Self {
-//         Self::new(value)
-//     }
-// }
-
 impl<T> AssetPath<T> {
     /// Construct a new asset path identifier from a path and a given asset root.
     pub fn from_root(root: impl AsRef<Path>, path: impl AsRef<Path>) -> Self {

@@ -21,8 +21,8 @@
             }
           },
           "restitution": 1.0,
-          "friction": 0.586802,
-          "density": 322.15356
+          "friction": 0.22580957,
+          "density": 69.1781
         }
       },
       {

@@ -171,7 +171,8 @@ fn get_rendering_settings() -> PbrRenderGraphConfig {
             bloom: Some(Default::default()),
             skybox: Some(SkyboxConfig {
                 hdri: Box::new(AssetPath::new(
-                    "hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
+                    // "hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
+                    "hdris/lauter_waterfall_4k.hdr",
                 )),
                 format: TextureFormat::Rgba16Float,
             }),
