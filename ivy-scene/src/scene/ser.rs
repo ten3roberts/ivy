@@ -2,12 +2,15 @@ use std::io::Read;
 
 use anyhow::Context;
 use flax::{
-    fetch::entity_refs, serialize::SerializationContext, Entity, EntityBuilder, EntityRef, Query,
-    World,
+    entity_ids, fetch::entity_refs, serialize::SerializationContext, Entity, EntityBuilder,
+    EntityRef, FetchExt, Query, World,
 };
 use futures::{stream, StreamExt, TryStreamExt};
 use ivy_assets::{loadable::Loadable, Asset, AssetCache, AssetPath, AsyncAssetExt};
-use ivy_core::template::{template_path, Template};
+use ivy_core::{
+    components::position,
+    template::{template_path, Template},
+};
 use serde::{
     de::{self, DeserializeSeed, Visitor},
     ser::{self, SerializeMap, SerializeSeq},
@@ -72,6 +75,13 @@ impl SceneSerializer {
         let value = SceneDeserializer { ctx: self }.deserialize(&mut deserializer)?;
 
         let scene = value.build(assets).await?;
+
+        tracing::info!(
+            "Loaded scene\n{:#?}",
+            Query::new((entity_ids(), template_path().cloned(), position().copied()))
+                .collect_vec(&scene.world)
+        );
+
         Ok(scene)
     }
 }

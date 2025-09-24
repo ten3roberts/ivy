@@ -475,7 +475,7 @@ impl Binding for CursorMoveBinding {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct CursorPositionBinding {
     value: Vec2,
     normalized: bool,
@@ -512,7 +512,7 @@ impl Binding for CursorPositionBinding {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct ScrollBinding {
     value: Vec2,
 }
@@ -547,7 +547,7 @@ impl Binding for ScrollBinding {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct ScrollSteppedBinding {
     value: Vec2,
 }

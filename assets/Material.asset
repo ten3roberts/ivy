@@ -8,20 +8,10 @@
         "Pbr": {
           "label": "unknown_material",
           "albedo": {
-            "Color": {
-              "red": 255,
-              "green": 255,
-              "blue": 255,
-              "alpha": 255
-            }
+            "Path": "textures/Metal008_1K-PNG/Metal008_1K-PNG_Color.png"
           },
           "normal": {
-            "Color": {
-              "red": 127,
-              "green": 127,
-              "blue": 255,
-              "alpha": 255
-            }
+            "Path": "textures/Metal008_1K-PNG/Metal008_1K-PNG_NormalGL.png"
           },
           "metallic_roughness": {
             "Color": {
@@ -47,7 +37,7 @@
               "alpha": 255
             }
           },
-          "roughness_factor": 0.051654056,
+          "roughness_factor": 0.22936821,
           "metallic_factor": 1.0
         }
       },

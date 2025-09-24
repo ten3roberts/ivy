@@ -38,7 +38,6 @@ flax::component! {
     pub engine,
 }
 
-#[cfg(feature = "serde")]
 flax::register_serializable! {
     position,
     rotation,
@@ -97,7 +96,6 @@ impl Default for TransformQuery {
     }
 }
 
-#[cfg(feature = "serde")]
 fn one_scale() -> Vec3 {
     Vec3::ONE
 }
@@ -106,13 +104,13 @@ fn one_scale() -> Vec3 {
 #[resource(derive = [Default, Editable])]
 pub struct TransformBundle {
     #[resource_attr(editable(default))]
-    #[cfg_attr(feature = "serde", resource_attr(serde(default)))]
+    #[resource_attr(serde(default))]
     pub position: Vec3,
     #[resource_attr(editable(default))]
-    #[cfg_attr(feature = "serde", resource_attr(serde(default)))]
+    #[resource_attr(serde(default))]
     pub rotation: Quat,
     #[resource_attr(editable(default = Vec3::ONE))]
-    #[cfg_attr(feature = "serde", resource_attr(serde(default = "one_scale")))]
+    #[resource_attr(serde(default = "one_scale"))]
     pub scale: Vec3,
 }
 
