@@ -276,12 +276,13 @@ impl Screen for FlyCameraScreen {
                 subtitle("Camera"),
                 row((
                     label("Speed"),
-                    LabeledSlider::input(camera_speed_value.lower_option(), 0.1, 1000.0)
-                        .precision(0),
+                    LabeledSlider::input(camera_speed_value.clone().lower_option(), 0.1, 100.0)
+                        .logarithmic()
+                        .precision(2),
                 )),
                 row((
                     label("Fov"),
-                    LabeledSlider::input(fov, 10.0, 120.0).precision(0),
+                    LabeledSlider::input(fov, 0.0, 120.0).precision(0),
                 )),
                 Collapsible::label(
                     "Environment",

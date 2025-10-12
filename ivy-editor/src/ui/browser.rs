@@ -25,37 +25,18 @@ use ivy_scene::{
 };
 use ivy_ui::{
     streamed::StreamedUiExt,
-    toast::{Toast, toasts},
+    toast::{toasts, Toast},
     violet::{
         core::{
-            Edges, Scope, ScopeRef, StateExt, StateStreamRef, Widget,
-            components::{LayoutAlignment, rect},
-            layout::Align,
-            state::StateStream,
-            stored::WeakHandle,
-            style::{
-                SizeExt, StyleExt, base_colors::*, default_corner_radius, surface_danger,
-                surface_primary, surface_secondary,
-            },
-            text::{FontFamily, Wrap},
-            time::sleep,
-            to_owned,
-            unit::Unit,
-            widget::{
-                Button, ButtonStyle, Checkbox, Collapsible, Draggable, FutureWidget, Image,
-                IterWidgetCollection, LoadingSpinner, Rectangle, ScrollArea, Selectable,
-                SignalWidget, Stack, StreamWidget, SuspenseWidget, Text, TextInput, TextInputStyle,
-                Throbber, WidgetExt, card, col,
-                interactive::{base::InteractiveWidget, overlay::overlay_state, tooltip::Tooltip},
-                label, panel, pill, raised_card, row, subtitle,
-            },
+            components::{rect, LayoutAlignment}, layout::Align, state::StateStream, stored::WeakHandle, style::{
+                base_colors::*, default_corner_radius, surface_danger, surface_primary, surface_secondary, SizeExt, StyleExt
+            }, text::{FontFamily, Wrap}, time::sleep, to_owned, unit::Unit, widget::{
+                card, col, interactive::{base::InteractiveWidget, overlay::overlay_state, tooltip::Tooltip}, label, panel, pill, raised_card, row, subtitle, Button, ButtonStyle, Checkbox, Collapsible, Draggable, EmptyWidget, FutureWidget, Image, IterWidgetCollection, List, LoadingSpinner, Rectangle, ScrollArea, Selectable, SignalWidget, Stack, StreamWidget, SuspenseWidget, Text, TextInput, TextInputStyle, Throbber, WidgetExt
+            }, Edges, Scope, ScopeRef, StateExt, StateStreamRef, Widget, WidgetCollection
         },
         futures_signals::signal::Mutable,
         lucide::icons::{
-            LUCIDE_BOX, LUCIDE_CLOUD_SUN, LUCIDE_COPY_PLUS, LUCIDE_ECLIPSE, LUCIDE_FILE_ARCHIVE,
-            LUCIDE_FILE_BOX, LUCIDE_FILE_CODE, LUCIDE_FILE_IMAGE, LUCIDE_FILE_JSON,
-            LUCIDE_FILE_QUESTION, LUCIDE_FILE_TEXT, LUCIDE_FILE_WARNING, LUCIDE_FOLDER,
-            LUCIDE_FOLDER_OPEN, LUCIDE_PACKAGE, LUCIDE_PIN, LUCIDE_SATELLITE, LUCIDE_TRASH_2,
+            LUCIDE_BOX, LUCIDE_CLOUD_SUN, LUCIDE_COPY_PLUS, LUCIDE_ECLIPSE, LUCIDE_FILE_ARCHIVE, LUCIDE_FILE_BOX, LUCIDE_FILE_CODE, LUCIDE_FILE_IMAGE, LUCIDE_FILE_JSON, LUCIDE_FILE_QUESTION, LUCIDE_FILE_TEXT, LUCIDE_FILE_WARNING, LUCIDE_FOLDER, LUCIDE_FOLDER_OPEN, LUCIDE_LOCK, LUCIDE_PACKAGE, LUCIDE_SATELLITE, LUCIDE_SATELLITE_DISH, LUCIDE_TRASH_2
         },
     },
 };
@@ -102,7 +83,7 @@ impl Widget for DirectoryTree {
                     None
                 }
             })
-            .collect_vec();
+        .collect_vec();
 
         let subdir_count = subdirs.len();
         let subdirs = col(subdirs)
@@ -116,15 +97,15 @@ impl Widget for DirectoryTree {
 
         let header =
             Selectable::new_value(row((label(icon), label(name))), selection, path.clone())
-                .with_style(ButtonStyle::hidden().with_align(LayoutAlignment::left_center()))
-                .with_maximize(Vec2::X);
+            .with_style(ButtonStyle::hidden().with_align(LayoutAlignment::left_center()))
+            .with_maximize(Vec2::X);
 
         Collapsible::deferred(header, || subdirs)
             .can_collapse(subdir_count > 0)
             .start_collapsed(self.expand_depth == 0)
             .with_name(path.display().to_string())
             .mount(scope);
-    }
+        }
 }
 
 pub struct DirectoryListing {
@@ -153,7 +134,7 @@ impl Widget for DirectoryListing {
                         assets: assets.clone(),
                     }
                 })
-                .sorted_by_key(|item| (!item.is_dir, item.name.clone()));
+            .sorted_by_key(|item| (!item.is_dir, item.name.clone()));
 
             let lines = items.chunks(8);
             lines
@@ -179,25 +160,25 @@ impl Widget for DirectoryListing {
 
         InteractiveWidget::new(
             col((
-                Breadcrumbs {
-                    path: &self.path,
-                    selection: self.state.active_dir.clone(),
-                },
-                ScrollArea::vertical(StreamWidget::new(
-                    refresh_state.stream().map(move |()| col(read_dir())),
-                )),
+                    Breadcrumbs {
+                        path: &self.path,
+                        selection: self.state.active_dir.clone(),
+                    },
+                    ScrollArea::vertical(StreamWidget::new(
+                            refresh_state.stream().map(move |()| col(read_dir())),
+                    )),
             ))
             .with_stretch(true),
         )
-        .on_generic_mouse_input(move |scope, input| {
-            if input.state.is_pressed() && input.button == MouseButton::Right {
-                let pos = input.cursor.absolute_pos;
-                open_context_menu(scope, pos);
-                return None;
-            }
+            .on_generic_mouse_input(move |scope, input| {
+                if input.state.is_pressed() && input.button == MouseButton::Right {
+                    let pos = input.cursor.absolute_pos;
+                    open_context_menu(scope, pos);
+                    return None;
+                }
 
-            Some(input)
-        })
+                Some(input)
+            })
         .mount(scope)
     }
 }
@@ -289,7 +270,7 @@ pub fn populate_item_menu(
                 Ok(())
             }
         }),
-    ])
+        ])
 }
 
 pub fn create_asset<T>(
@@ -307,8 +288,8 @@ where
         AssetPayload::new(AssetMeta::new(T::tag_name().into()), content).serialize_json()?;
 
     std::fs::write(&new_path, content).context(format!(
-        "Failed to create asset file at {}",
-        new_path.display()
+            "Failed to create asset file at {}",
+            new_path.display()
     ))?;
     Ok(new_path)
 }
@@ -361,14 +342,14 @@ pub fn populate_menu(
                 tracing::info!("Creating new asset folder");
                 let new_path = find_next_filename("Assets", &dir);
                 std::fs::create_dir(&new_path).context(format!(
-                    "Failed to create directory at {}",
-                    new_path.display()
+                        "Failed to create directory at {}",
+                        new_path.display()
                 ))?;
                 scope.read(selected_item).set(Some(new_path));
                 Ok(())
             }
         }),
-    ])
+        ])
 }
 
 pub const ITEM_SIZE: Unit<Vec2> = Unit::px2(120.0, 100.0);
@@ -467,19 +448,19 @@ impl Widget for FileItem {
                                                 hit,
                                                 async_cmd,
                                             )
-                                            .await;
+                                                .await;
 
                                             match fut {
                                                 Ok(_) => {
                                                     toasts.send(Toast::info(
-                                                        "Editor",
-                                                        format!("Spawned template {asset_path:?}"),
+                                                            "Editor",
+                                                            format!("Spawned template {asset_path:?}"),
                                                     ));
                                                 }
                                                 Err(e) => {
                                                     toasts.send(Toast::error(
-                                                        "Editor",
-                                                        format!("Failed to spawn template {asset_path:?}\n{e}"),
+                                                            "Editor",
+                                                            format!("Failed to spawn template {asset_path:?}\n{e}"),
                                                     ));
                                                 }
                                             }
@@ -498,14 +479,14 @@ impl Widget for FileItem {
                 Draggable::new(
                     Stack::new(
                         col((
-                            FileIcon {
-                                path: path.clone(),
-                                filetype: filetype.clone(),
-                            },
-                            RenamableItem {
-                                path: self.path.clone(),
-                                state: self.state.clone(),
-                            },
+                                FileIcon {
+                                    path: path.clone(),
+                                    filetype: filetype.clone(),
+                                },
+                                RenamableItem {
+                                    path: self.path.clone(),
+                                    state: self.state.clone(),
+                                },
                         ))
                         .center(),
                     )
@@ -516,14 +497,14 @@ impl Widget for FileItem {
                 ),
                 is_selected.dedup(),
                 Some(self.path.clone()),
-            )
-            .on_double_click({
-                move |_: &ScopeRef| {
-                    if self.is_dir {
-                        self.state.active_dir.set(path.clone());
-                    }
-                }
-            })
+                )
+                    .on_double_click({
+                        move |_: &ScopeRef| {
+                            if self.is_dir {
+                                self.state.active_dir.set(path.clone());
+                            }
+                        }
+                    })
             .on_mouse_input({
                 to_owned!(path = self.path);
                 move |scope, input| {
@@ -590,9 +571,9 @@ impl Widget for RenamableItem {
                     selected.set(Some(self.path.clone()));
                     selected_dir.set(
                         self.path
-                            .parent()
-                            .unwrap_or_else(|| Path::new("."))
-                            .to_owned(),
+                        .parent()
+                        .unwrap_or_else(|| Path::new("."))
+                        .to_owned(),
                     );
                 }
             }
@@ -603,8 +584,8 @@ impl Widget for RenamableItem {
                 Box::new(
                     TextInput::new(
                         edit_state
-                            .get_or_insert_with(|| Mutable::new(name.to_string()))
-                            .clone(),
+                        .get_or_insert_with(|| Mutable::new(name.to_string()))
+                        .clone(),
                     )
                     .on_focus_lost(move |scope: &ScopeRef| {
                         scope.read(renaming).set(false);
@@ -615,8 +596,8 @@ impl Widget for RenamableItem {
                 // Otherwise, show a label
                 Box::new(
                     label(name)
-                        .with_wrap(Wrap::WordOrGlyph)
-                        .with_font_size(12.0),
+                    .with_wrap(Wrap::WordOrGlyph)
+                    .with_font_size(12.0),
                 )
             }
         });
@@ -664,13 +645,12 @@ pub fn window_header(
 ) -> impl Widget {
     raised_card(
         row((
-            subtitle(icon.into()),
-            subtitle(title.into()),
-            Rectangle::new(Srgba::new(0.0, 0.0, 0.0, 0.0)),
-            controls,
-        ))
+                subtitle(icon.into()),
+                subtitle(title.into()),
+                Rectangle::new(Srgba::new(0.0, 0.0, 0.0, 0.0)),
+                controls,
+        )).with_contain_margins(true)
         .with_cross_align(Align::Center)
-        .with_maximize(Vec2::X),
     )
 }
 
@@ -679,51 +659,53 @@ pub fn window(
     title: impl Into<String>,
     controls: impl Widget,
     content: impl Widget,
-) -> impl Widget {
-    col((window_header(icon, title, controls), card(content))).with_background(surface_secondary())
+) -> List<impl WidgetCollection> {
+    col((window_header(icon, title, controls), card(content))).with_stretch(true).with_background(surface_secondary())
 }
 
 impl Widget for AspectInspectorPanel {
     fn mount(self, scope: &mut Scope<'_>) {
         let locked = Mutable::new(false);
-        let lock_widget = Checkbox::with_label(label(LUCIDE_PIN), locked.clone())
-            .with_style(ButtonStyle::default());
 
-        let details = StreamWidget::new(
+        let details = 
             self.state
-                .selected_file
-                .dedup()
-                .stream_ref({
-                    to_owned!(root = self.state.root, assets = self.assets);
-                    move |selected| {
-                        to_owned!(root, assets);
-                        selected.as_ref().map(move |v| FileDetailsWidget {
-                            assets: assets.clone(),
-                            path: v.to_owned(),
-                            asset_root: root,
-                        })
-                    }
-                })
-                .filter_map(move |v| {
-                    if locked.get() {
-                        ready(None)
-                    } else {
-                        ready(Some(v))
-                    }
-                }),
-        );
+            .selected_file
+            .dedup()
+            .stream_ref({
+                to_owned!(root = self.state.root, assets = self.assets);
+                move |selected| {
+                    to_owned!(root, assets);
+                    selected.as_ref().map(move |v| FileDetailsWidget {
+                        assets: assets.clone(),
+                        path: v.to_owned(),
+                        asset_root: root,
+                    })
+                }
+            })
+        .filter_map({to_owned!(locked);
+        move |v| {
+            if locked.get() {
+                ready(None)
+            } else {
+                ready(Some(v))
+            }
+        }
+        });
 
-        window(
-            LUCIDE_SATELLITE,
-            "Inspector",
-            row(lock_widget),
-            panel(details)
-                .with_min_size(Unit::px2(INSPECTOR_PANEL_WIDTH, 0.0))
-                .with_max_size(Unit::px2(INSPECTOR_PANEL_WIDTH, f32::MAX))
-                .with_maximize(Vec2::Y),
-        )
+        StreamWidget::new(details.filter_map(|v| ready(v)).map(move |details| {
+            let lock_widget = Checkbox::with_label(label(LUCIDE_LOCK), locked.clone())
+                .with_style(ButtonStyle::default());
+
+            window(
+                LUCIDE_SATELLITE,
+                "Inspector",
+                lock_widget,
+                panel(details),
+            )
+            .with_max_size(Unit::px2(INSPECTOR_PANEL_WIDTH, f32::MAX))
+        }))
         .mount(scope);
-    }
+        }
 }
 
 pub struct AssetBrowser {
@@ -740,25 +722,25 @@ impl AssetBrowser {
 impl Widget for AssetBrowser {
     fn mount(self, scope: &mut Scope<'_>) {
         row((
-            card(ScrollArea::vertical(DirectoryTree {
-                path: self.state.root.clone(),
-                state: self.state.clone(),
-                expand_depth: 1,
-            }))
-            .with_background(surface_primary()),
-            SignalWidget::new(self.state.active_dir.signal_ref({
-                to_owned!(state = self.state, assets = self.assets);
-                move |path| DirectoryListing {
-                    path: path.clone(),
-                    state: state.clone(),
-                    assets: assets.clone(),
-                }
-            })),
+                card(ScrollArea::vertical(DirectoryTree {
+                    path: self.state.root.clone(),
+                    state: self.state.clone(),
+                    expand_depth: 1,
+                }))
+                .with_background(surface_primary()),
+                SignalWidget::new(self.state.active_dir.signal_ref({
+                    to_owned!(state = self.state, assets = self.assets);
+                    move |path| DirectoryListing {
+                        path: path.clone(),
+                        state: state.clone(),
+                        assets: assets.clone(),
+                    }
+                })),
         ))
-        .with_min_size(Unit::px2(100.0, BROWSER_PANEL_HEIGHT))
-        .with_max_size(Unit::px2(f32::MAX, BROWSER_PANEL_HEIGHT))
-        .with_maximize(Vec2::X)
-        .mount(scope)
+            .with_min_size(Unit::px2(100.0, BROWSER_PANEL_HEIGHT))
+            .with_max_size(Unit::px2(f32::MAX, BROWSER_PANEL_HEIGHT))
+            .with_maximize(Vec2::X)
+            .mount(scope)
     }
 }
 
@@ -776,13 +758,12 @@ impl Widget for Breadcrumbs<'_> {
             let full_path = tail.iter().chain([&segment_str]).collect::<PathBuf>();
 
             let widget = InteractiveWidget::new(
-                pill(label(&segment_str).with_wrap(Wrap::None))
-                    .with_margin(Edges::even(2.0))
-                    .with_corner_radius(Unit::px(0.0)),
+                pill(label(&segment_str))
+                .with_margin(Edges::even(2.0))
             )
-            .on_click(move |scope: &ScopeRef| {
-                scope.read(selection).set(full_path.clone());
-            });
+                .on_click(move |scope: &ScopeRef| {
+                    scope.read(selection).set(full_path.clone());
+                });
 
             tail.push(segment_str);
             widget
@@ -851,24 +832,24 @@ impl FileType {
                         .await
                         .map(FileType::Asset)
                         .unwrap_or(FileType::Error),
-                    "txt" | "md" | "markdown" => FileType::Text,
-                    // "rs" | "py" | "js" | "ts" | "c" | "cpp" | "h" | "hpp" => FileType::Code,
-                    "png" | "jpg" | "jpeg" | "gif" | "webp" => FileType::Image,
-                    "hdr" | "exr" => FileType::Hdri,
-                    "zip" | "tar" | "gz" | "rar" => FileType::Archive,
-                    "blend" => FileType::Blend,
-                    "blend1" => FileType::Blend, // Blender backup files
-                    "blend2" => FileType::Blend, // Blender backup files
-                    "json" | "yaml" | "yml" => FileType::Code(Code::Json),
-                    "glb" | "gltf" => FileType::Gltf,
-                    "rs" => FileType::Code(Code::Rust),
-                    "c" => FileType::Code(Code::C),
-                    "cpp" => FileType::Code(Code::Cpp),
-                    "py" => FileType::Code(Code::Python),
-                    "js" => FileType::Code(Code::Js),
-                    "wgsl" => FileType::Code(Code::Wgsl),
-                    "wasm" => FileType::Code(Code::Wasm),
-                    _ => FileType::Other,
+                        "txt" | "md" | "markdown" => FileType::Text,
+                        // "rs" | "py" | "js" | "ts" | "c" | "cpp" | "h" | "hpp" => FileType::Code,
+                        "png" | "jpg" | "jpeg" | "gif" | "webp" => FileType::Image,
+                        "hdr" | "exr" => FileType::Hdri,
+                        "zip" | "tar" | "gz" | "rar" => FileType::Archive,
+                        "blend" => FileType::Blend,
+                        "blend1" => FileType::Blend, // Blender backup files
+                        "blend2" => FileType::Blend, // Blender backup files
+                        "json" | "yaml" | "yml" => FileType::Code(Code::Json),
+                        "glb" | "gltf" => FileType::Gltf,
+                        "rs" => FileType::Code(Code::Rust),
+                        "c" => FileType::Code(Code::C),
+                        "cpp" => FileType::Code(Code::Cpp),
+                        "py" => FileType::Code(Code::Python),
+                        "js" => FileType::Code(Code::Js),
+                        "wgsl" => FileType::Code(Code::Wgsl),
+                        "wasm" => FileType::Code(Code::Wasm),
+                        _ => FileType::Other,
                 },
                 _ => FileType::Other,
             }
@@ -983,18 +964,18 @@ impl Widget for FileDetailsWidget {
         let file_size_str = bytes_to_human_readable(file_size);
 
         col((
-            FilePreview {
-                assets: &self.assets,
-                path: &self.path,
-                asset_root: &self.asset_root,
-            },
-            Tooltip::label(
-                label(format!("Name: {file_name}")),
-                path.display().to_string(),
-            ),
-            label(format!("Size: {file_size_str}")),
+                FilePreview {
+                    assets: &self.assets,
+                    path: &self.path,
+                    asset_root: &self.asset_root,
+                },
+                Tooltip::label(
+                    label(format!("Name: {file_name}")),
+                    path.display().to_string(),
+                ),
+                label(format!("Size: {file_size_str}")),
         ))
-        .mount(scope);
+            .mount(scope);
     }
 }
 
@@ -1024,26 +1005,26 @@ impl Widget for FilePreview<'_> {
                         .with_corner_radius(default_corner_radius())
                         .with_exact_size(Unit::px2(200.0, 200.0))
                         .mount(scope);
-                } else if ty.is_asset() {
-                    AssetEditor::new(assets.clone(), root.into(), path.into()).mount(scope)
-                } else if ty.is_text() {
-                    let async_load = async {
-                        sleep(Duration::from_millis(500)).await;
-                        let path = path;
-                        let content = async_std::fs::read_to_string(&path).await;
-                        |scope: &mut Scope<'_>| match content {
-                            Ok(v) => FileEditor::new(Mutable::new(v), path).mount(scope),
-                            Err(_) => label("Could not read file")
-                                .with_color(surface_danger())
-                                .mount(scope),
-                        }
-                    };
+                    } else if ty.is_asset() {
+                        AssetEditor::new(assets.clone(), root.into(), path.into()).mount(scope)
+                    } else if ty.is_text() {
+                        let async_load = async {
+                            sleep(Duration::from_millis(500)).await;
+                            let path = path;
+                            let content = async_std::fs::read_to_string(&path).await;
+                            |scope: &mut Scope<'_>| match content {
+                                Ok(v) => FileEditor::new(Mutable::new(v), path).mount(scope),
+                                Err(_) => label("Could not read file")
+                                    .with_color(surface_danger())
+                                    .mount(scope),
+                            }
+                        };
 
-                    SuspenseWidget::new(LoadingSpinner::new("Loading Text"), async_load)
-                        .mount(scope);
-                } else {
-                    icon.mount(scope);
-                }
+                        SuspenseWidget::new(LoadingSpinner::new("Loading Text"), async_load)
+                            .mount(scope);
+                        } else {
+                            icon.mount(scope);
+                    }
             }
         })
         .mount(scope)
@@ -1066,23 +1047,23 @@ impl Widget for FileEditor {
         let content = self.content.clone();
 
         col((
-            ScrollArea::new(
-                BVec2::TRUE,
-                TextInput::new(content)
+                ScrollArea::new(
+                    BVec2::TRUE,
+                    TextInput::new(content)
                     .with_style(TextInputStyle::default().with_font_family(FontFamily::Monospace)),
-            ),
-            Button::label("Save").on_click(move |_| {
-                let content = self.content.get_cloned();
-                let path = self.path.clone();
-                async_std::task::spawn(async move {
-                    if let Err(err) = async_std::fs::write(&path, content).await {
-                        tracing::error!("Failed to save file: {}", err);
-                    } else {
-                        tracing::info!("File saved successfully: {}", path.display());
-                    }
-                });
-            }),
+                ),
+                Button::label("Save").on_click(move |_| {
+                    let content = self.content.get_cloned();
+                    let path = self.path.clone();
+                    async_std::task::spawn(async move {
+                        if let Err(err) = async_std::fs::write(&path, content).await {
+                            tracing::error!("Failed to save file: {}", err);
+                        } else {
+                            tracing::info!("File saved successfully: {}", path.display());
+                        }
+                    });
+                }),
         ))
-        .mount(scope);
-    }
+            .mount(scope);
+        }
 }

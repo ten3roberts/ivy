@@ -150,7 +150,10 @@ impl Screen for MainUI {
 
         maximized(
             col((
-                card(MyStruct::create_editor(value.clone().lower_option())),
+                card(MyStruct::create_editor(
+                    value.clone().lower_option(),
+                    Default::default(),
+                )),
                 card(StreamWidget::new(value.stream().map(|v| {
                     v.map(|v| label(format!("{v:#?}")))
                         .unwrap_or(bold("No Value"))

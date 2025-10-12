@@ -437,7 +437,6 @@ impl Widget for BundleCreationWidget {
             selection_widget,
             raised_card(StreamWidget::new(value_editor)),
         ))
-        .with_min_size(Unit::px2(400.0, 300.0))
         .with_stretch(true)
         .mount(scope);
     }

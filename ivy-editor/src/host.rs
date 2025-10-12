@@ -29,7 +29,7 @@ use ivy_ui::{
             },
         },
         futures_signals::signal::{Mutable, SignalExt},
-        lucide::icons::{LUCIDE_FOLDER, LUCIDE_LEAF, LUCIDE_PACKAGE, LUCIDE_SAVE},
+        lucide::icons::{LUCIDE_FOLDER, LUCIDE_LEAF, LUCIDE_PACKAGE, LUCIDE_SAVE, LUCIDE_SHOVEL},
     },
 };
 use rfd::{AsyncFileDialog, FileHandle};
@@ -381,10 +381,11 @@ fn header(assets: AssetCache, state: EditorState) -> impl Widget {
 
     raised_card(
         row((
-            subtitle(LUCIDE_LEAF).with_color(element_accent()),
+            subtitle(LUCIDE_SHOVEL).with_color(element_accent()),
             subtitle("Editor"),
             save_controls,
         ))
+        .with_contain_margins(true)
         .with_cross_align(Align::Center)
         .with_maximize(Vec2::X),
     )
