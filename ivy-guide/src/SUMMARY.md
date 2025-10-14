@@ -9,3 +9,5 @@
   * [Entity Component System](./fundamentals/ecs.md)
   * [Bundles](./fundamentals/bundles.md)
   * [Rendering and Passes](./fundamentals/rendering.md)
+- [Game Logic](./game.md)
+  - [Behavior Trees](./game/behavior_trees.md)

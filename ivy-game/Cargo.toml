@@ -15,6 +15,7 @@ ivy-physics = { path = "../ivy-physics" }
 ivy-ui = { path = "../ivy-ui" }
 ivy-scene = { path = "../ivy-scene" }
 
+slotmap.workspace = true
 violet.workspace = true
 flax.workspace = true
 glam.workspace = true
@@ -22,3 +23,4 @@ anyhow.workspace = true
 tracing.workspace = true
 futures.workspace = true
 itertools.workspace = true
+serde.workspace = true

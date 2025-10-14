@@ -2410,6 +2410,8 @@ dependencies = [
  "ivy-scene",
  "ivy-ui",
  "ivy-wgpu",
+ "serde",
+ "slotmap",
  "tracing",
  "violet",
 ]
