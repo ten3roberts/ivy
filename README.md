@@ -3,7 +3,7 @@
 [![Rust](https://img.shields.io/badge/rust-orange?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![WebGPU](https://img.shields.io/badge/WebGPU-blue?style=for-the-badge&logo=webgpu)](https://gpuweb.github.io/gpuweb/)
 [![ECS](https://img.shields.io/badge/ECS-Flax-green?style=for-the-badge)](https://github.com/ten3roberts/flax)
-[![Violet](https://img.shields.io/badge/Violet-GUI%20Library-purple?style=for-the-badge)](https://github.com/ten3roberts)
+[![Violet](https://img.shields.io/badge/UI-Violet-purple?style=for-the-badge)](https://github.com/ten3roberts/violet)
 
 [![Docs](https://img.shields.io/badge/API%20Docs-lib.rs?style=for-the-badge)](https://lib.rs/ivy)
 
@@ -206,19 +206,30 @@ ivy-physics = "0.10"
 
 ### Quick Start
 ```rust
-use ivy_core::{App, Layer};
-use ivy_wgpu::renderer::MeshRenderer;
+use ivy_core::{App, EngineLayer, transforms::TransformUpdatePlugin, update_layer::{FixedTimeStep, PluginLayer}};
+use ivy_game::fly_camera::FlyCameraPlugin;
+use ivy_input::layer::InputLayer;
+use ivy_physics::PhysicsPlugin;
+use ivy_postprocessing::preconfigured::{SurfacePbrPipelineDesc, SurfacePbrRenderer};
+use ivy_wgpu::{driver::WinitDriver, layer::GraphicsLayer};
+use winit::window::WindowAttributes;
 
 fn main() -> anyhow::Result<()> {
-    let mut app = App::new();
-
-    // Add rendering layer
-    app.push_layer(MeshRenderer::new()?);
-
-    // Add your custom layer
-    app.push_layer(MyGameLayer);
-
-    app.run()
+    App::builder()
+        .with_driver(WinitDriver::new(WindowAttributes::default()))
+        .with_layer(EngineLayer::new())
+        .with_layer(GraphicsLayer::new(|world, assets, store, gpu, surface| {
+            Ok(SurfacePbrRenderer::new(
+                world, assets, store, gpu, surface,
+                SurfacePbrPipelineDesc::default(),
+            ))
+        }))
+        .with_layer(InputLayer::new())
+        .with_layer(PluginLayer::new(FixedTimeStep::new(0.02))
+            .with_plugin(FlyCameraPlugin)
+            .with_plugin(PhysicsPlugin::new().with_gravity(-glam::Vec3::Y * 9.81))
+            .with_plugin(TransformUpdatePlugin))
+        .run()
 }
 ```
 
