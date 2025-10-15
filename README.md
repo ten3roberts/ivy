@@ -1,62 +1,259 @@
-# Ivy
+# Ivy Engine
 
-ECS driven game engine written in Rust
+[![Rust](https://img.shields.io/badge/rust-%23000000.svg?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![WebGPU](https://img.shields.io/badge/WebGPU-000000?style=for-the-badge&logo=webgpu&logoColor=white)](https://gpuweb.github.io/gpuweb/)
+[![ECS](https://img.shields.io/badge/ECS-Flax-000000?style=for-the-badge)](https://github.com/ten3roberts/flax)
 
-## [Guide](https://ten3roberts.github.io/ivy)
+A modular, ECS-driven game engine written in Rust, designed for building high-performance 3D applications and games. Ivy provides a layered architecture, advanced rendering with WebGPU, physics simulation, asset management, and an integrated editor.
 
-A user guide is provided to quickly familiarize the user with the basic usage of
-the engine.
+## Table of Contents
 
-## Features
-  - ECS driven architecture
-  - PBR rendering and post processing
-  - Rendergraph abstractions for fine tuned render results
-  - Collision detection and integrated physics engine
-  - Deferred dynamic events using observer pattern
-  - Async asset management and resource system
-  - Editor
-  - Asset Editor
-  - Input system with composable vector generation
-  - UI system with configurable widget and positioning system
-  - ... And more
+- [Overview](#overview)
+- [Key Features](#key-features)
+- [Working Principles](#working-principles)
+- [Architecture](#architecture)
+- [Getting Started](#getting-started)
+- [Examples](#examples)
+- [Documentation](#documentation)
+- [Gallery](#gallery)
+- [Contributing](#contributing)
+- [License](#license)
 
-# Gallery
-Basic scene
+## Overview
+
+Ivy Engine is built around an Entity Component System (ECS) using Flax, enabling efficient data-oriented programming. It features a modular crate structure, allowing developers to pick and choose components for their projects. The engine supports WebGPU-based rendering, physics with Rapier3D, async asset loading, and more.
+
+Whether you're building a game, simulation, or interactive 3D application, Ivy provides the tools to create performant, scalable Rust applications.
+
+## Key Features
+
+### Core Systems
+- **ECS Architecture**: Entity Component System via Flax for efficient game logic.
+- **Layered Design**: Modular layers for organizing logic (rendering, physics, input, etc.).
+- **Async Asset Management**: Non-blocking asset loading with caching and hot reloading.
+- **Event System**: Deferred dynamic events using an observer pattern.
+
+### Rendering & Graphics
+- **WebGPU Backend**: Modern GPU API support via WGPU.
+- **PBR Rendering**: Physically Based Rendering with materials, lights, and shadows.
+- **Render Graph**: Abstractions for fine-tuned render pipelines.
+- **Post-Processing**: Effects like bloom, tone mapping, and custom shaders.
+- **Gizmos**: Debug visualization for development.
+
+### Physics & Simulation
+- **Integrated Physics**: Full 3D physics with Rapier3D.
+- **Collision Detection**: Rigid bodies, colliders, joints, and effectors.
+- **Force Application**: Custom effectors for dynamic simulations.
+
+### Input & Interaction
+- **Flexible Input System**: Composable vector generation from keyboard, mouse, and gamepad.
+- **Action Binding**: Map inputs to component updates or callbacks.
+
+### User Interface
+- **UI System**: Built on Violet GUI library with configurable widgets and positioning.
+- **Editor Integration**: In-engine editor with property editing and gizmos.
+
+### Asset Pipeline
+- **GLTF Support**: Load 3D models, animations, and scenes.
+- **Image Loading**: PNG, JPEG, HDR, and more.
+- **Custom Assets**: Extensible asset types with serialization.
+
+### Utilities
+- **Profiling**: Optional Puffin integration for performance analysis.
+- **Random Generation**: Utilities for procedural content.
+- **Reflection**: Basic reflection traits for editor and serialization.
+
+## Working Principles
+
+### Core Architecture: App and Layers
+
+At the heart of Ivy is the `App` struct, which orchestrates the entire application lifecycle. The `App` manages:
+- **ECS World**: A Flax-based Entity Component System storing all entities and their components.
+- **Asset Cache**: Asynchronous asset loading and caching system with hot reloading support.
+- **Event Registry**: A broadcasting system for inter-layer communication.
+- **Layers**: Modular units of logic that can be stacked and configured.
+
+Layers implement the `Layer` trait, providing methods for initialization (`register`), updates, and event handling. This layered design allows for composable, non-interfering systems. For example:
+- A rendering layer handles GPU operations.
+- A physics layer simulates rigid body dynamics.
+- An input layer processes user interactions.
+- Custom game layers implement specific logic.
+
+Layers communicate through shared resources:
+- **ECS World**: Entities and components are accessible across layers.
+- **Asset Cache**: Shared assets like textures and models.
+- **Event System**: Low-frequency events (e.g., input, collisions) are broadcast and handled by interested layers.
+
+This architecture enables flexible, decoupled systems that can be mixed, matched, and conditionally enabled based on application needs.
+
+### ECS and Components
+
+Ivy uses an Entity Component System (ECS) for game logic. Entities are simple IDs, components are data attached to entities, and systems operate on component queries.
+
+**Core Components**:
+- **Transforms**: `position`, `rotation`, `scale`, `world_transform` for 3D positioning.
+- **Rendering**: `mesh`, `material`, `camera`, `light` for graphics.
+- **Physics**: `rigidbody_builder`, `collider_builder`, `velocity`, `mass` for simulation.
+- **Custom**: User-defined components for game-specific data.
+
+Components are defined using Flax's `component!` macro and can be bundled together using the `Bundle` trait for easy entity creation.
+
+### Asset Management
+
+Assets are loaded asynchronously to avoid blocking the main thread. The `AssetCache` handles:
+- **Caching**: Loaded assets are stored and reused.
+- **Hot Reloading**: Assets reload automatically on file changes during development.
+- **Types**: `Asset<T>` for shared resources, `Resource` for owned data.
+
+Supported formats include GLTF models, images (PNG, JPEG, HDR), and custom types via the extensible asset system.
+
+### Rendering Pipeline
+
+Rendering is handled via WebGPU through the WGPU backend:
+- **Render Graph**: Defines multi-pass rendering pipelines with dependencies.
+- **Shaders**: WGSL shaders for materials, lighting, and effects.
+- **Post-Processing**: Effects like bloom, tone mapping applied after main rendering.
+- **Gizmos**: Debug visualization primitives for development.
+
+The pipeline supports PBR materials, shadows, and advanced lighting.
+
+### Physics Simulation
+
+Physics is powered by Rapier3D, integrated seamlessly with ECS:
+- **Rigid Bodies**: Dynamic objects with mass and velocity.
+- **Colliders**: Shapes for collision detection (spheres, boxes, meshes).
+- **Joints**: Constraints between bodies.
+- **Effectors**: Custom forces and torques.
+
+Physics updates run in sync with the game loop, with collision events fed back into the ECS.
+
+### Input Handling
+
+Input is processed through a flexible system:
+- **Events**: Winit events are converted to Ivy `InputEvent`s.
+- **Actions**: Bind inputs to stimuli (bool, f32, Vec2) that update components or trigger callbacks.
+- **Bindings**: Composable mappings for keyboard, mouse, and gamepad.
+
+This allows for customizable control schemes without hardcoding.
+
+### UI Integration
+
+UI is built on the Violet retained-mode GUI library:
+- **Widgets**: Configurable components for layout and interaction.
+- **Integration**: UI renders as an overlay on 3D scenes.
+- **Editor**: In-engine editing tools use the same UI system.
+
+### Editor and Tools
+
+Ivy includes an integrated editor for rapid development:
+- **Gizmos**: Visual debugging tools.
+- **Property Editing**: Modify component values in real-time.
+- **Scene Management**: Load, edit, and save scenes.
+
+The editor is built using the same ECS and UI systems as user applications.
+
+## Getting Started
+
+### Prerequisites
+- Rust 1.70 or later
+- A WebGPU-compatible GPU (most modern GPUs)
+
+### Installation
+Add Ivy to your `Cargo.toml`:
+
+```toml
+[dependencies]
+ivy-engine = "0.10"
+```
+
+For specific crates:
+```toml
+ivy-core = "0.10"
+ivy-wgpu = "0.10"
+ivy-physics = "0.10"
+# etc.
+```
+
+### Quick Start
+```rust
+use ivy_core::{App, Layer};
+use ivy_wgpu::renderer::MeshRenderer;
+
+fn main() -> anyhow::Result<()> {
+    let mut app = App::new();
+
+    // Add rendering layer
+    app.push_layer(MeshRenderer::new()?);
+
+    // Add your custom layer
+    app.push_layer(MyGameLayer);
+
+    app.run()
+}
+```
+
+## Examples
+
+Check out the `examples/` directory for:
+- Basic rendering setup
+- Physics simulations
+- Input handling
+- UI integration
+- Full game examples
+
+Run an example:
+```bash
+cargo run --example basic
+```
+
+## Documentation
+
+- **[User Guide](https://ten3roberts.github.io/ivy)**: Comprehensive guide to using Ivy.
+- **[API Docs](https://docs.rs/ivy-engine)**: Generated Rust documentation.
+- **[Structure.md](./Structure.md)**: Detailed engine architecture and crate breakdown.
+
+## Gallery
+
+### Basic PBR Scene
 ![PBR example](https://github.com/user-attachments/assets/a83689d0-42fb-4002-804c-921b6702dc8f)
 
-Emissive materials
+### Emissive Materials
 ![Emissive Materials](https://github.com/user-attachments/assets/8e640d28-345c-44f7-b607-94febb1682fc)
 
-## How it works
+## Architecture
 
-### Layers
+### App and Layers
+The heart of Ivy is the `App` struct, which manages:
+- **ECS World**: Contains all entities and components.
+- **Asset Cache**: Handles loading and caching of assets.
+- **Event Registry**: Facilitates inter-layer communication.
+- **Layers**: Modular units of logic that can be stacked (e.g., rendering, physics, UI).
 
-The core of the program is an application. [`core::App`]. It defines the
-update loop, and event handling.
+Layers implement the `Layer` trait, allowing custom initialization, updates, and event handling. This design enables composable, non-interfering systems.
 
-From there, logic is extracted into layers which are run for each iteration.
-Within a layer, the user is free to do whatever they want, from reading from
-sockets, rendering using vulkan, or dispatching ECS workloads.
+### ECS Components
+Core components include:
+- **Transforms**: Position, rotation, scale, world transforms.
+- **Rendering**: Meshes, materials, cameras, lights.
+- **Physics**: Rigid bodies, colliders, velocities, masses.
+- **Custom**: User-defined components for game logic.
 
-Due to the layered design, several high level concepts can work together and
-not interfere, aswell as being inserted based on different configurations.
+### Rendering Pipeline
+- Graphics layers handle rendering passes.
+- WGPU provides GPU abstraction.
+- Render graphs define multi-pass rendering.
+- Post-processing effects are applied as final passes.
 
-Layers can be thought of as plugin in high level containers of behaviour.
+### Asset System
+Assets are loaded asynchronously and cached. Supports hot reloading for rapid iteration. Resources handle non-shared data, while Assets are shared across the application.
 
-The existance of layer allow importing of behaviour from other crates without
-concern of implementation details.
+## Contributing
 
-### Inter-layer communication
-The application exposes different ways in which two layers can influence
-each other.
+Contributions are welcome! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
 
-- `world` contains the ECS world with all entities and components.
-- `resources` is a typed storage accessed by handles. This is useful for
-storing textures, models, or singletons that are to be shared between layers
-and inside layers with dynamic borrow checking.
-- `events` facilitates a broadcasting channel in which events can be sent
-and listened to. Each layer can set up a receiver and iterate the sent events
-of a specific type. This is best used for low frequency data to avoid busy
-checking, like user input, state changes, or alike.
+- Report issues on [GitHub Issues](https://github.com/ten3roberts/ivy-engine/issues)
+- Submit PRs for bug fixes, features, or documentation improvements
 
-See the documentation for [`core::Layer`]
+## License
+
+Licensed under MIT OR Apache-2.0. See [LICENSE](./LICENSE) for details.
