@@ -5,12 +5,10 @@ use glam::{vec3, Mat4, Quat, Vec3};
 use itertools::iproduct;
 use ivy_assets::{stored::DynamicStore, AssetCache, AssetPath};
 use ivy_core::{
-    app::PostInitEvent,
-    layer::events::EventRegisterContext,
     profiling::ProfilingLayer,
     transforms::TransformUpdatePlugin,
-    update_layer::{FixedTimeStep, Plugin, PluginLayer},
-    App, Color, ColorExt, EngineLayer, Layer,
+    update_layer::{FixedTimeStep, Plugin, PluginLayer, ScheduleSetBuilder},
+    App, Color, ColorExt, EngineLayer,
 };
 use ivy_engine::{
     color, elapsed_time, engine, parent_transform, position, rotation, scale, world_transform,
@@ -81,9 +79,9 @@ pub fn main() -> anyhow::Result<()> {
             ))
         }))
         .with_layer(InputLayer::new())
-        .with_layer(LogicLayer::new())
         .with_layer(
             PluginLayer::new(FixedTimeStep::new(0.02))
+                .with_plugin(LogicPlugin)
                 .with_plugin(FlyCameraPlugin)
                 .with_plugin(AnimationPlugin)
                 .with_plugin(DynamicsPlugin)
@@ -103,20 +101,10 @@ pub fn main() -> anyhow::Result<()> {
     }
 }
 
-pub struct LogicLayer {}
+pub struct LogicPlugin;
 
-impl Default for LogicLayer {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl LogicLayer {
-    pub fn new() -> Self {
-        Self {}
-    }
-
-    fn setup_objects(&mut self, world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
+impl LogicPlugin {
+    fn setup_objects(&self, world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
         let sphere_mesh = MeshDesc::content(assets.load(&CubePrimitive));
 
         let plastic_material = RenderEffect::Pbr(
@@ -158,17 +146,15 @@ impl LogicLayer {
     }
 }
 
-impl Layer for LogicLayer {
-    fn register(
-        &mut self,
-        _: &mut World,
-        _: &AssetCache,
+impl Plugin for LogicPlugin {
+    fn install(
+        &self,
+        world: &mut World,
+        assets: &AssetCache,
         _: &mut DynamicStore,
-        mut events: EventRegisterContext<Self>,
+        _: &mut ScheduleSetBuilder,
     ) -> anyhow::Result<()> {
-        events.subscribe(|this, ctx, _: &PostInitEvent| this.setup_objects(ctx.world, ctx.assets));
-
-        Ok(())
+        self.setup_objects(world, assets)
     }
 }
 

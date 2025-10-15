@@ -2,14 +2,12 @@ use flax::{Entity, World};
 use glam::{Quat, Vec3};
 use ivy_assets::{stored::DynamicStore, Asset, AssetCache, AssetPath, AsyncAssetExt};
 use ivy_core::{
-    app::PostInitEvent,
-    layer::events::EventRegisterContext,
     math::Vec3Ext,
     palette::Srgb,
     profiling::ProfilingLayer,
     transforms::TransformUpdatePlugin,
-    update_layer::{FixedTimeStep, PluginLayer},
-    App, AsyncCommandBuffer, EngineLayer, EntityBuilderExt, Layer, DEG_90,
+    update_layer::{FixedTimeStep, Plugin, PluginLayer, ScheduleSetBuilder},
+    App, AsyncCommandBuffer, EngineLayer, EntityBuilderExt, DEG_90,
 };
 use ivy_engine::{async_commandbuffer, engine, TransformBundle};
 use ivy_game::orbit_camera::OrbitCameraPlugin;
@@ -68,9 +66,9 @@ pub fn main() -> anyhow::Result<()> {
             ))
         }))
         .with_layer(InputLayer::new())
-        .with_layer(LogicLayer)
         .with_layer(
             PluginLayer::new(FixedTimeStep::new(0.02))
+                .with_plugin(LogicPlugin)
                 .with_plugin(OrbitCameraPlugin)
                 .with_plugin(PhysicsPlugin::new())
                 .with_plugin(TransformUpdatePlugin),
@@ -109,28 +107,18 @@ async fn setup_objects(cmd: AsyncCommandBuffer, assets: AssetCache) -> anyhow::R
     Ok(())
 }
 
-struct LogicLayer;
+struct LogicPlugin;
 
-impl Layer for LogicLayer {
-    fn register(
-        &mut self,
-        _: &mut World,
-        _: &AssetCache,
+impl Plugin for LogicPlugin {
+    fn install(
+        &self,
+        world: &mut World,
+        assets: &AssetCache,
         _: &mut DynamicStore,
-        mut events: EventRegisterContext<Self>,
+        _: &mut ScheduleSetBuilder,
     ) -> anyhow::Result<()> {
-        events.subscribe(|_, ctx, _: &PostInitEvent| {
-            async_std::task::spawn(setup_objects(
-                ctx.world
-                    .get(engine(), async_commandbuffer())
-                    .unwrap()
-                    .clone(),
-                ctx.assets.clone(),
-            ));
-
-            Ok(())
-        });
-
+        let cmd = world.get(engine(), async_commandbuffer()).unwrap().clone();
+        async_std::task::spawn(setup_objects(cmd, assets.clone()));
         Ok(())
     }
 }

@@ -2,13 +2,11 @@ use flax::{Entity, World};
 use glam::{vec3, EulerRot, Quat, Vec3};
 use ivy_assets::{stored::DynamicStore, AssetCache};
 use ivy_core::{
-    app::PostInitEvent,
-    layer::events::EventRegisterContext,
     palette::{Srgb, Srgba},
     profiling::ProfilingLayer,
     transforms::TransformUpdatePlugin,
-    update_layer::{FixedTimeStep, PluginLayer},
-    App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer,
+    update_layer::{FixedTimeStep, Plugin, PluginLayer, ScheduleSetBuilder},
+    App, Color, ColorExt, EngineLayer, EntityBuilderExt,
 };
 use ivy_engine::{is_static, RigidBodyBundle, TransformBundle};
 use ivy_game::fly_camera::FlyCameraPlugin;
@@ -66,9 +64,9 @@ pub fn main() -> anyhow::Result<()> {
             ))
         }))
         .with_layer(InputLayer::new())
-        .with_layer(LogicLayer)
         .with_layer(
             PluginLayer::new(FixedTimeStep::new(0.02))
+                .with_plugin(LogicPlugin)
                 .with_plugin(FlyCameraPlugin)
                 .with_plugin(
                     PhysicsPlugin::new()
@@ -210,22 +208,16 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
     Ok(())
 }
 
-struct LogicLayer;
+struct LogicPlugin;
 
-impl Layer for LogicLayer {
-    fn register(
-        &mut self,
-        _: &mut World,
-        _: &AssetCache,
+impl Plugin for LogicPlugin {
+    fn install(
+        &self,
+        world: &mut World,
+        assets: &AssetCache,
         _: &mut DynamicStore,
-        mut events: EventRegisterContext<Self>,
+        _: &mut ScheduleSetBuilder,
     ) -> anyhow::Result<()> {
-        events.subscribe(|_, ctx, _: &PostInitEvent| {
-            setup_objects(ctx.world, ctx.assets.clone())?;
-
-            Ok(())
-        });
-
-        Ok(())
+        setup_objects(world, assets.clone())
     }
 }

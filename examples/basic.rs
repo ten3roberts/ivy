@@ -10,15 +10,13 @@ use ivy_assets::{
     loadable::Loadable, stored::DynamicStore, Asset, AssetCache, AssetPath, AsyncAssetExt,
 };
 use ivy_core::{
-    app::PostInitEvent,
     gizmos,
-    layer::events::EventRegisterContext,
     math::Vec3Ext,
     palette::{Srgb, WithAlpha},
     profiling::ProfilingLayer,
     transforms::TransformUpdatePlugin,
     update_layer::{FixedTimeStep, Plugin, PluginLayer, ScheduleSetBuilder},
-    App, AsyncCommandBuffer, EngineLayer, EntityBuilderExt, Layer,
+    App, AsyncCommandBuffer, EngineLayer, EntityBuilderExt,
 };
 use ivy_engine::{
     async_commandbuffer, elapsed_time, engine, rotation, world_transform, RigidBodyBundle,
@@ -123,9 +121,9 @@ pub fn main() -> anyhow::Result<()> {
         ))
         .with_layer(ui_input_layer)
         .with_layer(InputLayer::new())
-        .with_layer(LogicLayer::new())
         .with_layer(
             PluginLayer::new(FixedTimeStep::new(0.02))
+                .with_plugin(LogicPlugin)
                 .with_plugin(GameUiPlugin)
                 .with_plugin(OrbitCameraPlugin)
                 .with_plugin(GizmosPlugin)
@@ -174,18 +172,7 @@ impl Plugin for GizmosPlugin {
     }
 }
 
-pub struct LogicLayer {}
-
-impl Default for LogicLayer {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl LogicLayer {
-    pub fn new() -> Self {
-        Self {}
-    }
+pub struct LogicPlugin;
 
     fn setup_assets(&self, world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
         let cmd = world.get(engine(), async_commandbuffer()).unwrap().clone();
@@ -484,17 +471,15 @@ impl Screen for MainUI {
     }
 }
 
-impl Layer for LogicLayer {
-    fn register(
-        &mut self,
-        _: &mut World,
-        _: &AssetCache,
+impl Plugin for LogicPlugin {
+    fn install(
+        &self,
+        world: &mut World,
+        assets: &AssetCache,
         _: &mut DynamicStore,
-        mut events: EventRegisterContext<Self>,
+        _: &mut ivy_core::update_layer::ScheduleSetBuilder,
     ) -> anyhow::Result<()> {
-        events.subscribe(|this, ctx, _: &PostInitEvent| this.setup_assets(ctx.world, ctx.assets));
-
-        Ok(())
+        self.setup_assets(world, assets)
     }
 }
 
