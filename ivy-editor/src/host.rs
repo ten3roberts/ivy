@@ -29,7 +29,7 @@ use ivy_ui::{
             },
         },
         futures_signals::signal::{Mutable, SignalExt},
-        lucide::icons::{LUCIDE_FOLDER, LUCIDE_LEAF, LUCIDE_PACKAGE, LUCIDE_SAVE, LUCIDE_SHOVEL},
+        lucide::icons::{LUCIDE_FOLDER, LUCIDE_PACKAGE, LUCIDE_SAVE, LUCIDE_SHOVEL},
     },
 };
 use rfd::{AsyncFileDialog, FileHandle};

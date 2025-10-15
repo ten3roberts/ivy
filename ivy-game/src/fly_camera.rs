@@ -70,9 +70,9 @@ impl Plugin for FlyCameraPlugin {
             .with_system(camera_rotation_input_system())
             .with_system(camera_movement_input_system());
 
-        world
-            .get(engine(), screen_state())?
-            .open(FlyCameraScreen { id });
+        if let Ok(screen_state) = world.get(engine(), screen_state()) {
+            screen_state.open(FlyCameraScreen { id });
+        }
 
         Ok(())
     }

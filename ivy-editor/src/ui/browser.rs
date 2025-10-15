@@ -31,12 +31,12 @@ use ivy_ui::{
             components::{rect, LayoutAlignment}, layout::Align, state::StateStream, stored::WeakHandle, style::{
                 base_colors::*, default_corner_radius, surface_danger, surface_primary, surface_secondary, SizeExt, StyleExt
             }, text::{FontFamily, Wrap}, time::sleep, to_owned, unit::Unit, widget::{
-                card, col, interactive::{base::InteractiveWidget, overlay::overlay_state, tooltip::Tooltip}, label, panel, pill, raised_card, row, subtitle, Button, ButtonStyle, Checkbox, Collapsible, Draggable, EmptyWidget, FutureWidget, Image, IterWidgetCollection, List, LoadingSpinner, Rectangle, ScrollArea, Selectable, SignalWidget, Stack, StreamWidget, SuspenseWidget, Text, TextInput, TextInputStyle, Throbber, WidgetExt
+                card, col, interactive::{base::InteractiveWidget, overlay::overlay_state, tooltip::Tooltip}, label, panel, pill, raised_card, row, subtitle, Button, ButtonStyle, Checkbox, Collapsible, Draggable, FutureWidget, Image, IterWidgetCollection, List, LoadingSpinner, Rectangle, ScrollArea, Selectable, SignalWidget, Stack, StreamWidget, SuspenseWidget, Text, TextInput, TextInputStyle, Throbber, WidgetExt
             }, Edges, Scope, ScopeRef, StateExt, StateStreamRef, Widget, WidgetCollection
         },
         futures_signals::signal::Mutable,
         lucide::icons::{
-            LUCIDE_BOX, LUCIDE_CLOUD_SUN, LUCIDE_COPY_PLUS, LUCIDE_ECLIPSE, LUCIDE_FILE_ARCHIVE, LUCIDE_FILE_BOX, LUCIDE_FILE_CODE, LUCIDE_FILE_IMAGE, LUCIDE_FILE_JSON, LUCIDE_FILE_QUESTION, LUCIDE_FILE_TEXT, LUCIDE_FILE_WARNING, LUCIDE_FOLDER, LUCIDE_FOLDER_OPEN, LUCIDE_LOCK, LUCIDE_PACKAGE, LUCIDE_SATELLITE, LUCIDE_SATELLITE_DISH, LUCIDE_TRASH_2
+            LUCIDE_BOX, LUCIDE_CLOUD_SUN, LUCIDE_COPY_PLUS, LUCIDE_ECLIPSE, LUCIDE_FILE_ARCHIVE, LUCIDE_FILE_BOX, LUCIDE_FILE_CODE, LUCIDE_FILE_IMAGE, LUCIDE_FILE_JSON, LUCIDE_FILE_QUESTION, LUCIDE_FILE_TEXT, LUCIDE_FILE_WARNING, LUCIDE_FOLDER, LUCIDE_FOLDER_OPEN, LUCIDE_LOCK, LUCIDE_PACKAGE, LUCIDE_SATELLITE, LUCIDE_TRASH_2
         },
     },
 };

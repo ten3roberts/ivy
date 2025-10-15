@@ -9,6 +9,8 @@ use ivy_core::{
 use ivy_graphics::camera::CameraBundle;
 use ivy_physics::{RigidBodyBundle, RigidBodyKind};
 
+use crate::controllers::camera_controller::CameraControllerBundle;
+
 pub struct StandaloneCameraPlugin;
 
 impl Plugin for StandaloneCameraPlugin {
@@ -37,6 +39,7 @@ impl Bundle for StandaloneCameraBundle {
             ))
             .mount(RigidBodyBundle::new(RigidBodyKind::Dynamic).with_can_sleep(false))
             .mount(CameraBundle::default())
+            .mount(CameraControllerBundle {})
             .set(main_camera(), ());
     }
 }

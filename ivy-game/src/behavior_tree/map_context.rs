@@ -1,4 +1,4 @@
-use crate::{BehaviorTreeNode, NodeStatus};
+use crate::behavior_tree::{BehaviorTreeNode, NodeStatus};
 
 /// Maps a behavior tree context from `T` to `U`
 pub struct MapContext<T, U> {
@@ -21,7 +21,7 @@ impl<T, U> BehaviorTreeNode<T> for MapContext<T, U> {
         self.child.execute(sub_ctx)
     }
 
-    fn reset_state(&mut self) {
+    fn reset(&mut self) {
         self.child.reset();
     }
 }

@@ -123,14 +123,14 @@ impl MovementController {
 
 #[derive(Clone, Debug, Resource, Bundle, serde::Serialize, serde::Deserialize)]
 pub struct MoverBundle {
-    conf: MovementConfiguration,
+    pub conf: MovementConfiguration,
 }
 
 impl Bundle for MoverBundle {
     fn mount(&self, entity: &mut flax::EntityBuilder) {
         entity
             .set(movement_controller(), MovementController {})
-            .set(movement_configuration(), self.conf)
+            .set(movement_configuration(), self.conf.clone())
             .set_default(movement_direction());
     }
 }

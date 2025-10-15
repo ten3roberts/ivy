@@ -10,7 +10,7 @@ use itertools::Itertools;
 use ivy_assets::AssetCache;
 use ivy_ui::{
     screens::Screen,
-    streamed::{Streamed, StreamedUiExt},
+    streamed::StreamedUiExt,
     violet::{
         core::{
             Widget,
@@ -32,7 +32,7 @@ use ivy_ui::{
 use crate::{
     plugin::selection,
     tools_controller::{current_tool, tools},
-    ui::{browser::AssetBrowser, entity_editor::EntityComponentEditor},
+    ui::entity_editor::EntityComponentEditor,
 };
 
 pub struct InGameEditorUi {

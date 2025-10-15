@@ -126,13 +126,7 @@ impl<T: 'static + Send + Sync + LoadFromPath> Editable for AssetPath<T> {
                 ),
                 items,
             )
-            .searcheable(|item, query| {
-                item.path
-                    .display()
-                    .to_string()
-                    .to_lowercase()
-                    .contains(&query.to_lowercase())
-            }),
+            .searchable(|item| item.path.display().to_string()),
         )
     }
 

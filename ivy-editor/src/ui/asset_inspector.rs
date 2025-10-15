@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use async_std::{
-    path::{Path, PathBuf},
+    path::PathBuf,
     stream::StreamExt,
 };
 use glam::BVec2;
@@ -11,9 +11,7 @@ use ivy_assets::{
     meta::AssetPayloadUntyped,
 };
 use ivy_editable::registry::EDITABLE_REGISTRY;
-use ivy_ui::{
-    toast::{Toast, toasts},
-    violet::{
+use ivy_ui::violet::{
         core::{
             Scope, Widget,
             layout::Align,
@@ -29,8 +27,7 @@ use ivy_ui::{
         },
         futures_signals::signal::{Mutable, SignalExt},
         lucide::icons::{LUCIDE_CHECK, LUCIDE_TRIANGLE_ALERT},
-    },
-};
+    };
 
 pub struct AssetEditor {
     assets: AssetCache,

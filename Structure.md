@@ -24,8 +24,11 @@ The engine is organized into multiple crates within a workspace, allowing modula
   - `Bundle` trait: For mounting sets of components to entities via `EntityBuilder`.
   - `AsyncCommandBuffer`: For deferred ECS operations.
   - Events: `TickEvent`, `PostInitEvent`, etc.
+  - `Template`: Composition of Bundles for entity construction; allows stored, serializable entity descriptions.
+  - `TemplateDesc`: Serializable descriptor for Templates, editable in editor.
+  - `BundleDesc`: Trait for offline bundle descriptors, enabling asset-based entity creation.
 - **Modules**: app (builder, driver, event), bundle, components, extensions, gizmos (traits, transforms), layer (events), math, subscribers, systems, template, transforms, updatable, update_layer.
-- **Relations**: App owns World and AssetCache; Layers register into World; Gizmos are drawn via DrawGizmos; Bundles mount to EntityBuilder; Components are ECS primitives.
+- **Relations**: App owns World and AssetCache; Layers register into World; Gizmos are drawn via DrawGizmos; Bundles mount to EntityBuilder; Components are ECS primitives; Templates enable serialized, asset-based entity spawning.
 
 #### ivy-assets
 - **Purpose**: Sync and async asset system with caching.

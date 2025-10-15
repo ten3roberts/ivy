@@ -1,8 +1,10 @@
 # Ivy Engine
 
-[![Rust](https://img.shields.io/badge/rust-%23000000.svg?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
-[![WebGPU](https://img.shields.io/badge/WebGPU-000000?style=for-the-badge&logo=webgpu&logoColor=white)](https://gpuweb.github.io/gpuweb/)
-[![ECS](https://img.shields.io/badge/ECS-Flax-000000?style=for-the-badge)](https://github.com/ten3roberts/flax)
+[![Rust](https://img.shields.io/badge/rust-orange?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![WebGPU](https://img.shields.io/badge/WebGPU-blue?style=for-the-badge&logo=webgpu)](https://gpuweb.github.io/gpuweb/)
+[![ECS](https://img.shields.io/badge/ECS-Flax-green?style=for-the-badge)](https://github.com/ten3roberts/flax)
+
+[![Docs](https://img.shields.io/badge/API%20Docs-lib.rs?style=for-the-badge)](https://lib.rs/ivy)
 
 A modular, ECS-driven game engine written in Rust, designed for building high-performance 3D applications and games. Ivy provides a layered architecture, advanced rendering with WebGPU, physics simulation, asset management, and an integrated editor.
 
@@ -11,6 +13,7 @@ A modular, ECS-driven game engine written in Rust, designed for building high-pe
 - [Overview](#overview)
 - [Key Features](#key-features)
 - [Working Principles](#working-principles)
+- [Serialization](#serialization)
 - [Architecture](#architecture)
 - [Getting Started](#getting-started)
 - [Examples](#examples)
@@ -23,7 +26,7 @@ A modular, ECS-driven game engine written in Rust, designed for building high-pe
 
 Ivy Engine is built around an Entity Component System (ECS) using Flax, enabling efficient data-oriented programming. It features a modular crate structure, allowing developers to pick and choose components for their projects. The engine supports WebGPU-based rendering, physics with Rapier3D, async asset loading, and more.
 
-Whether you're building a game, simulation, or interactive 3D application, Ivy provides the tools to create performant, scalable Rust applications.
+Whether you're building a game, simulation, or interactive 3D application, Ivy enables the creation of performant, scalable Rust applications.
 
 ## Key Features
 
@@ -143,11 +146,34 @@ UI is built on the Violet retained-mode GUI library:
 - **Integration**: UI renders as an overlay on 3D scenes.
 - **Editor**: In-engine editing tools use the same UI system.
 
+### Templates and Entity Construction
+
+Templates provide a flexible way to define and instantiate entities:
+- **Composition**: A set of bundles describing the entity.
+- **Serialization**: Templates enable serialization and deserialization, supporting the loading of complex assets like textures, models, and other dependent assets.
+- **Editing**: Templates are editable in the editor, enabling visual entity creation.
+- **Instantiation**: Entity spawning from stored templates, supporting asset-based game design.
+
+This system bridges programmatic entity creation with data-driven design, enabling visual entity creation through editor tooling.
+
+## Serialization
+
+Ivy provides out-of-the-box support for scene serialization and save/loading, enabling persistent worlds and game world editors:
+
+- **Scene Serialization**: Scenes are serialized to various formats including JSON, Bincode, and RON, capturing entity hierarchies based on Templates.
+- **Template-Based**: Each entity references a `Template` (via `template_path`), with additional component data serialized separately.
+- **Asset Integration**: Serialized scenes load asynchronously, resolving all asset dependencies.
+- **Editor Support**: The integrated editor includes save/load dialogs for `.ivsc` scene files.
+- **API**: Use `SceneSerializer` for programmatic serialization; `serialize_json` for JSON saving, `load_scene` for loading from any supported format.
+
+This enables rapid iteration, scene sharing, and data-driven content creation without custom serialization code.
+
 ### Editor and Tools
 
 Ivy includes an integrated editor for rapid development:
 - **Gizmos**: Visual debugging tools.
 - **Property Editing**: Modify component values in real-time.
+- **Template Editing**: Create and edit entity templates visually.
 - **Scene Management**: Load, edit, and save scenes.
 
 The editor is built using the same ECS and UI systems as user applications.
@@ -209,7 +235,7 @@ cargo run --example basic
 ## Documentation
 
 - **[User Guide](https://ten3roberts.github.io/ivy)**: Comprehensive guide to using Ivy.
-- **[API Docs](https://docs.rs/ivy-engine)**: Generated Rust documentation.
+- **[API Docs](https://lib.rs/ivy)**: Generated Rust documentation.
 - **[Structure.md](./Structure.md)**: Detailed engine architecture and crate breakdown.
 
 ## Gallery

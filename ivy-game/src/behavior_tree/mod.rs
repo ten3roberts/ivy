@@ -9,7 +9,7 @@ pub enum NodeStatus {
 
 /// Trait for a Behavior Tree node.
 /// Each node mutably borrows the shared game/AI context `T`.
-pub trait BehaviorTreeNode<T> {
+pub trait BehaviorTreeNode<T>: Send + Sync {
     fn execute(&mut self, ctx: &mut T) -> NodeStatus;
     fn reset(&mut self) {}
 }

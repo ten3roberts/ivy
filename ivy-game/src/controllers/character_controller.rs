@@ -1,20 +1,22 @@
 use flax::{component, system};
 use glam::{vec3, Quat, Vec2, Vec3};
-use ivy_core::{components::rotation, math::Axis2D, update_layer::Plugin, Bundle};
+use ivy_core::{
+    components::rotation, math::Axis2D, update_layer::Plugin, Bundle, EntityBuilderExt,
+};
 use ivy_input::{
     components::input_state,
     types::{Key, NamedKey},
-    Action, CursorMoveBinding, InputState, KeyBinding,
+    Action, BindingExt, CursorMoveBinding, InputState, KeyBinding,
 };
 use ivy_physics::{
     rapier3d::prelude::{CoefficientCombineRule, ColliderBuilder, SharedShape},
-    ColliderBundle,
+    ColliderBundle, RigidBodyBundle,
 };
 
-use crate::{
-    behavior_tree::{BehaviorTree, BehaviorTreeNode},
-    controllers::character_controller,
-};
+use crate::behavior_tree::{BehaviorTree, BehaviorTreeNode};
+use crate::navigation::movement_direction;
+use ivy_core::components::position;
+use ivy_physics::components::velocity;
 
 component! {
     character_controller: CharacterController,
@@ -25,8 +27,9 @@ component! {
 
 }
 
+#[derive(Clone, Default, Debug)]
 pub struct CharacterControllerInput {
-    move_dir: Vec2,
+    pub move_dir: Vec2,
 }
 
 pub struct CharacterControllerState {
@@ -35,6 +38,7 @@ pub struct CharacterControllerState {
     grounded: bool,
 }
 
+#[derive(Default)]
 pub struct CharacterControllerOutput {
     move_velocity: Vec3,
     jump: bool,
@@ -49,6 +53,8 @@ pub struct CharacterControllerContext {
 pub struct CharacterController {
     behavior_tree: BehaviorTree<CharacterControllerContext>,
     input: CharacterControllerInput,
+    pub yaw: f32,
+    pub jump: bool,
 }
 
 #[derive(Clone)]
@@ -60,8 +66,15 @@ impl Bundle for CharacterControllerBundle {
 
         let input = PlayerInputConfiguration::new();
 
+        let controller = CharacterController {
+            behavior_tree: BehaviorTree::new(WalkAction {}),
+            input: CharacterControllerInput::default(),
+            yaw: 0.0,
+            jump: false,
+        };
+
         entity
-            .set(character_controller(), self.controller)
+            .set(character_controller(), controller)
             .set_default(movement_input())
             .set_default(yaw_input())
             .set_default(jump_input())
@@ -73,18 +86,7 @@ impl Bundle for CharacterControllerBundle {
                     .with_action(yaw_input(), input.yaw_input_action)
                     .with_action(jump_input(), input.jump_input)
                     .with_action(interact_input(), input.interact_input),
-            )
-            .mount(self.rb_bundle)
-            .mount(ColliderBundle::from_builder(
-                ColliderBuilder::new(SharedShape::capsule_y(
-                    (character_height) / 2.0 - 0.2 * 2.0,
-                    0.2,
-                ))
-                .friction_combine_rule(CoefficientCombineRule::Min)
-                .restitution_combine_rule(CoefficientCombineRule::Min)
-                .restitution(0.0)
-                .friction(0.0),
-            ));
+            );
     }
 }
 
@@ -93,13 +95,38 @@ impl CharacterController {
     fn update_inputs_system(
         self: &mut CharacterController,
         movement_input: Vec2,
-        rotation: Quat,
         yaw_input: f32,
         jump_input: bool,
     ) {
         self.yaw += yaw_input;
         self.jump |= jump_input;
-        self.input.move_dir = movement_input.normalize();
+        self.input.move_dir = movement_input.normalize_or_zero();
+
+        tracing::info!(?self.input, "Updating character input");
+    }
+
+    #[system]
+    fn update_movement_system(
+        self: &mut CharacterController,
+        position: Vec3,
+        velocity: Vec3,
+        movement_direction: &mut Vec3,
+    ) {
+        let state = CharacterControllerState {
+            position,
+            velocity,
+            grounded: true, // TODO: determine from physics
+        };
+
+        let mut ctx = CharacterControllerContext {
+            input: self.input.clone(),
+            state,
+            output: CharacterControllerOutput::default(),
+        };
+
+        self.behavior_tree.execute(&mut ctx);
+
+        *movement_direction = ctx.output.move_velocity;
     }
 }
 
@@ -116,6 +143,9 @@ impl Plugin for CharacterControllerPlugin {
         schedules
             .per_tick_mut()
             .with_system(CharacterController::update_inputs_system())
+            .with_system(CharacterController::update_movement_system());
+
+        Ok(())
     }
 }
 
@@ -161,11 +191,8 @@ impl PlayerInputConfiguration {
         let jump_input =
             Action::new().with_binding(KeyBinding::new(Key::Named(NamedKey::Space)).rising_edge());
 
-        // let interact_input =
-        //     Action::new().with_binding(KeyBinding::new(Key::Character("f".into())).rising_edge());
-        //
-        // let inventory_action =
-        //     Action::new().with_binding(KeyBinding::new(Key::Character("e".into())).falling_edge());
+        let interact_input =
+            Action::new().with_binding(KeyBinding::new(Key::Character("f".into())).rising_edge());
 
         Self {
             movement_input_action,

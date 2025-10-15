@@ -423,14 +423,8 @@ impl Widget for BundleCreationWidget {
         });
 
         let selection_widget = raised_card(ScrollArea::vertical(
-            Dropdown::new(selected.lower_option(), available_bundles.clone()).searcheable(
-                |item, filter| {
-                    item.registration
-                        .tag_name()
-                        .to_lowercase()
-                        .contains(&filter.to_lowercase())
-                },
-            ),
+            Dropdown::new(selected.lower_option(), available_bundles.clone())
+                .searchable(|item| item.registration.tag_name().to_string()),
         ));
 
         col((
