@@ -3,6 +3,7 @@
 [![Rust](https://img.shields.io/badge/rust-orange?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![WebGPU](https://img.shields.io/badge/WebGPU-blue?style=for-the-badge&logo=webgpu)](https://gpuweb.github.io/gpuweb/)
 [![ECS](https://img.shields.io/badge/ECS-Flax-green?style=for-the-badge)](https://github.com/ten3roberts/flax)
+[![Violet](https://img.shields.io/badge/Violet-GUI%20Library-purple?style=for-the-badge)](https://github.com/ten3roberts)
 
 [![Docs](https://img.shields.io/badge/API%20Docs-lib.rs?style=for-the-badge)](https://lib.rs/ivy)
 
@@ -87,7 +88,10 @@ Layers communicate through shared resources:
 - **Asset Cache**: Shared assets like textures and models.
 - **Event System**: Low-frequency events (e.g., input, collisions) are broadcast and handled by interested layers.
 
-This architecture enables flexible, decoupled systems that can be mixed, matched, and conditionally enabled based on application needs.
+### Plugins and World Logic
+Plugins extend the ECS World with modular logic using the `Plugin` trait. Unlike Layers, which operate above the World, Plugins integrate directly into the World's systems and scheduled logic. Plugins add ECS systems for game and entity logic, and enable automatic multithreading for parallel execution. Plugins are registered during App setup and can depend on other plugins for dependency ordered execution.
+
+This enables decoupled systems that can be mixed, matched, and conditionally enabled/disabled based on application needs.
 
 ### ECS and Components
 

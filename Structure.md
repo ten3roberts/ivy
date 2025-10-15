@@ -14,8 +14,9 @@ The engine is organized into multiple crates within a workspace, allowing modula
 - **Purpose**: Base crate providing core types, traits, and the App framework.
 - **Key Components**:
   - `App`: Heart of Ivy programs, manages layers, ECS world, asset cache, and event system. Contains `World` (ECS), `AssetCache`, `EventRegistry`, and `DynamicStore`.
-  - `Layer` trait: Abstraction for logic layers (e.g., graphics, game logic). Implement `register` to set up systems and events.
-  - `LayerDyn`: Dynamic dispatch for layers, with `register_dyn`.
+- `Layer` trait: Abstraction for logic layers (e.g., graphics, game logic). Implement `register` to set up systems and events.
+- `LayerDyn`: Dynamic dispatch for layers, with `register_dyn`.
+- `Plugin` trait: For ECS-centered modular logic, adding systems and schedules to the World. Enables multithreaded execution.
   - `EngineLayer`: Default layer handling async command buffers and gizmos.
   - `Gizmos`: Debug visualization system for temporary objects. Includes `GizmosSection`, `DrawGizmos` trait.
   - Gizmo types: `SphereGizmo`, `LineGizmo`, `CuboidGizmo`, etc., implementing `DrawGizmos`.
@@ -27,7 +28,7 @@ The engine is organized into multiple crates within a workspace, allowing modula
   - `Template`: Composition of Bundles for entity construction; allows stored, serializable entity descriptions.
   - `TemplateDesc`: Serializable descriptor for Templates, editable in editor.
   - `BundleDesc`: Trait for offline bundle descriptors, enabling asset-based entity creation.
-- **Modules**: app (builder, driver, event), bundle, components, extensions, gizmos (traits, transforms), layer (events), math, subscribers, systems, template, transforms, updatable, update_layer.
+- **Modules**: app (builder, driver, event), bundle, components, extensions, gizmos (traits, transforms), layer (events), math, plugin, subscribers, systems, template, transforms, updatable, update_layer.
 - **Relations**: App owns World and AssetCache; Layers register into World; Gizmos are drawn via DrawGizmos; Bundles mount to EntityBuilder; Components are ECS primitives; Templates enable serialized, asset-based entity spawning.
 
 #### ivy-assets
