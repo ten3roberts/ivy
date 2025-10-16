@@ -6,7 +6,8 @@ use ivy_assets::{stored::DynamicStore, AssetCache};
 use ivy_core::{
     components::engine,
     transforms::TransformUpdatePlugin,
-    update_layer::{Plugin, ScheduleSetBuilder},
+    plugin::{Plugin, PluginContext},
+    update_layer::ScheduleSetBuilder,
 };
 
 use crate::{
@@ -58,13 +59,8 @@ impl Default for PhysicsPlugin {
 }
 
 impl Plugin for PhysicsPlugin {
-    fn install(
-        &self,
-        world: &mut World,
-        _: &AssetCache,
-        _: &mut DynamicStore,
-        schedules: &mut ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
+    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
+        let PluginContext { world, assets, store, schedules } = ctx;
         let dt = schedules.fixed_mut().time_step().delta_time() as f32;
 
         world.set(engine(), gravity(), self.gravity)?;

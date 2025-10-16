@@ -2,8 +2,8 @@ use flax::{Entity, World};
 use glam::{vec3, Quat, Vec3};
 use ivy_assets::{stored::DynamicStore, AssetCache};
 use ivy_core::{
-    components::{main_camera, TransformBundle},
-    update_layer::{Plugin, ScheduleSetBuilder},
+    components::{engine, main_camera, TransformBundle},
+    plugin::{Plugin, PluginContext},
     Bundle, EntityBuilderExt,
 };
 use ivy_graphics::camera::CameraBundle;
@@ -14,20 +14,15 @@ use crate::controllers::camera_controller::CameraControllerBundle;
 pub struct StandaloneCameraPlugin;
 
 impl Plugin for StandaloneCameraPlugin {
-    fn install(
-        &self,
-        world: &mut World,
-        _: &AssetCache,
-        _: &mut DynamicStore,
-        _: &mut ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
+    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
+        let PluginContext { world, assets, store, schedules } = ctx;
         Entity::builder().mount(StandaloneCameraBundle).spawn(world);
 
         Ok(())
     }
 }
 
-struct StandaloneCameraBundle;
+pub struct StandaloneCameraBundle;
 
 impl Bundle for StandaloneCameraBundle {
     fn mount(&self, entity: &mut flax::EntityBuilder) {

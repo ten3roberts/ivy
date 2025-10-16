@@ -249,13 +249,8 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
 struct LogicPlugin;
 
 impl Plugin for LogicPlugin {
-    fn install(
-        &self,
-        world: &mut World,
-        assets: &AssetCache,
-        _: &mut DynamicStore,
-        _: &mut ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
+    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
+        let PluginContext { world, assets, store, schedules } = ctx;
         setup_objects(world, assets.clone())
     }
 }

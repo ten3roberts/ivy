@@ -1,7 +1,7 @@
 use flax::{component, system};
 use glam::{vec3, Quat, Vec2, Vec3};
 use ivy_core::{
-    components::rotation, math::Axis2D, update_layer::Plugin, Bundle, EntityBuilderExt,
+    components::rotation, math::Axis2D, plugin::Plugin, Bundle, EntityBuilderExt,
 };
 use ivy_input::{
     components::input_state,
@@ -133,13 +133,8 @@ impl CharacterController {
 pub struct CharacterControllerPlugin;
 
 impl Plugin for CharacterControllerPlugin {
-    fn install(
-        &self,
-        world: &mut flax::World,
-        assets: &ivy_assets::AssetCache,
-        store: &mut ivy_assets::stored::DynamicStore,
-        schedules: &mut ivy_core::update_layer::ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
+    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
+        let PluginContext { world, assets, store, schedules } = ctx;
         schedules
             .per_tick_mut()
             .with_system(CharacterController::update_inputs_system())

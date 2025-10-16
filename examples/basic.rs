@@ -157,13 +157,8 @@ pub fn main() -> anyhow::Result<()> {
 pub struct GizmosPlugin;
 
 impl Plugin for GizmosPlugin {
-    fn install(
-        &self,
-        _: &mut World,
-        _: &AssetCache,
-        _: &mut DynamicStore,
-        schedules: &mut ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
+    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
+        let PluginContext { world, assets, store, schedules } = ctx;
         schedules
             .per_tick_mut()
             .with_system(point_light_gizmo_system());
@@ -368,13 +363,8 @@ pub struct LogicPlugin;
 struct RotateSpotlightPlugin;
 
 impl Plugin for RotateSpotlightPlugin {
-    fn install(
-        &self,
-        world: &mut World,
-        _: &AssetCache,
-        _: &mut DynamicStore,
-        schedules: &mut ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
+    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
+        let PluginContext { world, assets, store, schedules } = ctx;
         flax::component! {
             rotate_light: Quat,
         }
@@ -443,13 +433,8 @@ impl Plugin for RotateSpotlightPlugin {
 struct GameUiPlugin;
 
 impl Plugin for GameUiPlugin {
-    fn install(
-        &self,
-        world: &mut World,
-        assets: &AssetCache,
-        _: &mut DynamicStore,
-        _: &mut ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
+    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
+        let PluginContext { world, assets, store, schedules } = ctx;
         world.get(engine(), screen_state())?.open(MainUI {
             assets: assets.clone(),
         });
@@ -472,13 +457,8 @@ impl Screen for MainUI {
 }
 
 impl Plugin for LogicPlugin {
-    fn install(
-        &self,
-        world: &mut World,
-        assets: &AssetCache,
-        _: &mut DynamicStore,
-        _: &mut ivy_core::update_layer::ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
+    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
+        let PluginContext { world, assets, store, schedules } = ctx;
         self.setup_assets(world, assets)
     }
 }

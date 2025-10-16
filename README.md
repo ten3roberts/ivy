@@ -3,7 +3,7 @@
 [![Rust](https://img.shields.io/badge/rust-orange?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![WebGPU](https://img.shields.io/badge/WebGPU-blue?style=for-the-badge&logo=webgpu)](https://gpuweb.github.io/gpuweb/)
 [![ECS](https://img.shields.io/badge/ECS-Flax-green?style=for-the-badge)](https://github.com/ten3roberts/flax)
-[![Violet](https://img.shields.io/badge/UI-Violet-purple?style=for-the-badge)](https://github.com/ten3roberts/violet)
+[![Violet](https://img.shields.io/badge/GUI-Violet-purple?style=for-the-badge)](https://github.com/ten3roberts/violet)
 
 [![Docs](https://img.shields.io/badge/API%20Docs-lib.rs?style=for-the-badge)](https://lib.rs/ivy)
 
@@ -15,7 +15,6 @@ A modular, ECS-driven game engine written in Rust, designed for building high-pe
 - [Key Features](#key-features)
 - [Working Principles](#working-principles)
 - [Serialization](#serialization)
-- [Architecture](#architecture)
 - [Getting Started](#getting-started)
 - [Examples](#examples)
 - [Documentation](#documentation)
@@ -27,7 +26,9 @@ A modular, ECS-driven game engine written in Rust, designed for building high-pe
 
 Ivy Engine is built around an Entity Component System (ECS) using Flax, enabling efficient data-oriented programming. It features a modular crate structure, allowing developers to pick and choose components for their projects. The engine supports WebGPU-based rendering, physics with Rapier3D, async asset loading, and more.
 
-Ivy builds performant, scalable Rust applications for games, simulations, and interactive 3D apps.
+**Systems communicate not by direct action, but by sharing data**
+
+Ivy allows Rust applications for games, simulations, and interactive 3D apps with a decoupled, modular architecture that avoids spaghetti code.
 
 ## Key Features
 
@@ -35,13 +36,14 @@ Ivy builds performant, scalable Rust applications for games, simulations, and in
 - **ECS Architecture**: Entity Component System via Flax for efficient game logic.
 - **Layered Design**: Modular layers for organizing logic (rendering, physics, input, etc.).
 - **Async Asset Management**: Non-blocking asset loading with caching and hot reloading.
-- **Event System**: Deferred dynamic events using an observer pattern.
+- **Event System**: Top-down propagated system events (e.g., input, window resize) from the application driver to layers using an observer pattern.
+- **Signals**: Entity-to-entity gameplay events for cross-entity communication.
 
 ### Rendering & Graphics
 - **WebGPU Backend**: Modern GPU API support via WGPU.
 - **PBR Rendering**: Physically Based Rendering with materials, lights, and shadows.
 - **Render Graph**: Abstractions for fine-tuned render pipelines.
-- **Post-Processing**: Effects like bloom, tone mapping, and custom shaders.
+- **Post-Processing**: Effects like bloom, HDR tonemapping, and custom shaders.
 - **Gizmos**: Debug visualization for development.
 
 ### Physics & Simulation
@@ -50,7 +52,7 @@ Ivy builds performant, scalable Rust applications for games, simulations, and in
 - **Force Application**: Custom effectors for dynamic simulations.
 
 ### Input & Interaction
-- **Flexible Input System**: Composable vector generation from keyboard, mouse, and gamepad.
+- **Flexible Input System**: Composable vector generation from keyboard, mouse, and controllers.
 - **Action Binding**: Map inputs to component updates or callbacks.
 
 ### User Interface
@@ -86,7 +88,6 @@ Layers implement the `Layer` trait, providing methods for initialization (`regis
 Layers communicate through shared resources:
 - **ECS World**: Entities and components are accessible across layers.
 - **Asset Cache**: Shared assets like textures and models.
-- **Event System**: Low-frequency events (e.g., input, collisions) are broadcast and handled by interested layers.
 
 ### Plugins and World Logic
 Plugins extend the ECS World with modular logic using the `Plugin` trait. Unlike Layers, which operate above the World,
@@ -126,7 +127,7 @@ Supported formats include GLTF models, images (PNG, JPEG, HDR), and custom types
 Rendering is handled via WebGPU through the WGPU backend:
 - **Render Graph**: Defines multi-pass rendering pipelines with dependencies.
 - **Shaders**: WGSL shaders for materials, lighting, and effects.
-- **Post-Processing**: Effects like bloom, tone mapping applied after main rendering.
+- **Post-Processing**: Effects like bloom and HDR tonemapping applied after main rendering.
 - **Gizmos**: Debug visualization primitives for development.
 
 The pipeline supports PBR materials, shadows, and advanced lighting.
@@ -166,6 +167,10 @@ Templates define and instantiate entities:
 - **Instantiation**: Entity spawning from stored templates for asset-based game design.
 
 Templates combine programmatic and data-driven entity creation, supporting visual editing.
+
+### Signals
+
+Signals allow entities to declare response capabilities for events, acting like open sockets that other code can invoke on the entity. Entities wanting to receive events (e.g., "onCollision", "unequip", "mouseButtonChanged") declare signals, enabling decoupled invocation without tight coupling. This supports reactive behaviors, such as collision handling or character tool switching.
 
 ## Serialization
 
@@ -267,8 +272,6 @@ cargo run --example basic
 
 ### Emissive Materials
 ![Emissive Materials](https://github.com/user-attachments/assets/8e640d28-345c-44f7-b607-94febb1682fc)
-
-
 
 ## Contributing
 

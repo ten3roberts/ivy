@@ -6,7 +6,11 @@ use flax::{
 use glam::{Vec2, Vec3};
 use ivy_assets::{stored::DynamicStore, AssetCache};
 use ivy_core::{
-    components::{delta_time, engine, gizmos, main_camera, position, rotation, TransformBundle}, gizmos::{Gizmos, SphereGizmo}, math::Axis2D, update_layer::{Plugin, ScheduleSetBuilder}, Bundle, Color, ColorExt, EntityBuilderExt
+    components::{engine, gizmos, main_camera, position, rotation, TransformBundle},
+    gizmos::{Gizmos, SphereGizmo},
+    math::Axis2D,
+    plugin::{Plugin, PluginContext},
+    Bundle, Color, ColorExt, EntityBuilderExt
 };
 use ivy_input::{
     components::{cursor_position, input_state},
@@ -230,14 +234,8 @@ impl Bundle for RayPickerBundle {
 pub struct RayPickingPlugin;
 
 impl Plugin for RayPickingPlugin {
-    fn install(
-        &self,
-        _: &mut World,
-        _: &AssetCache,
-        _: &mut DynamicStore,
-        schedules: &mut ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
-
+    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
+        let PluginContext { world, assets, store, schedules } = ctx;
 
         schedules
             .per_tick_mut()

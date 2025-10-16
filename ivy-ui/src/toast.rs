@@ -2,7 +2,7 @@ use std::{char::ToUppercase, time::Duration};
 
 use flax::{component, Component};
 use glam::{vec2, BVec2};
-use ivy_core::{components::engine, update_layer::Plugin};
+use ivy_core::{components::engine, plugin::Plugin};
 use violet::{
     core::{
         components::{rotation, translation, LayoutAlignment},
@@ -179,13 +179,8 @@ impl Screen for ToastScreen {
 pub struct ToastPlugin;
 
 impl Plugin for ToastPlugin {
-    fn install(
-        &self,
-        world: &mut flax::World,
-        assets: &ivy_assets::AssetCache,
-        store: &mut ivy_assets::stored::DynamicStore,
-        schedules: &mut ivy_core::update_layer::ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
+    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
+        let PluginContext { world, assets, store, schedules } = ctx;
         let (toasts_tx, toasts_rx) = flume::unbounded();
 
         world
@@ -198,8 +193,10 @@ impl Plugin for ToastPlugin {
                 "This is a toast notification. It will disappear after a few seconds.",
             ))
             .ok();
+
         world.set(engine(), toast_state(), ToastState { toasts_tx });
 
         Ok(())
     }
+}
 }

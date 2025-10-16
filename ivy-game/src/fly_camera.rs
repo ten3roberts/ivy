@@ -9,7 +9,7 @@ use ivy_assets::{stored::DynamicStore, AssetCache};
 use ivy_core::{
     components::{engine, main_camera, request_capture_mouse, rotation, TransformBundle},
     math::{Axis2D, Axis3D},
-    update_layer::{Plugin, ScheduleSetBuilder},
+    plugin::{Plugin, PluginContext},
     Bundle, EntityBuilderExt, DEG_45,
 };
 use ivy_editable::Editable;
@@ -54,13 +54,8 @@ flax::component! {
 pub struct FlyCameraPlugin;
 
 impl Plugin for FlyCameraPlugin {
-    fn install(
-        &self,
-        world: &mut World,
-        _: &AssetCache,
-        _: &mut DynamicStore,
-        schedules: &mut ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
+    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
+        let PluginContext { world, assets, store, schedules } = ctx;
         let id = Entity::builder().mount(FreeCameraBundle).spawn(world);
 
         schedules
@@ -73,6 +68,10 @@ impl Plugin for FlyCameraPlugin {
         if let Ok(screen_state) = world.get(engine(), screen_state()) {
             screen_state.open(FlyCameraScreen { id });
         }
+
+        Ok(())
+    }
+}
 
         Ok(())
     }

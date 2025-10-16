@@ -16,13 +16,8 @@ use super::{player::Animator, skin::Skin};
 pub struct AnimationPlugin;
 
 impl Plugin for AnimationPlugin {
-    fn install(
-        &self,
-        _: &mut World,
-        _: &AssetCache,
-        _: &mut DynamicStore,
-        schedules: &mut ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
+    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
+        let PluginContext { world, assets, store, schedules } = ctx;
         schedules
             .per_tick_mut()
             .with_system(animation_step_system())

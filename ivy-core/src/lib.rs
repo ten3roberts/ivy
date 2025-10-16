@@ -46,6 +46,7 @@ pub mod template;
 pub mod transforms;
 mod updatable;
 pub mod update_layer;
+pub mod plugin;
 
 use std::f32::consts::PI;
 

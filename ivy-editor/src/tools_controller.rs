@@ -8,7 +8,8 @@ use ivy_assets::{Asset, AssetCache};
 use ivy_core::{
     Bundle,
     template::Template,
-    update_layer::{Plugin, ScheduleSetBuilder},
+    plugin::{Plugin, PluginContext},
+    update_layer::ScheduleSetBuilder,
 };
 use ivy_ui::violet::core::{
     Widget,
@@ -161,13 +162,8 @@ impl Bundle for ToolsControllerBundle {
 pub struct ToolsControllerPlugin;
 
 impl Plugin for ToolsControllerPlugin {
-    fn install(
-        &self,
-        _: &mut World,
-        _: &AssetCache,
-        _: &mut ivy_assets::stored::DynamicStore,
-        schedules: &mut ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
+    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
+        let PluginContext { world, assets, store, schedules } = ctx;
         schedules
             .per_tick_mut()
             .with_system(ToolsController::equip_tool_system());

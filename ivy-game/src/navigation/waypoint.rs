@@ -5,7 +5,7 @@ use ivy_assets::{stored::DynamicStore, AssetCache, Resource};
 use ivy_core::{
     components::{gizmos, world_transform},
     gizmos::{Gizmos, LineGizmo, SphereGizmo},
-    update_layer::{Plugin, ScheduleSetBuilder},
+    plugin::{Plugin, PluginContext},
     Bundle, Color, ColorExt,
 };
 use serde::{Deserialize, Serialize};
@@ -75,13 +75,8 @@ impl Bundle for WaypointNavigatorBundle {
 pub struct WaypointNavigatorPlugin;
 
 impl Plugin for WaypointNavigatorPlugin {
-    fn install(
-        &self,
-        _: &mut World,
-        _: &AssetCache,
-        _: &mut DynamicStore,
-        schedules: &mut ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
+    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
+        let PluginContext { world, assets, store, schedules } = ctx;
         schedules
             .fixed_mut()
             .with_system(WaypointNavigator::update_system())

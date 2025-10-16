@@ -16,7 +16,7 @@ use ivy_core::{
     components::{engine, gizmos, main_camera},
     gizmos::Gizmos,
     palette::Srgba,
-    update_layer::Plugin,
+    plugin::Plugin,
 };
 
 use ivy_editable::Editable;
@@ -320,13 +320,8 @@ impl Bundle for TransformToolBundle {
 pub struct TransformToolPlugin;
 
 impl Plugin for TransformToolPlugin {
-    fn install(
-        &self,
-        _: &mut World,
-        _: &ivy_assets::AssetCache,
-        _: &mut ivy_assets::stored::DynamicStore,
-        schedules: &mut ivy_core::update_layer::ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
+    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
+        let PluginContext { world, assets, store, schedules } = ctx;
         schedules
             .per_tick_mut()
             .with_system(TransformTool::update_system())

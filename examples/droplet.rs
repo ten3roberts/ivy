@@ -110,13 +110,8 @@ async fn setup_objects(cmd: AsyncCommandBuffer, assets: AssetCache) -> anyhow::R
 struct LogicPlugin;
 
 impl Plugin for LogicPlugin {
-    fn install(
-        &self,
-        world: &mut World,
-        assets: &AssetCache,
-        _: &mut DynamicStore,
-        _: &mut ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
+    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
+        let PluginContext { world, assets, store, schedules } = ctx;
         let cmd = world.get(engine(), async_commandbuffer()).unwrap().clone();
         async_std::task::spawn(setup_objects(cmd, assets.clone()));
         Ok(())

@@ -10,7 +10,8 @@ use futures::{FutureExt, Stream};
 use ivy_assets::{stored::DynamicStore, AssetCache};
 use ivy_core::{
     components::engine,
-    update_layer::{Plugin, ScheduleSetBuilder},
+    plugin::{Plugin, PluginContext},
+    update_layer::ScheduleSetBuilder,
 };
 use sync_wrapper::SyncStream;
 use violet::{
@@ -346,13 +347,8 @@ where
 pub struct StreamedUiPlugin;
 
 impl Plugin for StreamedUiPlugin {
-    fn install(
-        &self,
-        world: &mut World,
-        _: &AssetCache,
-        store: &mut DynamicStore,
-        schedules: &mut ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
+    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
+        let PluginContext { world, assets, store, schedules } = ctx;
         let (tx, rx) = flume::unbounded();
         let state = StreamedState { tx: tx.clone() };
         world.set(engine(), streamed_state(), state.clone())?;

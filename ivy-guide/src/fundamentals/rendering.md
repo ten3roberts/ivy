@@ -1,73 +1,62 @@
 # Rendering and Passes
 
-## Shaderpass
+Ivy uses a modern, flexible rendering system based on WebGPU and render graphs.
 
-Compared to other game engines, Ivy uses a slightly more complicated, though more
-flexible approach to rendering.
+## Render Graph System
+The rendering graph describes an acyclic graph of rendering nodes that define how the scene is rendered. Each node describes its inputs and outputs, with dependencies automatically generated for proper ordering and synchronization.
 
-All rendereable entities, hereby referred to as *objects* have an associated
-shaderpass. A shaderpass holds a shader and describes at which point it will be rendered
-in the rendering pipelines.
+Render graphs enable:
+- Multi-pass rendering pipelines
+- Parallel execution where possible
+- Flexible rendering architectures
+- Post-processing integration
 
-Each node in the rendering shaderpass has an associated type of shaderpass which it will
-render. For example, the `ImageRenderer` will usually be set up to render
-objects which have a `Handle<ImagePass>`. The `ImagePass`, wrapped in an opaque
-resource handle, will describe the vulkan pipeline and layout used.
+## Shader Passes
+Renderable entities have associated shader passes that determine when and how they render. A shader pass wraps a GPU pipeline and describes rendering parameters.
 
-**Note**: The renderer usually expect the different shaderpasses to conform to
-a single pipeline layout due to descriptor binding.
+Common shader passes include:
+- **GeometryPass**: Standard 3D geometry with materials
+- **ImagePass**: 2D image rendering
+- **TextPass**: Text rendering
+- **ShadowPass**: Shadow map generation
 
-Objects with meshes usually have a `GeometryPass` attached to them, with the
-mesh and/or material describing the specific properties like texture and
-roughness.
+## Materials and Shaders
+Materials define surface properties (albedo, roughness, metallic, etc.) and reference shaders. Ivy supports:
 
-Different objects which belong to the same shaderpass can have different values, I.e;
-different shaders, which for example can be used for wind affected foliage to be
-rendered along other objects in the same shaderpass, but different shaders.
+- Physically Based Rendering (PBR) materials
+- Custom WGSL shaders
+- Material instancing for performance
+- Texture mapping and sampling
 
+## Lighting
+The lighting system supports:
+- Point lights, directional lights, spot lights
+- Shadow mapping
+- Light culling and optimization
+- Dynamic light properties
 
-The system also allows for multiple shaderpasses to be attached to the same entity,
-allowing the entity to use different shaders for different shaderpasses. This high
-customizability allows the same entity to use a textured albedo shader for
-`GeometryPass`, and a solid color for a hypothetical `MinimapPass`. This can be
-very useful in games where the same object may be required to be rendered
-multiple times from different viewpoints.
+## Post-Processing
+Post-processing effects are applied after main rendering:
+- Bloom and glow effects
+- HDR tonemapping
+- Color grading
+- Custom effects via render graph nodes
 
-A `ShaderPass` is a type which wraps a `Pipeline` and a `PipelineLayout`, though
-they can contain other info. The Rust type system is used for differentiating
-between different kinds of passes.
-
-For reducing boilerplate a convenience macro `new_shaderpass` is provided for
-easily creating one or more stronly typed shaderpass types.
-
-Example:
+## Example: Basic Render Graph Setup
 ```rust
-use ivy::new_shaderpass;
+use ivy_wgpu::{rendergraph::RenderGraph, renderer::MeshRenderer};
 
-
-new_shaderpass! {
-  pub struct MinimapPass;
-  pub struct SolidPass;
-}
+// Create a render graph with PBR rendering
+let render_graph = RenderGraph::new()
+    .with_node(MeshRenderer::new(...))
+    .with_node(ShadowRenderer::new(...))
+    .with_node(PostProcessingNode::new(...));
 ```
 
-In many cases though, the usage of the included `GeometryPass`, `ImagePass`,
-`TextPass`, and different post processing passes are enough.
+## Performance Considerations
+- Use instancing for repeated objects
+- Batch draw calls where possible
+- Leverage render graph parallelism
+- Profile with GPU debugging tools
 
-## Rendergraph
-
-The rendering graph describes an acyclic graph of rendering nodes, which
-describe how the scene will be rendered. Each node describes its inputs and
-outputs, and dependencies will automatically be generated to ensure proper
-ordering and syncronization with paralellization using Vulkan.
-
-`ivy-presets` contain common rendergraph setups, such as for PBR rendering. It
-is also possible to create your own rendergraph to tailor the rendering for your
-game or application.
-
-The following example shows the raw, unaided setup of a rendergraph rendering a
-simple unlit model to the screen.
-
-```rust
-{{ #include ../../../examples/rendergraph.rs }}
-```
+The render graph system provides the flexibility to create custom rendering pipelines while maintaining high performance.

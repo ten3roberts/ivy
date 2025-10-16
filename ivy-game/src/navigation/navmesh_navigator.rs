@@ -6,7 +6,7 @@ use ivy::{
     engine, gizmos,
     ivy_core::{
         gizmos::{Gizmos, Line, Sphere},
-        update_layer::Plugin,
+        plugin::Plugin,
         Bundle, Color, ColorExt,
     },
     position, world_transform,
@@ -115,12 +115,8 @@ register_bundle!(NavmeshNavigatorBundle, NavmeshNavigatorBundle);
 pub struct NavmeshNavigatorPlugin;
 
 impl Plugin for NavmeshNavigatorPlugin {
-    fn install(
-        &self,
-        _: &mut flax::World,
-        _: &ivy::ivy_assets::AssetCache,
-        schedules: &mut ivy::ivy_core::update_layer::ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
+    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
+        let PluginContext { world, assets, store, schedules } = ctx;
         schedules
             .per_tick_mut()
             .with_system(NavmeshNavigator::calculate_paths_system())

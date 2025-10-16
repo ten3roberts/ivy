@@ -147,13 +147,8 @@ impl LogicPlugin {
 }
 
 impl Plugin for LogicPlugin {
-    fn install(
-        &self,
-        world: &mut World,
-        assets: &AssetCache,
-        _: &mut DynamicStore,
-        _: &mut ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
+    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
+        let PluginContext { world, assets, store, schedules } = ctx;
         self.setup_objects(world, assets)
     }
 }
@@ -165,13 +160,8 @@ component! {
 }
 
 impl Plugin for DynamicsPlugin {
-    fn install(
-        &self,
-        _: &mut World,
-        _: &AssetCache,
-        _: &mut DynamicStore,
-        schedules: &mut ivy_core::update_layer::ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
+    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
+        let PluginContext { world, assets, store, schedules } = ctx;
         let rotate_system = System::builder()
             .with_query(
                 Query::new((
@@ -185,6 +175,7 @@ impl Plugin for DynamicsPlugin {
                 *rotation =
                     Quat::from_axis_angle(vec3(1.0, 0.2, 0.0).normalize(), elapsed.as_secs_f32());
             });
+
         // #[system(args(elapsed=elapsed_time().source(engine())), par)]
         // fn rotate(rotate_target: &(), rotation: &mut Quat, elapsed: &Duration) {}
 
@@ -192,4 +183,5 @@ impl Plugin for DynamicsPlugin {
 
         Ok(())
     }
+}
 }

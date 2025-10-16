@@ -5,7 +5,7 @@ use glam::Vec3;
 use ivy_assets::{stored::DynamicStore, AssetCache, Resource};
 use ivy_core::{
     components::{delta_time, engine},
-    update_layer::{Plugin, ScheduleSetBuilder},
+    plugin::{Plugin, PluginContext},
     Bundle,
 };
 use ivy_physics::{
@@ -138,13 +138,8 @@ impl Bundle for MoverBundle {
 pub struct MoverPlugin;
 
 impl Plugin for MoverPlugin {
-    fn install(
-        &self,
-        _: &mut flax::World,
-        _: &AssetCache,
-        _: &mut DynamicStore,
-        schedules: &mut ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
+    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
+        let PluginContext { world, assets, store, schedules } = ctx;
         schedules
             .fixed_mut()
             .with_system(MovementController::update_movement_system());

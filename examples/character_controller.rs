@@ -3,6 +3,7 @@ use flax::{entity_ids, Entity, Query, World};
 use glam::{vec3, EulerRot, Quat, Vec3};
 use ivy_assets::{stored::DynamicStore, AssetCache};
 use ivy_core::components::main_camera;
+use ivy_core::template::Template;
 use ivy_core::{
     palette::{Srgb, Srgba},
     profiling::ProfilingLayer,
@@ -11,6 +12,7 @@ use ivy_core::{
     App, Color, ColorExt, EngineLayer, EntityBuilderExt,
 };
 use ivy_engine::{is_static, RigidBodyBundle, TransformBundle};
+use ivy_game::standalone_camera::StandaloneCameraBundle;
 use ivy_game::{
     controllers::{
         camera_controller::{camera_target, CameraTrackingPlugin},
@@ -169,18 +171,15 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
     .set(forward_pass(), red_material.clone())
     .spawn(world);
 
-    // Connect camera to character
-    let camera_entity = Query::new(main_camera())
-        .borrow(world)
-        .iter()
-        .next()
-        .context("No main camera found")?
-        .0;
+    let camera_entity = Template::new()
+        .with_bundle(StandaloneCameraBundle)
+        .build()
+        .spawn(world);
 
     world
-        .entity_mut(camera_entity)
+        .entity_mut(character_entity)
         .unwrap()
-        .set(camera_target(character_entity), ());
+        .set(camera_target(camera_entity), ());
 
     Entity::builder()
         .mount(
@@ -248,13 +247,8 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
 struct LogicPlugin;
 
 impl Plugin for LogicPlugin {
-    fn install(
-        &self,
-        world: &mut World,
-        assets: &AssetCache,
-        _: &mut DynamicStore,
-        _: &mut ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
+    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
+        let PluginContext { world, assets, store, schedules } = ctx;
         setup_objects(world, assets.clone())
     }
 }

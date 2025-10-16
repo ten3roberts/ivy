@@ -6,7 +6,8 @@ use glam::Vec2;
 use ivy_assets::{AssetCache, stored::DynamicStore};
 use ivy_core::{
     components::engine,
-    update_layer::{Plugin, ScheduleSetBuilder},
+    plugin::{Plugin, PluginContext},
+    update_layer::ScheduleSetBuilder,
 };
 use ivy_scene::{
     OpenSceneCommand, SceneBuilder, SceneCommand, scene_commands, scene_world,
@@ -105,15 +106,8 @@ impl EditorHostPlugin {
 }
 
 impl Plugin for EditorHostPlugin {
-    fn install(
-        // TODO: mut or maybe config?
-        &self,
-        world: &mut World,
-        // TODO: collect into struct
-        assets: &AssetCache,
-        _: &mut DynamicStore,
-        _schedules: &mut ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
+    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
+        let PluginContext { world, assets, store, schedules } = ctx;
         let scene_commands = world.get(engine(), scene_commands())?;
         let screens = world.get_mut(engine(), screen_state())?;
 

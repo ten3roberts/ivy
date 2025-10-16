@@ -15,6 +15,7 @@ use crate::{
     app::{PostInitEvent, TickEvent},
     components::{delta_time, elapsed_time, engine},
     layer::events::EventRegisterContext,
+    plugin::{Plugin, PluginContext},
     Layer,
 };
 
@@ -28,45 +29,6 @@ pub struct PluginKey {
     pub name: &'static str,
 }
 
-/// A plugin is added to a layer and allows logic to be added using the ECS
-///
-/// For full control of events and update frequency, use [crate::layer::Layer].
-pub trait Plugin {
-    // Installs the plugin to the schedule set
-    fn install(
-        &self,
-        world: &mut World,
-        assets: &AssetCache,
-        store: &mut DynamicStore,
-        schedules: &mut ScheduleSetBuilder,
-    ) -> anyhow::Result<()>;
-
-    fn key(&self) -> &'static str {
-        std::any::type_name::<Self>()
-    }
-
-    // Plugin runs before other plugin
-    fn before(&self) -> Vec<&str> {
-        Vec::new()
-    }
-
-    // Plugin runs after another plugin
-    fn after(&self) -> Vec<&str> {
-        Vec::new()
-    }
-}
-
-impl<U: Plugin> Plugin for Box<U> {
-    fn install(
-        &self,
-        world: &mut World,
-        assets: &AssetCache,
-        store: &mut DynamicStore,
-        schedules: &mut ScheduleSetBuilder,
-    ) -> Result<(), anyhow::Error> {
-        (**self).install(world, assets, store, schedules)
-    }
-}
 
 pub trait TimeStep: 'static + Display + Copy {
     fn step(&mut self, world: &mut World, schedule: &mut Schedule) -> anyhow::Result<()>;
@@ -321,7 +283,7 @@ impl PluginLayer {
 
         let plugins = mem::take(&mut self.plugins);
         for plugin in Self::sort_plugins(&plugins)? {
-            plugin.install(world, assets, store, &mut self.builder)?;
+            plugin.install(crate::plugin::PluginContext { world, assets, store, schedules: &mut self.builder })?;
         }
 
         self.schedules = Some(self.builder.build());

@@ -168,13 +168,8 @@ pub fn main() -> anyhow::Result<()> {
 struct SetupPlugin;
 
 impl Plugin for SetupPlugin {
-    fn install(
-        &self,
-        world: &mut World,
-        assets: &AssetCache,
-        _: &mut DynamicStore,
-        _: &mut ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
+    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
+        let PluginContext { world, assets, store, schedules } = ctx;
         Self::setup_objects(world, assets)
     }
 

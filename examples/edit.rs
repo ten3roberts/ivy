@@ -102,13 +102,8 @@ pub fn main() -> anyhow::Result<()> {
 struct GameUiPlugin;
 
 impl Plugin for GameUiPlugin {
-    fn install(
-        &self,
-        world: &mut World,
-        _: &AssetCache,
-        _: &mut DynamicStore,
-        _: &mut ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
+    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
+        let PluginContext { world, assets, store, schedules } = ctx;
         world.get(engine(), screen_state())?.open(MainUI {});
 
         Ok(())

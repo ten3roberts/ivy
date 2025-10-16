@@ -4,10 +4,12 @@ use enum_dispatch::enum_dispatch;
 use flax::{Component, Entity, Query, QueryBorrow, System, World, component, system};
 use ivy_core::{
     EntityBuilderExt,
-    components::{engine, gizmos, position, rotation, world_transform},
-    gizmos::{CuboidGizmo, DEFAULT_THICKNESS, Gizmos},
+    components::{engine, gizmos, main_camera},
+    gizmos::Gizmos,
+    palette::Srgba,
+    plugin::{Plugin, PluginContext},
     template::Template,
-    update_layer::Plugin,
+    update_layer::ScheduleSetBuilder,
 };
 use ivy_input::{
     Action, CompositeBinding, InputState, KeyBinding,
@@ -189,13 +191,8 @@ impl HistoryManager {
 pub struct EditorPlugin;
 
 impl Plugin for EditorPlugin {
-    fn install(
-        &self,
-        world: &mut World,
-        assets: &ivy_assets::AssetCache,
-        store: &mut ivy_assets::stored::DynamicStore,
-        schedules: &mut ivy_core::update_layer::ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
+    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
+        let PluginContext { world, assets, store, schedules } = ctx;
         let (tx, rx) = flume::unbounded();
 
         let (tool_ui_tx, tool_ui_rx) = flume::unbounded();

@@ -1,43 +1,75 @@
 # Layers
 
-The core of the program is an application, which defines the update loop.
+Layers are the fundamental building blocks of Ivy applications, providing modular units of logic that can be stacked and configured.
 
-The update loop dispatches to several layers, which which are *mostly* self
-contained units of logic. The layers get exlusive access to the world,
-resources, and events and may execute any logic in `on_update`. They also get
-exclusive access to `self` which enables them to both read and modify their own
-state.
+## What are Layers?
 
-This is useful for games where the main game logic can be contained in one or
-more layers and store the state without interfering with other layers such as
-physics.
+Layers implement the `Layer` trait, providing methods for initialization (`register`), updates, and event handling. Each layer defines its own state and governs its own execution.
 
-The layered design allows several high level concepts to work together in unison
-and separately and allows for logic to be added or removed.
+Layers are *mostly* self-contained units of logic that get exclusive access to the ECS world, resources, and events. They can execute logic in their update methods while maintaining isolation from other layers.
 
-An example would be a game which makes use of a client and server. The binaries
-can share most of the code, and the client and server can be separated into
-separate layers which allows the client to use all the same game logic as the
-server, and vice versa. The server and client layers can also be present at the
-same time which allows a self hosted client.
+## Benefits of Layered Architecture
 
-The `on_update` function takes three parameters:
-- [World](./ecs.md)
-- [Resources](./resources.md)
-- [Events](./events.md)
+- **Modularity**: Logic can be added or removed without affecting other systems
+- **Separation of Concerns**: Different aspects (rendering, physics, input) stay isolated
+- **Composability**: Layers can be mixed and matched for different application types
+- **Client/Server Sharing**: Same game logic can be used for both client and server with different layers
 
-The return type is of `anyhow::Result` and allows for any error to be
-propogated.
+## Common Layer Types
+- **Rendering Layer**: Handles GPU operations and graphics
+- **Physics Layer**: Manages physics simulation
+- **Input Layer**: Processes user interactions
+- **UI Layer**: Manages user interface
+- **Game Logic Layer**: Implements specific game rules
+- **Network Layer**: Handles multiplayer communication
+## Layer Lifecycle
+Layers go through several phases:
 
-For a layer to be used it needs to be pushed into the App.
+1. **Registration**: Set up systems, events, and initial state
+2. **Update**: Execute main logic each frame
+3. **Event Handling**: Respond to system events
+4. **Cleanup**: Release resources when the app shuts down
 
-## Example Usage
-The layer is a trait which must define an `on_update` function
-
-The following examples shows the basic usage of a layer, as well how to create
-an application using the layer.
-
-
+## Example: Custom Game Layer
 ```rust
-{{#include ../../../examples/layer.rs}}
+use ivy_core::{layer::Layer, app::App, events::EventRegistry};
+use flax::World;
+
+struct GameLayer {
+    score: i32,
+}
+
+impl Layer for GameLayer {
+    fn register(
+        &mut self,
+        world: &mut World,
+        events: &mut EventRegistry,
+    ) -> anyhow::Result<()> {
+        // Set up game systems and initial state
+        Ok(())
+    }
+
+    fn update(
+        &mut self,
+        world: &World,
+        events: &EventRegistry,
+    ) -> anyhow::Result<()> {
+        // Update game logic
+        self.score += 1;
+        Ok(())
+    }
+}
 ```
+
+## Using Layers in App Builder
+```rust
+use ivy_core::App;
+
+let app = App::builder()
+    .with_layer(GameLayer { score: 0 })
+    .with_layer(PhysicsLayer::new())
+    .with_layer(RenderLayer::new())
+    .run()?;
+```
+
+Layers provide the foundation for building complex, maintainable applications with clear separation of concerns.

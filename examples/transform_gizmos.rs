@@ -241,13 +241,8 @@ fn setup_objects(world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
 struct ExamplePlugin;
 
 impl Plugin for ExamplePlugin {
-    fn install(
-        &self,
-        world: &mut World,
-        assets: &AssetCache,
-        _: &mut DynamicStore,
-        _: &mut ivy_core::update_layer::ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
+    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
+        let PluginContext { world, assets, store, schedules } = ctx;
         setup_objects(world, assets)?;
 
         #[system(with_query(Query::new((world_transform(), world_transform().relation(child_of)))))]
