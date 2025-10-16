@@ -6,3 +6,6 @@ perf.data
 /assets/models
 /assets/textures
 /assets/hdris
+
+# Ivy Scene Format
+*.ivsc
