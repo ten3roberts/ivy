@@ -27,7 +27,7 @@ A modular, ECS-driven game engine written in Rust, designed for building high-pe
 
 Ivy Engine is built around an Entity Component System (ECS) using Flax, enabling efficient data-oriented programming. It features a modular crate structure, allowing developers to pick and choose components for their projects. The engine supports WebGPU-based rendering, physics with Rapier3D, async asset loading, and more.
 
-Whether you're building a game, simulation, or interactive 3D application, Ivy enables the creation of performant, scalable Rust applications.
+Ivy builds performant, scalable Rust applications for games, simulations, and interactive 3D apps.
 
 ## Key Features
 
@@ -77,7 +77,7 @@ At the heart of Ivy is the `App` struct, which orchestrates the entire applicati
 - **Event Registry**: A broadcasting system for inter-layer communication.
 - **Layers**: Modular units of logic that can be stacked and configured.
 
-Layers implement the `Layer` trait, providing methods for initialization (`register`), updates, and event handling. This layered design allows for composable, non-interfering systems. For example:
+Layers implement the `Layer` trait, providing methods for initialization (`register`), updates, and event handling. The layered design supports composable, non-interfering systems. For example:
 - A rendering layer handles GPU operations.
 - A physics layer simulates rigid body dynamics.
 - An input layer processes user interactions.
@@ -89,9 +89,16 @@ Layers communicate through shared resources:
 - **Event System**: Low-frequency events (e.g., input, collisions) are broadcast and handled by interested layers.
 
 ### Plugins and World Logic
-Plugins extend the ECS World with modular logic using the `Plugin` trait. Unlike Layers, which operate above the World, Plugins integrate directly into the World's systems and scheduled logic. Plugins add ECS systems for game and entity logic, and enable automatic multithreading for parallel execution. Plugins are registered during App setup and can depend on other plugins for dependency ordered execution.
+Plugins extend the ECS World with modular logic using the `Plugin` trait. Unlike Layers, which operate above the World,
+plugins integrate directly into the World's systems and scheduled logic. They allow you to add ECS systems for game and
+entity logic, and enable automatic multithreading for parallel execution.
 
-This enables decoupled systems that can be mixed, matched, and conditionally enabled/disabled based on application needs.
+Plugins are registered during App setup and can depend on other plugins for dependency-ordered execution.
+
+This allows decoupled game systems that can be mixed, matched, and conditionally enabled/disabled based on application needs.
+
+Plugins intentionally cannot access each other; instead, they communicate through the shared ECS data and world
+resources.
 
 ### ECS and Components
 
@@ -152,25 +159,25 @@ UI is built on the Violet retained-mode GUI library:
 
 ### Templates and Entity Construction
 
-Templates provide a flexible way to define and instantiate entities:
+Templates define and instantiate entities:
 - **Composition**: A set of bundles describing the entity.
-- **Serialization**: Templates enable serialization and deserialization, supporting the loading of complex assets like textures, models, and other dependent assets.
-- **Editing**: Templates are editable in the editor, enabling visual entity creation.
-- **Instantiation**: Entity spawning from stored templates, supporting asset-based game design.
+- **Serialization**: Templates support serialization and deserialization for loading assets like textures and models.
+- **Editing**: Templates are editable in the editor for visual entity creation.
+- **Instantiation**: Entity spawning from stored templates for asset-based game design.
 
-This system bridges programmatic entity creation with data-driven design, enabling visual entity creation through editor tooling.
+Templates combine programmatic and data-driven entity creation, supporting visual editing.
 
 ## Serialization
 
-Ivy provides out-of-the-box support for scene serialization and save/loading, enabling persistent worlds and game world editors:
+Ivy supports scene serialization and save/loading for persistent worlds and editors:
 
-- **Scene Serialization**: Scenes are serialized to various formats including JSON, Bincode, and RON, capturing entity hierarchies based on Templates.
-- **Template-Based**: Each entity references a `Template` (via `template_path`), with additional component data serialized separately.
-- **Asset Integration**: Serialized scenes load asynchronously, resolving all asset dependencies.
+- **Scene Serialization**: Scenes serialize to JSON, Bincode, and RON, capturing entity hierarchies via Templates.
+- **Template-Based**: Each entity references a `Template` (via `template_path`), with component data serialized separately.
+- **Asset Integration**: Serialized scenes load asynchronously, resolving asset dependencies.
 - **Editor Support**: The integrated editor includes save/load dialogs for `.ivsc` scene files.
 - **API**: Use `SceneSerializer` for programmatic serialization; `serialize_json` for JSON saving, `load_scene` for loading from any supported format.
 
-This enables rapid iteration, scene sharing, and data-driven content creation without custom serialization code.
+This supports rapid iteration, scene sharing, and data-driven content creation without custom code.
 
 ### Editor and Tools
 
@@ -261,32 +268,7 @@ cargo run --example basic
 ### Emissive Materials
 ![Emissive Materials](https://github.com/user-attachments/assets/8e640d28-345c-44f7-b607-94febb1682fc)
 
-## Architecture
 
-### App and Layers
-The heart of Ivy is the `App` struct, which manages:
-- **ECS World**: Contains all entities and components.
-- **Asset Cache**: Handles loading and caching of assets.
-- **Event Registry**: Facilitates inter-layer communication.
-- **Layers**: Modular units of logic that can be stacked (e.g., rendering, physics, UI).
-
-Layers implement the `Layer` trait, allowing custom initialization, updates, and event handling. This design enables composable, non-interfering systems.
-
-### ECS Components
-Core components include:
-- **Transforms**: Position, rotation, scale, world transforms.
-- **Rendering**: Meshes, materials, cameras, lights.
-- **Physics**: Rigid bodies, colliders, velocities, masses.
-- **Custom**: User-defined components for game logic.
-
-### Rendering Pipeline
-- Graphics layers handle rendering passes.
-- WGPU provides GPU abstraction.
-- Render graphs define multi-pass rendering.
-- Post-processing effects are applied as final passes.
-
-### Asset System
-Assets are loaded asynchronously and cached. Supports hot reloading for rapid iteration. Resources handle non-shared data, while Assets are shared across the application.
 
 ## Contributing
 
