@@ -1,9 +1,7 @@
 # Welcome to Ivy Engine
-
 Ivy Engine is a modular, ECS-driven game engine written in Rust, designed for building high-performance 3D applications and games. Ivy provides a layered architecture, advanced rendering with WebGPU, physics simulation, asset management, and an integrated editor.
 
 ## Overview
-
 Ivy Engine is built around an Entity Component System (ECS) using Flax, enabling efficient data-oriented programming. It features a modular crate structure, allowing developers to pick and choose components for their projects. The engine supports WebGPU-based rendering, physics with Rapier3D, async asset loading, and more.
 
 **Systems communicate not by direct action, but by sharing data**
@@ -11,7 +9,6 @@ Ivy Engine is built around an Entity Component System (ECS) using Flax, enabling
 Ivy allows Rust applications for games, simulations, and interactive 3D apps with a decoupled, modular architecture that avoids spaghetti code.
 
 ## Key Features
-
 ### Core Systems
 - **ECS Architecture**: Entity Component System via Flax for efficient game logic.
 - **Layered Design**: Modular layers for organizing logic (rendering, physics, input, etc.).

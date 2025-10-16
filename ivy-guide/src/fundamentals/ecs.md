@@ -1,5 +1,4 @@
 # Entity Component System
-
 Ivy's game logic is centered around the Entity Component System (ECS) design pattern using Flax.
 
 ## ECS Fundamentals
@@ -58,6 +57,7 @@ Systems query and operate on entities with specific components:
 use flax::{system, Query};
 
 // Define a system that updates positions based on velocity
+
 #[system]
 fn update_positions(
     mut positions: Query<(&mut Position, &Velocity)>,

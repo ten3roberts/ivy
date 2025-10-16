@@ -1,5 +1,4 @@
 # Bundles
-
 Many of the built in systems require a certain set of components to be present
 in order to avoid many `Option` in query and branches.
 

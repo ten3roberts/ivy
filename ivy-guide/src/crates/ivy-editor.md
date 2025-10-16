@@ -1,15 +1,14 @@
 # ivy-editor
-
 Editor tools and integration.
-## Key Components
 
+## Key Components
 ### Tools
 Gizmos, property editing.
 
 ### Host, Plugin, ToolsController, UI
 Editor infrastructure.
-## Modules
 
+## Modules
 - `host`: Editor hosting
 - `plugin`: Editor plugin
 - `tools`: Editor tools

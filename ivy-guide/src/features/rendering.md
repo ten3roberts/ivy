@@ -1,5 +1,4 @@
 # Rendering & Graphics
-
 Learn how to set up and use Ivy's rendering system for creating visually rich 3D applications.
 
 ## Setting Up a Basic Renderer
@@ -70,8 +69,8 @@ world.spawn()
     .set(light_kind(), LightKind::Directional)
     .set(cast_shadow(), true);
 ```
-## Using Gizmos for Debugging
 
+## Using Gizmos for Debugging
 Visualize positions, vectors, and shapes during development:
 
 ```rust
@@ -82,8 +81,8 @@ fn debug_system(gizmos: Res<Gizmos>) {
     gizmos.cuboid(Vec3::ZERO, Vec3::ONE, Color::BLUE);
 }
 ```
-## Custom Render Graphs
 
+## Custom Render Graphs
 For advanced rendering pipelines, build custom render graphs:
 
 ```rust
@@ -93,8 +92,8 @@ let render_graph = RenderGraph::new()
     .with_node(BloomEffect::new())
     .with_node(Tonemapping::new());
 ```
-## Performance Tips
 
+## Performance Tips
 - Use instanced rendering for repeated objects
 - Batch similar materials together
 - Leverage LOD (Level of Detail) for distant objects

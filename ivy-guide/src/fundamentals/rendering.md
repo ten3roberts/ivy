@@ -1,5 +1,4 @@
 # Rendering and Passes
-
 Ivy uses a modern, flexible rendering system based on WebGPU and render graphs.
 
 ## Render Graph System

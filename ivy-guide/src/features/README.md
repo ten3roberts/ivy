@@ -1,5 +1,4 @@
 # Features
-
 This section demonstrates how to use Ivy Engine's major features and systems in practice. Each feature includes usage examples and implementation patterns.
 
 ## Rendering & Graphics

@@ -1,8 +1,7 @@
 # ivy-ui
-
 UI components built on Violet GUI library.
-## Key Components
 
+## Key Components
 ### ui_instance
 Handle to Violet AppInstance.
 
@@ -11,8 +10,8 @@ Texture for UI rendering.
 
 ### on_input_event
 Callback for input events.
-## Modules
 
+## Modules
 - `components`: UI components
 - `image`: Image handling
 - `layer`: UI layer

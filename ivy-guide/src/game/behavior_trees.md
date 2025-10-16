@@ -1,18 +1,15 @@
 # Behavior Trees for Characetr Controllers
-
 This guide covers how to use behavior trees for structured game logic in Ivy
 
 ---
 
 ## Overview
-
 Behavior Trees (BTs) are a hierarchical way to organize decision logic for characters and AI.  
 They replace tangled `if`/`else` code and complex state machines with modular, reusable nodes.
 
 ---
 
 ## Core API
-
 The core API defines a `BehaviorTreeNode` trait and `NodeStatus` enum.
 
 ```rust
@@ -22,7 +19,6 @@ The core API defines a `BehaviorTreeNode` trait and `NodeStatus` enum.
 ---
 
 ## Node Types
-
 | Type                   | Description                                       |
 | ---------------------- | ------------------------------------------------- |
 | **Sequence**           | Runs children in order until one fails or runs    |
@@ -35,7 +31,6 @@ The core API defines a `BehaviorTreeNode` trait and `NodeStatus` enum.
 ---
 
 ## Controller Context
-
 ```rust
 {{#include ../../../ivy-game/examples/character_controller.rs:controller_context}}
 ```
@@ -45,7 +40,6 @@ The behavior tree operates on this context every frame.
 ---
 
 ## Leaf Behaviors
-
 ```rust
 {{#include ../../../ivy-game/examples/character_controller.rs:actions}}
 ```
@@ -55,13 +49,11 @@ Each function returns a `NodeStatus` indicating whether it’s done, failed, or 
 ---
 
 ## Building the Tree
-
 ```rust
 {{#include ../../../ivy-game/examples/character_controller.rs:tree_build}}
 ```
 
 ### Visual Layout
-
 ```
 Selector
  ├── Jump
@@ -77,7 +69,6 @@ Selector
 ---
 
 ## Game Loop Example
-
 ```rust
 {{#include ../../../ivy-game/examples/character_controller.rs:loop}}
 ```
@@ -85,7 +76,6 @@ Selector
 ---
 
 ## Example Output
-
 ```
 Frame 0
 Moving → pos Vec3(0.08, 0.0, 0.0)

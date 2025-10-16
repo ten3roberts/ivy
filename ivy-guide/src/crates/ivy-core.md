@@ -1,8 +1,7 @@
 # ivy-core
-
 The base crate providing core types, traits, and the App framework.
-## Key Components
 
+## Key Components
 ### App
 The heart of Ivy programs, manages layers, ECS world, asset cache, and event system. Contains `World` (ECS), `AssetCache`, `EventRegistry`, and `DynamicStore`.
 
@@ -29,8 +28,8 @@ For deferred ECS operations.
 
 ### Template
 Composition of Bundles for entity construction; allows stored, serializable entity descriptions.
-## Modules
 
+## Modules
 - `app`: Builder, driver, event handling
 - `bundle`: Bundle traits and implementations
 - `components`: Core ECS components (position, rotation, scale, etc.)

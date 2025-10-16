@@ -1,13 +1,11 @@
 # Getting Started
-
 This section will guide you through installing Ivy Engine and creating your first application.
-## Prerequisites
 
+## Prerequisites
 - Rust 1.70 or later
 - A WebGPU-compatible GPU (most modern GPUs)
 
 ## Installation
-
 Add Ivy to your `Cargo.toml`:
 
 ```toml
@@ -21,11 +19,11 @@ For specific crates:
 ivy-core = "0.10"
 ivy-wgpu = "0.10"
 ivy-physics = "0.10"
+
 # etc.
 ```
 
 ## Quick Start
-
 Here's a basic example that sets up a window with rendering, physics, and input:
 
 ```rust
@@ -66,7 +64,6 @@ This creates an application with:
 - Transform updates
 
 ## Running Examples
-
 Ivy includes several examples to help you learn. Check out the `examples/` directory for:
 
 - Basic rendering setup
@@ -82,7 +79,6 @@ cargo run --example basic
 ```
 
 ## Next Steps
-
 - Learn about [Layers](fundamentals/layers.md) for organizing your application logic
 - Understand the [ECS](fundamentals/ecs.md) for game logic
 - Explore [Rendering](fundamentals/rendering.md) for graphics

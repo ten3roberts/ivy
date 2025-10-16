@@ -1,8 +1,7 @@
 # ivy-physics
-
 Physics simulation using Rapier3D.
-## Key Components
 
+## Key Components
 ### PhysicsState
 Wraps Rapier physics world.
 
@@ -17,8 +16,8 @@ For applying forces/torques to physics objects.
 
 ### EntityCollisionEvent
 Collision events with entity information.
-## Modules
 
+## Modules
 - `bundles`: Physics bundles for entities
 - `components`: Physics components
 - `effector`: Force/torque effectors

@@ -1,8 +1,7 @@
 # ivy-gltf
-
 GLTF asset loading and management.
-## Key Components
 
+## Key Components
 ### Document
 Parsed GLTF with buffers, images, meshes, skins.
 
@@ -14,7 +13,7 @@ Descriptor for loading nodes.
 
 ### Animation
 Skin, animation data.
-## Modules
 
+## Modules
 - `animation`: Animation handling (skin)
 - `components`: GLTF components

@@ -1,5 +1,4 @@
 # Input & Interaction
-
 Master Ivy's flexible input system for responsive, customizable controls in your applications.
 
 ## Setting Up Input Handling
@@ -9,8 +8,8 @@ Add the input layer to your app:
 use ivy_input::layer::InputLayer;
 
 app.with_layer(InputLayer::new());
-## Defining Actions
 
+## Defining Actions
 Create actions that map inputs to game logic:
 
 ```rust
@@ -30,11 +29,12 @@ let jump_action = Action::<bool>::new("jump")
     .with_binding(KeyCode::Space, true)
     .with_binding(GamepadButton::South, true);
 ```
-## Using Actions in Systems
 
+## Using Actions in Systems
 Read action values in your game logic:
 
 ```rust
+
 #[system]
 fn player_movement(
     mut transforms: Query<&mut Transform>,
@@ -57,8 +57,8 @@ fn player_movement(
     }
 }
 ```
-## Custom Input Processing
 
+## Custom Input Processing
 Create custom input handlers for specific needs:
 
 ```rust
@@ -79,8 +79,8 @@ impl InputHandler for CustomInputHandler {
     }
 }
 ```
-## Gamepad Vibration
 
+## Gamepad Vibration
 Provide haptic feedback:
 
 ```rust
@@ -99,8 +99,8 @@ fn gamepad_feedback(
     }
 }
 ```
-## Input Configuration
 
+## Input Configuration
 Allow players to customize controls:
 
 ```rust
@@ -113,8 +113,8 @@ app.modify_input_bindings(|bindings| {
     bindings.add_binding("move", KeyCode::ArrowUp, Vec2::Y);
 });
 ```
-## Best Practices
 
+## Best Practices
 - Use action names consistently across your codebase
 - Provide sensible defaults for all actions
 - Support both keyboard/mouse and gamepad input

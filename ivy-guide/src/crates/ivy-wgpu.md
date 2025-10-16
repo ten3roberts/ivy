@@ -1,8 +1,7 @@
 # ivy-wgpu
-
 WebGPU-based rendering backend.
-## Key Components
 
+## Key Components
 ### RenderGraph
 Manages rendering nodes and resources; `Node` trait for render passes, `Dependency` for resource usage.
 
@@ -12,8 +11,8 @@ Manages rendering nodes and resources; `Node` trait for render passes, `Dependen
 - `MeshRenderer`: Mesh rendering
 - `GizmosRenderer`: Debug gizmos
 - `Shadowmapping`: Shadow rendering
-## Modules
 
+## Modules
 - `components`: Rendering components
 - `driver`: WGPU driver setup
 - `effect`: Rendering effects

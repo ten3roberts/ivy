@@ -20,6 +20,7 @@ by other means as the event will be cloned for every subscribed sender.
 use ivy_core::{App, events::EventRegistry};
 
 // Define a custom event
+
 #[derive(Clone, Debug)]
 struct MyEvent {
     message: String,

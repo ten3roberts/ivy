@@ -1,9 +1,7 @@
 # Asset Pipeline
-
 Master Ivy's asset management system for efficient loading, caching, and hot reloading of game resources.
 
 ## Loading Assets
-
 Use the asset cache to load resources asynchronously:
 
 ```rust
@@ -19,8 +17,8 @@ async fn load_assets(assets: Res<AssetCache>) -> anyhow::Result<()> {
 
     Ok(())
 }
-## Using Assets in Entities
 
+## Using Assets in Entities
 Reference loaded assets in your entity spawning:
 
 ```rust
@@ -38,8 +36,8 @@ fn spawn_player(
         });
 }
 ```
-## Hot Reloading
 
+## Hot Reloading
 Assets automatically reload when files change during development:
 
 ```rust
@@ -49,11 +47,12 @@ let material = assets.load::<Material>("materials/wall.mat").await?;
 // When you modify wall.mat on disk, the asset automatically updates
 // All references to the material will use the new version
 ```
-## Custom Asset Types
 
+## Custom Asset Types
 Define your own asset types with custom loading logic:
 
 ```rust
+
 #[derive(Resource)]
 struct GameConfig {
     player_speed: f32,
@@ -71,11 +70,12 @@ impl Loadable for GameConfig {
     }
 }
 ```
-## Asset Dependencies
 
+## Asset Dependencies
 Handle assets that depend on other assets:
 
 ```rust
+
 #[derive(Resource)]
 struct CharacterModel {
     mesh: Asset<Mesh>,
@@ -96,8 +96,8 @@ impl Loadable for CharacterModel {
     }
 }
 ```
-## Asset Caching Strategies
 
+## Asset Caching Strategies
 Control how assets are cached and shared:
 
 ```rust
@@ -107,8 +107,8 @@ let shared_texture = assets.load::<Texture>("shared.png").await?;
 // Unique assets - each load creates a new instance
 let unique_config = assets.load_unique::<GameConfig>("config.toml").await?;
 ```
-## Asset Preloading
 
+## Asset Preloading
 Load assets upfront to avoid loading stalls:
 
 ```rust
@@ -121,8 +121,8 @@ async fn preload_assets(assets: Res<AssetCache>) {
     assets.wait_for_pending().await;
 }
 ```
-## Asset Organization
 
+## Asset Organization
 Structure your asset directories for maintainability:
 
 ```
@@ -140,8 +140,8 @@ assets/
 ├── materials/
 └── config/
 ```
-## Performance Tips
 
+## Performance Tips
 - Preload critical assets at startup
 - Use asset references instead of storing asset data directly
 - Monitor asset loading times with profiling tools

@@ -1,8 +1,7 @@
 # ivy-input
-
 Input handling system.
-## Key Components
 
+## Key Components
 ### InputState
 Manages actions and handlers.
 
@@ -14,8 +13,8 @@ Keyboard, mouse, cursor events.
 
 ### Binding Trait
 For input mappings.
-## Modules
 
+## Modules
 - `bindings`: Input binding system
 - `components`: Input components
 - `error`: Error handling

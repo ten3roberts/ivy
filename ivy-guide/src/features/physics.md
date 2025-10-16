@@ -1,5 +1,4 @@
 # Physics & Simulation
-
 Learn how to integrate physics into your Ivy applications for realistic object interactions and simulations.
 
 ## Setting Up Physics

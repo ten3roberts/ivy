@@ -1,8 +1,7 @@
 # ivy-assets
-
 Sync and async asset system with caching.
-## Key Components
 
+## Key Components
 ### AssetCache
 Central store for assets, manages loading, caching, and services.
 
@@ -24,8 +23,8 @@ Generic loading mechanism.
 
 ### AssetPath<T>
 Path wrapper for typed asset loading.
-## Modules
 
+## Modules
 - `asset_path`: Asset path utilities
 - `cell`: Asset storage cells
 - `fs`: File system services

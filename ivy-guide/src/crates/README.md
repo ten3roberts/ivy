@@ -1,8 +1,7 @@
 # Crates
-
 Ivy Engine is organized into multiple crates for modular development. This section provides detailed documentation for each crate.
-## Core Crates
 
+## Core Crates
 ### ivy-core
 Base crate with App framework, ECS, layers, and core components.
 
@@ -14,8 +13,8 @@ Procedural macros for deriving traits.
 
 ### ivy-editable
 Components and traits for editor integration.
-## Rendering
 
+## Rendering
 ### ivy-graphics
 Graphics abstractions and data structures.
 
@@ -27,26 +26,26 @@ Lower-level WebGPU abstractions.
 
 ### ivy-postprocessing
 Post-processing effects and pipelines.
-## Simulation
 
+## Simulation
 ### ivy-physics
 3D physics simulation with Rapier3D.
 
 ### ivy-input
 Input handling and action binding.
-## Content
 
+## Content
 ### ivy-gltf
 GLTF asset loading and animation.
 
 ### ivy-scene
 Scene management and GLTF integration.
-## Game Logic
 
+## Game Logic
 ### ivy-game
 High-level game behaviors and controllers.
-## Tools
 
+## Tools
 ### ivy-ui
 User interface components.
 
