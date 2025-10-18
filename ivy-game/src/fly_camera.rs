@@ -54,24 +54,19 @@ flax::component! {
 pub struct FlyCameraPlugin;
 
 impl Plugin for FlyCameraPlugin {
-    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
-        let PluginContext { world, assets, store, schedules } = ctx;
-        let id = Entity::builder().mount(FreeCameraBundle).spawn(world);
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        let id = Entity::builder().mount(FreeCameraBundle).spawn(ctx.world);
 
-        schedules
+        ctx.schedules
             .per_tick_mut()
             .with_system(cursor_lock_system())
             .with_system(camera_speed_input_system())
             .with_system(camera_rotation_input_system())
             .with_system(camera_movement_input_system());
 
-        if let Ok(screen_state) = world.get(engine(), screen_state()) {
+        if let Ok(screen_state) = ctx.world.get(engine(), screen_state()) {
             screen_state.open(FlyCameraScreen { id });
         }
-
-        Ok(())
-    }
-}
 
         Ok(())
     }

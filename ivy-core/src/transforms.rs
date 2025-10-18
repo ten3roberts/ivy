@@ -1,5 +1,7 @@
 use flax::{
     components::child_of,
+    fetch::{entity_refs, EntityRefs},
+    filter::All,
     BoxedSystem, Component, ComponentMut, Dfs, DfsBorrow, Query, QueryBorrow, System,
 };
 use glam::{Mat4, Vec3};
@@ -7,22 +9,14 @@ use ivy_assets::stored::DynamicStore;
 
 use crate::{
     components::{parent_transform, position, world_transform, TransformQuery},
-    plugin::Plugin,
-};
-use glam::{Mat4, Vec3};
-use ivy_assets::stored::DynamicStore;
-
-use crate::{
-    components::{parent_transform, position, world_transform, TransformQuery},
-    update_layer::Plugin,
+    plugin::{Plugin, PluginContext},
 };
 
 pub struct TransformUpdatePlugin;
 
 impl Plugin for TransformUpdatePlugin {
-    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
-        let PluginContext { world, assets, store, schedules } = ctx;
-        schedules
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        ctx.schedules
             .per_tick_mut()
             .with_system(update_root_transforms_system());
 

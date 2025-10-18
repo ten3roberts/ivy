@@ -6,16 +6,15 @@ use flax::{
 };
 use glam::{vec3, EulerRot, Mat4, Quat, Vec3};
 use image::{DynamicImage, Rgba};
-use ivy_assets::{
-    loadable::Loadable, stored::DynamicStore, Asset, AssetCache, AssetPath, AsyncAssetExt,
-};
+use ivy_assets::{loadable::Loadable, Asset, AssetCache, AssetPath, AsyncAssetExt};
 use ivy_core::{
     gizmos,
     math::Vec3Ext,
     palette::{Srgb, WithAlpha},
+    plugin::{Plugin, PluginContext},
     profiling::ProfilingLayer,
     transforms::TransformUpdatePlugin,
-    update_layer::{FixedTimeStep, Plugin, PluginLayer, ScheduleSetBuilder},
+    update_layer::{FixedTimeStep, PluginLayer, ScheduleSetBuilder},
     App, AsyncCommandBuffer, EngineLayer, EntityBuilderExt,
 };
 use ivy_engine::{
@@ -157,9 +156,8 @@ pub fn main() -> anyhow::Result<()> {
 pub struct GizmosPlugin;
 
 impl Plugin for GizmosPlugin {
-    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
-        let PluginContext { world, assets, store, schedules } = ctx;
-        schedules
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        ctx.schedules
             .per_tick_mut()
             .with_system(point_light_gizmo_system());
 
@@ -169,6 +167,7 @@ impl Plugin for GizmosPlugin {
 
 pub struct LogicPlugin;
 
+impl LogicPlugin {
     fn setup_assets(&self, world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
         let cmd = world.get(engine(), async_commandbuffer()).unwrap().clone();
         let assets = assets.clone();
@@ -363,8 +362,7 @@ pub struct LogicPlugin;
 struct RotateSpotlightPlugin;
 
 impl Plugin for RotateSpotlightPlugin {
-    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
-        let PluginContext { world, assets, store, schedules } = ctx;
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
         flax::component! {
             rotate_light: Quat,
         }
@@ -373,7 +371,7 @@ impl Plugin for RotateSpotlightPlugin {
         let parent = Entity::builder()
             .mount(TransformBundle::default().with_position(vec3(0.0, 4.0, 0.0)))
             .set(rotate_light(), Quat::IDENTITY)
-            .spawn(world);
+            .spawn(ctx.world);
 
         Entity::builder()
             .mount(
@@ -388,7 +386,7 @@ impl Plugin for RotateSpotlightPlugin {
                 cast_shadow: true,
             })
             .set(child_of(parent), ())
-            .spawn(world);
+            .spawn(ctx.world);
 
         for i in 0..count {
             let phi = (i as f32 / count as f32) * TAU;
@@ -410,10 +408,10 @@ impl Plugin for RotateSpotlightPlugin {
                     cast_shadow: true,
                 })
                 .set(child_of(parent), ())
-                .spawn(world);
+                .spawn(ctx.world);
         }
 
-        schedules.fixed_mut().with_system(
+        ctx.schedules.fixed_mut().with_system(
             System::builder()
                 .with_query(Query::new((
                     rotate_light(),
@@ -433,10 +431,9 @@ impl Plugin for RotateSpotlightPlugin {
 struct GameUiPlugin;
 
 impl Plugin for GameUiPlugin {
-    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
-        let PluginContext { world, assets, store, schedules } = ctx;
-        world.get(engine(), screen_state())?.open(MainUI {
-            assets: assets.clone(),
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        ctx.world.get(engine(), screen_state())?.open(MainUI {
+            assets: ctx.assets.clone(),
         });
 
         Ok(())
@@ -457,9 +454,8 @@ impl Screen for MainUI {
 }
 
 impl Plugin for LogicPlugin {
-    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
-        let PluginContext { world, assets, store, schedules } = ctx;
-        self.setup_assets(world, assets)
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        self.setup_assets(ctx.world, ctx.assets)
     }
 }
 

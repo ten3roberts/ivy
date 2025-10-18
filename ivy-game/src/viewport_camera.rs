@@ -1,7 +1,9 @@
 use flax::{system, Component, ComponentMut, FetchExt, Query, QueryBorrow};
 use glam::{Mat4, Vec2};
-use ivy_assets::stored::DynamicStore;
-use ivy_core::{components::engine, plugin::Plugin};
+use ivy_core::{
+    components::engine,
+    plugin::{Plugin, PluginContext},
+};
 use ivy_graphics::camera::{camera_settings, projection_matrix, CameraSettings};
 use ivy_wgpu::components::viewport_size;
 
@@ -9,9 +11,8 @@ use ivy_wgpu::components::viewport_size;
 pub struct CameraViewportPlugin;
 
 impl Plugin for CameraViewportPlugin {
-    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
-        let PluginContext { world, assets, store, schedules } = ctx;
-        schedules
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        ctx.schedules
             .per_tick_mut()
             .with_system(resize_cameras_system())
             .with_system(update_camera_projection_system());

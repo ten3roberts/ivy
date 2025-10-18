@@ -6,7 +6,8 @@ use itertools::Itertools;
 use ivy_assets::{stored::DynamicStore, Asset, AssetCache};
 use ivy_core::{
     components::{delta_time, engine, position, rotation},
-    update_layer::{Plugin, ScheduleSetBuilder},
+    plugin::{Plugin, PluginContext},
+    update_layer::ScheduleSetBuilder,
 };
 
 use crate::components::{animator, skin, skin_matrix, track_bone};
@@ -16,9 +17,8 @@ use super::{player::Animator, skin::Skin};
 pub struct AnimationPlugin;
 
 impl Plugin for AnimationPlugin {
-    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
-        let PluginContext { world, assets, store, schedules } = ctx;
-        schedules
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        ctx.schedules
             .per_tick_mut()
             .with_system(animation_step_system())
             .with_system(computer_skinning_system())

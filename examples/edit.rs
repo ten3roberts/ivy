@@ -4,8 +4,9 @@ use glam::Quat;
 use ivy_assets::{stored::DynamicStore, AssetCache, AssetPath};
 use ivy_core::{
     palette::Srgb,
+    plugin::Plugin,
     profiling::ProfilingLayer,
-    update_layer::{FixedTimeStep, Plugin, PluginLayer, ScheduleSetBuilder},
+    update_layer::{FixedTimeStep, PluginLayer, ScheduleSetBuilder},
     App, EngineLayer,
 };
 use ivy_editable::Editable;
@@ -102,9 +103,8 @@ pub fn main() -> anyhow::Result<()> {
 struct GameUiPlugin;
 
 impl Plugin for GameUiPlugin {
-    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
-        let PluginContext { world, assets, store, schedules } = ctx;
-        world.get(engine(), screen_state())?.open(MainUI {});
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        ctx.world.get(engine(), screen_state())?.open(MainUI {});
 
         Ok(())
     }

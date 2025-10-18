@@ -14,9 +14,10 @@ use crate::controllers::camera_controller::CameraControllerBundle;
 pub struct StandaloneCameraPlugin;
 
 impl Plugin for StandaloneCameraPlugin {
-    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
-        let PluginContext { world, assets, store, schedules } = ctx;
-        Entity::builder().mount(StandaloneCameraBundle).spawn(world);
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        Entity::builder()
+            .mount(StandaloneCameraBundle)
+            .spawn(ctx.world);
 
         Ok(())
     }

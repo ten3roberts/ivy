@@ -3,9 +3,10 @@ use glam::{vec3, EulerRot, Quat, Vec3};
 use ivy_assets::{stored::DynamicStore, AssetCache};
 use ivy_core::{
     palette::{Srgb, Srgba},
+    plugin::Plugin,
     profiling::ProfilingLayer,
     transforms::TransformUpdatePlugin,
-    update_layer::{FixedTimeStep, Plugin, PluginLayer, ScheduleSetBuilder},
+    update_layer::{FixedTimeStep, PluginLayer, ScheduleSetBuilder},
     App, Color, ColorExt, EngineLayer, EntityBuilderExt,
 };
 use ivy_engine::{is_static, RigidBodyBundle, TransformBundle};
@@ -211,8 +212,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
 struct LogicPlugin;
 
 impl Plugin for LogicPlugin {
-    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
-        let PluginContext { world, assets, store, schedules } = ctx;
-        setup_objects(world, assets.clone())
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        setup_objects(ctx.world, ctx.assets.clone())
     }
 }

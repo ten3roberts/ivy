@@ -115,9 +115,8 @@ register_bundle!(NavmeshNavigatorBundle, NavmeshNavigatorBundle);
 pub struct NavmeshNavigatorPlugin;
 
 impl Plugin for NavmeshNavigatorPlugin {
-    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
-        let PluginContext { world, assets, store, schedules } = ctx;
-        schedules
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        ctx.schedules
             .per_tick_mut()
             .with_system(NavmeshNavigator::calculate_paths_system())
             .with_system(NavmeshNavigator::update_movement_system())

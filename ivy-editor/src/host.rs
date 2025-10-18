@@ -106,10 +106,9 @@ impl EditorHostPlugin {
 }
 
 impl Plugin for EditorHostPlugin {
-    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
-        let PluginContext { world, assets, store, schedules } = ctx;
-        let scene_commands = world.get(engine(), scene_commands())?;
-        let screens = world.get_mut(engine(), screen_state())?;
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        let scene_commands = ctx.world.get(engine(), scene_commands())?;
+        let screens = ctx.world.get_mut(engine(), screen_state())?;
 
         let editor_state = EditorState {
             current_scene: Mutable::new(None),
@@ -132,7 +131,7 @@ impl Plugin for EditorHostPlugin {
 
         screens.open(MainEditorUI {
             editor_state,
-            assets: assets.clone(),
+            assets: ctx.assets.clone(),
         });
 
         Ok(())

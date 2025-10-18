@@ -12,10 +12,10 @@ pub struct LightParams {
     #[editable(range(0.0, 100.0))]
     pub intensity: f32,
     /// Spotlight inner cone radius
-    #[editable(range(0.0, 1.5708))]
+    #[editable(range(0.0, std::f32::consts::FRAC_PI_2))]
     pub inner_theta: f32,
     /// Spotlight outer cone radius
-    #[editable(range(0.0, 1.5708))]
+    #[editable(range(0.0, std::f32::consts::FRAC_PI_2))]
     pub outer_theta: f32,
 }
 

@@ -16,7 +16,7 @@ pub struct PluginContext<'a> {
 /// For full control of events and update frequency, use [crate::layer::Layer].
 pub trait Plugin {
     // Installs the plugin to the schedule set
-    fn install(&self, ctx: PluginContext) -> anyhow::Result<()>;
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()>;
 
     fn key(&self) -> &'static str {
         std::any::type_name::<Self>()
@@ -34,7 +34,7 @@ pub trait Plugin {
 }
 
 impl<U: Plugin> Plugin for Box<U> {
-    fn install(&self, ctx: PluginContext) -> Result<(), anyhow::Error> {
+    fn install(&self, ctx: &mut PluginContext) -> Result<(), anyhow::Error> {
         (**self).install(ctx)
     }
 }

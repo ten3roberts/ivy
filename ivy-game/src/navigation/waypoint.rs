@@ -75,9 +75,8 @@ impl Bundle for WaypointNavigatorBundle {
 pub struct WaypointNavigatorPlugin;
 
 impl Plugin for WaypointNavigatorPlugin {
-    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
-        let PluginContext { world, assets, store, schedules } = ctx;
-        schedules
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        ctx.schedules
             .fixed_mut()
             .with_system(WaypointNavigator::update_system())
             .with_system(debug_waypoints_system());

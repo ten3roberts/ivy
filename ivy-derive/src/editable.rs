@@ -1,9 +1,10 @@
 use itertools::Itertools;
 use proc_macro_crate::FoundCrate;
 use proc_macro2::{Span, TokenStream};
-use quote::{format_ident, quote, ToTokens};
+use quote::{ToTokens, format_ident, quote};
 use syn::{
-    parenthesized, spanned::Spanned, Attribute, DeriveInput, Error, Expr, Field, Ident, Index, PatLit, Result, Token, Type
+    Attribute, DeriveInput, Error, Expr, Field, Ident, Index, PatLit, Result, Token, Type,
+    parenthesized, spanned::Spanned,
 };
 
 pub fn editable_impl(input: DeriveInput) -> Result<TokenStream> {
@@ -58,7 +59,12 @@ fn expand_enum(
 
     let violet = quote! { #crate_name::__private::violet::core };
 
-    let default_variant = data_enum.variants.first().map(|v| &v.ident).ok_or_else(|| syn::Error::new_spanned(ident, "No variants found in enum"))?.to_string();
+    let default_variant = data_enum
+        .variants
+        .first()
+        .map(|v| &v.ident)
+        .ok_or_else(|| syn::Error::new_spanned(ident, "No variants found in enum"))?
+        .to_string();
 
     let discriminant = quote! {
         ::std::sync::Arc::new(state.clone().filter_map(|v| Some( match v { #(#disc_pat),* }), |_| None).memo(#default_variant).dedup()) as ::std::sync::Arc<dyn Send + Sync + #violet::state::StateDuplex<Item = &'static str>>;
@@ -311,7 +317,7 @@ fn expand_field_editors(
             };
             quote! {
                 <#ty as #crate_name::EditableWithOpts>::#method(#ident, #opts, assets)
-            }   
+            }
         } else {
             let method = if project {
                 format_ident!("create_editor_project")
@@ -367,7 +373,7 @@ fn expand_field_editors_indexed(
                 };
                 quote! {
                     <#ty as #crate_name::EditableWithOpts>::#method(#named_ident, #opts, assets)
-                }   
+                }
             } else {
                 let method = if project {
                     format_ident!("create_editor_project")
@@ -533,18 +539,21 @@ impl<'a> ParsedField<'a> {
 fn attrs_to_doc(attrs: &[Attribute]) -> String {
     attrs
         .iter()
-        .filter_map(|v| {
-            match &v.meta {
-                syn::Meta::NameValue(name_value) if name_value.path.is_ident("doc") => {
-                    if let Expr::Lit(syn::ExprLit { lit:  syn::Lit::Str(lit_str), .. }) = &name_value.value {
-                        Some(lit_str.value().trim().to_string())
-                    } else {
-                        None
-                    }
+        .filter_map(|v| match &v.meta {
+            syn::Meta::NameValue(name_value) if name_value.path.is_ident("doc") => {
+                if let Expr::Lit(syn::ExprLit {
+                    lit: syn::Lit::Str(lit_str),
+                    ..
+                }) = &name_value.value
+                {
+                    Some(lit_str.value().trim().to_string())
+                } else {
+                    None
                 }
-                _ => None
             }
-        }).join("\n")
+            _ => None,
+        })
+        .join("\n")
 }
 
 struct IndexedField<'a> {
@@ -560,8 +569,6 @@ impl<'a> IndexedField<'a> {
         let attrs = FieldAttrs::get(&field.attrs)?;
 
         let named_ident = Ident::new(&format!("field_{index}"), Span::call_site());
-
-
 
         Ok(Self {
             doc: attrs_to_doc(&field.attrs),
@@ -608,8 +615,7 @@ impl FieldAttrs {
                             }
 
                             Ok(())
-                        }
-                        else if meta.path.is_ident("range") {
+                        } else if meta.path.is_ident("range") {
                             let content;
 
                             parenthesized!(content in meta.input);

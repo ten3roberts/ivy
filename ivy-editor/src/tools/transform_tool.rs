@@ -16,7 +16,7 @@ use ivy_core::{
     components::{engine, gizmos, main_camera},
     gizmos::Gizmos,
     palette::Srgba,
-    plugin::Plugin,
+    plugin::{Plugin, PluginContext},
 };
 
 use ivy_editable::Editable;
@@ -128,7 +128,6 @@ impl TransformToolBundle {
         Self { settings }
     }
 }
-
 
 impl Bundle for TransformToolBundle {
     fn mount(&self, entity: &mut flax::EntityBuilder) {
@@ -320,9 +319,8 @@ impl Bundle for TransformToolBundle {
 pub struct TransformToolPlugin;
 
 impl Plugin for TransformToolPlugin {
-    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
-        let PluginContext { world, assets, store, schedules } = ctx;
-        schedules
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        ctx.schedules
             .per_tick_mut()
             .with_system(TransformTool::update_system())
             .with_system(TransformTool::selection_changed_system())

@@ -4,7 +4,7 @@ use flax::{component, components::child_of, system, CommandBuffer, Debuggable, E
 use ivy_assets::stored::DynamicStore;
 use ivy_core::{
     components::{delta_time, engine},
-    plugin::Plugin,
+    plugin::{Plugin, PluginContext},
 };
 
 component! {
@@ -35,9 +35,10 @@ impl Lifetime {
 pub struct LifetimePlugin;
 
 impl Plugin for LifetimePlugin {
-    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
-        let PluginContext { world, assets, store, schedules } = ctx;
-        schedules.fixed_mut().with_system(Lifetime::update_system());
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        ctx.schedules
+            .fixed_mut()
+            .with_system(Lifetime::update_system());
 
         Ok(())
     }

@@ -29,7 +29,6 @@ pub struct PluginKey {
     pub name: &'static str,
 }
 
-
 pub trait TimeStep: 'static + Display + Copy {
     fn step(&mut self, world: &mut World, schedule: &mut Schedule) -> anyhow::Result<()>;
 }
@@ -283,7 +282,13 @@ impl PluginLayer {
 
         let plugins = mem::take(&mut self.plugins);
         for plugin in Self::sort_plugins(&plugins)? {
-            plugin.install(crate::plugin::PluginContext { world, assets, store, schedules: &mut self.builder })?;
+            let mut ctx = crate::plugin::PluginContext {
+                world,
+                assets,
+                store,
+                schedules: &mut self.builder,
+            };
+            plugin.install(&mut ctx)?;
         }
 
         self.schedules = Some(self.builder.build());

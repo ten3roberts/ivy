@@ -2,7 +2,10 @@ use std::{char::ToUppercase, time::Duration};
 
 use flax::{component, Component};
 use glam::{vec2, BVec2};
-use ivy_core::{components::engine, plugin::Plugin};
+use ivy_core::{
+    components::engine,
+    plugin::{Plugin, PluginContext},
+};
 use violet::{
     core::{
         components::{rotation, translation, LayoutAlignment},
@@ -179,11 +182,10 @@ impl Screen for ToastScreen {
 pub struct ToastPlugin;
 
 impl Plugin for ToastPlugin {
-    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
-        let PluginContext { world, assets, store, schedules } = ctx;
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
         let (toasts_tx, toasts_rx) = flume::unbounded();
 
-        world
+        ctx.world
             .get(engine(), screen_state())?
             .open(ToastScreen::new(toasts_rx, toasts_tx.clone()));
 
@@ -194,9 +196,9 @@ impl Plugin for ToastPlugin {
             ))
             .ok();
 
-        world.set(engine(), toast_state(), ToastState { toasts_tx });
+        ctx.world
+            .set(engine(), toast_state(), ToastState { toasts_tx });
 
         Ok(())
     }
-}
 }

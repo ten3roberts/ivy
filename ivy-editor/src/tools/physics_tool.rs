@@ -6,7 +6,10 @@ use flax::{
 use futures::StreamExt;
 use glam::Vec3;
 use itertools::Itertools;
-use ivy_core::{Bundle, plugin::Plugin};
+use ivy_core::{
+    Bundle,
+    plugin::{Plugin, PluginContext},
+};
 use ivy_physics::components::{angular_velocity, mass, velocity};
 use ivy_ui::{
     streamed::StreamedUiExt,
@@ -120,9 +123,8 @@ impl Widget for PhysicsToolWidget {
 pub struct PhysicsToolPlugin;
 
 impl Plugin for PhysicsToolPlugin {
-    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
-        let PluginContext { world, assets, store, schedules } = ctx;
-        schedules
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        ctx.schedules
             .per_tick_mut()
             .with_system(PhysicsTool::update_system());
 

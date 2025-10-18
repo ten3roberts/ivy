@@ -7,8 +7,8 @@ use flax::{
 use ivy_assets::{Asset, AssetCache};
 use ivy_core::{
     Bundle,
-    template::Template,
     plugin::{Plugin, PluginContext},
+    template::Template,
     update_layer::ScheduleSetBuilder,
 };
 use ivy_ui::violet::core::{
@@ -162,9 +162,8 @@ impl Bundle for ToolsControllerBundle {
 pub struct ToolsControllerPlugin;
 
 impl Plugin for ToolsControllerPlugin {
-    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
-        let PluginContext { world, assets, store, schedules } = ctx;
-        schedules
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        ctx.schedules
             .per_tick_mut()
             .with_system(ToolsController::equip_tool_system());
 

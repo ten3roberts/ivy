@@ -2,7 +2,10 @@ use std::sync::Arc;
 
 use flax::{component, Entity, EntityRef, World};
 use glam::Vec2;
-use ivy_core::{components::engine, plugin::Plugin};
+use ivy_core::{
+    components::engine,
+    plugin::{Plugin, PluginContext},
+};
 use parking_lot::Mutex;
 use slotmap::{SecondaryMap, SlotMap};
 use violet::{
@@ -136,9 +139,9 @@ impl Default for ScreenState {
 pub struct ScreenPlugin;
 
 impl Plugin for ScreenPlugin {
-    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
-        let PluginContext { world, assets, store, schedules } = ctx;
-        world.set(engine(), screen_state(), ScreenState::new())?;
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        ctx.world
+            .set(engine(), screen_state(), ScreenState::new())?;
 
         Ok(())
     }

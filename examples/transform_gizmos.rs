@@ -8,9 +8,10 @@ use ivy_assets::{stored::DynamicStore, AssetCache, AssetPath};
 use ivy_core::{
     gizmos::{Gizmos, LineGizmo},
     palette::Srgb,
+    plugin::Plugin,
     profiling::ProfilingLayer,
     transforms::TransformUpdatePlugin,
-    update_layer::{FixedTimeStep, Plugin, PluginLayer},
+    update_layer::{FixedTimeStep, PluginLayer},
     App, Color, ColorExt, EngineLayer, EntityBuilderExt,
 };
 use ivy_editor::{
@@ -241,9 +242,8 @@ fn setup_objects(world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
 struct ExamplePlugin;
 
 impl Plugin for ExamplePlugin {
-    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
-        let PluginContext { world, assets, store, schedules } = ctx;
-        setup_objects(world, assets)?;
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        setup_objects(ctx.world, ctx.assets)?;
 
         #[system(with_query(Query::new((world_transform(), world_transform().relation(child_of)))))]
         fn hierarchy_relationship_gizmo_system(

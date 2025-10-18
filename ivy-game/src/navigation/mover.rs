@@ -138,9 +138,8 @@ impl Bundle for MoverBundle {
 pub struct MoverPlugin;
 
 impl Plugin for MoverPlugin {
-    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
-        let PluginContext { world, assets, store, schedules } = ctx;
-        schedules
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        ctx.schedules
             .fixed_mut()
             .with_system(MovementController::update_movement_system());
 

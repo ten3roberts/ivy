@@ -5,9 +5,10 @@ use glam::{vec3, EulerRot, Quat, Vec2, Vec3};
 use ivy_assets::{stored::DynamicStore, AssetCache, AssetPath};
 use ivy_core::{
     palette::Srgb,
+    plugin::Plugin,
     profiling::ProfilingLayer,
     transforms::TransformUpdatePlugin,
-    update_layer::{FixedTimeStep, Plugin, PluginLayer, ScheduleSetBuilder},
+    update_layer::{FixedTimeStep, PluginLayer, ScheduleSetBuilder},
     App, ColorExt, EngineLayer, EntityBuilderExt,
 };
 use ivy_editor::{
@@ -168,9 +169,8 @@ pub fn main() -> anyhow::Result<()> {
 struct SetupPlugin;
 
 impl Plugin for SetupPlugin {
-    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
-        let PluginContext { world, assets, store, schedules } = ctx;
-        Self::setup_objects(world, assets)
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        Self::setup_objects(ctx.world, ctx.assets)
     }
 
     fn after(&self) -> Vec<&str> {

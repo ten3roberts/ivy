@@ -4,12 +4,10 @@ use enum_dispatch::enum_dispatch;
 use flax::{Component, Entity, Query, QueryBorrow, System, World, component, system};
 use ivy_core::{
     EntityBuilderExt,
-    components::{engine, gizmos, main_camera},
-    gizmos::Gizmos,
-    palette::Srgba,
+    components::{engine, gizmos, position, rotation, world_transform},
+    gizmos::{CuboidGizmo, DEFAULT_THICKNESS, Gizmos},
     plugin::{Plugin, PluginContext},
     template::Template,
-    update_layer::ScheduleSetBuilder,
 };
 use ivy_input::{
     Action, CompositeBinding, InputState, KeyBinding,
@@ -191,8 +189,7 @@ impl HistoryManager {
 pub struct EditorPlugin;
 
 impl Plugin for EditorPlugin {
-    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
-        let PluginContext { world, assets, store, schedules } = ctx;
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
         let (tx, rx) = flume::unbounded();
 
         let (tool_ui_tx, tool_ui_rx) = flume::unbounded();
@@ -203,13 +200,15 @@ impl Plugin for EditorPlugin {
             Tool {
                 name: "Selection Tool".into(),
                 icon: LUCIDE_MOUSE_POINTER_2.into(),
-                template: assets.insert(Template::new().with_bundle(SelectToolBundle::new())),
+                template: ctx
+                    .assets
+                    .insert(Template::new().with_bundle(SelectToolBundle::new())),
                 ui: None,
             },
             Tool {
                 name: "Transform Tool".into(),
                 icon: LUCIDE_MOVE_3D.into(),
-                template: assets.insert(
+                template: ctx.assets.insert(
                     Template::new().with_bundle(TransformToolBundle::new(Default::default())),
                 ),
                 ui: Some(Arc::new(|id| Box::new(TransformToolWidget::new(id)))),
@@ -217,13 +216,15 @@ impl Plugin for EditorPlugin {
             Tool {
                 name: "Drag Tool".into(),
                 icon: LUCIDE_MOUSE_POINTER_CLICK.into(),
-                template: assets.insert(Template::new().with_bundle(RayPickerBundle::new())),
+                template: ctx
+                    .assets
+                    .insert(Template::new().with_bundle(RayPickerBundle::new())),
                 ui: None,
             },
             Tool {
                 name: "Physics Data".into(),
                 icon: LUCIDE_TORNADO.into(),
-                template: assets.insert(
+                template: ctx.assets.insert(
                     Template::new()
                         .with_bundle(PhysicsToolBundle)
                         .with_bundle(SelectToolBundle::new()),
@@ -268,7 +269,7 @@ impl Plugin for EditorPlugin {
             .set(edit_commands(), tx)
             .set(input_state(), input)
             .mount(ToolsControllerBundle::new(tools, tool_ui_tx))
-            .spawn(world);
+            .spawn(ctx.world);
 
         let process_commands_system = System::builder()
             .with_name("process_commands")
@@ -282,9 +283,9 @@ impl Plugin for EditorPlugin {
             })
             .boxed();
 
-        ToolsControllerPlugin.install(world, assets, store, schedules)?;
+        ToolsControllerPlugin.install(ctx)?;
 
-        schedules
+        ctx.schedules
             .per_tick_mut()
             .with_system(process_commands_system)
             .with_system(draw_selection_system());
@@ -292,9 +293,9 @@ impl Plugin for EditorPlugin {
         // TODO: set context globally, such as a global
         //
         // This will then be discovered by an external UI widget listening to it
-        world
+        ctx.world
             .get(engine(), screen_state())?
-            .open(InGameEditorUi::new(assets.clone(), editor, tool_ui_rx));
+            .open(InGameEditorUi::new(ctx.assets.clone(), editor, tool_ui_rx));
 
         Ok(())
     }

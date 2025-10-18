@@ -1,9 +1,6 @@
 use std::time::Duration;
 
-use async_std::{
-    path::PathBuf,
-    stream::StreamExt,
-};
+use async_std::{path::PathBuf, stream::StreamExt};
 use glam::BVec2;
 use ivy_assets::{
     AssetCache, AssetPath,
@@ -12,22 +9,22 @@ use ivy_assets::{
 };
 use ivy_editable::registry::EDITABLE_REGISTRY;
 use ivy_ui::violet::{
-        core::{
-            Scope, Widget,
-            layout::Align,
-            state::StateExt,
-            style::surface_danger,
-            text::Wrap,
-            time::sleep,
-            to_owned,
-            widget::{
-                LoadingSpinner, ScrollArea, StreamWidget, SuspenseWidget, Throbber, bold, col,
-                interactive::base::InteractiveWidget, label, row, subtitle,
-            },
+    core::{
+        Scope, Widget,
+        layout::Align,
+        state::StateExt,
+        style::surface_danger,
+        text::Wrap,
+        time::sleep,
+        to_owned,
+        widget::{
+            LoadingSpinner, ScrollArea, StreamWidget, SuspenseWidget, Throbber, bold, col,
+            interactive::base::InteractiveWidget, label, row, subtitle,
         },
-        futures_signals::signal::{Mutable, SignalExt},
-        lucide::icons::{LUCIDE_CHECK, LUCIDE_TRIANGLE_ALERT},
-    };
+    },
+    futures_signals::signal::{Mutable, SignalExt},
+    lucide::icons::{LUCIDE_CHECK, LUCIDE_TRIANGLE_ALERT},
+};
 
 pub struct AssetEditor {
     assets: AssetCache,

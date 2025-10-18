@@ -2,7 +2,10 @@ use flax::{components::name, fetch::MutGuard, system, Entity, FetchExt, World};
 use glam::{vec3, EulerRot, Quat, Vec2, Vec3};
 use ivy_assets::{stored::DynamicStore, AssetCache};
 use ivy_core::{
-    components::{engine, main_camera, request_capture_mouse, rotation, world_transform},
+    components::{
+        engine, main_camera, position, request_capture_mouse, rotation, world_transform,
+        TransformBundle,
+    },
     math::{Axis2D, Axis3D},
     plugin::{Plugin, PluginContext},
     Bundle, EntityBuilderExt, DEG_90,
@@ -27,11 +30,10 @@ flax::component! {
 pub struct OrbitCameraPlugin;
 
 impl Plugin for OrbitCameraPlugin {
-    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
-        let PluginContext { world, assets, store, schedules } = ctx;
-        Entity::builder().mount(OrbitCameraBundle).spawn(world);
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        Entity::builder().mount(OrbitCameraBundle).spawn(ctx.world);
 
-        schedules
+        ctx.schedules
             .per_tick_mut()
             .with_system(lock_cursor_system())
             .with_system(camera_orbit_system())

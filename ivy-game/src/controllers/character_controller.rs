@@ -1,16 +1,14 @@
 use flax::{component, system};
-use glam::{vec3, Quat, Vec2, Vec3};
+use glam::{vec3, Vec2, Vec3};
 use ivy_core::{
-    components::rotation, math::Axis2D, plugin::Plugin, Bundle, EntityBuilderExt,
+    math::Axis2D,
+    plugin::{Plugin, PluginContext},
+    Bundle,
 };
 use ivy_input::{
     components::input_state,
     types::{Key, NamedKey},
     Action, BindingExt, CursorMoveBinding, InputState, KeyBinding,
-};
-use ivy_physics::{
-    rapier3d::prelude::{CoefficientCombineRule, ColliderBuilder, SharedShape},
-    ColliderBundle, RigidBodyBundle,
 };
 
 use crate::behavior_tree::{BehaviorTree, BehaviorTreeNode};
@@ -62,8 +60,6 @@ pub struct CharacterControllerBundle {}
 
 impl Bundle for CharacterControllerBundle {
     fn mount(&self, entity: &mut flax::EntityBuilder) {
-        let character_height = 1.75;
-
         let input = PlayerInputConfiguration::new();
 
         let controller = CharacterController {
@@ -133,9 +129,8 @@ impl CharacterController {
 pub struct CharacterControllerPlugin;
 
 impl Plugin for CharacterControllerPlugin {
-    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
-        let PluginContext { world, assets, store, schedules } = ctx;
-        schedules
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        ctx.schedules
             .per_tick_mut()
             .with_system(CharacterController::update_inputs_system())
             .with_system(CharacterController::update_movement_system());

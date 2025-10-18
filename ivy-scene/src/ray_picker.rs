@@ -1,16 +1,17 @@
 use std::time::Duration;
 
 use flax::{
-    component, components::child_of, entity::EntityKind, system, CommandBuffer, ComponentMut, Entity, EntityRef, FetchExt, Query, QueryBorrow, World
+    component, components::child_of, entity::EntityKind, system, CommandBuffer, ComponentMut,
+    Entity, EntityRef, FetchExt, Query, QueryBorrow, World,
 };
 use glam::{Vec2, Vec3};
 use ivy_assets::{stored::DynamicStore, AssetCache};
 use ivy_core::{
-    components::{engine, gizmos, main_camera, position, rotation, TransformBundle},
+    components::{delta_time, engine, gizmos, main_camera, position, rotation, TransformBundle},
     gizmos::{Gizmos, SphereGizmo},
     math::Axis2D,
     plugin::{Plugin, PluginContext},
-    Bundle, Color, ColorExt, EntityBuilderExt
+    Bundle, Color, ColorExt, EntityBuilderExt,
 };
 use ivy_input::{
     components::{cursor_position, input_state},
@@ -36,14 +37,9 @@ pub struct RayPickingTool {
 }
 
 impl RayPickingTool {
-    pub fn move_manipulator(
-        &mut self,
-        manipulator: EntityRef,
-        ray:Ray,
-    ) -> anyhow::Result<()> {
+    pub fn move_manipulator(&mut self, manipulator: EntityRef, ray: Ray) -> anyhow::Result<()> {
         if let Some((_, _, distance)) = self.picked_object {
             let new_pos = ray.at(distance);
-
 
             manipulator.update_dedup(position(), new_pos);
         }
@@ -57,7 +53,7 @@ impl RayPickingTool {
         world: &World,
         cmd: &mut CommandBuffer,
         physics_state: &PhysicsState,
-        ray:Ray,
+        ray: Ray,
     ) -> anyhow::Result<()> {
         let result = physics_state.cast_ray(ray, 1e3, true, QueryFilter::exclude_fixed());
 
@@ -98,21 +94,15 @@ impl RayPickingTool {
         }
     }
 
-
     #[system(args(dt=delta_time().source(engine())))]
-    fn ray_distance_system(
-        self: &mut RayPickingTool,
-        dt: &Duration,
-        ray_distance_modifier: &f32,
-    ) {
+    fn ray_distance_system(self: &mut RayPickingTool, dt: &Duration, ray_distance_modifier: &f32) {
         if let Some((_, _, distance)) = &mut self.picked_object {
             *distance = (*distance + ray_distance_modifier * 5.0 * dt.as_secs_f32()).max(2.0);
         }
-
     }
 
     #[system(args(camera=(CameraQuery::new(), main_camera()).source(()),
-        physics_state=physics_state().source(engine()), 
+        physics_state=physics_state().source(engine()),
         cursor_position=cursor_position().source(engine())), with_world, with_cmd_mut)]
     pub fn update_system(
         self: &mut RayPickingTool,
@@ -139,10 +129,9 @@ impl RayPickingTool {
 
                 self.manipulator = Some(manipulator);
                 return Ok(());
-
             }
         };
-        
+
         let ray = screen_to_world_ray(*cursor_position, camera.0);
 
         if pick_ray_action && self.picked_object.is_none() {
@@ -151,11 +140,10 @@ impl RayPickingTool {
         } else if pick_ray_action {
             self.move_manipulator(manipulator, ray)?;
         } else if !pick_ray_action {
-            self.stop_manipulating( manipulator, cmd);
+            self.stop_manipulating(manipulator, cmd);
         }
 
         Ok(())
-
     }
 
     #[system(with_world, with_query(Query::new(gizmos().as_mut())))]
@@ -195,7 +183,7 @@ impl Default for RayPickerBundle {
 
 impl RayPickerBundle {
     pub fn new() -> Self {
-        Self {  }
+        Self {}
     }
 }
 
@@ -205,7 +193,9 @@ impl Bundle for RayPickerBundle {
         left_click_action.add(MouseButtonBinding::new(MouseButton::Left));
 
         let mut ray_distance_action = Action::new();
-        ray_distance_action.add(KeyBinding::new(Key::Named(NamedKey::ArrowUp)).analog()).add(ScrollBinding::new().decompose(Axis2D::Y).amplitude(2.0));
+        ray_distance_action
+            .add(KeyBinding::new(Key::Named(NamedKey::ArrowUp)).analog())
+            .add(ScrollBinding::new().decompose(Axis2D::Y).amplitude(2.0));
         ray_distance_action.add(
             KeyBinding::new(Key::Named(NamedKey::ArrowDown))
                 .analog()
@@ -234,10 +224,8 @@ impl Bundle for RayPickerBundle {
 pub struct RayPickingPlugin;
 
 impl Plugin for RayPickingPlugin {
-    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
-        let PluginContext { world, assets, store, schedules } = ctx;
-
-        schedules
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        ctx.schedules
             .per_tick_mut()
             .with_system(RayPickingTool::update_system())
             .with_system(RayPickingTool::ray_distance_system())
@@ -246,4 +234,3 @@ impl Plugin for RayPickingPlugin {
         Ok(())
     }
 }
-

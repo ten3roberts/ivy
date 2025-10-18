@@ -347,17 +347,16 @@ where
 pub struct StreamedUiPlugin;
 
 impl Plugin for StreamedUiPlugin {
-    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
-        let PluginContext { world, assets, store, schedules } = ctx;
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
         let (tx, rx) = flume::unbounded();
         let state = StreamedState { tx: tx.clone() };
-        world.set(engine(), streamed_state(), state.clone())?;
-        world.set(engine(), streamed(), Default::default())?;
+        ctx.world.set(engine(), streamed_state(), state.clone())?;
+        ctx.world.set(engine(), streamed(), Default::default())?;
 
-        let ui = &mut *store.get_mut(&*world.get(engine(), ui_instance())?);
+        let ui = &mut *ctx.store.get_mut(&*ctx.world.get(engine(), ui_instance())?);
         ui.root_scope().set_context(streamed_state(), state);
 
-        schedules
+        ctx.schedules
             .per_tick_mut()
             .with_system(update_streamed_system(rx));
 

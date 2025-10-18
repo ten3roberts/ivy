@@ -5,9 +5,10 @@ use glam::{vec3, Mat4, Quat, Vec3};
 use itertools::iproduct;
 use ivy_assets::{stored::DynamicStore, AssetCache, AssetPath};
 use ivy_core::{
+    plugin::{Plugin, PluginContext},
     profiling::ProfilingLayer,
     transforms::TransformUpdatePlugin,
-    update_layer::{FixedTimeStep, Plugin, PluginLayer, ScheduleSetBuilder},
+    update_layer::{FixedTimeStep, PluginLayer, ScheduleSetBuilder},
     App, Color, ColorExt, EngineLayer,
 };
 use ivy_engine::{
@@ -147,9 +148,8 @@ impl LogicPlugin {
 }
 
 impl Plugin for LogicPlugin {
-    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
-        let PluginContext { world, assets, store, schedules } = ctx;
-        self.setup_objects(world, assets)
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        self.setup_objects(ctx.world, ctx.assets)
     }
 }
 
@@ -160,8 +160,7 @@ component! {
 }
 
 impl Plugin for DynamicsPlugin {
-    fn install(&self, ctx: PluginContext) -> anyhow::Result<()> {
-        let PluginContext { world, assets, store, schedules } = ctx;
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
         let rotate_system = System::builder()
             .with_query(
                 Query::new((
@@ -176,12 +175,8 @@ impl Plugin for DynamicsPlugin {
                     Quat::from_axis_angle(vec3(1.0, 0.2, 0.0).normalize(), elapsed.as_secs_f32());
             });
 
-        // #[system(args(elapsed=elapsed_time().source(engine())), par)]
-        // fn rotate(rotate_target: &(), rotation: &mut Quat, elapsed: &Duration) {}
-
-        schedules.per_tick_mut().with_system(rotate_system);
+        ctx.schedules.per_tick_mut().with_system(rotate_system);
 
         Ok(())
     }
-}
 }
