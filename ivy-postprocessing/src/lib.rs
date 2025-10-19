@@ -1,4 +1,5 @@
 pub mod bloom;
+pub mod dof;
 pub mod components;
 pub mod depth_resolve;
 pub mod hdri;

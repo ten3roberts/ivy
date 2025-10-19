@@ -12,10 +12,9 @@ use ivy_core::{
     math::Vec3Ext,
     palette::{Srgb, WithAlpha},
     plugin::{Plugin, PluginContext},
-    profiling::ProfilingLayer,
     transforms::TransformUpdatePlugin,
-    update_layer::{FixedTimeStep, PluginLayer, ScheduleSetBuilder},
-    App, AsyncCommandBuffer, EngineLayer, EntityBuilderExt,
+    update_layer::{FixedTimeStep, PluginLayer},
+    AsyncCommandBuffer, EntityBuilderExt,
 };
 use ivy_engine::{
     async_commandbuffer, elapsed_time, engine, rotation, world_transform, RigidBodyBundle,
@@ -33,10 +32,7 @@ use ivy_gltf::{
 use ivy_graphics::texture::{TextureData, TextureDesc};
 use ivy_input::layer::InputLayer;
 use ivy_physics::{ColliderBundle, GizmoSettings, PhysicsPlugin};
-use ivy_postprocessing::preconfigured::{
-    pbr::{PbrRenderGraphConfig, SkyboxConfig},
-    SurfacePbrPipelineDesc, SurfacePbrRenderer,
-};
+use ivy_postprocessing::preconfigured::pbr::{PbrRenderGraphConfig, SkyboxConfig};
 use ivy_scene::{GltfNodeExt, NodeMountOptions};
 use ivy_ui::{
     layer::{UiLayer, UiUpdateLayer},
@@ -46,12 +42,10 @@ use ivy_wgpu::material::{EffectPass, Material, MaterialBundle};
 use ivy_wgpu::renderer::MeshBundle;
 use ivy_wgpu::{
     components::{forward_pass, light_kind, light_params, shadow_pass, transparent_pass},
-    driver::WinitDriver,
     effect_desc::{
         PbrEmissiveRenderEffectDesc, PbrRenderEffect, PbrRenderEffectDesc, RenderEffect,
         RenderEffectDesc,
     },
-    layer::GraphicsLayer,
     light::{LightBundle, LightKind, LightParams},
     mesh_desc::MeshDesc,
     primitives::{generate_plane, UvSpherePrimitive},
@@ -71,7 +65,8 @@ use violet::{
     palette::{rgb::Rgb, Hsl, IntoColor},
 };
 use wgpu::TextureFormat;
-use winit::{dpi::LogicalSize, window::WindowAttributes};
+
+mod common;
 
 pub fn main() -> anyhow::Result<()> {
     registry()
@@ -87,37 +82,19 @@ pub fn main() -> anyhow::Result<()> {
     let ui_input_layer = UiLayer::new();
     let ui_layer = UiUpdateLayer::new();
 
-    if let Err(err) = App::builder()
-        .with_driver(WinitDriver::new(
-            WindowAttributes::default()
-                .with_inner_size(LogicalSize::new(1920, 1080))
-                .with_title("Ivy"),
-        ))
-        .with_layer(EngineLayer::new())
-        .with_layer(ProfilingLayer::new())
-        .with_layer(GraphicsLayer::new(
-            move |world, assets, store, gpu, surface| {
-                Ok(SurfacePbrRenderer::new(
-                    world,
-                    assets,
-                    store,
-                    gpu,
-                    surface,
-                    SurfacePbrPipelineDesc {
-                        pbr_config: PbrRenderGraphConfig {
-                            label: "basic".into(),
-                            skybox: Some(SkyboxConfig {
-                                hdri: Box::new(AssetPath::new(
-                                    "hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
-                                )),
-                                format: TextureFormat::Rgba16Float,
-                            }),
-                            ..Default::default()
-                        },
-                    },
-                ))
-            },
-        ))
+    if let Err(err) = common::base_app_builder("Ivy")
+        .with_layer(common::graphics_layer_with_config(|| {
+            PbrRenderGraphConfig {
+                label: "basic".into(),
+                skybox: Some(SkyboxConfig {
+                    hdri: Box::new(AssetPath::new(
+                        "hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
+                    )),
+                    format: TextureFormat::Rgba16Float,
+                }),
+                ..Default::default()
+            }
+        }))
         .with_layer(ui_input_layer)
         .with_layer(InputLayer::new())
         .with_layer(
@@ -135,14 +112,6 @@ pub fn main() -> anyhow::Result<()> {
                 .with_plugin(RotateSpotlightPlugin)
                 .with_plugin(TransformUpdatePlugin),
         )
-        // .with_layer(CameraViewportPlugin::new(CameraSettings {
-        //     environment_data: EnvironmentData::new(
-        //         Srgb::new(0.2, 0.2, 0.3),
-        //         0.001,
-        //         if ENABLE_SKYBOX { 0.0 } else { 1.0 },
-        //     ),
-        //     fov: 1.0,
-        // }))
         .with_layer(ui_layer)
         .run()
     {
@@ -315,8 +284,7 @@ impl LogicPlugin {
         async fn load_gears(assets: AssetCache, cmd: AsyncCommandBuffer) -> anyhow::Result<()> {
             let document: Asset<Document> = AssetPath::new("models/Gears.glb")
                 .load_async(&assets)
-                .await
-                .unwrap();
+                .await?;
 
             for node in document.nodes() {
                 let animation = assets

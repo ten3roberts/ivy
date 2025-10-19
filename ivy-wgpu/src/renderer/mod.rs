@@ -246,6 +246,8 @@ pub fn get_camera_data(camera: &EntityRef) -> CameraData {
         fog_color: to_linear_vec3(env_data.fog_color),
         fog_density: env_data.fog_density,
         fog_blend: env_data.fog_blend,
+        fog_height: env_data.fog_height,
+        ..Default::default()
     }
 }
 
@@ -533,9 +535,13 @@ pub struct CameraData {
     pub view: Mat4,
     pub proj: Mat4,
     pub camera_pos: Vec3,
-    pub fog_blend: f32,
+    _pad1: f32,
     pub fog_color: Vec3,
+    _pad2: f32,
+    pub fog_blend: f32,
     pub fog_density: f32,
+    pub fog_height: f32,
+    _pad3: f32,
 }
 
 pub struct CameraShaderData {

@@ -4,10 +4,9 @@ use ivy_assets::{stored::DynamicStore, AssetCache};
 use ivy_core::{
     palette::{Srgb, Srgba},
     plugin::{Plugin, PluginContext},
-    profiling::ProfilingLayer,
     transforms::TransformUpdatePlugin,
     update_layer::{FixedTimeStep, PluginLayer, ScheduleSetBuilder},
-    App, Color, ColorExt, EngineLayer, EntityBuilderExt,
+    Color, ColorExt, EntityBuilderExt,
 };
 use ivy_editor::{
     plugin::EditorPlugin,
@@ -21,9 +20,7 @@ use ivy_input::layer::InputLayer;
 use ivy_physics::{
     components::collider_builder, ColliderBundle, GizmoSettings, PhysicsPlugin, RigidBodyKind,
 };
-use ivy_postprocessing::preconfigured::{
-    pbr::PbrRenderGraphConfig, SurfacePbrPipelineDesc, SurfacePbrRenderer,
-};
+use ivy_postprocessing::preconfigured::pbr::PbrRenderGraphConfig;
 use ivy_scene::ray_picker::RayPickingPlugin;
 use ivy_ui::{
     layer::{UiLayer, UiUpdateLayer},
@@ -31,9 +28,7 @@ use ivy_ui::{
 };
 use ivy_wgpu::{
     components::*,
-    driver::WinitDriver,
     effect_desc::{PbrRenderEffect, RenderEffect},
-    layer::GraphicsLayer,
     light::{LightKind, LightParams},
     mesh_desc::MeshDesc,
     primitives::{CapsulePrimitive, CubePrimitive, UvSpherePrimitive},
@@ -42,9 +37,10 @@ use ivy_wgpu::{
 use rapier3d::prelude::{ColliderBuilder, SharedShape};
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
-use winit::{dpi::LogicalSize, window::WindowAttributes};
 
 const ENABLE_SKYBOX: bool = true;
+
+mod common;
 
 pub fn main() -> anyhow::Result<()> {
     color_backtrace::install();
@@ -58,37 +54,12 @@ pub fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    if let Err(err) = App::builder()
-        .with_driver(WinitDriver::new(
-            WindowAttributes::default()
-                .with_inner_size(LogicalSize::new(1920, 1080))
-                .with_title("Ivy Physics"),
-        ))
-        .with_layer(EngineLayer::new())
-        .with_layer(ProfilingLayer::new())
-        .with_layer(GraphicsLayer::new(|world, assets, store, gpu, surface| {
-            Ok(SurfacePbrRenderer::new(
-                world,
-                assets,
-                store,
-                gpu,
-                surface,
-                SurfacePbrPipelineDesc {
-                    pbr_config: PbrRenderGraphConfig {
-                        label: "basic".into(),
-                        skybox: None,
-                        // skybox: Some(SkyboxConfig {
-                        //     // hdri: Box::new(AssetPath::new(
-                        //     //     "hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
-                        //     // )),
-                        //     hdri: None,
-                        //     format: TextureFormat::Rgba16Float,
-                        // }),
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                },
-            ))
+    if let Err(err) = common::base_app_builder("Ivy Physics")
+        .with_layer(common::graphics_layer_with_config(|| {
+            PbrRenderGraphConfig {
+                label: "basic".into(),
+                ..Default::default()
+            }
         }))
         .with_layer(UiLayer::new())
         .with_layer(InputLayer::new())

@@ -11,18 +11,6 @@ use ivy_physics::{RigidBodyBundle, RigidBodyKind};
 
 use crate::controllers::camera_controller::CameraControllerBundle;
 
-pub struct StandaloneCameraPlugin;
-
-impl Plugin for StandaloneCameraPlugin {
-    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
-        Entity::builder()
-            .mount(StandaloneCameraBundle)
-            .spawn(ctx.world);
-
-        Ok(())
-    }
-}
-
 pub struct StandaloneCameraBundle;
 
 impl Bundle for StandaloneCameraBundle {

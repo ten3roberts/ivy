@@ -4,10 +4,9 @@ use ivy_assets::{stored::DynamicStore, AssetCache};
 use ivy_core::{
     palette::{Srgb, Srgba},
     plugin::Plugin,
-    profiling::ProfilingLayer,
     transforms::TransformUpdatePlugin,
     update_layer::{FixedTimeStep, PluginLayer, ScheduleSetBuilder},
-    App, Color, ColorExt, EngineLayer, EntityBuilderExt,
+    EntityBuilderExt,
 };
 use ivy_engine::{is_static, RigidBodyBundle, TransformBundle};
 use ivy_game::fly_camera::FlyCameraPlugin;
@@ -15,13 +14,11 @@ use ivy_graphics::texture::TextureData;
 use ivy_input::layer::InputLayer;
 use ivy_physics::{components::angular_velocity, ColliderBundle, PhysicsPlugin};
 use ivy_postprocessing::preconfigured::{
-    pbr::PbrRenderGraphConfig, SurfacePbrPipelineDesc, SurfacePbrRenderer,
+    pbr::PbrRenderGraphConfig,
 };
 use ivy_wgpu::{
     components::*,
-    driver::WinitDriver,
     effect_desc::{PbrRenderEffect, RenderEffect},
-    layer::GraphicsLayer,
     light::{LightKind, LightParams},
     mesh_desc::MeshDesc,
     primitives::{CapsulePrimitive, CubePrimitive},
@@ -29,7 +26,8 @@ use ivy_wgpu::{
 };
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
-use winit::{dpi::LogicalSize, window::WindowAttributes};
+
+mod common;
 
 pub fn main() -> anyhow::Result<()> {
     registry()
@@ -41,29 +39,8 @@ pub fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    if let Err(err) = App::builder()
-        .with_driver(WinitDriver::new(
-            WindowAttributes::default()
-                .with_inner_size(LogicalSize::new(1920, 1080))
-                .with_title("Ivy Physics"),
-        ))
-        .with_layer(EngineLayer::new())
-        .with_layer(ProfilingLayer::new())
-        .with_layer(GraphicsLayer::new(|world, assets, store, gpu, surface| {
-            Ok(SurfacePbrRenderer::new(
-                world,
-                assets,
-                store,
-                gpu,
-                surface,
-                SurfacePbrPipelineDesc {
-                    pbr_config: PbrRenderGraphConfig {
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                },
-            ))
-        }))
+    if let Err(err) = common::base_app_builder("Ivy Physics")
+        .with_layer(common::graphics_layer_with_config(|| PbrRenderGraphConfig::default()))
         .with_layer(InputLayer::new())
         .with_layer(
             PluginLayer::new(FixedTimeStep::new(0.02))
@@ -78,7 +55,6 @@ pub fn main() -> anyhow::Result<()> {
         )
         .run()
     {
-        tracing::error!("{err:?}");
         Err(err)
     } else {
         Ok(())

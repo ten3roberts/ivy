@@ -3,15 +3,16 @@ use flax::{entity_ids, Entity, Query, World};
 use glam::{vec3, EulerRot, Quat, Vec3};
 use ivy_assets::{stored::DynamicStore, AssetCache};
 use ivy_core::components::main_camera;
+use ivy_core::components::position;
 use ivy_core::template::Template;
 use ivy_core::{
     palette::{Srgb, Srgba},
     plugin::{Plugin, PluginContext},
-    profiling::ProfilingLayer,
     transforms::TransformUpdatePlugin,
     update_layer::{FixedTimeStep, PluginLayer, ScheduleSetBuilder},
-    App, Color, ColorExt, EngineLayer, EntityBuilderExt,
+    Color, ColorExt, EntityBuilderExt,
 };
+use ivy_engine::scale;
 use ivy_engine::{is_static, RigidBodyBundle, TransformBundle};
 use ivy_game::standalone_camera::StandaloneCameraBundle;
 use ivy_game::{
@@ -22,28 +23,25 @@ use ivy_game::{
     navigation::{
         MovementConfiguration, MovementConstraint, MovementMode, MoverBundle, MoverPlugin,
     },
-    standalone_camera::StandaloneCameraPlugin,
     viewport_camera::CameraViewportPlugin,
 };
 use ivy_graphics::texture::TextureData;
 use ivy_input::layer::InputLayer;
-use ivy_physics::{ColliderBundle, PhysicsPlugin};
-use ivy_postprocessing::preconfigured::{
-    pbr::PbrRenderGraphConfig, SurfacePbrPipelineDesc, SurfacePbrRenderer,
-};
+use ivy_physics::{components::collider_builder, ColliderBundle, PhysicsPlugin, RigidBodyKind};
+use ivy_postprocessing::preconfigured::pbr::PbrRenderGraphConfig;
 use ivy_wgpu::{
     components::*,
-    driver::WinitDriver,
     effect_desc::{PbrRenderEffect, RenderEffect},
-    layer::GraphicsLayer,
     light::{LightKind, LightParams},
     mesh_desc::MeshDesc,
     primitives::{CapsulePrimitive, CubePrimitive},
     renderer::RenderObjectBundle,
 };
+use rapier3d::prelude::ColliderBuilder;
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
-use winit::{dpi::LogicalSize, window::WindowAttributes};
+
+mod common;
 
 pub fn main() -> anyhow::Result<()> {
     color_backtrace::install();
@@ -56,35 +54,15 @@ pub fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    if let Err(err) = App::builder()
-        .with_driver(WinitDriver::new(
-            WindowAttributes::default()
-                .with_inner_size(LogicalSize::new(1920, 1080))
-                .with_title("Ivy Character Controller"),
-        ))
-        .with_layer(EngineLayer::new())
-        .with_layer(ProfilingLayer::new())
-        .with_layer(GraphicsLayer::new(|world, assets, store, gpu, surface| {
-            Ok(SurfacePbrRenderer::new(
-                world,
-                assets,
-                store,
-                gpu,
-                surface,
-                SurfacePbrPipelineDesc {
-                    pbr_config: PbrRenderGraphConfig {
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                },
-            ))
+    if let Err(err) = common::base_app_builder("Ivy Character Controller")
+        .with_layer(common::graphics_layer_with_config(|| {
+            PbrRenderGraphConfig::default()
         }))
         .with_layer(InputLayer::new())
         .with_layer(
             PluginLayer::new(FixedTimeStep::new(0.02))
                 .with_plugin(LogicPlugin)
                 .with_plugin(CameraViewportPlugin)
-                .with_plugin(StandaloneCameraPlugin)
                 .with_plugin(CameraTrackingPlugin)
                 .with_plugin(CharacterControllerPlugin)
                 .with_plugin(MoverPlugin)
@@ -183,45 +161,19 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
         .set(camera_target(camera_entity), ());
 
     Entity::builder()
-        .mount(
-            TransformBundle::default()
-                .with_scale(vec3(5.0, 0.1, 5.0))
-                .with_rotation(Quat::from_scaled_axis(Vec3::Z * 0.1)),
-        )
-        .mount(RigidBodyBundle::fixed().with_mass(1.0))
-        .mount(
-            ColliderBundle::new(rapier3d::prelude::SharedShape::cuboid(1.0, 1.0, 1.0))
-                .with_friction(FRICTION)
-                .with_restitution(RESTITUTION),
+        .mount(TransformBundle::default())
+        .set(position(), Vec3::ZERO)
+        .set(scale(), vec3(100.0, 1.0, 100.0))
+        .mount(RigidBodyBundle::new(RigidBodyKind::Fixed))
+        .set(
+            collider_builder(),
+            ColliderBuilder::cuboid(100.0, 1.0, 100.0),
         )
         .set(is_static(), ())
         .mount(RenderObjectBundle::new(
             cube_mesh.clone(),
             &[
                 (forward_pass(), white_material.clone()),
-                (shadow_pass(), RenderEffect::OpaqueShadow),
-            ],
-        ))
-        .spawn(world);
-
-    Entity::builder()
-        .mount(
-            TransformBundle::default()
-                .with_position(vec3(-7.0, -3.0, 0.0))
-                .with_scale(vec3(20.0, 0.1, 20.0))
-                .with_rotation(Quat::from_scaled_axis(Vec3::Z * -0.2)),
-        )
-        .mount(RigidBodyBundle::fixed().with_mass(1.0))
-        .mount(
-            ColliderBundle::new(rapier3d::prelude::SharedShape::cuboid(1.0, 1.0, 1.0))
-                .with_friction(FRICTION)
-                .with_restitution(RESTITUTION),
-        )
-        .set(is_static(), ())
-        .mount(RenderObjectBundle::new(
-            cube_mesh.clone(),
-            &[
-                (forward_pass(), white_material),
                 (shadow_pass(), RenderEffect::OpaqueShadow),
             ],
         ))

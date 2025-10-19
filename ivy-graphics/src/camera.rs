@@ -276,14 +276,17 @@ pub struct EnvironmentData {
     pub fog_density: f32,
     #[editable(range(0.0, 1.0))]
     pub fog_blend: f32,
+    #[editable(range(-100.0, 100.0))]
+    pub fog_height: f32,
 }
 
 impl EnvironmentData {
-    pub fn new(fog_color: Srgb, fog_density: f32, fog_blend: f32) -> Self {
+    pub fn new(fog_color: Srgb, fog_density: f32, fog_blend: f32, fog_height: f32) -> Self {
         Self {
             fog_color,
             fog_density,
             fog_blend,
+            fog_height,
         }
     }
 }
@@ -294,6 +297,7 @@ impl Default for EnvironmentData {
             fog_color: Srgb::new(0.3, 0.3, 0.5),
             fog_density: 0.001,
             fog_blend: 0.0,
+            fog_height: 0.0,
         }
     }
 }

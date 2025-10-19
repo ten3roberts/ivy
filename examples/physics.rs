@@ -4,10 +4,9 @@ use ivy_assets::{stored::DynamicStore, AssetCache, AssetPath};
 use ivy_core::{
     palette::{Srgb, Srgba},
     plugin::Plugin,
-    profiling::ProfilingLayer,
     transforms::TransformUpdatePlugin,
     update_layer::{FixedTimeStep, PluginLayer, ScheduleSetBuilder},
-    App, EngineLayer, EntityBuilderExt, DEG_180, DEG_45,
+    EntityBuilderExt, DEG_180, DEG_45,
 };
 use ivy_editor::{
     plugin::EditorPlugin,
@@ -21,7 +20,6 @@ use ivy_input::layer::InputLayer;
 use ivy_physics::{ColliderBundle, PhysicsPlugin};
 use ivy_postprocessing::preconfigured::{
     pbr::{PbrRenderGraphConfig, SkyboxConfig},
-    SurfacePbrPipelineDesc, SurfacePbrRenderer,
 };
 use ivy_scene::ray_picker::RayPickingPlugin;
 use ivy_ui::{
@@ -30,9 +28,7 @@ use ivy_ui::{
 };
 use ivy_wgpu::{
     components::{cast_shadow, forward_pass, light_kind, light_params},
-    driver::WinitDriver,
     effect_desc::{PbrRenderEffect, RenderEffect},
-    layer::GraphicsLayer,
     light::{LightKind, LightParams},
     mesh_desc::MeshDesc,
     primitives::CapsulePrimitive,
@@ -41,7 +37,8 @@ use ivy_wgpu::{
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
 use wgpu::TextureFormat;
-use winit::{dpi::LogicalSize, window::WindowAttributes};
+
+mod common;
 
 pub fn main() -> anyhow::Result<()> {
     registry()
@@ -54,33 +51,14 @@ pub fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    if let Err(err) = App::builder()
-        .with_driver(WinitDriver::new(
-            WindowAttributes::default()
-                .with_inner_size(LogicalSize::new(1920, 1080))
-                .with_title("Ivy Physics"),
-        ))
-        .with_layer(EngineLayer::new())
-        .with_layer(ProfilingLayer::new())
-        .with_layer(GraphicsLayer::new(|world, assets, store, gpu, surface| {
-            Ok(SurfacePbrRenderer::new(
-                world,
-                assets,
-                store,
-                gpu,
-                surface,
-                SurfacePbrPipelineDesc {
-                    pbr_config: PbrRenderGraphConfig {
-                        label: "basic".into(),
-                        skybox: Some(SkyboxConfig {
-                            hdri: Box::new(AssetPath::new("hdris/HDR_artificial_planet_close.hdr")),
-                            format: TextureFormat::Rgba16Float,
-                        }),
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                },
-            ))
+    if let Err(err) = common::base_app_builder("Ivy Physics")
+        .with_layer(common::graphics_layer_with_config(|| PbrRenderGraphConfig {
+            label: "basic".into(),
+            skybox: Some(SkyboxConfig {
+                hdri: Box::new(AssetPath::new("hdris/HDR_artificial_planet_close.hdr")),
+                format: TextureFormat::Rgba16Float,
+            }),
+            ..Default::default()
         }))
         .with_layer(UiLayer::new())
         .with_layer(InputLayer::new())

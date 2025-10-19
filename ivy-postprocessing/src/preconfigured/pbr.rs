@@ -26,6 +26,7 @@ use wgpu::{BufferUsages, Extent3d, TextureDimension, TextureFormat};
 use crate::{
     bloom::BloomNode,
     depth_resolve::MsaaDepthResolve,
+    dof::DepthOfFieldNode,
     hdri::{HdriProcessor, HdriProcessorNode},
     skybox::SkyboxRenderer,
     tonemap::TonemapNode,
@@ -36,6 +37,7 @@ pub struct PbrRenderGraphConfig {
     pub shadow_map_config: Option<ShadowMapConfig>,
     pub msaa: Option<MsaaConfig>,
     pub bloom: Option<BloomConfig>,
+    pub dof: Option<DofConfig>,
     pub skybox: Option<SkyboxConfig>,
     pub hdr_format: Option<TextureFormat>,
     pub label: String,
@@ -47,6 +49,7 @@ impl Default for PbrRenderGraphConfig {
             shadow_map_config: Some(Default::default()),
             msaa: Some(Default::default()),
             bloom: Some(Default::default()),
+            dof: Some(Default::default()),
             skybox: None,
             hdr_format: Some(TextureFormat::Rgba16Float),
             label: "pbr".into(),
@@ -102,6 +105,29 @@ impl Default for BloomConfig {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct DofConfig {
+    pub filter_radius: f32,
+    pub layers: u32,
+    pub focus_distance: f32,
+    pub focus_range: f32,
+    pub near: f32,
+    pub far: f32,
+}
+
+impl Default for DofConfig {
+    fn default() -> Self {
+        Self {
+            filter_radius: 0.0001,
+            layers: 1,
+            focus_distance: 15.0,
+            focus_range: 100.0,
+            near: 0.1,
+            far: 1000.0,
+        }
+    }
+}
+
 pub struct PbrRenderGraphTextures {
     screensized: Vec<TextureHandle>,
 }
@@ -135,7 +161,7 @@ impl PbrRenderGraphConfig {
         let target_format = self.hdr_format.unwrap_or(TextureFormat::Rgba8UnormSrgb);
 
         // TODO: extend with generic effects
-        let needs_indirection_target = self.hdr_format.is_some() || self.bloom.is_some();
+        let needs_indirection_target = self.hdr_format.is_some() || self.bloom.is_some() || self.dof.is_some();
 
         tracing::info!(?target_format);
         let final_color = if needs_indirection_target {
@@ -175,7 +201,16 @@ impl PbrRenderGraphConfig {
             persistent: false,
         });
 
-        let resolved_depth_texture;
+        let resolved_depth_texture = render_graph.resources.insert_texture(ManagedTextureDesc {
+            label: "resolved_depth_texture".into(),
+            extent,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba16Float,
+            mip_level_count: 1,
+            sample_count: 1,
+            persistent: false,
+        });
+
         // let resolved_gizmos_depth_texture;
         let sampled_target;
 
@@ -187,16 +222,6 @@ impl PbrRenderGraphConfig {
                 format: target_format,
                 mip_level_count: 1,
                 sample_count,
-                persistent: false,
-            });
-
-            resolved_depth_texture = render_graph.resources.insert_texture(ManagedTextureDesc {
-                label: "depth_texture".into(),
-                extent,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::R32Float,
-                mip_level_count: 1,
-                sample_count: 1,
                 persistent: false,
             });
 
@@ -212,7 +237,6 @@ impl PbrRenderGraphConfig {
             //     })
         } else {
             sampled_target = final_color;
-            resolved_depth_texture = depth_texture;
             // resolved_gizmos_depth_texture = gizmos_depth_texture;
         };
 
@@ -416,13 +440,14 @@ impl PbrRenderGraphConfig {
             // screensized.push(resolved_gizmos_depth_texture);
         };
 
+        render_graph.add_node(MsaaDepthResolve::new(
+            gpu,
+            depth_texture,
+            resolved_depth_texture,
+        ));
+
         if self.msaa.is_some() {
             render_graph.add_node(MsaaResolve::new(sampled_target, final_color));
-            render_graph.add_node(MsaaDepthResolve::new(
-                gpu,
-                depth_texture,
-                resolved_depth_texture,
-            ));
             last_output = final_color;
         }
 
@@ -448,6 +473,35 @@ impl PbrRenderGraphConfig {
             last_output = bloom_result;
 
             screensized.push(bloom_result);
+        }
+
+        if let Some(dof) = self.dof {
+            let dof_result = render_graph.resources.insert_texture(ManagedTextureDesc {
+                label: "dof_result".into(),
+                extent,
+                dimension: wgpu::TextureDimension::D2,
+                format: TextureFormat::Rgba16Float,
+                mip_level_count: 1,
+                sample_count: 1,
+                persistent: false,
+            });
+
+            render_graph.add_node(DepthOfFieldNode::new(
+                gpu,
+                last_output,
+                resolved_depth_texture,
+                dof_result,
+                dof.layers,
+                dof.filter_radius,
+                dof.focus_distance,
+                dof.focus_range,
+                dof.near,
+                dof.far,
+            ));
+
+            last_output = dof_result;
+
+            screensized.push(dof_result);
         }
 
         // Needs resolve to tonemap and write to non-hdr output

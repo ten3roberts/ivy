@@ -160,6 +160,7 @@ fn get_rendering_settings() -> PbrRenderGraphConfig {
             shadow_map_config: None,
             msaa: None,
             bloom: None,
+            dof: None,
             skybox: None,
             hdr_format: None,
             label: "scene".into(),
@@ -169,6 +170,7 @@ fn get_rendering_settings() -> PbrRenderGraphConfig {
             shadow_map_config: Some(Default::default()),
             msaa: Some(Default::default()),
             bloom: Some(Default::default()),
+            dof: Some(Default::default()),
             skybox: Some(SkyboxConfig {
                 hdri: Box::new(AssetPath::new(
                     // "hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr",

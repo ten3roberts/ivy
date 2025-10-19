@@ -415,6 +415,8 @@ impl Node for ShadowMapNode {
                     fog_blend: Default::default(),
                     fog_color: Default::default(),
                     fog_density: Default::default(),
+                    fog_height: Default::default(),
+                    ..Default::default()
                 },
             };
 
