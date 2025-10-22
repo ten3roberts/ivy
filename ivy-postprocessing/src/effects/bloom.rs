@@ -14,7 +14,7 @@ impl Default for BloomConfig {
     fn default() -> Self {
         Self {
             filter_radius: 0.001,
-            layers: 4,
+            layers: 8,
         }
     }
 }
@@ -37,3 +37,4 @@ impl PostProcessingEffect for BloomConfig {
         ));
     }
 }
+

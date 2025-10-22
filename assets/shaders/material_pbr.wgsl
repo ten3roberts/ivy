@@ -20,14 +20,14 @@ fn fragment_color(surface: SurfaceProperties, in: VertexOutput) -> vec4<f32> {
 
     let world_normal = normalize(transpose(tbn) * surface.tangent_normal);
 
-    let tangent_camera_pos = tbn * globals.camera_pos;
-    let tangent_camera_dir = normalize(tangent_camera_pos - in.tangent_pos);
+    let tangent_camera_pos = tbn * (globals.camera_pos - in.world_pos.xyz);
+    let tangent_camera_dir = normalize(tangent_camera_pos);
 
     let camera_dir = normalize(globals.camera_pos - in.world_pos.xyz);
 
     var in_lum: PbrLuminance;
 
-    let world_pos = in.world_pos - DISPLACEMENT_STRENGTH * in.normal * (1f - surface.displacement);
+    let world_pos = in.world_pos + DISPLACEMENT_STRENGTH * in.normal * surface.displacement;
 
     in_lum.camera_dir = camera_dir;
     in_lum.tangent_camera_dir = tangent_camera_dir;

@@ -13,7 +13,7 @@ var<storage> indirection: array<u32>;
 #import vertex::{VertexInput, VertexOutput, transform_vertex, Globals, globals};
 
 #ifdef SKINNED
-    @group(2) @binding(1)
+    @group(2) @binding(2)
     var<storage> joint_matrices: array<mat4x4<f32>>;
 #endif
 
@@ -31,7 +31,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
         let joint: u32 = in.joints[i];
         let weight: f32 = in.weights[i];
 
-        pos += (joint_matrices[joint] * vec4(in.pos, 1.0)).xyz * weight;
+        pos += (joint_matrices[object.joint_offset + joint] * vec4(in.pos, 1.0)).xyz * weight;
     }
 
     vertex.pos = pos;
