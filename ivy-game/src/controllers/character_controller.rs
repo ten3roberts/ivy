@@ -11,7 +11,7 @@ use ivy_input::{
     Action, BindingExt, CursorMoveBinding, InputState, KeyBinding,
 };
 
-use crate::behavior_tree::{BehaviorTree, BehaviorTreeNode};
+use crate::behavior_tree::{BehaviorTree, BehaviorTreeNode, Selector};
 use crate::controllers::camera_controller::{camera_look_data, CameraLookData};
 use crate::navigation::movement_direction;
 use ivy_core::components::{position, rotation};
@@ -32,6 +32,7 @@ component! {
 pub struct CharacterControllerInput {
     pub move_dir: Vec2,
     pub shift: bool,
+    pub jump: bool,
 }
 
 pub struct CharacterControllerState {
@@ -68,10 +69,13 @@ impl Bundle for CharacterControllerBundle {
         let input = PlayerInputConfiguration::new();
 
         let controller = CharacterController {
-            behavior_tree: BehaviorTree::new(SprintSelector {
-                walk: WalkAction {},
-                sprint: SprintAction {},
-            }),
+            behavior_tree: BehaviorTree::new(Selector::new(vec![
+                Box::new(JumpAction {}),
+                Box::new(SprintSelector {
+                    walk: WalkAction {},
+                    sprint: SprintAction {},
+                }),
+            ])),
             input: CharacterControllerInput::default(),
             yaw: 0.0,
             pitch: 0.0,
@@ -112,23 +116,25 @@ impl CharacterController {
     ) {
         self.yaw += yaw_input;
         self.pitch += pitch_input;
-        self.jump |= jump_input;
         self.input.move_dir = movement_input.normalize_or_zero();
         self.input.shift = shift_input;
+        self.input.jump = self.jump;
+        self.jump = false;
     }
 
     #[system]
     fn update_movement_system(
         self: &mut CharacterController,
         position: Vec3,
-        velocity: Vec3,
+        velocity: &mut Vec3,
         rotation: &mut glam::Quat,
         movement_direction: &mut Vec3,
     ) {
+        let grounded = velocity.y.abs() < 0.01;
         let state = CharacterControllerState {
             position,
-            velocity,
-            grounded: true, // TODO: determine from physics
+            velocity: *velocity,
+            grounded,
         };
 
         let mut ctx = CharacterControllerContext {
@@ -141,6 +147,10 @@ impl CharacterController {
 
         *rotation = glam::Quat::from_rotation_y(self.yaw);
         *movement_direction = *rotation * ctx.output.move_velocity;
+
+        if ctx.output.jump {
+            velocity.y = 5.0;
+        }
     }
 
     #[system(args(camera_look_data=camera_look_data().as_mut()))]
@@ -236,6 +246,8 @@ impl Default for PlayerInputConfiguration {
     }
 }
 
+struct JumpAction {}
+
 struct WalkAction {}
 
 struct SprintAction {}
@@ -275,6 +287,20 @@ impl BehaviorTreeNode<CharacterControllerContext> for SprintAction {
             crate::behavior_tree::NodeStatus::Success
         } else {
             ctx.output.move_velocity = Vec3::ZERO;
+            crate::behavior_tree::NodeStatus::Failure
+        }
+    }
+}
+
+impl BehaviorTreeNode<CharacterControllerContext> for JumpAction {
+    fn execute(
+        &mut self,
+        ctx: &mut CharacterControllerContext,
+    ) -> crate::behavior_tree::NodeStatus {
+        if ctx.input.jump && ctx.state.grounded {
+            ctx.output.jump = true;
+            crate::behavior_tree::NodeStatus::Success
+        } else {
             crate::behavior_tree::NodeStatus::Failure
         }
     }

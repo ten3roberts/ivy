@@ -43,7 +43,7 @@ Ivy allows Rust applications for games, simulations, and interactive 3D apps wit
 - **WebGPU Backend**: Modern GPU API support via WGPU.
 - **PBR Rendering**: Physically Based Rendering with materials, lights, and shadows.
 - **Render Graph**: Abstractions for fine-tuned render pipelines.
-- **Post-Processing**: Effects like bloom, HDR tonemapping, and custom shaders.
+- **Post-Processing**: Effects including bloom, depth of field, HDR tonemapping, color grading, and custom shaders.
 - **Gizmos**: Debug visualization for development.
 
 ### Physics & Simulation

@@ -13,9 +13,12 @@ use ivy_editable::Editable;
 use ivy_engine::engine;
 use ivy_game::orbit_camera::OrbitCameraPlugin;
 use ivy_input::layer::InputLayer;
-use ivy_postprocessing::preconfigured::{
-    pbr::{PbrRenderGraphConfig, SkyboxConfig},
-    SurfacePbrPipelineDesc, SurfacePbrRenderer,
+use ivy_postprocessing::{
+    effects::SkyboxConfig,
+    preconfigured::{
+        pbr::PbrRenderGraphConfig,
+        SurfacePbrPipelineDesc, SurfacePbrRenderer,
+    },
 };
 use ivy_ui::{
     layer::{UiLayer, UiUpdateLayer},

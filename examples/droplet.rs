@@ -14,9 +14,12 @@ use ivy_game::orbit_camera::OrbitCameraPlugin;
 use ivy_gltf::Document;
 use ivy_input::layer::InputLayer;
 use ivy_physics::PhysicsPlugin;
-use ivy_postprocessing::preconfigured::{
-    pbr::{PbrRenderGraphConfig, SkyboxConfig},
-    SurfacePbrPipelineDesc, SurfacePbrRenderer,
+use ivy_postprocessing::{
+    effects::SkyboxConfig,
+    preconfigured::{
+        pbr::PbrRenderGraphConfig,
+        SurfacePbrPipelineDesc, SurfacePbrRenderer,
+    },
 };
 use ivy_scene::{GltfNodeExt, NodeMountOptions};
 use ivy_wgpu::{driver::WinitDriver, layer::GraphicsLayer};

@@ -29,95 +29,16 @@ use crate::{
     bloom::BloomNode,
     depth_resolve::MsaaDepthResolve,
     dof::DepthOfFieldNode,
+    effects::{
+        BloomConfig, ColorGradingConfig, DofConfig, MsaaConfig, PostProcessingEffect,
+        ShadowMapConfig, SkyboxConfig,
+    },
     hdri::{HdriProcessor, HdriProcessorNode},
     skybox::SkyboxRenderer,
     tonemap::TonemapNode,
 };
 
-/// Color grading configuration for cinematic color correction
-#[repr(C)]
-#[derive(Debug, Clone, Copy, Pod, Zeroable)]
-pub struct ColorGradingConfig {
-    // Professional Lift/Gamma/Gain color correction
-    pub lift: glam::Vec3,  // Shadow color adjustment (-1.0 to 1.0 per channel)
-    pub exposure: f32,     // Overall brightness (-4.0 to +4.0 EV)
-    pub gamma: glam::Vec3, // Midtone adjustment (0.1 to 10.0 per channel)
-    pub contrast: f32,     // Contrast multiplier (0.0 to 2.0)
-    pub gain: glam::Vec3,  // Highlight boost (0.0 to 16.0 per channel)
-    //
-    // Basic tonal adjustments
-    pub saturation: f32, // Color saturation (0.0 to 2.0)
 
-    // White balance
-    pub temperature: f32, // Blue ↔ Yellow shift (-1.0 to 1.0)
-    pub tint: f32,        // Green ↔ Magenta shift (-1.0 to 1.0)
-    pub _padding: Vec2,
-}
-
-impl Default for ColorGradingConfig {
-    fn default() -> Self {
-        Self {
-            exposure: 0.0,
-            contrast: 1.0,
-            saturation: 1.0,
-            lift: glam::Vec3::ZERO,
-            gamma: glam::Vec3::ONE,
-            gain: glam::Vec3::ONE,
-            temperature: 0.0,
-            tint: 0.0,
-            _padding: Default::default(),
-        }
-    }
-}
-
-impl ColorGradingConfig {
-    /// Neutral color grading (no adjustments)
-    pub fn neutral() -> Self {
-        Self::default()
-    }
-
-    /// Cinematic color grading deeper colors, higher contrast)
-    pub fn cinematic() -> Self {
-        Self {
-            exposure: -0.3,                         // Darker overall for depth
-            contrast: 1.2,                          // Higher contrast for drama
-            saturation: 0.9,                        // Slightly desaturated for realism
-            lift: glam::Vec3::new(0.1, 0.05, 0.15), // Blue-tinted shadows
-            gamma: glam::Vec3::new(1.0, 0.95, 1.1), // Warmer midtones
-            gain: glam::Vec3::new(1.2, 1.1, 1.0),   // Brighter highlights
-            temperature: -0.1,                      // Slightly cool
-            tint: 0.0,
-            _padding: Default::default(),
-        }
-    }
-
-    /// Cave atmosphere (grayish, darker, lower contrast)
-    pub fn cave() -> Self {
-        Self {
-            exposure: -0.5,                        // Much darker
-            contrast: 0.8,                         // Lower contrast (flatter)
-            saturation: 0.6,                       // Desaturated (grayish)
-            lift: glam::Vec3::new(0.2, 0.2, 0.2),  // Neutral gray shadows
-            gamma: glam::Vec3::new(0.9, 0.9, 0.9), // Darker midtones
-            gain: glam::Vec3::new(0.8, 0.8, 0.8),  // Muted highlights
-            temperature: -0.2,                     // Cooler
-            tint: 0.0,
-            _padding: Default::default(),
-        }
-    }
-
-    /// Bright sunny day
-    pub fn bright_sunny() -> Self {
-        Self {
-            exposure: 0.3,
-            contrast: 1.1,
-            saturation: 1.2,
-            temperature: 0.1, // Warmer
-            _padding: Default::default(),
-            ..Default::default()
-        }
-    }
-}
 
 /// Dynamic color grading controller for smooth transitions
 #[derive(Clone)]
@@ -191,17 +112,7 @@ impl ColorGradingController {
     }
 }
 
-/// Trait for post-processing effects that can be added to the render graph
-pub trait PostProcessingEffect {
-    fn add_to_graph(
-        &self,
-        gpu: &Gpu,
-        render_graph: &mut RenderGraph,
-        input: TextureHandle,
-        output: TextureHandle,
-        resolved_depth_texture: Option<TextureHandle>,
-    );
-}
+
 
 /// Pre-configured render graph suited for PBR render pipelines
 pub struct PbrRenderGraphConfig {
@@ -231,120 +142,15 @@ impl Default for PbrRenderGraphConfig {
     }
 }
 
-pub struct SkyboxConfig {
-    pub hdri: Box<dyn AsyncAssetExt<DynamicImage>>,
-    pub format: TextureFormat,
-}
 
-#[derive(Debug, Clone)]
-pub struct ShadowMapConfig {
-    pub resolution: u32,
-    pub max_cascades: u32,
-    pub max_shadows: u32,
-}
 
-impl Default for ShadowMapConfig {
-    fn default() -> Self {
-        Self {
-            resolution: 1024,
-            max_cascades: 4,
-            max_shadows: 8,
-        }
-    }
-}
 
-#[derive(Debug, Clone)]
-pub struct MsaaConfig {
-    pub sample_count: u32,
-}
 
-impl Default for MsaaConfig {
-    fn default() -> Self {
-        Self { sample_count: 4 }
-    }
-}
 
-#[derive(Debug, Clone)]
-pub struct BloomConfig {
-    pub filter_radius: f32,
-    pub layers: u32,
-}
 
-impl Default for BloomConfig {
-    fn default() -> Self {
-        Self {
-            filter_radius: 0.001,
-            layers: 4,
-        }
-    }
-}
 
-impl PostProcessingEffect for BloomConfig {
-    fn add_to_graph(
-        &self,
-        gpu: &Gpu,
-        render_graph: &mut RenderGraph,
-        input: TextureHandle,
-        output: TextureHandle,
-        _resolved_depth_texture: Option<TextureHandle>,
-    ) {
-        render_graph.add_node(BloomNode::new(
-            gpu,
-            input,
-            output,
-            self.layers,
-            self.filter_radius,
-        ));
-    }
-}
 
-#[derive(Debug, Clone)]
-pub struct DofConfig {
-    pub filter_radius: f32,
-    pub layers: u32,
-    pub focus_distance: f32,
-    pub focus_range: f32,
-    pub near: f32,
-    pub far: f32,
-}
 
-impl Default for DofConfig {
-    fn default() -> Self {
-        Self {
-            filter_radius: 0.0001,
-            layers: 1,
-            focus_distance: 15.0,
-            focus_range: 100.0,
-            near: 0.1,
-            far: 1000.0,
-        }
-    }
-}
-
-impl PostProcessingEffect for DofConfig {
-    fn add_to_graph(
-        &self,
-        gpu: &Gpu,
-        render_graph: &mut RenderGraph,
-        input: TextureHandle,
-        output: TextureHandle,
-        resolved_depth_texture: Option<TextureHandle>,
-    ) {
-        let depth_texture = resolved_depth_texture.expect("DoF requires resolved depth texture");
-        render_graph.add_node(DepthOfFieldNode::new(
-            gpu,
-            input,
-            depth_texture,
-            output,
-            self.layers,
-            self.filter_radius,
-            self.focus_distance,
-            self.focus_range,
-            self.near,
-            self.far,
-        ));
-    }
-}
 
 pub struct PbrRenderGraphTextures {
     screensized: Vec<TextureHandle>,

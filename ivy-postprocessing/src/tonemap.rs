@@ -12,7 +12,7 @@ use wgpu::{
     SamplerDescriptor, ShaderModuleDescriptor, ShaderSource, ShaderStages, StoreOp, TextureUsages,
 };
 
-use crate::preconfigured::pbr::ColorGradingConfig;
+use crate::effects::ColorGradingConfig;
 
 pub struct TonemapNode {
     input: TextureHandle,

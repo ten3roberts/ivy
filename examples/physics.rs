@@ -18,8 +18,9 @@ use ivy_game::fly_camera::FlyCameraPlugin;
 use ivy_graphics::texture::TextureData;
 use ivy_input::layer::InputLayer;
 use ivy_physics::{ColliderBundle, PhysicsPlugin};
-use ivy_postprocessing::preconfigured::{
-    pbr::{PbrRenderGraphConfig, SkyboxConfig},
+use ivy_postprocessing::{
+    effects::SkyboxConfig,
+    preconfigured::pbr::PbrRenderGraphConfig,
 };
 use ivy_scene::ray_picker::RayPickingPlugin;
 use ivy_ui::{

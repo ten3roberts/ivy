@@ -26,9 +26,12 @@ use ivy_gltf::animation::plugin::AnimationPlugin;
 use ivy_graphics::texture::TextureData;
 use ivy_input::layer::InputLayer;
 use ivy_physics::{components::collider_builder, ColliderBundle, PhysicsPlugin, RigidBodyKind};
-use ivy_postprocessing::preconfigured::{
-    pbr::{PbrRenderGraphConfig, SkyboxConfig},
-    SurfacePbrPipelineDesc, SurfacePbrRenderer,
+use ivy_postprocessing::{
+    effects::SkyboxConfig,
+    preconfigured::{
+        pbr::PbrRenderGraphConfig,
+        SurfacePbrPipelineDesc, SurfacePbrRenderer,
+    },
 };
 use ivy_scene::{
     ray_picker::RayPickingPlugin, ser::SceneData, ui::SceneView,

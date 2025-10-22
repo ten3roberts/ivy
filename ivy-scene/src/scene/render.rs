@@ -2,8 +2,9 @@ use std::mem;
 
 use flax::{Entity, World};
 use ivy_assets::{stored::DynamicStore, AssetCache, AssetPath};
-use ivy_postprocessing::preconfigured::pbr::{
-    BloomConfig, ColorGradingConfig, DofConfig, PbrRenderGraphConfig, PbrRenderGraphTextures, SkyboxConfig,
+use ivy_postprocessing::{
+    effects::{BloomConfig, ColorGradingConfig, DofConfig, SkyboxConfig},
+    preconfigured::pbr::{PbrRenderGraphConfig, PbrRenderGraphTextures},
 };
 use ivy_wgpu::{
     rendergraph::{

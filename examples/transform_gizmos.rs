@@ -24,9 +24,12 @@ use ivy_game::{fly_camera::FlyCameraPlugin, viewport_camera::CameraViewportPlugi
 use ivy_graphics::texture::TextureData;
 use ivy_input::layer::InputLayer;
 use ivy_physics::{ColliderBundle, GizmoSettings, PhysicsPlugin};
-use ivy_postprocessing::preconfigured::{
-    pbr::{BloomConfig, PbrRenderGraphConfig, SkyboxConfig},
-    SurfacePbrPipelineDesc, SurfacePbrRenderer,
+use ivy_postprocessing::{
+    effects::{BloomConfig, SkyboxConfig},
+    preconfigured::{
+        pbr::PbrRenderGraphConfig,
+        SurfacePbrPipelineDesc, SurfacePbrRenderer,
+    },
 };
 use ivy_scene::ray_picker::RayPickingPlugin;
 use ivy_ui::{

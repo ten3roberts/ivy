@@ -32,7 +32,10 @@ use ivy_gltf::{
 use ivy_graphics::texture::{TextureData, TextureDesc};
 use ivy_input::layer::InputLayer;
 use ivy_physics::{ColliderBundle, GizmoSettings, PhysicsPlugin};
-use ivy_postprocessing::preconfigured::pbr::{PbrRenderGraphConfig, SkyboxConfig};
+use ivy_postprocessing::{
+    effects::SkyboxConfig,
+    preconfigured::pbr::PbrRenderGraphConfig,
+};
 use ivy_scene::{GltfNodeExt, NodeMountOptions};
 use ivy_ui::{
     layer::{UiLayer, UiUpdateLayer},

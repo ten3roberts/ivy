@@ -18,9 +18,12 @@ use ivy_game::fly_camera::FlyCameraPlugin;
 use ivy_gltf::animation::plugin::AnimationPlugin;
 use ivy_input::layer::InputLayer;
 use ivy_physics::{GizmoSettings, PhysicsPlugin};
-use ivy_postprocessing::preconfigured::{
-    pbr::{BloomConfig, PbrRenderGraphConfig, SkyboxConfig},
-    SurfacePbrPipelineDesc, SurfacePbrRenderer,
+use ivy_postprocessing::{
+    effects::{BloomConfig, SkyboxConfig},
+    preconfigured::{
+        pbr::PbrRenderGraphConfig,
+        SurfacePbrPipelineDesc, SurfacePbrRenderer,
+    },
 };
 use ivy_wgpu::{
     components::{forward_pass, shadow_pass},

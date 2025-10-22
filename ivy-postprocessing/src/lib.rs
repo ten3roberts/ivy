@@ -5,5 +5,6 @@ pub mod depth_resolve;
 pub mod hdri;
 pub mod overlay;
 pub mod preconfigured;
+pub mod effects;
 pub mod skybox;
 pub mod tonemap;
