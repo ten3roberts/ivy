@@ -19,7 +19,7 @@ use ivy_gltf::animation::plugin::AnimationPlugin;
 use ivy_input::layer::InputLayer;
 use ivy_physics::{GizmoSettings, PhysicsPlugin};
 use ivy_postprocessing::preconfigured::{
-    pbr::{PbrRenderGraphConfig, SkyboxConfig},
+    pbr::{BloomConfig, PbrRenderGraphConfig, SkyboxConfig},
     SurfacePbrPipelineDesc, SurfacePbrRenderer,
 };
 use ivy_wgpu::{
@@ -66,7 +66,7 @@ pub fn main() -> anyhow::Result<()> {
                         label: "basic".into(),
                         shadow_map_config: Some(Default::default()),
                         msaa: Some(Default::default()),
-                        bloom: Some(Default::default()),
+                        post_processing_effects: vec![Box::new(BloomConfig::default())],
                         skybox: Some(SkyboxConfig {
                             hdri: Box::new(AssetPath::new(
                                 "hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr",

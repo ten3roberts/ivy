@@ -25,7 +25,7 @@ use ivy_graphics::texture::TextureData;
 use ivy_input::layer::InputLayer;
 use ivy_physics::{ColliderBundle, GizmoSettings, PhysicsPlugin};
 use ivy_postprocessing::preconfigured::{
-    pbr::{PbrRenderGraphConfig, SkyboxConfig},
+    pbr::{BloomConfig, PbrRenderGraphConfig, SkyboxConfig},
     SurfacePbrPipelineDesc, SurfacePbrRenderer,
 };
 use ivy_scene::ray_picker::RayPickingPlugin;
@@ -87,7 +87,7 @@ pub fn main() -> anyhow::Result<()> {
                         label: "basic".into(),
                         shadow_map_config: Some(Default::default()),
                         msaa: Some(Default::default()),
-                        bloom: Some(Default::default()),
+                        post_processing_effects: vec![Box::new(BloomConfig::default())],
                         skybox: None,
                         // skybox: Some(SkyboxConfig {
                         //     hdri: Box::new(AssetPath::new(

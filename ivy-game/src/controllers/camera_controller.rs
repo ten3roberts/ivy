@@ -5,7 +5,7 @@ use flax::{
     filter::{All, WithRelation},
     system, Component, ComponentMut, FetchExt, Query, QueryBorrow,
 };
-use glam::{Mat4, Quat, Vec3};
+use glam::{Quat, Vec3};
 use ivy_assets::{stored::DynamicStore, AssetCache, Resource};
 use ivy_core::{
     components::{engine, position, request_capture_mouse, rotation, world_transform},
@@ -17,13 +17,16 @@ use ivy_core::{
 };
 use ivy_input::{Action, BindingExt, CursorMoveBinding};
 
+use crate::controllers::character_controller::CharacterControllerPlugin;
+
 component! {
-    pub camera_target(Entity): (),
+    pub camera_target(id): (),
     pub camera_look_data: CameraLookData,
     camera_controller:CameraController,
 }
 
 /// Pure data determining where the camera should look
+#[derive(Default)]
 pub struct CameraLookData {
     pub yaw: f32,
     pub pitch: f32,
@@ -47,7 +50,7 @@ impl CameraController {
         Self {
             offset: Vec3::ZERO,
             rotation_offset: Vec3::ZERO,
-            mode: CameraMode::FirstPerson,
+            mode: CameraMode::ThirdPerson,
         }
     }
 }
@@ -62,22 +65,36 @@ impl CameraController {
         Ok(())
     }
 
-    #[system(args(self=camera_controller().as_mut(), rotation=rotation().as_mut(), position=position().as_mut()), with_query(Query::new((camera_look_data(), world_transform())).with_relation(camera_target)))]
+    #[system(args(self=camera_controller().as_mut(), rotation=rotation().as_mut(), position=position().as_mut()), with_query(Query::new((camera_look_data(), position(), rotation())).with_relation(camera_target)))]
     pub fn update_system(
         self: &mut CameraController,
         rotation: &mut Quat,
         position: &mut Vec3,
-        target: &mut QueryBorrow<(Component<CameraLookData>, Component<Mat4>), (All, WithRelation)>,
+        target: &mut QueryBorrow<
+            (Component<CameraLookData>, Component<Vec3>, Component<Quat>),
+            (All, WithRelation),
+        >,
     ) {
-        if let Some((look_data, target_transform)) = target.first() {
-            let (_, target_rot, target_pos) = target_transform.to_scale_rotation_translation();
-            let yaw = Quat::from_rotation_y(look_data.yaw);
-            let pitch = Quat::from_rotation_x(look_data.pitch);
+        if let Some((look_data, target_pos, target_rot)) = target.first() {
+            match self.mode {
+                CameraMode::FirstPerson => {
+                    let yaw = Quat::from_rotation_y(look_data.yaw);
+                    let pitch = Quat::from_rotation_x(1.0);
 
-            *rotation = yaw * pitch;
-            *position = target_pos + target_rot * self.offset;
-        } else {
-            tracing::warn!("CameraController has no target to follow");
+                    *rotation = target_rot * yaw * pitch;
+                    *position = target_pos + target_rot * self.offset;
+                }
+                CameraMode::ThirdPerson => {
+                    let azimuth = look_data.yaw;
+                    let zenith = look_data.pitch;
+                    let focus_point = target_pos + self.offset;
+                    let dir =
+                        target_rot * Quat::from_rotation_y(azimuth) * Quat::from_rotation_x(zenith);
+
+                    *position = focus_point + (dir * Vec3::Z * 5.0);
+                    *rotation = dir;
+                }
+            }
         }
     }
 }
@@ -88,27 +105,19 @@ pub struct CameraControllerBundle {}
 impl Bundle for CameraControllerBundle {
     fn mount(&self, entity: &mut flax::EntityBuilder) {
         let mut controller = CameraController::new();
-        controller.mode = CameraMode::ThirdPerson;
         controller.offset = match controller.mode {
             CameraMode::FirstPerson => glam::vec3(0.0, 1.7, 0.0),
-            CameraMode::ThirdPerson => glam::vec3(0.0, 1.7, 3.0), // Behind the character
+            CameraMode::ThirdPerson => glam::vec3(0.0, 1.7, 0.0),
         };
-
-        let rotate_action = Action::new().with_binding(
-            CursorMoveBinding::new()
-                .decompose(Axis2D::Y)
-                .amplitude(-0.001)
-                .compose(Axis3D::X),
-        );
 
         entity.set(camera_controller(), controller);
     }
 }
 
 /// Moves the camera to the currently followed entity
-pub struct CameraTrackingPlugin;
+pub struct CameraControllerPlugin;
 
-impl Plugin for CameraTrackingPlugin {
+impl Plugin for CameraControllerPlugin {
     fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
         ctx.schedules
             .per_tick_mut()
@@ -118,6 +127,10 @@ impl Plugin for CameraTrackingPlugin {
     }
 
     fn after(&self) -> Vec<&str> {
+        vec![type_name::<CharacterControllerPlugin>()]
+    }
+
+    fn before(&self) -> Vec<&str> {
         vec![type_name::<TransformUpdatePlugin>()]
     }
 }

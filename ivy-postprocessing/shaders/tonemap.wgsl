@@ -23,11 +23,25 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
     return result;
 }
 
+struct ColorGradingUniforms {
+    lift: vec3<f32>,
+    exposure: f32,
+    gamma: vec3<f32>,
+    contrast: f32,
+    gain: vec3<f32>,
+    saturation: f32,
+    temperature: f32,
+    tint: f32,
+};
+
 @group(0) @binding(0)
 var source_texture: texture_2d<f32>;
 
 @group(0) @binding(1)
 var default_sampler: sampler;
+
+@group(1) @binding(0)
+var<uniform> grading: ColorGradingUniforms;
 
 fn reinhard(x: f32) -> f32 {
     return x / (1f + x);
@@ -86,17 +100,44 @@ fn reinhard_2(x: f32) -> f32 {
     return (x * (1.0 + x / (L_white * L_white))) / (1.0 + x);
 }
 
+fn apply_color_grading(color: vec3<f32>) -> vec3<f32> {
+    // Exposure adjustment (EV stops)
+    var result = color * pow(2.0, grading.exposure);
+
+    // Professional Lift/Gamma/Gain color correction
+    result = result + grading.lift;
+    result = pow(max(result, vec3(0.0001)), 1.0 / grading.gamma);
+    result = result * grading.gain;
+
+    // Saturation adjustment using luminance
+    let luminance = dot(result, vec3(0.2126, 0.7152, 0.0722));
+    result = mix(vec3(luminance), result, grading.saturation);
+
+    // Contrast adjustment
+    result = (result - 0.5) * grading.contrast + 0.5;
+
+    // White balance (temperature/tint)
+    let temp_shift = vec3(-grading.temperature * 0.1, 0.0, grading.temperature * 0.1);
+    let tint_shift = vec3(0.0, grading.tint * 0.1, -grading.tint * 0.1);
+    result = result + temp_shift + tint_shift;
+
+    return clamp(result, vec3(0.0), vec3(1.0));
+}
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var color = textureSample(source_texture, default_sampler, in.uv).rgb;
-    var yxy = convert_rgb_yxy(color);
 
+    // Apply tonemapping (Reinhard)
+    var yxy = convert_rgb_yxy(color);
     let lum = 0.05;
     let lp = yxy.x / (9.6 * lum + 0.0001);
     yxy.x = reinhard_2(lp);
-
     color = convert_yxy_rgb(yxy);
 
-    return vec4(color, 1f);
+    // Apply color grading
+    color = apply_color_grading(color);
+
+    return vec4(color, 1.0);
 }
  

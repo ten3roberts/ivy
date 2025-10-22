@@ -295,9 +295,9 @@ impl Default for EnvironmentData {
     fn default() -> Self {
         Self {
             fog_color: Srgb::new(0.3, 0.3, 0.5),
-            fog_density: 0.001,
+            fog_density: 0.005,
             fog_blend: 0.0,
-            fog_height: 0.0,
+            fog_height: -1.0,
         }
     }
 }

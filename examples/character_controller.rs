@@ -1,5 +1,6 @@
 use anyhow::Context;
 use flax::{entity_ids, Entity, Query, World};
+use glam::BVec3;
 use glam::{vec3, EulerRot, Quat, Vec3};
 use ivy_assets::{stored::DynamicStore, AssetCache};
 use ivy_core::components::main_camera;
@@ -17,7 +18,7 @@ use ivy_engine::{is_static, RigidBodyBundle, TransformBundle};
 use ivy_game::standalone_camera::StandaloneCameraBundle;
 use ivy_game::{
     controllers::{
-        camera_controller::{camera_target, CameraTrackingPlugin},
+        camera_controller::{camera_target, CameraControllerPlugin},
         character_controller::{CharacterControllerBundle, CharacterControllerPlugin},
     },
     navigation::{
@@ -27,6 +28,7 @@ use ivy_game::{
 };
 use ivy_graphics::texture::TextureData;
 use ivy_input::layer::InputLayer;
+use ivy_physics::AxisContraints;
 use ivy_physics::{components::collider_builder, ColliderBundle, PhysicsPlugin, RigidBodyKind};
 use ivy_postprocessing::preconfigured::pbr::PbrRenderGraphConfig;
 use ivy_wgpu::{
@@ -63,7 +65,7 @@ pub fn main() -> anyhow::Result<()> {
             PluginLayer::new(FixedTimeStep::new(0.02))
                 .with_plugin(LogicPlugin)
                 .with_plugin(CameraViewportPlugin)
-                .with_plugin(CameraTrackingPlugin)
+                .with_plugin(CameraControllerPlugin)
                 .with_plugin(CharacterControllerPlugin)
                 .with_plugin(MoverPlugin)
                 .with_plugin(
@@ -123,7 +125,10 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
                     .with_rotation(rotation),
             )
             .mount(CharacterControllerBundle {})
-            .mount(RigidBodyBundle::dynamic())
+            .mount(
+                RigidBodyBundle::dynamic()
+                    .with_axis_constraints(AxisContraints::new(BVec3::FALSE, BVec3::TRUE)),
+            )
             .mount(MoverBundle {
                 conf: MOVEMENT_CONFIG,
             })

@@ -1,7 +1,9 @@
 use std::{future::ready, mem::size_of};
 
+use bytemuck::{Pod, Zeroable};
 use flax::World;
 use futures::{stream, StreamExt};
+use glam::Vec2;
 use image::DynamicImage;
 use ivy_assets::{
     stored::{DynamicStore, Handle},
@@ -17,8 +19,8 @@ use ivy_wgpu::{
         shadowmapping::{LightShadowCamera, ShadowMapNode},
         CameraNode, LightManager, MsaaResolve, ObjectManager, SkyboxTextures,
     },
-    rendergraph::{BufferDesc, ManagedTextureDesc, RenderGraph, TextureHandle},
-    types::{texture::max_mip_levels, PhysicalSize},
+    rendergraph::{BufferDesc, ManagedTextureDesc, Node, RenderGraph, TextureHandle},
+    types::{texture::max_mip_levels, PhysicalSize, TypedBuffer},
     Gpu,
 };
 use wgpu::{BufferUsages, Extent3d, TextureDimension, TextureFormat};
@@ -32,12 +34,181 @@ use crate::{
     tonemap::TonemapNode,
 };
 
+/// Color grading configuration for cinematic color correction
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+pub struct ColorGradingConfig {
+    // Professional Lift/Gamma/Gain color correction
+    pub lift: glam::Vec3,  // Shadow color adjustment (-1.0 to 1.0 per channel)
+    pub exposure: f32,     // Overall brightness (-4.0 to +4.0 EV)
+    pub gamma: glam::Vec3, // Midtone adjustment (0.1 to 10.0 per channel)
+    pub contrast: f32,     // Contrast multiplier (0.0 to 2.0)
+    pub gain: glam::Vec3,  // Highlight boost (0.0 to 16.0 per channel)
+    //
+    // Basic tonal adjustments
+    pub saturation: f32, // Color saturation (0.0 to 2.0)
+
+    // White balance
+    pub temperature: f32, // Blue ↔ Yellow shift (-1.0 to 1.0)
+    pub tint: f32,        // Green ↔ Magenta shift (-1.0 to 1.0)
+    pub _padding: Vec2,
+}
+
+impl Default for ColorGradingConfig {
+    fn default() -> Self {
+        Self {
+            exposure: 0.0,
+            contrast: 1.0,
+            saturation: 1.0,
+            lift: glam::Vec3::ZERO,
+            gamma: glam::Vec3::ONE,
+            gain: glam::Vec3::ONE,
+            temperature: 0.0,
+            tint: 0.0,
+            _padding: Default::default(),
+        }
+    }
+}
+
+impl ColorGradingConfig {
+    /// Neutral color grading (no adjustments)
+    pub fn neutral() -> Self {
+        Self::default()
+    }
+
+    /// Cinematic color grading deeper colors, higher contrast)
+    pub fn cinematic() -> Self {
+        Self {
+            exposure: -0.3,                         // Darker overall for depth
+            contrast: 1.2,                          // Higher contrast for drama
+            saturation: 0.9,                        // Slightly desaturated for realism
+            lift: glam::Vec3::new(0.1, 0.05, 0.15), // Blue-tinted shadows
+            gamma: glam::Vec3::new(1.0, 0.95, 1.1), // Warmer midtones
+            gain: glam::Vec3::new(1.2, 1.1, 1.0),   // Brighter highlights
+            temperature: -0.1,                      // Slightly cool
+            tint: 0.0,
+            _padding: Default::default(),
+        }
+    }
+
+    /// Cave atmosphere (grayish, darker, lower contrast)
+    pub fn cave() -> Self {
+        Self {
+            exposure: -0.5,                        // Much darker
+            contrast: 0.8,                         // Lower contrast (flatter)
+            saturation: 0.6,                       // Desaturated (grayish)
+            lift: glam::Vec3::new(0.2, 0.2, 0.2),  // Neutral gray shadows
+            gamma: glam::Vec3::new(0.9, 0.9, 0.9), // Darker midtones
+            gain: glam::Vec3::new(0.8, 0.8, 0.8),  // Muted highlights
+            temperature: -0.2,                     // Cooler
+            tint: 0.0,
+            _padding: Default::default(),
+        }
+    }
+
+    /// Bright sunny day
+    pub fn bright_sunny() -> Self {
+        Self {
+            exposure: 0.3,
+            contrast: 1.1,
+            saturation: 1.2,
+            temperature: 0.1, // Warmer
+            _padding: Default::default(),
+            ..Default::default()
+        }
+    }
+}
+
+/// Dynamic color grading controller for smooth transitions
+#[derive(Clone)]
+pub enum EasingFunction {
+    Linear,
+    SmoothStep,
+    Exponential,
+}
+
+pub struct ColorGradingController {
+    current: ColorGradingConfig,
+    target: ColorGradingConfig,
+    transition_duration: f32,
+    elapsed_time: f32,
+    easing_function: EasingFunction,
+}
+
+impl ColorGradingController {
+    pub fn new(initial_config: ColorGradingConfig) -> Self {
+        Self {
+            current: initial_config.clone(),
+            target: initial_config,
+            transition_duration: 0.0,
+            elapsed_time: 0.0,
+            easing_function: EasingFunction::SmoothStep,
+        }
+    }
+
+    pub fn transition_to(&mut self, target: ColorGradingConfig, duration: f32) {
+        self.target = target;
+        self.transition_duration = duration;
+        self.elapsed_time = 0.0;
+    }
+
+    pub fn update(&mut self, delta_time: f32) -> &ColorGradingConfig {
+        if self.elapsed_time < self.transition_duration {
+            self.elapsed_time += delta_time;
+            let t = (self.elapsed_time / self.transition_duration).min(1.0);
+            let eased_t = self.apply_easing(t);
+
+            self.current = self.interpolate_configs(&self.current, &self.target, eased_t);
+        }
+        &self.current
+    }
+
+    fn interpolate_configs(
+        &self,
+        a: &ColorGradingConfig,
+        b: &ColorGradingConfig,
+        t: f32,
+    ) -> ColorGradingConfig {
+        ColorGradingConfig {
+            exposure: a.exposure + (b.exposure - a.exposure) * t,
+            contrast: a.contrast + (b.contrast - a.contrast) * t,
+            saturation: a.saturation + (b.saturation - a.saturation) * t,
+            lift: a.lift.lerp(b.lift, t),
+            gamma: a.gamma.lerp(b.gamma, t),
+            gain: a.gain.lerp(b.gain, t),
+            temperature: a.temperature + (b.temperature - a.temperature) * t,
+            tint: a.tint + (b.tint - a.tint) * t,
+            _padding: Default::default(),
+        }
+    }
+
+    fn apply_easing(&self, t: f32) -> f32 {
+        match self.easing_function {
+            EasingFunction::Linear => t,
+            EasingFunction::SmoothStep => t * t * (3.0 - 2.0 * t),
+            EasingFunction::Exponential => 1.0 - (-t * 5.0).exp(),
+        }
+    }
+}
+
+/// Trait for post-processing effects that can be added to the render graph
+pub trait PostProcessingEffect {
+    fn add_to_graph(
+        &self,
+        gpu: &Gpu,
+        render_graph: &mut RenderGraph,
+        input: TextureHandle,
+        output: TextureHandle,
+        resolved_depth_texture: Option<TextureHandle>,
+    );
+}
+
 /// Pre-configured render graph suited for PBR render pipelines
 pub struct PbrRenderGraphConfig {
     pub shadow_map_config: Option<ShadowMapConfig>,
     pub msaa: Option<MsaaConfig>,
-    pub bloom: Option<BloomConfig>,
-    pub dof: Option<DofConfig>,
+    pub post_processing_effects: Vec<Box<dyn PostProcessingEffect>>,
+    pub color_grading: ColorGradingConfig,
     pub skybox: Option<SkyboxConfig>,
     pub hdr_format: Option<TextureFormat>,
     pub label: String,
@@ -48,8 +219,11 @@ impl Default for PbrRenderGraphConfig {
         Self {
             shadow_map_config: Some(Default::default()),
             msaa: Some(Default::default()),
-            bloom: Some(Default::default()),
-            dof: Some(Default::default()),
+            post_processing_effects: vec![
+                Box::new(BloomConfig::default()),
+                Box::new(DofConfig::default()),
+            ],
+            color_grading: ColorGradingConfig::default(),
             skybox: None,
             hdr_format: Some(TextureFormat::Rgba16Float),
             label: "pbr".into(),
@@ -105,6 +279,25 @@ impl Default for BloomConfig {
     }
 }
 
+impl PostProcessingEffect for BloomConfig {
+    fn add_to_graph(
+        &self,
+        gpu: &Gpu,
+        render_graph: &mut RenderGraph,
+        input: TextureHandle,
+        output: TextureHandle,
+        _resolved_depth_texture: Option<TextureHandle>,
+    ) {
+        render_graph.add_node(BloomNode::new(
+            gpu,
+            input,
+            output,
+            self.layers,
+            self.filter_radius,
+        ));
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct DofConfig {
     pub filter_radius: f32,
@@ -125,6 +318,31 @@ impl Default for DofConfig {
             near: 0.1,
             far: 1000.0,
         }
+    }
+}
+
+impl PostProcessingEffect for DofConfig {
+    fn add_to_graph(
+        &self,
+        gpu: &Gpu,
+        render_graph: &mut RenderGraph,
+        input: TextureHandle,
+        output: TextureHandle,
+        resolved_depth_texture: Option<TextureHandle>,
+    ) {
+        let depth_texture = resolved_depth_texture.expect("DoF requires resolved depth texture");
+        render_graph.add_node(DepthOfFieldNode::new(
+            gpu,
+            input,
+            depth_texture,
+            output,
+            self.layers,
+            self.filter_radius,
+            self.focus_distance,
+            self.focus_range,
+            self.near,
+            self.far,
+        ));
     }
 }
 
@@ -161,7 +379,8 @@ impl PbrRenderGraphConfig {
         let target_format = self.hdr_format.unwrap_or(TextureFormat::Rgba8UnormSrgb);
 
         // TODO: extend with generic effects
-        let needs_indirection_target = self.hdr_format.is_some() || self.bloom.is_some() || self.dof.is_some();
+        let needs_indirection_target =
+            self.hdr_format.is_some() || !self.post_processing_effects.is_empty();
 
         tracing::info!(?target_format);
         let final_color = if needs_indirection_target {
@@ -451,9 +670,10 @@ impl PbrRenderGraphConfig {
             last_output = final_color;
         }
 
-        if let Some(bloom) = self.bloom {
-            let bloom_result = render_graph.resources.insert_texture(ManagedTextureDesc {
-                label: "bloom_result".into(),
+        // Apply post-processing effects in order
+        for (i, effect) in self.post_processing_effects.iter().enumerate() {
+            let effect_result = render_graph.resources.insert_texture(ManagedTextureDesc {
+                label: format!("{}_effect_{}", self.label, i).into(),
                 extent,
                 dimension: wgpu::TextureDimension::D2,
                 format: TextureFormat::Rgba16Float,
@@ -462,51 +682,26 @@ impl PbrRenderGraphConfig {
                 persistent: false,
             });
 
-            render_graph.add_node(BloomNode::new(
+            effect.add_to_graph(
                 gpu,
+                render_graph,
                 last_output,
-                bloom_result,
-                bloom.layers,
-                bloom.filter_radius,
-            ));
+                effect_result,
+                Some(resolved_depth_texture),
+            );
 
-            last_output = bloom_result;
-
-            screensized.push(bloom_result);
-        }
-
-        if let Some(dof) = self.dof {
-            let dof_result = render_graph.resources.insert_texture(ManagedTextureDesc {
-                label: "dof_result".into(),
-                extent,
-                dimension: wgpu::TextureDimension::D2,
-                format: TextureFormat::Rgba16Float,
-                mip_level_count: 1,
-                sample_count: 1,
-                persistent: false,
-            });
-
-            render_graph.add_node(DepthOfFieldNode::new(
-                gpu,
-                last_output,
-                resolved_depth_texture,
-                dof_result,
-                dof.layers,
-                dof.filter_radius,
-                dof.focus_distance,
-                dof.focus_range,
-                dof.near,
-                dof.far,
-            ));
-
-            last_output = dof_result;
-
-            screensized.push(dof_result);
+            last_output = effect_result;
+            screensized.push(effect_result);
         }
 
         // Needs resolve to tonemap and write to non-hdr output
         if needs_indirection_target {
-            render_graph.add_node(TonemapNode::new(gpu, last_output, destination));
+            render_graph.add_node(TonemapNode::new_with_grading(
+                gpu,
+                last_output,
+                destination,
+                self.color_grading,
+            ));
         }
 
         // working in non-hdr space

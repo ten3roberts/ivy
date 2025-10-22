@@ -3,7 +3,7 @@ use std::mem;
 use flax::{Entity, World};
 use ivy_assets::{stored::DynamicStore, AssetCache, AssetPath};
 use ivy_postprocessing::preconfigured::pbr::{
-    PbrRenderGraphConfig, PbrRenderGraphTextures, SkyboxConfig,
+    BloomConfig, ColorGradingConfig, DofConfig, PbrRenderGraphConfig, PbrRenderGraphTextures, SkyboxConfig,
 };
 use ivy_wgpu::{
     rendergraph::{
@@ -159,8 +159,8 @@ fn get_rendering_settings() -> PbrRenderGraphConfig {
         PbrRenderGraphConfig {
             shadow_map_config: None,
             msaa: None,
-            bloom: None,
-            dof: None,
+            post_processing_effects: vec![],
+            color_grading: ColorGradingConfig::default(),
             skybox: None,
             hdr_format: None,
             label: "scene".into(),
@@ -169,8 +169,11 @@ fn get_rendering_settings() -> PbrRenderGraphConfig {
         PbrRenderGraphConfig {
             shadow_map_config: Some(Default::default()),
             msaa: Some(Default::default()),
-            bloom: Some(Default::default()),
-            dof: Some(Default::default()),
+            post_processing_effects: vec![
+                Box::new(BloomConfig::default()),
+                Box::new(DofConfig::default()),
+            ],
+            color_grading: ColorGradingConfig::cinematic(),
             skybox: Some(SkyboxConfig {
                 hdri: Box::new(AssetPath::new(
                     // "hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
