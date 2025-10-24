@@ -13,8 +13,8 @@ pub struct BloomConfig {
 impl Default for BloomConfig {
     fn default() -> Self {
         Self {
-            filter_radius: 0.001,
-            layers: 8,
+            filter_radius: 0.005,
+            layers: 4,
         }
     }
 }
@@ -37,4 +37,3 @@ impl PostProcessingEffect for BloomConfig {
         ));
     }
 }
-

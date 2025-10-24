@@ -14,16 +14,13 @@ use ivy_core::{
 use ivy_engine::{
     color, elapsed_time, engine, parent_transform, position, rotation, scale, world_transform,
 };
-use ivy_game::fly_camera::FlyCameraPlugin;
+use ivy_game::{fly_camera::FlyCameraPlugin, viewport_camera::CameraViewportPlugin};
 use ivy_gltf::animation::plugin::AnimationPlugin;
 use ivy_input::layer::InputLayer;
 use ivy_physics::{GizmoSettings, PhysicsPlugin};
 use ivy_postprocessing::{
     effects::{BloomConfig, SkyboxConfig},
-    preconfigured::{
-        pbr::PbrRenderGraphConfig,
-        SurfacePbrPipelineDesc, SurfacePbrRenderer,
-    },
+    preconfigured::{pbr::PbrRenderGraphConfig, SurfacePbrPipelineDesc, SurfacePbrRenderer},
 };
 use ivy_wgpu::{
     components::{forward_pass, shadow_pass},
@@ -37,6 +34,8 @@ use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt
 use tracing_tree::HierarchicalLayer;
 use wgpu::TextureFormat;
 use winit::{dpi::LogicalSize, window::WindowAttributes};
+
+mod common;
 
 pub fn main() -> anyhow::Result<()> {
     registry()
@@ -57,35 +56,14 @@ pub fn main() -> anyhow::Result<()> {
         ))
         .with_layer(EngineLayer::new())
         .with_layer(ProfilingLayer::new())
-        .with_layer(GraphicsLayer::new(|world, assets, store, gpu, surface| {
-            Ok(SurfacePbrRenderer::new(
-                world,
-                assets,
-                store,
-                gpu,
-                surface,
-                SurfacePbrPipelineDesc {
-                    pbr_config: PbrRenderGraphConfig {
-                        label: "basic".into(),
-                        shadow_map_config: Some(Default::default()),
-                        msaa: Some(Default::default()),
-                        post_processing_effects: vec![Box::new(BloomConfig::default())],
-                        skybox: Some(SkyboxConfig {
-                            hdri: Box::new(AssetPath::new(
-                                "hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
-                            )),
-                            format: TextureFormat::Rgba16Float,
-                        }),
-                        hdr_format: Some(wgpu::TextureFormat::Rgba16Float),
-                    },
-                    ..Default::default()
-                },
-            ))
+        .with_layer(common::graphics_layer_with_config(|| {
+            PbrRenderGraphConfig::default()
         }))
         .with_layer(InputLayer::new())
         .with_layer(
             PluginLayer::new(FixedTimeStep::new(0.02))
                 .with_plugin(LogicPlugin)
+                .with_plugin(CameraViewportPlugin)
                 .with_plugin(FlyCameraPlugin)
                 .with_plugin(AnimationPlugin)
                 .with_plugin(DynamicsPlugin)

@@ -5,7 +5,7 @@ use glam::{vec3, EulerRot, Quat, Vec2, Vec3};
 use ivy_assets::{stored::DynamicStore, AssetCache, AssetPath};
 use ivy_core::{
     palette::Srgb,
-    plugin::Plugin,
+    plugin::{Plugin, PluginContext},
     profiling::ProfilingLayer,
     transforms::TransformUpdatePlugin,
     update_layer::{FixedTimeStep, PluginLayer, ScheduleSetBuilder},
@@ -18,20 +18,14 @@ use ivy_editor::{
     tools_controller::ToolsControllerPlugin,
 };
 use ivy_engine::{engine, is_static, rotation, scale, RigidBodyBundle, TransformBundle};
-use ivy_game::{
-    fly_camera::FlyCameraPlugin, standalone_camera::StandaloneCameraPlugin,
-    viewport_camera::CameraViewportPlugin,
-};
+use ivy_game::{fly_camera::FlyCameraPlugin, viewport_camera::CameraViewportPlugin};
 use ivy_gltf::animation::plugin::AnimationPlugin;
 use ivy_graphics::texture::TextureData;
 use ivy_input::layer::InputLayer;
 use ivy_physics::{components::collider_builder, ColliderBundle, PhysicsPlugin, RigidBodyKind};
 use ivy_postprocessing::{
     effects::SkyboxConfig,
-    preconfigured::{
-        pbr::PbrRenderGraphConfig,
-        SurfacePbrPipelineDesc, SurfacePbrRenderer,
-    },
+    preconfigured::{pbr::PbrRenderGraphConfig, SurfacePbrPipelineDesc, SurfacePbrRenderer},
 };
 use ivy_scene::{
     ray_picker::RayPickingPlugin, ser::SceneData, ui::SceneView,
@@ -154,8 +148,7 @@ pub fn main() -> anyhow::Result<()> {
                     }),
                 )
                 .with_plugin(ToastPlugin)
-                .with_plugin(StreamedUiPlugin)
-                .with_plugin(StandaloneCameraPlugin), // TODO: remove,
+                .with_plugin(StreamedUiPlugin),
         )
         .with_layer(SceneLayer::new())
         .with_layer(SceneViewportProvider::new())

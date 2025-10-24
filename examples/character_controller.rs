@@ -5,7 +5,9 @@ use async_std;
 use flax::{components::child_of, entity_ids, Entity, Query, World};
 use glam::BVec3;
 use glam::{vec3, EulerRot, Quat, Vec3};
-use ivy_assets::{stored::DynamicStore, Asset, AssetCache, AssetPath, AsyncAssetExt};
+use ivy_assets::{
+    loadable::Loadable, stored::DynamicStore, Asset, AssetCache, AssetPath, AsyncAssetExt,
+};
 use ivy_core::components::main_camera;
 use ivy_core::components::position;
 use ivy_core::template::Template;
@@ -33,24 +35,26 @@ use ivy_game::{
     viewport_camera::CameraViewportPlugin,
 };
 use ivy_gltf::Document;
-use ivy_graphics::texture::TextureData;
+use ivy_graphics::texture::{TextureData, TextureDesc};
 use ivy_input::layer::InputLayer;
 use ivy_physics::AxisContraints;
 use ivy_physics::{components::collider_builder, ColliderBundle, PhysicsPlugin, RigidBodyKind};
 use ivy_postprocessing::preconfigured::pbr::PbrRenderGraphConfig;
 use ivy_scene::{GltfNodeExt, NodeMountOptions};
-use ivy_wgpu::effect_desc::PbrEmissiveRenderEffect;
+use ivy_wgpu::effect_desc::{
+    PbrEmissiveRenderEffect, PbrRenderEffectDesc, RenderEffect, RenderEffectDesc,
+};
 use ivy_wgpu::{
     components::*,
-    effect_desc::{PbrRenderEffect, RenderEffect},
+    effect_desc::PbrRenderEffect,
     light::{LightBundle, LightKind, LightParams},
     material::{EffectPass, Material, MaterialBundle},
     mesh_desc::MeshDesc,
-    primitives::{CapsulePrimitive, CubePrimitive, UvSpherePrimitive},
-    renderer::MeshBundle,
+    primitives::{generate_plane, CapsulePrimitive, CubePrimitive, UvSpherePrimitive},
+    renderer::{MeshBundle, RenderObjectBundle},
 };
 use rand::{rngs::StdRng, Rng, SeedableRng};
-use rapier3d::prelude::ColliderBuilder;
+use rapier3d::prelude::{ColliderBuilder, SharedShape};
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
 use violet::palette::{Hsl, Hsv, IntoColor, WithAlpha};
@@ -173,43 +177,6 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
         .unwrap()
         .set(camera_target(camera_entity), ());
 
-    let ground_material = assets.insert(
-        Material::new()
-            .with_effect(EffectPass::Forward, white_material.clone())
-            .with_effect(EffectPass::Shadow, RenderEffect::OpaqueShadow),
-    );
-
-    let ground_template = Template::new()
-        .with_bundle(TransformBundle::default())
-        .with_bundle(RigidBodyBundle::new(RigidBodyKind::Fixed))
-        .with_bundle(MeshBundle::new(cube_mesh.clone()))
-        .with_bundle(MaterialBundle::new(ground_material));
-
-    ground_template
-        .build()
-        .set(position(), Vec3::ZERO)
-        .set(scale(), vec3(100.0, 1.0, 100.0))
-        .set(
-            collider_builder(),
-            ColliderBuilder::cuboid(100.0, 1.0, 100.0).friction(0.3),
-        )
-        .set(is_static(), ())
-        .spawn(world);
-
-    let light_template = Template::new().with_bundle(
-        TransformBundle::default().with_rotation(Quat::from_euler(EulerRot::YXZ, -2.0, -1.0, 0.0)),
-    );
-
-    light_template
-        .build()
-        .set(
-            light_params(),
-            LightParams::new(Srgb::new(1.0, 1.0, 1.0), 1.0),
-        )
-        .set(light_kind(), LightKind::Directional)
-        .set_default(cast_shadow())
-        .spawn(world);
-
     Ok(())
 }
 
@@ -218,12 +185,56 @@ impl LogicPlugin {
         let cmd = world.get(engine(), async_commandbuffer()).unwrap().clone();
         let assets = assets.clone();
 
+        async fn load_ground(assets: AssetCache, cmd: AsyncCommandBuffer) -> anyhow::Result<()> {
+            let plane_mesh = MeshDesc::content(assets.insert(generate_plane(100.0, Vec3::Y)));
+
+            let texture_group = "textures/BaseCollection/Sand";
+            let albedo = AssetPath::new(format!("{texture_group}/albedo.png"));
+            let normal = AssetPath::new(format!("{texture_group}/normal.png"));
+            let roughness = AssetPath::new(format!("{texture_group}/roughness.png"));
+            let ao = AssetPath::new(format!("{texture_group}/ao.png"));
+            let displacement = AssetPath::new(format!("{texture_group}/displacement.png"));
+
+            let plane_material = RenderEffectDesc::Pbr(
+                PbrRenderEffectDesc::new()
+                    .with_metallic_factor(0.0)
+                    .with_albedo(TextureDesc::Path(albedo))
+                    .with_normal(TextureDesc::Path(normal))
+                    .with_metallic_roughness(TextureDesc::Path(roughness))
+                    .with_ambient_occlusion(TextureDesc::Path(ao))
+                    .with_displacement(TextureDesc::Path(displacement)),
+            )
+            .load(&assets)
+            .await?;
+
+            cmd.lock().spawn(
+                Entity::builder()
+                    .mount(TransformBundle::default())
+                    .mount(RenderObjectBundle::new(
+                        plane_mesh,
+                        &[
+                            (forward_pass(), plane_material),
+                            (shadow_pass(), RenderEffect::OpaqueShadow),
+                        ],
+                    ))
+                    .mount(RigidBodyBundle::fixed())
+                    .mount(
+                        ColliderBundle::new(SharedShape::cuboid(100.0, 0.1, 100.0))
+                            .with_friction(0.3),
+                    ),
+            );
+
+            anyhow::Ok(())
+        }
+
         async fn load_additional_objects(
             assets: AssetCache,
             cmd: AsyncCommandBuffer,
         ) -> anyhow::Result<()> {
             let cube_mesh = MeshDesc::Content(assets.load(&CubePrimitive));
             let sphere_mesh = MeshDesc::Content(assets.load(&UvSpherePrimitive::default()));
+
+            const ROUGHNESS: f32 = 0.2;
 
             // Create materials with different colors
             let red_material = assets.insert(
@@ -232,7 +243,7 @@ impl LogicPlugin {
                         EffectPass::Forward,
                         RenderEffect::Pbr(
                             PbrRenderEffect::new()
-                                .with_roughness_factor(1.0)
+                                .with_roughness_factor(ROUGHNESS)
                                 .with_metallic_factor(0.0)
                                 .with_albedo(TextureData::srgba(Color::from_hsla(
                                     0.0, 0.7, 0.7, 1.0,
@@ -248,7 +259,7 @@ impl LogicPlugin {
                         EffectPass::Forward,
                         RenderEffect::Pbr(
                             PbrRenderEffect::new()
-                                .with_roughness_factor(1.0)
+                                .with_roughness_factor(ROUGHNESS)
                                 .with_metallic_factor(0.0)
                                 .with_albedo(TextureData::srgba(Color::from_hsla(
                                     120.0, 0.7, 0.7, 1.0,
@@ -264,7 +275,7 @@ impl LogicPlugin {
                         EffectPass::Forward,
                         RenderEffect::Pbr(
                             PbrRenderEffect::new()
-                                .with_roughness_factor(1.0)
+                                .with_roughness_factor(ROUGHNESS)
                                 .with_metallic_factor(0.0)
                                 .with_albedo(TextureData::srgba(Color::from_hsla(
                                     240.0, 0.7, 0.7, 1.0,
@@ -280,7 +291,7 @@ impl LogicPlugin {
                         EffectPass::Forward,
                         RenderEffect::Pbr(
                             PbrRenderEffect::new()
-                                .with_roughness_factor(1.0)
+                                .with_roughness_factor(ROUGHNESS)
                                 .with_metallic_factor(0.0)
                                 .with_albedo(TextureData::srgba(Color::from_hsla(
                                     60.0, 0.7, 0.7, 1.0,
@@ -296,7 +307,7 @@ impl LogicPlugin {
                         EffectPass::Forward,
                         RenderEffect::Pbr(
                             PbrRenderEffect::new()
-                                .with_roughness_factor(1.0)
+                                .with_roughness_factor(ROUGHNESS)
                                 .with_metallic_factor(0.0)
                                 .with_albedo(TextureData::srgba(Color::from_hsla(
                                     300.0, 0.7, 0.7, 1.0,
@@ -354,7 +365,8 @@ impl LogicPlugin {
                     .with_bundle(
                         ColliderBundle::new(rapier3d::prelude::SharedShape::ball(1.0))
                             .with_friction(0.8)
-                            .with_restitution(1.0),
+                            .with_restitution(1.0)
+                            .with_density(2.0),
                     )
                     .with_bundle(MeshBundle::new(sphere_mesh.clone()))
                     .with_bundle(MaterialBundle::new(material))
@@ -369,31 +381,32 @@ impl LogicPlugin {
         async fn load_crates(assets: AssetCache, cmd: AsyncCommandBuffer) -> anyhow::Result<()> {
             // Assuming a crate GLTF model exists, e.g., "models/Crate.glb"
             // If not, this will fail, but for the example, we'll try
-            let document: Asset<Document> = AssetPath::new("models/Crate.glb")
-                .load_async(&assets)
-                .await?;
+            let template: Asset<Template> =
+                AssetPath::new("Crate.asset").load_async(&assets).await?;
 
-            for node in document.nodes() {
-                node.mount(
-                    &mut Entity::builder(),
-                    &NodeMountOptions {
-                        skip_empty_children: true,
-                        material_overrides: &Default::default(),
-                    },
-                )
-                .mount(TransformBundle::new(
-                    vec3(5.0, 1.0, -5.0), // Position for the crate
-                    Quat::IDENTITY,
-                    Vec3::ONE,
-                ))
-                .spawn_into(&mut cmd.lock());
+            let mut rng = StdRng::from_seed([42; 32]);
+            const SPAWN_RANGE: f32 = 20.0;
+            for _ in 0..5 {
+                let x: f32 = rng.random_range(-SPAWN_RANGE..SPAWN_RANGE);
+                let z: f32 = rng.random_range(-SPAWN_RANGE..SPAWN_RANGE);
+                let y: f32 = rng.random_range(1.0..3.0);
+
+                template
+                    .build()
+                    .mount(TransformBundle::default().with_position(vec3(x, y, z)))
+                    .spawn_into(&mut cmd.lock());
             }
 
             anyhow::Ok(())
         }
 
         async_std::task::spawn(load_additional_objects(assets.clone(), cmd.clone()));
-        async_std::task::spawn(load_crates(assets, cmd));
+        async_std::task::spawn(load_ground(assets.clone(), cmd.clone()));
+        async_std::task::spawn(async move {
+            if let Err(err) = load_crates(assets, cmd).await {
+                tracing::error!("Failed to load crate model: {err:?}");
+            }
+        });
 
         Ok(())
     }
@@ -412,8 +425,6 @@ struct SpawnSpotlightPlugin;
 
 impl Plugin for SpawnSpotlightPlugin {
     fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
-        let mut rng = StdRng::from_seed([123; 32]); // Different seed for lights
-
         let count = 4; // Several spotlights for scattered illumination
 
         let sphere_mesh = MeshDesc::content(ctx.assets.load(&UvSpherePrimitive::default()));

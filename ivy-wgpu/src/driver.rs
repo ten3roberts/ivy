@@ -214,6 +214,7 @@ impl WinitEventHandler<'_> {
                 self.app.emit_event(InputEvent::Keyboard(KeyboardInput {
                     modifiers: self.modifiers,
                     key: event.logical_key,
+                    physical_key: event.physical_key,
                     state: event.state,
                     text: event.text,
                 }))?;
