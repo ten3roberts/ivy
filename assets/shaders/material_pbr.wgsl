@@ -52,6 +52,7 @@ fn fragment_color(surface: SurfaceProperties, in: VertexOutput) -> vec4<f32> {
 
 fn fragment_color_unlit(albedo: vec4<f32>, in: VertexOutput) -> vec4<f32> {
     let base_color = albedo;
-    let color = mix(base_color.rgb, in.fog.rgb, in.fog.a);
+    //let color = mix(base_color.rgb, in.fog.rgb, in.fog.a);
+    let color = base_color.rgb;
     return vec4(color, albedo.a);
 }

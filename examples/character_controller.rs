@@ -5,6 +5,7 @@ use async_std;
 use flax::{components::child_of, entity_ids, Entity, Query, World};
 use glam::BVec3;
 use glam::{vec3, EulerRot, Quat, Vec3};
+use image::Rgba;
 use ivy_assets::{stored::DynamicStore, Asset, AssetCache, AssetPath, AsyncAssetExt};
 use ivy_core::components::main_camera;
 use ivy_core::components::position;
@@ -37,6 +38,7 @@ use ivy_graphics::texture::TextureData;
 use ivy_input::layer::InputLayer;
 use ivy_physics::AxisContraints;
 use ivy_physics::{components::collider_builder, ColliderBundle, PhysicsPlugin, RigidBodyKind};
+use ivy_postprocessing::effects::SkyboxConfig;
 use ivy_postprocessing::preconfigured::pbr::PbrRenderGraphConfig;
 use ivy_scene::{GltfNodeExt, NodeMountOptions};
 use ivy_wgpu::effect_desc::PbrEmissiveRenderEffect;
@@ -70,7 +72,13 @@ pub fn main() -> anyhow::Result<()> {
 
     if let Err(err) = common::base_app_builder("Ivy Character Controller")
         .with_layer(common::graphics_layer_with_config(|| {
-            PbrRenderGraphConfig::default()
+            PbrRenderGraphConfig {
+                skybox: Some(SkyboxConfig {
+                    hdri: Box::new(AssetPath::new("hdris/HDR_artificial_planet_close.hdr")),
+                    format: wgpu::TextureFormat::Rgba16Float,
+                }),
+                ..PbrRenderGraphConfig::default()
+            }
         }))
         .with_layer(InputLayer::new())
         .with_layer(

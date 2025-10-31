@@ -5,7 +5,7 @@ use glam::{vec3, EulerRot, Quat, Vec2, Vec3};
 use ivy_assets::{stored::DynamicStore, AssetCache, AssetPath};
 use ivy_core::{
     palette::Srgb,
-    plugin::Plugin,
+    plugin::{Plugin, PluginContext},
     profiling::ProfilingLayer,
     transforms::TransformUpdatePlugin,
     update_layer::{FixedTimeStep, PluginLayer, ScheduleSetBuilder},
@@ -17,36 +17,28 @@ use ivy_editor::{
     tools::{physics_tool::PhysicsToolPlugin, transform_tool::TransformToolPlugin},
     tools_controller::ToolsControllerPlugin,
 };
-use ivy_engine::{engine, is_static, rotation, scale, RigidBodyBundle, TransformBundle};
-use ivy_game::{
-    fly_camera::FlyCameraPlugin, standalone_camera::StandaloneCameraPlugin,
-    viewport_camera::CameraViewportPlugin,
-};
+use ivy_engine::{is_static, rotation, scale, RigidBodyBundle, TransformBundle};
+use ivy_game::{fly_camera::FlyCameraPlugin, viewport_camera::CameraViewportPlugin};
 use ivy_gltf::animation::plugin::AnimationPlugin;
 use ivy_graphics::texture::TextureData;
 use ivy_input::layer::InputLayer;
 use ivy_physics::{components::collider_builder, ColliderBundle, PhysicsPlugin, RigidBodyKind};
 use ivy_postprocessing::{
     effects::SkyboxConfig,
-    preconfigured::{
-        pbr::PbrRenderGraphConfig,
-        SurfacePbrPipelineDesc, SurfacePbrRenderer,
-    },
+    preconfigured::{pbr::PbrRenderGraphConfig, SurfacePbrPipelineDesc, SurfacePbrRenderer},
 };
 use ivy_scene::{
-    ray_picker::RayPickingPlugin, ser::SceneData, ui::SceneView,
-    viewport_provider::SceneViewportProvider, Scene, SceneLayer,
+    ray_picker::RayPickingPlugin, ser::SceneData, viewport_provider::SceneViewportProvider, Scene,
+    SceneLayer,
 };
 use ivy_ui::{
     layer::{UiLayer, UiLayerOptions, UiUpdateLayer},
-    screens::{screen_state, Screen},
     streamed::StreamedUiPlugin,
     toast::ToastPlugin,
 };
 use ivy_wgpu::{
     driver::WinitDriver,
     effect_desc::{PbrRenderEffect, RenderEffect},
-    layer::GraphicsLayer,
     light::{LightBundle, LightKind, LightParams},
     material::{EffectPass, Material, MaterialBundle},
     primitives::{CapsulePrimitive, CubePrimitive, PrimitiveBundle, UvSpherePrimitive},
@@ -54,23 +46,10 @@ use ivy_wgpu::{
 use rapier3d::prelude::{ColliderBuilder, SharedShape};
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
-use violet::{
-    core::{
-        layout::Align,
-        style::{base_colors::AMBER_400, spacing_medium, text_large, SizeExt},
-        widget::{
-            bold, col, interactive::tooltip::Tooltip, label, maximized, panel, raised_card, row,
-            subtitle,
-        },
-        Widget,
-    },
-    lucide::icons::LUCIDE_LAYERS_2,
-    palette::Srgba,
-};
-use wgpu::TextureFormat;
+use violet::palette::Srgba;
 use winit::{dpi::LogicalSize, window::WindowAttributes};
 
-const ENABLE_SKYBOX: bool = true;
+mod common;
 
 pub fn main() -> anyhow::Result<()> {
     registry()
@@ -120,29 +99,9 @@ pub fn main() -> anyhow::Result<()> {
                 .with_title("Ivy"),
         ))
         .with_layer(EngineLayer::new())
-        .with_layer(GraphicsLayer::new(
-            move |world, assets, store, gpu, surface| {
-                Ok(SurfacePbrRenderer::new(
-                    world,
-                    assets,
-                    store,
-                    gpu,
-                    surface,
-                    SurfacePbrPipelineDesc {
-                        pbr_config: PbrRenderGraphConfig {
-                            label: "basic".into(),
-                            skybox: Some(SkyboxConfig {
-                                hdri: Box::new(AssetPath::new(
-                                    "hdris/kloofendal_48d_parly_cloudy_puresky_2k.hdr",
-                                )),
-                                format: TextureFormat::Rgba16Float,
-                            }),
-                            ..Default::default()
-                        },
-                    },
-                ))
-            },
-        ))
+        .with_layer(common::graphics_layer_with_config(|| {
+            PbrRenderGraphConfig::default()
+        }))
         .with_layer(ProfilingLayer::new())
         .with_layer(UiLayer::new())
         .with_layer(InputLayer::new())
@@ -154,8 +113,7 @@ pub fn main() -> anyhow::Result<()> {
                     }),
                 )
                 .with_plugin(ToastPlugin)
-                .with_plugin(StreamedUiPlugin)
-                .with_plugin(StandaloneCameraPlugin), // TODO: remove,
+                .with_plugin(StreamedUiPlugin),
         )
         .with_layer(SceneLayer::new())
         .with_layer(SceneViewportProvider::new())

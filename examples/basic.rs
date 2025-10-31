@@ -20,7 +20,10 @@ use ivy_engine::{
     async_commandbuffer, elapsed_time, engine, rotation, world_transform, RigidBodyBundle,
     TransformBundle,
 };
-use ivy_game::{debug::AssetTimelinesWidget, orbit_camera::OrbitCameraPlugin};
+use ivy_game::{
+    debug::AssetTimelinesWidget, orbit_camera::OrbitCameraPlugin,
+    viewport_camera::CameraViewportPlugin,
+};
 use ivy_gltf::{
     animation::{
         player::{AnimationPlayer, Animator},
@@ -32,10 +35,7 @@ use ivy_gltf::{
 use ivy_graphics::texture::{TextureData, TextureDesc};
 use ivy_input::layer::InputLayer;
 use ivy_physics::{ColliderBundle, GizmoSettings, PhysicsPlugin};
-use ivy_postprocessing::{
-    effects::SkyboxConfig,
-    preconfigured::pbr::PbrRenderGraphConfig,
-};
+use ivy_postprocessing::{effects::SkyboxConfig, preconfigured::pbr::PbrRenderGraphConfig};
 use ivy_scene::{GltfNodeExt, NodeMountOptions};
 use ivy_ui::{
     layer::{UiLayer, UiUpdateLayer},
@@ -105,6 +105,7 @@ pub fn main() -> anyhow::Result<()> {
                 .with_plugin(LogicPlugin)
                 .with_plugin(GameUiPlugin)
                 .with_plugin(OrbitCameraPlugin)
+                .with_plugin(CameraViewportPlugin)
                 .with_plugin(GizmosPlugin)
                 .with_plugin(AnimationPlugin)
                 .with_plugin(

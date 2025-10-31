@@ -170,11 +170,8 @@ fn get_rendering_settings() -> PbrRenderGraphConfig {
         PbrRenderGraphConfig {
             shadow_map_config: Some(Default::default()),
             msaa: Some(Default::default()),
-            post_processing_effects: vec![
-                Box::new(BloomConfig::default()),
-                Box::new(DofConfig::default()),
-            ],
-            color_grading: ColorGradingConfig::cinematic(),
+            post_processing_effects: vec![],
+            color_grading: ColorGradingConfig::default(),
             skybox: Some(SkyboxConfig {
                 hdri: Box::new(AssetPath::new(
                     // "hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr",

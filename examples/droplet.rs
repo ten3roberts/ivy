@@ -1,25 +1,22 @@
-use flax::{Entity, World};
+use flax::Entity;
 use glam::{Quat, Vec3};
-use ivy_assets::{stored::DynamicStore, Asset, AssetCache, AssetPath, AsyncAssetExt};
+use ivy_assets::{Asset, AssetCache, AssetPath, AsyncAssetExt};
 use ivy_core::{
     math::Vec3Ext,
-    palette::Srgb,
+    plugin::{Plugin, PluginContext},
     profiling::ProfilingLayer,
     transforms::TransformUpdatePlugin,
-    update_layer::{FixedTimeStep, Plugin, PluginLayer, ScheduleSetBuilder},
+    update_layer::{FixedTimeStep, PluginLayer},
     App, AsyncCommandBuffer, EngineLayer, EntityBuilderExt, DEG_90,
 };
 use ivy_engine::{async_commandbuffer, engine, TransformBundle};
-use ivy_game::orbit_camera::OrbitCameraPlugin;
+use ivy_game::{orbit_camera::OrbitCameraPlugin, viewport_camera::CameraViewportPlugin};
 use ivy_gltf::Document;
 use ivy_input::layer::InputLayer;
 use ivy_physics::PhysicsPlugin;
 use ivy_postprocessing::{
     effects::SkyboxConfig,
-    preconfigured::{
-        pbr::PbrRenderGraphConfig,
-        SurfacePbrPipelineDesc, SurfacePbrRenderer,
-    },
+    preconfigured::{pbr::PbrRenderGraphConfig, SurfacePbrPipelineDesc, SurfacePbrRenderer},
 };
 use ivy_scene::{GltfNodeExt, NodeMountOptions};
 use ivy_wgpu::{driver::WinitDriver, layer::GraphicsLayer};
@@ -72,6 +69,7 @@ pub fn main() -> anyhow::Result<()> {
         .with_layer(
             PluginLayer::new(FixedTimeStep::new(0.02))
                 .with_plugin(LogicPlugin)
+                .with_plugin(CameraViewportPlugin)
                 .with_plugin(OrbitCameraPlugin)
                 .with_plugin(PhysicsPlugin::new())
                 .with_plugin(TransformUpdatePlugin),

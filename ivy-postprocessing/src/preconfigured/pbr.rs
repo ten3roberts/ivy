@@ -38,8 +38,6 @@ use crate::{
     tonemap::TonemapNode,
 };
 
-
-
 /// Dynamic color grading controller for smooth transitions
 #[derive(Clone)]
 pub enum EasingFunction {
@@ -112,8 +110,6 @@ impl ColorGradingController {
     }
 }
 
-
-
 /// Pre-configured render graph suited for PBR render pipelines
 pub struct PbrRenderGraphConfig {
     pub shadow_map_config: Option<ShadowMapConfig>,
@@ -130,27 +126,14 @@ impl Default for PbrRenderGraphConfig {
         Self {
             shadow_map_config: Some(Default::default()),
             msaa: Some(Default::default()),
-            post_processing_effects: vec![
-                Box::new(BloomConfig::default()),
-                Box::new(DofConfig::default()),
-            ],
-            color_grading: ColorGradingConfig::default(),
+            post_processing_effects: vec![],
+            color_grading: ColorGradingConfig::cinematic(),
             skybox: None,
             hdr_format: Some(TextureFormat::Rgba16Float),
             label: "pbr".into(),
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
 
 pub struct PbrRenderGraphTextures {
     screensized: Vec<TextureHandle>,

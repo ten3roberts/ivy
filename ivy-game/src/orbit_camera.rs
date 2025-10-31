@@ -1,3 +1,5 @@
+use std::any::type_name;
+
 use flax::{components::name, fetch::MutGuard, system, Entity, FetchExt, World};
 use glam::{vec3, EulerRot, Quat, Vec2, Vec3};
 use ivy_assets::{stored::DynamicStore, AssetCache};
@@ -15,6 +17,8 @@ use ivy_input::{
     components::input_state, types::MouseButton, Action, BindingExt, CompositeBinding,
     CursorMoveBinding, InputState, MouseButtonBinding, ScrollBinding,
 };
+
+use crate::viewport_camera::CameraViewportPlugin;
 
 flax::component! {
     control_active: bool,
@@ -41,6 +45,10 @@ impl Plugin for OrbitCameraPlugin {
             .with_system(update_camera_position_system());
 
         Ok(())
+    }
+
+    fn after(&self) -> Vec<&str> {
+        vec![type_name::<CameraViewportPlugin>()]
     }
 }
 

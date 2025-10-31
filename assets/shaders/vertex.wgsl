@@ -63,7 +63,7 @@ fn transform_vertex(in: VertexInput, world_transform: mat4x4<f32>, color: vec3<f
 
     let height_factor = max(0.0, world_position.y - globals.fog_height);
     let fog_opacity = 1f - exp(-globals.fog_density * distance * height_factor);
-    out.fog = vec4(globals.fog_color, fog_opacity);
+    //out.fog = vec4(globals.fog_color, fog_opacity);
 
     return out;
 }
