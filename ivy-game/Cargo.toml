@@ -6,12 +6,16 @@ license-file.workspace = true
 
 [dependencies]
 ivy-core = { path = "../ivy-core" }
+ivy-editable = { path = "../ivy-editable" }
 ivy-input = { path = "../ivy-input" }
 ivy-assets = { path = "../ivy-assets" }
 ivy-wgpu = { path = "../ivy-wgpu" }
+ivy-graphics = { path = "../ivy-graphics" }
 ivy-physics = { path = "../ivy-physics" }
-ivy-ui = {path = "../ivy-ui"}
+ivy-ui = { path = "../ivy-ui" }
+ivy-scene = { path = "../ivy-scene" }
 
+slotmap.workspace = true
 violet.workspace = true
 flax.workspace = true
 glam.workspace = true
@@ -19,3 +23,4 @@ anyhow.workspace = true
 tracing.workspace = true
 futures.workspace = true
 itertools.workspace = true
+serde.workspace = true

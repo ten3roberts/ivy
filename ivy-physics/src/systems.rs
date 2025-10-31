@@ -6,22 +6,19 @@ use flax::{
     fetch::{entity_refs, EntityRefs, Modified, Source, TransformFetch, Traverse},
     filter::{All, ChangeFilter, ChangeFilterMut, Without},
     signal::BoxedSignal,
-    system, BoxedSystem, CommandBuffer, Component, ComponentMut, EntityIds, FetchExt, Opt, Query,
+    system, BoxedSystem, CommandBuffer, Component, ComponentMut, EntityIds, FetchExt, Query,
     QueryBorrow, RelationExt, System, World,
 };
 use glam::{Mat4, Vec3};
 use ivy_core::{
     components::{engine, main_camera, world_transform, TransformQuery, TransformQueryItem},
-    gizmos::{Gizmos, Line, DEFAULT_THICKNESS},
+    gizmos::{transforms::ArrowGizmo, Gizmos},
     subscribers::{RemovedComponentSubscriber, RemovedRelationSubscriber},
     Color, ColorExt,
 };
 use rapier3d::{
     math::Isometry,
-    prelude::{
-        ColliderBuilder, ColliderHandle, CollisionEvent, LockedAxes, RigidBodyBuilder,
-        RigidBodyHandle, RigidBodyType,
-    },
+    prelude::{ColliderBuilder, ColliderHandle, RigidBodyBuilder, RigidBodyHandle},
 };
 
 use crate::{
@@ -38,13 +35,7 @@ pub fn register_bodies_system() -> BoxedSystem {
     System::builder()
         .with_cmd_mut()
         .with_query(Query::new(physics_state().as_mut()))
-        .with_query(Query::new((
-            entity_ids(),
-            rigid_body_type().modified(),
-            locked_axes().opt(),
-            can_sleep().satisfied(),
-            gravity_influence().opt_or(1.0),
-        )))
+        .with_query(Query::new((entity_ids(), rigidbody_builder().added())))
         .build(
             move |cmd: &mut CommandBuffer,
                   mut query: QueryBorrow<ComponentMut<PhysicsState>>,
@@ -52,21 +43,14 @@ pub fn register_bodies_system() -> BoxedSystem {
                 '_,
                 (
                     EntityIds,
-                    ChangeFilter<RigidBodyType>,
-                    Opt<Component<LockedAxes>>,
-                    _,
-                    _,
+                    ChangeFilter<RigidBodyBuilder>,
                 ),
             >| {
                 if let Some(state) = query.first() {
-                    for (id, &body_type, locked_axes, can_sleep, &gravity) in bodies.iter() {
+                    for (id, builder) in bodies.iter() {
                         let rb = state.add_body(
                             id,
-                            RigidBodyBuilder::new(body_type)
-                                .can_sleep(can_sleep)
-                                .locked_axes(locked_axes.copied().unwrap_or(LockedAxes::empty()))
-                                .gravity_scale(gravity)
-                                .build(),
+                            builder.build(),
                         );
 
                         let rb_mass = state.rigidbody(rb).mass();
@@ -218,10 +202,6 @@ impl PhysicsState {
 
             self.recompute_mass(parent);
             let rb = self.rigidbody(parent);
-            tracing::info!(
-                "Attaching collider {collider:?} to {parent:?} with mass {}",
-                rb.mass()
-            );
             cmd.set(id, collider_handle(), handle)
                 .set(parent_id, mass(), rb.mass())
                 .set(parent_id, center_of_mass(), (*rb.center_of_mass()).into());
@@ -245,6 +225,7 @@ impl PhysicsState {
                     rotation: v.rotation,
                     vel: v.vel,
                     ang_vel: v.ang_vel,
+                    rigidbody_flags: v.rigidbody_flags,
                 },
             )
         }));
@@ -274,7 +255,7 @@ impl PhysicsState {
     }
 
     #[system]
-    pub(crate) fn step_system(self: &mut PhysicsState, gravity: Vec3) {
+    pub(crate) fn physics_step_system(self: &mut PhysicsState, gravity: Vec3) {
         self.set_gravity(gravity);
         self.step();
     }
@@ -338,13 +319,14 @@ pub fn gizmo_system() -> BoxedSystem {
         .build(
             move |mut gizmos: QueryBorrow<Component<Gizmos>>,
                   mut query: QueryBorrow<
+                '_,
                 (
                     Component<Mat4>,
                     Component<Vec3>,
                     Component<Vec3>,
-                    Component<crate::Effector>,
+                    Component<Effector>,
                 ),
-                _,
+                (All, Without),
             >| {
                 let mut gizmos = gizmos
                     .get(engine())?
@@ -354,32 +336,17 @@ pub fn gizmo_system() -> BoxedSystem {
                     let origin = transform.transform_point3(Vec3::ZERO);
 
                     let dv = effector.pending_force();
-                    gizmos.draw(Line::new(origin, dv, DEFAULT_THICKNESS, Color::red()));
-                    gizmos.draw(Line::new(
-                        origin,
-                        transform.transform_vector3(Vec3::Z),
-                        DEFAULT_THICKNESS,
-                        Color::blue(),
-                    ));
-                    gizmos.draw(Line::new(
-                        origin,
-                        transform.transform_vector3(Vec3::X),
-                        DEFAULT_THICKNESS,
-                        Color::red(),
-                    ));
-                    gizmos.draw(Line::new(
-                        origin,
-                        transform.transform_vector3(Vec3::Y),
-                        DEFAULT_THICKNESS,
-                        Color::green(),
-                    ));
-                    gizmos.draw(Line::new(
-                        origin,
-                        velocity,
-                        DEFAULT_THICKNESS,
-                        Color::cyan(),
-                    ));
-                    gizmos.draw(Line::new(origin, w, DEFAULT_THICKNESS, Color::purple()));
+                    if dv.length() > 0.01 {
+                        gizmos.draw(ArrowGizmo::new(origin, dv).with_color(Color::red()));
+                    }
+
+                    if velocity.length() > 0.01 {
+                        gizmos.draw(ArrowGizmo::new(origin, velocity).with_color(Color::green()));
+                    }
+
+                    if w.length() > 0.01 {
+                        gizmos.draw(ArrowGizmo::new(origin, w).with_color(Color::blue()));
+                    }
                 }
 
                 anyhow::Ok(())

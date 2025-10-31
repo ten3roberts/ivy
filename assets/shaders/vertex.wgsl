@@ -32,6 +32,7 @@ struct Globals {
     camera_pos: vec3<f32>,
     fog_color: vec3<f32>,
     fog_density: f32,
+    fog_height: f32,
 }
 
 @group(0) @binding(0)
@@ -60,8 +61,9 @@ fn transform_vertex(in: VertexInput, world_transform: mat4x4<f32>, color: vec3<f
 
     let distance = length(world_position.xyz - globals.camera_pos);
 
-    let fog_opacity = 1f - exp(-globals.fog_density * distance);
-    out.fog = vec4(globals.fog_color, fog_opacity);
+    let height_factor = max(0.0, world_position.y - globals.fog_height);
+    let fog_opacity = 1f - exp(-globals.fog_density * distance * height_factor);
+    //out.fog = vec4(globals.fog_color, fog_opacity);
 
     return out;
 }

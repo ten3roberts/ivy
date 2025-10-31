@@ -20,7 +20,7 @@ pub struct NodeExecutionContext<'a> {
     pub encoder: &'a mut CommandEncoder,
     pub assets: &'a AssetCache,
     pub world: &'a mut World,
-    pub store: &'a mut DynamicStore,
+    pub store: &'a DynamicStore,
     pub external_resources: &'a ExternalResources<'a>,
 }
 
@@ -43,7 +43,7 @@ pub struct NodeUpdateContext<'a> {
     pub resources: &'a RenderGraphResources,
     pub assets: &'a AssetCache,
     pub world: &'a mut World,
-    pub store: &'a mut DynamicStore,
+    pub store: &'a DynamicStore,
     pub external_resources: &'a ExternalResources<'a>,
 }
 
@@ -263,7 +263,6 @@ impl RenderGraph {
                 .max()
                 .unwrap_or(open);
 
-            tracing::info!(?resource, lifetime = ?open..close, "lifetime");
             self.expected_lifetimes
                 .insert(resource, Lifetime::new(open, close + 1));
         }
@@ -287,7 +286,7 @@ impl RenderGraph {
         gpu: &Gpu,
         world: &mut World,
         assets: &AssetCache,
-        store: &mut DynamicStore,
+        store: &DynamicStore,
         external_resources: &ExternalResources,
     ) -> anyhow::Result<()> {
         profile_function!();
@@ -342,7 +341,7 @@ impl RenderGraph {
         encoder: &mut CommandEncoder,
         world: &mut World,
         assets: &AssetCache,
-        store: &mut DynamicStore,
+        store: &DynamicStore,
         external_resources: &ExternalResources,
     ) -> anyhow::Result<()> {
         profile_function!();
@@ -491,7 +490,7 @@ mod test {
     fn write_read() {
         tracing_subscriber::fmt::init();
 
-        let gpu = futures::executor::block_on(Gpu::headless());
+        let gpu = futures::executor::block_on(Gpu::headless(Default::default())).unwrap();
 
         struct WriteToTexture {
             buffer: TypedBuffer<u8>,
@@ -708,7 +707,7 @@ mod test {
                 &mut encoder,
                 &mut World::default(),
                 &AssetCache::default(),
-                &mut DynamicStore::default(),
+                &DynamicStore::default(),
                 &ExternalResources::default(),
             )
             .unwrap();

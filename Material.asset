@@ -1,0 +1,52 @@
+{
+  "meta": {
+    "type_name": "Material"
+  },
+  "desc": {
+    "effects": {
+      "Forward": {
+        "Pbr": {
+          "label": "unknown_material",
+          "albedo": {
+            "Path": "./assets/textures/uv.png"
+          },
+          "normal": {
+            "Color": {
+              "red": 127,
+              "green": 127,
+              "blue": 255,
+              "alpha": 255
+            }
+          },
+          "metallic_roughness": {
+            "Color": {
+              "red": 255,
+              "green": 255,
+              "blue": 255,
+              "alpha": 255
+            }
+          },
+          "ambient_occlusion": {
+            "Color": {
+              "red": 255,
+              "green": 255,
+              "blue": 255,
+              "alpha": 255
+            }
+          },
+          "displacement": {
+            "Color": {
+              "red": 255,
+              "green": 255,
+              "blue": 255,
+              "alpha": 255
+            }
+          },
+          "roughness_factor": 0.13571472,
+          "metallic_factor": 1.0
+        }
+      },
+      "Shadow": "OpaqueShadow"
+    }
+  }
+}

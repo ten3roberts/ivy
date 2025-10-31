@@ -1,14 +1,15 @@
 use std::{mem, ops::Mul};
 
 use glam::{vec2, IVec2, IVec3, Vec2, Vec3};
+use ivy_core::math::{Axis2D, Axis3D};
 use winit::{
     event::MouseButton,
-    keyboard::{Key, SmolStr},
+    keyboard::{Key, KeyCode, PhysicalKey, SmolStr},
 };
 
 use crate::{
     types::{InputEvent, InputKind, KeyboardInput, MouseInput},
-    Stimulus,
+    InputStimulus,
 };
 
 pub trait Binding: Send + Sync {
@@ -172,7 +173,7 @@ impl<Space: Copy + Send + Sync, T: Composable<Space>, B: Binding<Value = T>> Bin
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct Amplitude<B, Rhs> {
     binding: B,
     amplitude: Rhs,
@@ -199,7 +200,7 @@ where
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct Value<B, T> {
     binding: B,
     value: T,
@@ -229,16 +230,16 @@ where
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct KeyBinding {
     pressed: bool,
-    key: Key<SmolStr>,
+    key_code: KeyCode,
 }
 
 impl KeyBinding {
-    pub fn new(key: impl Into<Key<SmolStr>>) -> Self {
+    pub fn new(key: impl Into<KeyCode>) -> Self {
         Self {
-            key: key.into(),
+            key_code: key.into(),
             pressed: false,
         }
     }
@@ -249,8 +250,16 @@ impl Binding for KeyBinding {
 
     fn apply(&mut self, input: &InputEvent) {
         match input {
-            InputEvent::Keyboard(KeyboardInput { key, state, .. }) if key == &self.key => {
-                self.pressed = state.is_pressed();
+            InputEvent::Keyboard(KeyboardInput {
+                physical_key,
+                state,
+                ..
+            }) => {
+                if let PhysicalKey::Code(code) = physical_key {
+                    if code == &self.key_code {
+                        self.pressed = state.is_pressed();
+                    }
+                }
             }
             _ => {}
         }
@@ -261,7 +270,7 @@ impl Binding for KeyBinding {
     }
 
     fn bindings(&self) -> Vec<InputKind> {
-        vec![InputKind::Key(self.key.clone())]
+        vec![InputKind::Key(self.key_code)]
     }
 }
 
@@ -282,7 +291,7 @@ impl<T, U> CompositeBinding<T, U> {
 impl<T, U> Binding for CompositeBinding<T, U>
 where
     T: Binding,
-    T::Value: std::fmt::Debug + Stimulus,
+    T::Value: std::fmt::Debug + InputStimulus,
     U: Binding<Value = bool>,
 {
     type Value = T::Value;
@@ -403,7 +412,7 @@ where
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct MouseButtonBinding {
     pressed: bool,
     button: MouseButton,
@@ -474,7 +483,7 @@ impl Binding for CursorMoveBinding {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct CursorPositionBinding {
     value: Vec2,
     normalized: bool,
@@ -511,7 +520,7 @@ impl Binding for CursorPositionBinding {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct ScrollBinding {
     value: Vec2,
 }
@@ -546,7 +555,7 @@ impl Binding for ScrollBinding {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct ScrollSteppedBinding {
     value: Vec2,
 }
@@ -579,19 +588,6 @@ impl Binding for ScrollSteppedBinding {
     fn bindings(&self) -> Vec<InputKind> {
         vec![InputKind::Scroll]
     }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Axis2D {
-    X,
-    Y,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Axis3D {
-    X,
-    Y,
-    Z,
 }
 
 pub trait BindingExt

@@ -2,9 +2,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::Context;
 use glam::{Mat4, Quat};
-use gltf::buffer;
+use gltf::{buffer, json::deserialize};
 use itertools::Itertools;
-use ivy_assets::{fs::AssetPath, Asset, AssetCache, AsyncAssetDesc, AsyncAssetExt};
+use ivy_assets::{Asset, AssetCache, AssetPath, AsyncAssetExt, AsyncAssetKey};
 use ivy_core::components::TransformBundle;
 
 use crate::Document;
@@ -68,7 +68,7 @@ impl Skin {
                             ),
 
                             local_bind_transform: TransformBundle {
-                                pos: transform.0.into(),
+                                position: transform.0.into(),
                                 rotation: Quat::from_array(transform.1),
                                 scale: transform.2.into(),
                             },
@@ -154,14 +154,15 @@ impl Skin {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct SkinDesc {
     document: AssetPath<Document>,
     node: String,
 }
 
-impl AsyncAssetDesc for SkinDesc {
+impl AsyncAssetKey for SkinDesc {
     type Output = Skin;
     type Error = anyhow::Error;
 

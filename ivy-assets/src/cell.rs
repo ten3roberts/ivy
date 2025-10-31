@@ -2,13 +2,13 @@ use std::sync::Arc;
 
 use slotmap::SlotMap;
 
-use super::{handle::WeakHandle, Asset, AssetId};
+use super::{handle::WeakAsset, Asset, AssetId};
 
 /// Contains the actual asset data
 ///
 /// Allows accessing an asset by its id
 pub(crate) struct AssetCell<V> {
-    values: SlotMap<AssetId, WeakHandle<V>>,
+    values: SlotMap<AssetId, WeakAsset<V>>,
 }
 
 impl<V> AssetCell<V> {
@@ -25,12 +25,22 @@ impl<V> AssetCell<V> {
 
         let value = Arc::new(value);
 
-        let id = self.values.insert_with_key(|id| WeakHandle {
+        let id = self.values.insert_with_key(|id| WeakAsset {
             value: Arc::downgrade(&value),
             id,
         });
 
         Asset { value, id }
+    }
+
+    pub fn remove(&mut self, id: AssetId) -> Option<Asset<V>> {
+        self.values.remove(id).map(|weak| {
+            let value = weak
+                .value
+                .upgrade()
+                .expect("Asset was removed but still has a strong reference");
+            Asset { value, id }
+        })
     }
 
     pub fn prune(&mut self) {

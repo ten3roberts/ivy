@@ -1,5 +1,4 @@
 # Bundles
-
 Many of the built in systems require a certain set of components to be present
 in order to avoid many `Option` in query and branches.
 
@@ -18,19 +17,10 @@ and the entity does not have the `ObjectBundle` bundle. It is recommended to
 use a custom layer and creating the entities in `new` or a `setup` function.
 However, the raw usage of `App` is used for brevity.
 
-```rust
-{{ #include ../../../tests/bundles.rs:7:25 }}
-```
-
 ## Bundles
 The following bundles are provided:
-- `ObjectBundle` - Renderable objects with position and mesh
-- `RbBundle` - Rigidbody obejct
-- `RbColliderBundle` - Rigidbody object with a collider
-- `WidgetBundle` - Base UI element, similar to html `div`
-- `TextBundle` - UI text element
-- `ImageBundle` - UI image element
-- `ConnectionBundle` - Declare physical relationships between entities
-- `TransformBundle` - Position an object with Position, Rotation, and Scale. A
-  matching `TransformQuery` and `.into_matrix()` are provided as well.
-- `ConstraintBundle` - UI constraints bundle, part of `WidgetBundle`
+- `RenderObjectBundle` - Renderable objects with mesh and materials
+- `RigidBodyBundle` - Rigidbody object
+- `ColliderBundle` - Collider for physics
+- `TransformBundle` - Position an object with Position, Rotation, and Scale. A matching `TransformQuery` and `.into_matrix()` are provided as well.
+- UI components are provided by the violet library, see violet-core for available components and widgets.

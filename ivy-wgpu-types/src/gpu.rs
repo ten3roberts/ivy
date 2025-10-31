@@ -1,13 +1,61 @@
 use std::sync::Arc;
 
+use anyhow::Context;
 use ivy_assets::service::Service;
-use wgpu::{Backends, Features, SurfaceConfiguration, SurfaceError, SurfaceTexture, TextureFormat};
+use wgpu::{
+    Adapter, Backends, Device, Features, Queue, SurfaceConfiguration, SurfaceError, SurfaceTexture,
+    TextureFormat,
+};
 use winit::{dpi::PhysicalSize, window::Window};
 
-fn device_features() -> wgpu::Features {
+fn required_device_features() -> wgpu::Features {
     Features::TEXTURE_FORMAT_16BIT_NORM
         | Features::POLYGON_MODE_LINE
         | wgpu::Features::INDIRECT_FIRST_INSTANCE
+}
+
+/// Gpu creation description.
+///
+/// Allows customizing creationg of the graphics device.
+pub struct GpuCreationDesc {
+    /// Required device features. Only use if using a customized render pipeline
+    required_features: wgpu::Features,
+}
+
+impl Default for GpuCreationDesc {
+    fn default() -> Self {
+        Self {
+            required_features: required_device_features(),
+        }
+    }
+}
+
+impl GpuCreationDesc {
+    /// Not all backends are supported.
+    ///
+    /// DirectX does not support all features by default, or is fully compliant, such as non-zero indirect instance offset.
+    fn supported_backends() -> wgpu::Backends {
+        Backends::VULKAN | Backends::METAL | Backends::BROWSER_WEBGPU | Backends::GL
+    }
+
+    pub async fn request_device(&self, adapter: &Adapter) -> anyhow::Result<(Device, Queue)> {
+        adapter
+            .request_device(
+                &wgpu::DeviceDescriptor {
+                    label: "device".into(),
+                    required_features: self.required_features,
+                    required_limits: if cfg!(target_arch = "wasm32") {
+                        wgpu::Limits::downlevel_webgl2_defaults()
+                    } else {
+                        wgpu::Limits::default()
+                    },
+                    ..Default::default()
+                },
+                None,
+            )
+            .await
+            .context("Failed to acquire gpu device")
+    }
 }
 
 /// Represents the basic graphics state, such as the device and queue.
@@ -22,14 +70,8 @@ impl Service for Gpu {}
 
 impl Gpu {
     /// Creates a new Gpu instance with a surface.
-    pub async fn headless() -> Self {
-        #[cfg(not(target_arch = "wasm32"))]
-        let backends = Backends::all();
-
-        #[cfg(target_arch = "wasm32")]
-        let backends = Backends::GL;
-
-        tracing::info!(?backends);
+    pub async fn headless(desc: GpuCreationDesc) -> anyhow::Result<Self> {
+        let backends = GpuCreationDesc::supported_backends();
 
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends,
@@ -44,42 +86,22 @@ impl Gpu {
                 force_fallback_adapter: false,
             })
             .await
-            .expect("Failed to find an appropriate adapter");
+            .context("Failed to find an appropriate adapter")?;
 
-        let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    required_features: device_features(),
-                    // WebGL doesn't support all of wgpu's features, so if
-                    // we're building for the web we'll have to disable some.
-                    required_limits: if cfg!(target_arch = "wasm32") {
-                        wgpu::Limits::downlevel_webgl2_defaults()
-                    } else {
-                        wgpu::Limits::default()
-                    },
-                    label: None,
-                    ..Default::default()
-                },
-                None, // Trace path
-            )
-            .await
-            .unwrap();
+        let (device, queue) = desc.request_device(&adapter).await?;
 
-        Self {
+        Ok(Self {
             adapter: Arc::new(adapter),
             device: Arc::new(device),
             queue: Arc::new(queue),
-        }
+        })
     }
     /// Creates a new Gpu instance with a surface.
-    pub async fn with_surface(window: Arc<Window>) -> (Self, Surface) {
-        #[cfg(not(target_arch = "wasm32"))]
-        let backends = Backends::all();
-
-        #[cfg(target_arch = "wasm32")]
-        let backends = Backends::GL;
-
-        tracing::info!(?backends);
+    pub async fn with_surface(
+        window: Arc<Window>,
+        desc: GpuCreationDesc,
+    ) -> anyhow::Result<(Self, Surface)> {
+        let backends = GpuCreationDesc::supported_backends();
 
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends,
@@ -92,34 +114,17 @@ impl Gpu {
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::default(),
+                power_preference: wgpu::PowerPreference::HighPerformance,
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
             })
             .await
-            .expect("Failed to find an appropriate adapter");
+            .context("Failed to find an appropriate adapter")?;
 
-        let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    required_features: device_features(),
-                    // WebGL doesn't support all of wgpu's features, so if
-                    // we're building for the web we'll have to disable some.
-                    required_limits: if cfg!(target_arch = "wasm32") {
-                        wgpu::Limits::downlevel_webgl2_defaults()
-                    } else {
-                        wgpu::Limits {
-                            max_bind_groups: 6,
-                            ..wgpu::Limits::default()
-                        }
-                    },
-                    label: None,
-                    ..Default::default()
-                },
-                None, // Trace path
-            )
-            .await
-            .unwrap();
+        tracing::info!("created adapter: {instance:?} {adapter:?}");
+        let (device, queue) = desc.request_device(&adapter).await?;
+
+        tracing::info!("created device adapter: {:#?}", adapter.get_info());
 
         let surface_caps = surface.get_capabilities(&adapter);
 
@@ -143,7 +148,7 @@ impl Gpu {
 
         surface.configure(&device, &config);
 
-        (
+        Ok((
             Self {
                 adapter: Arc::new(adapter),
                 device: Arc::new(device),
@@ -154,7 +159,7 @@ impl Gpu {
                 config,
                 size: window_size,
             },
-        )
+        ))
     }
 }
 
@@ -174,9 +179,7 @@ impl Surface {
     }
 
     pub fn resize(&mut self, gpu: &Gpu, new_size: PhysicalSize<u32>) {
-        tracing::debug_span!("resize", ?new_size);
         if new_size == self.size {
-            tracing::info!(size=?new_size, "Duplicate resize message ignored");
             return;
         }
 
@@ -185,7 +188,7 @@ impl Surface {
             self.config.height = new_size.height;
 
             self.size = new_size;
-            tracing::info!("reconfigure surface {:#?}", self.config);
+            // tracing::info!("reconfigure surface {:#?}", self.config);
             self.reconfigure(gpu);
         } else {
             self.size = new_size;

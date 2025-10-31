@@ -4,10 +4,10 @@ mod effector;
 mod error;
 mod gltf;
 mod plugin;
+pub mod shapes;
 pub mod state;
 pub mod systems;
 pub mod util;
-pub mod shapes;
 
 pub use bundles::*;
 pub use effector::*;

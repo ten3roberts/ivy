@@ -1,0 +1,22 @@
+[package]
+name = "ivy-editable"
+version = "0.1.0"
+edition = "2024"
+license-file.workspace = true
+
+[dependencies]
+ivy-assets = { path = "../ivy-assets" }
+ivy-derive = { path = "../ivy-derive" }
+
+violet.workspace = true
+serde.workspace = true
+anyhow.workspace = true
+inventory.workspace = true
+flume.workspace = true
+flax.workspace = true
+futures.workspace = true
+glam.workspace = true
+itertools.workspace = true
+ordered-float.workspace = true
+bevy_reflect.workspace = true
+downcast-rs.workspace = true

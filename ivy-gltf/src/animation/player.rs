@@ -28,13 +28,13 @@ impl Animator {
         for (_, player) in &mut self.players {
             player.step(step_time, |joint, target_value| {
                 let joint_target = self.joint_targets.entry(joint).or_insert(TransformBundle {
-                    pos: Vec3::ZERO,
+                    position: Vec3::ZERO,
                     rotation: Quat::IDENTITY,
                     scale: Vec3::ONE,
                 });
 
                 match target_value {
-                    AnimationTarget::Position(v) => joint_target.pos = v,
+                    AnimationTarget::Position(v) => joint_target.position = v,
                     AnimationTarget::Rotation(v) => joint_target.rotation = v,
                     AnimationTarget::Scale(v) => joint_target.scale = v,
                 }
@@ -220,12 +220,11 @@ struct ChannelState {
 }
 
 /// Adds an animator to the entity
-#[derive(Debug, Clone, Copy)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub struct AnimatorBundle {}
 
 impl Bundle for AnimatorBundle {
-    fn mount(self, entity: &mut flax::EntityBuilder) {
+    fn mount(&self, entity: &mut flax::EntityBuilder) {
         entity.set(animator(), Animator::new());
     }
 }

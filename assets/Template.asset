@@ -1,0 +1,14 @@
+{
+  "meta": {
+    "type_name": "Template"
+  },
+  "desc": {
+    "bundles": [
+      {
+        "NameBundle": {
+          "name": "Character"
+        }
+      }
+    ]
+  }
+}

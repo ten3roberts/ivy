@@ -26,8 +26,8 @@ use super::{
 };
 use crate::{
     components::mesh,
-    material::RenderMaterial,
-    material_desc::{MaterialData, PbrMaterialData, RenderMaterialDesc},
+    effect::EffectPass,
+    effect_desc::{PbrRenderEffect, RenderEffect, RenderMaterialDesc},
     mesh::{SkinnedVertex, VertexDesc},
     mesh_buffer::{MeshBuffer, MeshHandle},
     mesh_desc::MeshDesc,
@@ -40,21 +40,21 @@ use crate::{
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BatchKey {
-    pub material: MaterialData,
+    pub material: RenderEffect,
     pub mesh: MeshDesc,
 }
 
 /// A single rendering batch of similar objects
 struct Batch {
     mesh: CachedMesh,
-    material: Asset<RenderMaterial>,
+    material: Asset<EffectPass>,
     shader: Handle<RenderShader>,
 }
 
 impl Batch {
     pub fn new(
         mesh: CachedMesh,
-        material: Asset<RenderMaterial>,
+        material: Asset<EffectPass>,
         shader: Handle<RenderShader>,
     ) -> Self {
         Self {
@@ -104,7 +104,7 @@ struct CachedMesh {
 type NewObjectQuery = (
     EntityRefs,
     Component<MeshDesc>,
-    Component<MaterialData>,
+    Component<RenderEffect>,
     Component<usize>,
     Satisfied<Component<SubBuffer<Mat4>>>,
 );
@@ -121,7 +121,7 @@ pub struct MeshRenderer {
 
     /// Keep track of loaded materials
     // TODO: move higher to deduplicate globally
-    pub materials: HashMap<MaterialData, Asset<RenderMaterial>>,
+    pub materials: HashMap<RenderEffect, Asset<EffectPass>>,
 
     batches: Vec<Batch>,
     draws: Vec<CullDrawObject>,
@@ -146,7 +146,7 @@ impl MeshRenderer {
         world: &mut World,
         assets: &AssetCache,
         gpu: &Gpu,
-        shader_pass: Component<MaterialData>,
+        shader_pass: Component<RenderEffect>,
         shader_library: Arc<ShaderLibrary>,
     ) -> Self {
         let id = world.spawn();
@@ -292,12 +292,12 @@ impl MeshRenderer {
                 let broken_material = |e: anyhow::Error| {
                     tracing::error!(?key.material, "{:?}", e.context("Failed to load material"));
                     assets.load(&RenderMaterialDesc {
-                        material: MaterialData::PbrMaterial(PbrMaterialData::new()),
+                        material: RenderEffect::Pbr(PbrRenderEffect::new()),
                         skinned: false,
                     })
                 };
 
-                let material: Asset<RenderMaterial> =
+                let material: Asset<EffectPass> =
                     assets.try_load(&material).unwrap_or_else(broken_material);
 
                 let shader = material.shader();

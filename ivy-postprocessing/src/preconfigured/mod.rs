@@ -4,30 +4,33 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use flax::World;
-use ivy_assets::{stored::DynamicStore, AssetCache};
+use ivy_assets::{
+    stored::{DynamicStore, Handle},
+    AssetCache,
+};
 use ivy_core::profiling::profile_scope;
-use ivy_ui::SharedUiInstance;
+use ivy_ui::components::ui_instance;
 use ivy_wgpu::{
     rendergraph::{self, ExternalResources, RenderGraph, RenderGraphResources, TextureHandle},
     shader_library::{ShaderLibrary, ShaderModuleDesc},
     types::{PhysicalSize, Surface},
     Gpu,
 };
-use pbr::{PbrRenderGraph, PbrRenderGraphConfig};
+use pbr::PbrRenderGraphConfig;
+
+use crate::preconfigured::pbr::PbrRenderGraphTextures;
 
 #[derive(Default)]
 pub struct SurfacePbrPipelineDesc {
-    /// Render Ui if configured
-    pub ui_instance: Option<SharedUiInstance>,
     pub pbr_config: PbrRenderGraphConfig,
 }
 
 /// Uses a rendergraph to render to a surface
 pub struct SurfacePbrRenderer {
-    render_graph: RenderGraph,
+    render_graph: Handle<RenderGraph>,
     surface: Surface,
     surface_texture: rendergraph::TextureHandle,
-    pbr: PbrRenderGraph,
+    pbr: PbrRenderGraphTextures,
 }
 
 impl SurfacePbrRenderer {
@@ -64,7 +67,7 @@ impl SurfacePbrRenderer {
 
         let surface_texture = render_graph
             .resources
-            .insert_texture(rendergraph::TextureDesc::External);
+            .insert_texture(rendergraph::RenderGraphImageDesc::External);
 
         let pbr = desc.pbr_config.configure(
             world,
@@ -72,9 +75,10 @@ impl SurfacePbrRenderer {
             assets,
             store,
             &mut render_graph,
-            desc.ui_instance,
             surface_texture,
         );
+
+        let render_graph = store.insert(render_graph);
 
         Self {
             render_graph,
@@ -86,6 +90,10 @@ impl SurfacePbrRenderer {
 }
 
 impl ivy_wgpu::layer::Renderer for SurfacePbrRenderer {
+    fn render_graph(&self) -> ivy_assets::stored::Handle<RenderGraph> {
+        self.render_graph.clone()
+    }
+
     fn draw(
         &mut self,
         world: &mut World,
@@ -98,13 +106,13 @@ impl ivy_wgpu::layer::Renderer for SurfacePbrRenderer {
 
         let mut external_resources = ExternalResources::new();
         external_resources.insert_texture(self.surface_texture, &surface_texture.texture);
+        let render_graph = &mut *store.get_mut(&self.render_graph);
 
-        self.render_graph
-            .update(gpu, world, assets, store, &external_resources)?;
+        render_graph.update(gpu, world, assets, store, &external_resources)?;
 
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
 
-        self.render_graph.draw_with_encoder(
+        render_graph.draw_with_encoder(
             gpu,
             queue,
             &mut encoder,
@@ -127,53 +135,52 @@ impl ivy_wgpu::layer::Renderer for SurfacePbrRenderer {
         Ok(())
     }
 
-    fn on_resize(&mut self, gpu: &Gpu, size: PhysicalSize<u32>) {
+    fn on_resize(&mut self, gpu: &Gpu, store: &DynamicStore, size: PhysicalSize<u32>) {
         self.surface.resize(gpu, size);
 
-        self.pbr.set_size(&mut self.render_graph, size);
+        self.pbr
+            .set_size(&mut *store.get_mut(&self.render_graph), size);
     }
 
-    fn process_commands(
-        &mut self,
-        world: &mut World,
-        assets: &AssetCache,
-        store: &mut DynamicStore,
-        gpu: &Gpu,
-        cmds: &mut flume::Receiver<ivy_wgpu::layer::RendererCommand>,
-    ) -> anyhow::Result<()> {
-        for cmd in cmds.drain() {
-            match cmd {
-                ivy_wgpu::layer::RendererCommand::ModifyRenderGraph(func) => {
-                    func(world, assets, store, gpu, &mut self.render_graph)?;
-                }
-                ivy_wgpu::layer::RendererCommand::UpdateTexture { handle, desc } => {
-                    *self
-                        .render_graph
-                        .resources
-                        .get_texture_mut(handle)
-                        .as_managed_mut()
-                        .context("Attempt to modify an external texture")? = desc;
-                }
-            }
-        }
+    // fn process_commands(
+    //     &mut self,
+    //     world: &mut World,
+    //     assets: &AssetCache,
+    //     store: &mut DynamicStore,
+    //     gpu: &Gpu,
+    //     cmds: &mut flume::Receiver<ivy_wgpu::layer::RendererCommand>,
+    // ) -> anyhow::Result<()> {
+    //     for cmd in cmds.drain() {
+    //         match cmd {
+    //             ivy_wgpu::layer::RendererCommand::ModifyRenderGraph(func) => {
+    //                 func(world, assets, store, gpu, &mut self.render_graph)?;
+    //             }
+    //             ivy_wgpu::layer::RendererCommand::UpdateTexture { handle, desc } => {
+    //                 *self
+    //                     .render_graph
+    //                     .resources
+    //                     .get_texture_mut(handle)
+    //                     .as_managed_mut()
+    //                     .context("Attempt to modify an external texture")? = desc;
+    //             }
+    //         }
+    //     }
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 }
 
-pub struct SurfacePipelineDesc {
-    pub ui_instance: SharedUiInstance,
-}
+pub struct SurfacePipelineDesc {}
 
 /// Uses a rendergraph to render to a surface
 pub struct SurfaceRenderer {
-    render_graph: RenderGraph,
+    render_graph: Handle<RenderGraph>,
     surface: Surface,
     surface_handle: rendergraph::TextureHandle,
 }
 
 impl SurfaceRenderer {
-    pub fn new(surface: Surface) -> Self {
+    pub fn new(store: &mut DynamicStore, surface: Surface) -> Self {
         // TODO; pass as param
         let shader_library = ShaderLibrary::new()
             .with_module(ShaderModuleDesc {
@@ -199,29 +206,25 @@ impl SurfaceRenderer {
 
         let surface_texture = render_graph
             .resources
-            .insert_texture(rendergraph::TextureDesc::External);
+            .insert_texture(rendergraph::RenderGraphImageDesc::External);
 
         Self {
-            render_graph,
+            render_graph: store.insert(render_graph),
             surface,
             surface_handle: surface_texture,
         }
     }
 
-    pub fn render_graph(&self) -> &RenderGraph {
-        &self.render_graph
-    }
-
     pub fn surface_handle(&self) -> TextureHandle {
         self.surface_handle
-    }
-
-    pub fn render_graph_mut(&mut self) -> &mut RenderGraph {
-        &mut self.render_graph
     }
 }
 
 impl ivy_wgpu::layer::Renderer for SurfaceRenderer {
+    fn render_graph(&self) -> Handle<RenderGraph> {
+        self.render_graph.clone()
+    }
+
     fn draw(
         &mut self,
         world: &mut World,
@@ -235,12 +238,12 @@ impl ivy_wgpu::layer::Renderer for SurfaceRenderer {
         let mut external_resources = ExternalResources::new();
         external_resources.insert_texture(self.surface_handle, &surface_texture.texture);
 
-        self.render_graph
-            .update(gpu, world, assets, store, &external_resources)?;
+        let render_graph = &mut *store.get_mut(&self.render_graph);
+        render_graph.update(gpu, world, assets, store, &external_resources)?;
 
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
 
-        self.render_graph.draw_with_encoder(
+        render_graph.draw_with_encoder(
             gpu,
             queue,
             &mut encoder,
@@ -263,34 +266,34 @@ impl ivy_wgpu::layer::Renderer for SurfaceRenderer {
         Ok(())
     }
 
-    fn on_resize(&mut self, gpu: &Gpu, size: PhysicalSize<u32>) {
+    fn on_resize(&mut self, gpu: &Gpu, store: &DynamicStore, size: PhysicalSize<u32>) {
         self.surface.resize(gpu, size);
     }
 
-    fn process_commands(
-        &mut self,
-        world: &mut World,
-        assets: &AssetCache,
-        store: &mut DynamicStore,
-        gpu: &Gpu,
-        cmds: &mut flume::Receiver<ivy_wgpu::layer::RendererCommand>,
-    ) -> anyhow::Result<()> {
-        for cmd in cmds.drain() {
-            match cmd {
-                ivy_wgpu::layer::RendererCommand::ModifyRenderGraph(func) => {
-                    func(world, assets, store, gpu, &mut self.render_graph)?;
-                }
-                ivy_wgpu::layer::RendererCommand::UpdateTexture { handle, desc } => {
-                    *self
-                        .render_graph
-                        .resources
-                        .get_texture_mut(handle)
-                        .as_managed_mut()
-                        .context("Attempt to modify an external texture")? = desc;
-                }
-            }
-        }
+    // fn process_commands(
+    //     &mut self,
+    //     world: &mut World,
+    //     assets: &AssetCache,
+    //     store: &mut DynamicStore,
+    //     gpu: &Gpu,
+    //     cmds: &mut flume::Receiver<ivy_wgpu::layer::RendererCommand>,
+    // ) -> anyhow::Result<()> {
+    //     for cmd in cmds.drain() {
+    //         match cmd {
+    //             ivy_wgpu::layer::RendererCommand::ModifyRenderGraph(func) => {
+    //                 func(world, assets, store, gpu, &mut self.render_graph)?;
+    //             }
+    //             ivy_wgpu::layer::RendererCommand::UpdateTexture { handle, desc } => {
+    //                 *self
+    //                     .render_graph
+    //                     .resources
+    //                     .get_texture_mut(handle)
+    //                     .as_managed_mut()
+    //                     .context("Attempt to modify an external texture")? = desc;
+    //             }
+    //         }
+    //     }
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 }

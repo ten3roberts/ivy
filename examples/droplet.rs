@@ -1,30 +1,25 @@
-use flax::{Entity, World};
+use flax::Entity;
 use glam::{Quat, Vec3};
-use ivy_assets::{fs::AssetPath, Asset, AssetCache, AsyncAssetExt};
+use ivy_assets::{Asset, AssetCache, AssetPath, AsyncAssetExt};
 use ivy_core::{
-    app::PostInitEvent,
-    layer::events::EventRegisterContext,
     math::Vec3Ext,
-    palette::Srgb,
+    plugin::{Plugin, PluginContext},
     profiling::ProfilingLayer,
     transforms::TransformUpdatePlugin,
-    update_layer::{FixedTimeStep, ScheduledLayer},
-    App, AsyncCommandBuffer, EngineLayer, EntityBuilderExt, Layer, DEG_90,
+    update_layer::{FixedTimeStep, PluginLayer},
+    App, AsyncCommandBuffer, EngineLayer, EntityBuilderExt, DEG_90,
 };
 use ivy_engine::{async_commandbuffer, engine, TransformBundle};
-use ivy_game::{
-    orbit_camera::OrbitCameraPlugin,
-    viewport_camera::{CameraSettings, ViewportCameraLayer},
-};
+use ivy_game::{orbit_camera::OrbitCameraPlugin, viewport_camera::CameraViewportPlugin};
 use ivy_gltf::Document;
 use ivy_input::layer::InputLayer;
 use ivy_physics::PhysicsPlugin;
-use ivy_postprocessing::preconfigured::{
-    pbr::{PbrRenderGraphConfig, SkyboxConfig},
-    SurfacePbrPipelineDesc, SurfacePbrRenderer,
+use ivy_postprocessing::{
+    effects::SkyboxConfig,
+    preconfigured::{pbr::PbrRenderGraphConfig, SurfacePbrPipelineDesc, SurfacePbrRenderer},
 };
 use ivy_scene::{GltfNodeExt, NodeMountOptions};
-use ivy_wgpu::{driver::WinitDriver, layer::GraphicsLayer, renderer::EnvironmentData};
+use ivy_wgpu::{driver::WinitDriver, layer::GraphicsLayer};
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
 use wgpu::TextureFormat;
@@ -71,17 +66,14 @@ pub fn main() -> anyhow::Result<()> {
             ))
         }))
         .with_layer(InputLayer::new())
-        .with_layer(LogicLayer)
         .with_layer(
-            ScheduledLayer::new(FixedTimeStep::new(0.02))
+            PluginLayer::new(FixedTimeStep::new(0.02))
+                .with_plugin(LogicPlugin)
+                .with_plugin(CameraViewportPlugin)
                 .with_plugin(OrbitCameraPlugin)
                 .with_plugin(PhysicsPlugin::new())
                 .with_plugin(TransformUpdatePlugin),
         )
-        .with_layer(ViewportCameraLayer::new(CameraSettings {
-            environment_data: EnvironmentData::new(Srgb::new(0.0, 0.0, 0.1), 0.001, 0.0),
-            fov: 1.0,
-        }))
         .run()
     {
         tracing::error!("{err:?}");
@@ -116,27 +108,16 @@ async fn setup_objects(cmd: AsyncCommandBuffer, assets: AssetCache) -> anyhow::R
     Ok(())
 }
 
-struct LogicLayer;
+struct LogicPlugin;
 
-impl Layer for LogicLayer {
-    fn register(
-        &mut self,
-        _: &mut World,
-        _: &AssetCache,
-        mut events: EventRegisterContext<Self>,
-    ) -> anyhow::Result<()> {
-        events.subscribe(|_, ctx, _: &PostInitEvent| {
-            async_std::task::spawn(setup_objects(
-                ctx.world
-                    .get(engine(), async_commandbuffer())
-                    .unwrap()
-                    .clone(),
-                ctx.assets.clone(),
-            ));
-
-            Ok(())
-        });
-
+impl Plugin for LogicPlugin {
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        let cmd = ctx
+            .world
+            .get(engine(), async_commandbuffer())
+            .unwrap()
+            .clone();
+        async_std::task::spawn(setup_objects(cmd, ctx.assets.clone()));
         Ok(())
     }
 }

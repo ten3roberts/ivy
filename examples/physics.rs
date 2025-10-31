@@ -1,43 +1,45 @@
 use flax::{Entity, World};
 use glam::{vec3, EulerRot, Quat, Vec3};
-use ivy_assets::{fs::AssetPath, AssetCache};
+use ivy_assets::{stored::DynamicStore, AssetCache, AssetPath};
 use ivy_core::{
-    app::PostInitEvent,
-    layer::events::EventRegisterContext,
     palette::{Srgb, Srgba},
-    profiling::ProfilingLayer,
+    plugin::Plugin,
     transforms::TransformUpdatePlugin,
-    update_layer::{FixedTimeStep, ScheduledLayer},
-    App, EngineLayer, EntityBuilderExt, Layer, DEG_180, DEG_45,
+    update_layer::{FixedTimeStep, PluginLayer, ScheduleSetBuilder},
+    EntityBuilderExt, DEG_180, DEG_45,
+};
+use ivy_editor::{
+    plugin::EditorPlugin,
+    tools::{physics_tool::PhysicsToolPlugin, transform_tool::TransformToolPlugin},
+    tools_controller::ToolsControllerPlugin,
 };
 use ivy_engine::{RigidBodyBundle, TransformBundle};
-use ivy_game::{
-    fly_camera::FlyCameraPlugin,
-    viewport_camera::{CameraSettings, ViewportCameraLayer},
-};
+use ivy_game::fly_camera::FlyCameraPlugin;
 use ivy_graphics::texture::TextureData;
 use ivy_input::layer::InputLayer;
 use ivy_physics::{ColliderBundle, PhysicsPlugin};
-use ivy_postprocessing::preconfigured::{
-    pbr::{PbrRenderGraphConfig, SkyboxConfig},
-    SurfacePbrPipelineDesc, SurfacePbrRenderer,
+use ivy_postprocessing::{
+    effects::SkyboxConfig,
+    preconfigured::pbr::PbrRenderGraphConfig,
+};
+use ivy_scene::ray_picker::RayPickingPlugin;
+use ivy_ui::{
+    layer::{UiLayer, UiUpdateLayer},
+    streamed::StreamedUiPlugin,
 };
 use ivy_wgpu::{
     components::{cast_shadow, forward_pass, light_kind, light_params},
-    driver::WinitDriver,
-    layer::GraphicsLayer,
+    effect_desc::{PbrRenderEffect, RenderEffect},
     light::{LightKind, LightParams},
-    material_desc::{MaterialData, PbrMaterialData},
     mesh_desc::MeshDesc,
     primitives::CapsulePrimitive,
-    renderer::{EnvironmentData, RenderObjectBundle},
+    renderer::RenderObjectBundle,
 };
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
 use wgpu::TextureFormat;
-use winit::{dpi::LogicalSize, window::WindowAttributes};
 
-const ENABLE_SKYBOX: bool = true;
+mod common;
 
 pub fn main() -> anyhow::Result<()> {
     registry()
@@ -50,39 +52,27 @@ pub fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    if let Err(err) = App::builder()
-        .with_driver(WinitDriver::new(
-            WindowAttributes::default()
-                .with_inner_size(LogicalSize::new(1920, 1080))
-                .with_title("Ivy Physics"),
-        ))
-        .with_layer(EngineLayer::new())
-        .with_layer(ProfilingLayer::new())
-        .with_layer(GraphicsLayer::new(|world, assets, store, gpu, surface| {
-            Ok(SurfacePbrRenderer::new(
-                world,
-                assets,
-                store,
-                gpu,
-                surface,
-                SurfacePbrPipelineDesc {
-                    pbr_config: PbrRenderGraphConfig {
-                        label: "basic".into(),
-                        skybox: Some(SkyboxConfig {
-                            hdri: Box::new(AssetPath::new("hdris/HDR_artificial_planet_close.hdr")),
-                            format: TextureFormat::Rgba16Float,
-                        }),
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                },
-            ))
+    if let Err(err) = common::base_app_builder("Ivy Physics")
+        .with_layer(common::graphics_layer_with_config(|| PbrRenderGraphConfig {
+            label: "basic".into(),
+            skybox: Some(SkyboxConfig {
+                hdri: Box::new(AssetPath::new("hdris/HDR_artificial_planet_close.hdr")),
+                format: TextureFormat::Rgba16Float,
+            }),
+            ..Default::default()
         }))
+        .with_layer(UiLayer::new())
         .with_layer(InputLayer::new())
-        .with_layer(LogicLayer)
         .with_layer(
-            ScheduledLayer::new(FixedTimeStep::new(0.02))
+            PluginLayer::new(FixedTimeStep::new(0.02))
+                .with_plugin(LogicPlugin)
+                .with_plugin(StreamedUiPlugin)
                 .with_plugin(FlyCameraPlugin)
+                .with_plugin(TransformToolPlugin)
+                .with_plugin(PhysicsToolPlugin)
+                .with_plugin(ToolsControllerPlugin)
+                .with_plugin(RayPickingPlugin)
+                .with_plugin(EditorPlugin)
                 .with_plugin(
                     PhysicsPlugin::new()
                         .with_gravity(Vec3::ZERO)
@@ -90,14 +80,7 @@ pub fn main() -> anyhow::Result<()> {
                 )
                 .with_plugin(TransformUpdatePlugin),
         )
-        .with_layer(ViewportCameraLayer::new(CameraSettings {
-            environment_data: EnvironmentData::new(
-                Srgb::new(0.2, 0.2, 0.3),
-                0.001,
-                if ENABLE_SKYBOX { 0.0 } else { 1.0 },
-            ),
-            fov: 1.0,
-        }))
+        .with_layer(UiUpdateLayer::new())
         .run()
     {
         tracing::error!("{err:?}");
@@ -108,8 +91,8 @@ pub fn main() -> anyhow::Result<()> {
 }
 
 fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
-    let material = MaterialData::PbrMaterial(
-        PbrMaterialData::new()
+    let material = RenderEffect::Pbr(
+        PbrRenderEffect::new()
             .with_roughness_factor(0.1)
             .with_metallic_factor(0.0)
             .with_albedo(TextureData::srgba(Srgba::new(1.0, 1.0, 1.0, 1.0))),
@@ -212,21 +195,10 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
     Ok(())
 }
 
-struct LogicLayer;
+struct LogicPlugin;
 
-impl Layer for LogicLayer {
-    fn register(
-        &mut self,
-        _: &mut World,
-        _: &AssetCache,
-        mut events: EventRegisterContext<Self>,
-    ) -> anyhow::Result<()> {
-        events.subscribe(|_, ctx, _: &PostInitEvent| {
-            setup_objects(ctx.world, ctx.assets.clone())?;
-
-            Ok(())
-        });
-
-        Ok(())
+impl Plugin for LogicPlugin {
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        setup_objects(ctx.world, ctx.assets.clone())
     }
 }

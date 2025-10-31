@@ -11,9 +11,12 @@ use gltf::{buffer, Gltf};
 use image::{DynamicImage, ImageFormat};
 use itertools::Itertools;
 use ivy_assets::{
-    fs::AssetPath, loadable::ResourceFromPath, Asset, AssetCache, AssetDesc, AsyncAssetExt,
+    declare_resource,
+    loadable::{LoadFromPath, Loadable},
+    Asset, AssetCache, AssetDesc, AssetPath, AsyncAssetKey,
 };
 use ivy_core::components::TransformBundle;
+use ivy_editable::Editable;
 use ivy_graphics::mesh::{MeshData, TANGENT_ATTRIBUTE};
 use ivy_profiling::{profile_function, profile_scope};
 
@@ -83,6 +86,32 @@ impl DocumentData {
     }
 }
 
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize, Editable,
+)]
+pub struct GltfNodeDesc {
+    document: AssetPath<Document>,
+    node: String,
+}
+
+impl Loadable for GltfNodeDesc {
+    type Output = GltfNode;
+
+    async fn load(&self, assets: &AssetCache) -> anyhow::Result<Self::Output> {
+        let document = self.document.load(assets).await?;
+        let node = document.find_node(&self.node).with_context(|| {
+            format!(
+                "Node {:?} not found in document {:?}",
+                self.node, self.document
+            )
+        })?;
+
+        Ok(node)
+    }
+}
+
+declare_resource!(GltfNode, GltfNodeDesc);
+
 pub struct Document {
     data: Asset<DocumentData>,
 }
@@ -96,106 +125,6 @@ impl std::ops::Deref for DocumentData {
 }
 
 impl Document {
-    async fn load(assets: &AssetCache, path: impl AsRef<Path>) -> anyhow::Result<Self> {
-        let path = path.as_ref();
-        let bytes: Asset<Vec<u8>> = AssetPath::new(path).load_async(assets).await?;
-
-        let mut gltf = Gltf::from_slice(&bytes)?;
-
-        let buffer_data: Vec<_> = gltf
-            .document
-            .buffers()
-            .map(|v| {
-                profile_scope!("load_buffer_data");
-                // TODO: load using assets
-                gltf::buffer::Data::from_source_and_blob(v.source(), None, &mut gltf.blob)
-            })
-            .try_collect()?;
-
-        let buffer_data = Arc::new(buffer_data);
-
-        let images = gltf.images().collect_vec();
-        let mut images: Vec<_> = stream::iter(images.iter().enumerate())
-            .map(|(i, v)| {
-                let buffer_data = buffer_data.clone();
-                async move {
-                    // let image = gltf::image::Data::from_source(v.source(), None, &buffer_data);
-                    let image = load_image_data(v.source(), None, &buffer_data)
-                        .await
-                        .with_context(|| format!("Failed to load image {:?}", v.name()))?;
-
-                    anyhow::Ok((i, assets.insert(image)))
-                }
-            })
-            .boxed()
-            .buffered(8)
-            .try_collect()
-            .await?;
-
-        images.sort_by_key(|v| v.0);
-        let images = images.into_iter().map(|v| v.1).collect_vec();
-
-        let meshes: Vec<_> = futures::stream::iter(gltf.meshes())
-            .map(|v| {
-                let buffer_data = buffer_data.clone();
-                async move {
-                    let primitives = futures::stream::iter(v.primitives())
-                        .then(|primitive| {
-                            let buffer_data = buffer_data.clone();
-                            async move {
-                                anyhow::Ok(assets.insert(
-                                    mesh_from_gltf(assets, &primitive, &buffer_data).await?,
-                                ))
-                            }
-                        })
-                        .try_collect()
-                        .await?;
-
-                    anyhow::Ok(primitives)
-                }
-            })
-            .boxed()
-            .buffered(4)
-            .try_collect()
-            .await?;
-
-        let named_meshes = gltf
-            .document
-            .meshes()
-            .enumerate()
-            .filter_map(|(i, v)| Some((v.name().map(ToString::to_string)?, i)))
-            .collect();
-
-        let named_materials = gltf
-            .document
-            .materials()
-            .enumerate()
-            .filter_map(|(i, v)| Some((v.name().map(ToString::to_string)?, i)))
-            .collect();
-
-        let named_nodes = gltf
-            .document
-            .nodes()
-            .enumerate()
-            .filter_map(|(i, v)| Some((v.name().map(ToString::to_string)?, i)))
-            .collect();
-
-        let skins = Skin::load_from_document(assets, &gltf.document, &buffer_data)?;
-
-        let data = assets.insert(DocumentData {
-            gltf,
-            named_meshes,
-            named_materials,
-            named_nodes,
-            buffer_data,
-            images,
-            skins,
-            mesh_data: meshes,
-        });
-
-        Ok(Self { data })
-    }
-
     pub fn meshes(&self) -> impl Iterator<Item = GltfMesh> + '_ {
         self.data
             .meshes()
@@ -344,11 +273,112 @@ async fn load_image_data(
     Ok(decoded_image)
 }
 
-impl ResourceFromPath for Document {
-    type Error = anyhow::Error;
+impl LoadFromPath for Document {
+    async fn load_from_file(path: AssetPath<Self>, assets: &AssetCache) -> anyhow::Result<Self> {
+        let content = path.load_file_content(assets).await?;
 
-    async fn load(path: AssetPath<Self>, assets: &AssetCache) -> Result<Self, Self::Error> {
-        Document::load(assets, path.path()).await
+        let mut gltf = Gltf::from_slice(&content)?;
+
+        let buffer_data: Vec<_> = gltf
+            .document
+            .buffers()
+            .map(|v| {
+                profile_scope!("load_buffer_data");
+                // TODO: load using assets
+                gltf::buffer::Data::from_source_and_blob(v.source(), None, &mut gltf.blob)
+            })
+            .try_collect()?;
+
+        let buffer_data = Arc::new(buffer_data);
+
+        let images = gltf.images().collect_vec();
+        let mut images: Vec<_> = stream::iter(images.iter().enumerate())
+            .map(|(i, v)| {
+                let buffer_data = buffer_data.clone();
+                async move {
+                    // let image = gltf::image::Data::from_source(v.source(), None, &buffer_data);
+                    let image = load_image_data(v.source(), None, &buffer_data)
+                        .await
+                        .with_context(|| format!("Failed to load image {:?}", v.name()))?;
+
+                    anyhow::Ok((i, assets.insert(image)))
+                }
+            })
+            .boxed()
+            .buffered(8)
+            .try_collect()
+            .await?;
+
+        images.sort_by_key(|v| v.0);
+        let images = images.into_iter().map(|v| v.1).collect_vec();
+
+        let meshes: Vec<_> = futures::stream::iter(gltf.meshes())
+            .map(|v| {
+                let buffer_data = buffer_data.clone();
+                async move {
+                    let primitives = futures::stream::iter(v.primitives())
+                        .then(|primitive| {
+                            let buffer_data = buffer_data.clone();
+                            async move {
+                                anyhow::Ok(assets.insert(
+                                    mesh_from_gltf(assets, &primitive, &buffer_data).await?,
+                                ))
+                            }
+                        })
+                        .try_collect()
+                        .await?;
+
+                    anyhow::Ok(primitives)
+                }
+            })
+            .boxed()
+            .buffered(4)
+            .try_collect()
+            .await?;
+
+        let named_meshes = gltf
+            .document
+            .meshes()
+            .enumerate()
+            .filter_map(|(i, v)| Some((v.name().map(ToString::to_string)?, i)))
+            .collect();
+
+        let named_materials = gltf
+            .document
+            .materials()
+            .enumerate()
+            .filter_map(|(i, v)| Some((v.name().map(ToString::to_string)?, i)))
+            .collect();
+
+        let named_nodes = gltf
+            .document
+            .nodes()
+            .enumerate()
+            .filter_map(|(i, v)| Some((v.name().map(ToString::to_string)?, i)))
+            .collect();
+
+        let skins = Skin::load_from_document(assets, &gltf.document, &buffer_data)?;
+
+        let data = assets.insert(DocumentData {
+            gltf,
+            named_meshes,
+            named_materials,
+            named_nodes,
+            buffer_data,
+            images,
+            skins,
+            mesh_data: meshes,
+        });
+
+        Ok(Self { data })
+    }
+
+    fn resource_name() -> Option<&'static str> {
+        None
+    }
+
+    fn extensions() -> &'static [&'static str] {
+        &["gltf", "glb"]
     }
 }
 

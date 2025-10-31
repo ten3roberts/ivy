@@ -2,9 +2,8 @@ use std::{borrow::Cow, collections::BTreeMap};
 
 use wgpu::{Face, PolygonMode};
 
-/// Represents a shader
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+/// Represents a shader's code
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct ShaderPass {
     pub path: String,
     pub label: Cow<'static, str>,
@@ -14,8 +13,7 @@ pub struct ShaderPass {
     pub polygon_mode: PolygonMode,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ShaderValue {
     Bool(bool),
     Int(i32),

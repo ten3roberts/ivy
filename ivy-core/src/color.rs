@@ -1,4 +1,4 @@
-use glam::{vec3, Vec3, Vec4};
+use glam::{vec3, vec4, Vec3, Vec4};
 pub use palette;
 use palette::{FromColor, Hsla, Hsva, IntoColor, Srgb, Srgba};
 
@@ -22,7 +22,11 @@ pub trait ColorExt {
 
     fn blue() -> Self;
 
+    fn light_blue() -> Self;
+
     fn white() -> Self;
+
+    fn gray() -> Self;
 
     fn black() -> Self;
 
@@ -77,8 +81,16 @@ impl ColorExt for Color {
         Color::new(0.0, 0.0, 1.0, 1.0)
     }
 
+    fn light_blue() -> Self {
+        Color::new(0.4, 0.4, 1.0, 1.0)
+    }
+
     fn white() -> Self {
         Color::new(1.0, 1.0, 1.0, 1.0)
+    }
+
+    fn gray() -> Self {
+        Color::new(0.5, 0.5, 0.5, 1.0)
     }
 
     fn black() -> Self {
@@ -100,6 +112,12 @@ impl ColorExt for Color {
     fn purple() -> Self {
         Color::new(1.0, 0.0, 1.0, 1.0)
     }
+}
+
+pub fn srgba_to_vec4(color: Srgba) -> Vec4 {
+    let (r, g, b, a) = color.into_linear().into_components();
+
+    vec4(r, g, b, a)
 }
 
 pub fn to_linear_vec3(color: Srgb) -> Vec3 {

@@ -1,14 +1,33 @@
+use ivy_assets::Resource;
 use ivy_core::{palette::Srgb, Bundle};
+use ivy_editable::Editable;
+use violet::core::{state::StateExt, Widget};
 
 use crate::components::{cast_shadow, light_kind, light_params};
 
-#[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Editable, serde::Serialize, serde::Deserialize)]
 pub struct LightParams {
     pub color: Srgb,
+    /// Light intensity
+    #[editable(range(0.0, 100.0))]
     pub intensity: f32,
+    /// Spotlight inner cone radius
+    #[editable(range(0.0, std::f32::consts::FRAC_PI_2))]
     pub inner_theta: f32,
+    /// Spotlight outer cone radius
+    #[editable(range(0.0, std::f32::consts::FRAC_PI_2))]
     pub outer_theta: f32,
+}
+
+impl Default for LightParams {
+    fn default() -> Self {
+        Self {
+            color: Srgb::new(1.0, 1.0, 1.0),
+            intensity: 1.0,
+            inner_theta: Default::default(),
+            outer_theta: Default::default(),
+        }
+    }
 }
 
 impl LightParams {
@@ -29,9 +48,21 @@ impl LightParams {
 }
 
 #[repr(u32)]
-#[derive(Debug, Clone, Copy)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(
+    Default,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Editable,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub enum LightKind {
+    #[default]
     Point,
     Directional,
     Spotlight,
@@ -63,8 +94,8 @@ impl LightKind {
     }
 }
 
-#[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Resource, Editable, Bundle)]
+#[resource(derive = [Editable])]
 pub struct LightBundle {
     pub params: LightParams,
     pub kind: LightKind,
@@ -72,9 +103,9 @@ pub struct LightBundle {
 }
 
 impl Bundle for LightBundle {
-    fn mount(self, entity: &mut flax::EntityBuilder) {
+    fn mount(&self, entity: &mut flax::EntityBuilder) {
         entity
-            .set(light_params(), self.params)
+            .set(light_params(), self.params.clone())
             .set(light_kind(), self.kind);
 
         if self.cast_shadow {

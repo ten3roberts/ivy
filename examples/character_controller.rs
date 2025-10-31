@@ -1,0 +1,489 @@
+use std::f32::consts::TAU;
+
+use anyhow::Context;
+use async_std;
+use flax::{components::child_of, entity_ids, Entity, Query, World};
+use glam::BVec3;
+use glam::{vec3, EulerRot, Quat, Vec3};
+use ivy_assets::{
+    loadable::Loadable, stored::DynamicStore, Asset, AssetCache, AssetPath, AsyncAssetExt,
+};
+use ivy_core::components::main_camera;
+use ivy_core::components::position;
+use ivy_core::template::Template;
+use ivy_core::DEG_90;
+use ivy_core::{
+    palette::{Srgb, Srgba},
+    plugin::{Plugin, PluginContext},
+    transforms::TransformUpdatePlugin,
+    update_layer::{FixedTimeStep, PluginLayer, ScheduleSetBuilder},
+    AsyncCommandBuffer, Color, ColorExt, EntityBuilderExt,
+};
+use ivy_engine::scale;
+use ivy_engine::{
+    async_commandbuffer, elapsed_time, engine, is_static, RigidBodyBundle, TransformBundle,
+};
+use ivy_game::standalone_camera::StandaloneCameraBundle;
+use ivy_game::{
+    controllers::{
+        camera_controller::{camera_target, CameraControllerPlugin},
+        character_controller::{CharacterControllerBundle, CharacterControllerPlugin},
+    },
+    navigation::{
+        MovementConfiguration, MovementConstraint, MovementMode, MoverBundle, MoverPlugin,
+    },
+    viewport_camera::CameraViewportPlugin,
+};
+use ivy_gltf::Document;
+use ivy_graphics::texture::{TextureData, TextureDesc};
+use ivy_input::layer::InputLayer;
+use ivy_physics::AxisContraints;
+use ivy_physics::{components::collider_builder, ColliderBundle, PhysicsPlugin, RigidBodyKind};
+use ivy_postprocessing::effects::SkyboxConfig;
+use ivy_postprocessing::preconfigured::pbr::PbrRenderGraphConfig;
+use ivy_scene::{GltfNodeExt, NodeMountOptions};
+use ivy_wgpu::effect_desc::{
+    PbrEmissiveRenderEffect, PbrRenderEffectDesc, RenderEffect, RenderEffectDesc,
+};
+use ivy_wgpu::{
+    components::*,
+    effect_desc::PbrRenderEffect,
+    light::{LightBundle, LightKind, LightParams},
+    material::{EffectPass, Material, MaterialBundle},
+    mesh_desc::MeshDesc,
+    primitives::{generate_plane, CapsulePrimitive, CubePrimitive, UvSpherePrimitive},
+    renderer::{MeshBundle, RenderObjectBundle},
+};
+use rand::{rngs::StdRng, Rng, SeedableRng};
+use rapier3d::prelude::{ColliderBuilder, SharedShape};
+use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
+use tracing_tree::HierarchicalLayer;
+use violet::palette::{Hsl, Hsv, IntoColor, WithAlpha};
+
+mod common;
+
+pub fn main() -> anyhow::Result<()> {
+    color_backtrace::install();
+    registry()
+        .with(EnvFilter::from_default_env())
+        .with(
+            HierarchicalLayer::default()
+                .with_indent_lines(true)
+                .with_span_retrace(true),
+        )
+        .init();
+
+    if let Err(err) = common::base_app_builder("Ivy Character Controller")
+        .with_layer(common::graphics_layer_with_config(|| {
+            PbrRenderGraphConfig {
+                skybox: Some(SkyboxConfig {
+                    hdri: Box::new(AssetPath::new("hdris/HDR_artificial_planet_close.hdr")),
+                    format: wgpu::TextureFormat::Rgba16Float,
+                }),
+                ..PbrRenderGraphConfig::default()
+            }
+        }))
+        .with_layer(InputLayer::new())
+        .with_layer(
+            PluginLayer::new(FixedTimeStep::new(0.02))
+                .with_plugin(LogicPlugin)
+                .with_plugin(CameraViewportPlugin)
+                .with_plugin(CameraControllerPlugin)
+                .with_plugin(CharacterControllerPlugin)
+                .with_plugin(MoverPlugin)
+                .with_plugin(
+                    PhysicsPlugin::new()
+                        .with_gizmos(ivy_physics::GizmoSettings { rigidbody: true })
+                        .with_gravity(-Vec3::Y * 9.81),
+                )
+                .with_plugin(SpawnSpotlightPlugin)
+                .with_plugin(TransformUpdatePlugin),
+        )
+        .run()
+    {
+        Err(err)
+    } else {
+        Ok(())
+    }
+}
+
+fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
+    let white_material = RenderEffect::Pbr(
+        PbrRenderEffect::new()
+            .with_roughness_factor(1.0)
+            .with_metallic_factor(0.0)
+            .with_albedo(TextureData::srgba(Srgba::new(1.0, 1.0, 1.0, 1.0))),
+    );
+
+    let red_material = RenderEffect::Pbr(
+        PbrRenderEffect::new()
+            .with_roughness_factor(0.1)
+            .with_metallic_factor(0.0)
+            .with_albedo(TextureData::srgba(Color::from_hsla(173.0, 0.7, 0.7, 1.0))),
+    );
+
+    let cube_mesh = MeshDesc::Content(assets.load(&CubePrimitive));
+
+    const MOVEMENT_CONFIG: MovementConfiguration = MovementConfiguration {
+        max_speed: 6.0,
+        max_acceleration: 50.0,
+        deceleration: 10.0,
+        constraint: MovementConstraint::None,
+        movement_mode: MovementMode::ProportionalFalloff,
+        kinematic: false,
+    };
+
+    let character_height = 1.85;
+    let character_radius = 0.3;
+    let capsule_halfheight = character_height / 2.0 - character_radius;
+
+    let mesh = MeshDesc::Content(
+        assets.load(&CapsulePrimitive::new(character_radius, capsule_halfheight)),
+    );
+
+    let material = assets.insert(
+        Material::new()
+            .with_effect(EffectPass::Forward, red_material.clone())
+            .with_effect(EffectPass::Shadow, RenderEffect::OpaqueShadow),
+    );
+
+    let character_entity = Template::new()
+        .with_bundle(
+            TransformBundle::default()
+                .with_position(vec3(0.0, 2.0, 0.0))
+                .with_rotation(Quat::IDENTITY),
+        )
+        .with_bundle(CharacterControllerBundle {})
+        .with_bundle(
+            RigidBodyBundle::dynamic()
+                .with_axis_constraints(AxisContraints::new(BVec3::FALSE, BVec3::TRUE)),
+        )
+        .with_bundle(MoverBundle {
+            conf: MOVEMENT_CONFIG,
+        })
+        .with_bundle(
+            ColliderBundle::new(rapier3d::prelude::SharedShape::capsule_y(
+                capsule_halfheight,
+                character_radius,
+            ))
+            .with_friction(0.0)
+            .with_restitution(0.0),
+        )
+        .with_bundle(MeshBundle::new(mesh.clone()))
+        .with_bundle(MaterialBundle::new(material))
+        .build()
+        .spawn(world);
+
+    let camera_entity = Template::new()
+        .with_bundle(StandaloneCameraBundle)
+        .build()
+        .spawn(world);
+
+    world
+        .entity_mut(character_entity)
+        .unwrap()
+        .set(camera_target(camera_entity), ());
+
+    Ok(())
+}
+
+impl LogicPlugin {
+    fn setup_assets(&self, world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
+        let cmd = world.get(engine(), async_commandbuffer()).unwrap().clone();
+        let assets = assets.clone();
+
+        async fn load_ground(assets: AssetCache, cmd: AsyncCommandBuffer) -> anyhow::Result<()> {
+            let plane_mesh = MeshDesc::content(assets.insert(generate_plane(100.0, Vec3::Y)));
+
+            let texture_group = "textures/BaseCollection/Sand";
+            let albedo = AssetPath::new(format!("{texture_group}/albedo.png"));
+            let normal = AssetPath::new(format!("{texture_group}/normal.png"));
+            let roughness = AssetPath::new(format!("{texture_group}/roughness.png"));
+            let ao = AssetPath::new(format!("{texture_group}/ao.png"));
+            let displacement = AssetPath::new(format!("{texture_group}/displacement.png"));
+
+            let plane_material = RenderEffectDesc::Pbr(
+                PbrRenderEffectDesc::new()
+                    .with_metallic_factor(0.0)
+                    .with_albedo(TextureDesc::Path(albedo))
+                    .with_normal(TextureDesc::Path(normal))
+                    .with_metallic_roughness(TextureDesc::Path(roughness))
+                    .with_ambient_occlusion(TextureDesc::Path(ao))
+                    .with_displacement(TextureDesc::Path(displacement)),
+            )
+            .load(&assets)
+            .await?;
+
+            cmd.lock().spawn(
+                Entity::builder()
+                    .mount(TransformBundle::default())
+                    .mount(RenderObjectBundle::new(
+                        plane_mesh,
+                        &[
+                            (forward_pass(), plane_material),
+                            (shadow_pass(), RenderEffect::OpaqueShadow),
+                        ],
+                    ))
+                    .mount(RigidBodyBundle::fixed())
+                    .mount(
+                        ColliderBundle::new(SharedShape::cuboid(100.0, 0.1, 100.0))
+                            .with_friction(0.3),
+                    ),
+            );
+
+            anyhow::Ok(())
+        }
+
+        async fn load_additional_objects(
+            assets: AssetCache,
+            cmd: AsyncCommandBuffer,
+        ) -> anyhow::Result<()> {
+            let cube_mesh = MeshDesc::Content(assets.load(&CubePrimitive));
+            let sphere_mesh = MeshDesc::Content(assets.load(&UvSpherePrimitive::default()));
+
+            const ROUGHNESS: f32 = 0.2;
+
+            // Create materials with different colors
+            let red_material = assets.insert(
+                Material::new()
+                    .with_effect(
+                        EffectPass::Forward,
+                        RenderEffect::Pbr(
+                            PbrRenderEffect::new()
+                                .with_roughness_factor(ROUGHNESS)
+                                .with_metallic_factor(0.0)
+                                .with_albedo(TextureData::srgba(Color::from_hsla(
+                                    0.0, 0.7, 0.7, 1.0,
+                                ))),
+                        ),
+                    )
+                    .with_effect(EffectPass::Shadow, RenderEffect::OpaqueShadow),
+            );
+
+            let green_material = assets.insert(
+                Material::new()
+                    .with_effect(
+                        EffectPass::Forward,
+                        RenderEffect::Pbr(
+                            PbrRenderEffect::new()
+                                .with_roughness_factor(ROUGHNESS)
+                                .with_metallic_factor(0.0)
+                                .with_albedo(TextureData::srgba(Color::from_hsla(
+                                    120.0, 0.7, 0.7, 1.0,
+                                ))),
+                        ),
+                    )
+                    .with_effect(EffectPass::Shadow, RenderEffect::OpaqueShadow),
+            );
+
+            let blue_material = assets.insert(
+                Material::new()
+                    .with_effect(
+                        EffectPass::Forward,
+                        RenderEffect::Pbr(
+                            PbrRenderEffect::new()
+                                .with_roughness_factor(ROUGHNESS)
+                                .with_metallic_factor(0.0)
+                                .with_albedo(TextureData::srgba(Color::from_hsla(
+                                    240.0, 0.7, 0.7, 1.0,
+                                ))),
+                        ),
+                    )
+                    .with_effect(EffectPass::Shadow, RenderEffect::OpaqueShadow),
+            );
+
+            let yellow_material = assets.insert(
+                Material::new()
+                    .with_effect(
+                        EffectPass::Forward,
+                        RenderEffect::Pbr(
+                            PbrRenderEffect::new()
+                                .with_roughness_factor(ROUGHNESS)
+                                .with_metallic_factor(0.0)
+                                .with_albedo(TextureData::srgba(Color::from_hsla(
+                                    60.0, 0.7, 0.7, 1.0,
+                                ))),
+                        ),
+                    )
+                    .with_effect(EffectPass::Shadow, RenderEffect::OpaqueShadow),
+            );
+
+            let purple_material = assets.insert(
+                Material::new()
+                    .with_effect(
+                        EffectPass::Forward,
+                        RenderEffect::Pbr(
+                            PbrRenderEffect::new()
+                                .with_roughness_factor(ROUGHNESS)
+                                .with_metallic_factor(0.0)
+                                .with_albedo(TextureData::srgba(Color::from_hsla(
+                                    300.0, 0.7, 0.7, 1.0,
+                                ))),
+                        ),
+                    )
+                    .with_effect(EffectPass::Shadow, RenderEffect::OpaqueShadow),
+            );
+
+            let materials = [
+                red_material,
+                green_material,
+                blue_material,
+                yellow_material,
+                purple_material,
+            ];
+
+            let mut rng = StdRng::from_seed([42; 32]);
+            const SPAWN_RANGE: f32 = 50.0;
+
+            // Add some random cubes
+            for i in 0..50 {
+                let x: f32 = rng.random_range(-SPAWN_RANGE..SPAWN_RANGE);
+                let z: f32 = rng.random_range(-SPAWN_RANGE..SPAWN_RANGE);
+                let y: f32 = rng.random_range(1.0..3.0);
+
+                let material = materials[i % materials.len()].clone();
+
+                Template::new()
+                    .with_bundle(TransformBundle::default())
+                    .with_bundle(RigidBodyBundle::dynamic())
+                    .with_bundle(
+                        ColliderBundle::new(rapier3d::prelude::SharedShape::cuboid(1.0, 1.0, 1.0))
+                            .with_friction(0.0)
+                            .with_restitution(1.0),
+                    )
+                    .with_bundle(MeshBundle::new(cube_mesh.clone()))
+                    .with_bundle(MaterialBundle::new(material))
+                    .build()
+                    .set(ivy_core::components::position(), vec3(x, y, z))
+                    .spawn_into(&mut cmd.lock());
+            }
+
+            // Add some spheres
+            for i in 0..5 {
+                let x: f32 = rng.random_range(-SPAWN_RANGE..SPAWN_RANGE);
+                let z: f32 = rng.random_range(-SPAWN_RANGE..SPAWN_RANGE);
+                let y: f32 = rng.random_range(1.0..3.0);
+
+                let material = materials[i % materials.len()].clone();
+
+                Template::new()
+                    .with_bundle(TransformBundle::default())
+                    .with_bundle(RigidBodyBundle::dynamic())
+                    .with_bundle(
+                        ColliderBundle::new(rapier3d::prelude::SharedShape::ball(1.0))
+                            .with_friction(0.8)
+                            .with_restitution(1.0)
+                            .with_density(2.0),
+                    )
+                    .with_bundle(MeshBundle::new(sphere_mesh.clone()))
+                    .with_bundle(MaterialBundle::new(material))
+                    .build()
+                    .set(ivy_core::components::position(), vec3(x, y, z))
+                    .spawn_into(&mut cmd.lock());
+            }
+
+            anyhow::Ok(())
+        }
+
+        async fn load_crates(assets: AssetCache, cmd: AsyncCommandBuffer) -> anyhow::Result<()> {
+            // Assuming a crate GLTF model exists, e.g., "models/Crate.glb"
+            // If not, this will fail, but for the example, we'll try
+            let template: Asset<Template> =
+                AssetPath::new("Crate.asset").load_async(&assets).await?;
+
+            let mut rng = StdRng::from_seed([42; 32]);
+            const SPAWN_RANGE: f32 = 20.0;
+            for _ in 0..5 {
+                let x: f32 = rng.random_range(-SPAWN_RANGE..SPAWN_RANGE);
+                let z: f32 = rng.random_range(-SPAWN_RANGE..SPAWN_RANGE);
+                let y: f32 = rng.random_range(1.0..3.0);
+
+                template
+                    .build()
+                    .mount(TransformBundle::default().with_position(vec3(x, y, z)))
+                    .spawn_into(&mut cmd.lock());
+            }
+
+            anyhow::Ok(())
+        }
+
+        async_std::task::spawn(load_additional_objects(assets.clone(), cmd.clone()));
+        async_std::task::spawn(load_ground(assets.clone(), cmd.clone()));
+        async_std::task::spawn(async move {
+            if let Err(err) = load_crates(assets, cmd).await {
+                tracing::error!("Failed to load crate model: {err:?}");
+            }
+        });
+
+        Ok(())
+    }
+}
+
+struct LogicPlugin;
+
+impl Plugin for LogicPlugin {
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        setup_objects(ctx.world, ctx.assets.clone())?;
+        self.setup_assets(ctx.world, ctx.assets)
+    }
+}
+
+struct SpawnSpotlightPlugin;
+
+impl Plugin for SpawnSpotlightPlugin {
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        let count = 4; // Several spotlights for scattered illumination
+
+        let sphere_mesh = MeshDesc::content(ctx.assets.load(&UvSpherePrimitive::default()));
+
+        // Scattered spotlights like streetlamps
+        for i in 0..count {
+            let radius = 20.0;
+            let theta = (i as f32 / count as f32) * TAU;
+            let x: f32 = radius * -theta.cos();
+            let z: f32 = radius * theta.sin();
+            let y: f32 = 8.0;
+
+            let color = Hsv::new(theta.to_degrees(), 1.0, 1.0);
+
+            let grey_material = ctx.assets.insert(
+                Material::new()
+                    .with_effect(
+                        EffectPass::Forward,
+                        RenderEffect::Emissive(PbrEmissiveRenderEffect::new(
+                            PbrRenderEffect::new().with_roughness_factor(0.0),
+                            TextureData::srgba(color.with_alpha(1.0).into_color()),
+                            5.0,
+                        )),
+                    )
+                    .with_effect(EffectPass::Shadow, RenderEffect::OpaqueShadow),
+            );
+
+            Entity::builder()
+                .mount(
+                    TransformBundle::default()
+                        .with_position(vec3(x, y, z))
+                        .with_scale(Vec3::splat(0.4)), // Small sphere
+                )
+                .mount(MeshBundle::new(sphere_mesh.clone()))
+                .mount(MaterialBundle::new(grey_material.clone()))
+                .spawn(ctx.world);
+
+            Entity::builder()
+                .mount(
+                    TransformBundle::default()
+                        .with_position(vec3(x, y, z))
+                        .with_rotation(Quat::from_rotation_x(-DEG_90)),
+                )
+                .mount(LightBundle {
+                    params: LightParams::new(color.into_color(), 80.0)
+                        .with_angular_cutoffs(0.7, 0.8), // Focused beam
+                    kind: LightKind::Spotlight,
+                    cast_shadow: true,
+                })
+                .spawn(ctx.world);
+        }
+
+        Ok(())
+    }
+}

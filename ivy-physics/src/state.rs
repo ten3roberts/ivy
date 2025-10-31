@@ -11,11 +11,14 @@ use rapier3d::{
         CCDSolver, ChannelEventCollector, Collider, ColliderHandle, ColliderSet, CollisionEvent,
         ContactForceEvent, DefaultBroadPhase, GenericJoint, ImpulseJointHandle, ImpulseJointSet,
         IntegrationParameters, IslandManager, MultibodyJointSet, NarrowPhase, PhysicsPipeline,
-        QueryFilter, QueryPipeline, Ray, RayIntersection, RigidBody, RigidBodyHandle, RigidBodySet,
+        QueryFilter, QueryPipeline, RayIntersection, RigidBody, RigidBodyHandle, RigidBodySet,
     },
 };
 
-use crate::components::{angular_velocity, velocity, EntityCollisionEvent};
+use crate::{
+    components::{angular_velocity, rigidbody_flags, velocity, EntityCollisionEvent},
+    shapes::Ray,
+};
 
 #[derive(Debug, Clone)]
 pub struct RaycastHit {
@@ -169,7 +172,7 @@ impl PhysicsState {
 
     pub fn cast_ray(
         &self,
-        ray: &Ray,
+        ray: Ray,
         max_dist: f32,
         solid: bool,
         filter: QueryFilter,
@@ -178,7 +181,7 @@ impl PhysicsState {
             .cast_ray_and_get_normal(
                 &self.bodies,
                 &self.collider_set,
-                ray,
+                &ray.into(),
                 max_dist,
                 solid,
                 filter,
@@ -195,7 +198,7 @@ impl PhysicsState {
 
     pub fn cast_ray_many(
         &self,
-        ray: &Ray,
+        ray: Ray,
         max_dist: f32,
         solid: bool,
         filter: QueryFilter,
@@ -204,7 +207,7 @@ impl PhysicsState {
         self.query_pipeline.intersections_with_ray(
             &self.bodies,
             &self.collider_set,
-            ray,
+            &ray.into(),
             max_dist,
             solid,
             filter,
@@ -292,6 +295,11 @@ impl PhysicsState {
         for (rb_handle, v) in data {
             let rb = &mut self.bodies[rb_handle];
 
+            rb.set_enabled(v.rigidbody_flags.enabled);
+            if !v.rigidbody_flags.enabled {
+                continue;
+            }
+
             rb.set_position(
                 Isometry3::new((*v.pos).into(), v.rotation.to_scaled_axis().into()),
                 false,
@@ -361,6 +369,28 @@ impl BodyDynamicsQueryMut {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RigidBodyFlags {
+    pub enabled: bool,
+}
+
+impl Default for RigidBodyFlags {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl RigidBodyFlags {
+    pub fn new() -> Self {
+        Self { enabled: true }
+    }
+
+    pub fn enabled(mut self, enabled: bool) -> Self {
+        self.enabled = enabled;
+        self
+    }
+}
+
 #[derive(Fetch)]
 #[fetch(item_derives = [Debug], transforms = [Modified])]
 pub struct BodyDynamicsQuery {
@@ -368,6 +398,7 @@ pub struct BodyDynamicsQuery {
     pub rotation: Component<Quat>,
     pub vel: Component<Vec3>,
     pub ang_vel: Component<Vec3>,
+    pub rigidbody_flags: Component<RigidBodyFlags>,
 }
 
 impl BodyDynamicsQuery {
@@ -377,6 +408,7 @@ impl BodyDynamicsQuery {
             rotation: rotation(),
             vel: velocity(),
             ang_vel: angular_velocity(),
+            rigidbody_flags: rigidbody_flags(),
         }
     }
 }

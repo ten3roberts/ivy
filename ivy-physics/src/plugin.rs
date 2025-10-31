@@ -2,11 +2,12 @@ use std::any::type_name;
 
 use flax::World;
 use glam::Vec3;
-use ivy_assets::AssetCache;
+use ivy_assets::{stored::DynamicStore, AssetCache};
 use ivy_core::{
     components::engine,
+    plugin::{Plugin, PluginContext},
     transforms::TransformUpdatePlugin,
-    update_layer::{Plugin, ScheduleSetBuilder},
+    update_layer::ScheduleSetBuilder,
 };
 
 use crate::{
@@ -58,34 +59,29 @@ impl Default for PhysicsPlugin {
 }
 
 impl Plugin for PhysicsPlugin {
-    fn install(
-        &self,
-        world: &mut World,
-        _: &AssetCache,
-        schedules: &mut ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
-        let dt = schedules.fixed_mut().time_step().delta_time() as f32;
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        let dt = ctx.schedules.fixed_mut().time_step().delta_time() as f32;
 
-        world.set(engine(), gravity(), self.gravity)?;
-        world.set(
+        ctx.world.set(engine(), gravity(), self.gravity)?;
+        ctx.world.set(
             engine(),
             physics_state(),
             PhysicsState::new(&self.configuration, dt),
         )?;
 
-        let schedule = &mut *schedules.fixed_mut();
+        let schedule = &mut *ctx.schedules.fixed_mut();
         schedule
-            .with_system(unregister_bodies_system(world))
-            .with_system(unregister_colliders_system(world))
+            .with_system(unregister_bodies_system(ctx.world))
+            .with_system(unregister_colliders_system(ctx.world))
             .with_system(register_bodies_system())
             .flush()
             .with_system(PhysicsState::register_colliders_system())
-            .with_system(attach_joints_system(world))
+            .with_system(attach_joints_system(ctx.world))
             .flush()
             .with_system(PhysicsState::update_collider_position_system())
             .with_system(PhysicsState::update_body_data_system())
             .with_system(PhysicsState::apply_effectors_system())
-            .with_system(PhysicsState::step_system())
+            .with_system(PhysicsState::physics_step_system())
             .with_system(PhysicsState::sync_bodies_after_step_system())
             .with_system(PhysicsState::process_events_system());
 

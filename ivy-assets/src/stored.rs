@@ -8,7 +8,10 @@ use std::{
     sync::{Arc, Weak},
 };
 
+use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use slotmap::{new_key_type, SecondaryMap, SlotMap};
+
+use crate::{LocalTypeMap, ShardedTypeMap};
 
 new_key_type! {
     pub struct HandleIndex;
@@ -21,6 +24,8 @@ pub struct Store<T> {
     free_tx: flume::Sender<HandleIndex>,
     free_rx: flume::Receiver<HandleIndex>,
 }
+
+type RefCellStore<T> = AtomicRefCell<Store<T>>;
 
 impl<T> Default for Store<T> {
     fn default() -> Self {
@@ -295,55 +300,39 @@ impl<T> Debug for WeakHandle<T> {
 }
 
 pub struct DynamicStore {
-    inner: HashMap<TypeId, Box<dyn Any>>,
+    inner: LocalTypeMap,
 }
 
 impl DynamicStore {
     pub fn new() -> Self {
         Self {
-            inner: HashMap::new(),
+            inner: LocalTypeMap::new(),
         }
     }
 
-    pub fn store_mut<T: 'static>(&mut self) -> &mut Store<T> {
-        self.inner
-            .entry(TypeId::of::<T>())
-            .or_insert_with(|| Box::new(Store::<T>::new()))
-            .downcast_mut::<Store<T>>()
-            .unwrap()
+    pub fn store_mut<T: 'static>(&mut self) -> &mut RefCellStore<T> {
+        self.inner.entry_or_default::<RefCellStore<T>>()
     }
 
-    pub fn store<T: 'static>(&self) -> Option<&Store<T>> {
-        self.inner.get(&TypeId::of::<T>()).map(|v| {
-            v.downcast_ref::<Store<T>>()
-                .expect("DynamicStore: downcast failed")
+    pub fn store<T: 'static>(&self) -> Option<&RefCellStore<T>> {
+        self.inner.get::<RefCellStore<T>>()
+    }
+
+    pub fn get<T: 'static>(&self, handle: &Handle<T>) -> AtomicRef<T> {
+        AtomicRef::map(self.store::<T>().expect("Invalid handle").borrow(), |v| {
+            v.get(handle)
         })
     }
 
-    pub fn get<T: 'static>(&self, handle: &Handle<T>) -> &T {
-        self.store::<T>().expect("Invalid handle").get(handle)
-    }
-
-    pub fn get_mut<T: 'static>(&mut self, handle: &Handle<T>) -> &mut T {
-        self.store_mut::<T>().get_mut(handle)
+    pub fn get_mut<T: 'static>(&self, handle: &Handle<T>) -> AtomicRefMut<T> {
+        AtomicRefMut::map(
+            self.store::<T>().expect("Invalid handle").borrow_mut(),
+            |v| v.get_mut(handle),
+        )
     }
 
     pub fn insert<T: 'static>(&mut self, value: T) -> Handle<T> {
-        self.store_mut::<T>().insert(value)
-    }
-}
-
-impl<T: 'static> Index<&Handle<T>> for DynamicStore {
-    type Output = T;
-
-    fn index(&self, handle: &Handle<T>) -> &Self::Output {
-        self.get(handle)
-    }
-}
-
-impl<T: 'static> IndexMut<&Handle<T>> for DynamicStore {
-    fn index_mut(&mut self, handle: &Handle<T>) -> &mut Self::Output {
-        self.get_mut(handle)
+        self.store_mut::<T>().get_mut().insert(value)
     }
 }
 

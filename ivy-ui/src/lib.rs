@@ -1,11 +1,9 @@
-use std::{cell::RefCell, rc::Rc};
-
-use violet::wgpu::app::AppInstance;
-
 pub mod components;
 pub mod image;
 pub mod layer;
 pub mod node;
+pub mod screens;
 pub mod streamed;
+pub mod toast;
 
-pub type SharedUiInstance = Rc<RefCell<AppInstance>>;
+pub use violet;

@@ -1,16 +1,24 @@
-use flax::{fetch::MutGuard, system, Entity, FetchExt, World};
+use std::any::type_name;
+
+use flax::{components::name, fetch::MutGuard, system, Entity, FetchExt, World};
 use glam::{vec3, EulerRot, Quat, Vec2, Vec3};
-use ivy_assets::AssetCache;
+use ivy_assets::{stored::DynamicStore, AssetCache};
 use ivy_core::{
-    components::{engine, main_camera, position, request_capture_mouse, rotation, TransformBundle},
-    update_layer::{Plugin, ScheduleSetBuilder},
+    components::{
+        engine, main_camera, position, request_capture_mouse, rotation, world_transform,
+        TransformBundle,
+    },
+    math::{Axis2D, Axis3D},
+    plugin::{Plugin, PluginContext},
     Bundle, EntityBuilderExt, DEG_90,
 };
+use ivy_graphics::camera::CameraBundle;
 use ivy_input::{
-    components::input_state, types::MouseButton, Action, Axis2D, BindingExt, CompositeBinding,
+    components::input_state, types::MouseButton, Action, BindingExt, CompositeBinding,
     CursorMoveBinding, InputState, MouseButtonBinding, ScrollBinding,
 };
-use ivy_wgpu::components::{environment_data, projection_matrix};
+
+use crate::viewport_camera::CameraViewportPlugin;
 
 flax::component! {
     control_active: bool,
@@ -26,15 +34,10 @@ flax::component! {
 pub struct OrbitCameraPlugin;
 
 impl Plugin for OrbitCameraPlugin {
-    fn install(
-        &self,
-        world: &mut World,
-        _: &AssetCache,
-        schedules: &mut ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
-        Entity::builder().mount(OrbitCameraBundle).spawn(world);
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        Entity::builder().mount(OrbitCameraBundle).spawn(ctx.world);
 
-        schedules
+        ctx.schedules
             .per_tick_mut()
             .with_system(lock_cursor_system())
             .with_system(camera_orbit_system())
@@ -43,12 +46,16 @@ impl Plugin for OrbitCameraPlugin {
 
         Ok(())
     }
+
+    fn after(&self) -> Vec<&str> {
+        vec![type_name::<CameraViewportPlugin>()]
+    }
 }
 
 struct OrbitCameraBundle;
 
 impl Bundle for OrbitCameraBundle {
-    fn mount(self, entity: &mut flax::EntityBuilder) {
+    fn mount(&self, entity: &mut flax::EntityBuilder) {
         let control_action = Action::new()
             .with_binding(MouseButtonBinding::new(MouseButton::Left))
             .with_binding(MouseButtonBinding::new(MouseButton::Right));
@@ -68,9 +75,9 @@ impl Bundle for OrbitCameraBundle {
 
         entity
             .mount(TransformBundle::default())
+            .mount(CameraBundle::default())
+            .set(name(), "OrbitCamera".to_string())
             .set(main_camera(), ())
-            .set_default(projection_matrix())
-            .set_default(environment_data())
             .set(phi(), -0.5)
             .set_default(theta())
             .set_default(focus_point())

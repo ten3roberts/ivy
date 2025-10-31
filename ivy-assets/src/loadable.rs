@@ -1,48 +1,187 @@
-use std::{collections::BTreeMap, future::Future};
+use std::{any::Any, collections::BTreeMap, future::Future, path::PathBuf};
 
-use futures::{stream, StreamExt, TryStreamExt};
+use downcast_rs::{impl_downcast, Downcast, DowncastSync};
+use futures::{future::BoxFuture, stream, FutureExt, StreamExt, TryStreamExt};
 use serde::de::DeserializeOwned;
 
-use crate::{fs::AssetPath, Asset, AssetCache, AsyncAssetDesc};
+use crate::{
+    meta::{AssetMeta, AssetPayload},
+    AssetCache, AssetPath,
+};
 
-pub trait Resource: 'static + Send + Sync + Sized {
-    type Desc: ResourceDesc;
+/// Signifies a type is a endpoint of a resource loading chain.
+///
+/// Many `AsyncAssetDesc` implementations can load to the same type, but this allows a type to
+/// prefer one asset implementation over another.
+pub trait Resource: 'static + Send + Sync {
+    type Desc: LoadablePayload<Output = Self>;
+
+    fn tag_name() -> &'static str;
 }
 
-/// Represents an owned resource that needs to be initialized from its descriptor.
-///
-/// Resources can *access* and load assets, but are themselves not assets.
-pub trait ResourceDesc: 'static + Send + Sync + Sized {
-    type Output: Send + Sync;
-    type Error: Send + Sync;
+pub trait ResourceDyn: Downcast {}
 
-    fn load(
-        self,
+pub trait LoadableDyn: 'static + Send + Sync + DowncastSync {
+    fn load_dyn(
+        &self,
+        meta: AssetMeta,
+        path: PathBuf,
         assets: &AssetCache,
-    ) -> impl Send + Future<Output = Result<Self::Output, Self::Error>>;
+    ) -> BoxFuture<anyhow::Result<Box<dyn ResourceDyn>>>;
+    fn upcast_boxed_any(&self) -> fn(Box<dyn Send + Sync + Any>) -> Box<dyn LoadableDyn>;
+
+    fn clone_dyn(&self) -> Box<dyn LoadableDyn>;
 }
 
-/// Allows a resource to load itself directly from a path, for example a png image.
-///
-/// Any implementation will also implement [`AsyncAssetDesc`] for `AssetPath<Self>`
-pub trait ResourceFromPath: 'static + Send + Sync + Sized {
-    type Error: Send + Sync;
+impl<T> ResourceDyn for T where T: Resource {}
 
-    fn load(
+impl<T> LoadableDyn for T
+where
+    T: Clone + LoadablePayload,
+    T::Output: ResourceDyn,
+{
+    fn load_dyn(
+        &self,
+        meta: AssetMeta,
+        path: PathBuf,
+        assets: &AssetCache,
+    ) -> BoxFuture<anyhow::Result<Box<dyn ResourceDyn>>> {
+        let assets = assets.clone();
+        async move {
+            let resource = self.load(meta, AssetPath::new(path), &assets).await?;
+            Ok(Box::new(resource) as Box<dyn ResourceDyn>)
+        }
+        .boxed()
+    }
+
+    fn clone_dyn(&self) -> Box<dyn LoadableDyn> {
+        Box::new(self.clone())
+    }
+
+    fn upcast_boxed_any(&self) -> fn(Box<dyn Send + Sync + Any>) -> Box<dyn LoadableDyn> {
+        move |value: Box<dyn Send + Sync + Any>| value.downcast::<T>().expect("Failed to downcast")
+    }
+}
+
+impl_downcast!(ResourceDyn);
+impl_downcast!(LoadableDyn);
+
+pub trait LoadFromPath: 'static + Send + Sync + Sized {
+    fn load_from_file(
         path: AssetPath<Self>,
         assets: &AssetCache,
-    ) -> impl Send + Future<Output = Result<Self, Self::Error>>;
+    ) -> impl Send + Future<Output = Result<Self, anyhow::Error>>
+    where
+        Self: Sized;
+
+    fn resource_name() -> Option<&'static str>;
+
+    fn extensions() -> &'static [&'static str];
 }
 
-impl<T> ResourceDesc for Vec<T>
+/// Generic loading mechanism.
+///
+/// Allow converting a plain-description type into a loaded resource.
+///
+/// Further implementations for Vec, Option, and BTreeMap are provided.
+pub trait Loadable: 'static + Send + Sync {
+    /// The type of the resource that this can load.
+    type Output: 'static + Send + Sync;
+
+    fn load(
+        &self,
+        assets: &AssetCache,
+    ) -> impl Send + Future<Output = Result<Self::Output, anyhow::Error>>
+    where
+        Self: Sized;
+}
+
+pub trait LoadablePayload: 'static + Send + Sync {
+    /// The type of the resource that this can load.
+    type Output: 'static + Send + Sync;
+
+    fn load(
+        &self,
+        meta: AssetMeta,
+        path: AssetPath<Self::Output>,
+        assets: &AssetCache,
+    ) -> impl Send + Future<Output = Result<Self::Output, anyhow::Error>>
+    where
+        Self: Sized;
+}
+
+impl<T: 'static + Loadable> LoadablePayload for T {
+    type Output = T::Output;
+
+    async fn load(
+        &self,
+        _meta: AssetMeta,
+        _path: AssetPath<Self::Output>,
+        assets: &AssetCache,
+    ) -> Result<Self::Output, anyhow::Error>
+    where
+        Self: Sized,
+    {
+        self.load(assets).await
+    }
+}
+
+async fn load_asset_payload<T>(
+    path: &AssetPath<T>,
+    assets: &AssetCache,
+) -> anyhow::Result<AssetPayload<T::Desc>>
 where
-    T: ResourceDesc,
+    T: Resource,
+    T::Desc: DeserializeOwned,
+{
+    let content = assets
+        .service::<crate::service::FileSystemMapService>()
+        .load_bytes_async(path.path())
+        .await?;
+
+    let payload: AssetPayload<T::Desc> = serde_json::from_slice(&content[..])?;
+
+    if payload.meta.type_name != T::tag_name() {
+        return Err(anyhow::anyhow!(
+            "Asset type mismatch: expected {}, found {}",
+            payload.meta.type_name,
+            T::tag_name()
+        ));
+    }
+
+    Ok(payload)
+}
+
+impl<T> LoadFromPath for T
+where
+    T: Resource,
+    T::Desc: DeserializeOwned,
+{
+    async fn load_from_file(path: AssetPath<Self>, assets: &AssetCache) -> anyhow::Result<Self>
+    where
+        Self: Sized,
+    {
+        let payload = load_asset_payload(&path, assets).await?;
+        let asset = payload.desc.load(payload.meta, path, assets).await?;
+        Ok(asset)
+    }
+
+    fn resource_name() -> Option<&'static str> {
+        Some(T::tag_name())
+    }
+
+    fn extensions() -> &'static [&'static str] {
+        &["asset"]
+    }
+}
+
+impl<T> Loadable for Vec<T>
+where
+    T: Loadable,
 {
     type Output = Vec<T::Output>;
 
-    type Error = T::Error;
-
-    async fn load(self, assets: &AssetCache) -> Result<Self::Output, Self::Error> {
+    async fn load(&self, assets: &AssetCache) -> Result<Self::Output, anyhow::Error> {
         stream::iter(self)
             .then(|item| item.load(assets))
             .try_collect()
@@ -50,94 +189,32 @@ where
     }
 }
 
-impl<K, V> ResourceDesc for BTreeMap<K, V>
+impl<K, V> Loadable for BTreeMap<K, V>
 where
-    K: 'static + Send + Sync + Ord,
-    V: ResourceDesc,
+    K: 'static + Send + Sync + Ord + Clone,
+    V: Loadable,
 {
     type Output = BTreeMap<K, V::Output>;
 
-    type Error = V::Error;
-
-    async fn load(self, assets: &AssetCache) -> Result<Self::Output, Self::Error> {
-        stream::iter(self)
-            .then(|(k, v)| async move { Ok((k, v.load(assets).await?)) })
+    async fn load(&self, assets: &AssetCache) -> Result<Self::Output, anyhow::Error> {
+        stream::iter(self.iter())
+            .then(|(k, v)| async move { Ok((k.clone(), v.load(assets).await?)) })
             .try_collect()
             .await
     }
 }
 
-impl<T> ResourceDesc for Option<T>
+impl<T> Loadable for Option<T>
 where
-    T: ResourceDesc,
+    T: Loadable,
 {
     type Output = Option<T::Output>;
 
-    type Error = T::Error;
-
-    async fn load(self, assets: &AssetCache) -> Result<Self::Output, Self::Error> {
+    async fn load(&self, assets: &AssetCache) -> Result<Self::Output, anyhow::Error> {
         if let Some(val) = self {
             Ok(Some(val.load(assets).await?))
         } else {
             Ok(None)
         }
-    }
-}
-
-impl<T> ResourceDesc for T
-where
-    T: AsyncAssetDesc,
-{
-    type Output = Asset<T::Output>;
-
-    type Error = anyhow::Error;
-
-    async fn load(self, assets: &AssetCache) -> Result<Self::Output, Self::Error> {
-        let v = assets.try_load_async(&self).await?;
-
-        Ok(v)
-    }
-}
-
-impl<T> AsyncAssetDesc for AssetPath<T>
-where
-    T: ResourceFromPath,
-    T::Error: Into<anyhow::Error>,
-{
-    type Output = T;
-
-    type Error = anyhow::Error;
-
-    async fn create(&self, assets: &AssetCache) -> Result<Asset<Self::Output>, Self::Error> {
-        Ok(assets.insert(T::load(self.clone(), assets).await.map_err(Into::into)?))
-    }
-
-    fn label(&self) -> String {
-        if let Some(filename) = self.path().file_name() {
-            format!("{}({})", tynm::type_name::<T>(), filename.to_string_lossy())
-        } else {
-            format!("{}({})", tynm::type_name::<T>(), self.path().display())
-        }
-    }
-}
-
-#[cfg(feature = "serde")]
-impl<T> ResourceFromPath for T
-where
-    T: Resource,
-    T::Desc: ResourceDesc<Output = T> + DeserializeOwned,
-    <T::Desc as ResourceDesc>::Error: Into<anyhow::Error>,
-{
-    type Error = anyhow::Error;
-
-    async fn load(path: AssetPath<Self>, assets: &AssetCache) -> Result<Self, Self::Error> {
-        let content = assets
-            .service::<crate::service::FileSystemMapService>()
-            .load_bytes_async(path.path())
-            .await?;
-
-        let desc: T::Desc = serde_json::from_slice(&content[..])?;
-
-        desc.load(assets).await.map_err(Into::into)
     }
 }

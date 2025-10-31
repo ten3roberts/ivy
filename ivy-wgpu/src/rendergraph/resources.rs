@@ -36,18 +36,20 @@ slotmap::new_key_type! {
 }
 
 #[derive(Debug)]
-pub enum TextureDesc {
+pub enum RenderGraphImageDesc {
+    /// Texture data is supplied externally before running the render graph
     External,
+    /// Texture data is managed and allocated by the render graph
     Managed(ManagedTextureDesc),
 }
 
-impl From<ManagedTextureDesc> for TextureDesc {
+impl From<ManagedTextureDesc> for RenderGraphImageDesc {
     fn from(v: ManagedTextureDesc) -> Self {
         Self::Managed(v)
     }
 }
 
-impl TextureDesc {
+impl RenderGraphImageDesc {
     pub fn managed(texture: ManagedTextureDesc) -> Self {
         Self::Managed(texture)
     }
@@ -293,7 +295,7 @@ pub struct RenderGraphResources {
     pub(crate) dirty: bool,
     shader_library: Arc<ShaderLibrary>,
 
-    textures: SlotMap<TextureHandle, TextureDesc>,
+    textures: SlotMap<TextureHandle, RenderGraphImageDesc>,
     managed_texture_data: ResourceAllocator<TextureHandle, Texture>,
 
     buffers: SlotMap<BufferHandle, BufferDesc>,
@@ -315,31 +317,31 @@ impl RenderGraphResources {
         }
     }
 
-    pub fn insert_texture(&mut self, texture: impl Into<TextureDesc>) -> TextureHandle {
+    pub fn insert_texture(&mut self, texture: impl Into<RenderGraphImageDesc>) -> TextureHandle {
         self.dirty = true;
         self.textures.insert(texture.into())
     }
 
-    pub fn remove_texture(&mut self, texture: TextureHandle) -> Option<TextureDesc> {
+    pub fn remove_texture(&mut self, texture: TextureHandle) -> Option<RenderGraphImageDesc> {
         self.dirty = true;
         self.textures.remove(texture)
     }
 
-    pub fn get_texture_mut(&mut self, handle: TextureHandle) -> &mut TextureDesc {
+    pub fn get_texture_mut(&mut self, handle: TextureHandle) -> &mut RenderGraphImageDesc {
         self.dirty = true;
         self.modified_resources.insert(handle.into());
         &mut self.textures[handle]
     }
 
-    pub fn get_texture(&self, handle: TextureHandle) -> &TextureDesc {
+    pub fn get_texture(&self, handle: TextureHandle) -> &RenderGraphImageDesc {
         &self.textures[handle]
     }
 
     #[track_caller]
     pub(super) fn get_texture_data(&self, key: TextureHandle) -> &Texture {
         match self.textures.get(key).unwrap() {
-            TextureDesc::External => panic!("Must use external resources"),
-            TextureDesc::Managed(_) => match self.managed_texture_data.get(key) {
+            RenderGraphImageDesc::External => panic!("Must use external resources"),
+            RenderGraphImageDesc::Managed(_) => match self.managed_texture_data.get(key) {
                 Some(v) => v,
                 None => {
                     panic!("No such texture {key:?}");

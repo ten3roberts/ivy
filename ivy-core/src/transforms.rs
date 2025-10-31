@@ -1,26 +1,22 @@
 use flax::{
     components::child_of,
     fetch::{entity_refs, EntityRefs},
-    filter::{All, ChangeFilter},
-    BoxedSystem, ComponentMut, Dfs, DfsBorrow, FetchExt, Query, QueryBorrow, System,
+    filter::All,
+    BoxedSystem, Component, ComponentMut, Dfs, DfsBorrow, Query, QueryBorrow, System,
 };
 use glam::{Mat4, Vec3};
+use ivy_assets::stored::DynamicStore;
 
 use crate::{
     components::{parent_transform, position, world_transform, TransformQuery},
-    update_layer::Plugin,
+    plugin::{Plugin, PluginContext},
 };
 
 pub struct TransformUpdatePlugin;
 
 impl Plugin for TransformUpdatePlugin {
-    fn install(
-        &self,
-        _: &mut flax::World,
-        _: &ivy_assets::AssetCache,
-        schedules: &mut crate::update_layer::ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
-        schedules
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        ctx.schedules
             .per_tick_mut()
             .with_system(update_root_transforms_system());
 
@@ -30,7 +26,7 @@ impl Plugin for TransformUpdatePlugin {
 
 fn update_root_transforms_system() -> BoxedSystem {
     System::builder()
-        .with_query(Query::new(entity_refs()).with_filter(position().modified()))
+        .with_query(Query::new(entity_refs()).with_filter(position()))
         .with_query(
             Query::new((
                 parent_transform().as_mut(),
@@ -40,7 +36,7 @@ fn update_root_transforms_system() -> BoxedSystem {
             .with_strategy(Dfs::new(child_of)),
         )
         .build(
-            |mut query: QueryBorrow<EntityRefs, (All, ChangeFilter<Vec3>)>,
+            |mut query: QueryBorrow<EntityRefs, (All, Component<Vec3>)>,
              mut children: DfsBorrow<
                 '_,
                 (ComponentMut<Mat4>, ComponentMut<Mat4>, TransformQuery),

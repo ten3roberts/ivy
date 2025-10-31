@@ -26,7 +26,7 @@ impl MsaaDepthResolve {
                 ShaderStages::COMPUTE,
                 BindingType::StorageTexture {
                     access: StorageTextureAccess::WriteOnly,
-                    format: wgpu::TextureFormat::R32Float,
+                    format: wgpu::TextureFormat::Rgba16Float,
                     view_dimension: wgpu::TextureViewDimension::D2,
                 },
             )

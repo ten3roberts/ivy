@@ -3,7 +3,7 @@ use ivy_core::layer::events::Event;
 use winit::{dpi::LogicalPosition, event::Modifiers, keyboard::SmolStr};
 pub use winit::{
     event::{ElementState, MouseButton},
-    keyboard::{Key, ModifiersState, NamedKey},
+    keyboard::{Key, KeyCode, ModifiersState, NamedKey, PhysicalKey},
 };
 
 #[derive(Debug, Clone)]
@@ -25,6 +25,7 @@ impl Event for InputEvent {}
 pub struct KeyboardInput {
     pub modifiers: ModifiersState,
     pub key: Key,
+    pub physical_key: PhysicalKey,
     pub state: ElementState,
     pub text: Option<SmolStr>,
 }
@@ -55,7 +56,7 @@ pub struct CursorMoved {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum InputKind {
-    Key(Key),
+    Key(KeyCode),
     MouseButton(MouseButton),
     Modifiers,
     CursorMoved,
@@ -74,7 +75,10 @@ pub struct CursorEntered;
 impl InputEvent {
     pub(crate) fn to_kind(&self) -> InputKind {
         match self {
-            InputEvent::Keyboard(v) => InputKind::Key(v.key.clone()),
+            InputEvent::Keyboard(v) => match v.physical_key {
+                PhysicalKey::Code(code) => InputKind::Key(code),
+                _ => InputKind::Key(KeyCode::F1), // dummy for unidentified
+            },
             InputEvent::MouseButton(v) => InputKind::MouseButton(v.button),
             InputEvent::ModifiersChanged(_) => InputKind::Modifiers,
             InputEvent::CursorMoved(_) => InputKind::CursorMoved,

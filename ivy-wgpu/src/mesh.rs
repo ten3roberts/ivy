@@ -1,19 +1,20 @@
 use std::iter::repeat;
 
-use glam::{UVec4, Vec2, Vec3, Vec4};
+use glam::{vec2, vec3, vec4, UVec4, Vec2, Vec3, Vec4};
 use itertools::{izip, Itertools};
 use ivy_graphics::mesh::{
     MeshData, JOINT_INDEX_ATTRIBUTE, NORMAL_ATTRIBUTE, POSITION_ATTRIBUTE, TANGENT_ATTRIBUTE,
     TEX_COORD_ATTRIBUTE, WEIGHT_ATTRIBUTE,
 };
 use wgpu::{
-    util::DeviceExt, vertex_attr_array, Buffer, RenderPass, VertexAttribute, VertexBufferLayout,
+    util::DeviceExt, vertex_attr_array, Buffer, BufferUsages, RenderPass, VertexAttribute,
+    VertexBufferLayout,
 };
 
 use super::Gpu;
 
 #[repr(C)]
-#[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Debug, Clone)]
+#[derive(bytemuck::Pod, bytemuck::Zeroable, Default, Copy, Debug, Clone)]
 pub struct Vertex {
     pub pos: Vec3,
     pub tex_coord: Vec2,
@@ -26,13 +27,27 @@ pub trait VertexDesc {
 }
 
 impl Vertex {
-    pub const fn new(pos: Vec3, tex_coord: Vec2, normal: Vec3) -> Self {
+    pub const fn new(pos: Vec3, tex_coord: Vec2, normal: Vec3, tangent: Vec4) -> Self {
         Self {
             pos,
             tex_coord,
             normal,
-            tangent: Vec4::ZERO,
+            tangent,
         }
+    }
+
+    pub fn quad() -> (Vec<Vertex>, Vec<u32>) {
+        #[rustfmt::skip]
+        let vertices = [
+            Vertex::new(vec3(-1.0, -1.0, 0.0), vec2(0.0, 0.0), Vec3::Z, vec4(0.0, 0.0, 1.0, 1.0)),
+            Vertex::new(vec3(1.0, -1.0, 0.0), vec2(1.0, 0.0), Vec3::Z, vec4(0.0, 0.0, 1.0, 1.0)),
+            Vertex::new(vec3(1.0, 1.0, 0.0), vec2(1.0, 1.0), Vec3::Z, vec4(0.0, 0.0, 1.0, 1.0)),
+            Vertex::new(vec3(-1.0, 1.0, 0.0), vec2(0.0, 1.0), Vec3::Z, vec4(0.0, 0.0, 1.0, 1.0)),
+        ];
+
+        let indices = [0, 1, 2, 2, 3, 0];
+
+        (vertices.to_vec(), indices.to_vec())
     }
 
     pub(crate) fn compose_from_mesh(mesh: &MeshData) -> Vec<Self> {
@@ -78,6 +93,50 @@ impl VertexDesc for Vertex {
 
         wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: ATTRIBUTES,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(bytemuck::Pod, bytemuck::Zeroable, Default, Copy, Debug, Clone)]
+pub struct ColoredVertex {
+    pub pos: Vec3,
+    pub _padding: f32,
+    pub color: Vec4,
+}
+
+impl ColoredVertex {
+    pub const fn new(pos: Vec3, color: Vec4) -> Self {
+        Self {
+            pos,
+            color,
+            _padding: 0.0,
+        }
+    }
+
+    pub fn quad() -> (Vec<Self>, Vec<u32>) {
+        #[rustfmt::skip]
+        let vertices = [
+            Self::new(vec3(-1.0, -1.0, 0.0), Vec4::ONE),
+            Self::new(vec3(1.0, -1.0, 0.0), Vec4::ONE),
+            Self::new(vec3(1.0, 1.0, 0.0), Vec4::ONE),
+            Self::new(vec3(-1.0, 1.0, 0.0), Vec4::ONE),
+        ];
+
+        let indices = [0, 1, 2, 2, 3, 0];
+
+        (vertices.to_vec(), indices.to_vec())
+    }
+}
+
+impl VertexDesc for ColoredVertex {
+    fn layout() -> VertexBufferLayout<'static> {
+        static ATTRIBUTES: &[VertexAttribute] = &vertex_attr_array![0 => Float32x4, 1 => Float32x4];
+
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Self>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: ATTRIBUTES,
         }
@@ -196,6 +255,20 @@ pub struct Primitive {
     pub index_count: u32,
 }
 
+pub struct MeshDescriptor {
+    pub vertex_buffer_usage: BufferUsages,
+    pub index_buffer_usage: BufferUsages,
+}
+
+impl Default for MeshDescriptor {
+    fn default() -> Self {
+        Self {
+            vertex_buffer_usage: BufferUsages::VERTEX,
+            index_buffer_usage: BufferUsages::INDEX,
+        }
+    }
+}
+
 /// Flat mesh of vertices and indices
 ///
 /// For Gltf, contains the vertices and indices of *all* primitives.
@@ -208,13 +281,18 @@ pub struct Mesh {
 }
 
 impl Mesh {
-    pub fn new(gpu: &Gpu, vertices: &[Vertex], indices: &[u32]) -> Self {
+    pub fn new<T: bytemuck::NoUninit + VertexDesc>(
+        gpu: &Gpu,
+        vertices: &[T],
+        indices: &[u32],
+        desc: MeshDescriptor,
+    ) -> Self {
         let vertex_buffer = gpu
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Vertex Buffer"),
                 contents: bytemuck::cast_slice(vertices),
-                usage: wgpu::BufferUsages::VERTEX,
+                usage: desc.vertex_buffer_usage,
             });
 
         let index_buffer = gpu
@@ -222,7 +300,7 @@ impl Mesh {
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Index Buffer"),
                 contents: bytemuck::cast_slice(indices),
-                usage: wgpu::BufferUsages::INDEX,
+                usage: desc.index_buffer_usage,
             });
 
         Self {

@@ -9,7 +9,9 @@ use futures::AsyncReadExt;
 use thiserror::Error;
 
 /// A service is registered with the asset cache and is used to load assets.
-pub trait Service: 'static + Send + Sync + Downcast {}
+pub trait Service: 'static + Send + Sync + Downcast {
+    fn register(&self, _assets: &crate::AssetCache) {}
+}
 
 pub trait Downcast {
     fn as_any(&self) -> &dyn std::any::Any;
@@ -60,6 +62,10 @@ impl FileSystemMapService {
         Self { root: root.into() }
     }
 
+    pub fn get_system_path(&self, path: impl AsRef<Path>) -> PathBuf {
+        self.root.join(path.as_ref())
+    }
+
     pub fn load_reader(&self, path: impl AsRef<Path>) -> Result<BufReader<File>, FsAssetError> {
         let path = path.as_ref();
 
@@ -105,5 +111,9 @@ impl FileSystemMapService {
             path: path.into(),
             error: err,
         })
+    }
+
+    pub fn root(&self) -> &PathBuf {
+        &self.root
     }
 }

@@ -7,7 +7,7 @@ pub mod shadowmapping;
 
 use std::any::type_name;
 
-use flax::{fetch::entity_refs, Component, EntityRef, Query, World};
+use flax::{fetch::entity_refs, Component, Entity, EntityRef, Query, World};
 use glam::{Mat4, Vec3};
 use itertools::Itertools;
 use ivy_assets::{
@@ -16,10 +16,9 @@ use ivy_assets::{
 };
 use ivy_core::{
     components::{color, main_camera, world_transform},
-    impl_for_tuples,
-    palette::Srgb,
-    to_linear_vec3, Bundle, Color, ColorExt,
+    impl_for_tuples, to_linear_vec3, Bundle, Color, ColorExt,
 };
+use ivy_graphics::camera::{environment_data, projection_matrix};
 use ivy_wgpu_types::shader::TargetDesc;
 pub use light_manager::LightManager;
 pub use object_manager::ObjectManager;
@@ -30,8 +29,8 @@ use wgpu::{
 };
 
 use crate::{
-    components::{environment_data, mesh, projection_matrix},
-    material_desc::MaterialData,
+    components::mesh,
+    effect_desc::RenderEffect,
     mesh_desc::MeshDesc,
     rendergraph::{Dependency, Node, NodeUpdateContext, TextureHandle, UpdateResult},
     types::{BindGroupBuilder, BindGroupLayoutBuilder, RenderShader, TypedBuffer},
@@ -224,23 +223,6 @@ impl SkyboxTextures {
     }
 }
 
-#[derive(Default, Debug, Clone, Copy)]
-pub struct EnvironmentData {
-    pub fog_color: Srgb,
-    pub fog_density: f32,
-    pub fog_blend: f32,
-}
-
-impl EnvironmentData {
-    pub fn new(fog_color: Srgb, fog_density: f32, fog_blend: f32) -> Self {
-        Self {
-            fog_color,
-            fog_density,
-            fog_blend,
-        }
-    }
-}
-
 pub fn get_main_camera_data(world: &World) -> Option<CameraData> {
     Query::new(entity_refs())
         .with(main_camera())
@@ -264,10 +246,13 @@ pub fn get_camera_data(camera: &EntityRef) -> CameraData {
         fog_color: to_linear_vec3(env_data.fog_color),
         fog_density: env_data.fog_density,
         fog_blend: env_data.fog_blend,
+        fog_height: env_data.fog_height,
+        ..Default::default()
     }
 }
 
 pub struct CameraNode {
+    camera: Option<Entity>,
     renderer: Box<dyn CameraRenderer>,
     shader_data: CameraShaderData,
     depth_texture: TextureHandle,
@@ -304,6 +289,7 @@ impl CameraNode {
             output,
             skybox,
             bind_group: None,
+            camera: None,
         }
     }
 }
@@ -324,14 +310,18 @@ impl Node for CameraNode {
             .first()
         {
             self.shader_data.data = get_camera_data(&camera);
+            self.camera = Some(camera.id());
 
             self.shader_data
                 .buffer
                 .write(&ctx.gpu.queue, 0, &[self.shader_data.data]);
+        } else {
+            self.shader_data.data = Default::default();
+            self.camera = None;
+            self.bind_group = None;
         }
-
         self.light_manager.update(&ctx)?;
-        let object_manager = ctx.store.get_mut(&self.object_manager);
+        let object_manager = &mut *ctx.store.get_mut(&self.object_manager);
 
         object_manager.update(ctx.world, ctx.gpu)?;
 
@@ -353,6 +343,10 @@ impl Node for CameraNode {
     }
 
     fn draw(&mut self, ctx: crate::rendergraph::NodeExecutionContext) -> anyhow::Result<()> {
+        if self.camera.is_none() {
+            return Ok(());
+        }
+
         let depth = ctx.get_texture(self.depth_texture);
 
         let depth_view = depth.create_view(&Default::default());
@@ -439,7 +433,7 @@ impl Node for CameraNode {
         let output = ctx.get_texture(self.output);
         let output_view = output.create_view(&Default::default());
 
-        let object_manager = ctx.store.get_mut(&self.object_manager);
+        let object_manager = &mut *ctx.store.get_mut(&self.object_manager);
 
         let render_context = RenderContext {
             world: ctx.world,
@@ -541,9 +535,13 @@ pub struct CameraData {
     pub view: Mat4,
     pub proj: Mat4,
     pub camera_pos: Vec3,
-    pub fog_blend: f32,
+    _pad1: f32,
     pub fog_color: Vec3,
+    _pad2: f32,
+    pub fog_blend: f32,
     pub fog_density: f32,
+    pub fog_height: f32,
+    _pad3: f32,
 }
 
 pub struct CameraShaderData {
@@ -578,14 +576,15 @@ impl CameraShaderData {
     }
 }
 
+// TODO: remove
 pub struct RenderObjectBundle<'a> {
     pub mesh: MeshDesc,
     pub color: Color,
-    pub materials: &'a [(Component<MaterialData>, MaterialData)],
+    pub materials: &'a [(Component<RenderEffect>, RenderEffect)],
 }
 
 impl<'a> RenderObjectBundle<'a> {
-    pub fn new(mesh: MeshDesc, materials: &'a [(Component<MaterialData>, MaterialData)]) -> Self {
+    pub fn new(mesh: MeshDesc, materials: &'a [(Component<RenderEffect>, RenderEffect)]) -> Self {
         Self {
             mesh,
             materials,
@@ -595,12 +594,36 @@ impl<'a> RenderObjectBundle<'a> {
 }
 
 impl Bundle for RenderObjectBundle<'_> {
-    fn mount(self, entity: &mut flax::EntityBuilder) {
-        entity.set(mesh(), self.mesh).set(color(), self.color);
+    fn mount(&self, entity: &mut flax::EntityBuilder) {
+        entity
+            .set(mesh(), self.mesh.clone())
+            .set(color(), self.color);
 
         for (pass, material) in self.materials {
             entity.set(*pass, material.clone());
         }
+    }
+}
+
+pub struct MeshBundle {
+    pub mesh: MeshDesc,
+    pub color: Color,
+}
+
+impl MeshBundle {
+    pub fn new(mesh: MeshDesc) -> Self {
+        Self {
+            mesh,
+            color: Color::white(),
+        }
+    }
+}
+
+impl Bundle for MeshBundle {
+    fn mount(&self, entity: &mut flax::EntityBuilder) {
+        entity
+            .set(mesh(), self.mesh.clone())
+            .set(color(), self.color);
     }
 }
 

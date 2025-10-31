@@ -5,7 +5,7 @@ var<uniform> dimensions: vec3<u32>;
 var input: texture_depth_multisampled_2d;
 
 @group(0) @binding(2)
-var output: texture_storage_2d<r32float, write>;
+var output: texture_storage_2d<rgba16float, write>;
 
 @compute @workgroup_size(1)
 fn main(@builtin(global_invocation_id) id: vec3<u32>) {
@@ -22,5 +22,5 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
         total = min(total, value);
     }
 
-    textureStore(output, coords, vec4(total));
+    textureStore(output, coords, vec4(total, 0.0, 0.0, 1.0));
 }

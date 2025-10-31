@@ -7,7 +7,10 @@ use std::time::Duration;
 pub use builder::*;
 pub use event::*;
 use flax::World;
-use ivy_assets::{service::FileSystemMapService, stored::DynamicStore, AssetCache};
+use ivy_assets::{
+    hotreload::FileReloadService, service::FileSystemMapService,
+    services::filesystem_index::FileSystemIndexService, stored::DynamicStore, AssetCache,
+};
 
 use self::driver::Driver;
 use crate::{
@@ -35,6 +38,16 @@ impl App {
     pub fn new() -> Self {
         let asset_cache = AssetCache::new();
         asset_cache.register_service(FileSystemMapService::new("./assets"));
+        asset_cache.register_service(FileSystemIndexService::new());
+
+        match FileReloadService::new() {
+            Ok(v) => {
+                asset_cache.register_service(v);
+            }
+            Err(err) => {
+                tracing::error!("Failed to create file reload service: {:?}", err);
+            }
+        }
 
         let mut world = World::new();
         world
@@ -73,6 +86,7 @@ impl App {
             layer.register_dyn(
                 &mut self.world,
                 &self.assets,
+                &mut self.store,
                 &mut self.event_registry,
                 index,
             )?;

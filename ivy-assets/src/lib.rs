@@ -24,8 +24,9 @@
 use std::{
     any::{Any, TypeId},
     borrow::Borrow,
-    collections::HashMap,
-    fmt::{Debug, Display},
+    collections::{hash_map, HashMap},
+    error::Error,
+    fmt::{format, Debug, Display},
     future::Future,
     hash::Hash,
     ops::Deref,
@@ -34,18 +35,26 @@ use std::{
     time::Duration,
 };
 
-use async_std::task::sleep;
-use dashmap::DashMap;
+use anyhow::Context;
+use async_std::{path::PathBuf, task::sleep};
+use dashmap::{
+    mapref::one::{MappedRef, MappedRefMut},
+    DashMap,
+};
 
+mod asset_path;
 pub mod cell;
 pub mod fs;
 mod handle;
+pub mod hotreload;
 pub mod loadable;
 pub mod map;
+pub mod meta;
+pub mod registry;
 pub mod service;
+pub mod services;
 pub mod stored;
 pub mod timeline;
-use fs::AssetPath;
 use futures::{
     future::{BoxFuture, Shared, WeakShared},
     FutureExt, TryFutureExt,
@@ -54,12 +63,17 @@ use futures_signals::signal::{Mutable, ReadOnlyMutable};
 pub use handle::Asset;
 use image::DynamicImage;
 use ivy_profiling::profile_scope;
-use loadable::ResourceFromPath;
 use parking_lot::{RwLock, RwLockReadGuard};
 use service::{FileSystemMapService, Service};
 use timeline::{AssetInfo, Timelines};
 
-use self::{cell::AssetCell, handle::WeakHandle};
+use crate::loadable::LoadFromPath;
+pub use crate::loadable::Resource;
+
+use self::{cell::AssetCell, handle::WeakAsset};
+
+pub use asset_path::*;
+pub use ivy_derive::Resource;
 
 slotmap::new_key_type! {
     pub struct AssetId;
@@ -82,35 +96,124 @@ impl Debug for AssetCache {
     }
 }
 
-#[derive(Debug)]
-pub struct SharedError<E>(Arc<E>);
+pub struct SharedError(Arc<anyhow::Error>);
 
-impl<E: Display> Display for SharedError<E> {
+impl Display for SharedError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Display::fmt(&self.0, f)
     }
 }
 
-impl<E: Debug + Display> std::error::Error for SharedError<E> {}
+impl std::error::Error for SharedError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.0.source()
+    }
+}
 
-impl<E> Clone for SharedError<E> {
+impl Debug for SharedError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(&self.0, f)
+    }
+}
+
+impl Clone for SharedError {
     #[cold]
     fn clone(&self) -> Self {
         Self(self.0.clone())
     }
 }
 
-type KeyMap<K, V> = DashMap<K, WeakHandle<V>>;
+type KeyMap<K, V> = DashMap<K, WeakAsset<V>>;
 type PendingKeyMap<K, V> = DashMap<
     <K as StoredKey>::Stored,
-    WeakShared<BoxFuture<'static, Result<Asset<V>, SharedError<<K as AsyncAssetDesc>::Error>>>>,
+    WeakShared<BoxFuture<'static, Result<Asset<V>, SharedError>>>,
 >;
+
+struct ShardedTypeMap {
+    inner: DashMap<TypeId, Box<dyn Any + Send + Sync>>,
+}
+
+impl ShardedTypeMap {
+    pub fn new() -> Self {
+        Self {
+            inner: DashMap::new(),
+        }
+    }
+
+    pub fn get<T: 'static + Send + Sync>(
+        &self,
+    ) -> std::option::Option<MappedRef<'_, TypeId, Box<dyn Any + Send + Sync>, T>> {
+        self.inner.get(&TypeId::of::<T>()).map(|v| {
+            dashmap::mapref::one::Ref::map(v, |v| v.downcast_ref::<T>().expect("Type mismatch"))
+        })
+    }
+
+    pub fn entry<T: 'static + Send + Sync>(
+        &self,
+    ) -> dashmap::Entry<'_, TypeId, Box<dyn Any + Send + Sync>> {
+        self.inner.entry(TypeId::of::<T>())
+    }
+
+    pub fn entry_or_default<T: 'static + Send + Sync + Default>(
+        &self,
+    ) -> MappedRefMut<'_, TypeId, Box<dyn Any + Send + Sync>, T> {
+        match self.entry::<T>() {
+            dashmap::Entry::Occupied(occupied_entry) => occupied_entry
+                .into_ref()
+                .map(|v| v.downcast_mut::<T>().expect("Type mismatch")),
+            dashmap::Entry::Vacant(vacant_entry) => {
+                let value = Box::new(T::default());
+                vacant_entry
+                    .insert(value)
+                    .map(|v| v.downcast_mut::<T>().expect("Type mismatch"))
+            }
+        }
+    }
+}
+
+struct LocalTypeMap {
+    inner: HashMap<TypeId, Box<dyn Any>>,
+}
+
+impl LocalTypeMap {
+    pub fn new() -> Self {
+        Self {
+            inner: HashMap::new(),
+        }
+    }
+
+    pub fn get<T: 'static>(&self) -> std::option::Option<&T> {
+        self.inner
+            .get(&TypeId::of::<T>())
+            .map(|v| v.downcast_ref::<T>().expect("Type mismatch"))
+    }
+
+    pub fn entry<T: 'static>(&mut self) -> hash_map::Entry<'_, TypeId, Box<dyn Any>> {
+        self.inner.entry(TypeId::of::<T>())
+    }
+
+    pub fn entry_or_default<T: 'static + Default>(&mut self) -> &mut T {
+        match self.entry::<T>() {
+            hash_map::Entry::Occupied(occupied_entry) => occupied_entry
+                .into_mut()
+                .downcast_mut::<T>()
+                .expect("Type mismatch"),
+            hash_map::Entry::Vacant(vacant_entry) => {
+                let value = Box::new(T::default());
+                vacant_entry
+                    .insert(value)
+                    .downcast_mut::<T>()
+                    .expect("Type mismatch")
+            }
+        }
+    }
+}
 
 /// Stores assets which are accessible through handles
 struct AssetCacheInner {
-    pending_keys: DashMap<TypeId, Box<dyn Any + Send + Sync>>,
-    keys: DashMap<TypeId, Box<dyn Any + Send + Sync>>,
-    cells: DashMap<TypeId, Box<dyn Any + Send + Sync>>,
+    pending_keys: ShardedTypeMap,
+    keys: ShardedTypeMap,
+    cells: ShardedTypeMap,
     services: RwLock<HashMap<TypeId, Box<dyn Service + Send>>>,
     timelines: Mutable<Timelines>,
 }
@@ -119,10 +222,10 @@ impl AssetCache {
     pub fn new() -> Self {
         Self {
             inner: Arc::new(AssetCacheInner {
-                keys: DashMap::new(),
-                cells: DashMap::new(),
+                keys: ShardedTypeMap::new(),
+                cells: ShardedTypeMap::new(),
+                pending_keys: ShardedTypeMap::new(),
                 services: Default::default(),
-                pending_keys: DashMap::new(),
                 timelines: Mutable::new(Timelines::new()),
             }),
             span: None,
@@ -175,10 +278,7 @@ impl AssetCache {
 
         self.inner
             .keys
-            .entry(TypeId::of::<(K::Stored, K::Output)>())
-            .or_insert_with(|| Box::<KeyMap<K::Stored, K::Output>>::default())
-            .downcast_mut::<KeyMap<K::Stored, K::Output>>()
-            .unwrap()
+            .entry_or_default::<KeyMap<K::Stored, K::Output>>()
             .insert(desc.to_stored(), value.downgrade());
 
         Ok(value)
@@ -197,9 +297,9 @@ impl AssetCache {
         }
     }
 
-    pub fn try_load_async<K>(&self, desc: &K) -> AssetLoadFuture<K::Output, K::Error>
+    pub fn try_load_async<K>(&self, desc: &K) -> AssetLoadFuture<K::Output>
     where
-        K: ?Sized + AsyncAssetDesc,
+        K: ?Sized + AsyncAssetKey,
     {
         if let Some(handle) = self.get_async(desc) {
             return AssetLoadFuture {
@@ -208,15 +308,9 @@ impl AssetCache {
         }
 
         {
-            let pending = self
-                .inner
-                .pending_keys
-                .get(&TypeId::of::<(K::Stored, K::Output)>());
-            if let Some(pending) = pending {
-                let pending = pending
-                    .downcast_ref::<PendingKeyMap<K, K::Output>>()
-                    .unwrap();
+            let pending = self.inner.pending_keys.get::<PendingKeyMap<K, K::Output>>();
 
+            if let Some(pending) = pending {
                 if let Some(fut) = pending.get(desc).and_then(|v| WeakShared::upgrade(&v)) {
                     return AssetLoadFuture { inner: Err(fut) };
                 }
@@ -228,7 +322,6 @@ impl AssetCache {
             asset_type: TypeId::of::<K::Output>(),
             type_name: tynm::type_name::<K::Output>(),
         };
-
         let span_id = self.inner.timelines.lock_mut().open_span(info, self.span);
 
         let assets = Self {
@@ -246,7 +339,7 @@ impl AssetCache {
                 .borrow()
                 .create(&assets)
                 .await
-                .map_err(|v| SharedError(Arc::new(v)));
+                .map_err(|v| SharedError(Arc::new(v.into())));
 
             assets
                 .inner
@@ -265,10 +358,7 @@ impl AssetCache {
             assets
                 .inner
                 .keys
-                .entry(TypeId::of::<(K::Stored, K::Output)>())
-                .or_insert_with(|| Box::<KeyMap<K::Stored, K::Output>>::default())
-                .downcast_mut::<KeyMap<K::Stored, K::Output>>()
-                .unwrap()
+                .entry_or_default::<KeyMap<K::Stored, K::Output>>()
                 .insert(desc, value.downgrade());
 
             Ok(value)
@@ -277,15 +367,11 @@ impl AssetCache {
         .shared();
 
         {
-            let mut pending = self
+            let pending = self
                 .inner
                 .pending_keys
-                .entry(TypeId::of::<(K::Stored, K::Output)>())
-                .or_insert_with(|| Box::new(PendingKeyMap::<K, K::Output>::new()));
+                .entry_or_default::<PendingKeyMap<K, K::Output>>();
 
-            let pending = pending
-                .downcast_mut::<PendingKeyMap<K, K::Output>>()
-                .unwrap();
             pending.insert(stored, fut.downgrade().unwrap());
         }
 
@@ -294,7 +380,7 @@ impl AssetCache {
         AssetLoadFuture { inner: Err(fut) }
     }
 
-    pub async fn load_async<K: AsyncAssetDesc + ?Sized>(&self, key: &K) -> Asset<K::Output> {
+    pub async fn load_async<K: AsyncAssetKey + ?Sized>(&self, key: &K) -> Asset<K::Output> {
         match self.try_load_async(key).await {
             Ok(v) => v,
             Err(err) => {
@@ -309,35 +395,21 @@ impl AssetCache {
         K: ?Sized + AssetDesc,
     {
         // Keys of K
-        let keys = self
-            .inner
-            .keys
-            .get(&TypeId::of::<(K::Stored, K::Output)>())?;
+        let keys = self.inner.keys.get::<KeyMap<K::Stored, K::Output>>()?;
 
-        let handle = keys
-            .downcast_ref::<KeyMap<K::Stored, K::Output>>()
-            .unwrap()
-            .get(key)?
-            .upgrade()?;
+        let handle = keys.get(key)?.upgrade()?;
 
         Some(handle)
     }
 
     pub fn get_async<K>(&self, key: &K) -> Option<Asset<K::Output>>
     where
-        K: ?Sized + AsyncAssetDesc,
+        K: ?Sized + AsyncAssetKey,
     {
         // Keys of K
-        let keys = self
-            .inner
-            .keys
-            .get(&TypeId::of::<(K::Stored, K::Output)>())?;
+        let keys = self.inner.keys.get::<KeyMap<K::Stored, K::Output>>()?;
 
-        let handle = keys
-            .downcast_ref::<KeyMap<K::Stored, K::Output>>()
-            .unwrap()
-            .get(key)?
-            .upgrade()?;
+        let handle = keys.get(key)?.upgrade()?;
 
         Some(handle)
     }
@@ -348,14 +420,28 @@ impl AssetCache {
     pub fn insert<V: 'static + Send + Sync>(&self, value: V) -> Asset<V> {
         self.inner
             .cells
-            .entry(TypeId::of::<V>())
-            .or_insert_with(|| Box::new(AssetCell::<V>::new()))
-            .downcast_mut::<AssetCell<V>>()
-            .unwrap()
+            .entry_or_default::<AssetCell<V>>()
             .insert(value)
     }
 
+    pub fn reload<K: AsyncAssetKey>(&self, key: &K) -> AssetLoadFuture<K::Output> {
+        // Remove the key from the pending keys
+        let pending = self.inner.pending_keys.get::<PendingKeyMap<K, K::Output>>();
+        if let Some(pending) = pending {
+            pending.remove(key);
+        }
+
+        self.inner
+            .keys
+            .get::<KeyMap<K::Stored, K::Output>>()
+            .and_then(|v| v.remove(key));
+
+        // Try to load the asset again
+        self.try_load_async(key)
+    }
+
     pub fn register_service<S: Service>(&self, service: S) {
+        service.register(self);
         self.inner
             .services
             .write()
@@ -370,6 +456,18 @@ impl AssetCache {
                 .downcast_ref::<S>()
                 .expect("Service type mismatch")
         })
+    }
+
+    pub fn try_get_service<S: Service>(&self) -> Option<impl Deref<Target = S> + '_ + Send> {
+        RwLockReadGuard::try_map(self.inner.services.read(), |v| {
+            Some(
+                v.get(&TypeId::of::<S>())?
+                    .as_any()
+                    .downcast_ref::<S>()
+                    .expect("Service type mismatch"),
+            )
+        })
+        .ok()
     }
 
     /// Returns asset loading timelines
@@ -416,16 +514,16 @@ where
 }
 
 pub trait AsyncAssetExt<V>: 'static + Send + Sync {
-    fn load_async(&self, assets: &AssetCache) -> AssetLoadFuture<V, anyhow::Error>;
+    fn load_async(&self, assets: &AssetCache) -> AssetLoadFuture<V>;
 }
 
 impl<T, V> AsyncAssetExt<V> for T
 where
-    T: AsyncAssetDesc<Output = V>,
+    T: AsyncAssetKey<Output = V>,
     T::Error: Debug + Display,
     V: 'static + Send + Sync,
 {
-    fn load_async(&self, assets: &AssetCache) -> AssetLoadFuture<V, anyhow::Error> {
+    fn load_async(&self, assets: &AssetCache) -> AssetLoadFuture<V> {
         let fut = assets.try_load_async(self);
         let inner = match fut.inner {
             Ok(v) => Ok(v.map_err(|v| SharedError(Arc::new(anyhow::Error::from(v))))),
@@ -459,7 +557,7 @@ pub trait AssetDesc: StoredKey + Debug {
 /// Assets are immutable, and shared.
 ///
 /// For mutable and owned/exclusive resource loading, refer to [`Loadable`]
-pub trait AsyncAssetDesc: StoredKey + Debug + Send + Sync {
+pub trait AsyncAssetKey: StoredKey + Debug + Send + Sync {
     type Output: 'static + Send + Sync;
     type Error: Send + Sync + 'static + Debug + Display + Into<anyhow::Error>;
 
@@ -476,15 +574,39 @@ pub trait AsyncAssetDesc: StoredKey + Debug + Send + Sync {
     }
 }
 
-impl ResourceFromPath for DynamicImage {
-    type Error = anyhow::Error;
+/// We implement `LoadFromPath` for `DynamicImage`, which causes `AssetPath<DynamicImage>` to be
+/// an `AsyncAssetDesc` that can be used to load images and cache images from the filesystem.
+// impl LoadFromPath for DynamicImage {
+//     type Error = anyhow::Error;
 
-    async fn load(path: AssetPath<Self>, assets: &AssetCache) -> anyhow::Result<Self> {
-        let format = image::ImageFormat::from_path(path.path())?;
+//     async fn load(path: AssetPath<Self>, assets: &AssetCache) -> anyhow::Result<Self> {
+//         let format = image::ImageFormat::from_path(path.path())?;
+//         let data = assets
+//             .service::<FileSystemMapService>()
+//             .load_bytes_async(path.path())
+//             .await?;
+
+//         let image = async_std::task::spawn_blocking(move || {
+//             profile_scope!("load_image_blocking");
+//             image::load_from_memory_with_format(&data, format)
+//         })
+//         .await?;
+//         Ok(image)
+//     }
+// }
+
+impl LoadFromPath for DynamicImage {
+    async fn load_from_file(
+        path: AssetPath<DynamicImage>,
+        assets: &AssetCache,
+    ) -> Result<Self, anyhow::Error> {
+        let format = image::ImageFormat::from_path(path.path())
+            .with_context(|| format!("Failed to guess image format from path: {path:?}"))?;
         let data = assets
             .service::<FileSystemMapService>()
             .load_bytes_async(path.path())
-            .await?;
+            .await
+            .with_context(|| format!("Could not load bytes from path: {path:?}"))?;
 
         let image = async_std::task::spawn_blocking(move || {
             profile_scope!("load_image_blocking");
@@ -493,18 +615,26 @@ impl ResourceFromPath for DynamicImage {
         .await?;
         Ok(image)
     }
+
+    fn resource_name() -> Option<&'static str> {
+        None
+    }
+
+    fn extensions() -> &'static [&'static str] {
+        &["png", "jpg", "jpeg", "bmp", "tga", "gif", "webp", "tiff"]
+    }
 }
 
-type SharedLoadFuture<T, E> = Shared<BoxFuture<'static, Result<Asset<T>, SharedError<E>>>>;
+type SharedLoadFuture<T> = Shared<BoxFuture<'static, Result<Asset<T>, SharedError>>>;
 
-pub struct AssetLoadFuture<T, E> {
-    inner: Result<Result<Asset<T>, SharedError<E>>, SharedLoadFuture<T, E>>,
+pub struct AssetLoadFuture<T> {
+    inner: Result<Result<Asset<T>, SharedError>, SharedLoadFuture<T>>,
 }
 
-impl<T, E> AssetLoadFuture<T, E> {
+impl<T> AssetLoadFuture<T> {
     /// Returns the value if loaded
     /// Can be called multiple times until loaded
-    pub fn try_get(&self) -> Option<Result<Asset<T>, SharedError<E>>> {
+    pub fn try_get(&self) -> Option<Result<Asset<T>, SharedError>> {
         match &self.inner {
             Ok(v) => Some(v.clone()),
             Err(v) => v.peek().cloned(),
@@ -512,8 +642,8 @@ impl<T, E> AssetLoadFuture<T, E> {
     }
 }
 
-impl<T, E> Future for AssetLoadFuture<T, E> {
-    type Output = Result<Asset<T>, SharedError<E>>;
+impl<T> Future for AssetLoadFuture<T> {
+    type Output = Result<Asset<T>, SharedError>;
 
     fn poll(
         mut self: std::pin::Pin<&mut Self>,
@@ -597,15 +727,15 @@ mod tests {
         #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
         struct Key(String);
 
-        impl AsyncAssetDesc for Key {
+        impl AsyncAssetKey for Key {
             type Output = ();
             type Error = Infallible;
 
             async fn create(&self, assets: &AssetCache) -> Result<Asset<()>, Infallible> {
-                eprintln!("Loading {:?}", self);
+                eprintln!("Loading {self:?}");
                 YieldOnce { yielded: false }.await;
 
-                eprintln!("Finished {:?}", self);
+                eprintln!("Finished {self:?}");
                 Ok(assets.insert(()))
             }
         }

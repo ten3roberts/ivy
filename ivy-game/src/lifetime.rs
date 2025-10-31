@@ -1,9 +1,10 @@
 use std::time::Duration;
 
 use flax::{component, components::child_of, system, CommandBuffer, Debuggable, Entity, FetchExt};
+use ivy_assets::stored::DynamicStore;
 use ivy_core::{
     components::{delta_time, engine},
-    update_layer::Plugin,
+    plugin::{Plugin, PluginContext},
 };
 
 component! {
@@ -34,13 +35,10 @@ impl Lifetime {
 pub struct LifetimePlugin;
 
 impl Plugin for LifetimePlugin {
-    fn install(
-        &self,
-        _: &mut flax::World,
-        _: &ivy_assets::AssetCache,
-        schedules: &mut ivy_core::update_layer::ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
-        schedules.fixed_mut().with_system(Lifetime::update_system());
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        ctx.schedules
+            .fixed_mut()
+            .with_system(Lifetime::update_system());
 
         Ok(())
     }

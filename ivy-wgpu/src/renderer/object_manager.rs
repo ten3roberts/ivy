@@ -241,6 +241,14 @@ impl ObjectManager {
     fn update_object_data(&mut self, world: &World, gpu: &Gpu) {
         profile_function!();
         for (&loc, item) in &mut self.object_query.borrow(world) {
+            if loc >= self.object_data.len() {
+                tracing::warn!(
+                    ?loc,
+                    "skipping invalid object buffer index. Items: {}",
+                    self.object_data.len()
+                );
+                continue;
+            }
             assert_ne!(loc, usize::MAX);
             let object_data = &mut self.object_data[loc];
             object_data.transform = *item.transform;

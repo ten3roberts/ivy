@@ -1,10 +1,16 @@
 use std::{future::ready, mem::size_of};
 
+use bytemuck::{Pod, Zeroable};
 use flax::World;
 use futures::{stream, StreamExt};
+use glam::Vec2;
 use image::DynamicImage;
-use ivy_assets::{stored::DynamicStore, AssetCache, AsyncAssetExt};
-use ivy_ui::{node::UiRenderNode, SharedUiInstance};
+use ivy_assets::{
+    stored::{DynamicStore, Handle},
+    AssetCache, AssetPath, AsyncAssetExt,
+};
+use ivy_core::components::engine;
+use ivy_ui::{components::ui_instance, node::UiRenderNode, violet::wgpu::app::AppInstance};
 use ivy_wgpu::{
     components::{forward_pass, transparent_pass},
     renderer::{
@@ -13,8 +19,8 @@ use ivy_wgpu::{
         shadowmapping::{LightShadowCamera, ShadowMapNode},
         CameraNode, LightManager, MsaaResolve, ObjectManager, SkyboxTextures,
     },
-    rendergraph::{BufferDesc, ManagedTextureDesc, RenderGraph, TextureHandle},
-    types::{texture::max_mip_levels, PhysicalSize},
+    rendergraph::{BufferDesc, ManagedTextureDesc, Node, RenderGraph, TextureHandle},
+    types::{texture::max_mip_levels, PhysicalSize, TypedBuffer},
     Gpu,
 };
 use wgpu::{BufferUsages, Extent3d, TextureDimension, TextureFormat};
@@ -22,16 +28,94 @@ use wgpu::{BufferUsages, Extent3d, TextureDimension, TextureFormat};
 use crate::{
     bloom::BloomNode,
     depth_resolve::MsaaDepthResolve,
+    dof::DepthOfFieldNode,
+    effects::{
+        BloomConfig, ColorGradingConfig, DofConfig, MsaaConfig, PostProcessingEffect,
+        ShadowMapConfig, SkyboxConfig,
+    },
     hdri::{HdriProcessor, HdriProcessorNode},
     skybox::SkyboxRenderer,
     tonemap::TonemapNode,
 };
 
+/// Dynamic color grading controller for smooth transitions
+#[derive(Clone)]
+pub enum EasingFunction {
+    Linear,
+    SmoothStep,
+    Exponential,
+}
+
+pub struct ColorGradingController {
+    current: ColorGradingConfig,
+    target: ColorGradingConfig,
+    transition_duration: f32,
+    elapsed_time: f32,
+    easing_function: EasingFunction,
+}
+
+impl ColorGradingController {
+    pub fn new(initial_config: ColorGradingConfig) -> Self {
+        Self {
+            current: initial_config.clone(),
+            target: initial_config,
+            transition_duration: 0.0,
+            elapsed_time: 0.0,
+            easing_function: EasingFunction::SmoothStep,
+        }
+    }
+
+    pub fn transition_to(&mut self, target: ColorGradingConfig, duration: f32) {
+        self.target = target;
+        self.transition_duration = duration;
+        self.elapsed_time = 0.0;
+    }
+
+    pub fn update(&mut self, delta_time: f32) -> &ColorGradingConfig {
+        if self.elapsed_time < self.transition_duration {
+            self.elapsed_time += delta_time;
+            let t = (self.elapsed_time / self.transition_duration).min(1.0);
+            let eased_t = self.apply_easing(t);
+
+            self.current = self.interpolate_configs(&self.current, &self.target, eased_t);
+        }
+        &self.current
+    }
+
+    fn interpolate_configs(
+        &self,
+        a: &ColorGradingConfig,
+        b: &ColorGradingConfig,
+        t: f32,
+    ) -> ColorGradingConfig {
+        ColorGradingConfig {
+            exposure: a.exposure + (b.exposure - a.exposure) * t,
+            contrast: a.contrast + (b.contrast - a.contrast) * t,
+            saturation: a.saturation + (b.saturation - a.saturation) * t,
+            lift: a.lift.lerp(b.lift, t),
+            gamma: a.gamma.lerp(b.gamma, t),
+            gain: a.gain.lerp(b.gain, t),
+            temperature: a.temperature + (b.temperature - a.temperature) * t,
+            tint: a.tint + (b.tint - a.tint) * t,
+            _padding: Default::default(),
+        }
+    }
+
+    fn apply_easing(&self, t: f32) -> f32 {
+        match self.easing_function {
+            EasingFunction::Linear => t,
+            EasingFunction::SmoothStep => t * t * (3.0 - 2.0 * t),
+            EasingFunction::Exponential => 1.0 - (-t * 5.0).exp(),
+        }
+    }
+}
+
 /// Pre-configured render graph suited for PBR render pipelines
 pub struct PbrRenderGraphConfig {
     pub shadow_map_config: Option<ShadowMapConfig>,
     pub msaa: Option<MsaaConfig>,
-    pub bloom: Option<BloomConfig>,
+    pub post_processing_effects: Vec<Box<dyn PostProcessingEffect>>,
+    pub color_grading: ColorGradingConfig,
     pub skybox: Option<SkyboxConfig>,
     pub hdr_format: Option<TextureFormat>,
     pub label: String,
@@ -42,67 +126,29 @@ impl Default for PbrRenderGraphConfig {
         Self {
             shadow_map_config: Some(Default::default()),
             msaa: Some(Default::default()),
-            bloom: Some(Default::default()),
-            skybox: None,
+            post_processing_effects: vec![
+                Box::new(BloomConfig::default()),
+                Box::new(DofConfig::default()),
+            ],
+            color_grading: ColorGradingConfig::default(),
+            skybox: Some(SkyboxConfig {
+                hdri: Box::new(AssetPath::new(
+                    // "hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
+                    "hdris/lauter_waterfall_4k.hdr",
+                )),
+                format: TextureFormat::Rgba16Float,
+            }),
             hdr_format: Some(TextureFormat::Rgba16Float),
             label: "pbr".into(),
         }
     }
 }
 
-pub struct SkyboxConfig {
-    pub hdri: Box<dyn AsyncAssetExt<DynamicImage>>,
-    pub format: TextureFormat,
-}
-
-#[derive(Debug, Clone)]
-pub struct ShadowMapConfig {
-    pub resolution: u32,
-    pub max_cascades: u32,
-    pub max_shadows: u32,
-}
-
-impl Default for ShadowMapConfig {
-    fn default() -> Self {
-        Self {
-            resolution: 1024,
-            max_cascades: 4,
-            max_shadows: 8,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct MsaaConfig {
-    pub sample_count: u32,
-}
-
-impl Default for MsaaConfig {
-    fn default() -> Self {
-        Self { sample_count: 4 }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct BloomConfig {
-    pub filter_radius: f32,
-    pub layers: u32,
-}
-
-impl Default for BloomConfig {
-    fn default() -> Self {
-        Self {
-            filter_radius: 0.001,
-            layers: 4,
-        }
-    }
-}
-
-pub struct PbrRenderGraph {
+pub struct PbrRenderGraphTextures {
     screensized: Vec<TextureHandle>,
 }
 
-impl PbrRenderGraph {
+impl PbrRenderGraphTextures {
     pub fn screensized(&self) -> &[TextureHandle] {
         &self.screensized
     }
@@ -118,9 +164,8 @@ impl PbrRenderGraphConfig {
         assets: &AssetCache,
         store: &mut DynamicStore,
         render_graph: &mut RenderGraph,
-        ui_instance: Option<SharedUiInstance>,
         destination: TextureHandle,
-    ) -> PbrRenderGraph {
+    ) -> PbrRenderGraphTextures {
         let object_manager = store.insert(ObjectManager::new(world, gpu));
 
         let extent = Extent3d {
@@ -132,9 +177,14 @@ impl PbrRenderGraphConfig {
         let target_format = self.hdr_format.unwrap_or(TextureFormat::Rgba8UnormSrgb);
 
         // TODO: extend with generic effects
-        let needs_indirection_target = self.hdr_format.is_some() || self.bloom.is_some();
+        let needs_indirection_target =
+            self.hdr_format.is_some() || !self.post_processing_effects.is_empty();
 
         tracing::info!(?target_format);
+
+        if self.msaa.is_none() {
+            tracing::warn!("MSAA is disabled. Depth of field and other post-processing effects may not work correctly without MSAA enabled for proper depth resolution.");
+        }
         let final_color = if needs_indirection_target {
             render_graph.resources.insert_texture(ManagedTextureDesc {
                 label: format!("{}.final_color", self.label).into(),
@@ -161,7 +211,28 @@ impl PbrRenderGraphConfig {
             persistent: false,
         });
 
-        let resolved_depth_texture;
+        // separate depth textures to render gizmos on top
+        let gizmos_depth_texture = render_graph.resources.insert_texture(ManagedTextureDesc {
+            label: "gizmos_depth_texture".into(),
+            extent,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Depth24Plus,
+            mip_level_count: 1,
+            sample_count: 1,
+            persistent: false,
+        });
+
+        let resolved_depth_texture = render_graph.resources.insert_texture(ManagedTextureDesc {
+            label: "resolved_depth_texture".into(),
+            extent,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba16Float,
+            mip_level_count: 1,
+            sample_count: 1,
+            persistent: false,
+        });
+
+        // let resolved_gizmos_depth_texture;
         let sampled_target;
 
         if self.msaa.is_some() {
@@ -175,18 +246,19 @@ impl PbrRenderGraphConfig {
                 persistent: false,
             });
 
-            resolved_depth_texture = render_graph.resources.insert_texture(ManagedTextureDesc {
-                label: "depth_texture".into(),
-                extent,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::R32Float,
-                mip_level_count: 1,
-                sample_count: 1,
-                persistent: false,
-            })
+            // resolved_gizmos_depth_texture =
+            //     render_graph.resources.insert_texture(ManagedTextureDesc {
+            //         label: "gizmos_depth_texture".into(),
+            //         extent,
+            //         dimension: wgpu::TextureDimension::D2,
+            //         format: wgpu::TextureFormat::R32Float,
+            //         mip_level_count: 1,
+            //         sample_count: 1,
+            //         persistent: false,
+            //     })
         } else {
             sampled_target = final_color;
-            resolved_depth_texture = depth_texture;
+            // resolved_gizmos_depth_texture = gizmos_depth_texture;
         };
 
         let (shadow_maps, shadow_camera_buffer) = match &self.shadow_map_config {
@@ -377,7 +449,7 @@ impl PbrRenderGraphConfig {
 
         let mut last_output = sampled_target;
 
-        let mut screensized = vec![depth_texture];
+        let mut screensized = vec![depth_texture, gizmos_depth_texture];
 
         if needs_indirection_target {
             screensized.push(final_color);
@@ -386,21 +458,24 @@ impl PbrRenderGraphConfig {
         if self.msaa.is_some() {
             screensized.push(sampled_target);
             screensized.push(resolved_depth_texture);
+            // screensized.push(resolved_gizmos_depth_texture);
         };
+
+        render_graph.add_node(MsaaDepthResolve::new(
+            gpu,
+            depth_texture,
+            resolved_depth_texture,
+        ));
 
         if self.msaa.is_some() {
             render_graph.add_node(MsaaResolve::new(sampled_target, final_color));
-            render_graph.add_node(MsaaDepthResolve::new(
-                gpu,
-                depth_texture,
-                resolved_depth_texture,
-            ));
             last_output = final_color;
         }
 
-        if let Some(bloom) = self.bloom {
-            let bloom_result = render_graph.resources.insert_texture(ManagedTextureDesc {
-                label: "bloom_result".into(),
+        // Apply post-processing effects in order
+        for (i, effect) in self.post_processing_effects.iter().enumerate() {
+            let effect_result = render_graph.resources.insert_texture(ManagedTextureDesc {
+                label: format!("{}_effect_{}", self.label, i).into(),
                 extent,
                 dimension: wgpu::TextureDimension::D2,
                 format: TextureFormat::Rgba16Float,
@@ -409,40 +484,45 @@ impl PbrRenderGraphConfig {
                 persistent: false,
             });
 
-            render_graph.add_node(BloomNode::new(
+            effect.add_to_graph(
                 gpu,
+                render_graph,
                 last_output,
-                bloom_result,
-                bloom.layers,
-                bloom.filter_radius,
-            ));
+                effect_result,
+                Some(resolved_depth_texture),
+            );
 
-            last_output = bloom_result;
-
-            screensized.push(bloom_result);
+            last_output = effect_result;
+            screensized.push(effect_result);
         }
 
         // Needs resolve to tonemap and write to non-hdr output
         if needs_indirection_target {
-            render_graph.add_node(TonemapNode::new(gpu, last_output, destination));
+            render_graph.add_node(TonemapNode::new_with_grading(
+                gpu,
+                last_output,
+                destination,
+                self.color_grading,
+            ));
         }
 
         // working in non-hdr space
         render_graph.add_node(GizmosRendererNode::new(
             gpu,
             destination,
-            resolved_depth_texture,
+            gizmos_depth_texture,
         ));
 
+        let ui_instance = world.get_clone(engine(), ui_instance()).ok();
         if let Some(ui) = ui_instance {
             render_graph.add_node(UiRenderNode::new(gpu, ui, destination));
         }
 
-        PbrRenderGraph { screensized }
+        PbrRenderGraphTextures { screensized }
     }
 }
 
-impl PbrRenderGraph {
+impl PbrRenderGraphTextures {
     pub fn set_size(&self, render_graph: &mut RenderGraph, size: PhysicalSize<u32>) {
         let new_extent = Extent3d {
             width: size.width,

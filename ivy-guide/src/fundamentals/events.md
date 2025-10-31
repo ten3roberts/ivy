@@ -17,8 +17,35 @@ by other means as the event will be cloned for every subscribed sender.
 
 ## Example
 ```rust
-{{ #include ../../../tests/events.rs:4:27 }}
+use ivy_core::{App, events::EventRegistry};
+
+// Define a custom event
+
+#[derive(Clone, Debug)]
+struct MyEvent {
+    message: String,
+}
+
+fn main() -> anyhow::Result<()> {
+    let mut app = App::builder().build();
+
+    // Subscribe to events
+    let receiver = app.subscribe::<MyEvent>();
+
+    // Send an event
+    app.send(MyEvent {
+        message: "Hello, World!".to_string(),
+    });
+
+    // In a layer, you can receive events
+    for event in receiver.try_iter() {
+        println!("Received: {}", event.message);
+    }
+
+    Ok(())
+}
 ```
+
 ## Intercepting
 Sometimes it is necessary to intercept events, either absorbing them or
 re-emitting them. This can be accomplished in two main ways.
@@ -33,5 +60,25 @@ be present and thus requiring a *mockup* intercepter that simply re-emits.
 For these use cases, the use of the `intercept` API is necessary.
 
 ```rust
-{{ #include ../../../tests/events.rs:32:54 }}
+use ivy_core::{Layer, events::EventRegistry};
+use flax::World;
+
+// Custom layer that intercepts events
+struct InterceptingLayer;
+
+impl Layer for InterceptingLayer {
+    fn register(
+        &mut self,
+        _world: &mut World,
+        events: &mut EventRegistry,
+    ) -> anyhow::Result<()> {
+        // Intercept events of type MyEvent
+        events.intercept::<MyEvent>(|event| {
+            println!("Intercepted: {}", event.message);
+            // Return Some(event) to re-emit, None to consume
+            Some(event)
+        });
+        Ok(())
+    }
+}
 ```

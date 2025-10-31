@@ -5,7 +5,7 @@ use itertools::Itertools;
 use ivy_assets::{timeline::Timelines, AssetCache};
 use violet::{
     core::{
-        components::offset,
+        components::{offset, LayoutAlignment},
         layout::Align,
         style::{
             base_colors::PLATINUM_700, default_corner_radius, spacing_medium, spacing_small,
@@ -64,7 +64,7 @@ impl Widget for TimelinesWidget {
             let end_load = timelines
                 .spans()
                 .iter()
-                .last()
+                .next_back()
                 .map(|v| v.1.load_end().unwrap_or(now))
                 .unwrap_or(Instant::now());
 
@@ -242,8 +242,8 @@ impl Widget for TimespanWidget {
             ))
             .with_size(Unit::px2(padded_width, CELL_HEIGHT + CELL_SPACING))
             .with_padding(spacing_small())
-            .with_alignment(Align::Start, Align::Center),
-            move || pill(label(&self.text)),
+            .with_alignment(LayoutAlignment::new(Align::Start, Align::Center)),
+            move |_| pill(label(&self.text)),
         )
         .mount(scope);
     }

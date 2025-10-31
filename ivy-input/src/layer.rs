@@ -2,7 +2,7 @@ use flax::{
     fetch::{entity_refs, EntityRefs},
     CommandBuffer, ComponentMut, Query,
 };
-use glam::Vec2;
+use ivy_assets::stored::DynamicStore;
 use ivy_core::{app::TickEvent, components::engine, Layer};
 
 use crate::{
@@ -51,6 +51,7 @@ impl Layer for InputLayer {
         &mut self,
         world: &mut flax::World,
         _: &ivy_assets::AssetCache,
+        _: &mut DynamicStore,
         mut events: ivy_core::layer::events::EventRegisterContext<Self>,
     ) -> anyhow::Result<()>
     where

@@ -1,48 +1,46 @@
 use flax::{Entity, World};
 use glam::{vec3, EulerRot, Quat, Vec3};
-use ivy_assets::{fs::AssetPath, AssetCache};
+use ivy_assets::{stored::DynamicStore, AssetCache};
 use ivy_core::{
-    app::PostInitEvent,
-    layer::events::EventRegisterContext,
     palette::{Srgb, Srgba},
-    profiling::ProfilingLayer,
+    plugin::{Plugin, PluginContext},
     transforms::TransformUpdatePlugin,
-    update_layer::{FixedTimeStep, ScheduledLayer},
-    App, Color, ColorExt, EngineLayer, EntityBuilderExt, Layer,
+    update_layer::{FixedTimeStep, PluginLayer, ScheduleSetBuilder},
+    Color, ColorExt, EntityBuilderExt,
+};
+use ivy_editor::{
+    plugin::EditorPlugin,
+    tools::{physics_tool::PhysicsToolPlugin, transform_tool::TransformToolPlugin},
+    tools_controller::ToolsControllerPlugin,
 };
 use ivy_engine::{is_static, rotation, scale, RigidBodyBundle, TransformBundle};
-use ivy_game::{
-    fly_camera::FlyCameraPlugin,
-    ray_picker::RayPickingPlugin,
-    viewport_camera::{CameraSettings, ViewportCameraLayer},
-};
+use ivy_game::{fly_camera::FlyCameraPlugin, viewport_camera::CameraViewportPlugin};
 use ivy_graphics::texture::TextureData;
 use ivy_input::layer::InputLayer;
 use ivy_physics::{
-    components::{collider_shape, rigid_body_type},
-    ColliderBundle, PhysicsPlugin,
+    components::collider_builder, ColliderBundle, GizmoSettings, PhysicsPlugin, RigidBodyKind,
 };
-use ivy_postprocessing::preconfigured::{
-    pbr::{PbrRenderGraphConfig, SkyboxConfig},
-    SurfacePbrPipelineDesc, SurfacePbrRenderer,
+use ivy_postprocessing::preconfigured::pbr::PbrRenderGraphConfig;
+use ivy_scene::ray_picker::RayPickingPlugin;
+use ivy_ui::{
+    layer::{UiLayer, UiUpdateLayer},
+    streamed::StreamedUiPlugin,
 };
 use ivy_wgpu::{
     components::*,
-    driver::WinitDriver,
-    layer::GraphicsLayer,
+    effect_desc::{PbrRenderEffect, RenderEffect},
     light::{LightKind, LightParams},
-    material_desc::{MaterialData, PbrMaterialData},
     mesh_desc::MeshDesc,
     primitives::{CapsulePrimitive, CubePrimitive, UvSpherePrimitive},
-    renderer::{EnvironmentData, RenderObjectBundle},
+    renderer::RenderObjectBundle,
 };
-use rapier3d::prelude::{RigidBodyType, SharedShape};
+use rapier3d::prelude::{ColliderBuilder, SharedShape};
 use tracing_subscriber::{layer::SubscriberExt, registry, util::SubscriberInitExt, EnvFilter};
 use tracing_tree::HierarchicalLayer;
-use wgpu::TextureFormat;
-use winit::{dpi::LogicalSize, window::WindowAttributes};
 
 const ENABLE_SKYBOX: bool = true;
+
+mod common;
 
 pub fn main() -> anyhow::Result<()> {
     color_backtrace::install();
@@ -56,53 +54,34 @@ pub fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    if let Err(err) = App::builder()
-        .with_driver(WinitDriver::new(
-            WindowAttributes::default()
-                .with_inner_size(LogicalSize::new(1920, 1080))
-                .with_title("Ivy Physics"),
-        ))
-        .with_layer(EngineLayer::new())
-        .with_layer(ProfilingLayer::new())
-        .with_layer(GraphicsLayer::new(|world, assets, store, gpu, surface| {
-            Ok(SurfacePbrRenderer::new(
-                world,
-                assets,
-                store,
-                gpu,
-                surface,
-                SurfacePbrPipelineDesc {
-                    pbr_config: PbrRenderGraphConfig {
-                        label: "basic".into(),
-                        skybox: Some(SkyboxConfig {
-                            hdri: Box::new(AssetPath::new(
-                                "hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
-                            )),
-                            format: TextureFormat::Rgba16Float,
-                        }),
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                },
-            ))
+    if let Err(err) = common::base_app_builder("Ivy Physics")
+        .with_layer(common::graphics_layer_with_config(|| {
+            PbrRenderGraphConfig {
+                label: "basic".into(),
+                ..Default::default()
+            }
         }))
+        .with_layer(UiLayer::new())
         .with_layer(InputLayer::new())
-        .with_layer(LogicLayer)
-        .with_layer(ScheduledLayer::new(FixedTimeStep::new(0.02)).with_plugin(FlyCameraPlugin))
         .with_layer(
-            ScheduledLayer::new(FixedTimeStep::new(0.02))
-                .with_plugin(PhysicsPlugin::new().with_gravity(-Vec3::Y * 9.81))
+            PluginLayer::new(FixedTimeStep::new(0.02))
+                .with_plugin(LogicPlugin)
+                .with_plugin(StreamedUiPlugin)
+                .with_plugin(FlyCameraPlugin)
+                .with_plugin(
+                    PhysicsPlugin::new()
+                        .with_gravity(-Vec3::Y * 9.81)
+                        .with_gizmos(GizmoSettings { rigidbody: true }),
+                )
+                .with_plugin(CameraViewportPlugin)
+                .with_plugin(TransformToolPlugin)
+                .with_plugin(PhysicsToolPlugin)
+                .with_plugin(ToolsControllerPlugin)
                 .with_plugin(RayPickingPlugin)
+                .with_plugin(EditorPlugin)
                 .with_plugin(TransformUpdatePlugin),
         )
-        .with_layer(ViewportCameraLayer::new(CameraSettings {
-            environment_data: EnvironmentData::new(
-                Srgb::new(0.2, 0.2, 0.3),
-                0.001,
-                if ENABLE_SKYBOX { 0.0 } else { 1.0 },
-            ),
-            fov: 1.0,
-        }))
+        .with_layer(UiUpdateLayer::new())
         .run()
     {
         tracing::error!("{err:?}");
@@ -113,15 +92,15 @@ pub fn main() -> anyhow::Result<()> {
 }
 
 fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
-    let white_material = MaterialData::PbrMaterial(
-        PbrMaterialData::new()
+    let white_material = RenderEffect::Pbr(
+        PbrRenderEffect::new()
             .with_roughness_factor(1.0)
             .with_metallic_factor(0.0)
             .with_albedo(TextureData::srgba(Srgba::new(1.0, 1.0, 1.0, 1.0))),
     );
 
-    let red_material = MaterialData::PbrMaterial(
-        PbrMaterialData::new()
+    let red_material = RenderEffect::Pbr(
+        PbrRenderEffect::new()
             .with_roughness_factor(1.0)
             .with_metallic_factor(0.0)
             .with_albedo(TextureData::srgba(Color::from_hsla(1.0, 0.7, 0.7, 1.0))),
@@ -134,7 +113,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
         let mut builder = Entity::builder();
         builder
             .mount(TransformBundle::default())
-            .mount(RigidBodyBundle::new(RigidBodyType::Dynamic))
+            .mount(RigidBodyBundle::new(RigidBodyKind::Dynamic))
             .mount(
                 ColliderBundle::new(SharedShape::cuboid(1.0, 1.0, 1.0))
                     .with_restitution(RESTITUTION)
@@ -144,7 +123,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
                 MeshDesc::Content(assets.load(&CubePrimitive)),
                 &[
                     (forward_pass(), red_material.clone()),
-                    (shadow_pass(), MaterialData::ShadowMaterial),
+                    (shadow_pass(), RenderEffect::OpaqueShadow),
                 ],
             ));
 
@@ -154,8 +133,8 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
     let cube = |pos: Vec3, size: Vec3| {
         let mut builder = body();
         builder.set(ivy_core::components::position(), pos).set(
-            collider_shape(),
-            SharedShape::cuboid(size.x, size.y, size.z),
+            collider_builder(),
+            ColliderBuilder::cuboid(size.x, size.y, size.z),
         );
         builder
     };
@@ -168,7 +147,7 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
                 mesh(),
                 MeshDesc::Content(assets.load(&UvSpherePrimitive::default())),
             )
-            .set(collider_shape(), SharedShape::ball(size));
+            .set(collider_builder(), ColliderBuilder::ball(size));
         builder
     };
 
@@ -180,12 +159,12 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
                 mesh(),
                 MeshDesc::Content(assets.load(&CapsulePrimitive::default())),
             )
-            .set(collider_shape(), SharedShape::capsule_y(1.0, 1.0));
+            .set(collider_builder(), ColliderBuilder::capsule_y(1.0, 1.0));
         builder
     };
 
     cube(Vec3::ZERO, vec3(100.0, 1.0, 100.0))
-        .set(rigid_body_type(), RigidBodyType::Fixed)
+        .mount(RigidBodyBundle::new(RigidBodyKind::Fixed))
         .set(scale(), vec3(100.0, 1.0, 100.0))
         .set(is_static(), ())
         .set(forward_pass(), white_material)
@@ -240,21 +219,10 @@ fn setup_objects(world: &mut World, assets: AssetCache) -> anyhow::Result<()> {
     Ok(())
 }
 
-struct LogicLayer;
+struct LogicPlugin;
 
-impl Layer for LogicLayer {
-    fn register(
-        &mut self,
-        _: &mut World,
-        _: &AssetCache,
-        mut events: EventRegisterContext<Self>,
-    ) -> anyhow::Result<()> {
-        events.subscribe(|_, ctx, _: &PostInitEvent| {
-            setup_objects(ctx.world, ctx.assets.clone())?;
-
-            Ok(())
-        });
-
-        Ok(())
+impl Plugin for LogicPlugin {
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        setup_objects(ctx.world, ctx.assets.clone())
     }
 }

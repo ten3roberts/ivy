@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use flax::{
     component::ComponentValue, components::child_of, entity_ids, fetch::entity_refs, CommandBuffer,
-    Component, Entity, EntityBuilder, EntityRef, Query, World,
+    Component, Entity, EntityRef, Query, World,
 };
 use parking_lot::{Mutex, MutexGuard};
 
@@ -88,21 +88,6 @@ impl WorldExt for World {
         }
 
         find_in_tree(self, root, &f)
-    }
-}
-
-pub trait Bundle {
-    fn mount(self, entity: &mut EntityBuilder);
-}
-
-pub trait EntityBuilderExt {
-    fn mount<T: Bundle>(&mut self, bundle: T) -> &mut Self;
-}
-
-impl EntityBuilderExt for EntityBuilder {
-    fn mount<T: Bundle>(&mut self, bundle: T) -> &mut Self {
-        bundle.mount(self);
-        self
     }
 }
 

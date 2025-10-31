@@ -1,54 +1,44 @@
-use flax::Query;
-use glam::Mat4;
-use ivy_core::{components::main_camera, Layer};
-use ivy_wgpu::{components::projection_matrix, events::ResizedEvent, renderer::EnvironmentData};
-
-pub struct CameraSettings {
-    pub environment_data: EnvironmentData,
-    pub fov: f32,
-}
+use flax::{system, Component, ComponentMut, FetchExt, Query, QueryBorrow};
+use glam::{Mat4, Vec2};
+use ivy_core::{
+    components::engine,
+    plugin::{Plugin, PluginContext},
+};
+use ivy_graphics::camera::{camera_settings, projection_matrix, CameraSettings};
+use ivy_wgpu::components::viewport_size;
 
 /// Automatically configure a camera based on the window viewport
-pub struct ViewportCameraLayer {
-    settings: CameraSettings,
-}
+pub struct CameraViewportPlugin;
 
-impl ViewportCameraLayer {
-    pub fn new(settings: CameraSettings) -> Self {
-        Self { settings }
-    }
-}
-
-impl Layer for ViewportCameraLayer {
-    fn register(
-        &mut self,
-        _: &mut flax::World,
-        _: &ivy_assets::AssetCache,
-        mut events: ivy_core::events::EventRegisterContext<Self>,
-    ) -> anyhow::Result<()>
-    where
-        Self: Sized,
-    {
-        let fov = self.settings.fov;
-        let environment_data = self.settings.environment_data;
-        events.subscribe(move |_, ctx, resized: &ResizedEvent| {
-            if let Some((main_camera, environment)) = Query::new((
-                projection_matrix().as_mut(),
-                ivy_wgpu::components::environment_data().as_mut(),
-            ))
-            .with(main_camera())
-            .borrow(ctx.world)
-            .first()
-            {
-                let aspect =
-                    resized.physical_size.width as f32 / resized.physical_size.height as f32;
-                *main_camera = Mat4::perspective_rh(fov, aspect, 0.1, 1000.0);
-                *environment = environment_data;
-            }
-
-            Ok(())
-        });
+impl Plugin for CameraViewportPlugin {
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        ctx.schedules
+            .per_tick_mut()
+            .with_system(resize_cameras_system())
+            .with_system(update_camera_projection_system());
 
         Ok(())
     }
+}
+
+#[system(args(window_size=viewport_size().copied().modified()), with_query(Query::new((projection_matrix().as_mut(), camera_settings()))))]
+fn resize_cameras_system(
+    window_size: Vec2,
+    cameras: &mut QueryBorrow<(ComponentMut<Mat4>, Component<CameraSettings>)>,
+) {
+    let new_aspect = window_size.x / window_size.y;
+    for (camera, settings) in cameras {
+        *camera = settings.projection().create_projection_matrix(new_aspect);
+    }
+}
+
+#[system(args(camera_settings=camera_settings().modified(), viewport_size=viewport_size().source(engine())))]
+fn update_camera_projection_system(
+    camera_settings: &CameraSettings,
+    projection_matrix: &mut Mat4,
+    viewport_size: &Vec2,
+) {
+    *projection_matrix = camera_settings
+        .projection()
+        .create_projection_matrix(viewport_size.x / viewport_size.y);
 }

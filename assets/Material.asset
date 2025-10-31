@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "type_name": "Material"
+  },
+  "desc": {
+    "effects": {
+      "Forward": {
+        "Pbr": {
+          "label": "unknown_material",
+          "albedo": {
+            "Path": "textures/Metal008_1K-PNG/Metal008_1K-PNG_Color.png"
+          },
+          "normal": {
+            "Path": "textures/Metal008_1K-PNG/Metal008_1K-PNG_NormalGL.png"
+          },
+          "metallic_roughness": {
+            "Color": {
+              "red": 255,
+              "green": 255,
+              "blue": 255,
+              "alpha": 255
+            }
+          },
+          "ambient_occlusion": {
+            "Color": {
+              "red": 255,
+              "green": 255,
+              "blue": 255,
+              "alpha": 255
+            }
+          },
+          "displacement": {
+            "Color": {
+              "red": 255,
+              "green": 255,
+              "blue": 255,
+              "alpha": 255
+            }
+          },
+          "roughness_factor": 0.22936821,
+          "metallic_factor": 1.0
+        }
+      },
+      "Shadow": "OpaqueShadow"
+    }
+  }
+}

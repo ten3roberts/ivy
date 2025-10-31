@@ -6,7 +6,7 @@ use gltf::{
     buffer,
 };
 use itertools::Itertools;
-use ivy_assets::{fs::AssetPath, Asset, AssetCache, AsyncAssetDesc, AsyncAssetExt};
+use ivy_assets::{Asset, AssetCache, AssetPath, AsyncAssetExt, AsyncAssetKey};
 use ordered_float::OrderedFloat;
 
 use crate::Document;
@@ -108,14 +108,15 @@ impl KeyFrameValues {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct AnimationDesc {
     pub document: AssetPath<Document>,
     pub animation: String,
 }
 
-impl AsyncAssetDesc for AnimationDesc {
+impl AsyncAssetKey for AnimationDesc {
     type Output = Animation;
     type Error = anyhow::Error;
 

@@ -2,10 +2,13 @@ use flax::{component, signal::BoxedSignal, Debuggable, Entity};
 use glam::Vec3;
 use rapier3d::prelude::{
     ColliderBuilder, ColliderHandle, CollisionEvent, CollisionEventFlags, GenericJoint,
-    ImpulseJointHandle, LockedAxes, RigidBodyHandle, RigidBodyType,
+    ImpulseJointHandle, RigidBodyBuilder, RigidBodyHandle,
 };
 
-use crate::{state::PhysicsState, Effector};
+use crate::{
+    state::{PhysicsState, RigidBodyFlags},
+    Effector,
+};
 
 component! {
     pub physics_state: PhysicsState,
@@ -14,23 +17,22 @@ component! {
 
     pub collider_handle: ColliderHandle,
 
-    pub rigid_body_type: RigidBodyType,
-    pub locked_axes: LockedAxes,
 
     pub collider_builder: ColliderBuilder,
+    pub rigidbody_builder: RigidBodyBuilder,
 
     pub center_of_mass: Vec3 => [ Debuggable ],
 
-    pub can_sleep: (),
 
     pub velocity: Vec3 => [ Debuggable ],
     pub gravity: Vec3 => [ Debuggable ],
     pub angular_velocity: Vec3 => [ Debuggable ],
 
+    pub rigidbody_flags: RigidBodyFlags => [ Debuggable ],
+
     /// Mass of body
     pub mass: f32 => [ Debuggable ],
     pub inertia_tensor: f32 => [ Debuggable ],
-    pub gravity_influence: f32 => [ Debuggable ],
 
     pub sleeping: () => [ Debuggable ],
     pub is_trigger: () => [ Debuggable ],

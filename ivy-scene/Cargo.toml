@@ -7,10 +7,30 @@ license-file.workspace = true
 
 [dependencies]
 ivy-core = { path = "../ivy-core" }
+ivy-editable = { path = "../ivy-editable" }
 ivy-wgpu = { path = "../ivy-wgpu" }
+ivy-graphics = { path = "../ivy-graphics" }
+ivy-physics = { path = "../ivy-physics" }
 ivy-gltf = { path = "../ivy-gltf" }
 ivy-assets = { path = "../ivy-assets" }
+ivy-ui = { path = "../ivy-ui" }
+ivy-input = { path = "../ivy-input" }
+ivy-derive = { path = "../ivy-derive" }
+ivy-postprocessing = { path = "../ivy-postprocessing" }
 
-tracing.workspace = true
+wgpu.workspace = true
+parking_lot.workspace = true
+serde_json.workspace = true
+serde.workspace = true
+async-std.workspace = true
+anyhow.workspace = true
+inventory.workspace = true
+flume.workspace = true
 flax.workspace = true
+futures.workspace = true
 glam.workspace = true
+itertools.workspace = true
+ordered-float.workspace = true
+tracing.workspace = true
+bevy_reflect.workspace = true
+downcast-rs.workspace = true

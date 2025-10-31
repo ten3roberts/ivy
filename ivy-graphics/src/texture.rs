@@ -1,14 +1,11 @@
-use std::{future::Future, ops::Deref, pin::Pin};
+use std::{future::Future, ops::Deref};
 
-use either::Either;
 use image::{DynamicImage, ImageBuffer};
-use ivy_assets::{
-    fs::AssetPath, loadable::ResourceDesc, Asset, AssetCache, AssetDesc, AsyncAssetExt,
-};
+use ivy_assets::{loadable::Loadable, Asset, AssetCache, AssetDesc, AssetPath, AsyncAssetExt};
 use ivy_core::palette::Srgba;
+use ivy_editable::Editable;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ProcessedTextureDesc {
     texture: Box<TextureDesc>,
     processor: StaticTextureProcessor,
@@ -20,8 +17,7 @@ pub struct ProcessedTexture {
     processor: StaticTextureProcessor,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Editable, serde::Serialize, serde::Deserialize)]
 pub enum StaticTextureProcessor {
     MetallicRoughness(MetallicRoughnessProcessor),
 }
@@ -44,25 +40,29 @@ pub trait TextureProcessor {
     fn process(&self, image: DynamicImage) -> DynamicImage;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Editable, serde::Serialize, serde::Deserialize)]
 pub enum ColorChannel {
     Red,
     Green,
     Blue,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Editable, serde::Serialize, serde::Deserialize)]
+pub enum ColorChannelOrValue {
+    Channel(ColorChannel),
+    Value(u8),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Editable, serde::Serialize, serde::Deserialize)]
 pub struct MetallicRoughnessProcessor {
-    metallic_channel: Either<ColorChannel, u8>,
-    roughness_channel: Either<ColorChannel, u8>,
+    metallic_channel: ColorChannelOrValue,
+    roughness_channel: ColorChannelOrValue,
 }
 
 impl MetallicRoughnessProcessor {
     pub fn new(
-        metallic_channel: Either<ColorChannel, u8>,
-        roughness_channel: Either<ColorChannel, u8>,
+        metallic_channel: ColorChannelOrValue,
+        roughness_channel: ColorChannelOrValue,
     ) -> Self {
         Self {
             metallic_channel,
@@ -77,17 +77,17 @@ impl TextureProcessor for MetallicRoughnessProcessor {
 
         for pixel in image.pixels_mut() {
             let roughness = match self.roughness_channel {
-                Either::Left(ColorChannel::Red) => pixel[0],
-                Either::Left(ColorChannel::Green) => pixel[0],
-                Either::Left(ColorChannel::Blue) => pixel[0],
-                Either::Right(v) => v,
+                ColorChannelOrValue::Channel(ColorChannel::Red) => pixel[0],
+                ColorChannelOrValue::Channel(ColorChannel::Green) => pixel[0],
+                ColorChannelOrValue::Channel(ColorChannel::Blue) => pixel[0],
+                ColorChannelOrValue::Value(v) => v,
             };
 
             let metallic = match self.metallic_channel {
-                Either::Left(ColorChannel::Red) => pixel[0],
-                Either::Left(ColorChannel::Green) => pixel[0],
-                Either::Left(ColorChannel::Blue) => pixel[0],
-                Either::Right(v) => v,
+                ColorChannelOrValue::Channel(ColorChannel::Red) => pixel[0],
+                ColorChannelOrValue::Channel(ColorChannel::Green) => pixel[0],
+                ColorChannelOrValue::Channel(ColorChannel::Blue) => pixel[0],
+                ColorChannelOrValue::Value(v) => v,
             };
 
             *pixel = image::Rgba([0, roughness, metallic, 255]);
@@ -98,34 +98,32 @@ impl TextureProcessor for MetallicRoughnessProcessor {
 }
 
 /// Describes a loadable texture
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Editable, serde::Serialize, serde::Deserialize)]
 pub enum TextureDesc {
     Path(AssetPath<DynamicImage>),
-    Color(u8, u8, u8, u8),
-    Processed(ProcessedTextureDesc),
+    Color(Srgba<u8>),
 }
 
 impl TextureDesc {
     pub fn srgba(color: Srgba) -> Self {
         let color = Srgba::<u8>::from_format(color);
-        Self::Color(color.red, color.green, color.blue, color.alpha)
+        Self::Color(color)
     }
 
     pub fn white() -> Self {
-        Self::Color(255, 255, 255, 255)
+        Self::Color(Srgba::<u8>::new(255, 255, 255, 255))
     }
 
     pub fn default_normal() -> Self {
-        Self::Color(127, 127, 255, 255)
+        Self::Color(Srgba::<u8>::new(127, 127, 255, 255))
     }
 
-    pub fn process(self, processor: impl Into<StaticTextureProcessor>) -> Self {
-        Self::Processed(ProcessedTextureDesc {
-            texture: Box::new(self),
-            processor: processor.into(),
-        })
-    }
+    // pub fn process(self, processor: impl Into<StaticTextureProcessor>) -> Self {
+    //     Self::Processed(ProcessedTextureDesc {
+    //         texture: Box::new(self),
+    //         processor: processor.into(),
+    //     })
+    // }
 
     // Ah, the beauty of rust at times. It can not figure out the send bound if I use the
     // `async-fn` sugar
@@ -137,37 +135,42 @@ impl TextureDesc {
         async move {
             match self {
                 Self::Path(v) => Ok(v.load_async(assets).await?.deref().clone()),
-                &Self::Color(r, g, b, a) => {
-                    Ok(ImageBuffer::from_pixel(1, 1, image::Rgba([r, g, b, a])).into())
-                }
-                Self::Processed(v) => {
-                    // NOTE: load_image, and not load here
-                    let original = (Box::pin(async { v.texture.load_image(assets).await })
-                        as Pin<Box<dyn Future<Output = anyhow::Result<DynamicImage>> + Send>>)
-                        .await?;
-                    let processed = v.processor.process(original);
-                    Ok(processed)
-                }
+                &Self::Color(color) => Ok(ImageBuffer::from_pixel(
+                    1,
+                    1,
+                    image::Rgba([color.red, color.green, color.blue, color.alpha]),
+                )
+                .into()), // Self::Processed(v) => {
+                          //     // NOTE: load_image, and not load here
+                          //     let original = (Box::pin(async { v.texture.load_image(assets).await })
+                          //         as Pin<Box<dyn Future<Output = anyhow::Result<DynamicImage>> + Send>>)
+                          //         .await?;
+                          //     let processed = v.processor.process(original);
+                          //     Ok(processed)
+                          // }
             }
         }
     }
 }
 
-impl ResourceDesc for TextureDesc {
+impl Loadable for TextureDesc {
     type Output = TextureData;
 
-    type Error = anyhow::Error;
-
-    async fn load(self, assets: &ivy_assets::AssetCache) -> Result<Self::Output, Self::Error> {
+    async fn load(&self, assets: &ivy_assets::AssetCache) -> Result<Self::Output, anyhow::Error> {
         let texture = match self {
             TextureDesc::Path(path) => TextureData::Content(path.load_async(assets).await?),
-            TextureDesc::Color(r, g, b, a) => TextureData::Color(image::Rgba([r, g, b, a])),
-            TextureDesc::Processed(v) => {
-                // NOTE: ensure we don't recurse with assets here, and use raw uncached images on
-                // the way down (and only loading the base image into the asset cache)
-                let image = v.texture.load_image(assets).await?;
-                TextureData::Content(assets.insert(v.processor.process(image)))
-            }
+            &TextureDesc::Color(color) => TextureData::Color(image::Rgba([
+                color.red,
+                color.green,
+                color.blue,
+                color.alpha,
+            ])),
+            // TextureDesc::Processed(v) => {
+            //     // NOTE: ensure we don't recurse with assets here, and use raw uncached images on
+            //     // the way down (and only loading the base image into the asset cache)
+            //     let image = v.texture.load_image(assets).await?;
+            //     TextureData::Content(assets.insert(v.processor.process(image)))
+            // }
         };
 
         Ok(texture)

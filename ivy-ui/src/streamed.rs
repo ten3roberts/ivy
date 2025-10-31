@@ -7,20 +7,29 @@ use flax::{
     BoxedSystem, Component, ComponentMut, Entity, FetchExt, Query, System, World,
 };
 use futures::{FutureExt, Stream};
-use ivy_assets::AssetCache;
+use ivy_assets::{stored::DynamicStore, AssetCache};
 use ivy_core::{
     components::engine,
-    update_layer::{Plugin, ScheduleSetBuilder},
+    plugin::{Plugin, PluginContext},
+    update_layer::ScheduleSetBuilder,
 };
+use sync_wrapper::SyncStream;
 use violet::{
     core::{Scope, ScopeRef},
     futures_signals::signal::{Mutable, MutableSignalCloned, SignalExt, SignalStream},
 };
 
+use crate::components::ui_instance;
+
+#[derive(Clone)]
+pub struct StreamedState {
+    pub tx: flume::Sender<Box<dyn Streamed>>,
+}
+
 flax::component! {
     pub streamed: Vec<Box<dyn Streamed>>,
 
-    pub streamed_tx: flume::Sender<Box<dyn Streamed>>,
+    pub streamed_state: StreamedState,
 }
 
 pub trait StreamedUiExt {
@@ -71,19 +80,25 @@ pub trait StreamedUiExt {
     }
 }
 
+impl StreamedUiExt for StreamedState {
+    fn open_streamed(&self, streamed: impl Streamed) {
+        self.tx.send(Box::new(streamed)).expect("Channel closed");
+    }
+}
+
 impl StreamedUiExt for Scope<'_> {
     fn open_streamed(&self, streamed: impl Streamed) {
-        let context = self.get_context(streamed_tx());
+        let context = self.get_context(streamed_state());
 
-        context.send(Box::new(streamed)).expect("Channel closed");
+        context.tx.send(Box::new(streamed)).expect("Channel closed");
     }
 }
 
 impl StreamedUiExt for ScopeRef<'_> {
     fn open_streamed(&self, streamed: impl Streamed) {
-        let context = self.get_context(streamed_tx());
+        let context = self.get_context(streamed_state());
 
-        context.send(Box::new(streamed)).expect("Channel closed");
+        context.tx.send(Box::new(streamed)).expect("Channel closed");
     }
 }
 
@@ -130,22 +145,20 @@ impl<F: 'static + Send + Sync + FnOnce(&World) -> anyhow::Result<()>> Streamed
 pub struct ComponentSink<T, S> {
     target: Entity,
     component: Component<T>,
-    tx: Pin<Box<S>>,
+    tx: Pin<Box<SyncStream<S>>>,
 }
 
-impl<T: ComponentValue, S: 'static + Send + Sync + Stream<Item = T>> ComponentSink<T, S> {
+impl<T: ComponentValue, S: 'static + Send + Stream<Item = T>> ComponentSink<T, S> {
     pub fn new(component: Component<T>, target: Entity, tx: S) -> Self {
         Self {
             target,
             component,
-            tx: Box::pin(tx),
+            tx: (Box::pin(SyncStream::new(tx))),
         }
     }
 }
 
-impl<T: ComponentValue, S: 'static + Send + Sync + Stream<Item = T>> Streamed
-    for ComponentSink<T, S>
-{
+impl<T: ComponentValue, S: 'static + Send + Stream<Item = T>> Streamed for ComponentSink<T, S> {
     fn update(&mut self, world: &World) -> bool {
         if !world.is_alive(self.target) {
             return false;
@@ -334,17 +347,16 @@ where
 pub struct StreamedUiPlugin;
 
 impl Plugin for StreamedUiPlugin {
-    fn install(
-        &self,
-        world: &mut World,
-        _: &AssetCache,
-        schedules: &mut ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
         let (tx, rx) = flume::unbounded();
-        world.set(engine(), streamed_tx(), tx)?;
-        world.set(engine(), streamed(), Default::default())?;
+        let state = StreamedState { tx: tx.clone() };
+        ctx.world.set(engine(), streamed_state(), state.clone())?;
+        ctx.world.set(engine(), streamed(), Default::default())?;
 
-        schedules
+        let ui = &mut *ctx.store.get_mut(&*ctx.world.get(engine(), ui_instance())?);
+        ui.root_scope().set_context(streamed_state(), state);
+
+        ctx.schedules
             .per_tick_mut()
             .with_system(update_streamed_system(rx));
 

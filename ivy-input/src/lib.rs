@@ -23,7 +23,7 @@ impl InputState {
         }
     }
 
-    pub fn with_action<T: ComponentValue + Stimulus + PartialEq>(
+    pub fn with_action<T: ComponentValue + InputStimulus + PartialEq>(
         mut self,
         target: Component<T>,
         action: Action<T>,
@@ -33,11 +33,13 @@ impl InputState {
         self
     }
 
+    /// Execute a function whenever value changes
     pub fn with_trigger_action<
-        F: 'static + Send + Sync + FnMut(&EntityRef, &mut CommandBuffer) -> anyhow::Result<()>,
+        T: InputStimulus,
+        F: 'static + Send + Sync + FnMut(&EntityRef<'_>, &mut CommandBuffer, T) -> anyhow::Result<()>,
     >(
         mut self,
-        action: Action<bool>,
+        action: Action<T>,
         func: F,
     ) -> Self {
         self.activations
@@ -45,17 +47,17 @@ impl InputState {
         self
     }
 
-    pub fn with_signal_action(
+    pub fn with_signal_action<T: InputStimulus>(
         mut self,
-        action: Action<bool>,
-        signal: Component<BoxedSignal>,
+        action: Action<T>,
+        signal: Component<BoxedSignal<T>>,
     ) -> Self {
         self.activations
             .push(Box::new(SignalActionHandler::new(action, signal)));
         self
     }
 
-    pub fn add_action<T: ComponentValue + Stimulus + PartialEq>(
+    pub fn add_action<T: ComponentValue + InputStimulus + PartialEq>(
         &mut self,
         target: Component<T>,
         action: Action<T>,
@@ -66,7 +68,10 @@ impl InputState {
     }
 
     pub fn add_trigger_action<
-        F: 'static + Send + Sync + FnMut(&EntityRef, &mut CommandBuffer) -> anyhow::Result<()>,
+        F: 'static
+            + Send
+            + Sync
+            + FnMut(&EntityRef<'_>, &mut CommandBuffer, bool) -> anyhow::Result<()>,
     >(
         &mut self,
         action: Action<bool>,
@@ -104,36 +109,39 @@ pub(crate) trait ActionHandler: 'static + Send + Sync {
 }
 
 pub type TriggerAction =
-    Box<dyn Send + Sync + FnMut(&EntityRef<'_>, &mut CommandBuffer) -> anyhow::Result<()>>;
+    Box<dyn Send + Sync + FnMut(&EntityRef<'_>, &mut CommandBuffer, bool) -> anyhow::Result<()>>;
 
-pub(crate) struct TriggerActionHandler<F> {
-    active: bool,
+pub(crate) struct TriggerActionHandler<T, F> {
+    value: T,
     callback: F,
-    action: Action<bool>,
+    action: Action<T>,
+    _marker: std::marker::PhantomData<T>,
 }
 
-impl<F> TriggerActionHandler<F> {
-    pub(crate) fn new(callback: F, action: Action<bool>) -> Self {
+impl<T, F> TriggerActionHandler<T, F> {
+    pub(crate) fn new(callback: F, action: Action<T>) -> Self
+    where
+        T: InputStimulus,
+    {
         Self {
             callback,
             action,
-            active: false,
+            value: T::ZERO,
+            _marker: std::marker::PhantomData,
         }
     }
 }
 
-impl<F> ActionHandler for TriggerActionHandler<F>
+impl<T, F> ActionHandler for TriggerActionHandler<T, F>
 where
-    F: 'static + Send + Sync + FnMut(&EntityRef<'_>, &mut CommandBuffer) -> anyhow::Result<()>,
+    T: InputStimulus,
+    F: 'static + Send + Sync + FnMut(&EntityRef<'_>, &mut CommandBuffer, T) -> anyhow::Result<()>,
 {
     fn update(&mut self, entity: &EntityRef, cmd: &mut CommandBuffer) -> anyhow::Result<()> {
-        if self.action.read_stimulus() {
-            if !self.active {
-                self.active = true;
-                (self.callback)(entity, cmd)?;
-            }
-        } else {
-            self.active = false
+        let new_value = self.action.read_stimulus();
+        if new_value != self.value {
+            self.value = new_value;
+            (self.callback)(entity, cmd, new_value)?;
         }
 
         Ok(())
@@ -144,31 +152,28 @@ where
     }
 }
 
-pub(crate) struct SignalActionHandler {
-    active: bool,
-    signal: Component<BoxedSignal>,
-    action: Action<bool>,
+pub(crate) struct SignalActionHandler<T> {
+    value: T,
+    signal: Component<BoxedSignal<T>>,
+    action: Action<T>,
 }
 
-impl SignalActionHandler {
-    pub(crate) fn new(action: Action<bool>, signal: Component<BoxedSignal>) -> Self {
+impl<T: InputStimulus> SignalActionHandler<T> {
+    pub(crate) fn new(action: Action<T>, signal: Component<BoxedSignal<T>>) -> Self {
         Self {
             action,
             signal,
-            active: false,
+            value: T::ZERO,
         }
     }
 }
 
-impl ActionHandler for SignalActionHandler {
+impl<T: InputStimulus> ActionHandler for SignalActionHandler<T> {
     fn update(&mut self, entity: &EntityRef, cmd: &mut CommandBuffer) -> anyhow::Result<()> {
-        if self.action.read_stimulus() {
-            if !self.active {
-                self.active = true;
-                (entity.get_mut(self.signal)?).execute(*entity, cmd, ())?;
-            }
-        } else {
-            self.active = false
+        let new_value = self.action.read_stimulus();
+        if new_value != self.value {
+            self.value = new_value;
+            (entity.get_mut(self.signal)?).execute(*entity, cmd, new_value)?;
         }
 
         Ok(())
@@ -190,7 +195,7 @@ impl<T> ComponentActionHandler<T> {
     }
 }
 
-impl<T: ComponentValue + Stimulus + PartialEq> ActionHandler for ComponentActionHandler<T> {
+impl<T: ComponentValue + InputStimulus + PartialEq> ActionHandler for ComponentActionHandler<T> {
     fn update(&mut self, entity: &EntityRef, cmd: &mut CommandBuffer) -> anyhow::Result<()> {
         let stimulus = self.action.read_stimulus();
         if entity.has(self.target) {
@@ -206,7 +211,7 @@ impl<T: ComponentValue + Stimulus + PartialEq> ActionHandler for ComponentAction
     }
 }
 
-impl<T: ComponentValue + Stimulus + PartialEq> From<(Component<T>, Action<T>)>
+impl<T: ComponentValue + InputStimulus + PartialEq> From<(Component<T>, Action<T>)>
     for ComponentActionHandler<T>
 {
     fn from(v: (Component<T>, Action<T>)) -> Self {
@@ -227,7 +232,7 @@ impl<T> std::fmt::Debug for Action<T> {
     }
 }
 
-impl<T: ComponentValue + Stimulus> Action<T> {
+impl<T: ComponentValue + InputStimulus> Action<T> {
     pub fn new() -> Self {
         Self {
             bindings: Vec::new(),
@@ -268,18 +273,18 @@ impl<T: ComponentValue + Stimulus> Action<T> {
     }
 }
 
-impl<T: ComponentValue + Stimulus> Default for Action<T> {
+impl<T: ComponentValue + InputStimulus> Default for Action<T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-pub trait Stimulus {
+pub trait InputStimulus: 'static + Send + Sync + ComponentValue + PartialEq + Copy {
     const ZERO: Self;
     fn combine(&self, other: &Self) -> Self;
 }
 
-impl Stimulus for f32 {
+impl InputStimulus for f32 {
     const ZERO: Self = 0.0;
 
     fn combine(&self, other: &Self) -> Self {
@@ -287,7 +292,7 @@ impl Stimulus for f32 {
     }
 }
 
-impl Stimulus for bool {
+impl InputStimulus for bool {
     const ZERO: Self = false;
 
     fn combine(&self, other: &Self) -> Self {
@@ -295,7 +300,7 @@ impl Stimulus for bool {
     }
 }
 
-impl Stimulus for i32 {
+impl InputStimulus for i32 {
     const ZERO: Self = 0;
 
     fn combine(&self, other: &Self) -> Self {
@@ -303,7 +308,7 @@ impl Stimulus for i32 {
     }
 }
 
-impl Stimulus for Vec2 {
+impl InputStimulus for Vec2 {
     const ZERO: Self = Vec2::ZERO;
 
     fn combine(&self, other: &Self) -> Self {
@@ -311,7 +316,7 @@ impl Stimulus for Vec2 {
     }
 }
 
-impl Stimulus for Vec3 {
+impl InputStimulus for Vec3 {
     const ZERO: Self = Vec3::ZERO;
 
     fn combine(&self, other: &Self) -> Self {
@@ -319,7 +324,7 @@ impl Stimulus for Vec3 {
     }
 }
 
-impl Stimulus for IVec2 {
+impl InputStimulus for IVec2 {
     const ZERO: Self = IVec2::ZERO;
 
     fn combine(&self, other: &Self) -> Self {
@@ -327,7 +332,7 @@ impl Stimulus for IVec2 {
     }
 }
 
-impl Stimulus for IVec3 {
+impl InputStimulus for IVec3 {
     const ZERO: Self = IVec3::ZERO;
 
     fn combine(&self, other: &Self) -> Self {
@@ -337,18 +342,22 @@ impl Stimulus for IVec3 {
 
 #[cfg(test)]
 mod test {
-    use winit::{event::ElementState, keyboard::Key};
+    use winit::{
+        event::ElementState,
+        keyboard::{Key, KeyCode, PhysicalKey},
+    };
 
     use crate::{types::KeyboardInput, Action, InputEvent, KeyBinding};
 
     #[test]
     fn input_state() {
         let mut activation = Action::new()
-            .with_binding(KeyBinding::new(Key::Character("A".into())))
-            .with_binding(KeyBinding::new(Key::Character("B".into())));
+            .with_binding(KeyBinding::new(KeyCode::KeyA))
+            .with_binding(KeyBinding::new(KeyCode::KeyB));
 
         activation.apply(&InputEvent::Keyboard(KeyboardInput {
             key: Key::Character("A".into()),
+            physical_key: PhysicalKey::Code(KeyCode::KeyA),
             state: ElementState::Pressed,
             modifiers: Default::default(),
             text: Default::default(),
@@ -358,6 +367,7 @@ mod test {
 
         activation.apply(&InputEvent::Keyboard(KeyboardInput {
             key: Key::Character("B".into()),
+            physical_key: PhysicalKey::Code(KeyCode::KeyB),
             state: ElementState::Pressed,
             modifiers: Default::default(),
             text: Default::default(),
@@ -367,6 +377,7 @@ mod test {
 
         activation.apply(&InputEvent::Keyboard(KeyboardInput {
             key: Key::Character("A".into()),
+            physical_key: PhysicalKey::Code(KeyCode::KeyA),
             state: ElementState::Released,
             modifiers: Default::default(),
             text: Default::default(),
@@ -375,6 +386,7 @@ mod test {
         assert!(activation.read_stimulus());
         activation.apply(&InputEvent::Keyboard(KeyboardInput {
             key: Key::Character("B".into()),
+            physical_key: PhysicalKey::Code(KeyCode::KeyB),
             state: ElementState::Released,
             modifiers: Default::default(),
             text: Default::default(),

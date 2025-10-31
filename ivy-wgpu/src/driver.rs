@@ -4,6 +4,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use anyhow::Context;
 use atomic_refcell::AtomicRefCell;
 use flax::{components::name, Entity};
 use glam::{vec2, Vec2};
@@ -22,8 +23,8 @@ use winit::{
 };
 
 use crate::{
-    components::{main_window, window, window_cursor_position, window_size},
-    events::{ApplicationReady, RedrawEvent, ResizedEvent},
+    components::{main_window, viewport_size, window, window_size},
+    events::{ApplicationReady, RedrawEvent, ScaleFactorChangedEvent, WindowResizedEvent},
 };
 
 pub struct WinitDriver {
@@ -95,12 +96,16 @@ impl ApplicationHandler for WinitEventHandler<'_> {
             )
             .set_default(main_window())
             .set_default(window_size())
-            .set_default(window_cursor_position())
+            .set_default(viewport_size())
             .spawn(&mut self.app.world);
 
         self.scale_factor = window.scale_factor();
 
-        self.app.init().unwrap();
+        if let Err(err) = self.app.init().context("Failed to initialize app") {
+            tracing::error!("{err:?}");
+            event_loop.exit();
+            return;
+        }
 
         if let Err(err) = self.app.emit_event(ApplicationReady(window.clone())) {
             tracing::error!("Error emitting window created event: {:?}", err);
@@ -112,9 +117,11 @@ impl ApplicationHandler for WinitEventHandler<'_> {
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, wid: WindowId, event: WindowEvent) {
-        if let Err(err) = self.process_event(event_loop, event, self.windows[&wid]) {
-            tracing::error!("Error processing event\n{err:?}");
-            event_loop.exit();
+        if let Some(&window_id) = self.windows.get(&wid) {
+            if let Err(err) = self.process_event(event_loop, event, window_id) {
+                tracing::error!("Error processing event\n{err:?}");
+                event_loop.exit();
+            }
         }
     }
 
@@ -175,15 +182,26 @@ impl WinitEventHandler<'_> {
                 serial: _,
                 token: _,
             } => todo!(),
-            WindowEvent::Resized(size) => {
-                let logical_size = size.to_logical(self.scale_factor);
+            WindowEvent::Resized(physical_size) => {
+                let logical_size = physical_size.to_logical(self.scale_factor);
 
                 let window = self.app.world().entity(window_id).unwrap();
                 *window.get_mut(window_size()).unwrap() = logical_size;
+                *window.get_mut(viewport_size()).unwrap() =
+                    vec2(logical_size.width, logical_size.height);
 
-                self.app.emit_event(ResizedEvent {
-                    physical_size: size,
+                self.app.emit_event(WindowResizedEvent {
+                    physical_size,
+                    logical_size,
                 })?;
+            }
+            WindowEvent::ScaleFactorChanged {
+                scale_factor,
+                inner_size_writer: _,
+            } => {
+                self.scale_factor = scale_factor;
+                self.app
+                    .emit_event(ScaleFactorChangedEvent { scale_factor })?;
             }
             WindowEvent::Moved(_) => {}
             WindowEvent::CloseRequested => event_loop.exit(),
@@ -196,6 +214,7 @@ impl WinitEventHandler<'_> {
                 self.app.emit_event(InputEvent::Keyboard(KeyboardInput {
                     modifiers: self.modifiers,
                     key: event.logical_key,
+                    physical_key: event.physical_key,
                     state: event.state,
                     text: event.text,
                 }))?;
@@ -209,12 +228,11 @@ impl WinitEventHandler<'_> {
                 device_id: _,
                 position,
             } => {
-                let logical_pos = position.to_logical(1.0);
+                let logical_pos = position.to_logical(self.scale_factor);
                 let window_entity = self.app.world().entity(window_id).unwrap();
 
                 let size;
                 {
-                    *window_entity.get_mut(window_cursor_position()).unwrap() = logical_pos;
                     size = window_entity.get_copy(window_size()).unwrap();
                     let window = &mut *window_entity.get_mut(crate::components::window()).unwrap();
                     window
@@ -284,12 +302,6 @@ impl WinitEventHandler<'_> {
                 value: _,
             } => {}
             WindowEvent::Touch(_) => todo!(),
-            WindowEvent::ScaleFactorChanged {
-                scale_factor,
-                inner_size_writer: _,
-            } => {
-                self.scale_factor = scale_factor;
-            }
             WindowEvent::ThemeChanged(_) => {}
             WindowEvent::Occluded(_) => {}
             WindowEvent::RedrawRequested => {

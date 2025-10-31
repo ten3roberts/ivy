@@ -1,7 +1,7 @@
-use std::{cell::RefCell, convert::identity, ops::Deref, rc::Rc};
+use std::convert::identity;
 
 use flax::World;
-use ivy_assets::AssetCache;
+use ivy_assets::{stored::DynamicStore, AssetCache};
 use ivy_core::{
     app::TickEvent,
     components::{engine, request_capture_mouse},
@@ -13,15 +13,18 @@ use ivy_input::types::InputEvent;
 use ivy_wgpu::{
     components::{main_window, window},
     driver::WindowHandle,
-    events::{ApplicationReady, ResizedEvent},
+    events::{ApplicationReady, ScaleFactorChangedEvent, WindowResizedEvent},
 };
 use violet::{
-    core::{declare_atom, ScopeRef, Widget},
+    core::{declare_atom, style::StylesheetOptions, widget::col, ScopeRef},
     glam::vec2,
-    wgpu::app::{AppInstance, AppInstanceBuilder},
+    wgpu::{app::AppInstance, AppBuilder},
 };
 
-use crate::{components::on_input_event, SharedUiInstance};
+use crate::{
+    components::{on_input_event, ui_instance},
+    screens::{screen_state, ScreenStack, ScreenState},
+};
 
 pub type Action = Box<dyn Send + Sync + FnOnce(&mut World, &AssetCache) -> anyhow::Result<()>>;
 
@@ -44,31 +47,73 @@ declare_atom! {
     pub action_sender: ActionSender,
 }
 
-pub struct UiInputLayer {
-    instance: Rc<RefCell<AppInstance>>,
-    window: Option<WindowHandle>,
-    capture_all_input: bool,
+/// Options for configuring the UI layer
+pub struct UiLayerOptions {
+    pub label: String,
+    pub capture_all_input: bool,
+    pub follow_window_size: bool,
 }
 
-impl UiInputLayer {
-    pub fn new(root: impl Widget) -> Self {
-        let instance = AppInstanceBuilder::new().build(root);
-        let instance = Rc::new(RefCell::new(instance));
+impl Default for UiLayerOptions {
+    fn default() -> Self {
+        Self {
+            label: "main_ui".to_string(),
+            capture_all_input: false,
+            follow_window_size: true,
+        }
+    }
+}
+
+pub struct UiLayer {
+    options: UiLayerOptions,
+    instance: Option<AppInstance>,
+    window: Option<WindowHandle>,
+    screens: ScreenState,
+}
+
+impl Default for UiLayer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl UiLayer {
+    pub fn new() -> Self {
+        Self::with_options(UiLayerOptions::default())
+    }
+
+    pub fn with_options(options: UiLayerOptions) -> Self {
+        let screens = ScreenState::new();
+
+        let instance = AppBuilder::new()
+            .with_font(violet::lucide::font_source())
+            .with_stylesheet(
+                StylesheetOptions::new()
+                    .with_icons(violet::lucide::icon_set())
+                    .build(),
+            )
+            .build(col(ScreenStack::new(screens.clone())).with_contain_margins(true));
 
         Self {
-            instance,
+            options,
+            screens,
+            instance: Some(instance),
             window: None,
-            capture_all_input: false,
         }
+    }
+
+    pub fn with_label(mut self, label: impl Into<String>) -> Self {
+        self.options.label = label.into();
+        self
     }
 
     /// Capture all input events instead of feeding forward to lower layers
     pub fn with_capture_all_input(mut self, capture_all_input: bool) -> Self {
-        self.capture_all_input = capture_all_input;
+        self.options.capture_all_input = capture_all_input;
         self
     }
 
-    fn on_ready(&mut self, engine_world: &mut World, _: &AssetCache) -> anyhow::Result<()> {
+    fn on_ready(&mut self, engine_world: &mut World, _: &mut DynamicStore) -> anyhow::Result<()> {
         let main_window = engine_world.by_tag(main_window());
 
         if let Some(main_window) = main_window {
@@ -82,14 +127,14 @@ impl UiInputLayer {
         &mut self,
         engine_world: &mut World,
         assets: &AssetCache,
+        store: &mut DynamicStore,
         event: &InputEvent,
     ) -> anyhow::Result<bool> {
         profile_function!();
-        let instance = &mut *self.instance.deref().borrow_mut();
+        let instance = &mut *store.get_mut(&*engine_world.get(engine(), ui_instance())?);
 
         instance.input_state.update_external_focus(&instance.frame);
 
-        // TODO: modifiers changed
         let mut captured = match event {
             InputEvent::Keyboard(keyboard_input) => instance.input_state.on_keyboard_input(
                 &mut instance.frame,
@@ -141,46 +186,69 @@ impl UiInputLayer {
             }
         }
 
-        captured |= self.capture_all_input;
+        captured |= self.options.capture_all_input;
         Ok(captured)
     }
 
     fn on_resized(
         &mut self,
-        _: &mut World,
+        engine_world: &mut World,
         _: &AssetCache,
-        event: &ResizedEvent,
+        store: &mut DynamicStore,
+        event: &WindowResizedEvent,
     ) -> anyhow::Result<()> {
-        let mut instance = self.instance.deref().borrow_mut();
+        let instance = &mut *store.get_mut(&*engine_world.get(engine(), ui_instance())?);
 
         instance.on_resize(event.physical_size);
         Ok(())
     }
 
-    /// Now be careful with this one, alright?
-    pub fn instance(&self) -> &SharedUiInstance {
-        &self.instance
+    fn on_scale_factor_change(
+        &mut self,
+        engine_world: &mut World,
+        _: &AssetCache,
+        store: &mut DynamicStore,
+        event: &ScaleFactorChangedEvent,
+    ) -> anyhow::Result<()> {
+        tracing::info!(scale_factor = event.scale_factor, "Scale factor changed");
+        let instance = &mut *store.get_mut(&*engine_world.get(engine(), ui_instance())?);
+
+        instance.set_scale_factor(event.scale_factor);
+        instance.on_resize(instance.window_size());
+        Ok(())
     }
 }
 
-impl Layer for UiInputLayer {
+impl Layer for UiLayer {
     fn register(
         &mut self,
-        _: &mut World,
+        world: &mut World,
         _: &AssetCache,
+        store: &mut DynamicStore,
         mut events: EventRegisterContext<Self>,
     ) -> anyhow::Result<()>
     where
         Self: Sized,
     {
-        events.subscribe(|this, ctx, _: &ApplicationReady| this.on_ready(ctx.world, ctx.assets));
+        let instance_handle = store.insert(self.instance.take().expect("on_ready called twice"));
+
+        world.set(engine(), ui_instance(), instance_handle)?;
+        world.set(engine(), screen_state(), self.screens.clone())?;
+
+        events.subscribe(|this, ctx, _: &ApplicationReady| this.on_ready(ctx.world, ctx.store));
 
         events.intercept(|this, ctx, event: &InputEvent| {
-            this.on_input_event(ctx.world, ctx.assets, event)
+            this.on_input_event(ctx.world, ctx.assets, ctx.store, event)
         });
 
-        events.subscribe(|this, ctx, event: &ResizedEvent| {
-            this.on_resized(ctx.world, ctx.assets, event)
+        if self.options.follow_window_size {
+            events.subscribe(|this, ctx, event: &WindowResizedEvent| {
+                this.on_resized(ctx.world, ctx.assets, ctx.store, event)
+            });
+        }
+
+        events.subscribe(|this, ctx, event: &ScaleFactorChangedEvent| {
+            this.on_scale_factor_change(ctx.world, ctx.assets, ctx.store, event)
         });
 
         Ok(())
@@ -188,57 +256,56 @@ impl Layer for UiInputLayer {
 }
 
 pub struct UiUpdateLayer {
-    instance: Rc<RefCell<AppInstance>>,
-    pending_actions: flume::Receiver<Action>,
+    pending_actions_rx: flume::Receiver<Action>,
+    pending_actions_tx: flume::Sender<Action>,
 }
 
 impl UiUpdateLayer {
-    pub fn new(instance: SharedUiInstance) -> Self {
+    pub fn new() -> Self {
         let (tx, rx) = flume::unbounded();
-        instance
-            .borrow_mut()
-            .frame
-            .set_atom(action_sender(), ActionSender { tx });
 
         Self {
-            instance,
-            pending_actions: rx,
+            pending_actions_rx: rx,
+            pending_actions_tx: tx,
         }
     }
 
-    fn on_ready(&mut self, _: &mut World, _: &AssetCache) -> anyhow::Result<()> {
+    fn on_ready(&mut self, world: &mut World, store: &mut DynamicStore) -> anyhow::Result<()> {
+        let instance = &mut *store.get_mut(&*world.get(engine(), ui_instance())?);
+
+        instance.frame.set_atom(
+            action_sender(),
+            ActionSender {
+                tx: self.pending_actions_tx.clone(),
+            },
+        );
+
         Ok(())
     }
 
-    fn on_tick(&mut self, world: &mut World, assets: &AssetCache) -> anyhow::Result<()> {
+    fn on_tick(
+        &mut self,
+        world: &mut World,
+        assets: &AssetCache,
+        store: &mut DynamicStore,
+    ) -> anyhow::Result<()> {
         profile_function!();
 
-        let mut instance = self.instance.deref().borrow_mut();
+        let instance = &mut *store.get_mut(&*world.get(engine(), ui_instance())?);
 
         instance.update();
 
-        for action in self.pending_actions.drain() {
+        for action in self.pending_actions_rx.drain() {
             action(world, assets)?;
         }
 
         Ok(())
     }
+}
 
-    fn on_resized(
-        &mut self,
-        _: &mut World,
-        _: &AssetCache,
-        event: &ResizedEvent,
-    ) -> anyhow::Result<()> {
-        let mut instance = self.instance.deref().borrow_mut();
-
-        instance.on_resize(event.physical_size);
-        Ok(())
-    }
-
-    /// Now be careful with this one, alright?
-    pub fn instance(&self) -> &SharedUiInstance {
-        &self.instance
+impl Default for UiUpdateLayer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -247,18 +314,15 @@ impl Layer for UiUpdateLayer {
         &mut self,
         _: &mut World,
         _: &AssetCache,
+        _: &mut DynamicStore,
         mut events: EventRegisterContext<Self>,
     ) -> anyhow::Result<()>
     where
         Self: Sized,
     {
-        events.subscribe(|this, ctx, _: &ApplicationReady| this.on_ready(ctx.world, ctx.assets));
+        events.subscribe(|this, ctx, _: &ApplicationReady| this.on_ready(ctx.world, ctx.store));
 
-        events.subscribe(|this, ctx, _: &TickEvent| this.on_tick(ctx.world, ctx.assets));
-
-        events.subscribe(|this, ctx, event: &ResizedEvent| {
-            this.on_resized(ctx.world, ctx.assets, event)
-        });
+        events.subscribe(|this, ctx, _: &TickEvent| this.on_tick(ctx.world, ctx.assets, ctx.store));
 
         Ok(())
     }

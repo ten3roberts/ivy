@@ -3,10 +3,11 @@ use std::time::Duration;
 use flax::{components::child_of, system, FetchExt, World};
 use glam::{Mat4, Quat, Vec3};
 use itertools::Itertools;
-use ivy_assets::{Asset, AssetCache};
+use ivy_assets::{stored::DynamicStore, Asset, AssetCache};
 use ivy_core::{
     components::{delta_time, engine, position, rotation},
-    update_layer::{Plugin, ScheduleSetBuilder},
+    plugin::{Plugin, PluginContext},
+    update_layer::ScheduleSetBuilder,
 };
 
 use crate::components::{animator, skin, skin_matrix, track_bone};
@@ -16,13 +17,8 @@ use super::{player::Animator, skin::Skin};
 pub struct AnimationPlugin;
 
 impl Plugin for AnimationPlugin {
-    fn install(
-        &self,
-        _: &mut World,
-        _: &AssetCache,
-        schedules: &mut ScheduleSetBuilder,
-    ) -> anyhow::Result<()> {
-        schedules
+    fn install(&self, ctx: &mut PluginContext) -> anyhow::Result<()> {
+        ctx.schedules
             .per_tick_mut()
             .with_system(animation_step_system())
             .with_system(computer_skinning_system())
