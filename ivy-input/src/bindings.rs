@@ -4,7 +4,7 @@ use glam::{vec2, IVec2, IVec3, Vec2, Vec3};
 use ivy_core::math::{Axis2D, Axis3D};
 use winit::{
     event::MouseButton,
-    keyboard::{Key, SmolStr},
+    keyboard::{Key, KeyCode, PhysicalKey, SmolStr},
 };
 
 use crate::{
@@ -233,13 +233,13 @@ where
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct KeyBinding {
     pressed: bool,
-    key: Key<SmolStr>,
+    key_code: KeyCode,
 }
 
 impl KeyBinding {
-    pub fn new(key: impl Into<Key<SmolStr>>) -> Self {
+    pub fn new(key: impl Into<KeyCode>) -> Self {
         Self {
-            key: key.into(),
+            key_code: key.into(),
             pressed: false,
         }
     }
@@ -250,8 +250,16 @@ impl Binding for KeyBinding {
 
     fn apply(&mut self, input: &InputEvent) {
         match input {
-            InputEvent::Keyboard(KeyboardInput { key, state, .. }) if key == &self.key => {
-                self.pressed = state.is_pressed();
+            InputEvent::Keyboard(KeyboardInput {
+                physical_key,
+                state,
+                ..
+            }) => {
+                if let PhysicalKey::Code(code) = physical_key {
+                    if code == &self.key_code {
+                        self.pressed = state.is_pressed();
+                    }
+                }
             }
             _ => {}
         }
@@ -262,7 +270,7 @@ impl Binding for KeyBinding {
     }
 
     fn bindings(&self) -> Vec<InputKind> {
-        vec![InputKind::Key(self.key.clone())]
+        vec![InputKind::Key(self.key_code)]
     }
 }
 
@@ -404,7 +412,7 @@ where
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct MouseButtonBinding {
     pressed: bool,
     button: MouseButton,

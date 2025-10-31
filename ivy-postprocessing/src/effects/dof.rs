@@ -4,29 +4,32 @@ use ivy_wgpu::{
     Gpu,
 };
 
+/// Configuration for the Depth of Field post-processing effect.
 #[derive(Debug, Clone)]
 pub struct DofConfig {
+    /// The radius of the blur filter.
     pub filter_radius: f32,
+    /// Number of layers for the effect.
     pub layers: u32,
+    /// Distance at which objects are in focus.
     pub focus_distance: f32,
+    /// Range around focus distance where objects are in focus.
     pub focus_range: f32,
-    pub near: f32,
-    pub far: f32,
 }
 
+/// Default configuration values for Depth of Field.
 impl Default for DofConfig {
     fn default() -> Self {
         Self {
             filter_radius: 0.0001,
-            layers: 1,
+            layers: 4,
             focus_distance: 15.0,
-            focus_range: 100.0,
-            near: 0.1,
-            far: 1000.0,
+            focus_range: 50.0,
         }
     }
 }
 
+/// Implementation of the PostProcessingEffect trait for DofConfig.
 impl PostProcessingEffect for DofConfig {
     fn add_to_graph(
         &self,
@@ -46,8 +49,6 @@ impl PostProcessingEffect for DofConfig {
             self.filter_radius,
             self.focus_distance,
             self.focus_range,
-            self.near,
-            self.far,
         ));
     }
 }

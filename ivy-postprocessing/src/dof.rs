@@ -1,8 +1,10 @@
 use std::slice;
 
+use flax::Query;
 use glam::{uvec2, vec3};
 use itertools::Itertools;
-use ivy_core::profiling::{profile_function, profile_scope};
+use ivy_core::{components::main_camera, profiling::{profile_function, profile_scope}};
+use ivy_graphics::camera::CameraSettings;
 use ivy_wgpu::{
     rendergraph::{Dependency, Node, TextureHandle},
     types::{
@@ -21,7 +23,6 @@ use wgpu::{
 struct Data {
     bind_groups: Vec<BindGroup>,
     mip_chain: Vec<TextureView>,
-    mix_bind_group: BindGroup,
 }
 
 pub struct DepthOfFieldNode {
@@ -42,8 +43,6 @@ pub struct DepthOfFieldNode {
     filter_radius: f32,
     focus_distance: f32,
     focus_range: f32,
-    near: f32,
-    far: f32,
 }
 
 impl DepthOfFieldNode {
@@ -56,8 +55,6 @@ impl DepthOfFieldNode {
         filter_radius: f32,
         focus_distance: f32,
         focus_range: f32,
-        near: f32,
-        far: f32,
     ) -> Self {
         let layout = BindGroupLayoutBuilder::new("DepthOfField")
             .bind_texture(ShaderStages::FRAGMENT)
@@ -152,8 +149,6 @@ impl DepthOfFieldNode {
             filter_radius,
             focus_distance,
             focus_range,
-            near,
-            far,
         }
     }
 }
@@ -167,6 +162,16 @@ impl Node for DepthOfFieldNode {
         let output = ctx.get_texture(self.final_output);
 
         let output_view = output.create_view(&Default::default());
+
+        let mut camera_query = Query::new().with(main_camera());
+        let (near, far) = camera_query
+            .iter(&ctx.world)
+            .next()
+            .map(|settings: &CameraSettings| match settings.projection {
+                ivy_graphics::camera::CameraProjection::Perspective { near, far, .. } => (*near, *far),
+                ivy_graphics::camera::CameraProjection::Orthographic { near, far, .. } => (*near, *far),
+            })
+            .unwrap_or((0.1, 1000.0));
 
         let data = self.data.get_or_insert_with(|| {
             let mip_texture = ctx.gpu.device.create_texture(&TextureDescriptor {
@@ -231,29 +236,28 @@ impl Node for DepthOfFieldNode {
                     .collect_vec()
             };
 
-            let depth_view = depth_input.create_view(&Default::default());
-
-            let dof_config_buffer = TypedBuffer::new(
-                ctx.gpu,
-                "DofConfig",
-                BufferUsages::UNIFORM,
-                &[glam::vec4(self.focus_distance, self.focus_range, self.near, self.far)],
-            );
-
-            let mix_bind_group = BindGroupBuilder::new("dof_mix")
-                .bind_texture(&color_view)
-                .bind_texture(&mip_chain[0])
-                .bind_texture(&depth_view)
-                .bind_sampler(&self.sampler)
-                .bind_buffer(&dof_config_buffer)
-                .build(ctx.gpu, &self.mix_layout);
-
             Data {
                 bind_groups,
-                mix_bind_group,
                 mip_chain,
             }
         });
+
+        let depth_view = depth_input.create_view(&Default::default());
+
+        let dof_config_buffer = TypedBuffer::new(
+            ctx.gpu,
+            "DofConfig",
+            BufferUsages::UNIFORM,
+            &[glam::vec4(self.focus_distance, self.focus_range, near, far)],
+        );
+
+        let mix_bind_group = BindGroupBuilder::new("dof_mix")
+            .bind_texture(&color_view)
+            .bind_texture(&data.mip_chain[0])
+            .bind_texture(&depth_view)
+            .bind_sampler(&self.sampler)
+            .bind_buffer(&dof_config_buffer)
+            .build(ctx.gpu, &self.mix_layout);
 
         for (bind_group, target) in data.bind_groups[..data.bind_groups.len() - 1]
             .iter()
@@ -340,7 +344,7 @@ impl Node for DepthOfFieldNode {
             });
 
             render_pass.set_pipeline(self.mix_shader.pipeline());
-            render_pass.set_bind_group(0, &data.mix_bind_group, &[]);
+            render_pass.set_bind_group(0, &mix_bind_group, &[]);
 
             render_pass.draw(0..3, 0..1);
         }

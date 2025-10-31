@@ -7,7 +7,7 @@ use glam::Vec2;
 use image::DynamicImage;
 use ivy_assets::{
     stored::{DynamicStore, Handle},
-    AssetCache, AsyncAssetExt,
+    AssetCache, AssetPath, AsyncAssetExt,
 };
 use ivy_core::components::engine;
 use ivy_ui::{components::ui_instance, node::UiRenderNode, violet::wgpu::app::AppInstance};
@@ -126,9 +126,18 @@ impl Default for PbrRenderGraphConfig {
         Self {
             shadow_map_config: Some(Default::default()),
             msaa: Some(Default::default()),
-            post_processing_effects: vec![],
-            color_grading: ColorGradingConfig::cinematic(),
-            skybox: None,
+            post_processing_effects: vec![
+                Box::new(BloomConfig::default()),
+                Box::new(DofConfig::default()),
+            ],
+            color_grading: ColorGradingConfig::default(),
+            skybox: Some(SkyboxConfig {
+                hdri: Box::new(AssetPath::new(
+                    // "hdris/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
+                    "hdris/lauter_waterfall_4k.hdr",
+                )),
+                format: TextureFormat::Rgba16Float,
+            }),
             hdr_format: Some(TextureFormat::Rgba16Float),
             label: "pbr".into(),
         }
@@ -172,6 +181,10 @@ impl PbrRenderGraphConfig {
             self.hdr_format.is_some() || !self.post_processing_effects.is_empty();
 
         tracing::info!(?target_format);
+
+        if self.msaa.is_none() {
+            tracing::warn!("MSAA is disabled. Depth of field and other post-processing effects may not work correctly without MSAA enabled for proper depth resolution.");
+        }
         let final_color = if needs_indirection_target {
             render_graph.resources.insert_texture(ManagedTextureDesc {
                 label: format!("{}.final_color", self.label).into(),

@@ -17,7 +17,7 @@ use ivy_editor::{
     tools::{physics_tool::PhysicsToolPlugin, transform_tool::TransformToolPlugin},
     tools_controller::ToolsControllerPlugin,
 };
-use ivy_engine::{is_static, rotation, scale, RigidBodyBundle, TransformBundle};
+use ivy_engine::{engine, is_static, rotation, scale, RigidBodyBundle, TransformBundle};
 use ivy_game::{fly_camera::FlyCameraPlugin, viewport_camera::CameraViewportPlugin};
 use ivy_gltf::animation::plugin::AnimationPlugin;
 use ivy_graphics::texture::TextureData;

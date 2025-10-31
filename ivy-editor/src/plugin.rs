@@ -12,7 +12,7 @@ use ivy_core::{
 use ivy_input::{
     Action, CompositeBinding, InputState, KeyBinding,
     components::input_state,
-    types::{Key, NamedKey},
+    types::{Key, KeyCode, NamedKey},
 };
 use ivy_physics::{
     components::{collider_handle, physics_state},
@@ -236,8 +236,8 @@ impl Plugin for EditorPlugin {
         let input = InputState::new()
             .with_trigger_action(
                 Action::new().with_binding(CompositeBinding::new(
-                    KeyBinding::new(Key::Character("z".into())),
-                    vec![KeyBinding::new(Key::Named(NamedKey::Control))],
+                    KeyBinding::new(KeyCode::KeyZ),
+                    vec![KeyBinding::new(KeyCode::ControlLeft)],
                 )),
                 |entity, cmd, pressed| {
                     let id = entity.id();
@@ -250,8 +250,8 @@ impl Plugin for EditorPlugin {
             )
             .with_trigger_action(
                 Action::new().with_binding(CompositeBinding::new(
-                    KeyBinding::new(Key::Character("y".into())),
-                    vec![KeyBinding::new(Key::Named(NamedKey::Control))],
+                    KeyBinding::new(KeyCode::KeyY),
+                    vec![KeyBinding::new(KeyCode::ControlLeft)],
                 )),
                 |entity, cmd, pressed| {
                     let id = entity.id();

@@ -51,6 +51,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let s = textureSample(sharp, default_sampler, in.uv);
     let b = textureSample(blurred, default_sampler, in.uv);
     let linear_d = config.near * config.far / (config.far - d * (config.far - config.near));
-    let weight = smoothstep(config.focus_distance - config.focus_range, config.focus_distance + config.focus_range, linear_d);
-    return vec4(mix(s.rgb, b.rgb, weight), s.a);
+    let weight = clamp(abs(linear_d - config.focus_distance) / config.focus_range, 0.0, 1.0);
+    return vec4(mix(s.rgb, b.rgb, weight * 0.2), s.a);
 }

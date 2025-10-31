@@ -13,7 +13,7 @@ use ivy_core::{
 use ivy_input::{
     Action, CursorPositionBinding, InputState, KeyBinding, MouseButtonBinding,
     components::input_state,
-    types::{Key, MouseButton, NamedKey},
+    types::{Key, KeyCode, MouseButton, NamedKey},
 };
 use ivy_physics::{components::physics_state, rapier3d::prelude::QueryFilter};
 use ivy_scene::camera::{self, CameraQuery};
@@ -96,7 +96,7 @@ impl Bundle for SelectToolBundle {
         let input = InputState::new()
             .with_action(
                 shift_input(),
-                Action::new().with_binding(KeyBinding::new(Key::Named(NamedKey::Shift))),
+                Action::new().with_binding(KeyBinding::new(KeyCode::ShiftLeft)),
             )
             .with_action(
                 cursor_pos(),

@@ -1,0 +1,64 @@
+{
+  "meta": {
+    "type_name": "Template"
+  },
+  "desc": {
+    "bundles": [
+      {
+        "NodeBundle": {
+          "node": {
+            "document": "models/crate.glb",
+            "node": "Cube"
+          }
+        }
+      },
+      {
+        "RigidBodyBundle": {
+          "body_type": "Dynamic",
+          "can_sleep": true,
+          "mass": 0.0,
+          "angular_mass": 0.0,
+          "constraints": {
+            "lock_translation": [
+              false,
+              false,
+              false
+            ],
+            "lock_rotation": [
+              false,
+              false,
+              false
+            ]
+          },
+          "velocity": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "angular_velocity": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "linear_damping": 0.0,
+          "angular_damping": 0.0
+        }
+      },
+      {
+        "GltfColliderBundle": {
+          "shape": {
+            "GltfConvexMesh": {
+              "node": {
+                "document": "models/crate.glb",
+                "node": "Cube"
+              }
+            }
+          },
+          "restitution": 1.0,
+          "friction": 0.8,
+          "density": 0.2
+        }
+      }
+    ]
+  }
+}

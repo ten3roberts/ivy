@@ -1,13 +1,14 @@
-use flax::{component, system};
+use flax::{component, system, ComponentMut, Query, QueryBorrow};
 use glam::{vec3, Vec2, Vec3};
 use ivy_core::{
+    components::{engine, request_capture_mouse},
     math::Axis2D,
     plugin::{Plugin, PluginContext},
     Bundle,
 };
 use ivy_input::{
     components::input_state,
-    types::{Key, NamedKey},
+    types::{Key, KeyCode, NamedKey},
     Action, BindingExt, CursorMoveBinding, InputState, KeyBinding,
 };
 
@@ -122,14 +123,15 @@ impl CharacterController {
         self.jump = false;
     }
 
-    #[system]
-    fn update_movement_system(
+    #[system(with_query(Query::new(request_capture_mouse().as_mut())))]
+    fn update_system(
         self: &mut CharacterController,
         position: Vec3,
         velocity: &mut Vec3,
         rotation: &mut glam::Quat,
         movement_direction: &mut Vec3,
-    ) {
+        request_mouse_lock: &mut QueryBorrow<ComponentMut<bool>>,
+    ) -> anyhow::Result<()> {
         let grounded = velocity.y.abs() < 0.01;
         let state = CharacterControllerState {
             position,
@@ -143,6 +145,7 @@ impl CharacterController {
             output: CharacterControllerOutput::default(),
         };
 
+        *request_mouse_lock.get(engine())? = true;
         self.behavior_tree.execute(&mut ctx);
 
         *rotation = glam::Quat::from_rotation_y(self.yaw);
@@ -151,6 +154,8 @@ impl CharacterController {
         if ctx.output.jump {
             velocity.y = 5.0;
         }
+
+        Ok(())
     }
 
     #[system(args(camera_look_data=camera_look_data().as_mut()))]
@@ -166,7 +171,7 @@ impl Plugin for CharacterControllerPlugin {
         ctx.schedules
             .per_tick_mut()
             .with_system(CharacterController::update_inputs_system())
-            .with_system(CharacterController::update_movement_system())
+            .with_system(CharacterController::update_system())
             .with_system(CharacterController::update_look_data_system());
 
         Ok(())
@@ -185,28 +190,20 @@ pub struct PlayerInputConfiguration {
 impl PlayerInputConfiguration {
     pub fn new() -> Self {
         let movement_input_action = Action::new()
+            .with_binding(KeyBinding::new(KeyCode::KeyW).analog().compose(Axis2D::Y))
             .with_binding(
-                KeyBinding::new(Key::Character("w".into()))
-                    .analog()
-                    .compose(Axis2D::Y),
-            )
-            .with_binding(
-                KeyBinding::new(Key::Character("s".into()))
+                KeyBinding::new(KeyCode::KeyS)
                     .analog()
                     .compose(Axis2D::Y)
                     .amplitude(-1.0),
             )
             .with_binding(
-                KeyBinding::new(Key::Character("a".into()))
+                KeyBinding::new(KeyCode::KeyA)
                     .analog()
                     .compose(Axis2D::X)
                     .amplitude(-1.0),
             )
-            .with_binding(
-                KeyBinding::new(Key::Character("d".into()))
-                    .analog()
-                    .compose(Axis2D::X),
-            );
+            .with_binding(KeyBinding::new(KeyCode::KeyD).analog().compose(Axis2D::X));
 
         let yaw_input_action = Action::new().with_binding(
             CursorMoveBinding::new()
@@ -220,14 +217,12 @@ impl PlayerInputConfiguration {
                 .amplitude(-0.001),
         );
 
-        let shift_input_action =
-            Action::new().with_binding(KeyBinding::new(Key::Named(NamedKey::Shift)));
+        let shift_input_action = Action::new().with_binding(KeyBinding::new(KeyCode::ShiftLeft));
 
-        let jump_input =
-            Action::new().with_binding(KeyBinding::new(Key::Named(NamedKey::Space)).rising_edge());
+        let jump_input = Action::new().with_binding(KeyBinding::new(KeyCode::Space).rising_edge());
 
         let interact_input =
-            Action::new().with_binding(KeyBinding::new(Key::Character("f".into())).rising_edge());
+            Action::new().with_binding(KeyBinding::new(KeyCode::KeyF).rising_edge());
 
         Self {
             movement_input_action,

@@ -68,7 +68,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // b,c,e,f * 0.125
     // d,e,g,h * 0.125
     // e,f,h,i * 0.125
-    // j,k,l,m * 0.5
     // This shows 5 square areas that are being sampled. But some of them overlap,
     // so to have an energy preserving downsample we need to make some adjustments.
     // The weights are the distributed, so that the sum of j,k,l,m (e.g.)

@@ -18,7 +18,7 @@ use ivy_graphics::camera::{
 };
 use ivy_input::{
     components::input_state,
-    types::{Key, NamedKey},
+    types::{Key, KeyCode, NamedKey},
     Action, BindingExt, CompositeBinding, CursorMoveBinding, InputState, KeyBinding,
     MouseButtonBinding, ScrollBinding,
 };
@@ -82,58 +82,46 @@ impl Bundle for FreeCameraBundle {
     fn mount(&self, entity: &mut flax::EntityBuilder) {
         let mut speed_action = Action::new();
         speed_action.add(
-            CompositeBinding::new(ScrollBinding::new(), [KeyBinding::new(NamedKey::Shift)])
+            CompositeBinding::new(ScrollBinding::new(), [KeyBinding::new(KeyCode::ShiftLeft)])
                 .decompose(Axis2D::Y),
         );
 
         let mut move_action = Action::<Vec3>::new();
+        move_action.add(KeyBinding::new(KeyCode::KeyW).analog().compose(Axis3D::Z));
         move_action.add(
-            KeyBinding::new(Key::Character("w".into()))
-                .analog()
-                .compose(Axis3D::Z),
-        );
-        move_action.add(
-            KeyBinding::new(Key::Character("a".into()))
+            KeyBinding::new(KeyCode::KeyA)
                 .analog()
                 .compose(Axis3D::X)
                 .amplitude(-1.0),
         );
         move_action.add(
-            KeyBinding::new(Key::Character("s".into()))
+            KeyBinding::new(KeyCode::KeyS)
                 .analog()
                 .compose(Axis3D::Z)
                 .amplitude(-1.0),
         );
-        move_action.add(
-            KeyBinding::new(Key::Character("d".into()))
-                .analog()
-                .compose(Axis3D::X),
-        );
+        move_action.add(KeyBinding::new(KeyCode::KeyD).analog().compose(Axis3D::X));
 
         move_action.add(
-            KeyBinding::new(Key::Character("c".into()))
+            KeyBinding::new(KeyCode::KeyC)
                 .analog()
                 .compose(Axis3D::Y)
                 .amplitude(-1.0),
         );
         // move_action.add(
-        //     KeyBinding::new(Key::Named(NamedKey::Control))
+        //     KeyBinding::new(KeyCode::ControlLeft)
         //         .analog()
         //         .compose(Axis3D::Y)
         //         .amplitude(-1.0),
         // );
-        move_action.add(
-            KeyBinding::new(Key::Named(NamedKey::Space))
-                .analog()
-                .compose(Axis3D::Y),
-        );
+        move_action.add(KeyBinding::new(KeyCode::Space).analog().compose(Axis3D::Y));
 
         let mut rotate_action = Action::new();
         rotate_action.add(CursorMoveBinding::new().amplitude(Vec2::ONE * 0.001));
 
         let mut pan_action = Action::new();
         pan_action
-            .add(KeyBinding::new(Key::Character("q".into())))
+            .add(KeyBinding::new(KeyCode::KeyQ))
             .add(MouseButtonBinding::new(
                 ivy_input::types::MouseButton::Right,
             ));

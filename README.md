@@ -90,7 +90,7 @@ Layers communicate through shared resources:
 - **Asset Cache**: Shared assets like textures and models.
 
 ### Plugins and World Logic
-Plugins extend the ECS World with modular logic using the `Plugin` trait. Unlike Layers, which operate above the World,
+Plugins extend the ECS World with modular logic blocks using the `Plugin` trait. Unlike Layers, which operate above the World,
 plugins integrate directly into the World's systems and scheduled logic. They allow you to add ECS systems for game and
 entity logic, and enable automatic multithreading for parallel execution.
 

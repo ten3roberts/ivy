@@ -36,7 +36,7 @@ impl InputState {
     /// Execute a function whenever value changes
     pub fn with_trigger_action<
         T: InputStimulus,
-        F: 'static + Send + Sync + FnMut(&EntityRef, &mut CommandBuffer, T) -> anyhow::Result<()>,
+        F: 'static + Send + Sync + FnMut(&EntityRef<'_>, &mut CommandBuffer, T) -> anyhow::Result<()>,
     >(
         mut self,
         action: Action<T>,
@@ -68,7 +68,10 @@ impl InputState {
     }
 
     pub fn add_trigger_action<
-        F: 'static + Send + Sync + FnMut(&EntityRef, &mut CommandBuffer, bool) -> anyhow::Result<()>,
+        F: 'static
+            + Send
+            + Sync
+            + FnMut(&EntityRef<'_>, &mut CommandBuffer, bool) -> anyhow::Result<()>,
     >(
         &mut self,
         action: Action<bool>,
@@ -339,18 +342,22 @@ impl InputStimulus for IVec3 {
 
 #[cfg(test)]
 mod test {
-    use winit::{event::ElementState, keyboard::Key};
+    use winit::{
+        event::ElementState,
+        keyboard::{Key, KeyCode, PhysicalKey},
+    };
 
     use crate::{types::KeyboardInput, Action, InputEvent, KeyBinding};
 
     #[test]
     fn input_state() {
         let mut activation = Action::new()
-            .with_binding(KeyBinding::new(Key::Character("A".into())))
-            .with_binding(KeyBinding::new(Key::Character("B".into())));
+            .with_binding(KeyBinding::new(KeyCode::KeyA))
+            .with_binding(KeyBinding::new(KeyCode::KeyB));
 
         activation.apply(&InputEvent::Keyboard(KeyboardInput {
             key: Key::Character("A".into()),
+            physical_key: PhysicalKey::Code(KeyCode::KeyA),
             state: ElementState::Pressed,
             modifiers: Default::default(),
             text: Default::default(),
@@ -360,6 +367,7 @@ mod test {
 
         activation.apply(&InputEvent::Keyboard(KeyboardInput {
             key: Key::Character("B".into()),
+            physical_key: PhysicalKey::Code(KeyCode::KeyB),
             state: ElementState::Pressed,
             modifiers: Default::default(),
             text: Default::default(),
@@ -369,6 +377,7 @@ mod test {
 
         activation.apply(&InputEvent::Keyboard(KeyboardInput {
             key: Key::Character("A".into()),
+            physical_key: PhysicalKey::Code(KeyCode::KeyA),
             state: ElementState::Released,
             modifiers: Default::default(),
             text: Default::default(),
@@ -377,6 +386,7 @@ mod test {
         assert!(activation.read_stimulus());
         activation.apply(&InputEvent::Keyboard(KeyboardInput {
             key: Key::Character("B".into()),
+            physical_key: PhysicalKey::Code(KeyCode::KeyB),
             state: ElementState::Released,
             modifiers: Default::default(),
             text: Default::default(),

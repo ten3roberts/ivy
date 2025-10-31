@@ -15,7 +15,7 @@ use ivy_core::{
 };
 use ivy_input::{
     components::{cursor_position, input_state},
-    types::{Key, MouseButton, NamedKey},
+    types::{Key, KeyCode, MouseButton, NamedKey},
     Action, BindingExt, InputState, KeyBinding, MouseButtonBinding, ScrollBinding,
 };
 use ivy_physics::{
@@ -194,13 +194,9 @@ impl Bundle for RayPickerBundle {
 
         let mut ray_distance_action = Action::new();
         ray_distance_action
-            .add(KeyBinding::new(Key::Named(NamedKey::ArrowUp)).analog())
+            .add(KeyBinding::new(KeyCode::ArrowUp).analog())
             .add(ScrollBinding::new().decompose(Axis2D::Y).amplitude(2.0));
-        ray_distance_action.add(
-            KeyBinding::new(Key::Named(NamedKey::ArrowDown))
-                .analog()
-                .amplitude(-1.0),
-        );
+        ray_distance_action.add(KeyBinding::new(KeyCode::ArrowDown).analog().amplitude(-1.0));
 
         entity
             .set(
